@@ -196,6 +196,51 @@ describe("evaluateLicenseRisk", () => {
     expect(finding.dependencyScope).toBe("direct");
   });
 
+  test("explains missing license metadata as a specific unknown risk", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "package@1.0.0",
+        choices: [],
+        joiner: "single",
+        signals: ["missing"],
+        evidenceSources: ["source: local"],
+        confidence: "low"
+      },
+      dependency: baseDependency,
+      profile: "saas"
+    });
+
+    expect(finding.severity).toBe("unknown");
+    expect(finding.reason).toBe("Package metadata does not declare a license expression.");
+    expect(finding.recommendation).toBe("collect-evidence");
+    expect(finding.action).toBe(
+      "Add or verify package license metadata before approving this package."
+    );
+  });
+
+  test("explains malformed license metadata as a specific unknown risk", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "package@1.0.0",
+        original: "SEE LICENSE IN LICENSE",
+        choices: ["SEE LICENSE IN LICENSE"],
+        joiner: "single",
+        signals: ["malformed", "custom-text"],
+        evidenceSources: ["source: local", "package.json license: SEE LICENSE IN LICENSE"],
+        confidence: "low"
+      },
+      dependency: baseDependency,
+      profile: "saas"
+    });
+
+    expect(finding.severity).toBe("unknown");
+    expect(finding.reason).toBe("Package metadata declares a malformed license expression.");
+    expect(finding.recommendation).toBe("collect-evidence");
+    expect(finding.action).toBe(
+      "Fix or manually review the declared license expression before approving this package."
+    );
+  });
+
   test("treats explicit commercial restriction signals as high risk", () => {
     const finding = evaluateLicenseRisk({
       license: {

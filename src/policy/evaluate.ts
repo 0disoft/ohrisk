@@ -49,7 +49,7 @@ export function evaluateLicenseRisk(input: {
     packageId: input.license.packageId,
     severity,
     reason: explainSeverity(input.license, input.profile, severity),
-    action: actionFor(recommendation),
+    action: actionFor(recommendation, input.license),
     dependencyType: input.dependency.dependencyType,
     dependencyScope: dependencyScopeFor(input.dependency),
     evidence: buildEvidence(input.license, input.dependency),
@@ -145,7 +145,15 @@ function explainSeverity(
 
       return `License expression is high risk for ${profile}.`;
     case "unknown":
-      return "License evidence is missing, malformed, or not recognized.";
+      if (license.signals.includes("missing")) {
+        return "Package metadata does not declare a license expression.";
+      }
+
+      if (license.signals.includes("malformed")) {
+        return "Package metadata declares a malformed license expression.";
+      }
+
+      return "License expression is not recognized by Ohrisk.";
   }
 }
 
@@ -187,7 +195,7 @@ function recommendationFor(
   return "replace";
 }
 
-function actionFor(recommendation: RiskRecommendation): string {
+function actionFor(recommendation: RiskRecommendation, license?: NormalizedLicense): string {
   switch (recommendation) {
     case "allow":
       return "No action needed for this profile.";
@@ -198,6 +206,14 @@ function actionFor(recommendation: RiskRecommendation): string {
     case "exclude-dev-only":
       return "Keep this package out of production or scan with --prod.";
     case "collect-evidence":
+      if (license?.signals.includes("missing")) {
+        return "Add or verify package license metadata before approving this package.";
+      }
+
+      if (license?.signals.includes("malformed")) {
+        return "Fix or manually review the declared license expression before approving this package.";
+      }
+
       return "Collect license evidence before approving this package.";
   }
 }

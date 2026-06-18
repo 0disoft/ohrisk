@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.18.1 - 2026-06-18
+## 0.18.2 - 2026-06-18
 
 First public release candidate for Ohrisk.
 
@@ -39,6 +39,7 @@ First public release candidate for Ohrisk.
 - Terminal and Markdown scan summaries include missing and malformed license counts.
 - Risk findings include structured dependency type and direct/transitive scope.
 - Scan and diff reports choose the next action from the actual finding recommendations.
+- Unknown-risk findings now distinguish missing, malformed, and unrecognized license metadata in reason and action text.
 - Risk findings for low, review, high, and unknown license evidence.
 - Terminal findings sorted by severity with package path, recommendation, and evidence snippets.
 
