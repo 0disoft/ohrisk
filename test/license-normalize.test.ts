@@ -220,6 +220,43 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
+  test("uses recognizable license file text when package license metadata points to a file", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "see-standard-license-package@1.0.0",
+      packageJsonLicense: "SEE LICENSE IN LICENSE",
+      files: [
+        {
+          path: "LICENSE",
+          kind: "license",
+          text: [
+            "Apache License",
+            "Version 2.0, January 2004",
+            "",
+            "TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION"
+          ].join("\n")
+        }
+      ],
+      source: "local",
+      warnings: []
+    });
+
+    expect(normalized).toEqual({
+      packageId: "see-standard-license-package@1.0.0",
+      original: "Apache-2.0",
+      expression: "Apache-2.0",
+      choices: ["Apache-2.0"],
+      joiner: "single",
+      signals: [],
+      evidenceSources: [
+        "source: local",
+        "package.json license: SEE LICENSE IN LICENSE",
+        "file: LICENSE (license)",
+        "file license match: Apache-2.0 from LICENSE"
+      ],
+      confidence: "medium"
+    });
+  });
+
   test("marks explicit commercial restriction text in license files", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "commons-clause-package@1.0.0",

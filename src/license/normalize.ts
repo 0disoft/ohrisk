@@ -20,7 +20,7 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     signals.push("commercial-restriction");
   }
 
-  const licenseExpression = readLicenseExpressionEvidence(evidence);
+  let licenseExpression = readLicenseExpressionEvidence(evidence);
 
   if (!licenseExpression) {
     signals.push("missing");
@@ -39,11 +39,19 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     };
   }
 
-  if (licenseExpression.source === "license-file") {
-    evidenceSources.push(`file license match: ${licenseExpression.expression} from ${licenseExpression.filePath}`);
+  let parsed = parseSpdxExpression(licenseExpression.expression);
+  const licenseFileExpression = licenseExpression.source === "package-metadata"
+    ? readLicenseFileExpression(evidence)
+    : undefined;
+
+  if (parsed.malformed && licenseFileExpression) {
+    licenseExpression = licenseFileExpression;
+    parsed = parseSpdxExpression(licenseExpression.expression);
   }
 
-  const parsed = parseSpdxExpression(licenseExpression.expression);
+  if (licenseExpression.source === "license-file") {
+    addLicenseFileMatchSource(evidenceSources, licenseExpression);
+  }
 
   if (parsed.malformed) {
     signals.push("malformed");
@@ -201,6 +209,13 @@ function recognizeStandardLicenseText(text: string): string | undefined {
   }
 
   return undefined;
+}
+
+function addLicenseFileMatchSource(
+  evidenceSources: string[],
+  licenseExpression: LicenseExpressionEvidence
+): void {
+  evidenceSources.push(`file license match: ${licenseExpression.expression} from ${licenseExpression.filePath}`);
 }
 
 function readLicenseObjectType(value: unknown): string | undefined {
