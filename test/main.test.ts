@@ -30,7 +30,8 @@ describe("main", () => {
     expect(stderr).toEqual([]);
     expect(stdout.join("\n")).toContain("Ohrisk scan");
     expect(stdout.join("\n")).toContain("Lockfile: bun.lock (bun)");
-    expect(stdout.join("\n")).toContain("Status: ready for dependency graph parsing");
+    expect(stdout.join("\n")).toContain("Dependencies: 4 total, 3 direct, 1 transitive");
+    expect(stdout.join("\n")).toContain("Status: dependency graph parsed");
   });
 
   test("prints JSON scan skeleton when requested", async () => {
@@ -44,11 +45,21 @@ describe("main", () => {
       status: string;
       profile: string;
       prodOnly: boolean;
+      dependencyGraph: {
+        total: number;
+        direct: number;
+        transitive: number;
+      };
     };
 
-    expect(payload.status).toBe("ready_for_graph_scan");
+    expect(payload.status).toBe("graph_parsed");
     expect(payload.profile).toBe("saas");
     expect(payload.prodOnly).toBe(true);
+    expect(payload.dependencyGraph).toEqual({
+      total: 4,
+      direct: 3,
+      transitive: 1
+    });
   });
 
   test("returns user-input failure for unsupported projects", async () => {

@@ -2,6 +2,8 @@
 import path from "node:path";
 
 import { parseArgs, type CliCommand } from "./args";
+import { parseBunLockfile } from "../graph/npm-bun-lock";
+import type { DependencyGraph } from "../graph/types";
 import { discoverProject, type ProjectInput } from "../project/discover";
 import { exitCodeForError, formatError } from "../shared/errors";
 import { isErr } from "../shared/result";
@@ -42,25 +44,41 @@ function runScan(command: Extract<CliCommand, { kind: "scan" }>, io: CliIO): num
     return exitCodeForError(discovered.error);
   }
 
-  io.stdout(renderScanSkeleton(discovered.value, command));
+  const graph = parseBunLockfile(discovered.value.lockfile.path);
+
+  if (isErr(graph)) {
+    io.stderr(formatError(graph.error));
+    return exitCodeForError(graph.error);
+  }
+
+  io.stdout(renderScanSkeleton(discovered.value, graph.value, command));
   return 0;
 }
 
 function renderScanSkeleton(
   project: ProjectInput,
+  graph: DependencyGraph,
   command: Extract<CliCommand, { kind: "scan" }>
 ): string {
+  const directCount = graph.nodes.filter((node) => node.direct).length;
+  const transitiveCount = graph.nodes.length - directCount;
+
   if (command.json) {
     return JSON.stringify(
       {
-        status: "ready_for_graph_scan",
+        status: "graph_parsed",
         projectRoot: project.rootDir,
         lockfile: {
           kind: project.lockfile.kind,
           path: project.lockfile.path
         },
         profile: command.profile,
-        prodOnly: command.prodOnly
+        prodOnly: command.prodOnly,
+        dependencyGraph: {
+          total: graph.nodes.length,
+          direct: directCount,
+          transitive: transitiveCount
+        }
       },
       null,
       2
@@ -73,8 +91,9 @@ function renderScanSkeleton(
     `Lockfile: ${path.basename(project.lockfile.path)} (${project.lockfile.kind})`,
     `Profile: ${command.profile}`,
     `Production only: ${command.prodOnly ? "yes" : "no"}`,
-    "Status: ready for dependency graph parsing",
-    "Next: implement bun.lock graph parsing."
+    `Dependencies: ${graph.nodes.length} total, ${directCount} direct, ${transitiveCount} transitive`,
+    "Status: dependency graph parsed",
+    "Next: collect package license evidence."
   ].join("\n");
 }
 

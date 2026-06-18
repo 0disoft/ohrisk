@@ -9,7 +9,9 @@ export type OhriskErrorCode =
   | "UNSUPPORTED_COMMAND"
   | "NO_SUPPORTED_LOCKFILE"
   | "MULTIPLE_LOCKFILES"
-  | "PROJECT_DISCOVERY_FAILED";
+  | "PROJECT_DISCOVERY_FAILED"
+  | "BUN_LOCK_READ_FAILED"
+  | "BUN_LOCK_PARSE_FAILED";
 
 export type OhriskError = {
   code: OhriskErrorCode;
