@@ -1541,6 +1541,49 @@ describe("main", () => {
     expect(payload.finding.action).toBe("No action needed for this profile.");
   });
 
+  test("explains source-available aliases without scanning a project", async () => {
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "no-lockfile"));
+    const exitCode = await main(["explain", "Commons Clause", "--profile", "saas"], io);
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+
+    const output = stdout.join("\n");
+    expect(output).toContain("Expression: Commons Clause");
+    expect(output).toContain("Severity: high");
+    expect(output).toContain("Recommendation: replace");
+    expect(output).toContain("Normalized: Commons-Clause");
+    expect(output).toContain("commercial-restriction");
+  });
+
+  test("explains restricted OR expressions without overriding the low-risk branch", async () => {
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "no-lockfile"));
+    const exitCode = await main(["explain", "MIT", "OR", "BUSL-1.1", "--json"], io);
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+
+    const payload = JSON.parse(stdout.join("\n")) as {
+      expression: string;
+      license: {
+        expression: string;
+        choices: string[];
+        signals: string[];
+      };
+      finding: {
+        severity: string;
+        recommendation: string;
+      };
+    };
+
+    expect(payload.expression).toBe("MIT OR BUSL-1.1");
+    expect(payload.license.expression).toBe("MIT OR BUSL-1.1");
+    expect(payload.license.choices).toEqual(["MIT", "BUSL-1.1"]);
+    expect(payload.license.signals).toContain("commercial-restriction");
+    expect(payload.finding.severity).toBe("low");
+    expect(payload.finding.recommendation).toBe("allow");
+  });
+
   test("returns user-input failure for unsupported projects", async () => {
     const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "no-lockfile"));
     const exitCode = await main(["scan"], io);
