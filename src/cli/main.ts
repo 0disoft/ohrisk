@@ -1,14 +1,10 @@
 #!/usr/bin/env bun
-import path from "node:path";
-
 import { parseArgs, type CliCommand } from "./args";
 import { collectGraphEvidence } from "../evidence/collect";
 import { parseBunLockfile } from "../graph/npm-bun-lock";
-import type { DependencyGraph } from "../graph/types";
 import { normalizeAllLicenseEvidence } from "../license/normalize";
-import type { NormalizedLicense } from "../license/types";
 import { evaluateLicenseRisks } from "../policy/evaluate";
-import type { RiskFinding, RiskSeverity } from "../policy/types";
+import { renderScanReport } from "../report/scan-report";
 import { discoverProject, type ProjectInput } from "../project/discover";
 import { exitCodeForError, formatError } from "../shared/errors";
 import { isErr } from "../shared/result";
@@ -81,132 +77,18 @@ function runScan(command: Extract<CliCommand, { kind: "scan" }>, io: CliIO): num
   });
 
   io.stdout(
-    renderScanSkeleton(
-      discovered.value,
-      scanGraph,
-      evidence.value,
+    renderScanReport({
+      project: discovered.value,
+      graph: scanGraph,
+      evidence: evidence.value,
       normalizedLicenses,
       riskFindings,
-      command
-    )
+      profile: command.profile,
+      prodOnly: command.prodOnly,
+      json: command.json
+    })
   );
   return 0;
-}
-
-function renderScanSkeleton(
-  project: ProjectInput,
-  graph: DependencyGraph,
-  evidence: Array<{ files: unknown[]; warnings: string[] }>,
-  normalizedLicenses: NormalizedLicense[],
-  riskFindings: RiskFinding[],
-  command: Extract<CliCommand, { kind: "scan" }>
-): string {
-  const directCount = graph.nodes.filter((node) => node.direct).length;
-  const transitiveCount = graph.nodes.length - directCount;
-  const evidenceFileCount = evidence.reduce((sum, item) => sum + item.files.length, 0);
-  const evidenceWarningCount = evidence.reduce((sum, item) => sum + item.warnings.length, 0);
-  const licenseSummary = summarizeLicenses(normalizedLicenses);
-  const riskSummary = summarizeRiskFindings(riskFindings);
-
-  if (command.json) {
-    return JSON.stringify(
-      {
-        status: "profile_risk_evaluated",
-        projectRoot: project.rootDir,
-        lockfile: {
-          kind: project.lockfile.kind,
-          path: project.lockfile.path
-        },
-        profile: command.profile,
-        prodOnly: command.prodOnly,
-        dependencyGraph: {
-          total: graph.nodes.length,
-          direct: directCount,
-          transitive: transitiveCount
-        },
-        evidence: {
-          packages: evidence.length,
-          files: evidenceFileCount,
-          warnings: evidenceWarningCount
-        },
-        licenses: {
-          highConfidence: licenseSummary.high,
-          mediumConfidence: licenseSummary.medium,
-          lowConfidence: licenseSummary.low,
-          missing: licenseSummary.missing,
-          malformed: licenseSummary.malformed
-        },
-        risks: {
-          high: riskSummary.high,
-          review: riskSummary.review,
-          unknown: riskSummary.unknown,
-          low: riskSummary.low
-        }
-      },
-      null,
-      2
-    );
-  }
-
-  return [
-    "Ohrisk scan",
-    `Project: ${project.rootDir}`,
-    `Lockfile: ${path.basename(project.lockfile.path)} (${project.lockfile.kind})`,
-    `Profile: ${command.profile}`,
-    `Production only: ${command.prodOnly ? "yes" : "no"}`,
-    `Dependencies: ${graph.nodes.length} total, ${directCount} direct, ${transitiveCount} transitive`,
-    `Evidence: ${evidenceFileCount} files, ${evidenceWarningCount} warnings`,
-    `Licenses: ${licenseSummary.high} high-confidence, ${licenseSummary.medium} medium-confidence, ${licenseSummary.low} low-confidence`,
-    `Risks: ${riskSummary.high} high, ${riskSummary.review} review, ${riskSummary.unknown} unknown, ${riskSummary.low} low`,
-    "Status: profile-aware risk evaluated",
-    "Next: render actionable package findings."
-  ].join("\n");
-}
-
-function summarizeLicenses(normalizedLicenses: NormalizedLicense[]): {
-  high: number;
-  medium: number;
-  low: number;
-  missing: number;
-  malformed: number;
-} {
-  return normalizedLicenses.reduce(
-    (summary, license) => {
-      summary[license.confidence] += 1;
-
-      if (license.signals.includes("missing")) {
-        summary.missing += 1;
-      }
-
-      if (license.signals.includes("malformed")) {
-        summary.malformed += 1;
-      }
-
-      return summary;
-    },
-    {
-      high: 0,
-      medium: 0,
-      low: 0,
-      missing: 0,
-      malformed: 0
-    }
-  );
-}
-
-function summarizeRiskFindings(riskFindings: RiskFinding[]): Record<RiskSeverity, number> {
-  return riskFindings.reduce(
-    (summary, finding) => {
-      summary[finding.severity] += 1;
-      return summary;
-    },
-    {
-      high: 0,
-      review: 0,
-      unknown: 0,
-      low: 0
-    }
-  );
 }
 
 function renderHelp(): string {

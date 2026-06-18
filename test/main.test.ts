@@ -22,7 +22,7 @@ function createTestIO(cwd: string): { io: CliIO; stdout: string[]; stderr: strin
 }
 
 describe("main", () => {
-  test("runs scan skeleton for a Bun project", async () => {
+  test("prints actionable findings for a Bun project", async () => {
     const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
     const exitCode = await main(["scan"], io);
 
@@ -35,9 +35,17 @@ describe("main", () => {
     expect(stdout.join("\n")).toContain("Licenses: 4 high-confidence, 0 medium-confidence, 0 low-confidence");
     expect(stdout.join("\n")).toContain("Risks: 2 high, 0 review, 0 unknown, 2 low");
     expect(stdout.join("\n")).toContain("Status: profile-aware risk evaluated");
+    expect(stdout.join("\n")).toContain("Findings:");
+    expect(stdout.join("\n")).toContain("- [high] agpl-child@0.1.0");
+    expect(stdout.join("\n")).toContain("recommendation: replace");
+    expect(stdout.join("\n")).toContain(
+      "path: fixture-bun-project -> permissive-parent@1.0.0 -> agpl-child@0.1.0"
+    );
+    expect(stdout.join("\n")).toContain("- [high] dev-risk@3.0.0");
+    expect(stdout.join("\n")).toContain("recommendation: exclude-dev-only");
   });
 
-  test("prints JSON scan skeleton when requested", async () => {
+  test("prints JSON report with findings when requested", async () => {
     const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
     const exitCode = await main(["scan", "--json", "--prod"], io);
 
@@ -71,6 +79,12 @@ describe("main", () => {
         unknown: number;
         low: number;
       };
+      findings: Array<{
+        packageId: string;
+        severity: string;
+        recommendation: string;
+        paths: string[][];
+      }>;
     };
 
     expect(payload.status).toBe("profile_risk_evaluated");
@@ -99,6 +113,18 @@ describe("main", () => {
       unknown: 0,
       low: 2
     });
+    expect(payload.findings).toHaveLength(3);
+    expect(payload.findings[0]).toMatchObject({
+      packageId: "agpl-child@0.1.0",
+      severity: "high",
+      recommendation: "replace"
+    });
+    expect(payload.findings[0]?.paths[0]).toEqual([
+      "fixture-bun-project",
+      "permissive-parent@1.0.0",
+      "agpl-child@0.1.0"
+    ]);
+    expect(payload.findings.map((finding) => finding.packageId)).not.toContain("dev-risk@3.0.0");
   });
 
   test("returns user-input failure for unsupported projects", async () => {
