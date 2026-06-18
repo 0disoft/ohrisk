@@ -45,7 +45,7 @@ The current implementation is the first npm-style vertical slice:
 - SARIF 2.1.0 reports for code scanning upload
 - Markdown reports for PR comments and release notes
 - stable finding IDs for PR comments and future waivers
-- stable diff matching that ignores reason and evidence prose churn
+- stable diff matching that ignores reason and evidence prose churn while surfacing severity, recommendation, and action changes
 - exact finding fingerprints for SARIF partial fingerprints and audit trails
 - structured dependency type and direct/transitive scope in findings
 - report file output with `--output <file>`

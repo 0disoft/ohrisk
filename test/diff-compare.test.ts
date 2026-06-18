@@ -60,4 +60,24 @@ describe("diffRiskFindings", () => {
 
     expect(diff.newFindings).toEqual([current]);
   });
+
+  test("reports an existing package path as new when action changes", () => {
+    const baseline = finding({
+      severity: "low",
+      recommendation: "allow",
+      action: "No action needed for this profile."
+    });
+    const current = finding({
+      severity: "low",
+      recommendation: "allow",
+      action: "Preserve required NOTICE or attribution files when distributing this package."
+    });
+
+    const diff = diffRiskFindings({
+      baselineFindings: [baseline],
+      currentFindings: [current]
+    });
+
+    expect(diff.newFindings).toEqual([current]);
+  });
 });

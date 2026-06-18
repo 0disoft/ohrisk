@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.41.0 - 2026-06-19
+## 0.42.0 - 2026-06-19
 
 First public release candidate for Ohrisk.
 
@@ -48,7 +48,7 @@ First public release candidate for Ohrisk.
 - Markdown scan and diff reports include finding reasons for PR review.
 - Findings include human-readable action text alongside the stable recommendation enum.
 - Findings include stable IDs for JSON, terminal, Markdown, SARIF, and diff matching.
-- Diff matching ignores reason and evidence prose churn while still surfacing severity or recommendation changes.
+- Diff matching ignores reason and evidence prose churn while still surfacing severity, recommendation, or action changes.
 - Findings include exact fingerprints for SARIF partial fingerprints and downstream audit trails.
 - npm alias dependencies resolve to the actual package identity while keeping the alias visible in dependency paths.
 - Installed `node_modules` evidence lookup checks npm alias install names before registry fallback.

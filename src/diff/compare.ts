@@ -23,6 +23,7 @@ function findingKey(finding: RiskFinding): string {
   return [
     finding.id,
     finding.severity,
-    finding.recommendation
+    finding.recommendation,
+    finding.action
   ].join("::");
 }
