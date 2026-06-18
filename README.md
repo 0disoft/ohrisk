@@ -35,6 +35,7 @@ The current implementation is the first npm-style vertical slice:
 - common `LICENSE`, `LICENCE`, `COPYING`, and `NOTICE` files
 - medium-confidence standard license detection from recognizable `LICENSE` and `COPYING` file text, including GPL-family v2/v3 text and malformed metadata pointers
 - SPDX-like license expression parsing
+- low-risk classification for common permissive and public-domain-style SPDX licenses
 - explicit commercial restriction text detection in license evidence
 - profile-aware risk evaluation for `saas` and `distributed-app`
 - terminal and JSON reports

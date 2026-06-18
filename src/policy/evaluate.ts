@@ -10,11 +10,14 @@ import type {
 } from "./types";
 
 const PERMISSIVE_LICENSES = new Set([
+  "0BSD",
   "MIT",
   "ISC",
   "BSD-2-Clause",
   "BSD-3-Clause",
-  "Apache-2.0"
+  "Apache-2.0",
+  "CC0-1.0",
+  "Unlicense"
 ]);
 
 const WEAK_COPYLEFT_LICENSE_PREFIXES = [

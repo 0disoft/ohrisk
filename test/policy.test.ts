@@ -37,6 +37,29 @@ describe("evaluateLicenseRisk", () => {
     expect(finding.dependencyScope).toBe("direct");
   });
 
+  test("treats common public-domain-style permissive licenses as low risk", () => {
+    for (const expression of ["0BSD", "CC0-1.0", "Unlicense"]) {
+      const finding = evaluateLicenseRisk({
+        license: {
+          packageId: "package@1.0.0",
+          original: expression,
+          expression,
+          choices: [expression],
+          joiner: "single",
+          signals: [],
+          evidenceSources: [`source: local`, `package.json license: ${expression}`],
+          confidence: "high"
+        },
+        dependency: baseDependency,
+        profile: "distributed-app"
+      });
+
+      expect(finding.severity).toBe("low");
+      expect(finding.recommendation).toBe("allow");
+      expect(finding.action).toBe("No action needed for this profile.");
+    }
+  });
+
   test("uses the least risky branch for OR expressions", () => {
     const finding = evaluateLicenseRisk({
       license: {

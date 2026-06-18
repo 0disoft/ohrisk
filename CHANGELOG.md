@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.30.0 - 2026-06-19
+## 0.31.0 - 2026-06-19
 
 First public release candidate for Ohrisk.
 
@@ -30,6 +30,7 @@ First public release candidate for Ohrisk.
 - `package.json` license field, legacy `licenses` field, `LICENSE`, `LICENCE`, `COPYING`, and `NOTICE` evidence handling.
 - SPDX-like license expression parsing with simple `AND` and `OR` handling.
 - SPDX `WITH` exception handling, deprecated package license object handling, and explicit `UNLICENSED` risk classification.
+- Common permissive and public-domain-style SPDX licenses `0BSD`, `CC0-1.0`, and `Unlicense` are classified as low risk.
 - Explicit commercial restriction text detection for Commons Clause, BUSL, and non-commercial license evidence.
 - Recognizable standard license text in `LICENSE` and `COPYING` files is used as medium-confidence evidence when package license metadata is absent.
 - Recognizable standard license files can resolve malformed package metadata pointers such as `SEE LICENSE IN LICENSE`.
