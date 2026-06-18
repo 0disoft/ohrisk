@@ -81,6 +81,34 @@ describe("evaluateLicenseRisk", () => {
     expect(finding.action).toBe("No action needed for this profile.");
   });
 
+  test("surfaces notice obligations without raising severity", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "package@1.0.0",
+        original: "Apache-2.0",
+        expression: "Apache-2.0",
+        choices: ["Apache-2.0"],
+        joiner: "single",
+        signals: ["notice-required"],
+        evidenceSources: [
+          "source: local",
+          "package.json license: Apache-2.0",
+          "file: NOTICE (notice)"
+        ],
+        confidence: "high"
+      },
+      dependency: baseDependency,
+      profile: "distributed-app"
+    });
+
+    expect(finding.severity).toBe("low");
+    expect(finding.recommendation).toBe("allow");
+    expect(finding.action).toBe(
+      "Preserve required NOTICE or attribution files when distributing this package."
+    );
+    expect(finding.evidence).toContain("signals: notice-required");
+  });
+
   test("uses the least risky branch for OR expressions", () => {
     const finding = evaluateLicenseRisk({
       license: {

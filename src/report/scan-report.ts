@@ -3,6 +3,7 @@ import path from "node:path";
 import type { LicenseEvidence } from "../evidence/types";
 import type { DependencyGraph } from "../graph/types";
 import type { NormalizedLicense } from "../license/types";
+import { NOTICE_ACTION } from "../policy/evaluate";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
 import type { ProjectInput } from "../project/discover";
 import { buildThresholdSummary, formatThresholdSummary } from "./threshold-summary";
@@ -268,6 +269,10 @@ function nextActionFor(findings: RiskFinding[]): string {
 
   if (findings.some((finding) => finding.recommendation === "exclude-dev-only")) {
     return "Run with --prod or keep dev-only risk out of production.";
+  }
+
+  if (findings.some((finding) => finding.action === NOTICE_ACTION)) {
+    return "Preserve required NOTICE or attribution files when distributing this project.";
   }
 
   return "No action needed for this profile.";

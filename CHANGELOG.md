@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.35.0 - 2026-06-19
+## 0.36.0 - 2026-06-19
 
 First public release candidate for Ohrisk.
 
@@ -32,6 +32,7 @@ First public release candidate for Ohrisk.
 - SPDX `WITH` exception handling, deprecated package license object handling, and explicit `UNLICENSED` risk classification.
 - Common human-readable license metadata aliases such as `Apache License, Version 2.0`, `BSD 2-Clause`, and `ISC License` are normalized.
 - Common permissive and public-domain-style SPDX licenses `0BSD`, `CC0-1.0`, and `Unlicense` are classified as low risk.
+- NOTICE evidence is surfaced as attribution-preservation action text without raising severity.
 - Source-available restriction licenses `Elastic-2.0`, `PolyForm-Noncommercial-1.0.0`, and `PolyForm-Free-Trial-1.0.0` are classified as high risk.
 - `Zlib` is classified as a low-risk permissive license.
 - Explicit commercial restriction text detection for Commons Clause, BUSL, and non-commercial license evidence.

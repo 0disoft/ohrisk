@@ -37,6 +37,7 @@ The current implementation is the first npm-style vertical slice:
 - SPDX-like license expression parsing
 - common human-readable license metadata alias normalization
 - low-risk classification for common permissive, Zlib, and public-domain-style SPDX licenses
+- NOTICE evidence is surfaced as attribution-preservation action text without raising severity
 - high-risk classification for common source-available restriction licenses
 - explicit commercial restriction text detection in license evidence
 - profile-aware risk evaluation for `saas` and `distributed-app`

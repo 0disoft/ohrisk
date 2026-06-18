@@ -45,6 +45,9 @@ const COMMERCIAL_RESTRICTION_LICENSES = new Set([
   "UNLICENSED"
 ]);
 
+const NO_ACTION_NEEDED = "No action needed for this profile.";
+export const NOTICE_ACTION = "Preserve required NOTICE or attribution files when distributing this package.";
+
 export function evaluateLicenseRisk(input: {
   license: NormalizedLicense;
   dependency: DependencyNode;
@@ -226,7 +229,7 @@ function recommendationFor(
 function actionFor(recommendation: RiskRecommendation, license?: NormalizedLicense): string {
   switch (recommendation) {
     case "allow":
-      return "No action needed for this profile.";
+      return license?.signals.includes("notice-required") ? NOTICE_ACTION : NO_ACTION_NEEDED;
     case "review":
       return "Review this package before shipping.";
     case "replace":
