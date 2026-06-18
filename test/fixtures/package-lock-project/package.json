@@ -1,0 +1,13 @@
+{
+  "name": "fixture-package-lock-project",
+  "version": "0.0.0",
+  "dependencies": {
+    "permissive-parent": "file:../bun-project/.registry/permissive-parent",
+    "dual-license": "file:../bun-project/.registry/dual-license",
+    "gpl-package": "file:../bun-project/.registry/gpl-package",
+    "missing-license": "file:../bun-project/.registry/missing-license"
+  },
+  "devDependencies": {
+    "dev-risk": "file:../bun-project/.registry/dev-risk"
+  }
+}

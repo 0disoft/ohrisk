@@ -7,6 +7,8 @@ import { diffRiskFindings } from "../diff/compare";
 import { collectGraphEvidence } from "../evidence/collect";
 import { readGitRefFile, type GitRefFileReader } from "../git/ref-file";
 import { parseBunLockfile, parseBunLockText } from "../graph/npm-bun-lock";
+import { parsePackageLockfile, parsePackageLockText } from "../graph/npm-package-lock";
+import type { DependencyGraph } from "../graph/types";
 import { normalizeAllLicenseEvidence, normalizeLicenseEvidence } from "../license/normalize";
 import { evaluateLicenseRisk, evaluateLicenseRisks } from "../policy/evaluate";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
@@ -89,10 +91,11 @@ async function runDiff(
     return exitCodeForError(baselineLockfile.error);
   }
 
-  const baselineGraph = parseBunLockText(
-    baselineLockfile.value,
-    `${command.baselineRef}:${relativeLockfilePath}`
-  );
+  const baselineGraph = parseLockfileTextForKind({
+    kind: current.value.project.lockfile.kind,
+    text: baselineLockfile.value,
+    lockfilePath: `${command.baselineRef}:${relativeLockfilePath}`
+  });
 
   if (isErr(baselineGraph)) {
     io.stderr(formatError(baselineGraph.error));
@@ -255,7 +258,7 @@ async function scanProject(input: {
     return discovered;
   }
 
-  const graph = parseBunLockfile(discovered.value.lockfile.path);
+  const graph = parseProjectLockfile(discovered.value);
 
   if (isErr(graph)) {
     return graph;
@@ -294,6 +297,28 @@ async function scanProject(input: {
       riskFindings
     }
   };
+}
+
+function parseProjectLockfile(project: ProjectInput): Result<DependencyGraph, OhriskError> {
+  switch (project.lockfile.kind) {
+    case "bun":
+      return parseBunLockfile(project.lockfile.path);
+    case "package-lock":
+      return parsePackageLockfile(project.lockfile.path);
+  }
+}
+
+function parseLockfileTextForKind(input: {
+  kind: ProjectInput["lockfile"]["kind"];
+  text: string;
+  lockfilePath: string;
+}): Result<DependencyGraph, OhriskError> {
+  switch (input.kind) {
+    case "bun":
+      return parseBunLockText(input.text, input.lockfilePath);
+    case "package-lock":
+      return parsePackageLockText(input.text, input.lockfilePath);
+  }
 }
 
 function renderHelp(): string {

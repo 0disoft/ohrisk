@@ -21,7 +21,7 @@ Ohrisk is distributed as an npm package, but the CLI runs on Bun. Make sure
 
 The current implementation is the first npm-style vertical slice:
 
-- Bun `bun.lock` project discovery
+- Bun `bun.lock` and npm `package-lock.json` project discovery
 - direct and transitive dependency graph extraction
 - production and development dependency classification
 - local `file:` package artifact evidence
@@ -39,8 +39,8 @@ The current implementation is the first npm-style vertical slice:
 - standalone license expression explanation
 - git ref diff reports that show only newly introduced findings
 
-SBOM export, waiver workflows, GitHub App checks, and multi-ecosystem adapters
-are not part of this slice yet.
+SBOM export, waiver workflows, GitHub App checks, and ecosystem adapters beyond
+npm-style lockfiles are not part of this slice yet.
 
 ## Usage
 
@@ -55,6 +55,11 @@ Run a local scan from a supported project:
 ```bash
 bun run src/cli/main.ts scan
 ```
+
+Supported lockfiles:
+
+- `bun.lock`
+- `package-lock.json` with a `packages` section, as produced by modern npm versions
 
 Pick the usage profile:
 

@@ -20,6 +20,19 @@ describe("discoverProject", () => {
     expect(path.basename(result.value.lockfile.path)).toBe("bun.lock");
   });
 
+  test("finds a package-lock.json project", () => {
+    const result = discoverProject({ cwd: path.join(fixturesDir, "package-lock-project") });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.rootDir).toBe(path.join(fixturesDir, "package-lock-project"));
+    expect(result.value.lockfile.kind).toBe("package-lock");
+    expect(path.basename(result.value.lockfile.path)).toBe("package-lock.json");
+  });
+
   test("walks up from a nested directory", () => {
     const result = discoverProject({ cwd: path.join(fixturesDir, "bun-project", "packages", "app") });
 
