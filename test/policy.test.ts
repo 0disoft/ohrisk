@@ -203,6 +203,9 @@ describe("evaluateLicenseRisk", () => {
     });
 
     expect(finding.severity).toBe("high");
+    expect(finding.reason).toBe(
+      "License evidence contains an explicit commercial-use restriction for saas."
+    );
     expect(finding.recommendation).toBe("replace");
     expect(finding.evidence).toContain("signals: commercial-restriction, malformed, custom-text");
   });

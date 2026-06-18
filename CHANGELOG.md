@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.13.0 - 2026-06-18
+## 0.13.1 - 2026-06-18
 
 First public release candidate for Ohrisk.
 
@@ -31,6 +31,7 @@ First public release candidate for Ohrisk.
 - SPDX-like license expression parsing with simple `AND` and `OR` handling.
 - SPDX `WITH` exception handling, deprecated package license object handling, and explicit `UNLICENSED` risk classification.
 - Explicit commercial restriction text detection for Commons Clause, BUSL, and non-commercial license evidence.
+- Specific finding reason text for explicit commercial-use restriction evidence.
 - Risk findings for low, review, high, and unknown license evidence.
 - Terminal findings sorted by severity with package path, recommendation, and evidence snippets.
 

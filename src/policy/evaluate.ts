@@ -130,6 +130,10 @@ function explainSeverity(
     case "review":
       return `License expression should be reviewed before shipping under ${profile}.`;
     case "high":
+      if (license.signals.includes("commercial-restriction")) {
+        return `License evidence contains an explicit commercial-use restriction for ${profile}.`;
+      }
+
       return `License expression is high risk for ${profile}.`;
     case "unknown":
       return "License evidence is missing, malformed, or not recognized.";
