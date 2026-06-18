@@ -1,7 +1,6 @@
 import { createError, type OhriskError } from "../shared/errors";
+import { isUsageProfile, USAGE_PROFILES, type UsageProfile } from "../policy/profiles";
 import { err, ok, type Result } from "../shared/result";
-
-export type UsageProfile = "saas" | "distributed-app";
 
 export type CliCommand =
   | { kind: "help" }
@@ -11,8 +10,6 @@ export type CliCommand =
       prodOnly: boolean;
       json: boolean;
     };
-
-const USAGE_PROFILES = new Set<UsageProfile>(["saas", "distributed-app"]);
 
 export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
   if (argv.length === 0 || argv[0] === "--help" || argv[0] === "-h") {
@@ -112,8 +109,4 @@ function parseScanArgs(argv: string[]): Result<CliCommand, OhriskError> {
     prodOnly,
     json
   });
-}
-
-function isUsageProfile(value: string): value is UsageProfile {
-  return USAGE_PROFILES.has(value as UsageProfile);
 }

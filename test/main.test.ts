@@ -33,7 +33,8 @@ describe("main", () => {
     expect(stdout.join("\n")).toContain("Dependencies: 4 total, 3 direct, 1 transitive");
     expect(stdout.join("\n")).toContain("Evidence: 4 files, 0 warnings");
     expect(stdout.join("\n")).toContain("Licenses: 4 high-confidence, 0 medium-confidence, 0 low-confidence");
-    expect(stdout.join("\n")).toContain("Status: license evidence normalized");
+    expect(stdout.join("\n")).toContain("Risks: 2 high, 0 review, 0 unknown, 2 low");
+    expect(stdout.join("\n")).toContain("Status: profile-aware risk evaluated");
   });
 
   test("prints JSON scan skeleton when requested", async () => {
@@ -64,27 +65,39 @@ describe("main", () => {
         missing: number;
         malformed: number;
       };
+      risks: {
+        high: number;
+        review: number;
+        unknown: number;
+        low: number;
+      };
     };
 
-    expect(payload.status).toBe("package_evidence_collected");
+    expect(payload.status).toBe("profile_risk_evaluated");
     expect(payload.profile).toBe("saas");
     expect(payload.prodOnly).toBe(true);
     expect(payload.dependencyGraph).toEqual({
-      total: 4,
-      direct: 3,
+      total: 3,
+      direct: 2,
       transitive: 1
     });
     expect(payload.evidence).toEqual({
-      packages: 4,
-      files: 4,
+      packages: 3,
+      files: 3,
       warnings: 0
     });
     expect(payload.licenses).toEqual({
-      highConfidence: 4,
+      highConfidence: 3,
       mediumConfidence: 0,
       lowConfidence: 0,
       missing: 0,
       malformed: 0
+    });
+    expect(payload.risks).toEqual({
+      high: 1,
+      review: 0,
+      unknown: 0,
+      low: 2
     });
   });
 

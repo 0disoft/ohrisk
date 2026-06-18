@@ -7,6 +7,8 @@ import { parseBunLockfile } from "../graph/npm-bun-lock";
 import type { DependencyGraph } from "../graph/types";
 import { normalizeAllLicenseEvidence } from "../license/normalize";
 import type { NormalizedLicense } from "../license/types";
+import { evaluateLicenseRisks } from "../policy/evaluate";
+import type { RiskFinding, RiskSeverity } from "../policy/types";
 import { discoverProject, type ProjectInput } from "../project/discover";
 import { exitCodeForError, formatError } from "../shared/errors";
 import { isErr } from "../shared/result";
@@ -54,8 +56,15 @@ function runScan(command: Extract<CliCommand, { kind: "scan" }>, io: CliIO): num
     return exitCodeForError(graph.error);
   }
 
+  const scanGraph = command.prodOnly
+    ? {
+        ...graph.value,
+        nodes: graph.value.nodes.filter((node) => node.dependencyType === "production")
+      }
+    : graph.value;
+
   const evidence = collectGraphEvidence({
-    graph: graph.value,
+    graph: scanGraph,
     projectRoot: discovered.value.rootDir
   });
 
@@ -65,8 +74,22 @@ function runScan(command: Extract<CliCommand, { kind: "scan" }>, io: CliIO): num
   }
 
   const normalizedLicenses = normalizeAllLicenseEvidence(evidence.value);
+  const riskFindings = evaluateLicenseRisks({
+    licenses: normalizedLicenses,
+    dependencies: scanGraph.nodes,
+    profile: command.profile
+  });
 
-  io.stdout(renderScanSkeleton(discovered.value, graph.value, evidence.value, normalizedLicenses, command));
+  io.stdout(
+    renderScanSkeleton(
+      discovered.value,
+      scanGraph,
+      evidence.value,
+      normalizedLicenses,
+      riskFindings,
+      command
+    )
+  );
   return 0;
 }
 
@@ -75,6 +98,7 @@ function renderScanSkeleton(
   graph: DependencyGraph,
   evidence: Array<{ files: unknown[]; warnings: string[] }>,
   normalizedLicenses: NormalizedLicense[],
+  riskFindings: RiskFinding[],
   command: Extract<CliCommand, { kind: "scan" }>
 ): string {
   const directCount = graph.nodes.filter((node) => node.direct).length;
@@ -82,11 +106,12 @@ function renderScanSkeleton(
   const evidenceFileCount = evidence.reduce((sum, item) => sum + item.files.length, 0);
   const evidenceWarningCount = evidence.reduce((sum, item) => sum + item.warnings.length, 0);
   const licenseSummary = summarizeLicenses(normalizedLicenses);
+  const riskSummary = summarizeRiskFindings(riskFindings);
 
   if (command.json) {
     return JSON.stringify(
       {
-        status: "package_evidence_collected",
+        status: "profile_risk_evaluated",
         projectRoot: project.rootDir,
         lockfile: {
           kind: project.lockfile.kind,
@@ -110,6 +135,12 @@ function renderScanSkeleton(
           lowConfidence: licenseSummary.low,
           missing: licenseSummary.missing,
           malformed: licenseSummary.malformed
+        },
+        risks: {
+          high: riskSummary.high,
+          review: riskSummary.review,
+          unknown: riskSummary.unknown,
+          low: riskSummary.low
         }
       },
       null,
@@ -126,8 +157,9 @@ function renderScanSkeleton(
     `Dependencies: ${graph.nodes.length} total, ${directCount} direct, ${transitiveCount} transitive`,
     `Evidence: ${evidenceFileCount} files, ${evidenceWarningCount} warnings`,
     `Licenses: ${licenseSummary.high} high-confidence, ${licenseSummary.medium} medium-confidence, ${licenseSummary.low} low-confidence`,
-    "Status: license evidence normalized",
-    "Next: evaluate profile-aware license risk."
+    `Risks: ${riskSummary.high} high, ${riskSummary.review} review, ${riskSummary.unknown} unknown, ${riskSummary.low} low`,
+    "Status: profile-aware risk evaluated",
+    "Next: render actionable package findings."
   ].join("\n");
 }
 
@@ -158,6 +190,21 @@ function summarizeLicenses(normalizedLicenses: NormalizedLicense[]): {
       low: 0,
       missing: 0,
       malformed: 0
+    }
+  );
+}
+
+function summarizeRiskFindings(riskFindings: RiskFinding[]): Record<RiskSeverity, number> {
+  return riskFindings.reduce(
+    (summary, finding) => {
+      summary[finding.severity] += 1;
+      return summary;
+    },
+    {
+      high: 0,
+      review: 0,
+      unknown: 0,
+      low: 0
     }
   );
 }
