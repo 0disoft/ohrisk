@@ -16,6 +16,7 @@ export type OhriskErrorCode =
   | "PACKAGE_EVIDENCE_READ_FAILED"
   | "PACKAGE_JSON_PARSE_FAILED"
   | "TARBALL_PARSE_FAILED"
+  | "REGISTRY_METADATA_FETCH_FAILED"
   | "TARBALL_FETCH_FAILED";
 
 export type OhriskError = {

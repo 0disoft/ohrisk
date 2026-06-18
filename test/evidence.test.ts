@@ -184,6 +184,155 @@ describe("collectGraphEvidence", () => {
     ]);
   });
 
+  test("resolves npm registry metadata when a node has no direct artifact", async () => {
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "registry-fixture",
+        version: "1.0.0",
+        license: "MIT"
+      }),
+      "package/LICENSE": "MIT License fixture text."
+    });
+    const fetchedUrls: string[] = [];
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "registry-fixture@1.0.0",
+            name: "registry-fixture",
+            version: "1.0.0",
+            ecosystem: "npm",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "registry-fixture@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async (url) => {
+        fetchedUrls.push(url);
+
+        if (url === "https://registry.npmjs.org/registry-fixture") {
+          return {
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            arrayBuffer: async () => Buffer.from(JSON.stringify({
+              versions: {
+                "1.0.0": {
+                  dist: {
+                    tarball: "https://registry.example.test/registry-fixture/-/registry-fixture-1.0.0.tgz"
+                  }
+                }
+              }
+            })).buffer
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          arrayBuffer: async () => tarball.buffer.slice(
+            tarball.byteOffset,
+            tarball.byteOffset + tarball.byteLength
+          ) as ArrayBuffer
+        };
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+
+    expect(fetchedUrls).toEqual([
+      "https://registry.npmjs.org/registry-fixture",
+      "https://registry.example.test/registry-fixture/-/registry-fixture-1.0.0.tgz"
+    ]);
+    expect(evidence.value).toEqual([
+      expect.objectContaining({
+        packageId: "registry-fixture@1.0.0",
+        packageJsonLicense: "MIT",
+        source: "tarball"
+      })
+    ]);
+  });
+
+  test("reports missing registry tarball metadata", async () => {
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "metadata-missing@1.0.0",
+            name: "metadata-missing",
+            version: "1.0.0",
+            ecosystem: "npm",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "metadata-missing@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async () => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        arrayBuffer: async () => Buffer.from(JSON.stringify({ versions: {} })).buffer
+      })
+    });
+
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected missing registry metadata to fail.");
+    }
+
+    expect(evidence.error.code).toBe("REGISTRY_METADATA_FETCH_FAILED");
+    expect(evidence.error.category).toBe("unsupported_input");
+  });
+
+  test("does not replace unsupported resolved artifacts with registry packages", async () => {
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "workspace-package@1.0.0",
+            name: "workspace-package",
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved: "workspace:*",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "workspace-package@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async () => {
+        throw new Error("Registry fallback should not run for explicit unsupported artifacts.");
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+
+    expect(evidence.value).toEqual([
+      {
+        packageId: "workspace-package@1.0.0",
+        files: [],
+        source: "unavailable",
+        warnings: ["Unsupported resolved artifact specifier: workspace:*"]
+      }
+    ]);
+  });
+
   test("reports remote tarball fetch failures", async () => {
     const evidence = await collectGraphEvidence({
       graph: {

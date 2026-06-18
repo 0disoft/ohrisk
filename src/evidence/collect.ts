@@ -47,21 +47,28 @@ async function collectNodeEvidence(input: {
   fetchArtifact: ArtifactFetcher;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   if (!input.node.resolved) {
-    return ok({
-      packageId: input.node.id,
-      files: [],
-      source: "unavailable",
-      warnings: ["Lockfile entry has no resolved package artifact."]
+    return collectRegistryTarballEvidence({
+      node: input.node,
+      fetchArtifact: input.fetchArtifact
     });
   }
 
   const localPath = resolveLocalArtifact(input.node.resolved, input.projectRoot);
 
   if (!localPath) {
-    return collectRemoteTarballEvidence({
+    if (isHttpUrl(input.node.resolved)) {
+      return collectRemoteTarballEvidence({
+        packageId: input.node.id,
+        resolved: input.node.resolved,
+        fetchArtifact: input.fetchArtifact
+      });
+    }
+
+    return ok({
       packageId: input.node.id,
-      resolved: input.node.resolved,
-      fetchArtifact: input.fetchArtifact
+      files: [],
+      source: "unavailable",
+      warnings: [`Unsupported resolved artifact specifier: ${input.node.resolved}`]
     });
   }
 
@@ -91,6 +98,70 @@ async function collectNodeEvidence(input: {
     packageId: input.node.id,
     tarball: readFileSync(localPath)
   });
+}
+
+async function collectRegistryTarballEvidence(input: {
+  node: DependencyNode;
+  fetchArtifact: ArtifactFetcher;
+}): Promise<Result<LicenseEvidence, OhriskError>> {
+  const metadataUrl = npmRegistryPackageUrl(input.node.name);
+
+  try {
+    const response = await input.fetchArtifact(metadataUrl);
+
+    if (!response.ok) {
+      return err(
+        createError({
+          code: "REGISTRY_METADATA_FETCH_FAILED",
+          category: "network",
+          message: "Failed to fetch npm registry metadata.",
+          details: {
+            packageId: input.node.id,
+            registryUrl: metadataUrl,
+            status: response.status,
+            statusText: response.statusText
+          }
+        })
+      );
+    }
+
+    const metadata = JSON.parse(Buffer.from(await response.arrayBuffer()).toString("utf8")) as unknown;
+    const tarballUrl = readRegistryTarballUrl(metadata, input.node.version);
+
+    if (!tarballUrl) {
+      return err(
+        createError({
+          code: "REGISTRY_METADATA_FETCH_FAILED",
+          category: "unsupported_input",
+          message: "npm registry metadata did not include a tarball for the requested version.",
+          details: {
+            packageId: input.node.id,
+            registryUrl: metadataUrl,
+            version: input.node.version
+          }
+        })
+      );
+    }
+
+    return collectRemoteTarballEvidence({
+      packageId: input.node.id,
+      resolved: tarballUrl,
+      fetchArtifact: input.fetchArtifact
+    });
+  } catch (cause) {
+    return err(
+      createError({
+        code: "REGISTRY_METADATA_FETCH_FAILED",
+        category: "network",
+        message: "Failed to read npm registry metadata.",
+        details: {
+          packageId: input.node.id,
+          registryUrl: metadataUrl,
+          cause: cause instanceof Error ? cause.message : String(cause)
+        }
+      })
+    );
+  }
 }
 
 function resolveLocalArtifact(resolved: string, projectRoot: string): string | undefined {
@@ -161,6 +232,37 @@ async function collectRemoteTarballEvidence(input: {
 
 function isHttpUrl(value: string): boolean {
   return value.startsWith("https://") || value.startsWith("http://");
+}
+
+function npmRegistryPackageUrl(name: string): string {
+  return `https://registry.npmjs.org/${encodeURIComponent(name).replace(/^%40/, "@")}`;
+}
+
+function readRegistryTarballUrl(metadata: unknown, version: string): string | undefined {
+  if (!isRecord(metadata)) {
+    return undefined;
+  }
+
+  const versions = metadata.versions;
+  if (!isRecord(versions)) {
+    return undefined;
+  }
+
+  const versionMetadata = versions[version];
+  if (!isRecord(versionMetadata)) {
+    return undefined;
+  }
+
+  const dist = versionMetadata.dist;
+  if (!isRecord(dist) || typeof dist.tarball !== "string") {
+    return undefined;
+  }
+
+  return dist.tarball;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function defaultArtifactFetcher(url: string): Promise<ArtifactFetchResponse> {

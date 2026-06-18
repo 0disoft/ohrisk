@@ -26,6 +26,7 @@ The current implementation is the first npm-style vertical slice:
 - production and development dependency classification
 - local `file:` package artifact evidence
 - remote HTTP(S) package tarball evidence when the lockfile points to a tarball
+- npm registry metadata lookup when the lockfile does not include a direct tarball URL
 - gzipped package tarball evidence
 - `package.json` license fields
 - common `LICENSE`, `LICENCE`, `COPYING`, and `NOTICE` files
@@ -33,9 +34,8 @@ The current implementation is the first npm-style vertical slice:
 - profile-aware risk evaluation for `saas` and `distributed-app`
 - terminal and JSON reports
 
-Registry metadata resolution, PR diff mode, SARIF, SBOM export, waiver
-workflows, GitHub App checks, and multi-ecosystem adapters are not part of this
-slice yet.
+PR diff mode, SARIF, SBOM export, waiver workflows, GitHub App checks, and
+multi-ecosystem adapters are not part of this slice yet.
 
 ## Usage
 

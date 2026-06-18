@@ -15,6 +15,7 @@ First public release candidate for Ohrisk.
 - Bun lockfile dependency graph parsing with direct, transitive, production, and development dependency context.
 - Local `file:` package evidence collection.
 - HTTP(S) tarball evidence collection when the lockfile points directly to a tarball.
+- npm registry metadata lookup when the lockfile does not contain a direct tarball URL.
 - `package.json` license field, legacy `licenses` field, `LICENSE`, `LICENCE`, `COPYING`, and `NOTICE` evidence handling.
 - SPDX-like license expression parsing with simple `AND` and `OR` handling.
 - SPDX `WITH` exception handling, deprecated package license object handling, and explicit `UNLICENSED` risk classification.
@@ -23,7 +24,6 @@ First public release candidate for Ohrisk.
 
 ### Not Included Yet
 
-- Registry metadata lookup when a lockfile does not contain a direct tarball URL.
 - PR diff mode.
 - CI failure mode.
 - SARIF or SBOM output.
