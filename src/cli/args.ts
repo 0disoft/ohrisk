@@ -266,7 +266,16 @@ function isFailOnSeverity(value: string): value is RiskSeverity {
 }
 
 function supportedOptionsFor(kind: "scan" | "ci"): string[] {
-  const common = ["--profile", "--prod", "--json", "--sarif", "--markdown", "--output"];
+  const common = [
+    "--profile",
+    "--prod",
+    "--json",
+    "--sarif",
+    "--markdown",
+    "--output",
+    "--help",
+    "-h"
+  ];
   return kind === "ci" ? [...common, "--fail-on"] : common;
 }
 
@@ -363,7 +372,7 @@ function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
               category: "invalid_input",
               message: `Unknown explain option "${arg}".`,
               details: {
-                supportedOptions: ["--profile", "--json", "--output"]
+                supportedOptions: ["--profile", "--json", "--output", "--help", "-h"]
               }
             })
           );
@@ -522,7 +531,9 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
                   "--json",
                   "--markdown",
                   "--output",
-                  "--fail-on"
+                  "--fail-on",
+                  "--help",
+                  "-h"
                 ]
               }
             })

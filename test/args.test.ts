@@ -317,6 +317,23 @@ describe("parseArgs", () => {
     }
 
     expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+    expect(parsed.error.details?.supportedOptions).toContain("--help");
+    expect(parsed.error.details?.supportedOptions).toContain("-h");
+  });
+
+  test("reports help options for unknown diff and explain options", () => {
+    for (const argv of [["diff", "main", "--bad"], ["explain", "MIT", "--bad"]]) {
+      const parsed = parseArgs(argv);
+
+      expect(parsed.ok).toBe(false);
+      if (parsed.ok) {
+        throw new Error("Expected unknown option to fail.");
+      }
+
+      expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+      expect(parsed.error.details?.supportedOptions).toContain("--help");
+      expect(parsed.error.details?.supportedOptions).toContain("-h");
+    }
   });
 
   test("rejects unsupported ci fail thresholds", () => {
