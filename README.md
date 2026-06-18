@@ -45,11 +45,12 @@ The current implementation is the first npm-style vertical slice:
 - SARIF 2.1.0 reports for code scanning upload
 - Markdown reports for PR comments and release notes
 - stable finding IDs for PR comments and future waivers
-- exact finding fingerprints for diffs and SARIF partial fingerprints
+- stable diff matching that ignores reason and evidence prose churn
+- exact finding fingerprints for SARIF partial fingerprints and audit trails
 - structured dependency type and direct/transitive scope in findings
 - report file output with `--output <file>`
 - standalone license expression explanation
-- git ref diff reports that show only newly introduced findings
+- git ref diff reports that show only newly introduced or meaningfully changed findings
 - JSON threshold outcomes for `ci --fail-on` and `diff --fail-on`
 - terminal and Markdown threshold outcomes for `ci --fail-on` and `diff --fail-on`
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.40.0 - 2026-06-19
+## 0.41.0 - 2026-06-19
 
 First public release candidate for Ohrisk.
 
@@ -20,7 +20,7 @@ First public release candidate for Ohrisk.
 - `--output <file>` for writing scan, ci, diff, and explain reports to disk.
 - `ohrisk ci --fail-on <severity>` for non-zero exits when findings meet a configured threshold.
 - `ohrisk explain <license-expression>` for profile-aware license risk explanation without scanning a project.
-- `ohrisk diff <baseline-ref>` for git-ref baseline comparison that reports only newly introduced findings.
+- `ohrisk diff <baseline-ref>` for git-ref baseline comparison that reports only newly introduced or meaningfully changed findings.
 - `--version` and `-v` package version output.
 - Project discovery with clear failures for unsupported or ambiguous lockfiles.
 - Bun lockfile dependency graph parsing with direct, transitive, production, and development dependency context.
@@ -48,7 +48,8 @@ First public release candidate for Ohrisk.
 - Markdown scan and diff reports include finding reasons for PR review.
 - Findings include human-readable action text alongside the stable recommendation enum.
 - Findings include stable IDs for JSON, terminal, Markdown, SARIF, and diff matching.
-- Findings include exact fingerprints for diff matching and SARIF partial fingerprints.
+- Diff matching ignores reason and evidence prose churn while still surfacing severity or recommendation changes.
+- Findings include exact fingerprints for SARIF partial fingerprints and downstream audit trails.
 - npm alias dependencies resolve to the actual package identity while keeping the alias visible in dependency paths.
 - Installed `node_modules` evidence lookup checks npm alias install names before registry fallback.
 - pnpm alias package keys such as `alias@npm:actual@version` resolve to the actual package identity.

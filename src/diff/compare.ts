@@ -20,5 +20,9 @@ export function diffRiskFindings(input: {
 }
 
 function findingKey(finding: RiskFinding): string {
-  return finding.fingerprint;
+  return [
+    finding.id,
+    finding.severity,
+    finding.recommendation
+  ].join("::");
 }
