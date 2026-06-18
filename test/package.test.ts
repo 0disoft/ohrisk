@@ -19,6 +19,10 @@ describe("package metadata", () => {
         access?: string;
       };
       files?: string[];
+      engines?: {
+        bun?: string;
+      };
+      packageManager?: string;
       repository?: {
         url?: string;
       };
@@ -28,6 +32,8 @@ describe("package metadata", () => {
     expect(packageJson.version).toBe("0.1.0");
     expect(packageJson.private).toBeUndefined();
     expect(packageJson.license).toBe("MIT");
+    expect(packageJson.packageManager).toBe("bun@1.3.14");
+    expect(packageJson.engines?.bun).toBe(">=1.3.0");
     expect(packageJson.bin).toEqual({
       ohrisk: "./src/cli/main.ts"
     });

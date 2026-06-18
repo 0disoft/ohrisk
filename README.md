@@ -1,5 +1,7 @@
 # Ohrisk
 
+[![CI](https://github.com/0disoft/ohrisk/actions/workflows/ci.yml/badge.svg)](https://github.com/0disoft/ohrisk/actions/workflows/ci.yml)
+
 Ohrisk catches open-source license risk before your PR ships.
 
 It is a local CLI for developers who need a quick answer to questions like:
