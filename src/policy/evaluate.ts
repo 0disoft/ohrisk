@@ -16,6 +16,7 @@ const PERMISSIVE_LICENSES = new Set([
   "BSD-2-Clause",
   "BSD-3-Clause",
   "Apache-2.0",
+  "Zlib",
   "CC0-1.0",
   "Unlicense"
 ]);

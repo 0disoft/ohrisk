@@ -365,6 +365,38 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
+  test("recognizes Zlib license file text", () => {
+    expect(
+      normalizeLicenseEvidence({
+        packageId: "zlib-file-only@1.0.0",
+        files: [
+          {
+            path: "LICENSE",
+            kind: "license",
+            text: [
+              "This software is provided 'as-is', without any express or implied warranty.",
+              "In no event will the authors be held liable for any damages arising from the use of this software.",
+              "",
+              "Permission is granted to anyone to use this software for any purpose,",
+              "including commercial applications, and to alter it and redistribute it freely.",
+              "",
+              "The origin of this software must not be misrepresented; you must not claim that",
+              "you wrote the original software."
+            ].join("\n")
+          }
+        ],
+        source: "local",
+        warnings: []
+      })
+    ).toMatchObject({
+      packageId: "zlib-file-only@1.0.0",
+      original: "Zlib",
+      expression: "Zlib",
+      choices: ["Zlib"],
+      confidence: "medium"
+    });
+  });
+
   test("marks explicit commercial restriction text in license files", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "commons-clause-package@1.0.0",

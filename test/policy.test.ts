@@ -60,6 +60,27 @@ describe("evaluateLicenseRisk", () => {
     }
   });
 
+  test("treats Zlib as a permissive low-risk license", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "package@1.0.0",
+        original: "Zlib",
+        expression: "Zlib",
+        choices: ["Zlib"],
+        joiner: "single",
+        signals: [],
+        evidenceSources: ["source: local", "package.json license: Zlib"],
+        confidence: "high"
+      },
+      dependency: baseDependency,
+      profile: "distributed-app"
+    });
+
+    expect(finding.severity).toBe("low");
+    expect(finding.recommendation).toBe("allow");
+    expect(finding.action).toBe("No action needed for this profile.");
+  });
+
   test("uses the least risky branch for OR expressions", () => {
     const finding = evaluateLicenseRisk({
       license: {

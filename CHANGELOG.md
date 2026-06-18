@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.33.0 - 2026-06-19
+## 0.34.0 - 2026-06-19
 
 First public release candidate for Ohrisk.
 
@@ -32,10 +32,12 @@ First public release candidate for Ohrisk.
 - SPDX `WITH` exception handling, deprecated package license object handling, and explicit `UNLICENSED` risk classification.
 - Common permissive and public-domain-style SPDX licenses `0BSD`, `CC0-1.0`, and `Unlicense` are classified as low risk.
 - Source-available restriction licenses `Elastic-2.0`, `PolyForm-Noncommercial-1.0.0`, and `PolyForm-Free-Trial-1.0.0` are classified as high risk.
+- `Zlib` is classified as a low-risk permissive license.
 - Explicit commercial restriction text detection for Commons Clause, BUSL, and non-commercial license evidence.
 - Recognizable standard license text in `LICENSE` and `COPYING` files is used as medium-confidence evidence when package license metadata is absent.
 - Recognizable standard license files can resolve malformed package metadata pointers such as `SEE LICENSE IN LICENSE`.
 - Standard license file detection covers `Unlicense` and `CC0-1.0` public-domain-style text.
+- Standard license file detection covers Zlib license text.
 - Standard license file detection covers GPL-2.0, LGPL-2.0, and LGPL-2.1 text in addition to existing GPL-family v3 detection.
 - Specific finding reason text for explicit commercial-use restriction evidence.
 - Markdown scan and diff reports include finding reasons for PR review.

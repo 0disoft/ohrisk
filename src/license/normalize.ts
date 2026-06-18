@@ -224,6 +224,14 @@ function recognizeStandardLicenseText(text: string): string | undefined {
     return "ISC";
   }
 
+  if (
+    /\bThis software is provided ['"]as-is['"], without any express or implied warranty\b/i.test(text)
+    && /\bPermission is granted to anyone to use this software for any purpose\b/i.test(text)
+    && /\bThe origin of this software must not be misrepresented\b/i.test(text)
+  ) {
+    return "Zlib";
+  }
+
   if (/\bRedistribution and use in source and binary forms\b/i.test(text)) {
     return /\bNeither the name of\b/i.test(text) ? "BSD-3-Clause" : "BSD-2-Clause";
   }
