@@ -7,9 +7,10 @@ const FAIL_ON_SEVERITIES: RiskSeverity[] = ["high", "unknown", "review", "low"];
 const SCAN_OUTPUT_FORMAT_OPTIONS = ["--json", "--sarif", "--markdown", "--cyclonedx"];
 const DIFF_OUTPUT_FORMAT_OPTIONS = ["--json", "--markdown"];
 const SUPPORTED_COMMANDS = ["scan", "ci", "diff", "explain", "help", "version"] as const;
+export type HelpTarget = typeof SUPPORTED_COMMANDS[number];
 
 export type CliCommand =
-  | { kind: "help" }
+  | { kind: "help"; target?: HelpTarget }
   | { kind: "version" }
   | {
       kind: "scan";
@@ -112,7 +113,7 @@ function parseTopLevelHelpArgs(argv: string[]): Result<CliCommand, OhriskError> 
 
   const command = argv[0];
   if (isSupportedCommand(command)) {
-    return ok({ kind: "help" });
+    return ok({ kind: "help", target: command });
   }
 
   return err(

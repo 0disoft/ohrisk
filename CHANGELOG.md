@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.57.0 - 2026-06-19
+
+### Added
+
+- `ohrisk help <command>` now prints command-specific usage and option details for `scan`, `ci`, `diff`, `explain`, `help`, and `version`.
+
 ## 0.56.0 - 2026-06-19
 
 ### Added

@@ -39,13 +39,57 @@ describe("main", () => {
     expect(output).toContain("--cyclonedx");
   });
 
+  test("prints command-specific help text", async () => {
+    const scan = createTestIO(fixturesDir);
+    const scanExitCode = await main(["help", "scan"], scan.io);
+    const scanOutput = scan.stdout.join("\n");
+
+    expect(scanExitCode).toBe(0);
+    expect(scan.stderr).toEqual([]);
+    expect(scanOutput).toContain("Ohrisk scan");
+    expect(scanOutput).toContain("ohrisk scan [--profile saas|distributed-app]");
+    expect(scanOutput).toContain("--cyclonedx");
+    expect(scanOutput).not.toContain("--fail-on");
+
+    const ci = createTestIO(fixturesDir);
+    const ciExitCode = await main(["help", "ci"], ci.io);
+    const ciOutput = ci.stdout.join("\n");
+
+    expect(ciExitCode).toBe(0);
+    expect(ci.stderr).toEqual([]);
+    expect(ciOutput).toContain("Ohrisk ci");
+    expect(ciOutput).toContain("--fail-on <severity>");
+    expect(ciOutput).toContain("--strict-waivers");
+
+    const diff = createTestIO(fixturesDir);
+    const diffExitCode = await main(["help", "diff"], diff.io);
+    const diffOutput = diff.stdout.join("\n");
+
+    expect(diffExitCode).toBe(0);
+    expect(diff.stderr).toEqual([]);
+    expect(diffOutput).toContain("Ohrisk diff");
+    expect(diffOutput).toContain("ohrisk diff <baseline-ref>");
+    expect(diffOutput).toContain("--markdown");
+    expect(diffOutput).not.toContain("--sarif");
+
+    const explain = createTestIO(fixturesDir);
+    const explainExitCode = await main(["help", "explain"], explain.io);
+    const explainOutput = explain.stdout.join("\n");
+
+    expect(explainExitCode).toBe(0);
+    expect(explain.stderr).toEqual([]);
+    expect(explainOutput).toContain("Ohrisk explain");
+    expect(explainOutput).toContain("ohrisk explain <license-expression>");
+    expect(explainOutput).toContain("--json");
+  });
+
   test("prints package version", async () => {
     const { io, stdout, stderr } = createTestIO(fixturesDir);
     const exitCode = await main(["version"], io);
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.56.0"]);
+    expect(stdout).toEqual(["ohrisk 0.57.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -414,7 +458,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.56.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.57.0");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",

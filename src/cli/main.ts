@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { parseArgs, type CliCommand } from "./args";
+import { parseArgs, type CliCommand, type HelpTarget } from "./args";
 import { diffRiskFindings } from "../diff/compare";
 import { collectGraphEvidence } from "../evidence/collect";
 import { readGitRefFile, type GitRefFileReader } from "../git/ref-file";
@@ -48,7 +48,7 @@ export async function main(
 
   switch (command.kind) {
     case "help":
-      io.stdout(renderHelp());
+      io.stdout(renderHelp(command.target));
       return 0;
     case "version":
       io.stdout(renderVersion());
@@ -414,7 +414,26 @@ function parseLockfileTextForKind(input: {
   }
 }
 
-function renderHelp(): string {
+function renderHelp(target?: HelpTarget): string {
+  switch (target) {
+    case "scan":
+      return renderScanHelp();
+    case "ci":
+      return renderCiHelp();
+    case "diff":
+      return renderDiffHelp();
+    case "explain":
+      return renderExplainHelp();
+    case "help":
+      return renderHelpCommandHelp();
+    case "version":
+      return renderVersionHelp();
+    case undefined:
+      return renderTopLevelHelp();
+  }
+}
+
+function renderTopLevelHelp(): string {
   return [
     "Ohrisk",
     "",
@@ -447,6 +466,105 @@ function renderHelp(): string {
     "  --strict-waivers       Fail CI when local waivers are expired or unmatched.",
     "  --help, -h             Print this help text.",
     "  --version, -v          Print the Ohrisk package version."
+  ].join("\n");
+}
+
+function renderScanHelp(): string {
+  return [
+    "Ohrisk scan",
+    "",
+    "Usage:",
+    "  ohrisk scan [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--cyclonedx] [--output <file>]",
+    "",
+    "Options:",
+    "  --profile <profile>    Usage profile. Defaults to saas.",
+    "  --prod                 Exclude development-only dependencies.",
+    "  --no-waivers           Ignore local .ohrisk-waivers.json files.",
+    "  --json                 Print machine-readable output.",
+    "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
+    "  --markdown             Print a Markdown report for PRs or release notes.",
+    "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
+    "  --output <file>        Write report output to a file instead of stdout."
+  ].join("\n");
+}
+
+function renderCiHelp(): string {
+  return [
+    "Ohrisk ci",
+    "",
+    "Usage:",
+    "  ohrisk ci [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--cyclonedx] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>]",
+    "",
+    "Options:",
+    "  --profile <profile>    Usage profile. Defaults to saas.",
+    "  --prod                 Exclude development-only dependencies.",
+    "  --no-waivers           Ignore local .ohrisk-waivers.json files.",
+    "  --json                 Print machine-readable output.",
+    "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
+    "  --markdown             Print a Markdown report for PRs or release notes.",
+    "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
+    "  --fail-on <severity>   CI threshold. Defaults to high.",
+    "  --strict-waivers       Fail CI when local waivers are expired or unmatched.",
+    "  --output <file>        Write report output to a file instead of stdout."
+  ].join("\n");
+}
+
+function renderDiffHelp(): string {
+  return [
+    "Ohrisk diff",
+    "",
+    "Usage:",
+    "  ohrisk diff <baseline-ref> [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
+    "",
+    "Options:",
+    "  --profile <profile>    Usage profile. Defaults to saas.",
+    "  --prod                 Exclude development-only dependencies.",
+    "  --json                 Print machine-readable output.",
+    "  --markdown             Print a Markdown report for PRs or release notes.",
+    "  --fail-on <severity>   Optional diff threshold.",
+    "  --output <file>        Write report output to a file instead of stdout."
+  ].join("\n");
+}
+
+function renderExplainHelp(): string {
+  return [
+    "Ohrisk explain",
+    "",
+    "Usage:",
+    "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
+    "",
+    "Options:",
+    "  --profile <profile>    Usage profile. Defaults to saas.",
+    "  --json                 Print machine-readable output.",
+    "  --output <file>        Write report output to a file instead of stdout."
+  ].join("\n");
+}
+
+function renderHelpCommandHelp(): string {
+  return [
+    "Ohrisk help",
+    "",
+    "Usage:",
+    "  ohrisk help [command]",
+    "",
+    "Commands:",
+    "  scan",
+    "  ci",
+    "  diff",
+    "  explain",
+    "  help",
+    "  version"
+  ].join("\n");
+}
+
+function renderVersionHelp(): string {
+  return [
+    "Ohrisk version",
+    "",
+    "Usage:",
+    "  ohrisk version",
+    "  ohrisk --version",
+    "  ohrisk -v"
   ].join("\n");
 }
 

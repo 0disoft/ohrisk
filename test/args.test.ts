@@ -28,7 +28,8 @@ describe("parseArgs", () => {
       }
 
       expect(parsed.value).toEqual({
-        kind: "help"
+        kind: "help",
+        target
       });
     }
   });
