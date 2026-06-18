@@ -28,7 +28,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.2.0"]);
+    expect(stdout).toEqual(["ohrisk 0.3.0"]);
   });
 
   test("prints actionable findings for a Bun project", async () => {
@@ -182,6 +182,49 @@ describe("main", () => {
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
     expect(stdout.join("\n")).toContain("Risks: 0 high, 0 review, 0 unknown, 1 low");
+  });
+
+  test("explains license risk without scanning a project", async () => {
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "no-lockfile"));
+    const exitCode = await main(["explain", "AGPL-3.0-only", "--profile", "saas"], io);
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+    expect(stdout.join("\n")).toContain("Ohrisk explain");
+    expect(stdout.join("\n")).toContain("Expression: AGPL-3.0-only");
+    expect(stdout.join("\n")).toContain("Severity: high");
+    expect(stdout.join("\n")).toContain("Recommendation: replace");
+    expect(stdout.join("\n")).toContain("not a legal safe or unsafe verdict");
+  });
+
+  test("prints JSON explain output", async () => {
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "no-lockfile"));
+    const exitCode = await main(["explain", "MIT", "OR", "Apache-2.0", "--json"], io);
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+
+    const payload = JSON.parse(stdout.join("\n")) as {
+      status: string;
+      expression: string;
+      profile: string;
+      license: {
+        expression: string;
+        choices: string[];
+      };
+      finding: {
+        severity: string;
+        recommendation: string;
+      };
+    };
+
+    expect(payload.status).toBe("license_explained");
+    expect(payload.expression).toBe("MIT OR Apache-2.0");
+    expect(payload.profile).toBe("saas");
+    expect(payload.license.expression).toBe("MIT OR Apache-2.0");
+    expect(payload.license.choices).toEqual(["MIT", "Apache-2.0"]);
+    expect(payload.finding.severity).toBe("low");
+    expect(payload.finding.recommendation).toBe("allow");
   });
 
   test("returns user-input failure for unsupported projects", async () => {

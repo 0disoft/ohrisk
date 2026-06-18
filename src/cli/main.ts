@@ -4,9 +4,10 @@ import { readFileSync } from "node:fs";
 import { parseArgs, type CliCommand } from "./args";
 import { collectGraphEvidence } from "../evidence/collect";
 import { parseBunLockfile } from "../graph/npm-bun-lock";
-import { normalizeAllLicenseEvidence } from "../license/normalize";
-import { evaluateLicenseRisks } from "../policy/evaluate";
+import { normalizeAllLicenseEvidence, normalizeLicenseEvidence } from "../license/normalize";
+import { evaluateLicenseRisk, evaluateLicenseRisks } from "../policy/evaluate";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
+import { renderExplainReport } from "../report/explain-report";
 import { renderScanReport } from "../report/scan-report";
 import { discoverProject, type ProjectInput } from "../project/discover";
 import { exitCodeForError, formatError } from "../shared/errors";
@@ -42,7 +43,46 @@ export async function main(
       return runScan(command, io);
     case "ci":
       return runScan(command, io);
+    case "explain":
+      return runExplain(command, io);
   }
+}
+
+async function runExplain(
+  command: Extract<CliCommand, { kind: "explain" }>,
+  io: CliIO
+): Promise<number> {
+  const normalizedLicense = normalizeLicenseEvidence({
+    packageId: "input",
+    packageJsonLicense: command.expression,
+    files: [],
+    source: "unavailable",
+    warnings: []
+  });
+  const finding = evaluateLicenseRisk({
+    license: normalizedLicense,
+    dependency: {
+      id: "input",
+      name: "input",
+      version: "0.0.0",
+      ecosystem: "npm",
+      dependencyType: "production",
+      direct: true,
+      paths: [["input"]]
+    },
+    profile: command.profile
+  });
+
+  io.stdout(
+    renderExplainReport({
+      expression: command.expression,
+      profile: command.profile,
+      normalizedLicense,
+      finding,
+      json: command.json
+    })
+  );
+  return 0;
 }
 
 async function runScan(
@@ -114,11 +154,13 @@ function renderHelp(): string {
     "Usage:",
     "  ohrisk scan [--profile saas|distributed-app] [--prod] [--json]",
     "  ohrisk ci [--profile saas|distributed-app] [--prod] [--json] [--fail-on high|unknown|review|low]",
+    "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json]",
     "  ohrisk --version",
     "",
     "Commands:",
     "  scan    Find the current project and prepare a license-risk scan.",
     "  ci      Run a scan and exit non-zero when findings meet the fail threshold.",
+    "  explain Explain how a license expression is classified for a profile.",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",

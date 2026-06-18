@@ -20,6 +20,12 @@ export type CliCommand =
       prodOnly: boolean;
       json: boolean;
       failOn: RiskSeverity;
+    }
+  | {
+      kind: "explain";
+      expression: string;
+      profile: UsageProfile;
+      json: boolean;
     };
 
 export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
@@ -34,17 +40,21 @@ export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
   const command = argv[0];
   const rest = argv.slice(1);
 
-  if (command !== "scan" && command !== "ci") {
+  if (command !== "scan" && command !== "ci" && command !== "explain") {
     return err(
       createError({
         code: "UNSUPPORTED_COMMAND",
         category: "invalid_input",
         message: `Unsupported command "${command}".`,
         details: {
-          supportedCommands: ["scan", "ci"]
+          supportedCommands: ["scan", "ci", "explain"]
         }
       })
     );
+  }
+
+  if (command === "explain") {
+    return parseExplainArgs(rest);
   }
 
   return command === "ci" ? parseCiArgs(rest) : parseScanArgs(rest);
@@ -200,4 +210,96 @@ function isFailOnSeverity(value: string): value is RiskSeverity {
 function supportedOptionsFor(kind: "scan" | "ci"): string[] {
   const common = ["--profile", "--prod", "--json"];
   return kind === "ci" ? [...common, "--fail-on"] : common;
+}
+
+function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
+  let profile: UsageProfile = "saas";
+  let json = false;
+  const expressionParts: string[] = [];
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    if (!arg) {
+      continue;
+    }
+
+    switch (arg) {
+      case "--profile": {
+        const value = argv[index + 1];
+        if (!value) {
+          return err(
+            createError({
+              code: "INVALID_ARGUMENT",
+              category: "invalid_input",
+              message: "--profile requires a value.",
+              details: {
+                supportedProfiles: [...USAGE_PROFILES]
+              }
+            })
+          );
+        }
+
+        if (!isUsageProfile(value)) {
+          return err(
+            createError({
+              code: "INVALID_ARGUMENT",
+              category: "invalid_input",
+              message: `Unsupported profile "${value}".`,
+              details: {
+                supportedProfiles: [...USAGE_PROFILES]
+              }
+            })
+          );
+        }
+
+        profile = value;
+        index += 1;
+        break;
+      }
+      case "--json":
+        json = true;
+        break;
+      case "--help":
+      case "-h":
+        return ok({ kind: "help" });
+      default:
+        if (arg.startsWith("-")) {
+          return err(
+            createError({
+              code: "INVALID_ARGUMENT",
+              category: "invalid_input",
+              message: `Unknown explain option "${arg}".`,
+              details: {
+                supportedOptions: ["--profile", "--json"]
+              }
+            })
+          );
+        }
+
+        expressionParts.push(arg);
+        break;
+    }
+  }
+
+  const expression = expressionParts.join(" ").trim();
+  if (!expression) {
+    return err(
+      createError({
+        code: "INVALID_ARGUMENT",
+        category: "invalid_input",
+        message: "explain requires a license expression.",
+        details: {
+          example: "ohrisk explain AGPL-3.0-only --profile saas"
+        }
+      })
+    );
+  }
+
+  return ok({
+    kind: "explain",
+    expression,
+    profile,
+    json
+  });
 }

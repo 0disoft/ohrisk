@@ -77,6 +77,22 @@ describe("parseArgs", () => {
     });
   });
 
+  test("parses explain expressions and options", () => {
+    const parsed = parseArgs(["explain", "GPL-2.0-only", "WITH", "Classpath-exception-2.0", "--profile", "distributed-app", "--json"]);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+
+    expect(parsed.value).toEqual({
+      kind: "explain",
+      expression: "GPL-2.0-only WITH Classpath-exception-2.0",
+      profile: "distributed-app",
+      json: true
+    });
+  });
+
   test("rejects unsupported commands", () => {
     const parsed = parseArgs(["diff"]);
 
@@ -129,6 +145,17 @@ describe("parseArgs", () => {
     expect(parsed.ok).toBe(false);
     if (parsed.ok) {
       throw new Error("Expected unsupported fail threshold to fail.");
+    }
+
+    expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+  });
+
+  test("rejects explain without an expression", () => {
+    const parsed = parseArgs(["explain", "--profile", "saas"]);
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) {
+      throw new Error("Expected missing explain expression to fail.");
     }
 
     expect(parsed.error.code).toBe("INVALID_ARGUMENT");

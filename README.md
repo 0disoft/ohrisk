@@ -33,6 +33,7 @@ The current implementation is the first npm-style vertical slice:
 - SPDX-like license expression parsing
 - profile-aware risk evaluation for `saas` and `distributed-app`
 - terminal and JSON reports
+- standalone license expression explanation
 
 PR diff mode, SARIF, SBOM export, waiver workflows, GitHub App checks, and
 multi-ecosystem adapters are not part of this slice yet.
@@ -76,6 +77,12 @@ Fail a local CI step when findings meet a threshold:
 bun run src/cli/main.ts ci --fail-on high
 ```
 
+Explain a license expression without scanning a project:
+
+```bash
+bun run src/cli/main.ts explain AGPL-3.0-only --profile saas
+```
+
 Print the package version:
 
 ```bash
@@ -87,6 +94,7 @@ Once installed as a package, the intended command shape is:
 ```bash
 ohrisk scan --profile saas --prod
 ohrisk ci --fail-on high
+ohrisk explain AGPL-3.0-only --profile saas
 ohrisk --version
 ```
 

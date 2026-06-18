@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 - 2026-06-18
+## 0.3.0 - 2026-06-18
 
 First public release candidate for Ohrisk.
 
@@ -11,6 +11,7 @@ First public release candidate for Ohrisk.
 - `--prod` filtering for production dependency scans.
 - `--json` output that reuses the terminal report finding model.
 - `ohrisk ci --fail-on <severity>` for non-zero exits when findings meet a configured threshold.
+- `ohrisk explain <license-expression>` for profile-aware license risk explanation without scanning a project.
 - `--version` and `-v` package version output.
 - Project discovery with clear failures for unsupported or ambiguous lockfiles.
 - Bun lockfile dependency graph parsing with direct, transitive, production, and development dependency context.
