@@ -4,7 +4,7 @@ import type { RiskSeverity } from "../policy/types";
 import { err, ok, type Result } from "../shared/result";
 
 const FAIL_ON_SEVERITIES: RiskSeverity[] = ["high", "unknown", "review", "low"];
-const SCAN_OUTPUT_FORMAT_OPTIONS = ["--json", "--sarif", "--markdown"];
+const SCAN_OUTPUT_FORMAT_OPTIONS = ["--json", "--sarif", "--markdown", "--cyclonedx"];
 const DIFF_OUTPUT_FORMAT_OPTIONS = ["--json", "--markdown"];
 const SUPPORTED_COMMANDS = ["scan", "ci", "diff", "explain", "help", "version"] as const;
 
@@ -18,6 +18,7 @@ export type CliCommand =
       json: boolean;
       sarif: boolean;
       markdown: boolean;
+      cyclonedx: boolean;
       outputPath?: string;
     }
   | {
@@ -27,6 +28,7 @@ export type CliCommand =
       json: boolean;
       sarif: boolean;
       markdown: boolean;
+      cyclonedx: boolean;
       outputPath?: string;
       failOn: RiskSeverity;
     }
@@ -159,6 +161,7 @@ function parseScanLikeArgs(
   let json = false;
   let sarif = false;
   let markdown = false;
+  let cyclonedx = false;
   let outputPath: string | undefined;
   let failOn: RiskSeverity = "high";
 
@@ -206,25 +209,32 @@ function parseScanLikeArgs(
         prodOnly = true;
         break;
       case "--json":
-        if (sarif || markdown) {
+        if (sarif || markdown || cyclonedx) {
           return outputFormatConflict("--json", SCAN_OUTPUT_FORMAT_OPTIONS);
         }
 
         json = true;
         break;
       case "--sarif":
-        if (json || markdown) {
+        if (json || markdown || cyclonedx) {
           return outputFormatConflict("--sarif", SCAN_OUTPUT_FORMAT_OPTIONS);
         }
 
         sarif = true;
         break;
       case "--markdown":
-        if (json || sarif) {
+        if (json || sarif || cyclonedx) {
           return outputFormatConflict("--markdown", SCAN_OUTPUT_FORMAT_OPTIONS);
         }
 
         markdown = true;
+        break;
+      case "--cyclonedx":
+        if (json || sarif || markdown) {
+          return outputFormatConflict("--cyclonedx", SCAN_OUTPUT_FORMAT_OPTIONS);
+        }
+
+        cyclonedx = true;
         break;
       case "--output": {
         const value = argv[index + 1];
@@ -306,6 +316,7 @@ function parseScanLikeArgs(
       json,
       sarif,
       markdown,
+      cyclonedx,
       ...(outputPath ? { outputPath } : {}),
       failOn
     });
@@ -318,6 +329,7 @@ function parseScanLikeArgs(
     json,
     sarif,
     markdown,
+    cyclonedx,
     ...(outputPath ? { outputPath } : {})
   });
 }
@@ -333,6 +345,7 @@ function supportedOptionsFor(kind: "scan" | "ci"): string[] {
     "--json",
     "--sarif",
     "--markdown",
+    "--cyclonedx",
     "--output",
     "--help",
     "-h"

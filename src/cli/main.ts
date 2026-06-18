@@ -14,6 +14,7 @@ import type { DependencyGraph, DependencyNode } from "../graph/types";
 import { normalizeAllLicenseEvidence, normalizeLicenseEvidence } from "../license/normalize";
 import { evaluateLicenseRisk, evaluateLicenseRisks } from "../policy/evaluate";
 import { hasFindingAtOrAbove } from "../policy/severity";
+import { renderCycloneDxReport } from "../report/cyclonedx-report";
 import { renderDiffReport } from "../report/diff-report";
 import { renderExplainReport } from "../report/explain-report";
 import { renderSarifReport } from "../report/sarif-report";
@@ -242,7 +243,11 @@ async function runScan(
     failOn: command.kind === "ci" ? command.failOn : undefined
   };
 
-  const output = command.sarif ? renderSarifReport(reportInput) : renderScanReport(reportInput);
+  const output = command.cyclonedx
+    ? renderCycloneDxReport(reportInput)
+    : command.sarif
+      ? renderSarifReport(reportInput)
+      : renderScanReport(reportInput);
   const emitted = emitReport({
     contents: output,
     outputPath: command.outputPath,
@@ -365,8 +370,8 @@ function renderHelp(): string {
     "Ohrisk",
     "",
     "Usage:",
-    "  ohrisk scan [--profile saas|distributed-app] [--prod] [--json|--sarif|--markdown] [--output <file>]",
-    "  ohrisk ci [--profile saas|distributed-app] [--prod] [--json|--sarif|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
+    "  ohrisk scan [--profile saas|distributed-app] [--prod] [--json|--sarif|--markdown|--cyclonedx] [--output <file>]",
+    "  ohrisk ci [--profile saas|distributed-app] [--prod] [--json|--sarif|--markdown|--cyclonedx] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk diff <baseline-ref> [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
     "  ohrisk help [command]",
@@ -386,6 +391,7 @@ function renderHelp(): string {
     "  --json                 Print machine-readable output.",
     "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
     "  --markdown             Print a Markdown report for PRs or release notes.",
+    "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
     "  --output <file>        Write report output to a file instead of stdout.",
     "  --fail-on <severity>   CI threshold. Defaults to high for ci.",
     "  --help, -h             Print this help text.",

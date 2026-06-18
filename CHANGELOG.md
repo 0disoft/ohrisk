@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.44.4 - 2026-06-19
+## 0.45.0 - 2026-06-19
 
 First public release candidate for Ohrisk.
 
@@ -16,6 +16,7 @@ First public release candidate for Ohrisk.
 - `--json` output that reuses the terminal report finding model.
 - `--sarif` output for SARIF 2.1.0 code scanning upload.
 - `--markdown` output for PR comments and release notes.
+- `--cyclonedx` output for CycloneDX 1.5 JSON SBOMs.
 - Diff reports surface new or changed NOTICE and attribution work as the next action.
 - `--output <file>` for writing scan, ci, diff, and explain reports to disk.
 - `ohrisk ci --fail-on <severity>` for non-zero exits when findings meet a configured threshold.
@@ -73,7 +74,6 @@ First public release candidate for Ohrisk.
 
 ### Not Included Yet
 
-- SBOM output.
 - Waiver, approval, or legal workflow management.
 - GitHub App integration.
 - Ecosystem adapters beyond npm-style lockfiles.

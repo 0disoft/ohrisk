@@ -76,7 +76,8 @@ describe("parseArgs", () => {
       prodOnly: false,
       json: false,
       sarif: false,
-      markdown: false
+      markdown: false,
+      cyclonedx: false
     });
   });
 
@@ -94,7 +95,8 @@ describe("parseArgs", () => {
       prodOnly: true,
       json: true,
       sarif: false,
-      markdown: false
+      markdown: false,
+      cyclonedx: false
     });
   });
 
@@ -112,7 +114,8 @@ describe("parseArgs", () => {
       prodOnly: false,
       json: false,
       sarif: true,
-      markdown: false
+      markdown: false,
+      cyclonedx: false
     });
   });
 
@@ -130,7 +133,27 @@ describe("parseArgs", () => {
       prodOnly: false,
       json: false,
       sarif: false,
-      markdown: true
+      markdown: true,
+      cyclonedx: false
+    });
+  });
+
+  test("parses scan CycloneDX output", () => {
+    const parsed = parseArgs(["scan", "--cyclonedx"]);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+
+    expect(parsed.value).toEqual({
+      kind: "scan",
+      profile: "saas",
+      prodOnly: false,
+      json: false,
+      sarif: false,
+      markdown: false,
+      cyclonedx: true
     });
   });
 
@@ -149,6 +172,7 @@ describe("parseArgs", () => {
       json: true,
       sarif: false,
       markdown: false,
+      cyclonedx: false,
       outputPath: "reports/ohrisk.json"
     });
   });
@@ -168,6 +192,7 @@ describe("parseArgs", () => {
       json: false,
       sarif: false,
       markdown: false,
+      cyclonedx: false,
       failOn: "high"
     });
   });
@@ -195,6 +220,7 @@ describe("parseArgs", () => {
       json: true,
       sarif: false,
       markdown: false,
+      cyclonedx: false,
       failOn: "review"
     });
   });
@@ -211,7 +237,25 @@ describe("parseArgs", () => {
     expect(parsed.error.details?.supportedOutputOptions).toEqual([
       "--json",
       "--sarif",
-      "--markdown"
+      "--markdown",
+      "--cyclonedx"
+    ]);
+  });
+
+  test("rejects conflicting CycloneDX scan output formats", () => {
+    const parsed = parseArgs(["scan", "--cyclonedx", "--markdown"]);
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) {
+      throw new Error("Expected conflicting CycloneDX output formats to fail.");
+    }
+
+    expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+    expect(parsed.error.details?.supportedOutputOptions).toEqual([
+      "--json",
+      "--sarif",
+      "--markdown",
+      "--cyclonedx"
     ]);
   });
 

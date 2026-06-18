@@ -36,6 +36,7 @@ describe("main", () => {
     expect(output).toContain("ohrisk help [command]");
     expect(output).toContain("ohrisk version");
     expect(output).toContain("--help, -h");
+    expect(output).toContain("--cyclonedx");
   });
 
   test("prints package version", async () => {
@@ -44,7 +45,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.44.4"]);
+    expect(stdout).toEqual(["ohrisk 0.45.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -405,7 +406,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.44.4");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.45.0");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
       "ohrisk/license-unknown",
@@ -449,6 +450,108 @@ describe("main", () => {
     expect(payload.runs[0]?.results[0]?.partialFingerprints.primaryLocationLineHash).toContain(
       "::high::replace::License expression is high risk for saas."
     );
+  });
+
+  test("prints CycloneDX SBOM output", async () => {
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
+    const exitCode = await main(["scan", "--cyclonedx", "--prod"], io);
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+
+    const payload = JSON.parse(stdout.join("\n")) as {
+      bomFormat: string;
+      specVersion: string;
+      version: number;
+      metadata: {
+        component: {
+          type: string;
+          name: string;
+          "bom-ref": string;
+        };
+        properties: Array<{
+          name: string;
+          value: string;
+        }>;
+      };
+      components: Array<{
+        type: string;
+        "bom-ref": string;
+        name: string;
+        version: string;
+        purl: string;
+        scope: string;
+        licenses?: Array<
+          | {
+              expression: string;
+            }
+          | {
+              license: {
+                id?: string;
+                name?: string;
+              };
+            }
+        >;
+        properties: Array<{
+          name: string;
+          value: string;
+        }>;
+      }>;
+      dependencies: Array<{
+        ref: string;
+        dependsOn: string[];
+      }>;
+    };
+
+    expect(payload.bomFormat).toBe("CycloneDX");
+    expect(payload.specVersion).toBe("1.5");
+    expect(payload.version).toBe(1);
+    expect(payload.metadata.component).toEqual({
+      type: "application",
+      name: "fixture-bun-project",
+      "bom-ref": "project"
+    });
+    expect(payload.metadata.properties).toContainEqual({
+      name: "ohrisk:lockfileKind",
+      value: "bun"
+    });
+    expect(payload.components).toHaveLength(5);
+    expect(payload.components.map((component) => component.name)).not.toContain("dev-risk");
+
+    const parent = payload.components.find((component) => component.name === "permissive-parent");
+    expect(parent).toMatchObject({
+      type: "library",
+      "bom-ref": "pkg:npm/permissive-parent@1.0.0",
+      version: "1.0.0",
+      purl: "pkg:npm/permissive-parent@1.0.0",
+      scope: "required"
+    });
+
+    const dualLicense = payload.components.find((component) => component.name === "dual-license");
+    expect(dualLicense?.licenses).toEqual([
+      {
+        expression: "MIT OR Apache-2.0"
+      }
+    ]);
+
+    const missingLicense = payload.components.find((component) => component.name === "missing-license");
+    expect(missingLicense?.licenses).toBeUndefined();
+    expect(missingLicense?.properties).toContainEqual({
+      name: "ohrisk:licenseSignals",
+      value: "missing"
+    });
+
+    const projectDependencies = payload.dependencies.find((dependency) => dependency.ref === "project");
+    expect([...(projectDependencies?.dependsOn ?? [])].sort()).toEqual([
+      "pkg:npm/dual-license@2.0.0",
+      "pkg:npm/gpl-package@5.0.0",
+      "pkg:npm/missing-license@4.0.0",
+      "pkg:npm/permissive-parent@1.0.0"
+    ]);
+    expect(payload.dependencies).toContainEqual({
+      ref: "pkg:npm/permissive-parent@1.0.0",
+      dependsOn: ["pkg:npm/agpl-child@0.1.0"]
+    });
   });
 
   test("prints Markdown scan output", async () => {

@@ -44,6 +44,7 @@ The current implementation is the first npm-style vertical slice:
 - terminal and JSON reports
 - SARIF 2.1.0 reports for code scanning upload
 - Markdown reports for PR comments and release notes
+- CycloneDX 1.5 JSON SBOM reports
 - stable finding IDs for PR comments and future waivers
 - stable diff matching that ignores reason and evidence prose churn while surfacing severity, recommendation, and action changes
 - exact finding fingerprints for SARIF partial fingerprints and audit trails
@@ -54,8 +55,8 @@ The current implementation is the first npm-style vertical slice:
 - JSON threshold outcomes for `ci --fail-on` and `diff --fail-on`
 - terminal and Markdown threshold outcomes for `ci --fail-on` and `diff --fail-on`
 
-SBOM export, waiver workflows, GitHub App checks, and ecosystem adapters beyond
-npm-style lockfiles are not part of this slice yet.
+Waiver workflows, GitHub App checks, and ecosystem adapters beyond npm-style
+lockfiles are not part of this slice yet.
 
 ## Usage
 
@@ -117,10 +118,17 @@ Print a Markdown report:
 bun run src/cli/main.ts scan --markdown --prod
 ```
 
+Print a CycloneDX SBOM:
+
+```bash
+bun run src/cli/main.ts scan --cyclonedx --prod
+```
+
 Write a report to a file:
 
 ```bash
 bun run src/cli/main.ts scan --sarif --output reports/ohrisk.sarif
+bun run src/cli/main.ts scan --cyclonedx --output reports/ohrisk.cdx.json
 bun run src/cli/main.ts diff main --prod --markdown --output reports/ohrisk-pr.md
 ```
 
@@ -157,6 +165,7 @@ ohrisk scan --profile saas --prod
 ohrisk ci --fail-on high
 ohrisk scan --sarif
 ohrisk scan --markdown --prod
+ohrisk scan --cyclonedx --prod
 ohrisk scan --sarif --output reports/ohrisk.sarif
 ohrisk explain AGPL-3.0-only --profile saas
 ohrisk diff main --prod --fail-on unknown
