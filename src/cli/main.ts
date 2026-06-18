@@ -14,15 +14,17 @@ import { renderDiffReport } from "../report/diff-report";
 import { renderExplainReport } from "../report/explain-report";
 import { renderSarifReport } from "../report/sarif-report";
 import { renderScanReport } from "../report/scan-report";
+import { writeReportFile, type ReportWriter } from "../report/write-output";
 import { discoverProject, type ProjectInput } from "../project/discover";
-import { exitCodeForError, formatError } from "../shared/errors";
-import { isErr } from "../shared/result";
+import { exitCodeForError, formatError, type OhriskError } from "../shared/errors";
+import { isErr, ok, type Result } from "../shared/result";
 
 export type CliIO = {
   cwd: string;
   stdout: (text: string) => void;
   stderr: (text: string) => void;
   readRefFile?: GitRefFileReader;
+  writeReport?: ReportWriter;
 };
 
 export async function main(
@@ -124,16 +126,24 @@ async function runDiff(
     currentFindings: current.value.riskFindings
   });
 
-  io.stdout(
-    renderDiffReport({
+  const output = renderDiffReport({
       baselineRef: command.baselineRef,
       profile: command.profile,
       prodOnly: command.prodOnly,
       diff,
       json: command.json,
       markdown: command.markdown
-    })
-  );
+    });
+  const emitted = emitReport({
+    contents: output,
+    outputPath: command.outputPath,
+    io
+  });
+
+  if (isErr(emitted)) {
+    io.stderr(formatError(emitted.error));
+    return exitCodeForError(emitted.error);
+  }
 
   if (command.failOn && hasFailingFinding(diff.newFindings, command.failOn)) {
     return 1;
@@ -167,15 +177,24 @@ async function runExplain(
     profile: command.profile
   });
 
-  io.stdout(
-    renderExplainReport({
+  const output = renderExplainReport({
       expression: command.expression,
       profile: command.profile,
       normalizedLicense,
       finding,
       json: command.json
-    })
-  );
+    });
+  const emitted = emitReport({
+    contents: output,
+    outputPath: command.outputPath,
+    io
+  });
+
+  if (isErr(emitted)) {
+    io.stderr(formatError(emitted.error));
+    return exitCodeForError(emitted.error);
+  }
+
   return 0;
 }
 
@@ -206,7 +225,17 @@ async function runScan(
     markdown: command.markdown
   };
 
-  io.stdout(command.sarif ? renderSarifReport(reportInput) : renderScanReport(reportInput));
+  const output = command.sarif ? renderSarifReport(reportInput) : renderScanReport(reportInput);
+  const emitted = emitReport({
+    contents: output,
+    outputPath: command.outputPath,
+    io
+  });
+
+  if (isErr(emitted)) {
+    io.stderr(formatError(emitted.error));
+    return exitCodeForError(emitted.error);
+  }
 
   if (command.kind === "ci" && hasFailingFinding(scanned.value.riskFindings, command.failOn)) {
     return 1;
@@ -272,10 +301,10 @@ function renderHelp(): string {
     "Ohrisk",
     "",
     "Usage:",
-    "  ohrisk scan [--profile saas|distributed-app] [--prod] [--json|--sarif|--markdown]",
-    "  ohrisk ci [--profile saas|distributed-app] [--prod] [--json|--sarif|--markdown] [--fail-on high|unknown|review|low]",
-    "  ohrisk diff <baseline-ref> [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low]",
-    "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json]",
+    "  ohrisk scan [--profile saas|distributed-app] [--prod] [--json|--sarif|--markdown] [--output <file>]",
+    "  ohrisk ci [--profile saas|distributed-app] [--prod] [--json|--sarif|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
+    "  ohrisk diff <baseline-ref> [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
+    "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
     "  ohrisk --version",
     "",
     "Commands:",
@@ -290,9 +319,34 @@ function renderHelp(): string {
     "  --json                 Print machine-readable output.",
     "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
     "  --markdown             Print a Markdown report for PRs or release notes.",
+    "  --output <file>        Write report output to a file instead of stdout.",
     "  --fail-on <severity>   CI threshold. Defaults to high for ci.",
     "  --version, -v          Print the Ohrisk package version."
   ].join("\n");
+}
+
+function emitReport(input: {
+  contents: string;
+  outputPath: string | undefined;
+  io: CliIO;
+}): Result<void, OhriskError> {
+  if (!input.outputPath) {
+    input.io.stdout(input.contents);
+    return ok(undefined);
+  }
+
+  const writer = input.io.writeReport ?? writeReportFile;
+  const written = writer({
+    cwd: input.io.cwd,
+    outputPath: input.outputPath,
+    contents: input.contents
+  });
+
+  if (isErr(written)) {
+    return written;
+  }
+
+  return ok(undefined);
 }
 
 function hasFailingFinding(findings: RiskFinding[], failOn: RiskSeverity): boolean {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -29,7 +30,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.6.0"]);
+    expect(stdout).toEqual(["ohrisk 0.7.0"]);
   });
 
   test("prints actionable findings for a Bun project", async () => {
@@ -166,6 +167,36 @@ describe("main", () => {
     );
   });
 
+  test("writes report output to a file instead of stdout", async () => {
+    const outputRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-output-"));
+
+    try {
+      const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
+      io.cwd = path.join(fixturesDir, "bun-project");
+
+      const exitCode = await main(
+        ["scan", "--json", "--prod", "--output", path.join(outputRoot, "reports", "scan.json")],
+        io
+      );
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toEqual([]);
+      expect(stderr).toEqual([]);
+
+      const payload = JSON.parse(
+        readFileSync(path.join(outputRoot, "reports", "scan.json"), "utf8")
+      ) as {
+        status: string;
+        prodOnly: boolean;
+      };
+
+      expect(payload.status).toBe("profile_risk_evaluated");
+      expect(payload.prodOnly).toBe(true);
+    } finally {
+      rmSync(outputRoot, { recursive: true, force: true });
+    }
+  });
+
   test("prints SARIF report with stable rule ids and lockfile locations", async () => {
     const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
     const exitCode = await main(["scan", "--sarif", "--prod"], io);
@@ -216,7 +247,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.6.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.7.0");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
       "ohrisk/license-unknown",
@@ -266,6 +297,27 @@ describe("main", () => {
     expect(stderr).toEqual([]);
     expect(stdout.join("\n")).toContain("Risks: 2 high, 1 review, 1 unknown, 2 low");
     expect(stdout.join("\n")).toContain("- [high] agpl-child@0.1.0");
+  });
+
+  test("writes ci output before returning a failing threshold exit code", async () => {
+    const outputRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-ci-output-"));
+
+    try {
+      const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
+      const outputPath = path.join(outputRoot, "ci.md");
+
+      const exitCode = await main(
+        ["ci", "--markdown", "--fail-on", "high", "--output", outputPath],
+        io
+      );
+
+      expect(exitCode).toBe(1);
+      expect(stdout).toEqual([]);
+      expect(stderr).toEqual([]);
+      expect(readFileSync(outputPath, "utf8")).toContain("# Ohrisk scan");
+    } finally {
+      rmSync(outputRoot, { recursive: true, force: true });
+    }
   });
 
   test("returns zero from ci when findings stay below the fail threshold", async () => {

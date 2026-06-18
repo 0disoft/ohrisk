@@ -75,6 +75,25 @@ describe("parseArgs", () => {
     });
   });
 
+  test("parses scan output path", () => {
+    const parsed = parseArgs(["scan", "--json", "--output", "reports/ohrisk.json"]);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+
+    expect(parsed.value).toEqual({
+      kind: "scan",
+      profile: "saas",
+      prodOnly: false,
+      json: true,
+      sarif: false,
+      markdown: false,
+      outputPath: "reports/ohrisk.json"
+    });
+  });
+
   test("parses ci defaults", () => {
     const parsed = parseArgs(["ci"]);
 
@@ -165,7 +184,9 @@ describe("parseArgs", () => {
       "--prod",
       "--json",
       "--fail-on",
-      "unknown"
+      "unknown",
+      "--output",
+      "reports/diff.json"
     ]);
 
     expect(parsed.ok).toBe(true);
@@ -180,8 +201,37 @@ describe("parseArgs", () => {
       prodOnly: true,
       json: true,
       markdown: false,
+      outputPath: "reports/diff.json",
       failOn: "unknown"
     });
+  });
+
+  test("parses explain output path", () => {
+    const parsed = parseArgs(["explain", "MIT", "--output", "reports/explain.txt"]);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+
+    expect(parsed.value).toEqual({
+      kind: "explain",
+      expression: "MIT",
+      profile: "saas",
+      json: false,
+      outputPath: "reports/explain.txt"
+    });
+  });
+
+  test("rejects output without a value", () => {
+    const parsed = parseArgs(["scan", "--output"]);
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) {
+      throw new Error("Expected missing output path to fail.");
+    }
+
+    expect(parsed.error.code).toBe("INVALID_ARGUMENT");
   });
 
   test("rejects diff without a baseline ref", () => {

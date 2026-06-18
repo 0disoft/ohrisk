@@ -35,6 +35,7 @@ The current implementation is the first npm-style vertical slice:
 - terminal and JSON reports
 - SARIF 2.1.0 reports for code scanning upload
 - Markdown reports for PR comments and release notes
+- report file output with `--output <file>`
 - standalone license expression explanation
 - git ref diff reports that show only newly introduced findings
 
@@ -86,6 +87,13 @@ Print a Markdown report:
 bun run src/cli/main.ts scan --markdown --prod
 ```
 
+Write a report to a file:
+
+```bash
+bun run src/cli/main.ts scan --sarif --output reports/ohrisk.sarif
+bun run src/cli/main.ts diff main --prod --markdown --output reports/ohrisk-pr.md
+```
+
 Fail a local CI step when findings meet a threshold:
 
 ```bash
@@ -119,6 +127,7 @@ ohrisk scan --profile saas --prod
 ohrisk ci --fail-on high
 ohrisk scan --sarif
 ohrisk scan --markdown --prod
+ohrisk scan --sarif --output reports/ohrisk.sarif
 ohrisk explain AGPL-3.0-only --profile saas
 ohrisk diff main --prod --fail-on unknown
 ohrisk --version

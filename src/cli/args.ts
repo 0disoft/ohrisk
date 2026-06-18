@@ -15,6 +15,7 @@ export type CliCommand =
       json: boolean;
       sarif: boolean;
       markdown: boolean;
+      outputPath?: string;
     }
   | {
       kind: "ci";
@@ -23,6 +24,7 @@ export type CliCommand =
       json: boolean;
       sarif: boolean;
       markdown: boolean;
+      outputPath?: string;
       failOn: RiskSeverity;
     }
   | {
@@ -32,6 +34,7 @@ export type CliCommand =
       prodOnly: boolean;
       json: boolean;
       markdown: boolean;
+      outputPath?: string;
       failOn?: RiskSeverity;
     }
   | {
@@ -39,6 +42,7 @@ export type CliCommand =
       expression: string;
       profile: UsageProfile;
       json: boolean;
+      outputPath?: string;
     };
 
 export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
@@ -94,6 +98,7 @@ function parseScanLikeArgs(
   let json = false;
   let sarif = false;
   let markdown = false;
+  let outputPath: string | undefined;
   let failOn: RiskSeverity = "high";
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -160,6 +165,16 @@ function parseScanLikeArgs(
 
         markdown = true;
         break;
+      case "--output": {
+        const value = argv[index + 1];
+        if (!value) {
+          return missingOptionValue("--output");
+        }
+
+        outputPath = value;
+        index += 1;
+        break;
+      }
       case "--fail-on": {
         if (kind !== "ci") {
           return err(
@@ -230,6 +245,7 @@ function parseScanLikeArgs(
       json,
       sarif,
       markdown,
+      ...(outputPath ? { outputPath } : {}),
       failOn
     });
   }
@@ -240,7 +256,8 @@ function parseScanLikeArgs(
     prodOnly,
     json,
     sarif,
-    markdown
+    markdown,
+    ...(outputPath ? { outputPath } : {})
   });
 }
 
@@ -249,8 +266,18 @@ function isFailOnSeverity(value: string): value is RiskSeverity {
 }
 
 function supportedOptionsFor(kind: "scan" | "ci"): string[] {
-  const common = ["--profile", "--prod", "--json", "--sarif", "--markdown"];
+  const common = ["--profile", "--prod", "--json", "--sarif", "--markdown", "--output"];
   return kind === "ci" ? [...common, "--fail-on"] : common;
+}
+
+function missingOptionValue(option: string): Result<CliCommand, OhriskError> {
+  return err(
+    createError({
+      code: "INVALID_ARGUMENT",
+      category: "invalid_input",
+      message: `${option} requires a value.`
+    })
+  );
 }
 
 function outputFormatConflict(option: string): Result<CliCommand, OhriskError> {
@@ -269,6 +296,7 @@ function outputFormatConflict(option: string): Result<CliCommand, OhriskError> {
 function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
   let profile: UsageProfile = "saas";
   let json = false;
+  let outputPath: string | undefined;
   const expressionParts: string[] = [];
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -314,6 +342,16 @@ function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
       case "--json":
         json = true;
         break;
+      case "--output": {
+        const value = argv[index + 1];
+        if (!value) {
+          return missingOptionValue("--output");
+        }
+
+        outputPath = value;
+        index += 1;
+        break;
+      }
       case "--help":
       case "-h":
         return ok({ kind: "help" });
@@ -325,7 +363,7 @@ function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
               category: "invalid_input",
               message: `Unknown explain option "${arg}".`,
               details: {
-                supportedOptions: ["--profile", "--json"]
+                supportedOptions: ["--profile", "--json", "--output"]
               }
             })
           );
@@ -354,7 +392,8 @@ function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
     kind: "explain",
     expression,
     profile,
-    json
+    json,
+    ...(outputPath ? { outputPath } : {})
   });
 }
 
@@ -363,6 +402,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
   let prodOnly = false;
   let json = false;
   let markdown = false;
+  let outputPath: string | undefined;
   let failOn: RiskSeverity | undefined;
   let baselineRef: string | undefined;
 
@@ -423,6 +463,16 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
 
         markdown = true;
         break;
+      case "--output": {
+        const value = argv[index + 1];
+        if (!value) {
+          return missingOptionValue("--output");
+        }
+
+        outputPath = value;
+        index += 1;
+        break;
+      }
       case "--fail-on": {
         const value = argv[index + 1];
         if (!value) {
@@ -466,7 +516,14 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
               category: "invalid_input",
               message: `Unknown diff option "${arg}".`,
               details: {
-                supportedOptions: ["--profile", "--prod", "--json", "--markdown", "--fail-on"]
+                supportedOptions: [
+                  "--profile",
+                  "--prod",
+                  "--json",
+                  "--markdown",
+                  "--output",
+                  "--fail-on"
+                ]
               }
             })
           );
@@ -511,6 +568,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
     prodOnly,
     json,
     markdown,
+    ...(outputPath ? { outputPath } : {}),
     ...(failOn ? { failOn } : {})
   });
 }
