@@ -311,6 +311,60 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
+  test("recognizes public-domain-style license file text", () => {
+    expect(
+      normalizeLicenseEvidence({
+        packageId: "unlicense-file-only@1.0.0",
+        files: [
+          {
+            path: "UNLICENSE",
+            kind: "license",
+            text: [
+              "This is free and unencumbered software released into the public domain.",
+              "",
+              "Anyone is free to copy, modify, publish, use, compile, sell, or distribute this software."
+            ].join("\n")
+          }
+        ],
+        source: "local",
+        warnings: []
+      })
+    ).toMatchObject({
+      packageId: "unlicense-file-only@1.0.0",
+      original: "Unlicense",
+      expression: "Unlicense",
+      choices: ["Unlicense"],
+      confidence: "medium"
+    });
+
+    expect(
+      normalizeLicenseEvidence({
+        packageId: "cc0-file-only@1.0.0",
+        files: [
+          {
+            path: "LICENSE",
+            kind: "license",
+            text: [
+              "Creative Commons Legal Code",
+              "",
+              "CC0 1.0 Universal",
+              "",
+              "CREATIVE COMMONS CORPORATION IS NOT A LAW FIRM."
+            ].join("\n")
+          }
+        ],
+        source: "local",
+        warnings: []
+      })
+    ).toMatchObject({
+      packageId: "cc0-file-only@1.0.0",
+      original: "CC0-1.0",
+      expression: "CC0-1.0",
+      choices: ["CC0-1.0"],
+      confidence: "medium"
+    });
+  });
+
   test("marks explicit commercial restriction text in license files", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "commons-clause-package@1.0.0",

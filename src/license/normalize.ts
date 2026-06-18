@@ -202,6 +202,14 @@ function recognizeStandardLicenseText(text: string): string | undefined {
     return "Apache-2.0";
   }
 
+  if (/\bCreative Commons Legal Code\b[\s\S]*\bCC0 1\.0 Universal\b/i.test(text)) {
+    return "CC0-1.0";
+  }
+
+  if (/\bfree and unencumbered software released into the public domain\b/i.test(text)) {
+    return "Unlicense";
+  }
+
   if (
     /\bPermission is hereby granted, free of charge, to any person obtaining a copy\b/i.test(text)
     && /\bTHE SOFTWARE IS PROVIDED "AS IS"/i.test(text)
