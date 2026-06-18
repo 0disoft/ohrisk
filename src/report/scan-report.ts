@@ -48,7 +48,8 @@ export function renderScanReport(input: ScanReportInput): string {
         nextAction,
         ...thresholdSummary,
         findings: input.riskFindings,
-        waivedFindings: input.waivedFindings
+        waivedFindings: input.waivedFindings,
+        expiredWaivers: input.expiredWaivers
       },
       null,
       2
@@ -77,6 +78,8 @@ export function renderScanReport(input: ScanReportInput): string {
     ...renderFindings(input.riskFindings),
     "",
     ...renderWaivedFindings(input.waivedFindings),
+    "",
+    ...renderExpiredWaivers(input.expiredWaivers),
     "",
     `Next: ${nextAction}`
   ].join("\n");
@@ -107,6 +110,8 @@ function renderMarkdownReport(
     ...renderMarkdownFindings(input.riskFindings),
     "",
     ...renderMarkdownWaivedFindings(input.waivedFindings),
+    "",
+    ...renderMarkdownExpiredWaivers(input.expiredWaivers),
     "",
     "## Next",
     "",
@@ -207,6 +212,21 @@ function renderWaivedFindings(waivedFindings: WaivedRiskFinding[]): string[] {
   ];
 }
 
+function renderExpiredWaivers(expiredWaivers: RiskWaiver[]): string[] {
+  if (expiredWaivers.length === 0) {
+    return ["Expired waivers: none"];
+  }
+
+  return [
+    "Expired waivers:",
+    ...expiredWaivers.flatMap((waiver) => [
+      `- ${formatWaiverTarget(waiver)}`,
+      `  expires on: ${waiver.expiresOn ?? "unknown"}`,
+      `  reason: ${waiver.reason}`
+    ])
+  ];
+}
+
 function renderMarkdownFindings(findings: RiskFinding[]): string[] {
   if (findings.length === 0) {
     return ["## Findings", "", "No findings."];
@@ -237,6 +257,23 @@ function renderMarkdownWaivedFindings(waivedFindings: WaivedRiskFinding[]): stri
     ...waivedFindings.map(
       (waived) =>
         `| \`${escapeMarkdownTable(waived.finding.id)}\` | ${waived.finding.severity} | \`${escapeMarkdownTable(waived.finding.packageId)}\` | ${waived.matchedBy} | ${escapeMarkdownTable(waived.waiver.reason)} | ${escapeMarkdownTable(waived.finding.action)} |`
+    )
+  ];
+}
+
+function renderMarkdownExpiredWaivers(expiredWaivers: RiskWaiver[]): string[] {
+  if (expiredWaivers.length === 0) {
+    return ["## Expired waivers", "", "No expired waivers."];
+  }
+
+  return [
+    "## Expired waivers",
+    "",
+    "| Target | Expires on | Reason |",
+    "| --- | --- | --- |",
+    ...expiredWaivers.map(
+      (waiver) =>
+        `| ${escapeMarkdownTable(formatWaiverTarget(waiver))} | ${escapeMarkdownTable(waiver.expiresOn ?? "unknown")} | ${escapeMarkdownTable(waiver.reason)} |`
     )
   ];
 }
@@ -305,6 +342,14 @@ function formatPath(pathItems: string[] | undefined): string {
 
 function formatDependencyContext(finding: RiskFinding): string {
   return `${finding.dependencyType} ${finding.dependencyScope}`;
+}
+
+function formatWaiverTarget(waiver: RiskWaiver): string {
+  if (waiver.id) {
+    return `id: ${waiver.id}`;
+  }
+
+  return `fingerprint: ${waiver.fingerprint ?? "unknown"}`;
 }
 
 function nextActionFor(findings: RiskFinding[]): string {
