@@ -164,6 +164,33 @@ describe("evaluateLicenseRisk", () => {
     expect(finding.recommendation).toBe("replace");
   });
 
+  test("marks source-available restriction licenses as high risk", () => {
+    for (const expression of [
+      "Elastic-2.0",
+      "PolyForm-Noncommercial-1.0.0",
+      "PolyForm-Free-Trial-1.0.0"
+    ]) {
+      const finding = evaluateLicenseRisk({
+        license: {
+          packageId: "package@1.0.0",
+          original: expression,
+          expression,
+          choices: [expression],
+          joiner: "single",
+          signals: [],
+          evidenceSources: [`source: local`, `package.json license: ${expression}`],
+          confidence: "high"
+        },
+        dependency: baseDependency,
+        profile: "saas"
+      });
+
+      expect(finding.severity).toBe("high");
+      expect(finding.recommendation).toBe("replace");
+      expect(finding.action).toBe("Replace this package or escalate before shipping.");
+    }
+  });
+
   test("is stricter for GPL in distributed apps than SaaS", () => {
     const license = {
       packageId: "package@1.0.0",

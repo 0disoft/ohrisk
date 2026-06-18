@@ -38,6 +38,9 @@ const COMMERCIAL_RESTRICTION_LICENSES = new Set([
   "SSPL-1.0",
   "BUSL-1.1",
   "Commons-Clause",
+  "Elastic-2.0",
+  "PolyForm-Noncommercial-1.0.0",
+  "PolyForm-Free-Trial-1.0.0",
   "UNLICENSED"
 ]);
 
