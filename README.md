@@ -77,7 +77,7 @@ bun add -g ohrisk
 Run a local scan from a supported project:
 
 ```bash
-bun run src/cli/main.ts scan
+ohrisk scan
 ```
 
 Print command help or the installed package version:
@@ -98,65 +98,65 @@ Supported lockfiles:
 Pick the usage profile:
 
 ```bash
-bun run src/cli/main.ts scan --profile saas
-bun run src/cli/main.ts scan --profile distributed-app
+ohrisk scan --profile saas
+ohrisk scan --profile distributed-app
 ```
 
 Limit the scan to production-relevant dependencies by excluding development-only packages:
 
 ```bash
-bun run src/cli/main.ts scan --prod
+ohrisk scan --prod
 ```
 
 Print machine-readable output:
 
 ```bash
-bun run src/cli/main.ts scan --json
+ohrisk scan --json
 ```
 
 Print SARIF output for code scanning upload:
 
 ```bash
-bun run src/cli/main.ts scan --sarif
+ohrisk scan --sarif
 ```
 
 Print a Markdown report:
 
 ```bash
-bun run src/cli/main.ts scan --markdown --prod
+ohrisk scan --markdown --prod
 ```
 
 Print a CycloneDX SBOM:
 
 ```bash
-bun run src/cli/main.ts scan --cyclonedx --prod
+ohrisk scan --cyclonedx --prod
 ```
 
 Write a report to a file:
 
 ```bash
-bun run src/cli/main.ts scan --sarif --output reports/ohrisk.sarif
-bun run src/cli/main.ts scan --cyclonedx --output reports/ohrisk.cdx.json
-bun run src/cli/main.ts diff main --prod --markdown --output reports/ohrisk-pr.md
+ohrisk scan --sarif --output reports/ohrisk.sarif
+ohrisk scan --cyclonedx --output reports/ohrisk.cdx.json
+ohrisk diff main --prod --markdown --output reports/ohrisk-pr.md
 ```
 
 Fail a local CI step when findings meet a threshold:
 
 ```bash
-bun run src/cli/main.ts ci --fail-on high
+ohrisk ci --fail-on high
 ```
 
 Fail a local CI step when waiver files contain expired or unmatched waivers:
 
 ```bash
-bun run src/cli/main.ts ci --strict-waivers
+ohrisk ci --strict-waivers
 ```
 
 Run a raw audit scan or CI step without reading local waiver files:
 
 ```bash
-bun run src/cli/main.ts scan --no-waivers
-bun run src/cli/main.ts ci --no-waivers --fail-on high
+ohrisk scan --no-waivers
+ohrisk ci --no-waivers --fail-on high
 ```
 
 Waive a finding locally by ID or fingerprint in `.ohrisk-waivers.json`:
@@ -189,21 +189,21 @@ audits can distinguish ignored waiver files from projects with no waivers.
 Explain a license expression without scanning a project:
 
 ```bash
-bun run src/cli/main.ts explain AGPL-3.0-only --profile saas
+ohrisk explain AGPL-3.0-only --profile saas
 ```
 
 Compare the current findings against a baseline git ref:
 
 ```bash
-bun run src/cli/main.ts diff main --prod
-bun run src/cli/main.ts diff main --prod --fail-on unknown
-bun run src/cli/main.ts diff main --prod --markdown
+ohrisk diff main --prod
+ohrisk diff main --prod --fail-on unknown
+ohrisk diff main --prod --markdown
 ```
 
 Print the package version:
 
 ```bash
-bun run src/cli/main.ts --version
+ohrisk --version
 ```
 
 Once installed as a package, the intended command shape is:
