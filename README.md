@@ -46,7 +46,7 @@ The current implementation is the first npm-style vertical slice:
 - waived findings in SARIF output as externally suppressed results
 - Markdown reports for PR comments and release notes
 - CycloneDX 1.5 JSON SBOM reports with Ohrisk risk decision properties
-- stable finding IDs for PR comments and future waivers
+- stable finding IDs for PR comments and local waiver workflows
 - local `.ohrisk-waivers.json` waivers by finding ID or fingerprint
 - stable diff matching that ignores reason and evidence prose churn while surfacing severity, recommendation, and action changes
 - exact finding fingerprints for SARIF partial fingerprints and audit trails
