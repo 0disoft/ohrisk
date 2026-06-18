@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.51.0 - 2026-06-19
+## 0.52.0 - 2026-06-19
 
 First public release candidate for Ohrisk.
 
@@ -21,6 +21,7 @@ First public release candidate for Ohrisk.
 - `--output <file>` for writing scan, ci, diff, and explain reports to disk.
 - `ohrisk ci --fail-on <severity>` for non-zero exits when findings meet a configured threshold.
 - `ohrisk ci --strict-waivers` for non-zero exits when local waivers are expired or unmatched.
+- `ohrisk scan --no-waivers` and `ohrisk ci --no-waivers` for raw audits that ignore local waiver files.
 - `ohrisk explain <license-expression>` for profile-aware license risk explanation without scanning a project.
 - `ohrisk diff <baseline-ref>` for git-ref baseline comparison that reports only new or meaningfully changed findings.
 - `--version` and `-v` package version output.

@@ -19,6 +19,7 @@ export type CliCommand =
       sarif: boolean;
       markdown: boolean;
       cyclonedx: boolean;
+      noWaivers: boolean;
       outputPath?: string;
     }
   | {
@@ -29,6 +30,7 @@ export type CliCommand =
       sarif: boolean;
       markdown: boolean;
       cyclonedx: boolean;
+      noWaivers: boolean;
       outputPath?: string;
       failOn: RiskSeverity;
       strictWaivers: boolean;
@@ -163,6 +165,7 @@ function parseScanLikeArgs(
   let sarif = false;
   let markdown = false;
   let cyclonedx = false;
+  let noWaivers = false;
   let outputPath: string | undefined;
   let failOn: RiskSeverity = "high";
   let strictWaivers = false;
@@ -209,6 +212,9 @@ function parseScanLikeArgs(
       }
       case "--prod":
         prodOnly = true;
+        break;
+      case "--no-waivers":
+        noWaivers = true;
         break;
       case "--json":
         if (sarif || markdown || cyclonedx) {
@@ -327,6 +333,19 @@ function parseScanLikeArgs(
     }
   }
 
+  if (kind === "ci" && noWaivers && strictWaivers) {
+    return err(
+      createError({
+        code: "INVALID_ARGUMENT",
+        category: "invalid_input",
+        message: "--no-waivers cannot be combined with --strict-waivers.",
+        details: {
+          supportedOptions: supportedOptionsFor(kind)
+        }
+      })
+    );
+  }
+
   if (kind === "ci") {
     return ok({
       kind,
@@ -336,6 +355,7 @@ function parseScanLikeArgs(
       sarif,
       markdown,
       cyclonedx,
+      noWaivers,
       ...(outputPath ? { outputPath } : {}),
       failOn,
       strictWaivers
@@ -350,6 +370,7 @@ function parseScanLikeArgs(
     sarif,
     markdown,
     cyclonedx,
+    noWaivers,
     ...(outputPath ? { outputPath } : {})
   });
 }
@@ -366,6 +387,7 @@ function supportedOptionsFor(kind: "scan" | "ci"): string[] {
     "--sarif",
     "--markdown",
     "--cyclonedx",
+    "--no-waivers",
     "--output",
     "--help",
     "-h"

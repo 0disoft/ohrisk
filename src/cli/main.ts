@@ -225,7 +225,7 @@ async function runScan(
     cwd: io.cwd,
     profile: command.profile,
     prodOnly: command.prodOnly,
-    applyWaivers: true
+    applyWaivers: !command.noWaivers
   });
 
   if (isErr(scanned)) {
@@ -418,8 +418,8 @@ function renderHelp(): string {
     "Ohrisk",
     "",
     "Usage:",
-    "  ohrisk scan [--profile saas|distributed-app] [--prod] [--json|--sarif|--markdown|--cyclonedx] [--output <file>]",
-    "  ohrisk ci [--profile saas|distributed-app] [--prod] [--json|--sarif|--markdown|--cyclonedx] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>]",
+    "  ohrisk scan [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--cyclonedx] [--output <file>]",
+    "  ohrisk ci [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--cyclonedx] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>]",
     "  ohrisk diff <baseline-ref> [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
     "  ohrisk help [command]",
@@ -436,6 +436,7 @@ function renderHelp(): string {
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --prod                 Exclude development-only dependencies.",
+    "  --no-waivers           Ignore local .ohrisk-waivers.json files.",
     "  --json                 Print machine-readable output.",
     "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
     "  --markdown             Print a Markdown report for PRs or release notes.",

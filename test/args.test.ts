@@ -77,7 +77,8 @@ describe("parseArgs", () => {
       json: false,
       sarif: false,
       markdown: false,
-      cyclonedx: false
+      cyclonedx: false,
+      noWaivers: false
     });
   });
 
@@ -96,7 +97,8 @@ describe("parseArgs", () => {
       json: true,
       sarif: false,
       markdown: false,
-      cyclonedx: false
+      cyclonedx: false,
+      noWaivers: false
     });
   });
 
@@ -115,7 +117,8 @@ describe("parseArgs", () => {
       json: false,
       sarif: true,
       markdown: false,
-      cyclonedx: false
+      cyclonedx: false,
+      noWaivers: false
     });
   });
 
@@ -134,7 +137,8 @@ describe("parseArgs", () => {
       json: false,
       sarif: false,
       markdown: true,
-      cyclonedx: false
+      cyclonedx: false,
+      noWaivers: false
     });
   });
 
@@ -153,7 +157,8 @@ describe("parseArgs", () => {
       json: false,
       sarif: false,
       markdown: false,
-      cyclonedx: true
+      cyclonedx: true,
+      noWaivers: false
     });
   });
 
@@ -173,7 +178,28 @@ describe("parseArgs", () => {
       sarif: false,
       markdown: false,
       cyclonedx: false,
+      noWaivers: false,
       outputPath: "reports/ohrisk.json"
+    });
+  });
+
+  test("parses scan without local waivers", () => {
+    const parsed = parseArgs(["scan", "--no-waivers"]);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+
+    expect(parsed.value).toEqual({
+      kind: "scan",
+      profile: "saas",
+      prodOnly: false,
+      json: false,
+      sarif: false,
+      markdown: false,
+      cyclonedx: false,
+      noWaivers: true
     });
   });
 
@@ -193,6 +219,7 @@ describe("parseArgs", () => {
       sarif: false,
       markdown: false,
       cyclonedx: false,
+      noWaivers: false,
       failOn: "high",
       strictWaivers: false
     });
@@ -223,8 +250,31 @@ describe("parseArgs", () => {
       sarif: false,
       markdown: false,
       cyclonedx: false,
+      noWaivers: false,
       failOn: "review",
       strictWaivers: true
+    });
+  });
+
+  test("parses ci without local waivers", () => {
+    const parsed = parseArgs(["ci", "--no-waivers"]);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+
+    expect(parsed.value).toEqual({
+      kind: "ci",
+      profile: "saas",
+      prodOnly: false,
+      json: false,
+      sarif: false,
+      markdown: false,
+      cyclonedx: false,
+      noWaivers: true,
+      failOn: "high",
+      strictWaivers: false
     });
   });
 
@@ -453,6 +503,18 @@ describe("parseArgs", () => {
 
     expect(parsed.error.code).toBe("INVALID_ARGUMENT");
     expect(parsed.error.details?.supportedOptions).not.toContain("--strict-waivers");
+  });
+
+  test("rejects strict waiver checks when local waivers are disabled", () => {
+    const parsed = parseArgs(["ci", "--no-waivers", "--strict-waivers"]);
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) {
+      throw new Error("Expected strict waiver checks without waivers to fail.");
+    }
+
+    expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+    expect(parsed.error.message).toContain("--no-waivers cannot be combined with --strict-waivers");
   });
 
   test("reports help options for unknown diff and explain options", () => {
