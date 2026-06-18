@@ -5,6 +5,7 @@ import type { DependencyGraph } from "../graph/types";
 import type { NormalizedLicense } from "../license/types";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
 import type { ProjectInput } from "../project/discover";
+import { buildThresholdSummary } from "./threshold-summary";
 
 export type ScanReportInput = {
   project: ProjectInput;
@@ -16,6 +17,7 @@ export type ScanReportInput = {
   prodOnly: boolean;
   json: boolean;
   markdown: boolean;
+  failOn?: RiskSeverity;
 };
 
 export function renderScanReport(input: ScanReportInput): string {
@@ -38,6 +40,7 @@ export function renderScanReport(input: ScanReportInput): string {
         licenses: summary.licenses,
         risks: summary.risks,
         nextAction,
+        ...buildThresholdSummary(input.riskFindings, input.failOn),
         findings: input.riskFindings
       },
       null,

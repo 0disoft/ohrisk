@@ -41,6 +41,7 @@ The current implementation is the first npm-style vertical slice:
 - report file output with `--output <file>`
 - standalone license expression explanation
 - git ref diff reports that show only newly introduced findings
+- JSON threshold outcomes for `ci --fail-on` and `diff --fail-on`
 
 SBOM export, waiver workflows, GitHub App checks, and ecosystem adapters beyond
 npm-style lockfiles are not part of this slice yet.
@@ -170,6 +171,9 @@ JSON output reuses the same finding model:
   "profile": "saas",
   "prodOnly": true,
   "nextAction": "Replace or escalate high-risk dependencies before shipping.",
+  "failOn": "high",
+  "failed": true,
+  "failingFindingCount": 1,
   "findings": [
     {
       "packageId": "agpl-child@0.1.0",

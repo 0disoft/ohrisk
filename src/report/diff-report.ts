@@ -1,6 +1,7 @@
 import type { RiskDiff } from "../diff/compare";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
 import type { UsageProfile } from "../policy/profiles";
+import { buildThresholdSummary } from "./threshold-summary";
 
 export type DiffReportInput = {
   baselineRef: string;
@@ -9,6 +10,7 @@ export type DiffReportInput = {
   diff: RiskDiff;
   json: boolean;
   markdown: boolean;
+  failOn?: RiskSeverity;
 };
 
 export function renderDiffReport(input: DiffReportInput): string {
@@ -27,6 +29,7 @@ export function renderDiffReport(input: DiffReportInput): string {
         newFindingCount: input.diff.newFindings.length,
         newRisks: summary,
         nextAction,
+        ...buildThresholdSummary(input.diff.newFindings, input.failOn),
         findings: input.diff.newFindings
       },
       null,

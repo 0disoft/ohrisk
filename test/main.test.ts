@@ -30,7 +30,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.19.0"]);
+    expect(stdout).toEqual(["ohrisk 0.20.0"]);
   });
 
   test("prints actionable findings for a Bun project", async () => {
@@ -345,7 +345,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.19.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.20.0");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
       "ohrisk/license-unknown",
@@ -416,6 +416,24 @@ describe("main", () => {
     expect(stderr).toEqual([]);
     expect(stdout.join("\n")).toContain("Risks: 2 high, 1 review, 1 unknown, 2 low");
     expect(stdout.join("\n")).toContain("- [high] agpl-child@0.1.0");
+  });
+
+  test("prints JSON ci threshold outcome", async () => {
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
+    const exitCode = await main(["ci", "--json", "--fail-on", "high"], io);
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toEqual([]);
+
+    const payload = JSON.parse(stdout.join("\n")) as {
+      failOn: string;
+      failed: boolean;
+      failingFindingCount: number;
+    };
+
+    expect(payload.failOn).toBe("high");
+    expect(payload.failed).toBe(true);
+    expect(payload.failingFindingCount).toBe(2);
   });
 
   test("writes ci output before returning a failing threshold exit code", async () => {
@@ -603,11 +621,32 @@ describe("main", () => {
     const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
     io.readRefFile = () => ({ ok: true as const, value: baselineLockfile });
 
-    const exitCode = await main(["diff", "main", "--prod", "--fail-on", "unknown"], io);
+    const exitCode = await main(["diff", "main", "--prod", "--json", "--fail-on", "unknown"], io);
 
     expect(exitCode).toBe(1);
     expect(stderr).toEqual([]);
-    expect(stdout.join("\n")).toContain("New risks: 0 high, 1 review, 1 unknown, 0 low");
+
+    const payload = JSON.parse(stdout.join("\n")) as {
+      failOn: string;
+      failed: boolean;
+      failingFindingCount: number;
+      newRisks: {
+        high: number;
+        review: number;
+        unknown: number;
+        low: number;
+      };
+    };
+
+    expect(payload.newRisks).toEqual({
+      high: 0,
+      review: 1,
+      unknown: 1,
+      low: 0
+    });
+    expect(payload.failOn).toBe("unknown");
+    expect(payload.failed).toBe(true);
+    expect(payload.failingFindingCount).toBe(1);
   });
 
   test("explains license risk without scanning a project", async () => {

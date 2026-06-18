@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.19.0 - 2026-06-18
+## 0.20.0 - 2026-06-18
 
 First public release candidate for Ohrisk.
 
@@ -40,6 +40,7 @@ First public release candidate for Ohrisk.
 - Risk findings include structured dependency type and direct/transitive scope.
 - Scan and diff reports choose the next action from the actual finding recommendations.
 - JSON scan and diff reports include the same next action used by human-readable reports.
+- JSON reports include `failOn`, `failed`, and `failingFindingCount` when a CI or diff threshold is configured.
 - Unknown-risk findings now distinguish missing, malformed, and unrecognized license metadata in reason and action text.
 - Risk findings for low, review, high, and unknown license evidence.
 - Terminal findings sorted by severity with package path, recommendation, and evidence snippets.

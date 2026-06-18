@@ -13,7 +13,7 @@ import { parseYarnLockfile, parseYarnLockText } from "../graph/npm-yarn-lock";
 import type { DependencyGraph } from "../graph/types";
 import { normalizeAllLicenseEvidence, normalizeLicenseEvidence } from "../license/normalize";
 import { evaluateLicenseRisk, evaluateLicenseRisks } from "../policy/evaluate";
-import type { RiskFinding, RiskSeverity } from "../policy/types";
+import { hasFindingAtOrAbove } from "../policy/severity";
 import { renderDiffReport } from "../report/diff-report";
 import { renderExplainReport } from "../report/explain-report";
 import { renderSarifReport } from "../report/sarif-report";
@@ -152,7 +152,8 @@ async function runDiff(
       prodOnly: command.prodOnly,
       diff,
       json: command.json,
-      markdown: command.markdown
+      markdown: command.markdown,
+      failOn: command.failOn
     });
   const emitted = emitReport({
     contents: output,
@@ -165,7 +166,7 @@ async function runDiff(
     return exitCodeForError(emitted.error);
   }
 
-  if (command.failOn && hasFailingFinding(diff.newFindings, command.failOn)) {
+  if (command.failOn && hasFindingAtOrAbove(diff.newFindings, command.failOn)) {
     return 1;
   }
 
@@ -242,7 +243,8 @@ async function runScan(
     profile: command.profile,
     prodOnly: command.prodOnly,
     json: command.json,
-    markdown: command.markdown
+    markdown: command.markdown,
+    failOn: command.kind === "ci" ? command.failOn : undefined
   };
 
   const output = command.sarif ? renderSarifReport(reportInput) : renderScanReport(reportInput);
@@ -257,7 +259,7 @@ async function runScan(
     return exitCodeForError(emitted.error);
   }
 
-  if (command.kind === "ci" && hasFailingFinding(scanned.value.riskFindings, command.failOn)) {
+  if (command.kind === "ci" && hasFindingAtOrAbove(scanned.value.riskFindings, command.failOn)) {
     return 1;
   }
 
@@ -406,22 +408,6 @@ function emitReport(input: {
   return ok(undefined);
 }
 
-function hasFailingFinding(findings: RiskFinding[], failOn: RiskSeverity): boolean {
-  return findings.some((finding) => severityRank(finding.severity) >= severityRank(failOn));
-}
-
-function severityRank(severity: RiskSeverity): number {
-  switch (severity) {
-    case "low":
-      return 0;
-    case "review":
-      return 1;
-    case "unknown":
-      return 2;
-    case "high":
-      return 3;
-  }
-}
 
 function renderVersion(): string {
   return `ohrisk ${readPackageVersion()}`;
