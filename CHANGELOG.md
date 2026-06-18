@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.52.1 - 2026-06-19
+
+### Fixed
+
+- README report examples now match the current terminal and Markdown fingerprint output.
+
 ## 0.52.0 - 2026-06-19
 
 First public release candidate for Ohrisk.

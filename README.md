@@ -228,15 +228,18 @@ Ohrisk scan
 Profile: saas
 Production only: yes
 Risks: 1 high, 1 review, 1 unknown, 2 low
+Waived: 0 applied, 0 expired, 0 unmatched
 
 Findings:
 - [high] agpl-child@0.1.0
   id: agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0
+  fingerprint: agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0::high::replace::License expression is high risk for saas.::license: AGPL-3.0-only|dependency: production|transitive dependency|source: local|package.json license: AGPL-3.0-only|file: COPYING (copying)
   License expression is high risk for saas.
   recommendation: replace
   action: Replace this package or escalate before shipping.
+  dependency: production transitive
   path: fixture-bun-project -> permissive-parent@1.0.0 -> agpl-child@0.1.0
-  evidence: license: AGPL-3.0-only; dependency: production; transitive dependency
+  evidence: license: AGPL-3.0-only; dependency: production; transitive dependency; source: local; package.json license: AGPL-3.0-only; file: COPYING (copying)
 ```
 
 JSON output reuses the same finding model:
@@ -280,9 +283,9 @@ Markdown output keeps the scan summary and PR-facing decision fields together:
 - License issues: `1 missing`, `0 malformed`
 - Threshold: failed on high (1 finding at or above threshold)
 
-| ID | Severity | Package | Dependency | Reason | Recommendation | Action | Path |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0` | high | `agpl-child@0.1.0` | production transitive | License expression is high risk for saas. | replace | Replace this package or escalate before shipping. | fixture-bun-project -> permissive-parent@1.0.0 -> agpl-child@0.1.0 |
+| ID | Fingerprint | Severity | Package | Dependency | Reason | Recommendation | Action | Path |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0` | `agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0::high::replace::License expression is high risk for saas.::license: AGPL-3.0-only\|dependency: production\|transitive dependency\|source: local\|package.json license: AGPL-3.0-only\|file: COPYING (copying)` | high | `agpl-child@0.1.0` | production transitive | License expression is high risk for saas. | replace | Replace this package or escalate before shipping. | fixture-bun-project -> permissive-parent@1.0.0 -> agpl-child@0.1.0 |
 ```
 
 ## Risk Language
