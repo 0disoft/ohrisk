@@ -191,6 +191,7 @@ Markdown output keeps the scan summary and PR-facing decision fields together:
 
 ```markdown
 - Licenses: `4 high-confidence`, `0 medium-confidence`, `1 low-confidence`
+- License issues: `1 missing`, `0 malformed`
 
 | Severity | Package | Reason | Recommendation | Action | Path |
 | --- | --- | --- | --- | --- | --- |

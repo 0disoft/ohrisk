@@ -30,7 +30,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.16.0"]);
+    expect(stdout).toEqual(["ohrisk 0.17.0"]);
   });
 
   test("prints actionable findings for a Bun project", async () => {
@@ -44,6 +44,7 @@ describe("main", () => {
     expect(stdout.join("\n")).toContain("Dependencies: 6 total, 5 direct, 1 transitive");
     expect(stdout.join("\n")).toContain("Evidence: 5 files, 1 warnings");
     expect(stdout.join("\n")).toContain("Licenses: 5 high-confidence, 0 medium-confidence, 1 low-confidence");
+    expect(stdout.join("\n")).toContain("License issues: 1 missing, 0 malformed");
     expect(stdout.join("\n")).toContain("Risks: 2 high, 1 review, 1 unknown, 2 low");
     expect(stdout.join("\n")).toContain("Status: profile-aware risk evaluated");
     expect(stdout.join("\n")).toContain("Findings:");
@@ -328,7 +329,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.16.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.17.0");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
       "ohrisk/license-unknown",
@@ -377,6 +378,7 @@ describe("main", () => {
     expect(output).toContain(
       "- Licenses: `4 high-confidence`, `0 medium-confidence`, `1 low-confidence`"
     );
+    expect(output).toContain("- License issues: `1 missing`, `0 malformed`");
     expect(output).toContain("| Severity | Package | Reason | Recommendation | Action | Path |");
     expect(output).toContain(
       "| high | `agpl-child@0.1.0` | License expression is high risk for saas. | replace | Replace this package or escalate before shipping. |"
