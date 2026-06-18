@@ -50,7 +50,7 @@ The current implementation is the first npm-style vertical slice:
 - structured dependency type and direct/transitive scope in findings
 - report file output with `--output <file>`
 - standalone license expression explanation
-- git ref diff reports that show only newly introduced or meaningfully changed findings
+- git ref diff reports that show only new or meaningfully changed findings
 - JSON threshold outcomes for `ci --fail-on` and `diff --fail-on`
 - terminal and Markdown threshold outcomes for `ci --fail-on` and `diff --fail-on`
 

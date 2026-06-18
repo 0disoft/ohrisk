@@ -48,8 +48,8 @@ export function renderDiffReport(input: DiffReportInput): string {
     `Baseline: ${input.baselineRef}`,
     `Profile: ${input.profile}`,
     `Production only: ${input.prodOnly ? "yes" : "no"}`,
-    `Findings: ${input.diff.currentFindings.length} current, ${input.diff.baselineFindings.length} baseline, ${input.diff.newFindings.length} new`,
-    `New risks: ${summary.high} high, ${summary.review} review, ${summary.unknown} unknown, ${summary.low} low`,
+    `Findings: ${input.diff.currentFindings.length} current, ${input.diff.baselineFindings.length} baseline, ${input.diff.newFindings.length} new or changed`,
+    `New or changed risks: ${summary.high} high, ${summary.review} review, ${summary.unknown} unknown, ${summary.low} low`,
     ...renderThresholdLines(thresholdSummary),
     "Status: profile-aware risk diff evaluated",
     "",
@@ -72,8 +72,8 @@ function renderMarkdownReport(
     `- Baseline: \`${input.baselineRef}\``,
     `- Profile: \`${input.profile}\``,
     `- Production only: \`${input.prodOnly ? "yes" : "no"}\``,
-    `- Findings: \`${input.diff.currentFindings.length} current\`, \`${input.diff.baselineFindings.length} baseline\`, \`${input.diff.newFindings.length} new\``,
-    `- New risks: \`${summary.high} high\`, \`${summary.review} review\`, \`${summary.unknown} unknown\`, \`${summary.low} low\``,
+    `- Findings: \`${input.diff.currentFindings.length} current\`, \`${input.diff.baselineFindings.length} baseline\`, \`${input.diff.newFindings.length} new or changed\``,
+    `- New or changed risks: \`${summary.high} high\`, \`${summary.review} review\`, \`${summary.unknown} unknown\`, \`${summary.low} low\``,
     ...renderMarkdownThresholdLines(thresholdSummary),
     "",
     ...renderMarkdownNewFindings(input.diff.newFindings),
@@ -113,11 +113,11 @@ function renderMarkdownThresholdLines(
 
 function renderNewFindings(findings: RiskFinding[]): string[] {
   if (findings.length === 0) {
-    return ["New findings: none"];
+    return ["New or changed findings: none"];
   }
 
   return [
-    "New findings:",
+    "New or changed findings:",
     ...findings.flatMap((finding) => [
       `- [${finding.severity}] ${finding.packageId}`,
       `  id: ${finding.id}`,
@@ -133,11 +133,11 @@ function renderNewFindings(findings: RiskFinding[]): string[] {
 
 function renderMarkdownNewFindings(findings: RiskFinding[]): string[] {
   if (findings.length === 0) {
-    return ["## New findings", "", "No new findings."];
+    return ["## New or changed findings", "", "No new or changed findings."];
   }
 
   return [
-    "## New findings",
+    "## New or changed findings",
     "",
     "| ID | Severity | Package | Dependency | Reason | Recommendation | Action | Path |",
     "| --- | --- | --- | --- | --- | --- | --- | --- |",
@@ -154,30 +154,30 @@ function formatDependencyContext(finding: RiskFinding): string {
 
 function nextActionFor(findings: RiskFinding[]): string {
   if (findings.length === 0) {
-    return "No new license risk introduced by this diff.";
+    return "No new or changed license risk introduced by this diff.";
   }
 
   if (findings.some((finding) => finding.recommendation === "replace")) {
-    return "Block or escalate new high-risk dependencies before merging.";
+    return "Block or escalate new or changed high-risk dependencies before merging.";
   }
 
   if (findings.some((finding) => finding.recommendation === "collect-evidence")) {
-    return "Collect evidence for new unknown license findings before merging.";
+    return "Collect evidence for new or changed unknown license findings before merging.";
   }
 
   if (findings.some((finding) => finding.recommendation === "review")) {
-    return "Review new flagged dependencies before merging.";
+    return "Review new or changed flagged dependencies before merging.";
   }
 
   if (findings.some((finding) => finding.recommendation === "exclude-dev-only")) {
-    return "Confirm new dev-only risk stays out of production before merging.";
+    return "Confirm new or changed dev-only risk stays out of production before merging.";
   }
 
   if (findings.some((finding) => finding.action === NOTICE_ACTION)) {
-    return "Preserve required NOTICE or attribution files for newly introduced packages.";
+    return "Preserve required NOTICE or attribution files for new or changed packages.";
   }
 
-  return "No blocking action for new low-risk findings.";
+  return "No blocking action for new or changed low-risk findings.";
 }
 
 function escapeMarkdownTable(value: string): string {

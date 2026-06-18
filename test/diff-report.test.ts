@@ -21,7 +21,7 @@ function noticeFinding(): RiskFinding {
 }
 
 describe("renderDiffReport", () => {
-  test("surfaces attribution work for newly introduced notice findings", () => {
+  test("surfaces attribution work for new or changed notice findings", () => {
     const finding = noticeFinding();
     const output = renderDiffReport({
       baselineRef: "main",
@@ -36,10 +36,11 @@ describe("renderDiffReport", () => {
       markdown: false
     });
 
-    expect(output).toContain("New risks: 0 high, 0 review, 0 unknown, 1 low");
+    expect(output).toContain("New or changed risks: 0 high, 0 review, 0 unknown, 1 low");
+    expect(output).toContain("New or changed findings:");
     expect(output).toContain("- [low] notice-package@1.0.0");
     expect(output).toContain(
-      "Next: Preserve required NOTICE or attribution files for newly introduced packages."
+      "Next: Preserve required NOTICE or attribution files for new or changed packages."
     );
   });
 
@@ -61,7 +62,7 @@ describe("renderDiffReport", () => {
     ) as { nextAction: string };
 
     expect(payload.nextAction).toBe(
-      "Preserve required NOTICE or attribution files for newly introduced packages."
+      "Preserve required NOTICE or attribution files for new or changed packages."
     );
   });
 });
