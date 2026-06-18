@@ -26,6 +26,7 @@ export function renderDiffReport(input: DiffReportInput): string {
         currentFindingCount: input.diff.currentFindings.length,
         newFindingCount: input.diff.newFindings.length,
         newRisks: summary,
+        nextAction,
         findings: input.diff.newFindings
       },
       null,

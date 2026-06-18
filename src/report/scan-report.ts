@@ -37,6 +37,7 @@ export function renderScanReport(input: ScanReportInput): string {
         evidence: summary.evidence,
         licenses: summary.licenses,
         risks: summary.risks,
+        nextAction,
         findings: input.riskFindings
       },
       null,

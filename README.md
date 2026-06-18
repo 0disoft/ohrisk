@@ -169,6 +169,7 @@ JSON output reuses the same finding model:
   "status": "profile_risk_evaluated",
   "profile": "saas",
   "prodOnly": true,
+  "nextAction": "Replace or escalate high-risk dependencies before shipping.",
   "findings": [
     {
       "packageId": "agpl-child@0.1.0",
