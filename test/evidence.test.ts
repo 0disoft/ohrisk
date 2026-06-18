@@ -66,7 +66,7 @@ describe("collectTarballEvidence", () => {
 });
 
 describe("collectGraphEvidence", () => {
-  test("collects evidence for every package in a parsed graph", () => {
+  test("collects evidence for every package in a parsed graph", async () => {
     const graph = parseBunLockfile(path.join(bunProjectDir, "bun.lock"));
 
     expect(graph.ok).toBe(true);
@@ -74,7 +74,7 @@ describe("collectGraphEvidence", () => {
       throw new Error(graph.error.message);
     }
 
-    const evidence = collectGraphEvidence({
+    const evidence = await collectGraphEvidence({
       graph: graph.value,
       projectRoot: bunProjectDir
     });
@@ -100,6 +100,100 @@ describe("collectGraphEvidence", () => {
       warnings: ["No LICENSE, LICENCE, COPYING, or NOTICE file found."]
     });
     expect(missingLicense).not.toHaveProperty("packageJsonLicense");
+  });
+
+  test("fetches remote tarball evidence from HTTP resolved artifacts", async () => {
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "remote-fixture",
+        version: "1.2.3",
+        license: "ISC"
+      }),
+      "package/LICENSE": "ISC License fixture text."
+    });
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "remote-fixture@1.2.3",
+            name: "remote-fixture",
+            version: "1.2.3",
+            ecosystem: "npm",
+            resolved: "https://registry.example.test/remote-fixture/-/remote-fixture-1.2.3.tgz",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "remote-fixture@1.2.3"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async () => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        arrayBuffer: async () => tarball.buffer.slice(
+          tarball.byteOffset,
+          tarball.byteOffset + tarball.byteLength
+        ) as ArrayBuffer
+      })
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+
+    expect(evidence.value).toEqual([
+      expect.objectContaining({
+        packageId: "remote-fixture@1.2.3",
+        packageJsonLicense: "ISC",
+        source: "tarball",
+        files: [
+          {
+            path: "LICENSE",
+            kind: "license",
+            text: "ISC License fixture text."
+          }
+        ]
+      })
+    ]);
+  });
+
+  test("reports remote tarball fetch failures", async () => {
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "missing-remote@9.9.9",
+            name: "missing-remote",
+            version: "9.9.9",
+            ecosystem: "npm",
+            resolved: "https://registry.example.test/missing-remote/-/missing-remote-9.9.9.tgz",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "missing-remote@9.9.9"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async () => ({
+        ok: false,
+        status: 404,
+        statusText: "Not Found",
+        arrayBuffer: async () => new ArrayBuffer(0)
+      })
+    });
+
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected remote tarball fetch to fail.");
+    }
+
+    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
+    expect(evidence.error.category).toBe("network");
   });
 });
 

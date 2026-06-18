@@ -2,6 +2,7 @@ export type OhriskErrorCategory =
   | "invalid_input"
   | "unsupported_input"
   | "filesystem"
+  | "network"
   | "internal";
 
 export type OhriskErrorCode =
@@ -14,7 +15,8 @@ export type OhriskErrorCode =
   | "BUN_LOCK_PARSE_FAILED"
   | "PACKAGE_EVIDENCE_READ_FAILED"
   | "PACKAGE_JSON_PARSE_FAILED"
-  | "TARBALL_PARSE_FAILED";
+  | "TARBALL_PARSE_FAILED"
+  | "TARBALL_FETCH_FAILED";
 
 export type OhriskError = {
   code: OhriskErrorCode;
@@ -33,6 +35,7 @@ export function exitCodeForError(error: OhriskError): number {
     case "unsupported_input":
       return 2;
     case "filesystem":
+    case "network":
     case "internal":
       return 1;
   }

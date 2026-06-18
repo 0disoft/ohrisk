@@ -37,7 +37,7 @@ export async function main(
   }
 }
 
-function runScan(command: Extract<CliCommand, { kind: "scan" }>, io: CliIO): number {
+async function runScan(command: Extract<CliCommand, { kind: "scan" }>, io: CliIO): Promise<number> {
   const discovered = discoverProject({ cwd: io.cwd });
 
   if (isErr(discovered)) {
@@ -59,7 +59,7 @@ function runScan(command: Extract<CliCommand, { kind: "scan" }>, io: CliIO): num
       }
     : graph.value;
 
-  const evidence = collectGraphEvidence({
+  const evidence = await collectGraphEvidence({
     graph: scanGraph,
     projectRoot: discovered.value.rootDir
   });
