@@ -121,4 +121,100 @@ describe("parseBunLockfile", () => {
         ]]
       });
   });
+
+  test("preserves nested optional and peer dependency edge types", () => {
+    const result = parseBunLockText(
+      JSON.stringify({
+        workspaces: {
+          "": {
+            name: "fixture-bun-nested-edges",
+            dependencies: {
+              "prod-parent": "1.0.0"
+            }
+          }
+        },
+        packages: {
+          "prod-parent": [
+            "prod-parent@1.0.0",
+            "",
+            {
+              dependencies: {
+                "regular-child": "1.0.0"
+              },
+              optionalDependencies: {
+                "optional-child": "1.0.0"
+              },
+              peerDependencies: {
+                "peer-child": "1.0.0"
+              }
+            }
+          ],
+          "regular-child": [
+            "regular-child@1.0.0",
+            "",
+            {}
+          ],
+          "optional-child": [
+            "optional-child@1.0.0",
+            "",
+            {}
+          ],
+          "peer-child": [
+            "peer-child@1.0.0",
+            "",
+            {}
+          ]
+        }
+      }),
+      "nested-edges-bun.lock"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "optional-child@1.0.0",
+      "peer-child@1.0.0",
+      "prod-parent@1.0.0",
+      "regular-child@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "prod-parent@1.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: true,
+        paths: [["fixture-bun-nested-edges", "prod-parent@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "regular-child@1.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: false,
+        paths: [[
+          "fixture-bun-nested-edges",
+          "prod-parent@1.0.0",
+          "regular-child@1.0.0"
+        ]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "optional-child@1.0.0"))
+      .toMatchObject({
+        dependencyType: "optional",
+        direct: false,
+        paths: [[
+          "fixture-bun-nested-edges",
+          "prod-parent@1.0.0",
+          "optional-child@1.0.0"
+        ]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "peer-child@1.0.0"))
+      .toMatchObject({
+        dependencyType: "peer",
+        direct: false,
+        paths: [[
+          "fixture-bun-nested-edges",
+          "prod-parent@1.0.0",
+          "peer-child@1.0.0"
+        ]]
+      });
+  });
 });

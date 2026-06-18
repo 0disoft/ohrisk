@@ -33,12 +33,18 @@ type BunLockPackageRecord = {
   id: string;
   resolved?: string;
   integrity?: string;
-  dependencies: Record<string, string>;
+  dependencies: BunLockDependencyEdge[];
 };
 
 type BunLockShape = {
   workspaces?: Record<string, BunLockWorkspace>;
   packages?: Record<string, BunLockPackageTuple>;
+};
+
+type BunLockDependencyEdge = {
+  name: string;
+  range: string;
+  type: DependencyType;
 };
 
 export function parseBunLockfile(
@@ -158,7 +164,7 @@ function parsePackageRecords(packages: Record<string, BunLockPackageTuple>): Bun
     }
 
     const metadata = isObjectRecord(tuple[2]) ? tuple[2] : {};
-    const dependencies = readDependencyMap(metadata.dependencies);
+    const dependencies = collectDependencyEdges(metadata);
     const resolved = typeof tuple[1] === "string" && tuple[1] !== "" ? tuple[1] : undefined;
     const integrity = typeof tuple[3] === "string" && tuple[3] !== "" ? tuple[3] : undefined;
 
@@ -209,27 +215,29 @@ function firstWorkspace(
   return Object.values(workspaces)[0];
 }
 
-function collectRootDependencies(workspace: BunLockWorkspace | undefined): Array<{
-  name: string;
-  range: string;
-  type: DependencyType;
-}> {
+function collectRootDependencies(workspace: BunLockWorkspace | undefined): BunLockDependencyEdge[] {
   if (!workspace) {
     return [];
   }
 
+  return collectDependencyEdges(workspace);
+}
+
+function collectDependencyEdges(source: {
+  dependencies?: unknown;
+  devDependencies?: unknown;
+  optionalDependencies?: unknown;
+  peerDependencies?: unknown;
+}): BunLockDependencyEdge[] {
   return [
-    ...dependencyEntries(workspace.dependencies, "production"),
-    ...dependencyEntries(workspace.devDependencies, "development"),
-    ...dependencyEntries(workspace.optionalDependencies, "optional"),
-    ...dependencyEntries(workspace.peerDependencies, "peer")
+    ...dependencyEntries(source.dependencies, "production"),
+    ...dependencyEntries(source.devDependencies, "development"),
+    ...dependencyEntries(source.optionalDependencies, "optional"),
+    ...dependencyEntries(source.peerDependencies, "peer")
   ];
 }
 
-function dependencyEntries(
-  value: unknown,
-  type: DependencyType
-): Array<{ name: string; range: string; type: DependencyType }> {
+function dependencyEntries(value: unknown, type: DependencyType): BunLockDependencyEdge[] {
   return Object.entries(readDependencyMap(value)).map(([name, range]) => ({
     name,
     range,
@@ -304,6 +312,7 @@ function walkDependency(input: {
 
   if (existing) {
     existing.direct = existing.direct || input.direct;
+    existing.dependencyType = mergeDependencyType(existing.dependencyType, input.dependencyType);
     existing.installNames = addUniqueInstallName({
       current: existing.installNames,
       installName
@@ -324,22 +333,48 @@ function walkDependency(input: {
     });
   }
 
-  for (const [childName, childRange] of Object.entries(input.record.dependencies)) {
-    const child = resolvePackageRecord(input.packageIndex, childName, childRange);
-    if (!child) {
+  for (const child of input.record.dependencies) {
+    const childRecord = resolvePackageRecord(input.packageIndex, child.name, child.range);
+    if (!childRecord) {
       continue;
     }
 
     walkDependency({
-      record: child,
-      dependencyType: input.dependencyType,
+      record: childRecord,
+      dependencyType: dependencyTypeForChildEdge(input.dependencyType, child.type),
       direct: false,
       path: nextPath,
       packageIndex: input.packageIndex,
       nodeMap: input.nodeMap,
       seen: nextSeen,
-      requestedName: childName
+      requestedName: child.name
     });
+  }
+}
+
+function dependencyTypeForChildEdge(
+  parentType: DependencyType,
+  childEdgeType: DependencyType
+): DependencyType {
+  return parentType === "production" ? childEdgeType : parentType;
+}
+
+function mergeDependencyType(left: DependencyType, right: DependencyType): DependencyType {
+  return dependencyTypeRank(left) >= dependencyTypeRank(right) ? left : right;
+}
+
+function dependencyTypeRank(type: DependencyType): number {
+  switch (type) {
+    case "production":
+      return 4;
+    case "optional":
+      return 3;
+    case "peer":
+      return 2;
+    case "development":
+      return 1;
+    case "unknown":
+      return 0;
   }
 }
 

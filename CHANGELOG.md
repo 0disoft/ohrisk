@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.62.0 - 2026-06-19
+
+### Fixed
+
+- Bun lockfile parsing now preserves nested optional and peer dependency edges instead of reporting them as production edges.
+
 ## 0.61.0 - 2026-06-19
 
 ### Fixed
