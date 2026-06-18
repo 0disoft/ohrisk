@@ -35,7 +35,7 @@ export function collectTarballEvidence(input: {
     const packageJson = JSON.parse(packageJsonEntry.data.toString("utf8")) as Record<string, unknown>;
     const files = collectTarEvidenceFiles(entries);
     const warnings = files.length === 0
-      ? ["No LICENSE, LICENCE, COPYING, or NOTICE file found."]
+      ? ["No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found."]
       : [];
 
     return ok({

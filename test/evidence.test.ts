@@ -7,12 +7,25 @@ import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
 import { collectGraphEvidence } from "../src/evidence/collect";
+import { classifyEvidenceFile } from "../src/evidence/license-files";
 import { collectLocalPackageEvidence } from "../src/evidence/local-package";
 import { collectTarballEvidence } from "../src/evidence/tarball";
 import { parseBunLockfile } from "../src/graph/npm-bun-lock";
 
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 const bunProjectDir = path.join(fixturesDir, "bun-project");
+
+describe("classifyEvidenceFile", () => {
+  test("classifies common license evidence filename variants", () => {
+    expect(classifyEvidenceFile("UNLICENSE")).toBe("license");
+    expect(classifyEvidenceFile("LICENSE-MIT")).toBe("license");
+    expect(classifyEvidenceFile("LICENCE_APACHE")).toBe("license");
+    expect(classifyEvidenceFile("NOTICE_THIRD_PARTY")).toBe("notice");
+    expect(classifyEvidenceFile("COPYING-LESSER")).toBe("copying");
+    expect(classifyEvidenceFile("docs/LICENSE-MIT")).toBe("license");
+    expect(classifyEvidenceFile("README.md")).toBeUndefined();
+  });
+});
 
 describe("collectLocalPackageEvidence", () => {
   test("reads package metadata and license files", () => {
@@ -33,6 +46,42 @@ describe("collectLocalPackageEvidence", () => {
     expect(result.value.files[0]?.text).toContain("MIT License");
     expect(result.value.files[0]?.text).toContain("Permission is hereby granted");
     expect(result.value.warnings).toEqual([]);
+  });
+
+  test("reads local license evidence filename variants", () => {
+    const packageDir = mkdtempSync(path.join(tmpdir(), "ohrisk-license-variant-"));
+
+    try {
+      writeFileSync(
+        path.join(packageDir, "package.json"),
+        JSON.stringify({
+          name: "license-variant",
+          version: "1.0.0"
+        }),
+        "utf8"
+      );
+      writeFileSync(path.join(packageDir, "UNLICENSE"), "Unlicense fixture text.", "utf8");
+      writeFileSync(path.join(packageDir, "NOTICE_THIRD_PARTY"), "Notice fixture text.", "utf8");
+
+      const result = collectLocalPackageEvidence({
+        packageId: "license-variant@1.0.0",
+        packageDir
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value.files.map((file) => file.path)).toEqual([
+        "NOTICE_THIRD_PARTY",
+        "UNLICENSE"
+      ]);
+      expect(result.value.files.map((file) => file.kind)).toEqual(["notice", "license"]);
+      expect(result.value.warnings).toEqual([]);
+    } finally {
+      rmSync(packageDir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -89,6 +138,41 @@ describe("collectTarballEvidence", () => {
 
     expect(result.value.packageJsonLicenses).toEqual({ type: "BSD" });
   });
+
+  test("reads tarball license evidence filename variants", () => {
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "tarball-license-variant",
+        version: "1.0.0"
+      }),
+      "package/LICENSE-MIT": "MIT License fixture text.",
+      "package/COPYING-LESSER": "LGPL fixture text."
+    });
+
+    const result = collectTarballEvidence({
+      packageId: "tarball-license-variant@1.0.0",
+      tarball
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.files).toEqual([
+      {
+        path: "COPYING-LESSER",
+        kind: "copying",
+        text: "LGPL fixture text."
+      },
+      {
+        path: "LICENSE-MIT",
+        kind: "license",
+        text: "MIT License fixture text."
+      }
+    ]);
+    expect(result.value.warnings).toEqual([]);
+  });
 });
 
 describe("collectGraphEvidence", () => {
@@ -123,7 +207,7 @@ describe("collectGraphEvidence", () => {
     const missingLicense = evidence.value.find((item) => item.packageId === "missing-license@4.0.0");
     expect(missingLicense).toMatchObject({
       files: [],
-      warnings: ["No LICENSE, LICENCE, COPYING, or NOTICE file found."]
+      warnings: ["No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found."]
     });
     expect(missingLicense).not.toHaveProperty("packageJsonLicense");
   });

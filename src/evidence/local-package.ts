@@ -36,7 +36,7 @@ export function collectLocalPackageEvidence(input: {
     const files = readEvidenceFiles(input.packageDir, warnings);
 
     if (files.length === 0) {
-      warnings.push("No LICENSE, LICENCE, COPYING, or NOTICE file found.");
+      warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found.");
     }
 
     return ok({

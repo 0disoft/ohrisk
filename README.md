@@ -32,7 +32,7 @@ The current implementation is the first npm-style vertical slice:
 - npm registry metadata lookup when the lockfile does not include a direct tarball URL
 - gzipped package tarball evidence
 - `package.json` license fields
-- common `LICENSE`, `LICENCE`, `COPYING`, and `NOTICE` files
+- common `LICENSE`, `LICENCE`, `UNLICENSE`, `COPYING`, and `NOTICE` file variants
 - medium-confidence standard license detection from recognizable `LICENSE` and `COPYING` file text, including GPL-family v2/v3 text, Zlib text, public-domain-style text, and malformed metadata pointers
 - SPDX-like license expression parsing
 - common human-readable license metadata alias normalization

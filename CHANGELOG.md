@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.56.0 - 2026-06-19
+
+### Added
+
+- License evidence collection now recognizes `UNLICENSE` plus hyphen and underscore variants such as `LICENSE-MIT`, `LICENCE_APACHE`, `COPYING-LESSER`, and `NOTICE_THIRD_PARTY`.
+
 ## 0.55.1 - 2026-06-19
 
 ### Fixed

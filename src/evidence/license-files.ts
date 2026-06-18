@@ -7,22 +7,28 @@ export function classifyEvidenceFile(path: string): LicenseEvidenceFileKind | un
     return undefined;
   }
 
-  if (normalized === "notice" || normalized.startsWith("notice.")) {
+  if (hasEvidenceName(normalized, "notice")) {
     return "notice";
   }
 
-  if (normalized === "copying" || normalized.startsWith("copying.")) {
+  if (hasEvidenceName(normalized, "copying")) {
     return "copying";
   }
 
   if (
-    normalized === "license"
-    || normalized === "licence"
-    || normalized.startsWith("license.")
-    || normalized.startsWith("licence.")
+    normalized === "unlicense"
+    || hasEvidenceName(normalized, "license")
+    || hasEvidenceName(normalized, "licence")
   ) {
     return "license";
   }
 
   return undefined;
+}
+
+function hasEvidenceName(normalized: string, baseName: string): boolean {
+  return normalized === baseName
+    || normalized.startsWith(`${baseName}.`)
+    || normalized.startsWith(`${baseName}-`)
+    || normalized.startsWith(`${baseName}_`);
 }
