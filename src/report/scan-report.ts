@@ -22,6 +22,7 @@ export type ScanReportInput = {
   failOn?: RiskSeverity;
   waivedFindings: WaivedRiskFinding[];
   expiredWaivers: RiskWaiver[];
+  unmatchedWaivers: RiskWaiver[];
 };
 
 export function renderScanReport(input: ScanReportInput): string {
@@ -49,7 +50,8 @@ export function renderScanReport(input: ScanReportInput): string {
         ...thresholdSummary,
         findings: input.riskFindings,
         waivedFindings: input.waivedFindings,
-        expiredWaivers: input.expiredWaivers
+        expiredWaivers: input.expiredWaivers,
+        unmatchedWaivers: input.unmatchedWaivers
       },
       null,
       2
@@ -71,7 +73,7 @@ export function renderScanReport(input: ScanReportInput): string {
     `Licenses: ${summary.licenses.highConfidence} high-confidence, ${summary.licenses.mediumConfidence} medium-confidence, ${summary.licenses.lowConfidence} low-confidence`,
     `License issues: ${summary.licenses.missing} missing, ${summary.licenses.malformed} malformed`,
     `Risks: ${summary.risks.high} high, ${summary.risks.review} review, ${summary.risks.unknown} unknown, ${summary.risks.low} low`,
-    `Waived: ${summary.waivers.applied} applied, ${summary.waivers.expired} expired`,
+    `Waived: ${summary.waivers.applied} applied, ${summary.waivers.expired} expired, ${summary.waivers.unmatched} unmatched`,
     ...renderThresholdLines(thresholdSummary),
     "Status: profile-aware risk evaluated",
     "",
@@ -80,6 +82,8 @@ export function renderScanReport(input: ScanReportInput): string {
     ...renderWaivedFindings(input.waivedFindings),
     "",
     ...renderExpiredWaivers(input.expiredWaivers),
+    "",
+    ...renderUnmatchedWaivers(input.unmatchedWaivers),
     "",
     `Next: ${nextAction}`
   ].join("\n");
@@ -104,7 +108,7 @@ function renderMarkdownReport(
     `- Licenses: \`${summary.licenses.highConfidence} high-confidence\`, \`${summary.licenses.mediumConfidence} medium-confidence\`, \`${summary.licenses.lowConfidence} low-confidence\``,
     `- License issues: \`${summary.licenses.missing} missing\`, \`${summary.licenses.malformed} malformed\``,
     `- Risks: \`${summary.risks.high} high\`, \`${summary.risks.review} review\`, \`${summary.risks.unknown} unknown\`, \`${summary.risks.low} low\``,
-    `- Waived: \`${summary.waivers.applied} applied\`, \`${summary.waivers.expired} expired\``,
+    `- Waived: \`${summary.waivers.applied} applied\`, \`${summary.waivers.expired} expired\`, \`${summary.waivers.unmatched} unmatched\``,
     ...renderMarkdownThresholdLines(thresholdSummary),
     "",
     ...renderMarkdownFindings(input.riskFindings),
@@ -112,6 +116,8 @@ function renderMarkdownReport(
     ...renderMarkdownWaivedFindings(input.waivedFindings),
     "",
     ...renderMarkdownExpiredWaivers(input.expiredWaivers),
+    "",
+    ...renderMarkdownUnmatchedWaivers(input.unmatchedWaivers),
     "",
     "## Next",
     "",
@@ -141,6 +147,7 @@ function buildScanSummary(input: ScanReportInput): {
   waivers: {
     applied: number;
     expired: number;
+    unmatched: number;
   };
 } {
   const directCount = input.graph.nodes.filter((node) => node.direct).length;
@@ -170,7 +177,8 @@ function buildScanSummary(input: ScanReportInput): {
     risks: summarizeRiskFindings(input.riskFindings),
     waivers: {
       applied: input.waivedFindings.length,
-      expired: input.expiredWaivers.length
+      expired: input.expiredWaivers.length,
+      unmatched: input.unmatchedWaivers.length
     }
   };
 }
@@ -227,6 +235,20 @@ function renderExpiredWaivers(expiredWaivers: RiskWaiver[]): string[] {
   ];
 }
 
+function renderUnmatchedWaivers(unmatchedWaivers: RiskWaiver[]): string[] {
+  if (unmatchedWaivers.length === 0) {
+    return ["Unmatched waivers: none"];
+  }
+
+  return [
+    "Unmatched waivers:",
+    ...unmatchedWaivers.flatMap((waiver) => [
+      `- ${formatWaiverTarget(waiver)}`,
+      `  reason: ${waiver.reason}`
+    ])
+  ];
+}
+
 function renderMarkdownFindings(findings: RiskFinding[]): string[] {
   if (findings.length === 0) {
     return ["## Findings", "", "No findings."];
@@ -274,6 +296,23 @@ function renderMarkdownExpiredWaivers(expiredWaivers: RiskWaiver[]): string[] {
     ...expiredWaivers.map(
       (waiver) =>
         `| ${escapeMarkdownTable(formatWaiverTarget(waiver))} | ${escapeMarkdownTable(waiver.expiresOn ?? "unknown")} | ${escapeMarkdownTable(waiver.reason)} |`
+    )
+  ];
+}
+
+function renderMarkdownUnmatchedWaivers(unmatchedWaivers: RiskWaiver[]): string[] {
+  if (unmatchedWaivers.length === 0) {
+    return ["## Unmatched waivers", "", "No unmatched waivers."];
+  }
+
+  return [
+    "## Unmatched waivers",
+    "",
+    "| Target | Reason |",
+    "| --- | --- |",
+    ...unmatchedWaivers.map(
+      (waiver) =>
+        `| ${escapeMarkdownTable(formatWaiverTarget(waiver))} | ${escapeMarkdownTable(waiver.reason)} |`
     )
   ];
 }

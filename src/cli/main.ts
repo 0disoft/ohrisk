@@ -245,7 +245,8 @@ async function runScan(
     markdown: command.markdown,
     failOn: command.kind === "ci" ? command.failOn : undefined,
     waivedFindings: scanned.value.waivedFindings,
-    expiredWaivers: scanned.value.expiredWaivers
+    expiredWaivers: scanned.value.expiredWaivers,
+    unmatchedWaivers: scanned.value.unmatchedWaivers
   };
 
   const output = command.cyclonedx
@@ -316,7 +317,8 @@ async function scanProject(input: {
         normalizedLicenses,
         riskFindings,
         waivedFindings: [],
-        expiredWaivers: []
+        expiredWaivers: [],
+        unmatchedWaivers: []
       }
     };
   }
@@ -341,7 +343,8 @@ async function scanProject(input: {
       normalizedLicenses,
       riskFindings: appliedWaivers.activeFindings,
       waivedFindings: appliedWaivers.waivedFindings,
-      expiredWaivers: appliedWaivers.expiredWaivers
+      expiredWaivers: appliedWaivers.expiredWaivers,
+      unmatchedWaivers: appliedWaivers.unmatchedWaivers
     }
   };
 }

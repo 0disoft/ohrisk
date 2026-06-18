@@ -24,6 +24,7 @@ export type AppliedRiskWaivers = {
   activeFindings: RiskFinding[];
   waivedFindings: WaivedRiskFinding[];
   expiredWaivers: RiskWaiver[];
+  unmatchedWaivers: RiskWaiver[];
 };
 
 export function readRiskWaivers(projectRoot: string): Result<RiskWaiver[], OhriskError> {
@@ -94,6 +95,7 @@ export function applyRiskWaivers(input: {
   const expiredWaivers = input.waivers.filter((waiver) => isExpired(waiver, now));
   const activeFindings: RiskFinding[] = [];
   const waivedFindings: WaivedRiskFinding[] = [];
+  const matchedWaivers = new Set<RiskWaiver>();
 
   for (const finding of input.findings) {
     const waiver = activeWaivers.find((candidate) => matchesWaiver(candidate, finding));
@@ -102,6 +104,7 @@ export function applyRiskWaivers(input: {
       continue;
     }
 
+    matchedWaivers.add(waiver);
     waivedFindings.push({
       finding,
       waiver,
@@ -112,7 +115,8 @@ export function applyRiskWaivers(input: {
   return {
     activeFindings,
     waivedFindings,
-    expiredWaivers
+    expiredWaivers,
+    unmatchedWaivers: activeWaivers.filter((waiver) => !matchedWaivers.has(waiver))
   };
 }
 

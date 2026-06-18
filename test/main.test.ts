@@ -45,7 +45,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.47.0"]);
+    expect(stdout).toEqual(["ohrisk 0.48.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -406,7 +406,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.47.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.48.0");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
       "ohrisk/license-unknown",
@@ -648,6 +648,7 @@ describe("main", () => {
         waivers: {
           applied: number;
           expired: number;
+          unmatched: number;
         };
         failed: boolean;
         failingFindingCount: number;
@@ -669,7 +670,8 @@ describe("main", () => {
       expect(payload.risks.high).toBe(0);
       expect(payload.waivers).toEqual({
         applied: 1,
-        expired: 0
+        expired: 0,
+        unmatched: 0
       });
       expect(payload.failed).toBe(false);
       expect(payload.failingFindingCount).toBe(0);
@@ -744,6 +746,7 @@ describe("main", () => {
         waivers: {
           applied: number;
           expired: number;
+          unmatched: number;
         };
         failed: boolean;
         failingFindingCount: number;
@@ -758,7 +761,8 @@ describe("main", () => {
       expect(payload.risks.high).toBe(1);
       expect(payload.waivers).toEqual({
         applied: 0,
-        expired: 1
+        expired: 1,
+        unmatched: 0
       });
       expect(payload.failed).toBe(true);
       expect(payload.failingFindingCount).toBe(1);
@@ -768,6 +772,66 @@ describe("main", () => {
           id: "agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0",
           reason: "Temporary acceptance expired.",
           expiresOn: "2000-01-01"
+        }
+      ]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("reports unmatched active waivers without applying them", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-unmatched-waiver-project-"));
+
+    try {
+      cpSync(path.join(fixturesDir, "permissive-project"), projectRoot, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, ".ohrisk-waivers.json"),
+        JSON.stringify(
+          {
+            waivers: [
+              {
+                id: "missing-package@9.9.9::production::direct::fixture-permissive-project>missing-package@9.9.9",
+                reason: "Leftover waiver from a removed dependency."
+              }
+            ]
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--json", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const payload = JSON.parse(stdout.join("\n")) as {
+        waivers: {
+          applied: number;
+          expired: number;
+          unmatched: number;
+        };
+        waivedFindings: unknown[];
+        expiredWaivers: unknown[];
+        unmatchedWaivers: Array<{
+          id: string;
+          reason: string;
+        }>;
+      };
+
+      expect(payload.waivers).toEqual({
+        applied: 0,
+        expired: 0,
+        unmatched: 1
+      });
+      expect(payload.waivedFindings).toEqual([]);
+      expect(payload.expiredWaivers).toEqual([]);
+      expect(payload.unmatchedWaivers).toEqual([
+        {
+          id: "missing-package@9.9.9::production::direct::fixture-permissive-project>missing-package@9.9.9",
+          reason: "Leftover waiver from a removed dependency."
         }
       ]);
     } finally {

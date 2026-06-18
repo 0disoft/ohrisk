@@ -155,7 +155,7 @@ Waive a finding locally by ID or fingerprint in `.ohrisk-waivers.json`:
 
 Waived findings are excluded from `ci --fail-on` threshold failures, but scan
 and CI reports still show them in a separate waived findings section. Expired
-waivers are reported separately and are not applied.
+waivers and unmatched active waivers are reported separately and are not applied.
 
 Explain a license expression without scanning a project:
 

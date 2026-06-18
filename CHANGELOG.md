@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.47.0 - 2026-06-19
+## 0.48.0 - 2026-06-19
 
 First public release candidate for Ohrisk.
 
@@ -71,6 +71,7 @@ First public release candidate for Ohrisk.
 - `.ohrisk-waivers.json` local waivers by finding ID or fingerprint.
 - Scan and CI JSON, terminal, and Markdown reports separate active findings from waived findings.
 - Expired local waivers are reported with target, reason, and expiry date without being applied.
+- Unmatched active waivers are reported with target and reason without being applied.
 - Unknown-risk findings now distinguish missing, malformed, and unrecognized license metadata in reason and action text.
 - Risk findings for low, review, high, and unknown license evidence.
 - Terminal findings sorted by severity with package path, recommendation, and evidence snippets.
