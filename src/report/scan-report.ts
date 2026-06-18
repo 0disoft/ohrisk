@@ -147,6 +147,7 @@ function renderFindings(findings: RiskFinding[]): string[] {
       `- [${finding.severity}] ${finding.packageId}`,
       `  ${finding.reason}`,
       `  recommendation: ${finding.recommendation}`,
+      `  action: ${finding.action}`,
       `  path: ${formatPath(finding.paths[0])}`,
       `  evidence: ${finding.evidence.join("; ")}`
     ])
@@ -161,11 +162,11 @@ function renderMarkdownFindings(findings: RiskFinding[]): string[] {
   return [
     "## Findings",
     "",
-    "| Severity | Package | Reason | Recommendation | Path |",
-    "| --- | --- | --- | --- | --- |",
+    "| Severity | Package | Reason | Recommendation | Action | Path |",
+    "| --- | --- | --- | --- | --- | --- |",
     ...findings.map(
       (finding) =>
-        `| ${finding.severity} | \`${escapeMarkdownTable(finding.packageId)}\` | ${escapeMarkdownTable(finding.reason)} | ${finding.recommendation} | ${escapeMarkdownTable(formatPath(finding.paths[0]))} |`
+        `| ${finding.severity} | \`${escapeMarkdownTable(finding.packageId)}\` | ${escapeMarkdownTable(finding.reason)} | ${finding.recommendation} | ${escapeMarkdownTable(finding.action)} | ${escapeMarkdownTable(formatPath(finding.paths[0]))} |`
     )
   ];
 }

@@ -156,6 +156,7 @@ Findings:
 - [high] agpl-child@0.1.0
   License expression is high risk for saas.
   recommendation: replace
+  action: Replace this package or escalate before shipping.
   path: fixture-bun-project -> permissive-parent@1.0.0 -> agpl-child@0.1.0
   evidence: license: AGPL-3.0-only; dependency: production; transitive dependency
 ```
@@ -171,7 +172,9 @@ JSON output reuses the same finding model:
     {
       "packageId": "agpl-child@0.1.0",
       "severity": "high",
+      "reason": "License expression is high risk for saas.",
       "recommendation": "replace",
+      "action": "Replace this package or escalate before shipping.",
       "paths": [
         [
           "fixture-bun-project",
@@ -187,9 +190,9 @@ JSON output reuses the same finding model:
 Markdown output keeps the PR-facing decision fields in one table:
 
 ```markdown
-| Severity | Package | Reason | Recommendation | Path |
-| --- | --- | --- | --- | --- |
-| high | `agpl-child@0.1.0` | License expression is high risk for saas. | replace | fixture-bun-project -> permissive-parent@1.0.0 -> agpl-child@0.1.0 |
+| Severity | Package | Reason | Recommendation | Action | Path |
+| --- | --- | --- | --- | --- | --- |
+| high | `agpl-child@0.1.0` | License expression is high risk for saas. | replace | Replace this package or escalate before shipping. | fixture-bun-project -> permissive-parent@1.0.0 -> agpl-child@0.1.0 |
 ```
 
 ## Risk Language

@@ -32,6 +32,7 @@ describe("evaluateLicenseRisk", () => {
 
     expect(finding.severity).toBe("low");
     expect(finding.recommendation).toBe("allow");
+    expect(finding.action).toBe("No action needed for this profile.");
   });
 
   test("uses the least risky branch for OR expressions", () => {
@@ -71,6 +72,7 @@ describe("evaluateLicenseRisk", () => {
 
     expect(finding.severity).toBe("high");
     expect(finding.recommendation).toBe("replace");
+    expect(finding.action).toBe("Replace this package or escalate before shipping.");
   });
 
   test("treats mixed expressions conservatively instead of using OR fallback", () => {
@@ -185,6 +187,7 @@ describe("evaluateLicenseRisk", () => {
 
     expect(finding.severity).toBe("high");
     expect(finding.recommendation).toBe("exclude-dev-only");
+    expect(finding.action).toBe("Keep this package out of production or scan with --prod.");
   });
 
   test("treats explicit commercial restriction signals as high risk", () => {
@@ -207,6 +210,7 @@ describe("evaluateLicenseRisk", () => {
       "License evidence contains an explicit commercial-use restriction for saas."
     );
     expect(finding.recommendation).toBe("replace");
+    expect(finding.action).toBe("Replace this package or escalate before shipping.");
     expect(finding.evidence).toContain("signals: commercial-restriction, malformed, custom-text");
   });
 });

@@ -31,6 +31,7 @@ export function renderExplainReport(input: ExplainReportInput): string {
     `Profile: ${input.profile}`,
     `Severity: ${input.finding.severity}`,
     `Recommendation: ${input.finding.recommendation}`,
+    `Action: ${input.finding.action}`,
     `Reason: ${input.finding.reason}`,
     `Normalized: ${formatNormalizedExpression(input.normalizedLicense)}`,
     `Signals: ${input.normalizedLicense.signals.length > 0 ? input.normalizedLicense.signals.join(", ") : "none"}`,

@@ -15,6 +15,7 @@ export type RiskFinding = {
   packageId: string;
   severity: RiskSeverity;
   reason: string;
+  action: string;
   evidence: string[];
   paths: string[][];
   recommendation: RiskRecommendation;

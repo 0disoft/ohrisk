@@ -38,14 +38,16 @@ export function evaluateLicenseRisk(input: {
   profile: UsageProfile;
 }): RiskFinding {
   const severity = classifySeverity(input.license, input.profile);
+  const recommendation = recommendationFor(severity, input.dependency);
 
   return {
     packageId: input.license.packageId,
     severity,
     reason: explainSeverity(input.license, input.profile, severity),
+    action: actionFor(recommendation),
     evidence: buildEvidence(input.license, input.dependency),
     paths: input.dependency.paths,
-    recommendation: recommendationFor(severity, input.dependency)
+    recommendation
   };
 }
 
@@ -176,6 +178,21 @@ function recommendationFor(
   }
 
   return "replace";
+}
+
+function actionFor(recommendation: RiskRecommendation): string {
+  switch (recommendation) {
+    case "allow":
+      return "No action needed for this profile.";
+    case "review":
+      return "Review this package before shipping.";
+    case "replace":
+      return "Replace this package or escalate before shipping.";
+    case "exclude-dev-only":
+      return "Keep this package out of production or scan with --prod.";
+    case "collect-evidence":
+      return "Collect license evidence before approving this package.";
+  }
 }
 
 function matchesPrefix(choice: string, prefixes: string[]): boolean {
