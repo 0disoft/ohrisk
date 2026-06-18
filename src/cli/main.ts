@@ -10,7 +10,7 @@ import { parseBunLockfile, parseBunLockText } from "../graph/npm-bun-lock";
 import { parsePackageLockfile, parsePackageLockText } from "../graph/npm-package-lock";
 import { parsePnpmLockfile, parsePnpmLockText } from "../graph/npm-pnpm-lock";
 import { parseYarnLockfile, parseYarnLockText } from "../graph/npm-yarn-lock";
-import type { DependencyGraph } from "../graph/types";
+import type { DependencyGraph, DependencyNode } from "../graph/types";
 import { normalizeAllLicenseEvidence, normalizeLicenseEvidence } from "../license/normalize";
 import { evaluateLicenseRisk, evaluateLicenseRisks } from "../policy/evaluate";
 import { hasFindingAtOrAbove } from "../policy/severity";
@@ -119,12 +119,7 @@ async function runDiff(
     return exitCodeForError(baselineGraph.error);
   }
 
-  const scanGraph = command.prodOnly
-    ? {
-        ...baselineGraph.value,
-        nodes: baselineGraph.value.nodes.filter((node) => node.dependencyType === "production")
-      }
-    : baselineGraph.value;
+  const scanGraph = filterGraphForProdOnly(baselineGraph.value, command.prodOnly);
   const baselineEvidence = await collectGraphEvidence({
     graph: scanGraph,
     projectRoot: current.value.project.rootDir
@@ -283,12 +278,7 @@ async function scanProject(input: {
     return graph;
   }
 
-  const scanGraph = input.prodOnly
-    ? {
-        ...graph.value,
-        nodes: graph.value.nodes.filter((node) => node.dependencyType === "production")
-      }
-    : graph.value;
+  const scanGraph = filterGraphForProdOnly(graph.value, input.prodOnly);
 
   const evidence = await collectGraphEvidence({
     graph: scanGraph,
@@ -329,6 +319,21 @@ function parseProjectLockfile(project: ProjectInput): Result<DependencyGraph, Oh
     case "yarn-lock":
       return parseYarnLockfile(project.lockfile.path);
   }
+}
+
+function filterGraphForProdOnly(graph: DependencyGraph, prodOnly: boolean): DependencyGraph {
+  if (!prodOnly) {
+    return graph;
+  }
+
+  return {
+    ...graph,
+    nodes: graph.nodes.filter(isProductionRelevantDependency)
+  };
+}
+
+function isProductionRelevantDependency(node: DependencyNode): boolean {
+  return node.dependencyType !== "development";
 }
 
 function parseLockfileTextForKind(input: {
@@ -374,7 +379,7 @@ function renderHelp(): string {
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
-    "  --prod                 Limit later scan stages to production dependencies.",
+    "  --prod                 Exclude development-only dependencies.",
     "  --json                 Print machine-readable output.",
     "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
     "  --markdown             Print a Markdown report for PRs or release notes.",

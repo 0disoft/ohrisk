@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.39.0 - 2026-06-19
+## 0.40.0 - 2026-06-19
 
 First public release candidate for Ohrisk.
 
@@ -12,7 +12,7 @@ First public release candidate for Ohrisk.
 - `pnpm-lock.yaml` graph parsing for importer, package, and snapshot dependency data.
 - Yarn v1 `yarn.lock` graph parsing with root dependency classification from `package.json`.
 - `--profile saas` and `--profile distributed-app` risk profiles.
-- `--prod` filtering for production dependency scans.
+- `--prod` filtering that excludes development-only dependencies while keeping production-relevant optional and peer dependency risk visible.
 - `--json` output that reuses the terminal report finding model.
 - `--sarif` output for SARIF 2.1.0 code scanning upload.
 - `--markdown` output for PR comments and release notes.

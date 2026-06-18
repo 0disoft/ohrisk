@@ -84,7 +84,7 @@ bun run src/cli/main.ts scan --profile saas
 bun run src/cli/main.ts scan --profile distributed-app
 ```
 
-Limit the scan to production dependencies:
+Limit the scan to production-relevant dependencies by excluding development-only packages:
 
 ```bash
 bun run src/cli/main.ts scan --prod
