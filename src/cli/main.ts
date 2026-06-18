@@ -369,7 +369,7 @@ function renderHelp(): string {
     "  ohrisk ci [--profile saas|distributed-app] [--prod] [--json|--sarif|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk diff <baseline-ref> [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
-    "  ohrisk help",
+    "  ohrisk help [command]",
     "  ohrisk version",
     "",
     "Commands:",

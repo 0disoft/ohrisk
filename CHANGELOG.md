@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.44.3 - 2026-06-19
+## 0.44.4 - 2026-06-19
 
 First public release candidate for Ohrisk.
 
@@ -26,6 +26,7 @@ First public release candidate for Ohrisk.
 - Unknown option errors list the supported `--help` and `-h` aliases.
 - Diff output-format conflict errors no longer advertise unsupported SARIF output.
 - Top-level `help` and `version` aliases validate trailing arguments instead of silently ignoring them.
+- Help output and README examples document the supported `help <command>` shape.
 - Project discovery with clear failures for unsupported or ambiguous lockfiles.
 - Bun lockfile dependency graph parsing with direct, transitive, production, and development dependency context.
 - Local `file:` package evidence collection.

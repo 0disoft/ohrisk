@@ -75,6 +75,7 @@ Print command help or the installed package version:
 
 ```bash
 ohrisk help
+ohrisk help scan
 ohrisk version
 ```
 
