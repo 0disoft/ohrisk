@@ -68,12 +68,18 @@ describe("parsePackageLockfile", () => {
             version: "1.0.0",
             resolved: "file:../bun-project/.registry/permissive-parent",
             requires: {
-              "agpl-child": "0.1.0"
+              "agpl-child": "0.1.0",
+              "optional-child": "2.0.0"
             },
             dependencies: {
               "agpl-child": {
                 version: "0.1.0",
                 resolved: "file:../bun-project/.registry/agpl-child"
+              },
+              "optional-child": {
+                version: "2.0.0",
+                resolved: "file:../bun-project/.registry/optional-child",
+                optional: true
               }
             }
           },
@@ -96,6 +102,7 @@ describe("parsePackageLockfile", () => {
     expect(result.value.nodes.map((node) => node.id)).toEqual([
       "agpl-child@0.1.0",
       "dev-risk@3.0.0",
+      "optional-child@2.0.0",
       "permissive-parent@1.0.0"
     ]);
     expect(result.value.nodes.find((node) => node.id === "permissive-parent@1.0.0"))
@@ -114,6 +121,16 @@ describe("parsePackageLockfile", () => {
       .toMatchObject({
         direct: true,
         dependencyType: "development"
+      });
+    expect(result.value.nodes.find((node) => node.id === "optional-child@2.0.0"))
+      .toMatchObject({
+        direct: false,
+        dependencyType: "optional",
+        paths: [[
+          "fixture-package-lock-v1",
+          "permissive-parent@1.0.0",
+          "optional-child@2.0.0"
+        ]]
       });
   });
 

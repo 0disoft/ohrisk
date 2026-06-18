@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.63.0 - 2026-06-19
+
+### Fixed
+
+- Legacy `package-lock.json` v1 parsing now preserves nested optional dependency flags instead of inheriting production scope from the parent.
+
 ## 0.62.0 - 2026-06-19
 
 ### Fixed

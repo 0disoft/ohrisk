@@ -446,7 +446,10 @@ function walkV1Dependency(input: {
     walkV1Dependency({
       name: childName,
       dependency: child,
-      dependencyType: input.dependencyType,
+      dependencyType: dependencyTypeForChildEdge(
+        input.dependencyType,
+        dependencyTypeForV1Dependency(child)
+      ),
       direct: false,
       path: nextPath,
       nodeMap: input.nodeMap,
