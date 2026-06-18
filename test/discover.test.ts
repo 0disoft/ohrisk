@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 import { discoverProject } from "../src/project/discover";
@@ -134,5 +136,43 @@ describe("discoverProject", () => {
     }
 
     expect(result.error.code).toBe("LOCKFILE_NOT_FOUND");
+  });
+
+  test("rejects explicit lockfile paths that are directories", () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-lockfile-directory-"));
+    mkdirSync(path.join(projectDir, "package-lock.json"));
+
+    const result = discoverProject({
+      cwd: projectDir,
+      lockfilePath: "package-lock.json"
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected discovery to fail.");
+    }
+
+    expect(result.error.code).toBe("LOCKFILE_NOT_FILE");
+    expect(result.error.details).toMatchObject({
+      lockfilePath: path.join(projectDir, "package-lock.json")
+    });
+  });
+
+  test("ignores known lockfile names that are directories during project discovery", () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-lockfile-directory-discovery-"));
+    writeFileSync(path.join(projectDir, "package.json"), JSON.stringify({ name: "directory-lockfile" }));
+    mkdirSync(path.join(projectDir, "bun.lock"));
+
+    const result = discoverProject({ cwd: projectDir });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected discovery to fail.");
+    }
+
+    expect(result.error.code).toBe("NO_SUPPORTED_LOCKFILE");
+    expect(result.error.details).toMatchObject({
+      rootDir: projectDir
+    });
   });
 });

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.65.0 - 2026-06-19
+
+### Fixed
+
+- Project discovery now ignores directories that use supported lockfile names and reports explicit lockfile directory paths as invalid input.
+
 ## 0.64.0 - 2026-06-19
 
 ### Added

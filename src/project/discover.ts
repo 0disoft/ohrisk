@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
@@ -177,6 +177,19 @@ function discoverExplicitLockfile(input: {
     );
   }
 
+  if (!isFile(lockfilePath)) {
+    return err(
+      createError({
+        code: "LOCKFILE_NOT_FILE",
+        category: "invalid_input",
+        message: "Explicit lockfile path exists but is not a file.",
+        details: {
+          lockfilePath
+        }
+      })
+    );
+  }
+
   return ok({
     rootDir: path.dirname(lockfilePath),
     lockfile: {
@@ -187,7 +200,15 @@ function discoverExplicitLockfile(input: {
 }
 
 function findKnownLockfiles(dir: string): string[] {
-  return KNOWN_LOCKFILES.filter((lockfile) => existsSync(path.join(dir, lockfile)));
+  return KNOWN_LOCKFILES.filter((lockfile) => isFile(path.join(dir, lockfile)));
+}
+
+function isFile(pathname: string): boolean {
+  try {
+    return statSync(pathname).isFile();
+  } catch {
+    return false;
+  }
 }
 
 function ancestorsFrom(startDir: string): string[] {
