@@ -78,6 +78,7 @@ function renderMarkdownReport(
     `- Production only: \`${input.prodOnly ? "yes" : "no"}\``,
     `- Dependencies: \`${summary.dependencyGraph.total} total\`, \`${summary.dependencyGraph.direct} direct\`, \`${summary.dependencyGraph.transitive} transitive\``,
     `- Evidence: \`${summary.evidence.files} files\`, \`${summary.evidence.warnings} warnings\``,
+    `- Licenses: \`${summary.licenses.highConfidence} high-confidence\`, \`${summary.licenses.mediumConfidence} medium-confidence\`, \`${summary.licenses.lowConfidence} low-confidence\``,
     `- Risks: \`${summary.risks.high} high\`, \`${summary.risks.review} review\`, \`${summary.risks.unknown} unknown\`, \`${summary.risks.low} low\``,
     "",
     ...renderMarkdownFindings(input.riskFindings),

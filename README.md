@@ -187,9 +187,11 @@ JSON output reuses the same finding model:
 }
 ```
 
-Markdown output keeps the PR-facing decision fields in one table:
+Markdown output keeps the scan summary and PR-facing decision fields together:
 
 ```markdown
+- Licenses: `4 high-confidence`, `0 medium-confidence`, `1 low-confidence`
+
 | Severity | Package | Reason | Recommendation | Action | Path |
 | --- | --- | --- | --- | --- | --- |
 | high | `agpl-child@0.1.0` | License expression is high risk for saas. | replace | Replace this package or escalate before shipping. | fixture-bun-project -> permissive-parent@1.0.0 -> agpl-child@0.1.0 |
