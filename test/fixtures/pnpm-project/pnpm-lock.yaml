@@ -1,0 +1,57 @@
+lockfileVersion: '9.0'
+
+importers:
+  .:
+    dependencies:
+      permissive-parent:
+        specifier: file:../bun-project/.registry/permissive-parent
+        version: '1.0.0'
+      dual-license:
+        specifier: file:../bun-project/.registry/dual-license
+        version: '2.0.0'
+      gpl-package:
+        specifier: file:../bun-project/.registry/gpl-package
+        version: '5.0.0'
+      missing-license:
+        specifier: file:../bun-project/.registry/missing-license
+        version: '4.0.0'
+    devDependencies:
+      dev-risk:
+        specifier: file:../bun-project/.registry/dev-risk
+        version: '3.0.0'
+
+packages:
+  agpl-child@0.1.0:
+    resolution:
+      directory: ../bun-project/.registry/agpl-child
+      type: directory
+  dev-risk@3.0.0:
+    resolution:
+      directory: ../bun-project/.registry/dev-risk
+      type: directory
+  dual-license@2.0.0:
+    resolution:
+      directory: ../bun-project/.registry/dual-license
+      type: directory
+  gpl-package@5.0.0:
+    resolution:
+      directory: ../bun-project/.registry/gpl-package
+      type: directory
+  missing-license@4.0.0:
+    resolution:
+      directory: ../bun-project/.registry/missing-license
+      type: directory
+  permissive-parent@1.0.0:
+    resolution:
+      directory: ../bun-project/.registry/permissive-parent
+      type: directory
+
+snapshots:
+  agpl-child@0.1.0: {}
+  dev-risk@3.0.0: {}
+  dual-license@2.0.0: {}
+  gpl-package@5.0.0: {}
+  missing-license@4.0.0: {}
+  permissive-parent@1.0.0:
+    dependencies:
+      agpl-child: '0.1.0'

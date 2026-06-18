@@ -4,7 +4,7 @@ import path from "node:path";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 
-export type SupportedLockfileKind = "bun" | "package-lock";
+export type SupportedLockfileKind = "bun" | "package-lock" | "pnpm-lock";
 
 export type ProjectLockfile = {
   kind: SupportedLockfileKind;
@@ -22,7 +22,8 @@ export type DiscoverProjectOptions = {
 
 const SUPPORTED_LOCKFILES: Record<string, SupportedLockfileKind> = {
   "bun.lock": "bun",
-  "package-lock.json": "package-lock"
+  "package-lock.json": "package-lock",
+  "pnpm-lock.yaml": "pnpm-lock"
 };
 
 const KNOWN_LOCKFILES = [
@@ -48,7 +49,7 @@ export function discoverProject(
             createError({
               code: "NO_SUPPORTED_LOCKFILE",
               category: "unsupported_input",
-              message: "Project manifest found, but no supported lockfile exists. Ohrisk currently supports bun.lock and package-lock.json.",
+              message: "Project manifest found, but no supported lockfile exists. Ohrisk currently supports bun.lock, package-lock.json, and pnpm-lock.yaml.",
               details: {
                 rootDir: dir,
                 supportedLockfiles: Object.keys(SUPPORTED_LOCKFILES)
@@ -87,7 +88,7 @@ export function discoverProject(
           createError({
             code: "NO_SUPPORTED_LOCKFILE",
             category: "unsupported_input",
-            message: "No supported lockfile found. Ohrisk currently supports bun.lock and package-lock.json.",
+            message: "No supported lockfile found. Ohrisk currently supports bun.lock, package-lock.json, and pnpm-lock.yaml.",
             details: {
               rootDir: dir,
               foundLockfiles: lockfiles,
@@ -123,7 +124,7 @@ export function discoverProject(
     createError({
       code: "NO_SUPPORTED_LOCKFILE",
       category: "unsupported_input",
-      message: "No supported lockfile found. Ohrisk currently supports bun.lock and package-lock.json.",
+      message: "No supported lockfile found. Ohrisk currently supports bun.lock, package-lock.json, and pnpm-lock.yaml.",
       details: {
         startDir,
         supportedLockfiles: Object.keys(SUPPORTED_LOCKFILES)

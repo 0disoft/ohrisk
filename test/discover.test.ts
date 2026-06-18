@@ -33,6 +33,19 @@ describe("discoverProject", () => {
     expect(path.basename(result.value.lockfile.path)).toBe("package-lock.json");
   });
 
+  test("finds a pnpm-lock.yaml project", () => {
+    const result = discoverProject({ cwd: path.join(fixturesDir, "pnpm-project") });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.rootDir).toBe(path.join(fixturesDir, "pnpm-project"));
+    expect(result.value.lockfile.kind).toBe("pnpm-lock");
+    expect(path.basename(result.value.lockfile.path)).toBe("pnpm-lock.yaml");
+  });
+
   test("walks up from a nested directory", () => {
     const result = discoverProject({ cwd: path.join(fixturesDir, "bun-project", "packages", "app") });
 

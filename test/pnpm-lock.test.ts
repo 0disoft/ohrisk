@@ -1,0 +1,75 @@
+import { describe, expect, test } from "bun:test";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { parsePnpmLockfile, parsePnpmLockText } from "../src/graph/npm-pnpm-lock";
+
+const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
+
+describe("parsePnpmLockfile", () => {
+  test("parses direct and transitive dependencies from a pnpm-lock.yaml", () => {
+    const result = parsePnpmLockfile(
+      path.join(fixturesDir, "pnpm-project", "pnpm-lock.yaml")
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "agpl-child@0.1.0",
+      "dev-risk@3.0.0",
+      "dual-license@2.0.0",
+      "gpl-package@5.0.0",
+      "missing-license@4.0.0",
+      "permissive-parent@1.0.0"
+    ]);
+
+    const parent = result.value.nodes.find((node) => node.id === "permissive-parent@1.0.0");
+    expect(parent?.direct).toBe(true);
+    expect(parent?.dependencyType).toBe("production");
+    expect(parent?.resolved).toBe("file:../bun-project/.registry/permissive-parent");
+    expect(parent?.paths).toEqual([
+      ["<root>", "permissive-parent@1.0.0"]
+    ]);
+
+    const child = result.value.nodes.find((node) => node.id === "agpl-child@0.1.0");
+    expect(child?.direct).toBe(false);
+    expect(child?.dependencyType).toBe("production");
+    expect(child?.resolved).toBe("file:../bun-project/.registry/agpl-child");
+    expect(child?.paths).toEqual([
+      ["<root>", "permissive-parent@1.0.0", "agpl-child@0.1.0"]
+    ]);
+
+    const devRisk = result.value.nodes.find((node) => node.id === "dev-risk@3.0.0");
+    expect(devRisk?.direct).toBe(true);
+    expect(devRisk?.dependencyType).toBe("development");
+  });
+
+  test("reports malformed pnpm lockfiles as typed errors", () => {
+    const result = parsePnpmLockText(":\n  - not yaml", "broken-pnpm-lock.yaml");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected malformed lockfile to fail.");
+    }
+
+    expect(result.error.code).toBe("PNPM_LOCK_PARSE_FAILED");
+  });
+
+  test("reports pnpm lockfiles without importers as unsupported input", () => {
+    const result = parsePnpmLockText(
+      "lockfileVersion: '9.0'\npackages: {}\n",
+      "missing-importers-pnpm-lock.yaml"
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected missing importers to fail.");
+    }
+
+    expect(result.error.code).toBe("PNPM_LOCK_PARSE_FAILED");
+    expect(result.error.category).toBe("unsupported_input");
+  });
+});

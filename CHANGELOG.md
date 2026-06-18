@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.10.0 - 2026-06-18
+## 0.11.0 - 2026-06-18
 
 First public release candidate for Ohrisk.
 
@@ -9,6 +9,7 @@ First public release candidate for Ohrisk.
 - `ohrisk scan` for local Bun `bun.lock` projects.
 - `package-lock.json` graph parsing for modern npm lockfiles with a `packages` section.
 - npm v1 `package-lock.json` dependency-tree parsing.
+- `pnpm-lock.yaml` graph parsing for importer, package, and snapshot dependency data.
 - `--profile saas` and `--profile distributed-app` risk profiles.
 - `--prod` filtering for production dependency scans.
 - `--json` output that reuses the terminal report finding model.
@@ -36,4 +37,4 @@ First public release candidate for Ohrisk.
 - SBOM output.
 - Waiver, approval, or legal workflow management.
 - GitHub App integration.
-- Multi-ecosystem adapters beyond the first npm-style Bun lockfile path.
+- Ecosystem adapters beyond npm-style lockfiles.

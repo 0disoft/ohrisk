@@ -8,6 +8,7 @@ import { collectGraphEvidence } from "../evidence/collect";
 import { readGitRefFile, type GitRefFileReader } from "../git/ref-file";
 import { parseBunLockfile, parseBunLockText } from "../graph/npm-bun-lock";
 import { parsePackageLockfile, parsePackageLockText } from "../graph/npm-package-lock";
+import { parsePnpmLockfile, parsePnpmLockText } from "../graph/npm-pnpm-lock";
 import type { DependencyGraph } from "../graph/types";
 import { normalizeAllLicenseEvidence, normalizeLicenseEvidence } from "../license/normalize";
 import { evaluateLicenseRisk, evaluateLicenseRisks } from "../policy/evaluate";
@@ -305,6 +306,8 @@ function parseProjectLockfile(project: ProjectInput): Result<DependencyGraph, Oh
       return parseBunLockfile(project.lockfile.path);
     case "package-lock":
       return parsePackageLockfile(project.lockfile.path);
+    case "pnpm-lock":
+      return parsePnpmLockfile(project.lockfile.path);
   }
 }
 
@@ -318,6 +321,8 @@ function parseLockfileTextForKind(input: {
       return parseBunLockText(input.text, input.lockfilePath);
     case "package-lock":
       return parsePackageLockText(input.text, input.lockfilePath);
+    case "pnpm-lock":
+      return parsePnpmLockText(input.text, input.lockfilePath);
   }
 }
 

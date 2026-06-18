@@ -1,6 +1,6 @@
 {
   "name": "ohrisk",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Catch open-source license risk before your PR ships.",
   "license": "MIT",
   "type": "module",
@@ -39,5 +39,8 @@
   "files": [
     "CHANGELOG.md",
     "src"
-  ]
+  ],
+  "dependencies": {
+    "yaml": "2.9.0"
+  }
 }
