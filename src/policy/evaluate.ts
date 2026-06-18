@@ -1,7 +1,12 @@
 import type { DependencyNode } from "../graph/types";
 import type { NormalizedLicense } from "../license/types";
 import type { UsageProfile } from "./profiles";
-import type { RiskFinding, RiskRecommendation, RiskSeverity } from "./types";
+import type {
+  RiskDependencyScope,
+  RiskFinding,
+  RiskRecommendation,
+  RiskSeverity
+} from "./types";
 
 const PERMISSIVE_LICENSES = new Set([
   "MIT",
@@ -45,6 +50,8 @@ export function evaluateLicenseRisk(input: {
     severity,
     reason: explainSeverity(input.license, input.profile, severity),
     action: actionFor(recommendation),
+    dependencyType: input.dependency.dependencyType,
+    dependencyScope: dependencyScopeFor(input.dependency),
     evidence: buildEvidence(input.license, input.dependency),
     paths: input.dependency.paths,
     recommendation
@@ -193,6 +200,10 @@ function actionFor(recommendation: RiskRecommendation): string {
     case "collect-evidence":
       return "Collect license evidence before approving this package.";
   }
+}
+
+function dependencyScopeFor(dependency: DependencyNode): RiskDependencyScope {
+  return dependency.direct ? "direct" : "transitive";
 }
 
 function matchesPrefix(choice: string, prefixes: string[]): boolean {

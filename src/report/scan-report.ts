@@ -151,6 +151,7 @@ function renderFindings(findings: RiskFinding[]): string[] {
       `  ${finding.reason}`,
       `  recommendation: ${finding.recommendation}`,
       `  action: ${finding.action}`,
+      `  dependency: ${formatDependencyContext(finding)}`,
       `  path: ${formatPath(finding.paths[0])}`,
       `  evidence: ${finding.evidence.join("; ")}`
     ])
@@ -165,11 +166,11 @@ function renderMarkdownFindings(findings: RiskFinding[]): string[] {
   return [
     "## Findings",
     "",
-    "| Severity | Package | Reason | Recommendation | Action | Path |",
-    "| --- | --- | --- | --- | --- | --- |",
+    "| Severity | Package | Dependency | Reason | Recommendation | Action | Path |",
+    "| --- | --- | --- | --- | --- | --- | --- |",
     ...findings.map(
       (finding) =>
-        `| ${finding.severity} | \`${escapeMarkdownTable(finding.packageId)}\` | ${escapeMarkdownTable(finding.reason)} | ${finding.recommendation} | ${escapeMarkdownTable(finding.action)} | ${escapeMarkdownTable(formatPath(finding.paths[0]))} |`
+        `| ${finding.severity} | \`${escapeMarkdownTable(finding.packageId)}\` | ${escapeMarkdownTable(formatDependencyContext(finding))} | ${escapeMarkdownTable(finding.reason)} | ${finding.recommendation} | ${escapeMarkdownTable(finding.action)} | ${escapeMarkdownTable(formatPath(finding.paths[0]))} |`
     )
   ];
 }
@@ -222,6 +223,10 @@ function summarizeRiskFindings(riskFindings: RiskFinding[]): Record<RiskSeverity
 
 function formatPath(pathItems: string[] | undefined): string {
   return pathItems?.join(" -> ") ?? "unknown";
+}
+
+function formatDependencyContext(finding: RiskFinding): string {
+  return `${finding.dependencyType} ${finding.dependencyScope}`;
 }
 
 function escapeMarkdownTable(value: string): string {

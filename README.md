@@ -37,6 +37,7 @@ The current implementation is the first npm-style vertical slice:
 - terminal and JSON reports
 - SARIF 2.1.0 reports for code scanning upload
 - Markdown reports for PR comments and release notes
+- structured dependency type and direct/transitive scope in findings
 - report file output with `--output <file>`
 - standalone license expression explanation
 - git ref diff reports that show only newly introduced findings
@@ -175,6 +176,8 @@ JSON output reuses the same finding model:
       "reason": "License expression is high risk for saas.",
       "recommendation": "replace",
       "action": "Replace this package or escalate before shipping.",
+      "dependencyType": "production",
+      "dependencyScope": "transitive",
       "paths": [
         [
           "fixture-bun-project",
@@ -193,9 +196,9 @@ Markdown output keeps the scan summary and PR-facing decision fields together:
 - Licenses: `4 high-confidence`, `0 medium-confidence`, `1 low-confidence`
 - License issues: `1 missing`, `0 malformed`
 
-| Severity | Package | Reason | Recommendation | Action | Path |
-| --- | --- | --- | --- | --- | --- |
-| high | `agpl-child@0.1.0` | License expression is high risk for saas. | replace | Replace this package or escalate before shipping. | fixture-bun-project -> permissive-parent@1.0.0 -> agpl-child@0.1.0 |
+| Severity | Package | Dependency | Reason | Recommendation | Action | Path |
+| --- | --- | --- | --- | --- | --- | --- |
+| high | `agpl-child@0.1.0` | production transitive | License expression is high risk for saas. | replace | Replace this package or escalate before shipping. | fixture-bun-project -> permissive-parent@1.0.0 -> agpl-child@0.1.0 |
 ```
 
 ## Risk Language

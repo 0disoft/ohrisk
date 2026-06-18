@@ -99,6 +99,7 @@ function renderNewFindings(findings: RiskFinding[]): string[] {
       `  ${finding.reason}`,
       `  recommendation: ${finding.recommendation}`,
       `  action: ${finding.action}`,
+      `  dependency: ${formatDependencyContext(finding)}`,
       `  path: ${finding.paths[0]?.join(" -> ") ?? "unknown"}`,
       `  evidence: ${finding.evidence.join("; ")}`
     ])
@@ -113,13 +114,17 @@ function renderMarkdownNewFindings(findings: RiskFinding[]): string[] {
   return [
     "## New findings",
     "",
-    "| Severity | Package | Reason | Recommendation | Action | Path |",
-    "| --- | --- | --- | --- | --- | --- |",
+    "| Severity | Package | Dependency | Reason | Recommendation | Action | Path |",
+    "| --- | --- | --- | --- | --- | --- | --- |",
     ...findings.map(
       (finding) =>
-        `| ${finding.severity} | \`${escapeMarkdownTable(finding.packageId)}\` | ${escapeMarkdownTable(finding.reason)} | ${finding.recommendation} | ${escapeMarkdownTable(finding.action)} | ${escapeMarkdownTable(finding.paths[0]?.join(" -> ") ?? "unknown")} |`
+        `| ${finding.severity} | \`${escapeMarkdownTable(finding.packageId)}\` | ${escapeMarkdownTable(formatDependencyContext(finding))} | ${escapeMarkdownTable(finding.reason)} | ${finding.recommendation} | ${escapeMarkdownTable(finding.action)} | ${escapeMarkdownTable(finding.paths[0]?.join(" -> ") ?? "unknown")} |`
     )
   ];
+}
+
+function formatDependencyContext(finding: RiskFinding): string {
+  return `${finding.dependencyType} ${finding.dependencyScope}`;
 }
 
 function escapeMarkdownTable(value: string): string {

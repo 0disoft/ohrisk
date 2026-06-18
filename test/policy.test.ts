@@ -33,6 +33,8 @@ describe("evaluateLicenseRisk", () => {
     expect(finding.severity).toBe("low");
     expect(finding.recommendation).toBe("allow");
     expect(finding.action).toBe("No action needed for this profile.");
+    expect(finding.dependencyType).toBe("production");
+    expect(finding.dependencyScope).toBe("direct");
   });
 
   test("uses the least risky branch for OR expressions", () => {
@@ -73,6 +75,8 @@ describe("evaluateLicenseRisk", () => {
     expect(finding.severity).toBe("high");
     expect(finding.recommendation).toBe("replace");
     expect(finding.action).toBe("Replace this package or escalate before shipping.");
+    expect(finding.dependencyType).toBe("production");
+    expect(finding.dependencyScope).toBe("direct");
   });
 
   test("treats mixed expressions conservatively instead of using OR fallback", () => {
@@ -188,6 +192,8 @@ describe("evaluateLicenseRisk", () => {
     expect(finding.severity).toBe("high");
     expect(finding.recommendation).toBe("exclude-dev-only");
     expect(finding.action).toBe("Keep this package out of production or scan with --prod.");
+    expect(finding.dependencyType).toBe("development");
+    expect(finding.dependencyScope).toBe("direct");
   });
 
   test("treats explicit commercial restriction signals as high risk", () => {

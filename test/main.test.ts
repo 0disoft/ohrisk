@@ -30,7 +30,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.17.0"]);
+    expect(stdout).toEqual(["ohrisk 0.18.0"]);
   });
 
   test("prints actionable findings for a Bun project", async () => {
@@ -53,6 +53,7 @@ describe("main", () => {
     expect(stdout.join("\n")).toContain(
       "action: Replace this package or escalate before shipping."
     );
+    expect(stdout.join("\n")).toContain("dependency: production transitive");
     expect(stdout.join("\n")).toContain(
       "path: fixture-bun-project -> permissive-parent@1.0.0 -> agpl-child@0.1.0"
     );
@@ -61,6 +62,7 @@ describe("main", () => {
     expect(stdout.join("\n")).toContain(
       "action: Keep this package out of production or scan with --prod."
     );
+    expect(stdout.join("\n")).toContain("dependency: development direct");
     expect(stdout.join("\n")).toContain("- [unknown] missing-license@4.0.0");
     expect(stdout.join("\n")).toContain("recommendation: collect-evidence");
     expect(stdout.join("\n")).toContain(
@@ -190,6 +192,8 @@ describe("main", () => {
         severity: string;
         recommendation: string;
         action: string;
+        dependencyType: string;
+        dependencyScope: string;
         paths: string[][];
       }>;
     };
@@ -225,7 +229,9 @@ describe("main", () => {
       packageId: "agpl-child@0.1.0",
       severity: "high",
       recommendation: "replace",
-      action: "Replace this package or escalate before shipping."
+      action: "Replace this package or escalate before shipping.",
+      dependencyType: "production",
+      dependencyScope: "transitive"
     });
     expect(payload.findings[0]?.paths[0]).toEqual([
       "fixture-bun-project",
@@ -321,6 +327,8 @@ describe("main", () => {
             reason: string;
             recommendation: string;
             action: string;
+            dependencyType: string;
+            dependencyScope: string;
           };
         }>;
       }>;
@@ -329,7 +337,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.17.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.18.0");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
       "ohrisk/license-unknown",
@@ -344,13 +352,18 @@ describe("main", () => {
     });
     expect(payload.runs[0]?.results[0]?.message.text).toContain("agpl-child@0.1.0");
     expect(payload.runs[0]?.results[0]?.message.text).toContain(
+      "Dependency: production transitive."
+    );
+    expect(payload.runs[0]?.results[0]?.message.text).toContain(
       "Action: Replace this package or escalate before shipping."
     );
     expect(payload.runs[0]?.results[0]?.properties).toMatchObject({
       packageId: "agpl-child@0.1.0",
       reason: "License expression is high risk for saas.",
       recommendation: "replace",
-      action: "Replace this package or escalate before shipping."
+      action: "Replace this package or escalate before shipping.",
+      dependencyType: "production",
+      dependencyScope: "transitive"
     });
     expect(payload.runs[0]?.results[0]?.locations[0]?.physicalLocation).toEqual({
       artifactLocation: {
@@ -379,9 +392,9 @@ describe("main", () => {
       "- Licenses: `4 high-confidence`, `0 medium-confidence`, `1 low-confidence`"
     );
     expect(output).toContain("- License issues: `1 missing`, `0 malformed`");
-    expect(output).toContain("| Severity | Package | Reason | Recommendation | Action | Path |");
+    expect(output).toContain("| Severity | Package | Dependency | Reason | Recommendation | Action | Path |");
     expect(output).toContain(
-      "| high | `agpl-child@0.1.0` | License expression is high risk for saas. | replace | Replace this package or escalate before shipping. |"
+      "| high | `agpl-child@0.1.0` | production transitive | License expression is high risk for saas. | replace | Replace this package or escalate before shipping. |"
     );
     expect(output).toContain("## Next");
   });
@@ -443,6 +456,7 @@ describe("main", () => {
     expect(output).toContain("Findings: 5 current, 3 baseline, 2 new");
     expect(output).toContain("New risks: 0 high, 1 review, 1 unknown, 0 low");
     expect(output).toContain("- [unknown] missing-license@4.0.0");
+    expect(output).toContain("dependency: production direct");
     expect(output).toContain("- [review] gpl-package@5.0.0");
     expect(output).not.toContain("- [high] agpl-child@0.1.0");
   });
@@ -562,10 +576,10 @@ describe("main", () => {
     expect(output).toContain("- Baseline: `main`");
     expect(output).toContain("- New risks: `0 high`, `1 review`, `1 unknown`, `0 low`");
     expect(output).toContain(
-      "| unknown | `missing-license@4.0.0` | License evidence is missing, malformed, or not recognized. | collect-evidence | Collect license evidence before approving this package. |"
+      "| unknown | `missing-license@4.0.0` | production direct | License evidence is missing, malformed, or not recognized. | collect-evidence | Collect license evidence before approving this package. |"
     );
     expect(output).toContain(
-      "| review | `gpl-package@5.0.0` | License expression should be reviewed before shipping under saas. | review | Review this package before shipping. |"
+      "| review | `gpl-package@5.0.0` | production direct | License expression should be reviewed before shipping under saas. | review | Review this package before shipping. |"
     );
   });
 

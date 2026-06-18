@@ -135,6 +135,8 @@ function resultFor(finding: RiskFinding, lockfileUri: string): {
     reason: string;
     recommendation: string;
     action: string;
+    dependencyType: string;
+    dependencyScope: string;
     paths: string[][];
     evidence: string[];
   };
@@ -146,7 +148,7 @@ function resultFor(finding: RiskFinding, lockfileUri: string): {
     ruleIndex: RULE_INDEX_BY_ID.get(ruleId) ?? 0,
     level: sarifLevelFor(finding.severity),
     message: {
-      text: `${finding.packageId}: ${finding.reason} Recommendation: ${finding.recommendation}. Action: ${finding.action}`
+      text: `${finding.packageId}: ${finding.reason} Dependency: ${finding.dependencyType} ${finding.dependencyScope}. Recommendation: ${finding.recommendation}. Action: ${finding.action}`
     },
     locations: [
       {
@@ -168,6 +170,8 @@ function resultFor(finding: RiskFinding, lockfileUri: string): {
       reason: finding.reason,
       recommendation: finding.recommendation,
       action: finding.action,
+      dependencyType: finding.dependencyType,
+      dependencyScope: finding.dependencyScope,
       paths: finding.paths,
       evidence: finding.evidence
     }
