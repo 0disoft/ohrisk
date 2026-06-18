@@ -20,6 +20,7 @@ describe("parseBunLockfile", () => {
       "agpl-child@0.1.0",
       "dev-risk@3.0.0",
       "dual-license@2.0.0",
+      "gpl-package@5.0.0",
       "missing-license@4.0.0",
       "permissive-parent@1.0.0"
     ]);
@@ -43,6 +44,11 @@ describe("parseBunLockfile", () => {
     expect(missingLicense?.direct).toBe(true);
     expect(missingLicense?.dependencyType).toBe("production");
     expect(missingLicense?.paths).toEqual([["fixture-bun-project", "missing-license@4.0.0"]]);
+
+    const gplPackage = result.value.nodes.find((node) => node.id === "gpl-package@5.0.0");
+    expect(gplPackage?.direct).toBe(true);
+    expect(gplPackage?.dependencyType).toBe("production");
+    expect(gplPackage?.paths).toEqual([["fixture-bun-project", "gpl-package@5.0.0"]]);
   });
 
   test("reports malformed Bun lockfiles as typed errors", () => {
