@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import type { RiskFinding, RiskSeverity } from "../policy/types";
+import type { WaivedRiskFinding } from "../policy/waivers";
 import type { ScanReportInput } from "./scan-report";
 
 type SarifRule = {
@@ -25,6 +26,47 @@ type SarifRule = {
     precision: "high" | "medium";
     "problem.severity": "error" | "warning" | "recommendation";
     "security-severity"?: string;
+  };
+};
+
+type SarifResult = {
+  ruleId: string;
+  ruleIndex: number;
+  level: "error" | "warning" | "note";
+  message: {
+    text: string;
+  };
+  locations: Array<{
+    physicalLocation: {
+      artifactLocation: {
+        uri: string;
+      };
+      region: {
+        startLine: number;
+      };
+    };
+  }>;
+  partialFingerprints: {
+    primaryLocationLineHash: string;
+  };
+  suppressions?: Array<{
+    kind: "external";
+    justification: string;
+  }>;
+  properties: {
+    packageId: string;
+    reason: string;
+    recommendation: string;
+    action: string;
+    dependencyType: string;
+    dependencyScope: string;
+    paths: string[][];
+    evidence: string[];
+    findingId: string;
+    fingerprint: string;
+    waived?: boolean;
+    waiverMatchedBy?: "id" | "fingerprint";
+    waiverReason?: string;
   };
 };
 
@@ -68,7 +110,16 @@ export function renderSarifReport(input: ScanReportInput): string {
               }
             }
           ],
-          results: input.riskFindings.map((finding) => resultFor(finding, lockfileUri))
+          properties: {
+            ohriskActiveFindingCount: input.riskFindings.length,
+            ohriskWaivedFindingCount: input.waivedFindings.length,
+            ohriskExpiredWaiverCount: input.expiredWaivers.length,
+            ohriskUnmatchedWaiverCount: input.unmatchedWaivers.length
+          },
+          results: [
+            ...input.riskFindings.map((finding) => resultFor(finding, lockfileUri)),
+            ...input.waivedFindings.map((waived) => suppressedResultFor(waived, lockfileUri))
+          ]
         }
       ]
     },
@@ -110,39 +161,7 @@ function ruleFor(severity: RiskSeverity, name: string, description: string): Sar
   return rule;
 }
 
-function resultFor(finding: RiskFinding, lockfileUri: string): {
-  ruleId: string;
-  ruleIndex: number;
-  level: "error" | "warning" | "note";
-  message: {
-    text: string;
-  };
-  locations: Array<{
-    physicalLocation: {
-      artifactLocation: {
-        uri: string;
-      };
-      region: {
-        startLine: number;
-      };
-    };
-  }>;
-  partialFingerprints: {
-    primaryLocationLineHash: string;
-  };
-  properties: {
-    packageId: string;
-    reason: string;
-    recommendation: string;
-    action: string;
-    dependencyType: string;
-    dependencyScope: string;
-    paths: string[][];
-    evidence: string[];
-    findingId: string;
-    fingerprint: string;
-  };
-} {
+function resultFor(finding: RiskFinding, lockfileUri: string): SarifResult {
   const ruleId = ruleIdFor(finding.severity);
 
   return {
@@ -178,6 +197,26 @@ function resultFor(finding: RiskFinding, lockfileUri: string): {
       dependencyScope: finding.dependencyScope,
       paths: finding.paths,
       evidence: finding.evidence
+    }
+  };
+}
+
+function suppressedResultFor(waived: WaivedRiskFinding, lockfileUri: string): SarifResult {
+  const result = resultFor(waived.finding, lockfileUri);
+
+  return {
+    ...result,
+    suppressions: [
+      {
+        kind: "external",
+        justification: waived.waiver.reason
+      }
+    ],
+    properties: {
+      ...result.properties,
+      waived: true,
+      waiverMatchedBy: waived.matchedBy,
+      waiverReason: waived.waiver.reason
     }
   };
 }

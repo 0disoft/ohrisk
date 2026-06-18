@@ -43,6 +43,7 @@ The current implementation is the first npm-style vertical slice:
 - profile-aware risk evaluation for `saas` and `distributed-app`
 - terminal and JSON reports
 - SARIF 2.1.0 reports for code scanning upload
+- waived findings in SARIF output as externally suppressed results
 - Markdown reports for PR comments and release notes
 - CycloneDX 1.5 JSON SBOM reports
 - stable finding IDs for PR comments and future waivers
@@ -154,8 +155,9 @@ Waive a finding locally by ID or fingerprint in `.ohrisk-waivers.json`:
 ```
 
 Waived findings are excluded from `ci --fail-on` threshold failures, but scan
-and CI reports still show them in a separate waived findings section. Expired
-waivers and unmatched active waivers are reported separately and are not applied.
+and CI JSON, terminal, Markdown, and SARIF reports still show them. Expired
+waivers and unmatched active waivers are reported separately in JSON, terminal,
+and Markdown reports and are not applied.
 
 Explain a license expression without scanning a project:
 

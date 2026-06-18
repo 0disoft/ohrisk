@@ -45,7 +45,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.48.0"]);
+    expect(stdout).toEqual(["ohrisk 0.49.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -406,7 +406,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.48.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.49.0");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
       "ohrisk/license-unknown",
@@ -450,6 +450,85 @@ describe("main", () => {
     expect(payload.runs[0]?.results[0]?.partialFingerprints.primaryLocationLineHash).toContain(
       "::high::replace::License expression is high risk for saas."
     );
+  });
+
+  test("prints waived findings as suppressed SARIF results", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-sarif-waiver-project-"));
+
+    try {
+      cpSync(path.join(fixturesDir, "bun-project"), projectRoot, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, ".ohrisk-waivers.json"),
+        JSON.stringify(
+          {
+            waivers: [
+              {
+                id: "agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0",
+                reason: "Accepted fixture risk for SARIF audit output."
+              }
+            ]
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--sarif", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const payload = JSON.parse(stdout.join("\n")) as {
+        runs: Array<{
+          properties: {
+            ohriskActiveFindingCount: number;
+            ohriskWaivedFindingCount: number;
+            ohriskExpiredWaiverCount: number;
+            ohriskUnmatchedWaiverCount: number;
+          };
+          results: Array<{
+            properties: {
+              packageId: string;
+              waived?: boolean;
+              waiverMatchedBy?: string;
+              waiverReason?: string;
+            };
+            suppressions?: Array<{
+              kind: string;
+              justification: string;
+            }>;
+          }>;
+        }>;
+      };
+
+      expect(payload.runs[0]?.properties).toEqual({
+        ohriskActiveFindingCount: 4,
+        ohriskWaivedFindingCount: 1,
+        ohriskExpiredWaiverCount: 0,
+        ohriskUnmatchedWaiverCount: 0
+      });
+      expect(payload.runs[0]?.results).toHaveLength(5);
+
+      const suppressed = payload.runs[0]?.results.find(
+        (result) => result.properties.packageId === "agpl-child@0.1.0"
+      );
+
+      expect(suppressed?.suppressions).toEqual([
+        {
+          kind: "external",
+          justification: "Accepted fixture risk for SARIF audit output."
+        }
+      ]);
+      expect(suppressed?.properties).toMatchObject({
+        waived: true,
+        waiverMatchedBy: "id",
+        waiverReason: "Accepted fixture risk for SARIF audit output."
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 
   test("prints CycloneDX SBOM output", async () => {
