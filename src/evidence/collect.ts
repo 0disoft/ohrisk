@@ -18,6 +18,15 @@ type ArtifactFetchResponse = {
 
 type ArtifactFetcher = (url: string) => Promise<ArtifactFetchResponse>;
 
+const SUPPORTED_INTEGRITY_DIGEST_BYTES = {
+  sha1: 20,
+  sha256: 32,
+  sha384: 48,
+  sha512: 64
+} as const;
+
+type SupportedIntegrityAlgorithm = keyof typeof SUPPORTED_INTEGRITY_DIGEST_BYTES;
+
 export async function collectGraphEvidence(input: {
   graph: DependencyGraph;
   projectRoot: string;
@@ -357,9 +366,7 @@ function verifyPackageIntegrity(input: {
 
 function parseSupportedIntegrityEntries(
   integrity: string
-): Array<{ algorithm: "sha512" | "sha384" | "sha256" | "sha1"; digest: Buffer }> {
-  const supportedAlgorithms = new Set(["sha512", "sha384", "sha256", "sha1"]);
-
+): Array<{ algorithm: SupportedIntegrityAlgorithm; digest: Buffer }> {
   return integrity
     .split(/\s+/)
     .map((entry) => {
@@ -370,19 +377,55 @@ function parseSupportedIntegrityEntries(
 
       const algorithm = entry.slice(0, separatorIndex);
       const digest = entry.slice(separatorIndex + 1);
-      if (!supportedAlgorithms.has(algorithm) || digest === "") {
+      if (!isSupportedIntegrityAlgorithm(algorithm) || digest === "") {
+        return undefined;
+      }
+
+      const decoded = decodeIntegrityDigest({ algorithm, digest });
+      if (!decoded) {
         return undefined;
       }
 
       return {
-        algorithm: algorithm as "sha512" | "sha384" | "sha256" | "sha1",
-        digest: Buffer.from(digest, "base64")
+        algorithm,
+        digest: decoded
       };
     })
     .filter((entry): entry is {
-      algorithm: "sha512" | "sha384" | "sha256" | "sha1";
+      algorithm: SupportedIntegrityAlgorithm;
       digest: Buffer;
     } => entry !== undefined);
+}
+
+function isSupportedIntegrityAlgorithm(value: string): value is SupportedIntegrityAlgorithm {
+  return Object.prototype.hasOwnProperty.call(SUPPORTED_INTEGRITY_DIGEST_BYTES, value);
+}
+
+function decodeIntegrityDigest(input: {
+  algorithm: SupportedIntegrityAlgorithm;
+  digest: string;
+}): Buffer | undefined {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(input.digest)) {
+    return undefined;
+  }
+
+  const paddingStart = input.digest.indexOf("=");
+  if (paddingStart !== -1 && !/^=+$/.test(input.digest.slice(paddingStart))) {
+    return undefined;
+  }
+
+  if (input.digest.length % 4 === 1) {
+    return undefined;
+  }
+
+  const decoded = Buffer.from(input.digest, "base64");
+  if (decoded.byteLength !== SUPPORTED_INTEGRITY_DIGEST_BYTES[input.algorithm]) {
+    return undefined;
+  }
+
+  const normalizedInput = input.digest.replace(/=+$/, "");
+  const normalizedDecoded = decoded.toString("base64").replace(/=+$/, "");
+  return normalizedDecoded === normalizedInput ? decoded : undefined;
 }
 
 function npmRegistryPackageUrl(name: string): string {

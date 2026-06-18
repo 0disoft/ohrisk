@@ -322,6 +322,62 @@ describe("collectGraphEvidence", () => {
     }
   });
 
+  test("rejects malformed integrity digests before comparing tarball bytes", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-malformed-integrity-"));
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "malformed-integrity-fixture",
+        version: "1.0.0",
+        license: "MIT"
+      }),
+      "package/LICENSE": "MIT License fixture text."
+    });
+    const tarballPath = path.join(projectRoot, "malformed-integrity-fixture.tgz");
+    writeFileSync(tarballPath, tarball);
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "bun.lock",
+          nodes: [
+            {
+              id: "malformed-integrity-fixture@1.0.0",
+              name: "malformed-integrity-fixture",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved: "file:malformed-integrity-fixture.tgz",
+              integrity: "sha512-not-base64",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "malformed-integrity-fixture@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot
+      });
+
+      expect(evidence.ok).toBe(false);
+      if (evidence.ok) {
+        throw new Error("Expected malformed integrity to fail.");
+      }
+
+      expect(evidence.error.code).toBe("PACKAGE_INTEGRITY_CHECK_FAILED");
+      expect(evidence.error.category).toBe("unsupported_input");
+      expect(evidence.error.message).toBe(
+        "Package artifact integrity could not be verified because no supported digest was found."
+      );
+      expect(evidence.error.details).toMatchObject({
+        packageId: "malformed-integrity-fixture@1.0.0",
+        resolved: "file:malformed-integrity-fixture.tgz",
+        integrity: "sha512-not-base64",
+        supportedAlgorithms: ["sha512", "sha384", "sha256", "sha1"]
+      });
+      expect(evidence.error.details).not.toHaveProperty("computed");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("rejects remote tarballs that do not match lockfile integrity", async () => {
     const tarball = createTarGz({
       "package/package.json": JSON.stringify({

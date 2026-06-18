@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.66.0 - 2026-06-19
+
+### Fixed
+
+- Integrity verification now rejects malformed or wrong-length SRI digests before comparing package tarball bytes.
+
 ## 0.65.0 - 2026-06-19
 
 ### Fixed
