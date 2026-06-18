@@ -5,6 +5,7 @@ import type { DependencyGraph } from "../graph/types";
 import type { NormalizedLicense } from "../license/types";
 import { NOTICE_ACTION } from "../policy/evaluate";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
+import type { RiskWaiver, WaivedRiskFinding } from "../policy/waivers";
 import type { ProjectInput } from "../project/discover";
 import { buildThresholdSummary, formatThresholdSummary } from "./threshold-summary";
 
@@ -19,6 +20,8 @@ export type ScanReportInput = {
   json: boolean;
   markdown: boolean;
   failOn?: RiskSeverity;
+  waivedFindings: WaivedRiskFinding[];
+  expiredWaivers: RiskWaiver[];
 };
 
 export function renderScanReport(input: ScanReportInput): string {
@@ -41,9 +44,11 @@ export function renderScanReport(input: ScanReportInput): string {
         evidence: summary.evidence,
         licenses: summary.licenses,
         risks: summary.risks,
+        waivers: summary.waivers,
         nextAction,
         ...thresholdSummary,
-        findings: input.riskFindings
+        findings: input.riskFindings,
+        waivedFindings: input.waivedFindings
       },
       null,
       2
@@ -65,10 +70,13 @@ export function renderScanReport(input: ScanReportInput): string {
     `Licenses: ${summary.licenses.highConfidence} high-confidence, ${summary.licenses.mediumConfidence} medium-confidence, ${summary.licenses.lowConfidence} low-confidence`,
     `License issues: ${summary.licenses.missing} missing, ${summary.licenses.malformed} malformed`,
     `Risks: ${summary.risks.high} high, ${summary.risks.review} review, ${summary.risks.unknown} unknown, ${summary.risks.low} low`,
+    `Waived: ${summary.waivers.applied} applied, ${summary.waivers.expired} expired`,
     ...renderThresholdLines(thresholdSummary),
     "Status: profile-aware risk evaluated",
     "",
     ...renderFindings(input.riskFindings),
+    "",
+    ...renderWaivedFindings(input.waivedFindings),
     "",
     `Next: ${nextAction}`
   ].join("\n");
@@ -93,9 +101,12 @@ function renderMarkdownReport(
     `- Licenses: \`${summary.licenses.highConfidence} high-confidence\`, \`${summary.licenses.mediumConfidence} medium-confidence\`, \`${summary.licenses.lowConfidence} low-confidence\``,
     `- License issues: \`${summary.licenses.missing} missing\`, \`${summary.licenses.malformed} malformed\``,
     `- Risks: \`${summary.risks.high} high\`, \`${summary.risks.review} review\`, \`${summary.risks.unknown} unknown\`, \`${summary.risks.low} low\``,
+    `- Waived: \`${summary.waivers.applied} applied\`, \`${summary.waivers.expired} expired\``,
     ...renderMarkdownThresholdLines(thresholdSummary),
     "",
     ...renderMarkdownFindings(input.riskFindings),
+    "",
+    ...renderMarkdownWaivedFindings(input.waivedFindings),
     "",
     "## Next",
     "",
@@ -122,6 +133,10 @@ function buildScanSummary(input: ScanReportInput): {
     malformed: number;
   };
   risks: Record<RiskSeverity, number>;
+  waivers: {
+    applied: number;
+    expired: number;
+  };
 } {
   const directCount = input.graph.nodes.filter((node) => node.direct).length;
   const transitiveCount = input.graph.nodes.length - directCount;
@@ -147,7 +162,11 @@ function buildScanSummary(input: ScanReportInput): {
       missing: licenseSummary.missing,
       malformed: licenseSummary.malformed
     },
-    risks: summarizeRiskFindings(input.riskFindings)
+    risks: summarizeRiskFindings(input.riskFindings),
+    waivers: {
+      applied: input.waivedFindings.length,
+      expired: input.expiredWaivers.length
+    }
   };
 }
 
@@ -171,6 +190,23 @@ function renderFindings(findings: RiskFinding[]): string[] {
   ];
 }
 
+function renderWaivedFindings(waivedFindings: WaivedRiskFinding[]): string[] {
+  if (waivedFindings.length === 0) {
+    return ["Waived findings: none"];
+  }
+
+  return [
+    "Waived findings:",
+    ...waivedFindings.flatMap((waived) => [
+      `- [${waived.finding.severity}] ${waived.finding.packageId}`,
+      `  id: ${waived.finding.id}`,
+      `  matched by: ${waived.matchedBy}`,
+      `  reason: ${waived.waiver.reason}`,
+      `  action: ${waived.finding.action}`
+    ])
+  ];
+}
+
 function renderMarkdownFindings(findings: RiskFinding[]): string[] {
   if (findings.length === 0) {
     return ["## Findings", "", "No findings."];
@@ -184,6 +220,23 @@ function renderMarkdownFindings(findings: RiskFinding[]): string[] {
     ...findings.map(
       (finding) =>
         `| \`${escapeMarkdownTable(finding.id)}\` | ${finding.severity} | \`${escapeMarkdownTable(finding.packageId)}\` | ${escapeMarkdownTable(formatDependencyContext(finding))} | ${escapeMarkdownTable(finding.reason)} | ${finding.recommendation} | ${escapeMarkdownTable(finding.action)} | ${escapeMarkdownTable(formatPath(finding.paths[0]))} |`
+    )
+  ];
+}
+
+function renderMarkdownWaivedFindings(waivedFindings: WaivedRiskFinding[]): string[] {
+  if (waivedFindings.length === 0) {
+    return ["## Waived findings", "", "No waived findings."];
+  }
+
+  return [
+    "## Waived findings",
+    "",
+    "| ID | Severity | Package | Matched by | Reason | Action |",
+    "| --- | --- | --- | --- | --- | --- |",
+    ...waivedFindings.map(
+      (waived) =>
+        `| \`${escapeMarkdownTable(waived.finding.id)}\` | ${waived.finding.severity} | \`${escapeMarkdownTable(waived.finding.packageId)}\` | ${waived.matchedBy} | ${escapeMarkdownTable(waived.waiver.reason)} | ${escapeMarkdownTable(waived.finding.action)} |`
     )
   ];
 }

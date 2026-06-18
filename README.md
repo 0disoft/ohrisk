@@ -46,6 +46,7 @@ The current implementation is the first npm-style vertical slice:
 - Markdown reports for PR comments and release notes
 - CycloneDX 1.5 JSON SBOM reports
 - stable finding IDs for PR comments and future waivers
+- local `.ohrisk-waivers.json` waivers by finding ID or fingerprint
 - stable diff matching that ignores reason and evidence prose churn while surfacing severity, recommendation, and action changes
 - exact finding fingerprints for SARIF partial fingerprints and audit trails
 - structured dependency type and direct/transitive scope in findings
@@ -55,8 +56,8 @@ The current implementation is the first npm-style vertical slice:
 - JSON threshold outcomes for `ci --fail-on` and `diff --fail-on`
 - terminal and Markdown threshold outcomes for `ci --fail-on` and `diff --fail-on`
 
-Waiver workflows, GitHub App checks, and ecosystem adapters beyond npm-style
-lockfiles are not part of this slice yet.
+Central approval workflows, GitHub App checks, and ecosystem adapters beyond
+npm-style lockfiles are not part of this slice yet.
 
 ## Usage
 
@@ -137,6 +138,23 @@ Fail a local CI step when findings meet a threshold:
 ```bash
 bun run src/cli/main.ts ci --fail-on high
 ```
+
+Waive a finding locally by ID or fingerprint in `.ohrisk-waivers.json`:
+
+```json
+{
+  "waivers": [
+    {
+      "id": "agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0",
+      "reason": "Accepted for this release after internal review.",
+      "expiresOn": "2099-12-31"
+    }
+  ]
+}
+```
+
+Waived findings are excluded from `ci --fail-on` threshold failures, but scan
+and CI reports still show them in a separate waived findings section.
 
 Explain a license expression without scanning a project:
 

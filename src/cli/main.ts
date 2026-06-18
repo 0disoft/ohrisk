@@ -14,6 +14,7 @@ import type { DependencyGraph, DependencyNode } from "../graph/types";
 import { normalizeAllLicenseEvidence, normalizeLicenseEvidence } from "../license/normalize";
 import { evaluateLicenseRisk, evaluateLicenseRisks } from "../policy/evaluate";
 import { hasFindingAtOrAbove } from "../policy/severity";
+import { applyRiskWaivers, readRiskWaivers } from "../policy/waivers";
 import { renderCycloneDxReport } from "../report/cyclonedx-report";
 import { renderDiffReport } from "../report/diff-report";
 import { renderExplainReport } from "../report/explain-report";
@@ -70,7 +71,8 @@ async function runDiff(
   const current = await scanProject({
     cwd: io.cwd,
     profile: command.profile,
-    prodOnly: command.prodOnly
+    prodOnly: command.prodOnly,
+    applyWaivers: false
   });
 
   if (isErr(current)) {
@@ -222,7 +224,8 @@ async function runScan(
   const scanned = await scanProject({
     cwd: io.cwd,
     profile: command.profile,
-    prodOnly: command.prodOnly
+    prodOnly: command.prodOnly,
+    applyWaivers: true
   });
 
   if (isErr(scanned)) {
@@ -240,7 +243,9 @@ async function runScan(
     prodOnly: command.prodOnly,
     json: command.json,
     markdown: command.markdown,
-    failOn: command.kind === "ci" ? command.failOn : undefined
+    failOn: command.kind === "ci" ? command.failOn : undefined,
+    waivedFindings: scanned.value.waivedFindings,
+    expiredWaivers: scanned.value.expiredWaivers
   };
 
   const output = command.cyclonedx
@@ -270,6 +275,7 @@ async function scanProject(input: {
   cwd: string;
   profile: Extract<CliCommand, { kind: "scan" | "ci" | "diff" }>["profile"];
   prodOnly: boolean;
+  applyWaivers: boolean;
 }) {
   const discovered = discoverProject({ cwd: input.cwd });
 
@@ -300,6 +306,31 @@ async function scanProject(input: {
     dependencies: scanGraph.nodes,
     profile: input.profile
   });
+  if (!input.applyWaivers) {
+    return {
+      ok: true as const,
+      value: {
+        project: discovered.value,
+        graph: scanGraph,
+        evidence: evidence.value,
+        normalizedLicenses,
+        riskFindings,
+        waivedFindings: [],
+        expiredWaivers: []
+      }
+    };
+  }
+
+  const waivers = readRiskWaivers(discovered.value.rootDir);
+
+  if (isErr(waivers)) {
+    return waivers;
+  }
+
+  const appliedWaivers = applyRiskWaivers({
+    findings: riskFindings,
+    waivers: waivers.value
+  });
 
   return {
     ok: true as const,
@@ -308,7 +339,9 @@ async function scanProject(input: {
       graph: scanGraph,
       evidence: evidence.value,
       normalizedLicenses,
-      riskFindings
+      riskFindings: appliedWaivers.activeFindings,
+      waivedFindings: appliedWaivers.waivedFindings,
+      expiredWaivers: appliedWaivers.expiredWaivers
     }
   };
 }

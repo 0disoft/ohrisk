@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.45.0 - 2026-06-19
+## 0.46.0 - 2026-06-19
 
 First public release candidate for Ohrisk.
 
@@ -68,12 +68,14 @@ First public release candidate for Ohrisk.
 - JSON scan and diff reports include the same next action used by human-readable reports.
 - JSON reports include `failOn`, `failed`, and `failingFindingCount` when a CI or diff threshold is configured.
 - Terminal and Markdown reports show threshold pass/fail lines when a CI or diff threshold is configured.
+- `.ohrisk-waivers.json` local waivers by finding ID or fingerprint.
+- Scan and CI JSON, terminal, and Markdown reports separate active findings from waived findings.
 - Unknown-risk findings now distinguish missing, malformed, and unrecognized license metadata in reason and action text.
 - Risk findings for low, review, high, and unknown license evidence.
 - Terminal findings sorted by severity with package path, recommendation, and evidence snippets.
 
 ### Not Included Yet
 
-- Waiver, approval, or legal workflow management.
+- Central approval or legal workflow management.
 - GitHub App integration.
 - Ecosystem adapters beyond npm-style lockfiles.

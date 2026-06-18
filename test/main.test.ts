@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -45,7 +45,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.45.0"]);
+    expect(stdout).toEqual(["ohrisk 0.46.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -406,7 +406,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.45.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.46.0");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
       "ohrisk/license-unknown",
@@ -610,6 +610,104 @@ describe("main", () => {
     expect(payload.failingFindingCount).toBe(2);
   });
 
+  test("excludes waived findings from CI threshold failures while reporting them", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-waived-project-"));
+
+    try {
+      cpSync(path.join(fixturesDir, "bun-project"), projectRoot, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, ".ohrisk-waivers.json"),
+        JSON.stringify(
+          {
+            waivers: [
+              {
+                id: "agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0",
+                reason: "Accepted fixture risk for this release candidate."
+              }
+            ]
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["ci", "--json", "--prod", "--fail-on", "high"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const payload = JSON.parse(stdout.join("\n")) as {
+        risks: {
+          high: number;
+          review: number;
+          unknown: number;
+          low: number;
+        };
+        waivers: {
+          applied: number;
+          expired: number;
+        };
+        failed: boolean;
+        failingFindingCount: number;
+        findings: Array<{
+          packageId: string;
+        }>;
+        waivedFindings: Array<{
+          finding: {
+            packageId: string;
+            severity: string;
+          };
+          waiver: {
+            reason: string;
+          };
+          matchedBy: string;
+        }>;
+      };
+
+      expect(payload.risks.high).toBe(0);
+      expect(payload.waivers).toEqual({
+        applied: 1,
+        expired: 0
+      });
+      expect(payload.failed).toBe(false);
+      expect(payload.failingFindingCount).toBe(0);
+      expect(payload.findings.map((finding) => finding.packageId)).not.toContain("agpl-child@0.1.0");
+      expect(payload.waivedFindings).toHaveLength(1);
+      expect(payload.waivedFindings[0]).toMatchObject({
+        finding: {
+          packageId: "agpl-child@0.1.0",
+          severity: "high"
+        },
+        waiver: {
+          reason: "Accepted fixture risk for this release candidate."
+        },
+        matchedBy: "id"
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("returns invalid input for malformed waiver files", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-bad-waiver-project-"));
+
+    try {
+      cpSync(path.join(fixturesDir, "bun-project"), projectRoot, { recursive: true });
+      writeFileSync(path.join(projectRoot, ".ohrisk-waivers.json"), "{", "utf8");
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan"], io);
+
+      expect(exitCode).toBe(2);
+      expect(stdout).toEqual([]);
+      expect(stderr.join("\n")).toContain("WAIVER_FILE_PARSE_FAILED");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("writes ci output before returning a failing threshold exit code", async () => {
     const outputRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-ci-output-"));
 
@@ -669,6 +767,76 @@ describe("main", () => {
     expect(output).toContain("dependency: production direct");
     expect(output).toContain("- [review] gpl-package@5.0.0");
     expect(output).not.toContain("- [high] agpl-child@0.1.0");
+  });
+
+  test("does not apply local waivers to git ref diff findings", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-diff-waiver-project-"));
+    const baselineLockfile = [
+      "# THIS IS AN AUTOGENERATED FILE. DO NOT EDIT THIS FILE DIRECTLY.",
+      "# bun lockfile v1",
+      "",
+      "{",
+      '  "lockfileVersion": 1,',
+      '  "workspaces": {',
+      '    "": {',
+      '      "name": "fixture-bun-project",',
+      '      "dependencies": {',
+      '        "dual-license": "2.0.0",',
+      "      },",
+      "    },",
+      "  },",
+      '  "packages": {',
+      '    "dual-license": [',
+      '      "dual-license@2.0.0",',
+      '      "file:./.registry/dual-license",',
+      "      {},",
+      '      "sha512-dual",',
+      "    ],",
+      "  },",
+      "}"
+    ].join("\n");
+
+    try {
+      cpSync(path.join(fixturesDir, "bun-project"), projectRoot, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, ".ohrisk-waivers.json"),
+        JSON.stringify(
+          {
+            waivers: [
+              {
+                id: "agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0",
+                reason: "Accepted fixture risk for scan output only."
+              }
+            ]
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      io.readRefFile = () => ({ ok: true as const, value: baselineLockfile });
+
+      const exitCode = await main(["diff", "main", "--prod", "--json", "--fail-on", "high"], io);
+
+      expect(exitCode).toBe(1);
+      expect(stderr).toEqual([]);
+
+      const payload = JSON.parse(stdout.join("\n")) as {
+        newRisks: {
+          high: number;
+        };
+        findings: Array<{
+          packageId: string;
+        }>;
+      };
+
+      expect(payload.newRisks.high).toBe(1);
+      expect(payload.findings.map((finding) => finding.packageId)).toContain("agpl-child@0.1.0");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 
   test("prints only new or changed findings for a Yarn v1 git ref diff", async () => {
