@@ -369,13 +369,16 @@ function renderHelp(): string {
     "  ohrisk ci [--profile saas|distributed-app] [--prod] [--json|--sarif|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk diff <baseline-ref> [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
-    "  ohrisk --version",
+    "  ohrisk help",
+    "  ohrisk version",
     "",
     "Commands:",
     "  scan    Find the current project and prepare a license-risk scan.",
     "  ci      Run a scan and exit non-zero when findings meet the fail threshold.",
     "  diff    Compare current findings against a baseline git ref.",
     "  explain Explain how a license expression is classified for a profile.",
+    "  help    Print this help text.",
+    "  version Print the Ohrisk package version.",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
@@ -385,6 +388,7 @@ function renderHelp(): string {
     "  --markdown             Print a Markdown report for PRs or release notes.",
     "  --output <file>        Write report output to a file instead of stdout.",
     "  --fail-on <severity>   CI threshold. Defaults to high for ci.",
+    "  --help, -h             Print this help text.",
     "  --version, -v          Print the Ohrisk package version."
   ].join("\n");
 }

@@ -3,6 +3,21 @@ import { describe, expect, test } from "bun:test";
 import { parseArgs } from "../src/cli/args";
 
 describe("parseArgs", () => {
+  test("parses help aliases", () => {
+    for (const argv of [[], ["--help"], ["-h"], ["help"]]) {
+      const parsed = parseArgs(argv);
+
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) {
+        throw new Error(parsed.error.message);
+      }
+
+      expect(parsed.value).toEqual({
+        kind: "help"
+      });
+    }
+  });
+
   test("parses scan defaults", () => {
     const parsed = parseArgs(["scan"]);
 
@@ -267,17 +282,19 @@ describe("parseArgs", () => {
     expect(parsed.error.code).toBe("UNSUPPORTED_COMMAND");
   });
 
-  test("parses version command", () => {
-    const parsed = parseArgs(["--version"]);
+  test("parses version aliases", () => {
+    for (const argv of [["--version"], ["-v"], ["version"]]) {
+      const parsed = parseArgs(argv);
 
-    expect(parsed.ok).toBe(true);
-    if (!parsed.ok) {
-      throw new Error(parsed.error.message);
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) {
+        throw new Error(parsed.error.message);
+      }
+
+      expect(parsed.value).toEqual({
+        kind: "version"
+      });
     }
-
-    expect(parsed.value).toEqual({
-      kind: "version"
-    });
   });
 
   test("rejects unsupported profiles", () => {

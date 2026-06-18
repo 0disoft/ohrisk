@@ -71,6 +71,13 @@ Run a local scan from a supported project:
 bun run src/cli/main.ts scan
 ```
 
+Print command help or the installed package version:
+
+```bash
+ohrisk help
+ohrisk version
+```
+
 Supported lockfiles:
 
 - `bun.lock`

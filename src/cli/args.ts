@@ -46,11 +46,11 @@ export type CliCommand =
     };
 
 export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
-  if (argv.length === 0 || argv[0] === "--help" || argv[0] === "-h") {
+  if (argv.length === 0 || argv[0] === "--help" || argv[0] === "-h" || argv[0] === "help") {
     return ok({ kind: "help" });
   }
 
-  if (argv[0] === "--version" || argv[0] === "-v") {
+  if (argv[0] === "--version" || argv[0] === "-v" || argv[0] === "version") {
     return ok({ kind: "version" });
   }
 
@@ -64,7 +64,7 @@ export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
         category: "invalid_input",
         message: `Unsupported command "${command}".`,
         details: {
-          supportedCommands: ["scan", "ci", "diff", "explain"]
+          supportedCommands: ["scan", "ci", "diff", "explain", "help", "version"]
         }
       })
     );

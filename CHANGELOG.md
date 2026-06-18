@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.43.0 - 2026-06-19
+## 0.44.0 - 2026-06-19
 
 First public release candidate for Ohrisk.
 
@@ -22,6 +22,7 @@ First public release candidate for Ohrisk.
 - `ohrisk explain <license-expression>` for profile-aware license risk explanation without scanning a project.
 - `ohrisk diff <baseline-ref>` for git-ref baseline comparison that reports only new or meaningfully changed findings.
 - `--version` and `-v` package version output.
+- `help` and `version` command aliases for the global CLI.
 - Project discovery with clear failures for unsupported or ambiguous lockfiles.
 - Bun lockfile dependency graph parsing with direct, transitive, production, and development dependency context.
 - Local `file:` package evidence collection.
