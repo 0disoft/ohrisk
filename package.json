@@ -1,11 +1,31 @@
 {
   "name": "ohrisk",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "description": "Catch open-source license risk before your PR ships.",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "ohrisk": "./src/cli/main.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0disoft/ohrisk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/0disoft/ohrisk/issues"
+  },
+  "homepage": "https://github.com/0disoft/ohrisk#readme",
+  "keywords": [
+    "bun",
+    "cli",
+    "compliance",
+    "license",
+    "open-source",
+    "risk",
+    "supply-chain"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "scan": "bun run src/cli/main.ts scan",
