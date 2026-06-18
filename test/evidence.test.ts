@@ -451,6 +451,83 @@ describe("collectGraphEvidence", () => {
     ]);
   });
 
+  test("encodes scoped npm registry metadata URLs", async () => {
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "@scope/registry-fixture",
+        version: "1.0.0",
+        license: "MIT"
+      }),
+      "package/LICENSE": "MIT License fixture text."
+    });
+    const fetchedUrls: string[] = [];
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "@scope/registry-fixture@1.0.0",
+            name: "@scope/registry-fixture",
+            version: "1.0.0",
+            ecosystem: "npm",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "@scope/registry-fixture@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async (url) => {
+        fetchedUrls.push(url);
+
+        if (url === "https://registry.npmjs.org/@scope%2Fregistry-fixture") {
+          return {
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            arrayBuffer: async () => Buffer.from(JSON.stringify({
+              versions: {
+                "1.0.0": {
+                  dist: {
+                    tarball: "https://registry.example.test/@scope/registry-fixture/-/registry-fixture-1.0.0.tgz"
+                  }
+                }
+              }
+            })).buffer
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          arrayBuffer: async () => tarball.buffer.slice(
+            tarball.byteOffset,
+            tarball.byteOffset + tarball.byteLength
+          ) as ArrayBuffer
+        };
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+
+    expect(fetchedUrls).toEqual([
+      "https://registry.npmjs.org/@scope%2Fregistry-fixture",
+      "https://registry.example.test/@scope/registry-fixture/-/registry-fixture-1.0.0.tgz"
+    ]);
+    expect(evidence.value).toEqual([
+      expect.objectContaining({
+        packageId: "@scope/registry-fixture@1.0.0",
+        packageJsonLicense: "MIT",
+        source: "tarball"
+      })
+    ]);
+  });
+
   test("uses installed node_modules package evidence before registry fallback", async () => {
     const projectRoot = createInstalledPackageProject({
       name: "installed-fixture",
