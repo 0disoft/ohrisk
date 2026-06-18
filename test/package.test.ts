@@ -31,7 +31,7 @@ describe("package metadata", () => {
     };
 
     expect(packageJson.name).toBe("ohrisk");
-    expect(packageJson.version).toBe("0.11.0");
+    expect(packageJson.version).toBe("0.12.0");
     expect(packageJson.private).toBeUndefined();
     expect(packageJson.license).toBe("MIT");
     expect(packageJson.packageManager).toBe("bun@1.3.14");
@@ -42,6 +42,7 @@ describe("package metadata", () => {
     expect(packageJson.files).toEqual(["CHANGELOG.md", "src"]);
     expect(packageJson.publishConfig?.access).toBe("public");
     expect(packageJson.repository?.url).toBe("git+https://github.com/0disoft/ohrisk.git");
+    expect(packageJson.dependencies?.["@yarnpkg/lockfile"]).toBe("1.1.0");
     expect(packageJson.dependencies?.yaml).toBe("2.9.0");
     expect(packageJson.scripts?.["verify:release"]).toBe("bun test && npm pack --dry-run --json");
   });

@@ -46,6 +46,19 @@ describe("discoverProject", () => {
     expect(path.basename(result.value.lockfile.path)).toBe("pnpm-lock.yaml");
   });
 
+  test("finds a Yarn v1 yarn.lock project", () => {
+    const result = discoverProject({ cwd: path.join(fixturesDir, "yarn-project") });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.rootDir).toBe(path.join(fixturesDir, "yarn-project"));
+    expect(result.value.lockfile.kind).toBe("yarn-lock");
+    expect(path.basename(result.value.lockfile.path)).toBe("yarn.lock");
+  });
+
   test("walks up from a nested directory", () => {
     const result = discoverProject({ cwd: path.join(fixturesDir, "bun-project", "packages", "app") });
 

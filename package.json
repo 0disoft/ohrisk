@@ -1,6 +1,6 @@
 {
   "name": "ohrisk",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Catch open-source license risk before your PR ships.",
   "license": "MIT",
   "type": "module",
@@ -41,6 +41,7 @@
     "src"
   ],
   "dependencies": {
+    "@yarnpkg/lockfile": "1.1.0",
     "yaml": "2.9.0"
   }
 }

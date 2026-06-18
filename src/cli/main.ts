@@ -9,6 +9,7 @@ import { readGitRefFile, type GitRefFileReader } from "../git/ref-file";
 import { parseBunLockfile, parseBunLockText } from "../graph/npm-bun-lock";
 import { parsePackageLockfile, parsePackageLockText } from "../graph/npm-package-lock";
 import { parsePnpmLockfile, parsePnpmLockText } from "../graph/npm-pnpm-lock";
+import { parseYarnLockfile, parseYarnLockText } from "../graph/npm-yarn-lock";
 import type { DependencyGraph } from "../graph/types";
 import { normalizeAllLicenseEvidence, normalizeLicenseEvidence } from "../license/normalize";
 import { evaluateLicenseRisk, evaluateLicenseRisks } from "../policy/evaluate";
@@ -92,10 +93,25 @@ async function runDiff(
     return exitCodeForError(baselineLockfile.error);
   }
 
+  const baselinePackageJson = current.value.project.lockfile.kind === "yarn-lock"
+    ? readRefFile({
+        projectRoot: current.value.project.rootDir,
+        ref: command.baselineRef,
+        relativePath: "package.json"
+      })
+    : undefined;
+
+  if (baselinePackageJson && isErr(baselinePackageJson)) {
+    io.stderr(formatError(baselinePackageJson.error));
+    return exitCodeForError(baselinePackageJson.error);
+  }
+
   const baselineGraph = parseLockfileTextForKind({
     kind: current.value.project.lockfile.kind,
     text: baselineLockfile.value,
-    lockfilePath: `${command.baselineRef}:${relativeLockfilePath}`
+    lockfilePath: `${command.baselineRef}:${relativeLockfilePath}`,
+    packageJsonText: baselinePackageJson?.value,
+    packageJsonPath: `${command.baselineRef}:package.json`
   });
 
   if (isErr(baselineGraph)) {
@@ -308,6 +324,8 @@ function parseProjectLockfile(project: ProjectInput): Result<DependencyGraph, Oh
       return parsePackageLockfile(project.lockfile.path);
     case "pnpm-lock":
       return parsePnpmLockfile(project.lockfile.path);
+    case "yarn-lock":
+      return parseYarnLockfile(project.lockfile.path);
   }
 }
 
@@ -315,6 +333,8 @@ function parseLockfileTextForKind(input: {
   kind: ProjectInput["lockfile"]["kind"];
   text: string;
   lockfilePath: string;
+  packageJsonText?: string;
+  packageJsonPath?: string;
 }): Result<DependencyGraph, OhriskError> {
   switch (input.kind) {
     case "bun":
@@ -323,6 +343,13 @@ function parseLockfileTextForKind(input: {
       return parsePackageLockText(input.text, input.lockfilePath);
     case "pnpm-lock":
       return parsePnpmLockText(input.text, input.lockfilePath);
+    case "yarn-lock":
+      return parseYarnLockText({
+        lockfileText: input.text,
+        packageJsonText: input.packageJsonText ?? "{}",
+        lockfilePath: input.lockfilePath,
+        packageJsonPath: input.packageJsonPath
+      });
   }
 }
 

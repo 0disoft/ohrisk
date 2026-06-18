@@ -30,7 +30,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.11.0"]);
+    expect(stdout).toEqual(["ohrisk 0.12.0"]);
   });
 
   test("prints actionable findings for a Bun project", async () => {
@@ -98,6 +98,27 @@ describe("main", () => {
     expect(output).toContain("- [high] agpl-child@0.1.0");
     expect(output).toContain(
       "path: <root> -> permissive-parent@1.0.0 -> agpl-child@0.1.0"
+    );
+    expect(output).toContain("- [unknown] missing-license@4.0.0");
+    expect(output).toContain("- [review] gpl-package@5.0.0");
+    expect(output).not.toContain("- [high] dev-risk@3.0.0");
+  });
+
+  test("prints actionable findings for a Yarn v1 lockfile project", async () => {
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "yarn-project"));
+    const exitCode = await main(["scan", "--prod"], io);
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+
+    const output = stdout.join("\n");
+    expect(output).toContain("Ohrisk scan");
+    expect(output).toContain("Lockfile: yarn.lock (yarn-lock)");
+    expect(output).toContain("Dependencies: 5 total, 4 direct, 1 transitive");
+    expect(output).toContain("Risks: 1 high, 1 review, 1 unknown, 2 low");
+    expect(output).toContain("- [high] agpl-child@0.1.0");
+    expect(output).toContain(
+      "path: fixture-yarn-project -> permissive-parent@1.0.0 -> agpl-child@0.1.0"
     );
     expect(output).toContain("- [unknown] missing-license@4.0.0");
     expect(output).toContain("- [review] gpl-package@5.0.0");
@@ -290,7 +311,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.11.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.12.0");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
       "ohrisk/license-unknown",
@@ -386,6 +407,61 @@ describe("main", () => {
     expect(output).toContain("Ohrisk diff");
     expect(output).toContain("Baseline: main");
     expect(output).toContain("Production only: yes");
+    expect(output).toContain("Findings: 5 current, 3 baseline, 2 new");
+    expect(output).toContain("New risks: 0 high, 1 review, 1 unknown, 0 low");
+    expect(output).toContain("- [unknown] missing-license@4.0.0");
+    expect(output).toContain("- [review] gpl-package@5.0.0");
+    expect(output).not.toContain("- [high] agpl-child@0.1.0");
+  });
+
+  test("prints only newly introduced findings for a Yarn v1 git ref diff", async () => {
+    const baselineLockfile = [
+      "# yarn lockfile v1",
+      "",
+      "agpl-child@0.1.0:",
+      "  version \"0.1.0\"",
+      "  resolved \"file:../bun-project/.registry/agpl-child\"",
+      "",
+      "\"dual-license@file:../bun-project/.registry/dual-license\":",
+      "  version \"2.0.0\"",
+      "  resolved \"file:../bun-project/.registry/dual-license\"",
+      "",
+      "\"permissive-parent@file:../bun-project/.registry/permissive-parent\":",
+      "  version \"1.0.0\"",
+      "  resolved \"file:../bun-project/.registry/permissive-parent\"",
+      "  dependencies:",
+      "    agpl-child \"0.1.0\"",
+      ""
+    ].join("\n");
+    const baselinePackageJson = JSON.stringify({
+      name: "fixture-yarn-project",
+      version: "0.0.0",
+      dependencies: {
+        "permissive-parent": "file:../bun-project/.registry/permissive-parent",
+        "dual-license": "file:../bun-project/.registry/dual-license"
+      }
+    });
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "yarn-project"));
+    io.readRefFile = ({ relativePath }) => {
+      if (relativePath === "yarn.lock") {
+        return { ok: true as const, value: baselineLockfile };
+      }
+
+      if (relativePath === "package.json") {
+        return { ok: true as const, value: baselinePackageJson };
+      }
+
+      throw new Error(`Unexpected baseline path: ${relativePath}`);
+    };
+
+    const exitCode = await main(["diff", "main", "--prod"], io);
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+
+    const output = stdout.join("\n");
+    expect(output).toContain("Ohrisk diff");
+    expect(output).toContain("Baseline: main");
     expect(output).toContain("Findings: 5 current, 3 baseline, 2 new");
     expect(output).toContain("New risks: 0 high, 1 review, 1 unknown, 0 low");
     expect(output).toContain("- [unknown] missing-license@4.0.0");

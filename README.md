@@ -21,7 +21,7 @@ Ohrisk is distributed as an npm package, but the CLI runs on Bun. Make sure
 
 The current implementation is the first npm-style vertical slice:
 
-- Bun `bun.lock`, npm `package-lock.json`, and pnpm `pnpm-lock.yaml` project discovery
+- Bun `bun.lock`, npm `package-lock.json`, pnpm `pnpm-lock.yaml`, and Yarn v1 `yarn.lock` project discovery
 - direct and transitive dependency graph extraction
 - production and development dependency classification
 - local `file:` package artifact evidence
@@ -62,6 +62,7 @@ Supported lockfiles:
 - `bun.lock`
 - `package-lock.json` with either a modern `packages` section or an npm v1 dependency tree
 - `pnpm-lock.yaml` with `importers`, `packages`, and `snapshots` sections
+- Yarn v1 `yarn.lock` with the root dependency set from `package.json`
 
 Pick the usage profile:
 

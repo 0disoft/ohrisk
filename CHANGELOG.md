@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.11.0 - 2026-06-18
+## 0.12.0 - 2026-06-18
 
 First public release candidate for Ohrisk.
 
@@ -10,6 +10,7 @@ First public release candidate for Ohrisk.
 - `package-lock.json` graph parsing for modern npm lockfiles with a `packages` section.
 - npm v1 `package-lock.json` dependency-tree parsing.
 - `pnpm-lock.yaml` graph parsing for importer, package, and snapshot dependency data.
+- Yarn v1 `yarn.lock` graph parsing with root dependency classification from `package.json`.
 - `--profile saas` and `--profile distributed-app` risk profiles.
 - `--prod` filtering for production dependency scans.
 - `--json` output that reuses the terminal report finding model.
