@@ -218,6 +218,7 @@ function renderFindings(findings: RiskFinding[]): string[] {
     ...findings.flatMap((finding) => [
       `- [${finding.severity}] ${finding.packageId}`,
       `  id: ${finding.id}`,
+      `  fingerprint: ${finding.fingerprint}`,
       `  ${finding.reason}`,
       `  recommendation: ${finding.recommendation}`,
       `  action: ${finding.action}`,
@@ -238,6 +239,7 @@ function renderWaivedFindings(waivedFindings: WaivedRiskFinding[]): string[] {
     ...waivedFindings.flatMap((waived) => [
       `- [${waived.finding.severity}] ${waived.finding.packageId}`,
       `  id: ${waived.finding.id}`,
+      `  fingerprint: ${waived.finding.fingerprint}`,
       `  matched by: ${waived.matchedBy}`,
       `  reason: ${waived.waiver.reason}`,
       `  action: ${waived.finding.action}`
@@ -282,11 +284,11 @@ function renderMarkdownFindings(findings: RiskFinding[]): string[] {
   return [
     "## Findings",
     "",
-    "| ID | Severity | Package | Dependency | Reason | Recommendation | Action | Path |",
-    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+    "| ID | Fingerprint | Severity | Package | Dependency | Reason | Recommendation | Action | Path |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ...findings.map(
       (finding) =>
-        `| \`${escapeMarkdownTable(finding.id)}\` | ${finding.severity} | \`${escapeMarkdownTable(finding.packageId)}\` | ${escapeMarkdownTable(formatDependencyContext(finding))} | ${escapeMarkdownTable(finding.reason)} | ${finding.recommendation} | ${escapeMarkdownTable(finding.action)} | ${escapeMarkdownTable(formatPath(finding.paths[0]))} |`
+        `| \`${escapeMarkdownTable(finding.id)}\` | \`${escapeMarkdownTable(finding.fingerprint)}\` | ${finding.severity} | \`${escapeMarkdownTable(finding.packageId)}\` | ${escapeMarkdownTable(formatDependencyContext(finding))} | ${escapeMarkdownTable(finding.reason)} | ${finding.recommendation} | ${escapeMarkdownTable(finding.action)} | ${escapeMarkdownTable(formatPath(finding.paths[0]))} |`
     )
   ];
 }
@@ -299,11 +301,11 @@ function renderMarkdownWaivedFindings(waivedFindings: WaivedRiskFinding[]): stri
   return [
     "## Waived findings",
     "",
-    "| ID | Severity | Package | Matched by | Reason | Action |",
-    "| --- | --- | --- | --- | --- | --- |",
+    "| ID | Fingerprint | Severity | Package | Matched by | Reason | Action |",
+    "| --- | --- | --- | --- | --- | --- | --- |",
     ...waivedFindings.map(
       (waived) =>
-        `| \`${escapeMarkdownTable(waived.finding.id)}\` | ${waived.finding.severity} | \`${escapeMarkdownTable(waived.finding.packageId)}\` | ${waived.matchedBy} | ${escapeMarkdownTable(waived.waiver.reason)} | ${escapeMarkdownTable(waived.finding.action)} |`
+        `| \`${escapeMarkdownTable(waived.finding.id)}\` | \`${escapeMarkdownTable(waived.finding.fingerprint)}\` | ${waived.finding.severity} | \`${escapeMarkdownTable(waived.finding.packageId)}\` | ${waived.matchedBy} | ${escapeMarkdownTable(waived.waiver.reason)} | ${escapeMarkdownTable(waived.finding.action)} |`
     )
   ];
 }

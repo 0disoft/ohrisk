@@ -50,6 +50,7 @@ The current implementation is the first npm-style vertical slice:
 - local `.ohrisk-waivers.json` waivers by finding ID or fingerprint
 - stable diff matching that ignores reason and evidence prose churn while surfacing severity, recommendation, and action changes
 - exact finding fingerprints for SARIF partial fingerprints and audit trails
+- finding fingerprints in terminal and Markdown reports for waiver and audit workflows
 - structured dependency type and direct/transitive scope in findings
 - report file output with `--output <file>`
 - standalone license expression explanation
@@ -162,12 +163,14 @@ Waive a finding locally by ID or fingerprint in `.ohrisk-waivers.json`:
 ```
 
 Waived findings are excluded from `ci --fail-on` threshold failures, but scan
-and CI JSON, terminal, Markdown, and SARIF reports still show them. Expired
-waivers and unmatched active waivers are reported separately in JSON, terminal,
-and Markdown reports and are not applied. `ci --strict-waivers` exits non-zero
-when either expired or unmatched waivers are present, even if active findings
-stay below the `--fail-on` threshold. JSON, terminal, Markdown, and SARIF
-outputs include the strict waiver drift result when that option is enabled.
+and CI JSON, terminal, Markdown, and SARIF reports still show them. Terminal
+and Markdown reports include finding fingerprints so waiver files can target
+either `id` or `fingerprint`. Expired waivers and unmatched active waivers are
+reported separately in JSON, terminal, and Markdown reports and are not applied.
+`ci --strict-waivers` exits non-zero when either expired or unmatched waivers
+are present, even if active findings stay below the `--fail-on` threshold. JSON,
+terminal, Markdown, and SARIF outputs include the strict waiver drift result
+when that option is enabled.
 
 Explain a license expression without scanning a project:
 
