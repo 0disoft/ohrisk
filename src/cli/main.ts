@@ -5,6 +5,8 @@ import { parseArgs, type CliCommand } from "./args";
 import { collectGraphEvidence } from "../evidence/collect";
 import { parseBunLockfile } from "../graph/npm-bun-lock";
 import type { DependencyGraph } from "../graph/types";
+import { normalizeAllLicenseEvidence } from "../license/normalize";
+import type { NormalizedLicense } from "../license/types";
 import { discoverProject, type ProjectInput } from "../project/discover";
 import { exitCodeForError, formatError } from "../shared/errors";
 import { isErr } from "../shared/result";
@@ -62,7 +64,9 @@ function runScan(command: Extract<CliCommand, { kind: "scan" }>, io: CliIO): num
     return exitCodeForError(evidence.error);
   }
 
-  io.stdout(renderScanSkeleton(discovered.value, graph.value, evidence.value, command));
+  const normalizedLicenses = normalizeAllLicenseEvidence(evidence.value);
+
+  io.stdout(renderScanSkeleton(discovered.value, graph.value, evidence.value, normalizedLicenses, command));
   return 0;
 }
 
@@ -70,12 +74,14 @@ function renderScanSkeleton(
   project: ProjectInput,
   graph: DependencyGraph,
   evidence: Array<{ files: unknown[]; warnings: string[] }>,
+  normalizedLicenses: NormalizedLicense[],
   command: Extract<CliCommand, { kind: "scan" }>
 ): string {
   const directCount = graph.nodes.filter((node) => node.direct).length;
   const transitiveCount = graph.nodes.length - directCount;
   const evidenceFileCount = evidence.reduce((sum, item) => sum + item.files.length, 0);
   const evidenceWarningCount = evidence.reduce((sum, item) => sum + item.warnings.length, 0);
+  const licenseSummary = summarizeLicenses(normalizedLicenses);
 
   if (command.json) {
     return JSON.stringify(
@@ -97,6 +103,13 @@ function renderScanSkeleton(
           packages: evidence.length,
           files: evidenceFileCount,
           warnings: evidenceWarningCount
+        },
+        licenses: {
+          highConfidence: licenseSummary.high,
+          mediumConfidence: licenseSummary.medium,
+          lowConfidence: licenseSummary.low,
+          missing: licenseSummary.missing,
+          malformed: licenseSummary.malformed
         }
       },
       null,
@@ -112,9 +125,41 @@ function renderScanSkeleton(
     `Production only: ${command.prodOnly ? "yes" : "no"}`,
     `Dependencies: ${graph.nodes.length} total, ${directCount} direct, ${transitiveCount} transitive`,
     `Evidence: ${evidenceFileCount} files, ${evidenceWarningCount} warnings`,
-    "Status: package evidence collected",
-    "Next: normalize SPDX license expressions."
+    `Licenses: ${licenseSummary.high} high-confidence, ${licenseSummary.medium} medium-confidence, ${licenseSummary.low} low-confidence`,
+    "Status: license evidence normalized",
+    "Next: evaluate profile-aware license risk."
   ].join("\n");
+}
+
+function summarizeLicenses(normalizedLicenses: NormalizedLicense[]): {
+  high: number;
+  medium: number;
+  low: number;
+  missing: number;
+  malformed: number;
+} {
+  return normalizedLicenses.reduce(
+    (summary, license) => {
+      summary[license.confidence] += 1;
+
+      if (license.signals.includes("missing")) {
+        summary.missing += 1;
+      }
+
+      if (license.signals.includes("malformed")) {
+        summary.malformed += 1;
+      }
+
+      return summary;
+    },
+    {
+      high: 0,
+      medium: 0,
+      low: 0,
+      missing: 0,
+      malformed: 0
+    }
+  );
 }
 
 function renderHelp(): string {

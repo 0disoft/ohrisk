@@ -32,7 +32,8 @@ describe("main", () => {
     expect(stdout.join("\n")).toContain("Lockfile: bun.lock (bun)");
     expect(stdout.join("\n")).toContain("Dependencies: 4 total, 3 direct, 1 transitive");
     expect(stdout.join("\n")).toContain("Evidence: 4 files, 0 warnings");
-    expect(stdout.join("\n")).toContain("Status: package evidence collected");
+    expect(stdout.join("\n")).toContain("Licenses: 4 high-confidence, 0 medium-confidence, 0 low-confidence");
+    expect(stdout.join("\n")).toContain("Status: license evidence normalized");
   });
 
   test("prints JSON scan skeleton when requested", async () => {
@@ -56,6 +57,13 @@ describe("main", () => {
         files: number;
         warnings: number;
       };
+      licenses: {
+        highConfidence: number;
+        mediumConfidence: number;
+        lowConfidence: number;
+        missing: number;
+        malformed: number;
+      };
     };
 
     expect(payload.status).toBe("package_evidence_collected");
@@ -70,6 +78,13 @@ describe("main", () => {
       packages: 4,
       files: 4,
       warnings: 0
+    });
+    expect(payload.licenses).toEqual({
+      highConfidence: 4,
+      mediumConfidence: 0,
+      lowConfidence: 0,
+      missing: 0,
+      malformed: 0
     });
   });
 
