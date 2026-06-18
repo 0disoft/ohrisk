@@ -59,7 +59,7 @@ bun run src/cli/main.ts scan
 Supported lockfiles:
 
 - `bun.lock`
-- `package-lock.json` with a `packages` section, as produced by modern npm versions
+- `package-lock.json` with either a modern `packages` section or an npm v1 dependency tree
 
 Pick the usage profile:
 

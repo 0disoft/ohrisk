@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.0 - 2026-06-18
+## 0.9.0 - 2026-06-18
 
 First public release candidate for Ohrisk.
 
@@ -8,6 +8,7 @@ First public release candidate for Ohrisk.
 
 - `ohrisk scan` for local Bun `bun.lock` projects.
 - `package-lock.json` graph parsing for modern npm lockfiles with a `packages` section.
+- npm v1 `package-lock.json` dependency-tree parsing.
 - `--profile saas` and `--profile distributed-app` risk profiles.
 - `--prod` filtering for production dependency scans.
 - `--json` output that reuses the terminal report finding model.

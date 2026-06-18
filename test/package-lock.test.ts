@@ -58,21 +58,62 @@ describe("parsePackageLockfile", () => {
     expect(result.error.code).toBe("PACKAGE_LOCK_PARSE_FAILED");
   });
 
-  test("rejects old package-lock shapes without package records", () => {
+  test("parses old package-lock v1 dependency trees", () => {
     const result = parsePackageLockText(
       JSON.stringify({
-        name: "old-lock",
+        name: "fixture-package-lock-v1",
         lockfileVersion: 1,
-        dependencies: {}
+        dependencies: {
+          "permissive-parent": {
+            version: "1.0.0",
+            resolved: "file:../bun-project/.registry/permissive-parent",
+            requires: {
+              "agpl-child": "0.1.0"
+            },
+            dependencies: {
+              "agpl-child": {
+                version: "0.1.0",
+                resolved: "file:../bun-project/.registry/agpl-child"
+              }
+            }
+          },
+          "dev-risk": {
+            version: "3.0.0",
+            resolved: "file:../bun-project/.registry/dev-risk",
+            dev: true
+          }
+        }
       }),
       "package-lock-v1.json"
     );
 
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      throw new Error("Expected unsupported old lockfile to fail.");
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
     }
 
-    expect(result.error.code).toBe("PACKAGE_LOCK_PARSE_FAILED");
+    expect(result.value.rootName).toBe("fixture-package-lock-v1");
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "agpl-child@0.1.0",
+      "dev-risk@3.0.0",
+      "permissive-parent@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "permissive-parent@1.0.0"))
+      .toMatchObject({
+        direct: true,
+        dependencyType: "production",
+        paths: [["fixture-package-lock-v1", "permissive-parent@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "agpl-child@0.1.0"))
+      .toMatchObject({
+        direct: false,
+        dependencyType: "production",
+        paths: [["fixture-package-lock-v1", "permissive-parent@1.0.0", "agpl-child@0.1.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "dev-risk@3.0.0"))
+      .toMatchObject({
+        direct: true,
+        dependencyType: "development"
+      });
   });
 });
