@@ -37,10 +37,10 @@ type PackageLockRecord = {
   id: string;
   resolved?: string;
   integrity?: string;
-  dependencies: Record<string, string>;
+  dependencies: PackageLockDependencyEdge[];
 };
 
-type RootDependency = {
+type PackageLockDependencyEdge = {
   name: string;
   range: string;
   type: DependencyType;
@@ -233,7 +233,7 @@ function parsePackageRecords(packages: Record<string, unknown>): PackageLockReco
       id: `${name}@${pkg.version}`,
       ...(resolved ? { resolved } : {}),
       ...(integrity ? { integrity } : {}),
-      dependencies: readDependencyMap(pkg.dependencies)
+      dependencies: collectDependencyEdges(pkg)
     });
   }
 
@@ -256,20 +256,24 @@ function packageNameFromPath(packagePath: string): string | undefined {
   return parts[0] || undefined;
 }
 
-function collectRootDependencies(rootPackage: PackageLockPackage | undefined): RootDependency[] {
+function collectRootDependencies(rootPackage: PackageLockPackage | undefined): PackageLockDependencyEdge[] {
   if (!rootPackage) {
     return [];
   }
 
+  return collectDependencyEdges(rootPackage);
+}
+
+function collectDependencyEdges(pkg: PackageLockPackage): PackageLockDependencyEdge[] {
   return [
-    ...dependencyEntries(rootPackage.dependencies, "production"),
-    ...dependencyEntries(rootPackage.devDependencies, "development"),
-    ...dependencyEntries(rootPackage.optionalDependencies, "optional"),
-    ...dependencyEntries(rootPackage.peerDependencies, "peer")
+    ...dependencyEntries(pkg.dependencies, "production"),
+    ...dependencyEntries(pkg.devDependencies, "development"),
+    ...dependencyEntries(pkg.optionalDependencies, "optional"),
+    ...dependencyEntries(pkg.peerDependencies, "peer")
   ];
 }
 
-function dependencyEntries(value: unknown, type: DependencyType): RootDependency[] {
+function dependencyEntries(value: unknown, type: DependencyType): PackageLockDependencyEdge[] {
   return Object.entries(readDependencyMap(value)).map(([name, range]) => ({
     name,
     range,
@@ -356,27 +360,27 @@ function walkDependency(input: {
     });
   }
 
-  for (const [childName, childRange] of Object.entries(input.record.dependencies)) {
-    const child = resolvePackageRecord({
+  for (const child of input.record.dependencies) {
+    const childRecord = resolvePackageRecord({
       records: input.records,
-      name: childName,
-      range: childRange,
+      name: child.name,
+      range: child.range,
       parentPath: input.record.packagePath
     });
 
-    if (!child) {
+    if (!childRecord) {
       continue;
     }
 
     walkDependency({
-      record: child,
-      dependencyType: input.dependencyType,
+      record: childRecord,
+      dependencyType: dependencyTypeForChildEdge(input.dependencyType, child.type),
       direct: false,
       path: nextPath,
       records: input.records,
       nodeMap: input.nodeMap,
       seen: nextSeen,
-      requestedName: childName
+      requestedName: child.name
     });
   }
 }
@@ -453,6 +457,13 @@ function walkV1Dependency(input: {
 
 function mergeDependencyType(left: DependencyType, right: DependencyType): DependencyType {
   return dependencyTypeRank(left) >= dependencyTypeRank(right) ? left : right;
+}
+
+function dependencyTypeForChildEdge(
+  parentType: DependencyType,
+  childEdgeType: DependencyType
+): DependencyType {
+  return parentType === "production" ? childEdgeType : parentType;
 }
 
 function dependencyTypeRank(type: DependencyType): number {

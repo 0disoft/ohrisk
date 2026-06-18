@@ -178,4 +178,89 @@ describe("parsePackageLockfile", () => {
         ]]
       });
   });
+
+  test("keeps nested optional and peer dependency edges from modern package locks", () => {
+    const result = parsePackageLockText(
+      JSON.stringify({
+        name: "fixture-package-lock-nested-edges",
+        lockfileVersion: 3,
+        packages: {
+          "": {
+            name: "fixture-package-lock-nested-edges",
+            dependencies: {
+              "prod-parent": "1.0.0"
+            }
+          },
+          "node_modules/prod-parent": {
+            name: "prod-parent",
+            version: "1.0.0",
+            dependencies: {
+              "regular-child": "1.0.0"
+            },
+            optionalDependencies: {
+              "optional-child": "1.0.0"
+            },
+            peerDependencies: {
+              "peer-child": "1.0.0"
+            }
+          },
+          "node_modules/prod-parent/node_modules/regular-child": {
+            name: "regular-child",
+            version: "1.0.0"
+          },
+          "node_modules/prod-parent/node_modules/optional-child": {
+            name: "optional-child",
+            version: "1.0.0"
+          },
+          "node_modules/prod-parent/node_modules/peer-child": {
+            name: "peer-child",
+            version: "1.0.0"
+          }
+        }
+      }),
+      "nested-edges-package-lock.json"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "optional-child@1.0.0",
+      "peer-child@1.0.0",
+      "prod-parent@1.0.0",
+      "regular-child@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "regular-child@1.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: false,
+        paths: [[
+          "fixture-package-lock-nested-edges",
+          "prod-parent@1.0.0",
+          "regular-child@1.0.0"
+        ]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "optional-child@1.0.0"))
+      .toMatchObject({
+        dependencyType: "optional",
+        direct: false,
+        paths: [[
+          "fixture-package-lock-nested-edges",
+          "prod-parent@1.0.0",
+          "optional-child@1.0.0"
+        ]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "peer-child@1.0.0"))
+      .toMatchObject({
+        dependencyType: "peer",
+        direct: false,
+        paths: [[
+          "fixture-package-lock-nested-edges",
+          "prod-parent@1.0.0",
+          "peer-child@1.0.0"
+        ]]
+      });
+  });
 });

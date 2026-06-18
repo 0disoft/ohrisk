@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.60.0 - 2026-06-19
+
+### Fixed
+
+- Modern `package-lock.json` parsing now preserves nested `optionalDependencies` and `peerDependencies` edges instead of dropping those transitive packages.
+
 ## 0.59.0 - 2026-06-19
 
 ### Added
