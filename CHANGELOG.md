@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.0 - 2026-06-18
+## 0.10.0 - 2026-06-18
 
 First public release candidate for Ohrisk.
 
@@ -22,6 +22,7 @@ First public release candidate for Ohrisk.
 - Project discovery with clear failures for unsupported or ambiguous lockfiles.
 - Bun lockfile dependency graph parsing with direct, transitive, production, and development dependency context.
 - Local `file:` package evidence collection.
+- Installed `node_modules` package evidence collection before network fallback.
 - HTTP(S) tarball evidence collection when the lockfile points directly to a tarball.
 - npm registry metadata lookup when the lockfile does not contain a direct tarball URL.
 - `package.json` license field, legacy `licenses` field, `LICENSE`, `LICENCE`, `COPYING`, and `NOTICE` evidence handling.

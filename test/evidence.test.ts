@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
@@ -261,6 +263,106 @@ describe("collectGraphEvidence", () => {
     ]);
   });
 
+  test("uses installed node_modules package evidence before registry fallback", async () => {
+    const projectRoot = createInstalledPackageProject({
+      name: "installed-fixture",
+      version: "1.0.0",
+      license: "MIT",
+      licenseText: "MIT License from node_modules."
+    });
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "package-lock.json",
+          nodes: [
+            {
+              id: "installed-fixture@1.0.0",
+              name: "installed-fixture",
+              version: "1.0.0",
+              ecosystem: "npm",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "installed-fixture@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot,
+        fetchArtifact: async () => {
+          throw new Error("Registry fallback should not run when node_modules evidence exists.");
+        }
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+
+      expect(evidence.value).toEqual([
+        expect.objectContaining({
+          packageId: "installed-fixture@1.0.0",
+          packageJsonLicense: "MIT",
+          source: "local",
+          files: [
+            {
+              path: "LICENSE",
+              kind: "license",
+              text: "MIT License from node_modules."
+            }
+          ]
+        })
+      ]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("uses installed node_modules package evidence before remote tarball fetch", async () => {
+    const projectRoot = createInstalledPackageProject({
+      name: "remote-but-installed",
+      version: "2.0.0",
+      license: "Apache-2.0",
+      licenseText: "Apache License from node_modules."
+    });
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "package-lock.json",
+          nodes: [
+            {
+              id: "remote-but-installed@2.0.0",
+              name: "remote-but-installed",
+              version: "2.0.0",
+              ecosystem: "npm",
+              resolved: "https://registry.example.test/remote-but-installed/-/remote-but-installed-2.0.0.tgz",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "remote-but-installed@2.0.0"]]
+            }
+          ]
+        },
+        projectRoot,
+        fetchArtifact: async () => {
+          throw new Error("Remote tarball fetch should not run when node_modules evidence exists.");
+        }
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+
+      expect(evidence.value[0]).toMatchObject({
+        packageId: "remote-but-installed@2.0.0",
+        packageJsonLicense: "Apache-2.0",
+        source: "local"
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("reports missing registry tarball metadata", async () => {
     const evidence = await collectGraphEvidence({
       graph: {
@@ -395,4 +497,26 @@ function createTarGz(files: Record<string, string>): Buffer {
 
   chunks.push(Buffer.alloc(1024));
   return gzipSync(Buffer.concat(chunks));
+}
+
+function createInstalledPackageProject(input: {
+  name: string;
+  version: string;
+  license: string;
+  licenseText: string;
+}): string {
+  const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-installed-package-"));
+  const packageDir = path.join(projectRoot, "node_modules", ...input.name.split("/"));
+  mkdirSync(packageDir, { recursive: true });
+  writeFileSync(
+    path.join(packageDir, "package.json"),
+    JSON.stringify({
+      name: input.name,
+      version: input.version,
+      license: input.license
+    }),
+    "utf8"
+  );
+  writeFileSync(path.join(packageDir, "LICENSE"), input.licenseText, "utf8");
+  return projectRoot;
 }

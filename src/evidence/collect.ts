@@ -46,6 +46,25 @@ async function collectNodeEvidence(input: {
   projectRoot: string;
   fetchArtifact: ArtifactFetcher;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
+  const explicitLocalPath = input.node.resolved
+    ? resolveLocalArtifact(input.node.resolved, input.projectRoot)
+    : undefined;
+
+  if (explicitLocalPath) {
+    return collectLocalPathEvidence({
+      node: input.node,
+      localPath: explicitLocalPath
+    });
+  }
+
+  const nodeModulesPath = resolveNodeModulesPackage(input.node.name, input.projectRoot);
+  if (existsSync(nodeModulesPath) && statSync(nodeModulesPath).isDirectory()) {
+    return collectLocalPackageEvidence({
+      packageId: input.node.id,
+      packageDir: nodeModulesPath
+    });
+  }
+
   if (!input.node.resolved) {
     return collectRegistryTarballEvidence({
       node: input.node,
@@ -53,26 +72,27 @@ async function collectNodeEvidence(input: {
     });
   }
 
-  const localPath = resolveLocalArtifact(input.node.resolved, input.projectRoot);
-
-  if (!localPath) {
-    if (isHttpUrl(input.node.resolved)) {
-      return collectRemoteTarballEvidence({
-        packageId: input.node.id,
-        resolved: input.node.resolved,
-        fetchArtifact: input.fetchArtifact
-      });
-    }
-
-    return ok({
+  if (isHttpUrl(input.node.resolved)) {
+    return collectRemoteTarballEvidence({
       packageId: input.node.id,
-      files: [],
-      source: "unavailable",
-      warnings: [`Unsupported resolved artifact specifier: ${input.node.resolved}`]
+      resolved: input.node.resolved,
+      fetchArtifact: input.fetchArtifact
     });
   }
 
-  if (!existsSync(localPath)) {
+  return ok({
+    packageId: input.node.id,
+    files: [],
+    source: "unavailable",
+    warnings: [`Unsupported resolved artifact specifier: ${input.node.resolved}`]
+  });
+}
+
+function collectLocalPathEvidence(input: {
+  node: DependencyNode;
+  localPath: string;
+}): Result<LicenseEvidence, OhriskError> {
+  if (!existsSync(input.localPath)) {
     return err(
       createError({
         code: "PACKAGE_EVIDENCE_READ_FAILED",
@@ -81,22 +101,22 @@ async function collectNodeEvidence(input: {
         details: {
           packageId: input.node.id,
           resolved: input.node.resolved,
-          artifactPath: localPath
+          artifactPath: input.localPath
         }
       })
     );
   }
 
-  if (statSync(localPath).isDirectory()) {
+  if (statSync(input.localPath).isDirectory()) {
     return collectLocalPackageEvidence({
       packageId: input.node.id,
-      packageDir: localPath
+      packageDir: input.localPath
     });
   }
 
   return collectTarballEvidence({
     packageId: input.node.id,
-    tarball: readFileSync(localPath)
+    tarball: readFileSync(input.localPath)
   });
 }
 
@@ -175,6 +195,10 @@ function resolveLocalArtifact(resolved: string, projectRoot: string): string | u
   }
 
   return undefined;
+}
+
+function resolveNodeModulesPackage(packageName: string, projectRoot: string): string {
+  return path.join(projectRoot, "node_modules", ...packageName.split("/"));
 }
 
 async function collectRemoteTarballEvidence(input: {
