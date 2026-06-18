@@ -7,11 +7,18 @@
     "": {
       "name": "permissive-project",
       "dependencies": {
+        "alias-package": "2.0.0",
         "permissive-package": "1.0.0",
       },
     },
   },
   "packages": {
+    "alias-package": [
+      "alias-package@2.0.0",
+      "file:./.registry/alias-package",
+      {},
+      "sha512-alias",
+    ],
     "permissive-package": [
       "permissive-package@1.0.0",
       "file:./.registry/permissive-package",

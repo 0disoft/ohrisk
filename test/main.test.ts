@@ -488,7 +488,9 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout.join("\n")).toContain("Risks: 0 high, 0 review, 0 unknown, 1 low");
+    expect(stdout.join("\n")).toContain("Risks: 0 high, 0 review, 0 unknown, 2 low");
+    expect(stdout.join("\n")).toContain("- [low] alias-package@2.0.0");
+    expect(stdout.join("\n")).toContain("evidence: license: Apache License, Version 2.0");
     expect(stdout.join("\n")).toContain(
       "Threshold: passed on high (0 findings at or above threshold)"
     );
