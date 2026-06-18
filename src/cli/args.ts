@@ -4,6 +4,8 @@ import type { RiskSeverity } from "../policy/types";
 import { err, ok, type Result } from "../shared/result";
 
 const FAIL_ON_SEVERITIES: RiskSeverity[] = ["high", "unknown", "review", "low"];
+const SCAN_OUTPUT_FORMAT_OPTIONS = ["--json", "--sarif", "--markdown"];
+const DIFF_OUTPUT_FORMAT_OPTIONS = ["--json", "--markdown"];
 
 export type CliCommand =
   | { kind: "help" }
@@ -146,21 +148,21 @@ function parseScanLikeArgs(
         break;
       case "--json":
         if (sarif || markdown) {
-          return outputFormatConflict("--json");
+          return outputFormatConflict("--json", SCAN_OUTPUT_FORMAT_OPTIONS);
         }
 
         json = true;
         break;
       case "--sarif":
         if (json || markdown) {
-          return outputFormatConflict("--sarif");
+          return outputFormatConflict("--sarif", SCAN_OUTPUT_FORMAT_OPTIONS);
         }
 
         sarif = true;
         break;
       case "--markdown":
         if (json || sarif) {
-          return outputFormatConflict("--markdown");
+          return outputFormatConflict("--markdown", SCAN_OUTPUT_FORMAT_OPTIONS);
         }
 
         markdown = true;
@@ -289,14 +291,17 @@ function missingOptionValue(option: string): Result<CliCommand, OhriskError> {
   );
 }
 
-function outputFormatConflict(option: string): Result<CliCommand, OhriskError> {
+function outputFormatConflict(
+  option: string,
+  supportedOutputOptions: string[]
+): Result<CliCommand, OhriskError> {
   return err(
     createError({
       code: "INVALID_ARGUMENT",
       category: "invalid_input",
       message: `${option} cannot be combined with another output format option.`,
       details: {
-        supportedOutputOptions: ["--json", "--sarif", "--markdown"]
+        supportedOutputOptions
       }
     })
   );
@@ -460,14 +465,14 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
         break;
       case "--json":
         if (markdown) {
-          return outputFormatConflict("--json");
+          return outputFormatConflict("--json", DIFF_OUTPUT_FORMAT_OPTIONS);
         }
 
         json = true;
         break;
       case "--markdown":
         if (json) {
-          return outputFormatConflict("--markdown");
+          return outputFormatConflict("--markdown", DIFF_OUTPUT_FORMAT_OPTIONS);
         }
 
         markdown = true;

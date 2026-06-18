@@ -164,6 +164,23 @@ describe("parseArgs", () => {
     }
 
     expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+    expect(parsed.error.details?.supportedOutputOptions).toEqual([
+      "--json",
+      "--sarif",
+      "--markdown"
+    ]);
+  });
+
+  test("rejects conflicting diff output formats without advertising sarif", () => {
+    const parsed = parseArgs(["diff", "main", "--json", "--markdown"]);
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) {
+      throw new Error("Expected conflicting diff output formats to fail.");
+    }
+
+    expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+    expect(parsed.error.details?.supportedOutputOptions).toEqual(["--json", "--markdown"]);
   });
 
   test("parses explain expressions and options", () => {
