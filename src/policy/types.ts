@@ -24,6 +24,7 @@ export type RiskDependencyType =
 
 export type RiskFinding = {
   id: string;
+  fingerprint: string;
   packageId: string;
   severity: RiskSeverity;
   reason: string;

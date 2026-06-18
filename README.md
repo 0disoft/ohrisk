@@ -37,7 +37,8 @@ The current implementation is the first npm-style vertical slice:
 - terminal and JSON reports
 - SARIF 2.1.0 reports for code scanning upload
 - Markdown reports for PR comments and release notes
-- stable finding IDs for PR comments, diffs, SARIF fingerprints, and future waivers
+- stable finding IDs for PR comments and future waivers
+- exact finding fingerprints for diffs and SARIF partial fingerprints
 - structured dependency type and direct/transitive scope in findings
 - report file output with `--output <file>`
 - standalone license expression explanation
@@ -158,7 +159,7 @@ Risks: 1 high, 1 review, 1 unknown, 2 low
 
 Findings:
 - [high] agpl-child@0.1.0
-  id: agpl-child@0.1.0::high::replace::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0
+  id: agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0
   License expression is high risk for saas.
   recommendation: replace
   action: Replace this package or escalate before shipping.
@@ -179,7 +180,8 @@ JSON output reuses the same finding model:
   "failingFindingCount": 1,
   "findings": [
     {
-      "id": "agpl-child@0.1.0::high::replace::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0",
+      "id": "agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0",
+      "fingerprint": "agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0::high::replace::License expression is high risk for saas.::license: AGPL-3.0-only|dependency: production|transitive dependency",
       "packageId": "agpl-child@0.1.0",
       "severity": "high",
       "reason": "License expression is high risk for saas.",
@@ -208,7 +210,7 @@ Markdown output keeps the scan summary and PR-facing decision fields together:
 
 | ID | Severity | Package | Dependency | Reason | Recommendation | Action | Path |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `agpl-child@0.1.0::high::replace::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0` | high | `agpl-child@0.1.0` | production transitive | License expression is high risk for saas. | replace | Replace this package or escalate before shipping. | fixture-bun-project -> permissive-parent@1.0.0 -> agpl-child@0.1.0 |
+| `agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0` | high | `agpl-child@0.1.0` | production transitive | License expression is high risk for saas. | replace | Replace this package or escalate before shipping. | fixture-bun-project -> permissive-parent@1.0.0 -> agpl-child@0.1.0 |
 ```
 
 ## Risk Language

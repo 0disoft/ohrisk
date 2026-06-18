@@ -140,6 +140,7 @@ function resultFor(finding: RiskFinding, lockfileUri: string): {
     paths: string[][];
     evidence: string[];
     findingId: string;
+    fingerprint: string;
   };
 } {
   const ruleId = ruleIdFor(finding.severity);
@@ -164,10 +165,11 @@ function resultFor(finding: RiskFinding, lockfileUri: string): {
       }
     ],
     partialFingerprints: {
-      primaryLocationLineHash: finding.id
+      primaryLocationLineHash: finding.fingerprint
     },
     properties: {
       findingId: finding.id,
+      fingerprint: finding.fingerprint,
       packageId: finding.packageId,
       reason: finding.reason,
       recommendation: finding.recommendation,
