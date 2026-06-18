@@ -70,6 +70,10 @@ export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
   }
 
   if (argv[0] === "--version" || argv[0] === "-v" || argv[0] === "version") {
+    if (argv[0] === "version" && isHelpFlag(argv[1]) && argv.length === 2) {
+      return ok({ kind: "help", target: "version" });
+    }
+
     return argv.length === 1
       ? ok({ kind: "version" })
       : unexpectedTopLevelArgs(argv[0], argv.slice(1));
@@ -112,6 +116,10 @@ function parseTopLevelHelpArgs(argv: string[]): Result<CliCommand, OhriskError> 
   }
 
   const command = argv[0];
+  if (isHelpFlag(command)) {
+    return ok({ kind: "help", target: "help" });
+  }
+
   if (isSupportedCommand(command)) {
     return ok({ kind: "help", target: command });
   }
@@ -319,7 +327,7 @@ function parseScanLikeArgs(
       }
       case "--help":
       case "-h":
-        return ok({ kind: "help" });
+        return ok({ kind: "help", target: kind });
       default:
         return err(
           createError({
@@ -378,6 +386,10 @@ function parseScanLikeArgs(
 
 function isFailOnSeverity(value: string): value is RiskSeverity {
   return (FAIL_ON_SEVERITIES as string[]).includes(value);
+}
+
+function isHelpFlag(value: string | undefined): boolean {
+  return value === "--help" || value === "-h";
 }
 
 function supportedOptionsFor(kind: "scan" | "ci"): string[] {
@@ -483,7 +495,7 @@ function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
       }
       case "--help":
       case "-h":
-        return ok({ kind: "help" });
+        return ok({ kind: "help", target: "explain" });
       default:
         if (arg.startsWith("-")) {
           return err(
@@ -636,7 +648,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
       }
       case "--help":
       case "-h":
-        return ok({ kind: "help" });
+        return ok({ kind: "help", target: "diff" });
       default:
         if (arg.startsWith("-")) {
           return err(

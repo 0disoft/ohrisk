@@ -34,6 +34,30 @@ describe("parseArgs", () => {
     }
   });
 
+  test("parses command help flags as command-specific help", () => {
+    for (const [argv, target] of [
+      [["scan", "--help"], "scan"],
+      [["scan", "-h"], "scan"],
+      [["ci", "--help"], "ci"],
+      [["diff", "--help"], "diff"],
+      [["explain", "--help"], "explain"],
+      [["help", "--help"], "help"],
+      [["version", "--help"], "version"]
+    ] as const) {
+      const parsed = parseArgs([...argv]);
+
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) {
+        throw new Error(parsed.error.message);
+      }
+
+      expect(parsed.value).toEqual({
+        kind: "help",
+        target
+      });
+    }
+  });
+
   test("rejects unsupported or extra top-level help arguments", () => {
     const unsupported = parseArgs(["help", "deploy"]);
     expect(unsupported.ok).toBe(false);

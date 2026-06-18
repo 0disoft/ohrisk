@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.58.0 - 2026-06-19
+
+### Added
+
+- Command-specific help is now also available through `ohrisk <command> --help` and `ohrisk <command> -h`.
+
 ## 0.57.0 - 2026-06-19
 
 ### Added

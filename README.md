@@ -53,7 +53,7 @@ The current implementation is the first npm-style vertical slice:
 - finding fingerprints in terminal and Markdown reports for waiver and audit workflows
 - structured dependency type and direct/transitive scope in findings
 - report file output with `--output <file>`
-- command-specific help with `ohrisk help <command>`
+- command-specific help with `ohrisk help <command>` and `ohrisk <command> --help`
 - standalone license expression explanation
 - git ref diff reports that show only new or meaningfully changed findings
 - JSON threshold outcomes for `ci --fail-on` and `diff --fail-on`
