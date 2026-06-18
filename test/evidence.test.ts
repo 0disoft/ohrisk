@@ -84,14 +84,21 @@ describe("collectGraphEvidence", () => {
       throw new Error(evidence.error.message);
     }
 
-    expect(evidence.value).toHaveLength(4);
+    expect(evidence.value).toHaveLength(5);
     expect(evidence.value.map((item) => item.packageId)).toEqual([
       "agpl-child@0.1.0",
       "dev-risk@3.0.0",
       "dual-license@2.0.0",
+      "missing-license@4.0.0",
       "permissive-parent@1.0.0"
     ]);
     expect(evidence.value.flatMap((item) => item.files)).toHaveLength(4);
+    const missingLicense = evidence.value.find((item) => item.packageId === "missing-license@4.0.0");
+    expect(missingLicense).toMatchObject({
+      files: [],
+      warnings: ["No LICENSE, LICENCE, COPYING, or NOTICE file found."]
+    });
+    expect(missingLicense).not.toHaveProperty("packageJsonLicense");
   });
 });
 

@@ -48,6 +48,7 @@ describe("normalizeLicenseEvidence", () => {
       expression: "MIT OR Apache-2.0",
       choices: ["MIT", "Apache-2.0"],
       signals: [],
+      evidenceSources: ["source: local", "package.json license: MIT OR Apache-2.0"],
       confidence: "high"
     });
   });
@@ -88,6 +89,7 @@ describe("normalizeLicenseEvidence", () => {
       packageId: "missing-license@1.0.0",
       choices: [],
       signals: ["missing", "custom-text"],
+      evidenceSources: ["source: local", "file: LICENSE (license)"],
       confidence: "low"
     });
   });

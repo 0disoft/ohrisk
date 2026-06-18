@@ -135,7 +135,8 @@ function buildEvidence(license: NormalizedLicense, dependency: DependencyNode): 
   const evidence = [
     license.original ? `license: ${license.original}` : "license: missing",
     `dependency: ${dependency.dependencyType}`,
-    dependency.direct ? "direct dependency" : "transitive dependency"
+    dependency.direct ? "direct dependency" : "transitive dependency",
+    ...license.evidenceSources
   ];
 
   if (license.signals.length > 0) {

@@ -9,6 +9,7 @@
       "dependencies": {
         "permissive-parent": "1.0.0",
         "dual-license": "2.0.0",
+        "missing-license": "4.0.0",
       },
       "devDependencies": {
         "dev-risk": "3.0.0",
@@ -43,6 +44,12 @@
       "file:./.registry/dev-risk",
       {},
       "sha512-dev",
+    ],
+    "missing-license": [
+      "missing-license@4.0.0",
+      "file:./.registry/missing-license",
+      {},
+      "sha512-missing",
     ],
   },
 }

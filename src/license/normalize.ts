@@ -4,6 +4,7 @@ import { parseSpdxExpression } from "./spdx";
 
 export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedLicense {
   const signals: NormalizedLicenseSignal[] = [];
+  const evidenceSources = describeEvidenceSources(evidence);
 
   if (evidence.files.some((file) => file.kind === "notice")) {
     signals.push("notice-required");
@@ -22,6 +23,7 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
       packageId: evidence.packageId,
       choices: [],
       signals,
+      evidenceSources,
       confidence: "low"
     };
   }
@@ -37,6 +39,7 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
       ...(parsed.expression ? { expression: parsed.expression } : {}),
       choices: parsed.choices,
       signals,
+      evidenceSources,
       confidence: "low"
     };
   }
@@ -47,6 +50,7 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     ...(parsed.expression ? { expression: parsed.expression } : {}),
     choices: parsed.choices,
     signals,
+    evidenceSources,
     confidence: parsed.usedAlias ? "medium" : "high"
   };
 }
@@ -82,4 +86,26 @@ function readPackageLicenseExpression(evidence: LicenseEvidence): string | undef
   }
 
   return undefined;
+}
+
+function describeEvidenceSources(evidence: LicenseEvidence): string[] {
+  const sources = [`source: ${evidence.source}`];
+
+  if (evidence.packageJsonLicense) {
+    sources.push(`package.json license: ${evidence.packageJsonLicense}`);
+  }
+
+  if (evidence.packageJsonLicenses !== undefined) {
+    sources.push("package.json licenses field");
+  }
+
+  for (const file of evidence.files) {
+    sources.push(`file: ${file.path} (${file.kind})`);
+  }
+
+  for (const warning of evidence.warnings) {
+    sources.push(`warning: ${warning}`);
+  }
+
+  return sources;
 }

@@ -20,6 +20,7 @@ describe("parseBunLockfile", () => {
       "agpl-child@0.1.0",
       "dev-risk@3.0.0",
       "dual-license@2.0.0",
+      "missing-license@4.0.0",
       "permissive-parent@1.0.0"
     ]);
 
@@ -37,6 +38,11 @@ describe("parseBunLockfile", () => {
 
     const devRisk = result.value.nodes.find((node) => node.id === "dev-risk@3.0.0");
     expect(devRisk?.dependencyType).toBe("development");
+
+    const missingLicense = result.value.nodes.find((node) => node.id === "missing-license@4.0.0");
+    expect(missingLicense?.direct).toBe(true);
+    expect(missingLicense?.dependencyType).toBe("production");
+    expect(missingLicense?.paths).toEqual([["fixture-bun-project", "missing-license@4.0.0"]]);
   });
 
   test("reports malformed Bun lockfiles as typed errors", () => {

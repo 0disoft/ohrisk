@@ -15,5 +15,6 @@ export type NormalizedLicense = {
   expression?: string;
   choices: string[];
   signals: NormalizedLicenseSignal[];
+  evidenceSources: string[];
   confidence: NormalizedLicenseConfidence;
 };

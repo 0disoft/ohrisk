@@ -22,6 +22,7 @@ describe("evaluateLicenseRisk", () => {
         expression: "MIT",
         choices: ["MIT"],
         signals: [],
+        evidenceSources: ["source: local", "package.json license: MIT"],
         confidence: "high"
       },
       dependency: baseDependency,
@@ -40,6 +41,7 @@ describe("evaluateLicenseRisk", () => {
         expression: "MIT OR AGPL-3.0-only",
         choices: ["MIT", "AGPL-3.0-only"],
         signals: [],
+        evidenceSources: ["source: local", "package.json license: MIT OR AGPL-3.0-only"],
         confidence: "high"
       },
       dependency: baseDependency,
@@ -57,6 +59,7 @@ describe("evaluateLicenseRisk", () => {
         expression: "AGPL-3.0-only",
         choices: ["AGPL-3.0-only"],
         signals: [],
+        evidenceSources: ["source: local", "package.json license: AGPL-3.0-only"],
         confidence: "high"
       },
       dependency: baseDependency,
@@ -74,6 +77,7 @@ describe("evaluateLicenseRisk", () => {
       expression: "GPL-3.0-only",
       choices: ["GPL-3.0-only"],
       signals: [],
+      evidenceSources: ["source: local", "package.json license: GPL-3.0-only"],
       confidence: "high" as const
     };
 
@@ -102,6 +106,7 @@ describe("evaluateLicenseRisk", () => {
         expression: "BUSL-1.1",
         choices: ["BUSL-1.1"],
         signals: [],
+        evidenceSources: ["source: local", "package.json license: BUSL-1.1"],
         confidence: "high"
       },
       dependency: {
