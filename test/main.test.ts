@@ -1312,6 +1312,32 @@ describe("main", () => {
     expect(output).not.toContain("- [high] agpl-child@0.1.0");
   });
 
+  test("diff reads the baseline for an explicit lockfile path", async () => {
+    const baselineLockfile = readFileSync(
+      path.join(fixturesDir, "multiple-lockfiles", "package-lock.json"),
+      "utf8"
+    );
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "multiple-lockfiles"));
+    io.readRefFile = ({ relativePath }) => {
+      expect(relativePath).toBe("package-lock.json");
+      return { ok: true as const, value: baselineLockfile };
+    };
+
+    const exitCode = await main(["diff", "main", "--lockfile", "package-lock.json", "--json"], io);
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+
+    const payload = JSON.parse(stdout.join("\n")) as {
+      currentFindingCount: number;
+      baselineFindingCount: number;
+      newFindingCount: number;
+    };
+    expect(payload.currentFindingCount).toBe(0);
+    expect(payload.baselineFindingCount).toBe(0);
+    expect(payload.newFindingCount).toBe(0);
+  });
+
   test("does not apply local waivers to git ref diff findings", async () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-diff-waiver-project-"));
     const baselineLockfile = [
