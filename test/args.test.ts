@@ -18,6 +18,50 @@ describe("parseArgs", () => {
     }
   });
 
+  test("parses supported help targets", () => {
+    for (const target of ["scan", "ci", "diff", "explain", "help", "version"]) {
+      const parsed = parseArgs(["help", target]);
+
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) {
+        throw new Error(parsed.error.message);
+      }
+
+      expect(parsed.value).toEqual({
+        kind: "help"
+      });
+    }
+  });
+
+  test("rejects unsupported or extra top-level help arguments", () => {
+    const unsupported = parseArgs(["help", "deploy"]);
+    expect(unsupported.ok).toBe(false);
+    if (unsupported.ok) {
+      throw new Error("Expected unsupported help target to fail.");
+    }
+
+    expect(unsupported.error.code).toBe("UNSUPPORTED_COMMAND");
+    expect(unsupported.error.details?.supportedCommands).toContain("scan");
+
+    const extraTarget = parseArgs(["help", "scan", "extra"]);
+    expect(extraTarget.ok).toBe(false);
+    if (extraTarget.ok) {
+      throw new Error("Expected extra help target argument to fail.");
+    }
+
+    expect(extraTarget.error.code).toBe("INVALID_ARGUMENT");
+    expect(extraTarget.error.details?.extraArgs).toEqual(["scan", "extra"]);
+
+    const extraFlag = parseArgs(["--help", "scan"]);
+    expect(extraFlag.ok).toBe(false);
+    if (extraFlag.ok) {
+      throw new Error("Expected extra --help argument to fail.");
+    }
+
+    expect(extraFlag.error.code).toBe("INVALID_ARGUMENT");
+    expect(extraFlag.error.details?.extraArgs).toEqual(["scan"]);
+  });
+
   test("parses scan defaults", () => {
     const parsed = parseArgs(["scan"]);
 
@@ -311,6 +355,20 @@ describe("parseArgs", () => {
       expect(parsed.value).toEqual({
         kind: "version"
       });
+    }
+  });
+
+  test("rejects extra version arguments", () => {
+    for (const argv of [["--version", "scan"], ["-v", "scan"], ["version", "scan"]]) {
+      const parsed = parseArgs(argv);
+
+      expect(parsed.ok).toBe(false);
+      if (parsed.ok) {
+        throw new Error("Expected extra version argument to fail.");
+      }
+
+      expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+      expect(parsed.error.details?.extraArgs).toEqual(["scan"]);
     }
   });
 

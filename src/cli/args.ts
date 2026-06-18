@@ -6,6 +6,7 @@ import { err, ok, type Result } from "../shared/result";
 const FAIL_ON_SEVERITIES: RiskSeverity[] = ["high", "unknown", "review", "low"];
 const SCAN_OUTPUT_FORMAT_OPTIONS = ["--json", "--sarif", "--markdown"];
 const DIFF_OUTPUT_FORMAT_OPTIONS = ["--json", "--markdown"];
+const SUPPORTED_COMMANDS = ["scan", "ci", "diff", "explain", "help", "version"] as const;
 
 export type CliCommand =
   | { kind: "help" }
@@ -48,12 +49,24 @@ export type CliCommand =
     };
 
 export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
-  if (argv.length === 0 || argv[0] === "--help" || argv[0] === "-h" || argv[0] === "help") {
+  if (argv.length === 0) {
     return ok({ kind: "help" });
   }
 
+  if (argv[0] === "--help" || argv[0] === "-h") {
+    return argv.length === 1
+      ? ok({ kind: "help" })
+      : unexpectedTopLevelArgs(argv[0], argv.slice(1));
+  }
+
+  if (argv[0] === "help") {
+    return parseTopLevelHelpArgs(argv.slice(1));
+  }
+
   if (argv[0] === "--version" || argv[0] === "-v" || argv[0] === "version") {
-    return ok({ kind: "version" });
+    return argv.length === 1
+      ? ok({ kind: "version" })
+      : unexpectedTopLevelArgs(argv[0], argv.slice(1));
   }
 
   const command = argv[0];
@@ -66,7 +79,7 @@ export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
         category: "invalid_input",
         message: `Unsupported command "${command}".`,
         details: {
-          supportedCommands: ["scan", "ci", "diff", "explain", "help", "version"]
+          supportedCommands: [...SUPPORTED_COMMANDS]
         }
       })
     );
@@ -81,6 +94,52 @@ export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
   }
 
   return command === "ci" ? parseCiArgs(rest) : parseScanArgs(rest);
+}
+
+function parseTopLevelHelpArgs(argv: string[]): Result<CliCommand, OhriskError> {
+  if (argv.length === 0) {
+    return ok({ kind: "help" });
+  }
+
+  if (argv.length > 1) {
+    return unexpectedTopLevelArgs("help", argv);
+  }
+
+  const command = argv[0];
+  if (isSupportedCommand(command)) {
+    return ok({ kind: "help" });
+  }
+
+  return err(
+    createError({
+      code: "UNSUPPORTED_COMMAND",
+      category: "invalid_input",
+      message: `Unsupported help target "${command}".`,
+      details: {
+        supportedCommands: [...SUPPORTED_COMMANDS]
+      }
+    })
+  );
+}
+
+function isSupportedCommand(value: string | undefined): value is typeof SUPPORTED_COMMANDS[number] {
+  return typeof value === "string" && (SUPPORTED_COMMANDS as readonly string[]).includes(value);
+}
+
+function unexpectedTopLevelArgs(
+  command: string | undefined,
+  extraArgs: string[]
+): Result<CliCommand, OhriskError> {
+  return err(
+    createError({
+      code: "INVALID_ARGUMENT",
+      category: "invalid_input",
+      message: `${command ?? "command"} does not accept those extra arguments.`,
+      details: {
+        extraArgs
+      }
+    })
+  );
 }
 
 function parseScanArgs(argv: string[]): Result<CliCommand, OhriskError> {
