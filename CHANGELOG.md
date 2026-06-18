@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.49.0 - 2026-06-19
+## 0.50.0 - 2026-06-19
 
 First public release candidate for Ohrisk.
 
@@ -20,6 +20,7 @@ First public release candidate for Ohrisk.
 - Diff reports surface new or changed NOTICE and attribution work as the next action.
 - `--output <file>` for writing scan, ci, diff, and explain reports to disk.
 - `ohrisk ci --fail-on <severity>` for non-zero exits when findings meet a configured threshold.
+- `ohrisk ci --strict-waivers` for non-zero exits when local waivers are expired or unmatched.
 - `ohrisk explain <license-expression>` for profile-aware license risk explanation without scanning a project.
 - `ohrisk diff <baseline-ref>` for git-ref baseline comparison that reports only new or meaningfully changed findings.
 - `--version` and `-v` package version output.
@@ -73,6 +74,7 @@ First public release candidate for Ohrisk.
 - SARIF reports include waived findings as externally suppressed results with waiver reason metadata.
 - Expired local waivers are reported with target, reason, and expiry date without being applied.
 - Unmatched active waivers are reported with target and reason without being applied.
+- JSON, terminal, Markdown, and SARIF reports show strict waiver drift status when `ci --strict-waivers` is enabled.
 - Unknown-risk findings now distinguish missing, malformed, and unrecognized license metadata in reason and action text.
 - Risk findings for low, review, high, and unknown license evidence.
 - Terminal findings sorted by severity with package path, recommendation, and evidence snippets.

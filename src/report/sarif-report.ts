@@ -114,7 +114,8 @@ export function renderSarifReport(input: ScanReportInput): string {
             ohriskActiveFindingCount: input.riskFindings.length,
             ohriskWaivedFindingCount: input.waivedFindings.length,
             ohriskExpiredWaiverCount: input.expiredWaivers.length,
-            ohriskUnmatchedWaiverCount: input.unmatchedWaivers.length
+            ohriskUnmatchedWaiverCount: input.unmatchedWaivers.length,
+            ...sarifWaiverDriftProperties(input)
           },
           results: [
             ...input.riskFindings.map((finding) => resultFor(finding, lockfileUri)),
@@ -126,6 +127,25 @@ export function renderSarifReport(input: ScanReportInput): string {
     null,
     2
   );
+}
+
+function sarifWaiverDriftProperties(input: ScanReportInput):
+  | {
+      ohriskStrictWaivers: true;
+      ohriskWaiverDriftFailed: boolean;
+      ohriskWaiverDriftCount: number;
+    }
+  | Record<string, never> {
+  if (!input.strictWaivers) {
+    return {};
+  }
+
+  const waiverDriftCount = input.expiredWaivers.length + input.unmatchedWaivers.length;
+  return {
+    ohriskStrictWaivers: true,
+    ohriskWaiverDriftFailed: waiverDriftCount > 0,
+    ohriskWaiverDriftCount: waiverDriftCount
+  };
 }
 
 function ruleFor(severity: RiskSeverity, name: string, description: string): SarifRule {

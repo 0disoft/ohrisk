@@ -31,6 +31,7 @@ export type CliCommand =
       cyclonedx: boolean;
       outputPath?: string;
       failOn: RiskSeverity;
+      strictWaivers: boolean;
     }
   | {
       kind: "diff";
@@ -164,6 +165,7 @@ function parseScanLikeArgs(
   let cyclonedx = false;
   let outputPath: string | undefined;
   let failOn: RiskSeverity = "high";
+  let strictWaivers = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -291,6 +293,23 @@ function parseScanLikeArgs(
         index += 1;
         break;
       }
+      case "--strict-waivers": {
+        if (kind !== "ci") {
+          return err(
+            createError({
+              code: "INVALID_ARGUMENT",
+              category: "invalid_input",
+              message: "--strict-waivers is only supported by the ci command.",
+              details: {
+                supportedOptions: supportedOptionsFor(kind)
+              }
+            })
+          );
+        }
+
+        strictWaivers = true;
+        break;
+      }
       case "--help":
       case "-h":
         return ok({ kind: "help" });
@@ -318,7 +337,8 @@ function parseScanLikeArgs(
       markdown,
       cyclonedx,
       ...(outputPath ? { outputPath } : {}),
-      failOn
+      failOn,
+      strictWaivers
     });
   }
 
@@ -350,7 +370,7 @@ function supportedOptionsFor(kind: "scan" | "ci"): string[] {
     "--help",
     "-h"
   ];
-  return kind === "ci" ? [...common, "--fail-on"] : common;
+  return kind === "ci" ? [...common, "--fail-on", "--strict-waivers"] : common;
 }
 
 function missingOptionValue(option: string): Result<CliCommand, OhriskError> {

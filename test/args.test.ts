@@ -193,11 +193,12 @@ describe("parseArgs", () => {
       sarif: false,
       markdown: false,
       cyclonedx: false,
-      failOn: "high"
+      failOn: "high",
+      strictWaivers: false
     });
   });
 
-  test("parses ci profile, prod, json, and fail threshold", () => {
+  test("parses ci profile, prod, json, fail threshold, and strict waiver checks", () => {
     const parsed = parseArgs([
       "ci",
       "--profile",
@@ -205,7 +206,8 @@ describe("parseArgs", () => {
       "--prod",
       "--json",
       "--fail-on",
-      "review"
+      "review",
+      "--strict-waivers"
     ]);
 
     expect(parsed.ok).toBe(true);
@@ -221,7 +223,8 @@ describe("parseArgs", () => {
       sarif: false,
       markdown: false,
       cyclonedx: false,
-      failOn: "review"
+      failOn: "review",
+      strictWaivers: true
     });
   });
 
@@ -438,6 +441,18 @@ describe("parseArgs", () => {
     expect(parsed.error.code).toBe("INVALID_ARGUMENT");
     expect(parsed.error.details?.supportedOptions).toContain("--help");
     expect(parsed.error.details?.supportedOptions).toContain("-h");
+  });
+
+  test("rejects scan strict waiver checks", () => {
+    const parsed = parseArgs(["scan", "--strict-waivers"]);
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) {
+      throw new Error("Expected scan strict waiver checks to fail.");
+    }
+
+    expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+    expect(parsed.error.details?.supportedOptions).not.toContain("--strict-waivers");
   });
 
   test("reports help options for unknown diff and explain options", () => {

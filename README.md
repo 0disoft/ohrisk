@@ -56,6 +56,7 @@ The current implementation is the first npm-style vertical slice:
 - git ref diff reports that show only new or meaningfully changed findings
 - JSON threshold outcomes for `ci --fail-on` and `diff --fail-on`
 - terminal and Markdown threshold outcomes for `ci --fail-on` and `diff --fail-on`
+- strict CI waiver drift checks for expired or unmatched local waivers
 
 Central approval workflows, GitHub App checks, and ecosystem adapters beyond
 npm-style lockfiles are not part of this slice yet.
@@ -140,6 +141,12 @@ Fail a local CI step when findings meet a threshold:
 bun run src/cli/main.ts ci --fail-on high
 ```
 
+Fail a local CI step when waiver files contain expired or unmatched waivers:
+
+```bash
+bun run src/cli/main.ts ci --strict-waivers
+```
+
 Waive a finding locally by ID or fingerprint in `.ohrisk-waivers.json`:
 
 ```json
@@ -157,7 +164,10 @@ Waive a finding locally by ID or fingerprint in `.ohrisk-waivers.json`:
 Waived findings are excluded from `ci --fail-on` threshold failures, but scan
 and CI JSON, terminal, Markdown, and SARIF reports still show them. Expired
 waivers and unmatched active waivers are reported separately in JSON, terminal,
-and Markdown reports and are not applied.
+and Markdown reports and are not applied. `ci --strict-waivers` exits non-zero
+when either expired or unmatched waivers are present, even if active findings
+stay below the `--fail-on` threshold. JSON, terminal, Markdown, and SARIF
+outputs include the strict waiver drift result when that option is enabled.
 
 Explain a license expression without scanning a project:
 
@@ -184,6 +194,7 @@ Once installed as a package, the intended command shape is:
 ```bash
 ohrisk scan --profile saas --prod
 ohrisk ci --fail-on high
+ohrisk ci --strict-waivers
 ohrisk scan --sarif
 ohrisk scan --markdown --prod
 ohrisk scan --cyclonedx --prod

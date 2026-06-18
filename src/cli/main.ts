@@ -244,6 +244,7 @@ async function runScan(
     json: command.json,
     markdown: command.markdown,
     failOn: command.kind === "ci" ? command.failOn : undefined,
+    strictWaivers: command.kind === "ci" ? command.strictWaivers : false,
     waivedFindings: scanned.value.waivedFindings,
     expiredWaivers: scanned.value.expiredWaivers,
     unmatchedWaivers: scanned.value.unmatchedWaivers
@@ -269,7 +270,18 @@ async function runScan(
     return 1;
   }
 
+  if (command.kind === "ci" && command.strictWaivers && hasWaiverDrift(scanned.value)) {
+    return 1;
+  }
+
   return 0;
+}
+
+function hasWaiverDrift(input: {
+  expiredWaivers: unknown[];
+  unmatchedWaivers: unknown[];
+}): boolean {
+  return input.expiredWaivers.length > 0 || input.unmatchedWaivers.length > 0;
 }
 
 async function scanProject(input: {
@@ -407,7 +419,7 @@ function renderHelp(): string {
     "",
     "Usage:",
     "  ohrisk scan [--profile saas|distributed-app] [--prod] [--json|--sarif|--markdown|--cyclonedx] [--output <file>]",
-    "  ohrisk ci [--profile saas|distributed-app] [--prod] [--json|--sarif|--markdown|--cyclonedx] [--fail-on high|unknown|review|low] [--output <file>]",
+    "  ohrisk ci [--profile saas|distributed-app] [--prod] [--json|--sarif|--markdown|--cyclonedx] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>]",
     "  ohrisk diff <baseline-ref> [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
     "  ohrisk help [command]",
@@ -430,6 +442,7 @@ function renderHelp(): string {
     "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
     "  --output <file>        Write report output to a file instead of stdout.",
     "  --fail-on <severity>   CI threshold. Defaults to high for ci.",
+    "  --strict-waivers       Fail CI when local waivers are expired or unmatched.",
     "  --help, -h             Print this help text.",
     "  --version, -v          Print the Ohrisk package version."
   ].join("\n");

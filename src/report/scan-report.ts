@@ -20,6 +20,7 @@ export type ScanReportInput = {
   json: boolean;
   markdown: boolean;
   failOn?: RiskSeverity;
+  strictWaivers?: boolean;
   waivedFindings: WaivedRiskFinding[];
   expiredWaivers: RiskWaiver[];
   unmatchedWaivers: RiskWaiver[];
@@ -29,6 +30,7 @@ export function renderScanReport(input: ScanReportInput): string {
   const summary = buildScanSummary(input);
   const nextAction = nextActionFor(input.riskFindings);
   const thresholdSummary = buildThresholdSummary(input.riskFindings, input.failOn);
+  const waiverDriftSummary = buildWaiverDriftSummary(input);
 
   if (input.json) {
     return JSON.stringify(
@@ -48,6 +50,7 @@ export function renderScanReport(input: ScanReportInput): string {
         waivers: summary.waivers,
         nextAction,
         ...thresholdSummary,
+        ...waiverDriftSummary,
         findings: input.riskFindings,
         waivedFindings: input.waivedFindings,
         expiredWaivers: input.expiredWaivers,
@@ -75,6 +78,7 @@ export function renderScanReport(input: ScanReportInput): string {
     `Risks: ${summary.risks.high} high, ${summary.risks.review} review, ${summary.risks.unknown} unknown, ${summary.risks.low} low`,
     `Waived: ${summary.waivers.applied} applied, ${summary.waivers.expired} expired, ${summary.waivers.unmatched} unmatched`,
     ...renderThresholdLines(thresholdSummary),
+    ...renderWaiverDriftLines(waiverDriftSummary),
     "Status: profile-aware risk evaluated",
     "",
     ...renderFindings(input.riskFindings),
@@ -95,6 +99,7 @@ function renderMarkdownReport(
 ): string {
   const nextAction = nextActionFor(input.riskFindings);
   const thresholdSummary = buildThresholdSummary(input.riskFindings, input.failOn);
+  const waiverDriftSummary = buildWaiverDriftSummary(input);
 
   return [
     "# Ohrisk scan",
@@ -110,6 +115,7 @@ function renderMarkdownReport(
     `- Risks: \`${summary.risks.high} high\`, \`${summary.risks.review} review\`, \`${summary.risks.unknown} unknown\`, \`${summary.risks.low} low\``,
     `- Waived: \`${summary.waivers.applied} applied\`, \`${summary.waivers.expired} expired\`, \`${summary.waivers.unmatched} unmatched\``,
     ...renderMarkdownThresholdLines(thresholdSummary),
+    ...renderMarkdownWaiverDriftLines(waiverDriftSummary),
     "",
     ...renderMarkdownFindings(input.riskFindings),
     "",
@@ -123,6 +129,25 @@ function renderMarkdownReport(
     "",
     nextAction
   ].join("\n");
+}
+
+function buildWaiverDriftSummary(input: ScanReportInput):
+  | {
+      strictWaivers: true;
+      waiverDriftFailed: boolean;
+      waiverDriftCount: number;
+    }
+  | Record<string, never> {
+  if (!input.strictWaivers) {
+    return {};
+  }
+
+  const waiverDriftCount = input.expiredWaivers.length + input.unmatchedWaivers.length;
+  return {
+    strictWaivers: true,
+    waiverDriftFailed: waiverDriftCount > 0,
+    waiverDriftCount
+  };
 }
 
 function buildScanSummary(input: ScanReportInput): {
@@ -368,11 +393,36 @@ function renderThresholdLines(thresholdSummary: ReturnType<typeof buildThreshold
   return thresholdLine ? [thresholdLine] : [];
 }
 
+function renderWaiverDriftLines(
+  waiverDriftSummary: ReturnType<typeof buildWaiverDriftSummary>
+): string[] {
+  const waiverDriftLine = formatWaiverDriftSummary(waiverDriftSummary);
+  return waiverDriftLine ? [waiverDriftLine] : [];
+}
+
 function renderMarkdownThresholdLines(
   thresholdSummary: ReturnType<typeof buildThresholdSummary>
 ): string[] {
   const thresholdLine = formatThresholdSummary(thresholdSummary);
   return thresholdLine ? [`- ${thresholdLine}`] : [];
+}
+
+function renderMarkdownWaiverDriftLines(
+  waiverDriftSummary: ReturnType<typeof buildWaiverDriftSummary>
+): string[] {
+  const waiverDriftLine = formatWaiverDriftSummary(waiverDriftSummary);
+  return waiverDriftLine ? [`- ${waiverDriftLine}`] : [];
+}
+
+function formatWaiverDriftSummary(
+  waiverDriftSummary: ReturnType<typeof buildWaiverDriftSummary>
+): string | undefined {
+  if (!("strictWaivers" in waiverDriftSummary)) {
+    return undefined;
+  }
+
+  const status = waiverDriftSummary.waiverDriftFailed ? "failed" : "passed";
+  return `Waiver drift: ${status} (${waiverDriftSummary.waiverDriftCount} expired or unmatched waivers)`;
 }
 
 function formatPath(pathItems: string[] | undefined): string {
