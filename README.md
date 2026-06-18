@@ -12,6 +12,11 @@ It is a local CLI for developers who need a quick answer to questions like:
 Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 `high`, and `unknown` findings for the selected usage profile.
 
+## Runtime
+
+Ohrisk is distributed as an npm package, but the CLI runs on Bun. Make sure
+`bun` is available on your `PATH` before running the installed `ohrisk` command.
+
 ## Current Scope
 
 The current implementation is the first npm-style vertical slice:
@@ -33,6 +38,12 @@ workflows, GitHub App checks, and multi-ecosystem adapters are not part of this
 slice yet.
 
 ## Usage
+
+Install globally after the package is published:
+
+```bash
+bun add -g ohrisk
+```
 
 Run a local scan from a supported project:
 
@@ -69,6 +80,7 @@ Once installed as a package, the intended command shape is:
 
 ```bash
 ohrisk scan --profile saas --prod
+ohrisk --version
 ```
 
 ## Report Shape

@@ -33,4 +33,13 @@ describe("package metadata", () => {
     expect(packageJson.publishConfig?.access).toBe("public");
     expect(packageJson.repository?.url).toBe("git+https://github.com/0disoft/ohrisk.git");
   });
+
+  test("uses Bun as the packaged CLI runtime", () => {
+    const mainEntrypoint = readFileSync(path.join(repoRoot, "src", "cli", "main.ts"), "utf8");
+    const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
+
+    expect(mainEntrypoint.startsWith("#!/usr/bin/env bun")).toBe(true);
+    expect(readme).toContain("the CLI runs on Bun");
+    expect(readme).toContain("bun add -g ohrisk");
+  });
 });
