@@ -14,6 +14,7 @@ export type ParsedSpdxExpression = {
   original: string;
   expression?: string;
   choices: string[];
+  joiner: "single" | "and" | "or" | "mixed";
   malformed: boolean;
   usedAlias: boolean;
 };
@@ -25,6 +26,7 @@ export function parseSpdxExpression(input: string): ParsedSpdxExpression {
     return {
       original,
       choices: [],
+      joiner: "single",
       malformed: true,
       usedAlias: false
     };
@@ -36,11 +38,13 @@ export function parseSpdxExpression(input: string): ParsedSpdxExpression {
       original,
       expression: alias.normalized,
       choices: [alias.normalized],
+      joiner: "single",
       malformed: false,
       usedAlias: true
     };
   }
 
+  const joiner = detectJoiner(original);
   const tokens = original
     .replace(/[()]/g, " ")
     .split(/\s+(?:AND|OR)\s+/i)
@@ -51,6 +55,7 @@ export function parseSpdxExpression(input: string): ParsedSpdxExpression {
     return {
       original,
       choices: tokens.flatMap((token) => token.normalized ? [token.normalized] : []),
+      joiner,
       malformed: true,
       usedAlias: tokens.some((token) => token.usedAlias)
     };
@@ -62,9 +67,29 @@ export function parseSpdxExpression(input: string): ParsedSpdxExpression {
     original,
     expression,
     choices: [...new Set(tokens.map((token) => token.normalized as string))],
+    joiner,
     malformed: false,
     usedAlias: tokens.some((token) => token.usedAlias)
   };
+}
+
+function detectJoiner(expression: string): ParsedSpdxExpression["joiner"] {
+  const hasAnd = /\sAND\s/i.test(expression);
+  const hasOr = /\sOR\s/i.test(expression);
+
+  if (hasAnd && hasOr) {
+    return "mixed";
+  }
+
+  if (hasAnd) {
+    return "and";
+  }
+
+  if (hasOr) {
+    return "or";
+  }
+
+  return "single";
 }
 
 function normalizeLicenseToken(token: string): {

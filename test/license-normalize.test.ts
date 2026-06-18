@@ -9,8 +9,29 @@ describe("parseSpdxExpression", () => {
       original: "MIT OR Apache-2.0",
       expression: "MIT OR Apache-2.0",
       choices: ["MIT", "Apache-2.0"],
+      joiner: "or",
       malformed: false,
       usedAlias: false
+    });
+  });
+
+  test("parses simple AND expressions", () => {
+    expect(parseSpdxExpression("MIT AND Apache-2.0")).toEqual({
+      original: "MIT AND Apache-2.0",
+      expression: "MIT AND Apache-2.0",
+      choices: ["MIT", "Apache-2.0"],
+      joiner: "and",
+      malformed: false,
+      usedAlias: false
+    });
+  });
+
+  test("marks mixed AND and OR expressions without pretending to resolve precedence", () => {
+    expect(parseSpdxExpression("MIT OR GPL-3.0-only AND Apache-2.0")).toMatchObject({
+      original: "MIT OR GPL-3.0-only AND Apache-2.0",
+      choices: ["MIT", "GPL-3.0-only", "Apache-2.0"],
+      joiner: "mixed",
+      malformed: false
     });
   });
 
@@ -19,6 +40,7 @@ describe("parseSpdxExpression", () => {
       original: "MIT License",
       expression: "MIT",
       choices: ["MIT"],
+      joiner: "single",
       malformed: false,
       usedAlias: true
     });
@@ -47,6 +69,7 @@ describe("normalizeLicenseEvidence", () => {
       original: "MIT OR Apache-2.0",
       expression: "MIT OR Apache-2.0",
       choices: ["MIT", "Apache-2.0"],
+      joiner: "or",
       signals: [],
       evidenceSources: ["source: local", "package.json license: MIT OR Apache-2.0"],
       confidence: "high"
@@ -88,6 +111,7 @@ describe("normalizeLicenseEvidence", () => {
     ).toEqual({
       packageId: "missing-license@1.0.0",
       choices: [],
+      joiner: "single",
       signals: ["missing", "custom-text"],
       evidenceSources: ["source: local", "file: LICENSE (license)"],
       confidence: "low"

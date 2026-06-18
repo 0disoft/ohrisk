@@ -21,6 +21,7 @@ describe("evaluateLicenseRisk", () => {
         original: "MIT",
         expression: "MIT",
         choices: ["MIT"],
+        joiner: "single",
         signals: [],
         evidenceSources: ["source: local", "package.json license: MIT"],
         confidence: "high"
@@ -40,6 +41,7 @@ describe("evaluateLicenseRisk", () => {
         original: "MIT OR AGPL-3.0-only",
         expression: "MIT OR AGPL-3.0-only",
         choices: ["MIT", "AGPL-3.0-only"],
+        joiner: "or",
         signals: [],
         evidenceSources: ["source: local", "package.json license: MIT OR AGPL-3.0-only"],
         confidence: "high"
@@ -51,6 +53,48 @@ describe("evaluateLicenseRisk", () => {
     expect(finding.severity).toBe("low");
   });
 
+  test("uses the riskiest branch for AND expressions", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "package@1.0.0",
+        original: "MIT AND AGPL-3.0-only",
+        expression: "MIT AND AGPL-3.0-only",
+        choices: ["MIT", "AGPL-3.0-only"],
+        joiner: "and",
+        signals: [],
+        evidenceSources: ["source: local", "package.json license: MIT AND AGPL-3.0-only"],
+        confidence: "high"
+      },
+      dependency: baseDependency,
+      profile: "saas"
+    });
+
+    expect(finding.severity).toBe("high");
+    expect(finding.recommendation).toBe("replace");
+  });
+
+  test("treats mixed expressions conservatively instead of using OR fallback", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "package@1.0.0",
+        original: "MIT OR GPL-3.0-only AND Apache-2.0",
+        expression: "MIT OR GPL-3.0-only AND Apache-2.0",
+        choices: ["MIT", "GPL-3.0-only", "Apache-2.0"],
+        joiner: "mixed",
+        signals: [],
+        evidenceSources: [
+          "source: local",
+          "package.json license: MIT OR GPL-3.0-only AND Apache-2.0"
+        ],
+        confidence: "high"
+      },
+      dependency: baseDependency,
+      profile: "distributed-app"
+    });
+
+    expect(finding.severity).toBe("high");
+  });
+
   test("marks AGPL as high risk for SaaS", () => {
     const finding = evaluateLicenseRisk({
       license: {
@@ -58,6 +102,7 @@ describe("evaluateLicenseRisk", () => {
         original: "AGPL-3.0-only",
         expression: "AGPL-3.0-only",
         choices: ["AGPL-3.0-only"],
+        joiner: "single",
         signals: [],
         evidenceSources: ["source: local", "package.json license: AGPL-3.0-only"],
         confidence: "high"
@@ -76,6 +121,7 @@ describe("evaluateLicenseRisk", () => {
       original: "GPL-3.0-only",
       expression: "GPL-3.0-only",
       choices: ["GPL-3.0-only"],
+      joiner: "single",
       signals: [],
       evidenceSources: ["source: local", "package.json license: GPL-3.0-only"],
       confidence: "high" as const
@@ -105,6 +151,7 @@ describe("evaluateLicenseRisk", () => {
         original: "BUSL-1.1",
         expression: "BUSL-1.1",
         choices: ["BUSL-1.1"],
+        joiner: "single",
         signals: [],
         evidenceSources: ["source: local", "package.json license: BUSL-1.1"],
         confidence: "high"

@@ -22,6 +22,7 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     return {
       packageId: evidence.packageId,
       choices: [],
+      joiner: "single",
       signals,
       evidenceSources,
       confidence: "low"
@@ -38,6 +39,7 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
       original: parsed.original,
       ...(parsed.expression ? { expression: parsed.expression } : {}),
       choices: parsed.choices,
+      joiner: parsed.joiner,
       signals,
       evidenceSources,
       confidence: "low"
@@ -49,6 +51,7 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     original: parsed.original,
     ...(parsed.expression ? { expression: parsed.expression } : {}),
     choices: parsed.choices,
+    joiner: parsed.joiner,
     signals,
     evidenceSources,
     confidence: parsed.usedAlias ? "medium" : "high"

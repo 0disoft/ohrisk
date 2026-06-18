@@ -83,7 +83,7 @@ function classifySeverity(license: NormalizedLicense, profile: UsageProfile): Ri
 
   const severities = license.choices.map((choice) => classifyLicenseChoice(choice, profile));
 
-  if (isOrExpression(license)) {
+  if (license.joiner === "or") {
     return minSeverity(severities);
   }
 
@@ -167,10 +167,6 @@ function recommendationFor(
   }
 
   return "replace";
-}
-
-function isOrExpression(license: NormalizedLicense): boolean {
-  return /\sOR\s/i.test(license.expression ?? license.original ?? "");
 }
 
 function matchesPrefix(choice: string, prefixes: string[]): boolean {
