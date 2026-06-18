@@ -110,7 +110,15 @@ describe("parseArgs", () => {
   });
 
   test("parses explain expressions and options", () => {
-    const parsed = parseArgs(["explain", "GPL-2.0-only", "WITH", "Classpath-exception-2.0", "--profile", "distributed-app", "--json"]);
+    const parsed = parseArgs([
+      "explain",
+      "GPL-2.0-only",
+      "WITH",
+      "Classpath-exception-2.0",
+      "--profile",
+      "distributed-app",
+      "--json"
+    ]);
 
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) {
@@ -125,8 +133,57 @@ describe("parseArgs", () => {
     });
   });
 
-  test("rejects unsupported commands", () => {
+  test("parses diff baseline, profile, prod, json, and fail threshold", () => {
+    const parsed = parseArgs([
+      "diff",
+      "main",
+      "--profile",
+      "distributed-app",
+      "--prod",
+      "--json",
+      "--fail-on",
+      "unknown"
+    ]);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+
+    expect(parsed.value).toEqual({
+      kind: "diff",
+      baselineRef: "main",
+      profile: "distributed-app",
+      prodOnly: true,
+      json: true,
+      failOn: "unknown"
+    });
+  });
+
+  test("rejects diff without a baseline ref", () => {
     const parsed = parseArgs(["diff"]);
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) {
+      throw new Error("Expected missing diff baseline ref to fail.");
+    }
+
+    expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+  });
+
+  test("rejects diff with extra baseline refs", () => {
+    const parsed = parseArgs(["diff", "main", "HEAD"]);
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) {
+      throw new Error("Expected extra diff baseline ref to fail.");
+    }
+
+    expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+  });
+
+  test("rejects unsupported commands", () => {
+    const parsed = parseArgs(["deploy"]);
 
     expect(parsed.ok).toBe(false);
     if (parsed.ok) {

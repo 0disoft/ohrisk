@@ -1,0 +1,79 @@
+import type { RiskDiff } from "../diff/compare";
+import type { RiskFinding, RiskSeverity } from "../policy/types";
+import type { UsageProfile } from "../policy/profiles";
+
+export type DiffReportInput = {
+  baselineRef: string;
+  profile: UsageProfile;
+  prodOnly: boolean;
+  diff: RiskDiff;
+  json: boolean;
+};
+
+export function renderDiffReport(input: DiffReportInput): string {
+  const summary = summarize(input.diff.newFindings);
+
+  if (input.json) {
+    return JSON.stringify(
+      {
+        status: "risk_diff_evaluated",
+        baselineRef: input.baselineRef,
+        profile: input.profile,
+        prodOnly: input.prodOnly,
+        baselineFindingCount: input.diff.baselineFindings.length,
+        currentFindingCount: input.diff.currentFindings.length,
+        newFindingCount: input.diff.newFindings.length,
+        newRisks: summary,
+        findings: input.diff.newFindings
+      },
+      null,
+      2
+    );
+  }
+
+  return [
+    "Ohrisk diff",
+    `Baseline: ${input.baselineRef}`,
+    `Profile: ${input.profile}`,
+    `Production only: ${input.prodOnly ? "yes" : "no"}`,
+    `Findings: ${input.diff.currentFindings.length} current, ${input.diff.baselineFindings.length} baseline, ${input.diff.newFindings.length} new`,
+    `New risks: ${summary.high} high, ${summary.review} review, ${summary.unknown} unknown, ${summary.low} low`,
+    "Status: profile-aware risk diff evaluated",
+    "",
+    ...renderNewFindings(input.diff.newFindings),
+    "",
+    "Next: block or review new high-risk and unknown production findings before merging."
+  ].join("\n");
+}
+
+function summarize(findings: RiskFinding[]): Record<RiskSeverity, number> {
+  return findings.reduce(
+    (summary, finding) => {
+      summary[finding.severity] += 1;
+      return summary;
+    },
+    {
+      high: 0,
+      review: 0,
+      unknown: 0,
+      low: 0
+    }
+  );
+}
+
+function renderNewFindings(findings: RiskFinding[]): string[] {
+  if (findings.length === 0) {
+    return ["New findings: none"];
+  }
+
+  return [
+    "New findings:",
+    ...findings.flatMap((finding) => [
+      `- [${finding.severity}] ${finding.packageId}`,
+      `  ${finding.reason}`,
+      `  recommendation: ${finding.recommendation}`,
+      `  path: ${finding.paths[0]?.join(" -> ") ?? "unknown"}`,
+      `  evidence: ${finding.evidence.join("; ")}`
+    ])
+  ];
+}

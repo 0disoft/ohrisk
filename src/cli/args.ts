@@ -24,6 +24,14 @@ export type CliCommand =
       failOn: RiskSeverity;
     }
   | {
+      kind: "diff";
+      baselineRef: string;
+      profile: UsageProfile;
+      prodOnly: boolean;
+      json: boolean;
+      failOn?: RiskSeverity;
+    }
+  | {
       kind: "explain";
       expression: string;
       profile: UsageProfile;
@@ -42,14 +50,14 @@ export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
   const command = argv[0];
   const rest = argv.slice(1);
 
-  if (command !== "scan" && command !== "ci" && command !== "explain") {
+  if (command !== "scan" && command !== "ci" && command !== "diff" && command !== "explain") {
     return err(
       createError({
         code: "UNSUPPORTED_COMMAND",
         category: "invalid_input",
         message: `Unsupported command "${command}".`,
         details: {
-          supportedCommands: ["scan", "ci", "explain"]
+          supportedCommands: ["scan", "ci", "diff", "explain"]
         }
       })
     );
@@ -57,6 +65,10 @@ export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
 
   if (command === "explain") {
     return parseExplainArgs(rest);
+  }
+
+  if (command === "diff") {
+    return parseDiffArgs(rest);
   }
 
   return command === "ci" ? parseCiArgs(rest) : parseScanArgs(rest);
@@ -330,5 +342,149 @@ function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
     expression,
     profile,
     json
+  });
+}
+
+function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
+  let profile: UsageProfile = "saas";
+  let prodOnly = false;
+  let json = false;
+  let failOn: RiskSeverity | undefined;
+  let baselineRef: string | undefined;
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    if (!arg) {
+      continue;
+    }
+
+    switch (arg) {
+      case "--profile": {
+        const value = argv[index + 1];
+        if (!value) {
+          return err(
+            createError({
+              code: "INVALID_ARGUMENT",
+              category: "invalid_input",
+              message: "--profile requires a value.",
+              details: {
+                supportedProfiles: [...USAGE_PROFILES]
+              }
+            })
+          );
+        }
+
+        if (!isUsageProfile(value)) {
+          return err(
+            createError({
+              code: "INVALID_ARGUMENT",
+              category: "invalid_input",
+              message: `Unsupported profile "${value}".`,
+              details: {
+                supportedProfiles: [...USAGE_PROFILES]
+              }
+            })
+          );
+        }
+
+        profile = value;
+        index += 1;
+        break;
+      }
+      case "--prod":
+        prodOnly = true;
+        break;
+      case "--json":
+        json = true;
+        break;
+      case "--fail-on": {
+        const value = argv[index + 1];
+        if (!value) {
+          return err(
+            createError({
+              code: "INVALID_ARGUMENT",
+              category: "invalid_input",
+              message: "--fail-on requires a value.",
+              details: {
+                supportedSeverities: FAIL_ON_SEVERITIES
+              }
+            })
+          );
+        }
+
+        if (!isFailOnSeverity(value)) {
+          return err(
+            createError({
+              code: "INVALID_ARGUMENT",
+              category: "invalid_input",
+              message: `Unsupported fail-on severity "${value}".`,
+              details: {
+                supportedSeverities: FAIL_ON_SEVERITIES
+              }
+            })
+          );
+        }
+
+        failOn = value;
+        index += 1;
+        break;
+      }
+      case "--help":
+      case "-h":
+        return ok({ kind: "help" });
+      default:
+        if (arg.startsWith("-")) {
+          return err(
+            createError({
+              code: "INVALID_ARGUMENT",
+              category: "invalid_input",
+              message: `Unknown diff option "${arg}".`,
+              details: {
+                supportedOptions: ["--profile", "--prod", "--json", "--fail-on"]
+              }
+            })
+          );
+        }
+
+        if (baselineRef !== undefined) {
+          return err(
+            createError({
+              code: "INVALID_ARGUMENT",
+              category: "invalid_input",
+              message: "diff accepts exactly one baseline ref.",
+              details: {
+                baselineRef,
+                extraRef: arg
+              }
+            })
+          );
+        }
+
+        baselineRef = arg;
+        break;
+    }
+  }
+
+  if (!baselineRef) {
+    return err(
+      createError({
+        code: "INVALID_ARGUMENT",
+        category: "invalid_input",
+        message: "diff requires a baseline git ref.",
+        details: {
+          example: "ohrisk diff main --profile saas --prod"
+        }
+      })
+    );
+  }
+
+  return ok({
+    kind: "diff",
+    baselineRef,
+    profile,
+    prodOnly,
+    json,
+    ...(failOn ? { failOn } : {})
   });
 }

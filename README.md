@@ -35,9 +35,10 @@ The current implementation is the first npm-style vertical slice:
 - terminal and JSON reports
 - SARIF 2.1.0 reports for code scanning upload
 - standalone license expression explanation
+- git ref diff reports that show only newly introduced findings
 
-PR diff mode, SBOM export, waiver workflows, GitHub App checks, and
-multi-ecosystem adapters are not part of this slice yet.
+SBOM export, waiver workflows, GitHub App checks, and multi-ecosystem adapters
+are not part of this slice yet.
 
 ## Usage
 
@@ -90,6 +91,13 @@ Explain a license expression without scanning a project:
 bun run src/cli/main.ts explain AGPL-3.0-only --profile saas
 ```
 
+Compare the current findings against a baseline git ref:
+
+```bash
+bun run src/cli/main.ts diff main --prod
+bun run src/cli/main.ts diff main --prod --fail-on unknown
+```
+
 Print the package version:
 
 ```bash
@@ -103,6 +111,7 @@ ohrisk scan --profile saas --prod
 ohrisk ci --fail-on high
 ohrisk scan --sarif
 ohrisk explain AGPL-3.0-only --profile saas
+ohrisk diff main --prod --fail-on unknown
 ohrisk --version
 ```
 

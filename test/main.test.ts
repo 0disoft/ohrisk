@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,7 +29,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.4.0"]);
+    expect(stdout).toEqual(["ohrisk 0.5.0"]);
   });
 
   test("prints actionable findings for a Bun project", async () => {
@@ -215,7 +216,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.4.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.5.0");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
       "ohrisk/license-unknown",
@@ -258,6 +259,84 @@ describe("main", () => {
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
     expect(stdout.join("\n")).toContain("Risks: 0 high, 0 review, 0 unknown, 1 low");
+  });
+
+  test("prints only newly introduced findings for a git ref diff", async () => {
+    const baselineLockfile = readFileSync(path.join(fixturesDir, "baseline-bun.lock"), "utf8");
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
+    io.readRefFile = () => ({ ok: true as const, value: baselineLockfile });
+
+    const exitCode = await main(["diff", "main", "--prod"], io);
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+
+    const output = stdout.join("\n");
+    expect(output).toContain("Ohrisk diff");
+    expect(output).toContain("Baseline: main");
+    expect(output).toContain("Production only: yes");
+    expect(output).toContain("Findings: 5 current, 3 baseline, 2 new");
+    expect(output).toContain("New risks: 0 high, 1 review, 1 unknown, 0 low");
+    expect(output).toContain("- [unknown] missing-license@4.0.0");
+    expect(output).toContain("- [review] gpl-package@5.0.0");
+    expect(output).not.toContain("- [high] agpl-child@0.1.0");
+  });
+
+  test("prints JSON diff output", async () => {
+    const baselineLockfile = readFileSync(path.join(fixturesDir, "baseline-bun.lock"), "utf8");
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
+    io.readRefFile = () => ({ ok: true as const, value: baselineLockfile });
+
+    const exitCode = await main(["diff", "main", "--prod", "--json"], io);
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+
+    const payload = JSON.parse(stdout.join("\n")) as {
+      status: string;
+      baselineRef: string;
+      baselineFindingCount: number;
+      currentFindingCount: number;
+      newFindingCount: number;
+      newRisks: {
+        high: number;
+        review: number;
+        unknown: number;
+        low: number;
+      };
+      findings: Array<{
+        packageId: string;
+        severity: string;
+      }>;
+    };
+
+    expect(payload.status).toBe("risk_diff_evaluated");
+    expect(payload.baselineRef).toBe("main");
+    expect(payload.baselineFindingCount).toBe(3);
+    expect(payload.currentFindingCount).toBe(5);
+    expect(payload.newFindingCount).toBe(2);
+    expect(payload.newRisks).toEqual({
+      high: 0,
+      review: 1,
+      unknown: 1,
+      low: 0
+    });
+    expect(payload.findings.map((finding) => finding.packageId)).toEqual([
+      "missing-license@4.0.0",
+      "gpl-package@5.0.0"
+    ]);
+  });
+
+  test("returns non-zero from diff when new findings meet the fail threshold", async () => {
+    const baselineLockfile = readFileSync(path.join(fixturesDir, "baseline-bun.lock"), "utf8");
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
+    io.readRefFile = () => ({ ok: true as const, value: baselineLockfile });
+
+    const exitCode = await main(["diff", "main", "--prod", "--fail-on", "unknown"], io);
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toEqual([]);
+    expect(stdout.join("\n")).toContain("New risks: 0 high, 1 review, 1 unknown, 0 low");
   });
 
   test("explains license risk without scanning a project", async () => {

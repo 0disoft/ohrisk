@@ -1,12 +1,16 @@
 #!/usr/bin/env bun
 import { readFileSync } from "node:fs";
+import path from "node:path";
 
 import { parseArgs, type CliCommand } from "./args";
+import { diffRiskFindings } from "../diff/compare";
 import { collectGraphEvidence } from "../evidence/collect";
-import { parseBunLockfile } from "../graph/npm-bun-lock";
+import { readGitRefFile, type GitRefFileReader } from "../git/ref-file";
+import { parseBunLockfile, parseBunLockText } from "../graph/npm-bun-lock";
 import { normalizeAllLicenseEvidence, normalizeLicenseEvidence } from "../license/normalize";
 import { evaluateLicenseRisk, evaluateLicenseRisks } from "../policy/evaluate";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
+import { renderDiffReport } from "../report/diff-report";
 import { renderExplainReport } from "../report/explain-report";
 import { renderSarifReport } from "../report/sarif-report";
 import { renderScanReport } from "../report/scan-report";
@@ -18,6 +22,7 @@ export type CliIO = {
   cwd: string;
   stdout: (text: string) => void;
   stderr: (text: string) => void;
+  readRefFile?: GitRefFileReader;
 };
 
 export async function main(
@@ -44,9 +49,96 @@ export async function main(
       return runScan(command, io);
     case "ci":
       return runScan(command, io);
+    case "diff":
+      return runDiff(command, io);
     case "explain":
       return runExplain(command, io);
   }
+}
+
+async function runDiff(
+  command: Extract<CliCommand, { kind: "diff" }>,
+  io: CliIO
+): Promise<number> {
+  const current = await scanProject({
+    cwd: io.cwd,
+    profile: command.profile,
+    prodOnly: command.prodOnly
+  });
+
+  if (isErr(current)) {
+    io.stderr(formatError(current.error));
+    return exitCodeForError(current.error);
+  }
+
+  const relativeLockfilePath = path.relative(
+    current.value.project.rootDir,
+    current.value.project.lockfile.path
+  );
+  const readRefFile = io.readRefFile ?? readGitRefFile;
+  const baselineLockfile = readRefFile({
+    projectRoot: current.value.project.rootDir,
+    ref: command.baselineRef,
+    relativePath: relativeLockfilePath
+  });
+
+  if (isErr(baselineLockfile)) {
+    io.stderr(formatError(baselineLockfile.error));
+    return exitCodeForError(baselineLockfile.error);
+  }
+
+  const baselineGraph = parseBunLockText(
+    baselineLockfile.value,
+    `${command.baselineRef}:${relativeLockfilePath}`
+  );
+
+  if (isErr(baselineGraph)) {
+    io.stderr(formatError(baselineGraph.error));
+    return exitCodeForError(baselineGraph.error);
+  }
+
+  const scanGraph = command.prodOnly
+    ? {
+        ...baselineGraph.value,
+        nodes: baselineGraph.value.nodes.filter((node) => node.dependencyType === "production")
+      }
+    : baselineGraph.value;
+  const baselineEvidence = await collectGraphEvidence({
+    graph: scanGraph,
+    projectRoot: current.value.project.rootDir
+  });
+
+  if (isErr(baselineEvidence)) {
+    io.stderr(formatError(baselineEvidence.error));
+    return exitCodeForError(baselineEvidence.error);
+  }
+
+  const baselineLicenses = normalizeAllLicenseEvidence(baselineEvidence.value);
+  const baselineFindings = evaluateLicenseRisks({
+    licenses: baselineLicenses,
+    dependencies: scanGraph.nodes,
+    profile: command.profile
+  });
+  const diff = diffRiskFindings({
+    baselineFindings,
+    currentFindings: current.value.riskFindings
+  });
+
+  io.stdout(
+    renderDiffReport({
+      baselineRef: command.baselineRef,
+      profile: command.profile,
+      prodOnly: command.prodOnly,
+      diff,
+      json: command.json
+    })
+  );
+
+  if (command.failOn && hasFailingFinding(diff.newFindings, command.failOn)) {
+    return 1;
+  }
+
+  return 0;
 }
 
 async function runExplain(
@@ -90,21 +182,55 @@ async function runScan(
   command: Extract<CliCommand, { kind: "scan" | "ci" }>,
   io: CliIO
 ): Promise<number> {
-  const discovered = discoverProject({ cwd: io.cwd });
+  const scanned = await scanProject({
+    cwd: io.cwd,
+    profile: command.profile,
+    prodOnly: command.prodOnly
+  });
+
+  if (isErr(scanned)) {
+    io.stderr(formatError(scanned.error));
+    return exitCodeForError(scanned.error);
+  }
+
+  const reportInput = {
+    project: scanned.value.project,
+    graph: scanned.value.graph,
+    evidence: scanned.value.evidence,
+    normalizedLicenses: scanned.value.normalizedLicenses,
+    riskFindings: scanned.value.riskFindings,
+    profile: command.profile,
+    prodOnly: command.prodOnly,
+    json: command.json
+  };
+
+  io.stdout(command.sarif ? renderSarifReport(reportInput) : renderScanReport(reportInput));
+
+  if (command.kind === "ci" && hasFailingFinding(scanned.value.riskFindings, command.failOn)) {
+    return 1;
+  }
+
+  return 0;
+}
+
+async function scanProject(input: {
+  cwd: string;
+  profile: Extract<CliCommand, { kind: "scan" | "ci" | "diff" }>["profile"];
+  prodOnly: boolean;
+}) {
+  const discovered = discoverProject({ cwd: input.cwd });
 
   if (isErr(discovered)) {
-    io.stderr(formatError(discovered.error));
-    return exitCodeForError(discovered.error);
+    return discovered;
   }
 
   const graph = parseBunLockfile(discovered.value.lockfile.path);
 
   if (isErr(graph)) {
-    io.stderr(formatError(graph.error));
-    return exitCodeForError(graph.error);
+    return graph;
   }
 
-  const scanGraph = command.prodOnly
+  const scanGraph = input.prodOnly
     ? {
         ...graph.value,
         nodes: graph.value.nodes.filter((node) => node.dependencyType === "production")
@@ -117,35 +243,26 @@ async function runScan(
   });
 
   if (isErr(evidence)) {
-    io.stderr(formatError(evidence.error));
-    return exitCodeForError(evidence.error);
+    return evidence;
   }
 
   const normalizedLicenses = normalizeAllLicenseEvidence(evidence.value);
   const riskFindings = evaluateLicenseRisks({
     licenses: normalizedLicenses,
     dependencies: scanGraph.nodes,
-    profile: command.profile
+    profile: input.profile
   });
 
-  const reportInput = {
-    project: discovered.value,
-    graph: scanGraph,
-    evidence: evidence.value,
-    normalizedLicenses,
-    riskFindings,
-    profile: command.profile,
-    prodOnly: command.prodOnly,
-    json: command.json
+  return {
+    ok: true as const,
+    value: {
+      project: discovered.value,
+      graph: scanGraph,
+      evidence: evidence.value,
+      normalizedLicenses,
+      riskFindings
+    }
   };
-
-  io.stdout(command.sarif ? renderSarifReport(reportInput) : renderScanReport(reportInput));
-
-  if (command.kind === "ci" && hasFailingFinding(riskFindings, command.failOn)) {
-    return 1;
-  }
-
-  return 0;
 }
 
 function renderHelp(): string {
@@ -155,12 +272,14 @@ function renderHelp(): string {
     "Usage:",
     "  ohrisk scan [--profile saas|distributed-app] [--prod] [--json|--sarif]",
     "  ohrisk ci [--profile saas|distributed-app] [--prod] [--json|--sarif] [--fail-on high|unknown|review|low]",
+    "  ohrisk diff <baseline-ref> [--profile saas|distributed-app] [--prod] [--json] [--fail-on high|unknown|review|low]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json]",
     "  ohrisk --version",
     "",
     "Commands:",
     "  scan    Find the current project and prepare a license-risk scan.",
     "  ci      Run a scan and exit non-zero when findings meet the fail threshold.",
+    "  diff    Compare current findings against a baseline git ref.",
     "  explain Explain how a license expression is classified for a profile.",
     "",
     "Options:",
@@ -168,7 +287,7 @@ function renderHelp(): string {
     "  --prod                 Limit later scan stages to production dependencies.",
     "  --json                 Print machine-readable output.",
     "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
-    "  --fail-on <severity>   CI threshold. Defaults to high.",
+    "  --fail-on <severity>   CI threshold. Defaults to high for ci.",
     "  --version, -v          Print the Ohrisk package version."
   ].join("\n");
 }

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.0 - 2026-06-18
+## 0.5.0 - 2026-06-18
 
 First public release candidate for Ohrisk.
 
@@ -13,6 +13,7 @@ First public release candidate for Ohrisk.
 - `--sarif` output for SARIF 2.1.0 code scanning upload.
 - `ohrisk ci --fail-on <severity>` for non-zero exits when findings meet a configured threshold.
 - `ohrisk explain <license-expression>` for profile-aware license risk explanation without scanning a project.
+- `ohrisk diff <baseline-ref>` for git-ref baseline comparison that reports only newly introduced findings.
 - `--version` and `-v` package version output.
 - Project discovery with clear failures for unsupported or ambiguous lockfiles.
 - Bun lockfile dependency graph parsing with direct, transitive, production, and development dependency context.
@@ -27,7 +28,6 @@ First public release candidate for Ohrisk.
 
 ### Not Included Yet
 
-- PR diff mode.
 - SBOM output.
 - Waiver, approval, or legal workflow management.
 - GitHub App integration.
