@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
+import { formatDependencyPathSegment, resolveNpmDependencyReference } from "./npm-spec";
 import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
 
 type PackageLockPackage = {
@@ -130,7 +131,8 @@ export function parsePackageLockText(
       path: [rootName ?? "<root>"],
       records,
       nodeMap,
-      seen: new Set()
+      seen: new Set(),
+      requestedName: rootDependency.name
     });
   }
 
@@ -276,16 +278,21 @@ function resolvePackageRecord(input: {
   range: string;
   parentPath?: string;
 }): PackageLockRecord | undefined {
+  const reference = resolveNpmDependencyReference(input.name, input.range);
   const nestedPath = input.parentPath
-    ? `${input.parentPath}/node_modules/${input.name}`
+    ? `${input.parentPath}/node_modules/${reference.requestedName}`
     : undefined;
-  const topLevelPath = `node_modules/${input.name}`;
+  const topLevelPath = `node_modules/${reference.requestedName}`;
 
   return input.records.find((record) => nestedPath && record.packagePath === nestedPath)
     ?? input.records.find((record) => record.packagePath === topLevelPath)
-    ?? input.records.find((record) => record.name === input.name && record.version === input.range)
-    ?? input.records.find((record) => record.name === input.name && input.range.includes(record.version))
-    ?? input.records.find((record) => record.name === input.name);
+    ?? input.records.find((record) =>
+      record.name === reference.lookupName && record.version === reference.lookupRange
+    )
+    ?? input.records.find((record) =>
+      record.name === reference.lookupName && reference.lookupRange.includes(record.version)
+    )
+    ?? input.records.find((record) => record.name === reference.lookupName);
 }
 
 function walkDependency(input: {
@@ -296,6 +303,7 @@ function walkDependency(input: {
   records: PackageLockRecord[];
   nodeMap: Map<string, DependencyNode>;
   seen: Set<string>;
+  requestedName?: string;
 }): void {
   const seenKey = input.record.packagePath;
   if (input.seen.has(seenKey)) {
@@ -305,7 +313,14 @@ function walkDependency(input: {
   const nextSeen = new Set(input.seen);
   nextSeen.add(seenKey);
 
-  const nextPath = [...input.path, input.record.id];
+  const nextPath = [
+    ...input.path,
+    formatDependencyPathSegment({
+      requestedName: input.requestedName ?? input.record.name,
+      actualName: input.record.name,
+      packageId: input.record.id
+    })
+  ];
   const existing = input.nodeMap.get(input.record.id);
 
   if (existing) {
@@ -345,7 +360,8 @@ function walkDependency(input: {
       path: nextPath,
       records: input.records,
       nodeMap: input.nodeMap,
-      seen: nextSeen
+      seen: nextSeen,
+      requestedName: childName
     });
   }
 }

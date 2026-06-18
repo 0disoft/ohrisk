@@ -116,4 +116,64 @@ describe("parsePackageLockfile", () => {
         dependencyType: "development"
       });
   });
+
+  test("resolves npm alias dependencies to the actual package identity", () => {
+    const result = parsePackageLockText(
+      JSON.stringify({
+        name: "fixture-package-lock-alias-project",
+        lockfileVersion: 3,
+        packages: {
+          "": {
+            name: "fixture-package-lock-alias-project",
+            dependencies: {
+              "compat-parent": "npm:permissive-parent@1.0.0"
+            }
+          },
+          "node_modules/compat-parent": {
+            name: "permissive-parent",
+            version: "1.0.0",
+            resolved: "file:../bun-project/.registry/permissive-parent",
+            dependencies: {
+              "compat-child": "npm:agpl-child@0.1.0"
+            }
+          },
+          "node_modules/compat-parent/node_modules/compat-child": {
+            name: "agpl-child",
+            version: "0.1.0",
+            resolved: "file:../bun-project/.registry/agpl-child"
+          }
+        }
+      }),
+      "alias-package-lock.json"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "agpl-child@0.1.0",
+      "permissive-parent@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "permissive-parent@1.0.0"))
+      .toMatchObject({
+        name: "permissive-parent",
+        direct: true,
+        paths: [[
+          "fixture-package-lock-alias-project",
+          "compat-parent -> permissive-parent@1.0.0"
+        ]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "agpl-child@0.1.0"))
+      .toMatchObject({
+        name: "agpl-child",
+        direct: false,
+        paths: [[
+          "fixture-package-lock-alias-project",
+          "compat-parent -> permissive-parent@1.0.0",
+          "compat-child -> agpl-child@0.1.0"
+        ]]
+      });
+  });
 });

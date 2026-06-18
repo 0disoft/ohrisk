@@ -3,6 +3,7 @@ import { parse as parseYaml } from "yaml";
 
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
+import { formatDependencyPathSegment, resolveNpmDependencyReference } from "./npm-spec";
 import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
 
 type PnpmLockShape = {
@@ -99,7 +100,8 @@ export function parsePnpmLockText(
       path: ["<root>"],
       packageIndex,
       nodeMap,
-      seen: new Set()
+      seen: new Set(),
+      requestedName: rootDependency.name
     });
   }
 
@@ -314,15 +316,16 @@ function resolvePackageRecord(input: {
   name: string;
   range: string;
 }): PnpmPackageRecord | undefined {
-  const candidates = input.packageIndex.get(input.name) ?? [];
   const normalizedRange = normalizePnpmReference(input.range);
+  const reference = resolveNpmDependencyReference(input.name, normalizedRange);
+  const candidates = input.packageIndex.get(reference.lookupName) ?? [];
 
   if (candidates.length <= 1) {
     return candidates[0];
   }
 
-  return candidates.find((candidate) => candidate.version === normalizedRange)
-    ?? candidates.find((candidate) => normalizedRange.includes(candidate.version))
+  return candidates.find((candidate) => candidate.version === reference.lookupRange)
+    ?? candidates.find((candidate) => reference.lookupRange.includes(candidate.version))
     ?? candidates[0];
 }
 
@@ -338,6 +341,7 @@ function walkDependency(input: {
   packageIndex: Map<string, PnpmPackageRecord[]>;
   nodeMap: Map<string, DependencyNode>;
   seen: Set<string>;
+  requestedName?: string;
 }): void {
   if (input.seen.has(input.record.key)) {
     return;
@@ -346,7 +350,14 @@ function walkDependency(input: {
   const nextSeen = new Set(input.seen);
   nextSeen.add(input.record.key);
 
-  const nextPath = [...input.path, input.record.id];
+  const nextPath = [
+    ...input.path,
+    formatDependencyPathSegment({
+      requestedName: input.requestedName ?? input.record.name,
+      actualName: input.record.name,
+      packageId: input.record.id
+    })
+  ];
   const existing = input.nodeMap.get(input.record.id);
 
   if (existing) {
@@ -385,7 +396,8 @@ function walkDependency(input: {
       path: nextPath,
       packageIndex: input.packageIndex,
       nodeMap: input.nodeMap,
-      seen: nextSeen
+      seen: nextSeen,
+      requestedName: childName
     });
   }
 }

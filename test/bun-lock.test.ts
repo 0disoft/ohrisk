@@ -61,4 +61,62 @@ describe("parseBunLockfile", () => {
 
     expect(result.error.code).toBe("BUN_LOCK_PARSE_FAILED");
   });
+
+  test("resolves npm alias dependencies to the actual package identity", () => {
+    const result = parseBunLockText(
+      JSON.stringify({
+        workspaces: {
+          "": {
+            name: "fixture-bun-alias-project",
+            dependencies: {
+              "compat-parent": "npm:permissive-parent@1.0.0"
+            }
+          }
+        },
+        packages: {
+          "compat-parent": [
+            "npm:permissive-parent@1.0.0",
+            "file:../bun-project/.registry/permissive-parent",
+            {
+              dependencies: {
+                "compat-child": "npm:agpl-child@0.1.0"
+              }
+            }
+          ],
+          "compat-child": [
+            "npm:agpl-child@0.1.0",
+            "file:../bun-project/.registry/agpl-child",
+            {}
+          ]
+        }
+      }),
+      "alias-bun.lock"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "agpl-child@0.1.0",
+      "permissive-parent@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "permissive-parent@1.0.0"))
+      .toMatchObject({
+        name: "permissive-parent",
+        direct: true,
+        paths: [["fixture-bun-alias-project", "compat-parent -> permissive-parent@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "agpl-child@0.1.0"))
+      .toMatchObject({
+        name: "agpl-child",
+        direct: false,
+        paths: [[
+          "fixture-bun-alias-project",
+          "compat-parent -> permissive-parent@1.0.0",
+          "compat-child -> agpl-child@0.1.0"
+        ]]
+      });
+  });
 });

@@ -77,4 +77,53 @@ describe("parseYarnLockfile", () => {
 
     expect(result.error.code).toBe("YARN_PACKAGE_JSON_PARSE_FAILED");
   });
+
+  test("resolves npm alias dependencies to the actual package identity", () => {
+    const result = parseYarnLockText({
+      packageJsonText: JSON.stringify({
+        name: "fixture-yarn-alias-project",
+        dependencies: {
+          "compat-parent": "npm:permissive-parent@1.0.0"
+        }
+      }),
+      lockfileText: [
+        "\"compat-parent@npm:permissive-parent@1.0.0\":",
+        "  version \"1.0.0\"",
+        "  resolved \"file:../bun-project/.registry/permissive-parent\"",
+        "  dependencies:",
+        "    compat-child \"npm:agpl-child@0.1.0\"",
+        "",
+        "\"compat-child@npm:agpl-child@0.1.0\":",
+        "  version \"0.1.0\"",
+        "  resolved \"file:../bun-project/.registry/agpl-child\""
+      ].join("\n"),
+      lockfilePath: "alias-yarn.lock"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "agpl-child@0.1.0",
+      "permissive-parent@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "permissive-parent@1.0.0"))
+      .toMatchObject({
+        name: "permissive-parent",
+        direct: true,
+        paths: [["fixture-yarn-alias-project", "compat-parent -> permissive-parent@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "agpl-child@0.1.0"))
+      .toMatchObject({
+        name: "agpl-child",
+        direct: false,
+        paths: [[
+          "fixture-yarn-alias-project",
+          "compat-parent -> permissive-parent@1.0.0",
+          "compat-child -> agpl-child@0.1.0"
+        ]]
+      });
+  });
 });

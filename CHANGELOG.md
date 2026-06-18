@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.23.0 - 2026-06-18
+## 0.24.0 - 2026-06-18
 
 First public release candidate for Ohrisk.
 
@@ -36,6 +36,7 @@ First public release candidate for Ohrisk.
 - Findings include human-readable action text alongside the stable recommendation enum.
 - Findings include stable IDs for JSON, terminal, Markdown, SARIF, and diff matching.
 - Findings include exact fingerprints for diff matching and SARIF partial fingerprints.
+- npm alias dependencies resolve to the actual package identity while keeping the alias visible in dependency paths.
 - SARIF result properties include structured reason and action fields.
 - Markdown scan reports include license confidence counts.
 - Terminal and Markdown scan summaries include missing and malformed license counts.

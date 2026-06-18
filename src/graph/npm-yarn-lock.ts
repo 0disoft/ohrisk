@@ -4,6 +4,11 @@ import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
+import {
+  formatDependencyPathSegment,
+  parseNpmPackageReference,
+  resolveNpmDependencyReference
+} from "./npm-spec";
 import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
 
 const require = createRequire(import.meta.url);
@@ -142,7 +147,8 @@ export function parseYarnLockText(input: {
       descriptorIndex,
       nameIndex,
       nodeMap,
-      seen: new Set()
+      seen: new Set(),
+      requestedName: rootDependency.name
     });
   }
 
@@ -278,20 +284,22 @@ function splitDescriptorKey(key: string): string[] {
 
 function parseDescriptor(descriptor: string): { name: string; range: string } | undefined {
   const unquoted = descriptor.replace(/^"|"$/g, "");
-  const atIndex = unquoted.lastIndexOf("@");
+  const aliasMarker = "@npm:";
+  const aliasIndex = unquoted.indexOf(aliasMarker);
+  if (aliasIndex > 0) {
+    const aliasName = unquoted.slice(0, aliasIndex);
+    const alias = parseNpmPackageReference(unquoted.slice(aliasIndex + 1));
+    if (alias && aliasName) {
+      return { name: alias.name, range: alias.reference };
+    }
+  }
 
-  if (atIndex <= 0) {
+  const parsed = parseNpmPackageReference(unquoted);
+  if (!parsed) {
     return undefined;
   }
 
-  const name = unquoted.slice(0, atIndex);
-  const range = unquoted.slice(atIndex + 1);
-
-  if (!name || !range) {
-    return undefined;
-  }
-
-  return { name, range };
+  return { name: parsed.name, range: parsed.reference };
 }
 
 function collectRootDependencies(packageJson: PackageJsonShape): RootDependency[] {
@@ -358,11 +366,12 @@ function resolvePackageRecord(input: {
   range: string;
 }): YarnPackageRecord | undefined {
   const descriptor = `${input.name}@${input.range}`;
-  const candidates = input.nameIndex.get(input.name) ?? [];
+  const reference = resolveNpmDependencyReference(input.name, input.range);
+  const candidates = input.nameIndex.get(reference.lookupName) ?? [];
 
   return input.descriptorIndex.get(descriptor)
-    ?? candidates.find((candidate) => candidate.version === input.range)
-    ?? candidates.find((candidate) => input.range.includes(candidate.version))
+    ?? candidates.find((candidate) => candidate.version === reference.lookupRange)
+    ?? candidates.find((candidate) => reference.lookupRange.includes(candidate.version))
     ?? candidates[0];
 }
 
@@ -375,6 +384,7 @@ function walkDependency(input: {
   nameIndex: Map<string, YarnPackageRecord[]>;
   nodeMap: Map<string, DependencyNode>;
   seen: Set<string>;
+  requestedName?: string;
 }): void {
   if (input.seen.has(input.record.key)) {
     return;
@@ -383,7 +393,14 @@ function walkDependency(input: {
   const nextSeen = new Set(input.seen);
   nextSeen.add(input.record.key);
 
-  const nextPath = [...input.path, input.record.id];
+  const nextPath = [
+    ...input.path,
+    formatDependencyPathSegment({
+      requestedName: input.requestedName ?? input.record.name,
+      actualName: input.record.name,
+      packageId: input.record.id
+    })
+  ];
   const existing = input.nodeMap.get(input.record.id);
 
   if (existing) {
@@ -424,7 +441,8 @@ function walkDependency(input: {
       descriptorIndex: input.descriptorIndex,
       nameIndex: input.nameIndex,
       nodeMap: input.nodeMap,
-      seen: nextSeen
+      seen: nextSeen,
+      requestedName: childName
     });
   }
 }

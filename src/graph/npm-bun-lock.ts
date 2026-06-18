@@ -2,6 +2,11 @@ import { readFileSync } from "node:fs";
 
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
+import {
+  formatDependencyPathSegment,
+  parseNpmPackageReference,
+  resolveNpmDependencyReference
+} from "./npm-spec";
 import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
 
 type BunLockWorkspace = {
@@ -84,7 +89,8 @@ export function parseBunLockText(
       path: [rootName ?? "<root>"],
       packageIndex,
       nodeMap,
-      seen: new Set()
+      seen: new Set(),
+      requestedName: rootDependency.name
     });
   }
 
@@ -170,20 +176,13 @@ function parsePackageRecords(packages: Record<string, BunLockPackageTuple>): Bun
 
 function parsePackageIdentity(input: string): { name: string; version: string } | undefined {
   const withoutProtocol = input.startsWith("npm:") ? input.slice("npm:".length) : input;
-  const atIndex = withoutProtocol.lastIndexOf("@");
+  const parsed = parseNpmPackageReference(withoutProtocol);
 
-  if (atIndex <= 0) {
+  if (!parsed) {
     return undefined;
   }
 
-  const name = withoutProtocol.slice(0, atIndex);
-  const version = withoutProtocol.slice(atIndex + 1);
-
-  if (!name || !version) {
-    return undefined;
-  }
-
-  return { name, version };
+  return { name: parsed.name, version: parsed.reference };
 }
 
 function indexPackagesByName(records: BunLockPackageRecord[]): Map<string, BunLockPackageRecord[]> {
@@ -257,14 +256,15 @@ function resolvePackageRecord(
   name: string,
   range: string
 ): BunLockPackageRecord | undefined {
-  const candidates = packageIndex.get(name) ?? [];
+  const reference = resolveNpmDependencyReference(name, range);
+  const candidates = packageIndex.get(reference.lookupName) ?? [];
 
   if (candidates.length <= 1) {
     return candidates[0];
   }
 
-  return candidates.find((candidate) => candidate.version === range)
-    ?? candidates.find((candidate) => range.includes(candidate.version))
+  return candidates.find((candidate) => candidate.version === reference.lookupRange)
+    ?? candidates.find((candidate) => reference.lookupRange.includes(candidate.version))
     ?? candidates[0];
 }
 
@@ -276,6 +276,7 @@ function walkDependency(input: {
   packageIndex: Map<string, BunLockPackageRecord[]>;
   nodeMap: Map<string, DependencyNode>;
   seen: Set<string>;
+  requestedName?: string;
 }): void {
   if (input.seen.has(input.record.id)) {
     return;
@@ -284,7 +285,14 @@ function walkDependency(input: {
   const nextSeen = new Set(input.seen);
   nextSeen.add(input.record.id);
 
-  const nextPath = [...input.path, input.record.id];
+  const nextPath = [
+    ...input.path,
+    formatDependencyPathSegment({
+      requestedName: input.requestedName ?? input.record.name,
+      actualName: input.record.name,
+      packageId: input.record.id
+    })
+  ];
   const existing = input.nodeMap.get(input.record.id);
 
   if (existing) {
@@ -317,7 +325,8 @@ function walkDependency(input: {
       path: nextPath,
       packageIndex: input.packageIndex,
       nodeMap: input.nodeMap,
-      seen: nextSeen
+      seen: nextSeen,
+      requestedName: childName
     });
   }
 }
