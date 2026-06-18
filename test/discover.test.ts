@@ -91,4 +91,48 @@ describe("discoverProject", () => {
 
     expect(result.error.code).toBe("MULTIPLE_LOCKFILES");
   });
+
+  test("uses an explicit lockfile path when a project has multiple lockfiles", () => {
+    const result = discoverProject({
+      cwd: path.join(fixturesDir, "multiple-lockfiles"),
+      lockfilePath: "package-lock.json"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.rootDir).toBe(path.join(fixturesDir, "multiple-lockfiles"));
+    expect(result.value.lockfile.kind).toBe("package-lock");
+    expect(path.basename(result.value.lockfile.path)).toBe("package-lock.json");
+  });
+
+  test("rejects unsupported explicit lockfile paths", () => {
+    const result = discoverProject({
+      cwd: path.join(fixturesDir, "multiple-lockfiles"),
+      lockfilePath: "Cargo.lock"
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected discovery to fail.");
+    }
+
+    expect(result.error.code).toBe("UNSUPPORTED_LOCKFILE");
+  });
+
+  test("rejects missing explicit lockfile paths", () => {
+    const result = discoverProject({
+      cwd: path.join(fixturesDir, "multiple-lockfiles"),
+      lockfilePath: "pnpm-lock.yaml"
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected discovery to fail.");
+    }
+
+    expect(result.error.code).toBe("LOCKFILE_NOT_FOUND");
+  });
 });

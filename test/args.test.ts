@@ -108,7 +108,15 @@ describe("parseArgs", () => {
   });
 
   test("parses scan profile, prod, and json flags", () => {
-    const parsed = parseArgs(["scan", "--profile", "distributed-app", "--prod", "--json"]);
+    const parsed = parseArgs([
+      "scan",
+      "--lockfile",
+      "package-lock.json",
+      "--profile",
+      "distributed-app",
+      "--prod",
+      "--json"
+    ]);
 
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) {
@@ -123,7 +131,8 @@ describe("parseArgs", () => {
       sarif: false,
       markdown: false,
       cyclonedx: false,
-      noWaivers: false
+      noWaivers: false,
+      lockfilePath: "package-lock.json"
     });
   });
 
@@ -253,6 +262,8 @@ describe("parseArgs", () => {
   test("parses ci profile, prod, json, fail threshold, and strict waiver checks", () => {
     const parsed = parseArgs([
       "ci",
+      "--lockfile",
+      "pnpm-lock.yaml",
       "--profile",
       "distributed-app",
       "--prod",
@@ -276,6 +287,7 @@ describe("parseArgs", () => {
       markdown: false,
       cyclonedx: false,
       noWaivers: false,
+      lockfilePath: "pnpm-lock.yaml",
       failOn: "review",
       strictWaivers: true
     });
@@ -377,6 +389,8 @@ describe("parseArgs", () => {
     const parsed = parseArgs([
       "diff",
       "main",
+      "--lockfile",
+      "bun.lock",
       "--profile",
       "distributed-app",
       "--prod",
@@ -399,6 +413,7 @@ describe("parseArgs", () => {
       prodOnly: true,
       json: true,
       markdown: false,
+      lockfilePath: "bun.lock",
       outputPath: "reports/diff.json",
       failOn: "unknown"
     });

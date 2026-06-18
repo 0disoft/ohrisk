@@ -21,6 +21,7 @@ export type CliCommand =
       markdown: boolean;
       cyclonedx: boolean;
       noWaivers: boolean;
+      lockfilePath?: string;
       outputPath?: string;
     }
   | {
@@ -32,6 +33,7 @@ export type CliCommand =
       markdown: boolean;
       cyclonedx: boolean;
       noWaivers: boolean;
+      lockfilePath?: string;
       outputPath?: string;
       failOn: RiskSeverity;
       strictWaivers: boolean;
@@ -43,6 +45,7 @@ export type CliCommand =
       prodOnly: boolean;
       json: boolean;
       markdown: boolean;
+      lockfilePath?: string;
       outputPath?: string;
       failOn?: RiskSeverity;
     }
@@ -175,6 +178,7 @@ function parseScanLikeArgs(
   let markdown = false;
   let cyclonedx = false;
   let noWaivers = false;
+  let lockfilePath: string | undefined;
   let outputPath: string | undefined;
   let failOn: RiskSeverity = "high";
   let strictWaivers = false;
@@ -225,6 +229,16 @@ function parseScanLikeArgs(
       case "--no-waivers":
         noWaivers = true;
         break;
+      case "--lockfile": {
+        const value = argv[index + 1];
+        if (!value) {
+          return missingOptionValue("--lockfile");
+        }
+
+        lockfilePath = value;
+        index += 1;
+        break;
+      }
       case "--json":
         if (sarif || markdown || cyclonedx) {
           return outputFormatConflict("--json", SCAN_OUTPUT_FORMAT_OPTIONS);
@@ -365,6 +379,7 @@ function parseScanLikeArgs(
       markdown,
       cyclonedx,
       noWaivers,
+      ...(lockfilePath ? { lockfilePath } : {}),
       ...(outputPath ? { outputPath } : {}),
       failOn,
       strictWaivers
@@ -380,6 +395,7 @@ function parseScanLikeArgs(
     markdown,
     cyclonedx,
     noWaivers,
+    ...(lockfilePath ? { lockfilePath } : {}),
     ...(outputPath ? { outputPath } : {})
   });
 }
@@ -401,6 +417,7 @@ function supportedOptionsFor(kind: "scan" | "ci"): string[] {
     "--markdown",
     "--cyclonedx",
     "--no-waivers",
+    "--lockfile",
     "--output",
     "--help",
     "-h"
@@ -543,6 +560,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
   let prodOnly = false;
   let json = false;
   let markdown = false;
+  let lockfilePath: string | undefined;
   let outputPath: string | undefined;
   let failOn: RiskSeverity | undefined;
   let baselineRef: string | undefined;
@@ -590,6 +608,16 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
       case "--prod":
         prodOnly = true;
         break;
+      case "--lockfile": {
+        const value = argv[index + 1];
+        if (!value) {
+          return missingOptionValue("--lockfile");
+        }
+
+        lockfilePath = value;
+        index += 1;
+        break;
+      }
       case "--json":
         if (markdown) {
           return outputFormatConflict("--json", DIFF_OUTPUT_FORMAT_OPTIONS);
@@ -660,6 +688,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
                 supportedOptions: [
                   "--profile",
                   "--prod",
+                  "--lockfile",
                   "--json",
                   "--markdown",
                   "--output",
@@ -711,6 +740,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
     prodOnly,
     json,
     markdown,
+    ...(lockfilePath ? { lockfilePath } : {}),
     ...(outputPath ? { outputPath } : {}),
     ...(failOn ? { failOn } : {})
   });

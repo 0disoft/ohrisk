@@ -22,6 +22,7 @@ Ohrisk is distributed as an npm package, but the CLI runs on Bun. Make sure
 The current implementation is the first npm-style vertical slice:
 
 - Bun `bun.lock`, npm `package-lock.json`, pnpm `pnpm-lock.yaml`, and Yarn v1 `yarn.lock` project discovery
+- explicit lockfile selection with `--lockfile <path>` for projects that contain more than one supported lockfile
 - direct and transitive dependency graph extraction
 - npm alias dependency resolution, including pnpm alias package keys, with alias context preserved in dependency paths
 - production, development, optional, and peer dependency classification
@@ -94,6 +95,14 @@ Supported lockfiles:
 - `package-lock.json` with either a modern `packages` section or an npm v1 dependency tree
 - `pnpm-lock.yaml` with `importers`, `packages`, and `snapshots` sections
 - Yarn v1 `yarn.lock` with the root dependency set from `package.json`
+
+Select a specific lockfile when a project contains more than one supported lockfile:
+
+```bash
+ohrisk scan --lockfile package-lock.json
+ohrisk ci --lockfile pnpm-lock.yaml --fail-on high
+ohrisk diff main --lockfile bun.lock
+```
 
 Pick the usage profile:
 
@@ -210,6 +219,7 @@ Once installed as a package, the intended command shape is:
 
 ```bash
 ohrisk scan --profile saas --prod
+ohrisk scan --lockfile package-lock.json
 ohrisk ci --fail-on high
 ohrisk ci --strict-waivers
 ohrisk scan --no-waivers

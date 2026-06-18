@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.64.0 - 2026-06-19
+
+### Added
+
+- `scan`, `ci`, and `diff` now accept `--lockfile <path>` so projects with multiple supported lockfiles can select the intended lockfile explicitly.
+
 ## 0.63.0 - 2026-06-19
 
 ### Fixed

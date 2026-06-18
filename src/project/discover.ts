@@ -18,6 +18,7 @@ export type ProjectInput = {
 
 export type DiscoverProjectOptions = {
   cwd?: string;
+  lockfilePath?: string;
 };
 
 const SUPPORTED_LOCKFILES: Record<string, SupportedLockfileKind> = {
@@ -40,6 +41,13 @@ export function discoverProject(
   const startDir = path.resolve(options.cwd ?? process.cwd());
 
   try {
+    if (options.lockfilePath) {
+      return discoverExplicitLockfile({
+        cwd: startDir,
+        lockfilePath: options.lockfilePath
+      });
+    }
+
     for (const dir of ancestorsFrom(startDir)) {
       const lockfiles = findKnownLockfiles(dir);
       const hasPackageManifest = existsSync(path.join(dir, "package.json"));
@@ -132,6 +140,50 @@ export function discoverProject(
       }
     })
   );
+}
+
+function discoverExplicitLockfile(input: {
+  cwd: string;
+  lockfilePath: string;
+}): Result<ProjectInput, OhriskError> {
+  const lockfilePath = path.resolve(input.cwd, input.lockfilePath);
+  const lockfileName = path.basename(lockfilePath);
+  const kind = SUPPORTED_LOCKFILES[lockfileName];
+
+  if (!kind) {
+    return err(
+      createError({
+        code: "UNSUPPORTED_LOCKFILE",
+        category: "unsupported_input",
+        message: "Explicit lockfile path is not a supported lockfile name. Ohrisk currently supports bun.lock, package-lock.json, pnpm-lock.yaml, and Yarn v1 yarn.lock.",
+        details: {
+          lockfilePath,
+          supportedLockfiles: Object.keys(SUPPORTED_LOCKFILES)
+        }
+      })
+    );
+  }
+
+  if (!existsSync(lockfilePath)) {
+    return err(
+      createError({
+        code: "LOCKFILE_NOT_FOUND",
+        category: "invalid_input",
+        message: "Explicit lockfile path does not exist.",
+        details: {
+          lockfilePath
+        }
+      })
+    );
+  }
+
+  return ok({
+    rootDir: path.dirname(lockfilePath),
+    lockfile: {
+      kind,
+      path: lockfilePath
+    }
+  });
 }
 
 function findKnownLockfiles(dir: string): string[] {

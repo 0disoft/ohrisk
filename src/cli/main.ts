@@ -70,6 +70,7 @@ async function runDiff(
 ): Promise<number> {
   const current = await scanProject({
     cwd: io.cwd,
+    lockfilePath: command.lockfilePath,
     profile: command.profile,
     prodOnly: command.prodOnly,
     applyWaivers: false
@@ -223,6 +224,7 @@ async function runScan(
 ): Promise<number> {
   const scanned = await scanProject({
     cwd: io.cwd,
+    lockfilePath: command.lockfilePath,
     profile: command.profile,
     prodOnly: command.prodOnly,
     applyWaivers: !command.noWaivers
@@ -287,11 +289,15 @@ function hasWaiverDrift(input: {
 
 async function scanProject(input: {
   cwd: string;
+  lockfilePath?: string;
   profile: Extract<CliCommand, { kind: "scan" | "ci" | "diff" }>["profile"];
   prodOnly: boolean;
   applyWaivers: boolean;
 }) {
-  const discovered = discoverProject({ cwd: input.cwd });
+  const discovered = discoverProject({
+    cwd: input.cwd,
+    ...(input.lockfilePath ? { lockfilePath: input.lockfilePath } : {})
+  });
 
   if (isErr(discovered)) {
     return discovered;
@@ -438,9 +444,9 @@ function renderTopLevelHelp(): string {
     "Ohrisk",
     "",
     "Usage:",
-    "  ohrisk scan [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--cyclonedx] [--output <file>]",
-    "  ohrisk ci [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--cyclonedx] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>]",
-    "  ohrisk diff <baseline-ref> [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
+    "  ohrisk scan [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--cyclonedx] [--output <file>]",
+    "  ohrisk ci [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--cyclonedx] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>]",
+    "  ohrisk diff <baseline-ref> [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
     "  ohrisk help [command]",
     "  ohrisk version",
@@ -455,6 +461,7 @@ function renderTopLevelHelp(): string {
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
+    "  --lockfile <path>      Use a specific supported lockfile path.",
     "  --prod                 Exclude development-only dependencies.",
     "  --no-waivers           Ignore local .ohrisk-waivers.json files.",
     "  --json                 Print machine-readable output.",
@@ -474,10 +481,11 @@ function renderScanHelp(): string {
     "Ohrisk scan",
     "",
     "Usage:",
-    "  ohrisk scan [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--cyclonedx] [--output <file>]",
+    "  ohrisk scan [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--cyclonedx] [--output <file>]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
+    "  --lockfile <path>      Use a specific supported lockfile path.",
     "  --prod                 Exclude development-only dependencies.",
     "  --no-waivers           Ignore local .ohrisk-waivers.json files.",
     "  --json                 Print machine-readable output.",
@@ -493,10 +501,11 @@ function renderCiHelp(): string {
     "Ohrisk ci",
     "",
     "Usage:",
-    "  ohrisk ci [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--cyclonedx] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>]",
+    "  ohrisk ci [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--cyclonedx] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
+    "  --lockfile <path>      Use a specific supported lockfile path.",
     "  --prod                 Exclude development-only dependencies.",
     "  --no-waivers           Ignore local .ohrisk-waivers.json files.",
     "  --json                 Print machine-readable output.",
@@ -514,10 +523,11 @@ function renderDiffHelp(): string {
     "Ohrisk diff",
     "",
     "Usage:",
-    "  ohrisk diff <baseline-ref> [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
+    "  ohrisk diff <baseline-ref> [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
+    "  --lockfile <path>      Use a specific supported lockfile path.",
     "  --prod                 Exclude development-only dependencies.",
     "  --json                 Print machine-readable output.",
     "  --markdown             Print a Markdown report for PRs or release notes.",
