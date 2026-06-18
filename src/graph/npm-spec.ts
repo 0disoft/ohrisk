@@ -9,9 +9,9 @@ export function resolveNpmDependencyReference(
   requestedName: string,
   range: string
 ): NpmDependencyReference {
-  const alias = parseNpmPackageReference(range);
+  const alias = parseNpmAliasReference(range);
 
-  if (range.startsWith("npm:") && alias) {
+  if (alias) {
     return {
       requestedName,
       lookupName: alias.name,
@@ -26,6 +26,22 @@ export function resolveNpmDependencyReference(
     lookupRange: range,
     aliased: false
   };
+}
+
+export function parseNpmAliasReference(
+  value: string
+): { name: string; reference: string } | undefined {
+  if (value.startsWith("npm:")) {
+    return parseNpmPackageReference(value);
+  }
+
+  const aliasMarker = "@npm:";
+  const aliasIndex = value.indexOf(aliasMarker);
+  if (aliasIndex <= 0) {
+    return undefined;
+  }
+
+  return parseNpmPackageReference(value.slice(aliasIndex + 1));
 }
 
 export function parseNpmPackageReference(

@@ -7,6 +7,7 @@ import {
   addUniqueInstallName,
   dependencyInstallName,
   formatDependencyPathSegment,
+  parseNpmAliasReference,
   resolveNpmDependencyReference
 } from "./npm-spec";
 import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
@@ -207,6 +208,11 @@ function readPackageIdentity(
 function parsePackageKey(key: string): { name: string; version: string } | undefined {
   const withoutLeadingSlash = key.replace(/^\//, "");
   const withoutPeerSuffix = withoutLeadingSlash.replace(/\(.+\)$/, "").split("_")[0] ?? "";
+  const alias = parseNpmAliasReference(withoutPeerSuffix);
+  if (alias) {
+    return { name: alias.name, version: alias.reference };
+  }
+
   const atIndex = withoutPeerSuffix.lastIndexOf("@");
 
   if (atIndex <= 0) {
