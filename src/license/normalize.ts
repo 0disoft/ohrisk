@@ -34,6 +34,10 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
   if (parsed.malformed) {
     signals.push("malformed");
 
+    if (evidence.files.length > 0) {
+      signals.push("custom-text");
+    }
+
     return {
       packageId: evidence.packageId,
       original: parsed.original,
@@ -67,6 +71,11 @@ function readPackageLicenseExpression(evidence: LicenseEvidence): string | undef
     return evidence.packageJsonLicense;
   }
 
+  const licenseObjectType = readLicenseObjectType(evidence.packageJsonLicenses);
+  if (licenseObjectType) {
+    return licenseObjectType;
+  }
+
   if (Array.isArray(evidence.packageJsonLicenses)) {
     const choices = evidence.packageJsonLicenses
       .map((item) => {
@@ -89,6 +98,15 @@ function readPackageLicenseExpression(evidence: LicenseEvidence): string | undef
   }
 
   return undefined;
+}
+
+function readLicenseObjectType(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value) || !("type" in value)) {
+    return undefined;
+  }
+
+  const type = (value as { type?: unknown }).type;
+  return typeof type === "string" ? type : undefined;
 }
 
 function describeEvidenceSources(evidence: LicenseEvidence): string[] {

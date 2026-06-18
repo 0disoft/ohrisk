@@ -28,7 +28,8 @@ const NETWORK_COPYLEFT_LICENSE_PREFIXES = [
 const COMMERCIAL_RESTRICTION_LICENSES = new Set([
   "SSPL-1.0",
   "BUSL-1.1",
-  "Commons-Clause"
+  "Commons-Clause",
+  "UNLICENSED"
 ]);
 
 export function evaluateLicenseRisk(input: {

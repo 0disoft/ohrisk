@@ -115,6 +115,26 @@ describe("evaluateLicenseRisk", () => {
     expect(finding.recommendation).toBe("replace");
   });
 
+  test("marks UNLICENSED packages as high risk", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "package@1.0.0",
+        original: "UNLICENSED",
+        expression: "UNLICENSED",
+        choices: ["UNLICENSED"],
+        joiner: "single",
+        signals: [],
+        evidenceSources: ["source: local", "package.json license: UNLICENSED"],
+        confidence: "high"
+      },
+      dependency: baseDependency,
+      profile: "saas"
+    });
+
+    expect(finding.severity).toBe("high");
+    expect(finding.recommendation).toBe("replace");
+  });
+
   test("is stricter for GPL in distributed apps than SaaS", () => {
     const license = {
       packageId: "package@1.0.0",

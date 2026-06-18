@@ -5,7 +5,8 @@ const LICENSE_ALIASES = new Map<string, string>([
   ["bsd", "BSD-3-Clause"],
   ["bsd license", "BSD-3-Clause"],
   ["mit license", "MIT"],
-  ["the mit license", "MIT"]
+  ["the mit license", "MIT"],
+  ["unlicensed", "UNLICENSED"]
 ]);
 
 const VALID_SPDX_ID = /^[A-Za-z0-9-.+]+$/;
@@ -104,16 +105,17 @@ function normalizeLicenseToken(token: string): {
     };
   }
 
-  const alias = LICENSE_ALIASES.get(token.toLowerCase());
+  const tokenWithoutException = stripWithException(token);
+  const alias = LICENSE_ALIASES.get(tokenWithoutException.toLowerCase());
   if (alias) {
     return {
       normalized: alias,
       malformed: false,
-      usedAlias: true
+      usedAlias: alias !== tokenWithoutException
     };
   }
 
-  if (!VALID_SPDX_ID.test(token)) {
+  if (!VALID_SPDX_ID.test(tokenWithoutException)) {
     return {
       normalized: token,
       malformed: true,
@@ -122,10 +124,14 @@ function normalizeLicenseToken(token: string): {
   }
 
   return {
-    normalized: token,
+    normalized: tokenWithoutException,
     malformed: false,
-    usedAlias: false
+    usedAlias: tokenWithoutException !== token
   };
+}
+
+function stripWithException(token: string): string {
+  return token.split(/\s+WITH\s+/i)[0]?.trim() ?? token;
 }
 
 function rebuildExpression(original: string, normalizedTokens: string[]): string {

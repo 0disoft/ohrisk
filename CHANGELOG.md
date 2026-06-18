@@ -17,6 +17,7 @@ First public release candidate for Ohrisk.
 - HTTP(S) tarball evidence collection when the lockfile points directly to a tarball.
 - `package.json` license field, legacy `licenses` field, `LICENSE`, `LICENCE`, `COPYING`, and `NOTICE` evidence handling.
 - SPDX-like license expression parsing with simple `AND` and `OR` handling.
+- SPDX `WITH` exception handling, deprecated package license object handling, and explicit `UNLICENSED` risk classification.
 - Risk findings for low, review, high, and unknown license evidence.
 - Terminal findings sorted by severity with package path, recommendation, and evidence snippets.
 

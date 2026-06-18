@@ -63,6 +63,29 @@ describe("collectTarballEvidence", () => {
       }
     ]);
   });
+
+  test("preserves deprecated package.json license objects from tarballs", () => {
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "tarball-legacy-license",
+        version: "1.0.0",
+        license: { type: "BSD" }
+      }),
+      "package/LICENSE": "BSD license fixture text."
+    });
+
+    const result = collectTarballEvidence({
+      packageId: "tarball-legacy-license@1.0.0",
+      tarball
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.packageJsonLicenses).toEqual({ type: "BSD" });
+  });
 });
 
 describe("collectGraphEvidence", () => {

@@ -46,6 +46,28 @@ describe("parseSpdxExpression", () => {
     });
   });
 
+  test("normalizes SPDX exception expressions to their base license", () => {
+    expect(parseSpdxExpression("GPL-2.0-only WITH Classpath-exception-2.0")).toEqual({
+      original: "GPL-2.0-only WITH Classpath-exception-2.0",
+      expression: "GPL-2.0-only",
+      choices: ["GPL-2.0-only"],
+      joiner: "single",
+      malformed: false,
+      usedAlias: true
+    });
+  });
+
+  test("recognizes UNLICENSED as a license decision instead of malformed text", () => {
+    expect(parseSpdxExpression("UNLICENSED")).toEqual({
+      original: "UNLICENSED",
+      expression: "UNLICENSED",
+      choices: ["UNLICENSED"],
+      joiner: "single",
+      malformed: false,
+      usedAlias: false
+    });
+  });
+
   test("marks malformed expressions", () => {
     const parsed = parseSpdxExpression("not a license ???");
 
@@ -114,6 +136,46 @@ describe("normalizeLicenseEvidence", () => {
       joiner: "single",
       signals: ["missing", "custom-text"],
       evidenceSources: ["source: local", "file: LICENSE (license)"],
+      confidence: "low"
+    });
+  });
+
+  test("reads deprecated package.json license objects", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "legacy-license-object@1.0.0",
+      packageJsonLicenses: { type: "BSD" },
+      files: [],
+      source: "local",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      original: "BSD",
+      expression: "BSD-3-Clause",
+      choices: ["BSD-3-Clause"],
+      confidence: "medium"
+    });
+  });
+
+  test("keeps custom license-file evidence when package license text is malformed", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "see-license-package@1.0.0",
+      packageJsonLicense: "SEE LICENSE IN LICENSE",
+      files: [
+        {
+          path: "LICENSE",
+          kind: "license",
+          text: "Custom license terms."
+        }
+      ],
+      source: "local",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      original: "SEE LICENSE IN LICENSE",
+      choices: ["SEE LICENSE IN LICENSE"],
+      signals: ["malformed", "custom-text"],
       confidence: "low"
     });
   });

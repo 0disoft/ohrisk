@@ -118,11 +118,17 @@ function readLicenseFields(packageJson: Record<string, unknown>): {
 } {
   const license = packageJson.license;
   const licenses = packageJson.licenses;
+  const legacyLicenseObject = isPlainLicenseObject(license) ? license : undefined;
 
   return {
     ...(typeof license === "string" ? { packageJsonLicense: license } : {}),
+    ...(legacyLicenseObject !== undefined ? { packageJsonLicenses: legacyLicenseObject } : {}),
     ...(licenses !== undefined ? { packageJsonLicenses: licenses } : {})
   };
+}
+
+function isPlainLicenseObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function normalizePackagePath(path: string): string {
