@@ -1,11 +1,14 @@
 import type { DependencyGraph, DependencyNode } from "../graph/types";
 import type { NormalizedLicense } from "../license/types";
+import type { RiskFinding } from "../policy/types";
 import type { ProjectInput } from "../project/discover";
 
 export type CycloneDxReportInput = {
   project: ProjectInput;
   graph: DependencyGraph;
   normalizedLicenses: NormalizedLicense[];
+  riskFindings: RiskFinding[];
+  waiverMode: "local" | "ignored";
 };
 
 type CycloneDxComponent = {
@@ -36,11 +39,15 @@ export function renderCycloneDxReport(input: CycloneDxReportInput): string {
   const licensesByPackageId = new Map(
     input.normalizedLicenses.map((license) => [license.packageId, license])
   );
+  const findingsByPackageId = new Map(
+    input.riskFindings.map((finding) => [finding.packageId, finding])
+  );
 
   const components = input.graph.nodes.map((node) =>
     renderComponent({
       node,
-      license: licensesByPackageId.get(node.id)
+      license: licensesByPackageId.get(node.id),
+      finding: findingsByPackageId.get(node.id)
     })
   );
 
@@ -67,6 +74,10 @@ export function renderCycloneDxReport(input: CycloneDxReportInput): string {
           {
             name: "ohrisk:lockfilePath",
             value: input.project.lockfile.path
+          },
+          {
+            name: "ohrisk:waiverMode",
+            value: input.waiverMode
           }
         ]
       },
@@ -94,6 +105,7 @@ export function renderCycloneDxReport(input: CycloneDxReportInput): string {
 function renderComponent(input: {
   node: DependencyNode;
   license: NormalizedLicense | undefined;
+  finding: RiskFinding | undefined;
 }): CycloneDxComponent {
   const licenses = input.license ? renderLicenses(input.license) : [];
 
@@ -127,6 +139,30 @@ function renderComponent(input: {
             {
               name: "ohrisk:licenseSignals",
               value: input.license.signals.join(",")
+            }
+          ]
+        : []),
+      ...(input.finding
+        ? [
+            {
+              name: "ohrisk:findingId",
+              value: input.finding.id
+            },
+            {
+              name: "ohrisk:fingerprint",
+              value: input.finding.fingerprint
+            },
+            {
+              name: "ohrisk:riskSeverity",
+              value: input.finding.severity
+            },
+            {
+              name: "ohrisk:recommendation",
+              value: input.finding.recommendation
+            },
+            {
+              name: "ohrisk:action",
+              value: input.finding.action
             }
           ]
         : [])

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.54.0 - 2026-06-19
+
+### Added
+
+- CycloneDX SBOM components now include active Ohrisk risk decision properties for audit workflows.
+- CycloneDX SBOM metadata now includes the Ohrisk waiver mode.
+
 ## 0.53.0 - 2026-06-19
 
 ### Added

@@ -45,7 +45,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.53.0"]);
+    expect(stdout).toEqual(["ohrisk 0.54.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -414,7 +414,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.53.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.54.0");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
@@ -605,6 +605,10 @@ describe("main", () => {
       name: "ohrisk:lockfileKind",
       value: "bun"
     });
+    expect(payload.metadata.properties).toContainEqual({
+      name: "ohrisk:waiverMode",
+      value: "local"
+    });
     expect(payload.components).toHaveLength(5);
     expect(payload.components.map((component) => component.name)).not.toContain("dev-risk");
 
@@ -630,6 +634,23 @@ describe("main", () => {
       name: "ohrisk:licenseSignals",
       value: "missing"
     });
+
+    const highRisk = payload.components.find((component) => component.name === "agpl-child");
+    expect(highRisk?.properties).toContainEqual({
+      name: "ohrisk:riskSeverity",
+      value: "high"
+    });
+    expect(highRisk?.properties).toContainEqual({
+      name: "ohrisk:recommendation",
+      value: "replace"
+    });
+    expect(highRisk?.properties).toContainEqual({
+      name: "ohrisk:action",
+      value: "Replace this package or escalate before shipping."
+    });
+    expect(highRisk?.properties.some(
+      (property) => property.name === "ohrisk:fingerprint" && property.value.includes("agpl-child@0.1.0")
+    )).toBe(true);
 
     const projectDependencies = payload.dependencies.find((dependency) => dependency.ref === "project");
     expect([...(projectDependencies?.dependsOn ?? [])].sort()).toEqual([

@@ -45,7 +45,7 @@ The current implementation is the first npm-style vertical slice:
 - SARIF 2.1.0 reports for code scanning upload
 - waived findings in SARIF output as externally suppressed results
 - Markdown reports for PR comments and release notes
-- CycloneDX 1.5 JSON SBOM reports
+- CycloneDX 1.5 JSON SBOM reports with Ohrisk risk decision properties
 - stable finding IDs for PR comments and future waivers
 - local `.ohrisk-waivers.json` waivers by finding ID or fingerprint
 - stable diff matching that ignores reason and evidence prose churn while surfacing severity, recommendation, and action changes
@@ -60,6 +60,7 @@ The current implementation is the first npm-style vertical slice:
 - strict CI waiver drift checks for expired or unmatched local waivers
 - raw scan and CI mode with `--no-waivers` when waiver files should be ignored
 - explicit waiver mode in JSON, terminal, Markdown, and SARIF reports
+- explicit waiver mode in CycloneDX SBOM metadata
 
 Central approval workflows, GitHub App checks, and ecosystem adapters beyond
 npm-style lockfiles are not part of this slice yet.
