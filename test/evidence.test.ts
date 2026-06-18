@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -147,6 +148,7 @@ describe("collectGraphEvidence", () => {
             version: "1.2.3",
             ecosystem: "npm",
             resolved: "https://registry.example.test/remote-fixture/-/remote-fixture-1.2.3.tgz",
+            integrity: integrityFor(tarball),
             dependencyType: "production",
             direct: true,
             paths: [["root", "remote-fixture@1.2.3"]]
@@ -184,6 +186,108 @@ describe("collectGraphEvidence", () => {
         ]
       })
     ]);
+  });
+
+  test("rejects local tarballs that do not match lockfile integrity", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-local-integrity-"));
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "local-integrity-fixture",
+        version: "1.0.0",
+        license: "MIT"
+      }),
+      "package/LICENSE": "MIT License fixture text."
+    });
+    const tarballPath = path.join(projectRoot, "local-integrity-fixture.tgz");
+    writeFileSync(tarballPath, tarball);
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "bun.lock",
+          nodes: [
+            {
+              id: "local-integrity-fixture@1.0.0",
+              name: "local-integrity-fixture",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved: "file:local-integrity-fixture.tgz",
+              integrity: integrityFor(Buffer.from("different tarball bytes")),
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "local-integrity-fixture@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot
+      });
+
+      expect(evidence.ok).toBe(false);
+      if (evidence.ok) {
+        throw new Error("Expected local tarball integrity mismatch to fail.");
+      }
+
+      expect(evidence.error.code).toBe("PACKAGE_INTEGRITY_CHECK_FAILED");
+      expect(evidence.error.category).toBe("unsupported_input");
+      expect(evidence.error.details).toMatchObject({
+        packageId: "local-integrity-fixture@1.0.0",
+        resolved: "file:local-integrity-fixture.tgz"
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects remote tarballs that do not match lockfile integrity", async () => {
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "remote-integrity-fixture",
+        version: "1.0.0",
+        license: "MIT"
+      }),
+      "package/LICENSE": "MIT License fixture text."
+    });
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "remote-integrity-fixture@1.0.0",
+            name: "remote-integrity-fixture",
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved: "https://registry.example.test/remote-integrity-fixture/-/remote-integrity-fixture-1.0.0.tgz",
+            integrity: integrityFor(Buffer.from("different tarball bytes")),
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "remote-integrity-fixture@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async () => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        arrayBuffer: async () => tarball.buffer.slice(
+          tarball.byteOffset,
+          tarball.byteOffset + tarball.byteLength
+        ) as ArrayBuffer
+      })
+    });
+
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected remote tarball integrity mismatch to fail.");
+    }
+
+    expect(evidence.error.code).toBe("PACKAGE_INTEGRITY_CHECK_FAILED");
+    expect(evidence.error.category).toBe("unsupported_input");
+    expect(evidence.error.details).toMatchObject({
+      packageId: "remote-integrity-fixture@1.0.0",
+      resolved: "https://registry.example.test/remote-integrity-fixture/-/remote-integrity-fixture-1.0.0.tgz"
+    });
   });
 
   test("resolves npm registry metadata when a node has no direct artifact", async () => {
@@ -553,6 +657,10 @@ function createTarGz(files: Record<string, string>): Buffer {
 
   chunks.push(Buffer.alloc(1024));
   return gzipSync(Buffer.concat(chunks));
+}
+
+function integrityFor(value: Buffer): string {
+  return `sha512-${createHash("sha512").update(value).digest("base64")}`;
 }
 
 function createInstalledPackageProject(input: {

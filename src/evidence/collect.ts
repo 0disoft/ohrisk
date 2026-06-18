@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -76,6 +77,7 @@ async function collectNodeEvidence(input: {
     return collectRemoteTarballEvidence({
       packageId: input.node.id,
       resolved: input.node.resolved,
+      integrity: input.node.integrity,
       fetchArtifact: input.fetchArtifact
     });
   }
@@ -114,9 +116,21 @@ function collectLocalPathEvidence(input: {
     });
   }
 
+  const tarball = readFileSync(input.localPath);
+  const verified = verifyPackageIntegrity({
+    packageId: input.node.id,
+    resolved: input.node.resolved,
+    integrity: input.node.integrity,
+    tarball
+  });
+
+  if (!verified.ok) {
+    return err(verified.error);
+  }
+
   return collectTarballEvidence({
     packageId: input.node.id,
-    tarball: readFileSync(input.localPath)
+    tarball
   });
 }
 
@@ -166,6 +180,7 @@ async function collectRegistryTarballEvidence(input: {
     return collectRemoteTarballEvidence({
       packageId: input.node.id,
       resolved: tarballUrl,
+      integrity: input.node.integrity,
       fetchArtifact: input.fetchArtifact
     });
   } catch (cause) {
@@ -217,6 +232,7 @@ function resolveNodeModulesPackage(packageName: string, projectRoot: string): st
 async function collectRemoteTarballEvidence(input: {
   packageId: string;
   resolved: string;
+  integrity?: string;
   fetchArtifact: ArtifactFetcher;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   if (!isHttpUrl(input.resolved)) {
@@ -247,9 +263,21 @@ async function collectRemoteTarballEvidence(input: {
       );
     }
 
+    const tarball = Buffer.from(await response.arrayBuffer());
+    const verified = verifyPackageIntegrity({
+      packageId: input.packageId,
+      resolved: input.resolved,
+      integrity: input.integrity,
+      tarball
+    });
+
+    if (!verified.ok) {
+      return err(verified.error);
+    }
+
     return collectTarballEvidence({
       packageId: input.packageId,
-      tarball: Buffer.from(await response.arrayBuffer())
+      tarball
     });
   } catch (cause) {
     return err(
@@ -269,6 +297,92 @@ async function collectRemoteTarballEvidence(input: {
 
 function isHttpUrl(value: string): boolean {
   return value.startsWith("https://") || value.startsWith("http://");
+}
+
+function verifyPackageIntegrity(input: {
+  packageId: string;
+  resolved: string | undefined;
+  integrity: string | undefined;
+  tarball: Buffer;
+}): Result<void, OhriskError> {
+  if (!input.integrity) {
+    return ok(undefined);
+  }
+
+  const supported = parseSupportedIntegrityEntries(input.integrity);
+  if (supported.length === 0) {
+    return err(
+      createError({
+        code: "PACKAGE_INTEGRITY_CHECK_FAILED",
+        category: "unsupported_input",
+        message: "Package artifact integrity could not be verified because no supported digest was found.",
+        details: {
+          packageId: input.packageId,
+          resolved: input.resolved,
+          integrity: input.integrity,
+          supportedAlgorithms: ["sha512", "sha384", "sha256", "sha1"]
+        }
+      })
+    );
+  }
+
+  const computed: string[] = [];
+  for (const entry of supported) {
+    const actualDigest = createHash(entry.algorithm).update(input.tarball).digest();
+    const actual = `${entry.algorithm}-${actualDigest.toString("base64")}`;
+    computed.push(actual);
+
+    if (
+      actualDigest.byteLength === entry.digest.byteLength
+      && timingSafeEqual(actualDigest, entry.digest)
+    ) {
+      return ok(undefined);
+    }
+  }
+
+  return err(
+    createError({
+      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
+      category: "unsupported_input",
+      message: "Package artifact integrity did not match the lockfile digest.",
+      details: {
+        packageId: input.packageId,
+        resolved: input.resolved,
+        integrity: input.integrity,
+        computed
+      }
+    })
+  );
+}
+
+function parseSupportedIntegrityEntries(
+  integrity: string
+): Array<{ algorithm: "sha512" | "sha384" | "sha256" | "sha1"; digest: Buffer }> {
+  const supportedAlgorithms = new Set(["sha512", "sha384", "sha256", "sha1"]);
+
+  return integrity
+    .split(/\s+/)
+    .map((entry) => {
+      const separatorIndex = entry.indexOf("-");
+      if (separatorIndex <= 0) {
+        return undefined;
+      }
+
+      const algorithm = entry.slice(0, separatorIndex);
+      const digest = entry.slice(separatorIndex + 1);
+      if (!supportedAlgorithms.has(algorithm) || digest === "") {
+        return undefined;
+      }
+
+      return {
+        algorithm: algorithm as "sha512" | "sha384" | "sha256" | "sha1",
+        digest: Buffer.from(digest, "base64")
+      };
+    })
+    .filter((entry): entry is {
+      algorithm: "sha512" | "sha384" | "sha256" | "sha1";
+      digest: Buffer;
+    } => entry !== undefined);
 }
 
 function npmRegistryPackageUrl(name: string): string {
