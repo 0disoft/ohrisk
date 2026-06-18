@@ -44,6 +44,30 @@ describe("parseSpdxExpression", () => {
       malformed: false,
       usedAlias: true
     });
+
+    expect(parseSpdxExpression("Apache License, Version 2.0")).toMatchObject({
+      original: "Apache License, Version 2.0",
+      expression: "Apache-2.0",
+      choices: ["Apache-2.0"],
+      malformed: false,
+      usedAlias: true
+    });
+
+    expect(parseSpdxExpression("BSD 2-Clause")).toMatchObject({
+      original: "BSD 2-Clause",
+      expression: "BSD-2-Clause",
+      choices: ["BSD-2-Clause"],
+      malformed: false,
+      usedAlias: true
+    });
+
+    expect(parseSpdxExpression("ISC License")).toMatchObject({
+      original: "ISC License",
+      expression: "ISC",
+      choices: ["ISC"],
+      malformed: false,
+      usedAlias: true
+    });
   });
 
   test("normalizes SPDX exception expressions to their base license", () => {
