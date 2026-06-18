@@ -4,7 +4,7 @@
 
 ### Added
 
-- Release verification now installs the packed tarball into a temporary consumer project and smoke-tests the packaged `ohrisk` bin.
+- Release verification now installs the packed tarball into a temporary consumer project and smoke-tests the packaged `ohrisk` bin with `version` and `scan --json`.
 - Usage documentation now shows the installed `ohrisk` CLI command instead of source-tree development commands.
 
 ## 0.58.0 - 2026-06-19

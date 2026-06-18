@@ -31,9 +31,6 @@ try {
         type: "module",
         dependencies: {
           ohrisk: `file:${tarballPath}`
-        },
-        scripts: {
-          smoke: "ohrisk version"
         }
       },
       null,
@@ -43,12 +40,27 @@ try {
   );
 
   run("bun", ["install"], consumerDir);
-  const smokeOutput = run("bun", ["run", "smoke"], consumerDir).trim();
+  const ohriskBin = path.join(
+    consumerDir,
+    "node_modules",
+    ".bin",
+    process.platform === "win32" ? "ohrisk.exe" : "ohrisk"
+  );
+
+  const smokeOutput = run(ohriskBin, ["version"], consumerDir).trim();
   const expectedOutput = `ohrisk ${expectedVersion}`;
 
   if (!smokeOutput.includes(expectedOutput)) {
     throw new Error(
       `Packaged CLI smoke test expected "${expectedOutput}" but received "${smokeOutput}".`
+    );
+  }
+
+  const scanOutput = run(ohriskBin, ["scan", "--json"], consumerDir);
+  const scanReport = readJsonObject(scanOutput);
+  if (scanReport.status !== "profile_risk_evaluated") {
+    throw new Error(
+      `Packaged CLI scan smoke test expected status "profile_risk_evaluated" but received "${String(scanReport.status)}".`
     );
   }
 } finally {
@@ -80,11 +92,7 @@ function run(command: string, args: string[], cwd: string): string {
 }
 
 function readPackageVersion(rootDir: string): string {
-  const packageJson = JSON.parse(
-    readFileSync(path.join(rootDir, "package.json"), "utf8")
-  ) as {
-    version?: unknown;
-  };
+  const packageJson = readJsonObject(readFileSync(path.join(rootDir, "package.json"), "utf8"));
 
   if (typeof packageJson.version !== "string") {
     throw new Error("package.json must contain a string version.");
@@ -96,8 +104,21 @@ function readPackageVersion(rootDir: string): string {
 function readFirstJsonObject(stdout: string): { filename?: unknown } | undefined {
   const parsed = JSON.parse(stdout) as unknown;
   if (Array.isArray(parsed)) {
-    return parsed[0] as { filename?: unknown } | undefined;
+    return isJsonObject(parsed[0]) ? parsed[0] : undefined;
   }
 
-  return parsed as { filename?: unknown };
+  return isJsonObject(parsed) ? parsed : undefined;
+}
+
+function readJsonObject(text: string): Record<string, unknown> {
+  const parsed = JSON.parse(text) as unknown;
+  if (!isJsonObject(parsed)) {
+    throw new Error("Expected a JSON object.");
+  }
+
+  return parsed;
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
