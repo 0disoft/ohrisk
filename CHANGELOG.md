@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.55.1 - 2026-06-19
+
+### Fixed
+
+- Commercial restriction signals no longer override parseable `OR` license choices when a lower-risk branch is available.
+
 ## 0.55.0 - 2026-06-19
 
 ### Added

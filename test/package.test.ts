@@ -31,7 +31,7 @@ describe("package metadata", () => {
     };
 
     expect(packageJson.name).toBe("ohrisk");
-    expect(packageJson.version).toBe("0.55.0");
+    expect(packageJson.version).toBe("0.55.1");
     expect(packageJson.private).toBeUndefined();
     expect(packageJson.license).toBe("MIT");
     expect(packageJson.packageManager).toBe("bun@1.3.14");

@@ -128,6 +128,26 @@ describe("evaluateLicenseRisk", () => {
     expect(finding.severity).toBe("low");
   });
 
+  test("does not let commercial restriction signals override parseable OR choices", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "package@1.0.0",
+        original: "MIT OR BUSL-1.1",
+        expression: "MIT OR BUSL-1.1",
+        choices: ["MIT", "BUSL-1.1"],
+        joiner: "or",
+        signals: ["commercial-restriction"],
+        evidenceSources: ["source: registry", "package.json license: MIT OR BUSL-1.1"],
+        confidence: "high"
+      },
+      dependency: baseDependency,
+      profile: "saas"
+    });
+
+    expect(finding.severity).toBe("low");
+    expect(finding.recommendation).toBe("allow");
+  });
+
   test("uses the riskiest branch for AND expressions", () => {
     const finding = evaluateLicenseRisk({
       license: {
