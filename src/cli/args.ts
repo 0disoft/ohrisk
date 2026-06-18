@@ -4,6 +4,7 @@ import { err, ok, type Result } from "../shared/result";
 
 export type CliCommand =
   | { kind: "help" }
+  | { kind: "version" }
   | {
       kind: "scan";
       profile: UsageProfile;
@@ -14,6 +15,10 @@ export type CliCommand =
 export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
   if (argv.length === 0 || argv[0] === "--help" || argv[0] === "-h") {
     return ok({ kind: "help" });
+  }
+
+  if (argv[0] === "--version" || argv[0] === "-v") {
+    return ok({ kind: "version" });
   }
 
   const command = argv[0];

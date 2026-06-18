@@ -22,6 +22,15 @@ function createTestIO(cwd: string): { io: CliIO; stdout: string[]; stderr: strin
 }
 
 describe("main", () => {
+  test("prints package version", async () => {
+    const { io, stdout, stderr } = createTestIO(fixturesDir);
+    const exitCode = await main(["--version"], io);
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+    expect(stdout).toEqual(["ohrisk 0.1.0"]);
+  });
+
   test("prints actionable findings for a Bun project", async () => {
     const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
     const exitCode = await main(["scan"], io);

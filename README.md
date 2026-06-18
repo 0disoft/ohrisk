@@ -59,6 +59,12 @@ Print machine-readable output:
 bun run src/cli/main.ts scan --json
 ```
 
+Print the package version:
+
+```bash
+bun run src/cli/main.ts --version
+```
+
 Once installed as a package, the intended command shape is:
 
 ```bash

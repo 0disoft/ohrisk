@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+import { readFileSync } from "node:fs";
+
 import { parseArgs, type CliCommand } from "./args";
 import { collectGraphEvidence } from "../evidence/collect";
 import { parseBunLockfile } from "../graph/npm-bun-lock";
@@ -31,6 +33,9 @@ export async function main(
   switch (command.kind) {
     case "help":
       io.stdout(renderHelp());
+      return 0;
+    case "version":
+      io.stdout(renderVersion());
       return 0;
     case "scan":
       return runScan(command, io);
@@ -97,6 +102,7 @@ function renderHelp(): string {
     "",
     "Usage:",
     "  ohrisk scan [--profile saas|distributed-app] [--prod] [--json]",
+    "  ohrisk --version",
     "",
     "Commands:",
     "  scan    Find the current project and prepare a license-risk scan.",
@@ -104,8 +110,21 @@ function renderHelp(): string {
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --prod                 Limit later scan stages to production dependencies.",
-    "  --json                 Print machine-readable output."
+    "  --json                 Print machine-readable output.",
+    "  --version, -v          Print the Ohrisk package version."
   ].join("\n");
+}
+
+function renderVersion(): string {
+  return `ohrisk ${readPackageVersion()}`;
+}
+
+function readPackageVersion(): string {
+  const packageJson = JSON.parse(
+    readFileSync(new URL("../../package.json", import.meta.url), "utf8")
+  ) as { version?: unknown };
+
+  return typeof packageJson.version === "string" ? packageJson.version : "unknown";
 }
 
 function defaultIO(): CliIO {

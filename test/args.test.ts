@@ -46,6 +46,19 @@ describe("parseArgs", () => {
     expect(parsed.error.code).toBe("UNSUPPORTED_COMMAND");
   });
 
+  test("parses version command", () => {
+    const parsed = parseArgs(["--version"]);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+
+    expect(parsed.value).toEqual({
+      kind: "version"
+    });
+  });
+
   test("rejects unsupported profiles", () => {
     const parsed = parseArgs(["scan", "--profile", "desktop"]);
 
