@@ -243,6 +243,7 @@ async function runScan(
     prodOnly: command.prodOnly,
     json: command.json,
     markdown: command.markdown,
+    waiverMode: command.noWaivers ? "ignored" : "local",
     failOn: command.kind === "ci" ? command.failOn : undefined,
     strictWaivers: command.kind === "ci" ? command.strictWaivers : false,
     waivedFindings: scanned.value.waivedFindings,

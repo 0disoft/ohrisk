@@ -45,7 +45,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.52.1"]);
+    expect(stdout).toEqual(["ohrisk 0.53.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -241,6 +241,7 @@ describe("main", () => {
         unknown: number;
         low: number;
       };
+      waiverMode: string;
       findings: Array<{
         id: string;
         fingerprint: string;
@@ -281,6 +282,7 @@ describe("main", () => {
       unknown: 1,
       low: 2
     });
+    expect(payload.waiverMode).toBe("local");
     expect(payload.nextAction).toBe("Replace or escalate high-risk dependencies before shipping.");
     expect(payload.findings).toHaveLength(5);
     expect(payload.findings[0]).toMatchObject({
@@ -372,6 +374,9 @@ describe("main", () => {
             }>;
           };
         };
+        properties: {
+          ohriskWaiverMode: string;
+        };
         results: Array<{
           ruleId: string;
           ruleIndex: number;
@@ -409,7 +414,8 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.52.1");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.53.0");
+    expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
       "ohrisk/license-unknown",
@@ -486,6 +492,7 @@ describe("main", () => {
       const payload = JSON.parse(stdout.join("\n")) as {
         runs: Array<{
           properties: {
+            ohriskWaiverMode: string;
             ohriskActiveFindingCount: number;
             ohriskWaivedFindingCount: number;
             ohriskExpiredWaiverCount: number;
@@ -507,6 +514,7 @@ describe("main", () => {
       };
 
       expect(payload.runs[0]?.properties).toEqual({
+        ohriskWaiverMode: "local",
         ohriskActiveFindingCount: 4,
         ohriskWaivedFindingCount: 1,
         ohriskExpiredWaiverCount: 0,
@@ -647,6 +655,7 @@ describe("main", () => {
     expect(output).toContain("# Ohrisk scan");
     expect(output).toContain("- Profile: `saas`");
     expect(output).toContain("- Production only: `yes`");
+    expect(output).toContain("- Waiver mode: `local (.ohrisk-waivers.json)`");
     expect(output).toContain(
       "- Licenses: `4 high-confidence`, `0 medium-confidence`, `1 low-confidence`"
     );
@@ -732,6 +741,7 @@ describe("main", () => {
           expired: number;
           unmatched: number;
         };
+        waiverMode: string;
         failed: boolean;
         failingFindingCount: number;
         findings: Array<{
@@ -829,6 +839,7 @@ describe("main", () => {
           expired: number;
           unmatched: number;
         };
+        waiverMode: string;
         failed: boolean;
         failingFindingCount: number;
         findings: Array<{
@@ -846,6 +857,7 @@ describe("main", () => {
         expired: 0,
         unmatched: 0
       });
+      expect(payload.waiverMode).toBe("ignored");
       expect(payload.failed).toBe(true);
       expect(payload.failingFindingCount).toBe(1);
       expect(payload.findings).toContainEqual(
@@ -881,6 +893,7 @@ describe("main", () => {
           expired: number;
           unmatched: number;
         };
+        waiverMode: string;
         waivedFindings: unknown[];
         expiredWaivers: unknown[];
         unmatchedWaivers: unknown[];
@@ -891,6 +904,7 @@ describe("main", () => {
         expired: 0,
         unmatched: 0
       });
+      expect(payload.waiverMode).toBe("ignored");
       expect(payload.waivedFindings).toEqual([]);
       expect(payload.expiredWaivers).toEqual([]);
       expect(payload.unmatchedWaivers).toEqual([]);

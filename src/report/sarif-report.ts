@@ -111,6 +111,7 @@ export function renderSarifReport(input: ScanReportInput): string {
             }
           ],
           properties: {
+            ohriskWaiverMode: input.waiverMode,
             ohriskActiveFindingCount: input.riskFindings.length,
             ohriskWaivedFindingCount: input.waivedFindings.length,
             ohriskExpiredWaiverCount: input.expiredWaivers.length,

@@ -19,6 +19,7 @@ export type ScanReportInput = {
   prodOnly: boolean;
   json: boolean;
   markdown: boolean;
+  waiverMode: "local" | "ignored";
   failOn?: RiskSeverity;
   strictWaivers?: boolean;
   waivedFindings: WaivedRiskFinding[];
@@ -47,6 +48,7 @@ export function renderScanReport(input: ScanReportInput): string {
         evidence: summary.evidence,
         licenses: summary.licenses,
         risks: summary.risks,
+        waiverMode: input.waiverMode,
         waivers: summary.waivers,
         nextAction,
         ...thresholdSummary,
@@ -76,6 +78,7 @@ export function renderScanReport(input: ScanReportInput): string {
     `Licenses: ${summary.licenses.highConfidence} high-confidence, ${summary.licenses.mediumConfidence} medium-confidence, ${summary.licenses.lowConfidence} low-confidence`,
     `License issues: ${summary.licenses.missing} missing, ${summary.licenses.malformed} malformed`,
     `Risks: ${summary.risks.high} high, ${summary.risks.review} review, ${summary.risks.unknown} unknown, ${summary.risks.low} low`,
+    `Waiver mode: ${formatWaiverMode(input.waiverMode)}`,
     `Waived: ${summary.waivers.applied} applied, ${summary.waivers.expired} expired, ${summary.waivers.unmatched} unmatched`,
     ...renderThresholdLines(thresholdSummary),
     ...renderWaiverDriftLines(waiverDriftSummary),
@@ -113,6 +116,7 @@ function renderMarkdownReport(
     `- Licenses: \`${summary.licenses.highConfidence} high-confidence\`, \`${summary.licenses.mediumConfidence} medium-confidence\`, \`${summary.licenses.lowConfidence} low-confidence\``,
     `- License issues: \`${summary.licenses.missing} missing\`, \`${summary.licenses.malformed} malformed\``,
     `- Risks: \`${summary.risks.high} high\`, \`${summary.risks.review} review\`, \`${summary.risks.unknown} unknown\`, \`${summary.risks.low} low\``,
+    `- Waiver mode: \`${formatWaiverMode(input.waiverMode)}\``,
     `- Waived: \`${summary.waivers.applied} applied\`, \`${summary.waivers.expired} expired\`, \`${summary.waivers.unmatched} unmatched\``,
     ...renderMarkdownThresholdLines(thresholdSummary),
     ...renderMarkdownWaiverDriftLines(waiverDriftSummary),
@@ -414,6 +418,10 @@ function renderMarkdownWaiverDriftLines(
 ): string[] {
   const waiverDriftLine = formatWaiverDriftSummary(waiverDriftSummary);
   return waiverDriftLine ? [`- ${waiverDriftLine}`] : [];
+}
+
+function formatWaiverMode(waiverMode: ScanReportInput["waiverMode"]): string {
+  return waiverMode === "ignored" ? "ignored (--no-waivers)" : "local (.ohrisk-waivers.json)";
 }
 
 function formatWaiverDriftSummary(

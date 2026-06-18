@@ -59,6 +59,7 @@ The current implementation is the first npm-style vertical slice:
 - terminal and Markdown threshold outcomes for `ci --fail-on` and `diff --fail-on`
 - strict CI waiver drift checks for expired or unmatched local waivers
 - raw scan and CI mode with `--no-waivers` when waiver files should be ignored
+- explicit waiver mode in JSON, terminal, Markdown, and SARIF reports
 
 Central approval workflows, GitHub App checks, and ecosystem adapters beyond
 npm-style lockfiles are not part of this slice yet.
@@ -180,7 +181,8 @@ are present, even if active findings stay below the `--fail-on` threshold. JSON,
 terminal, Markdown, and SARIF outputs include the strict waiver drift result
 when that option is enabled. `scan --no-waivers` and `ci --no-waivers` do not
 read or apply local waiver files; `ci --no-waivers` cannot be combined with
-`--strict-waivers`.
+`--strict-waivers`. Reports include a waiver mode field or summary line so raw
+audits can distinguish ignored waiver files from projects with no waivers.
 
 Explain a license expression without scanning a project:
 
@@ -228,6 +230,7 @@ Ohrisk scan
 Profile: saas
 Production only: yes
 Risks: 1 high, 1 review, 1 unknown, 2 low
+Waiver mode: local (.ohrisk-waivers.json)
 Waived: 0 applied, 0 expired, 0 unmatched
 
 Findings:
@@ -249,6 +252,7 @@ JSON output reuses the same finding model:
   "status": "profile_risk_evaluated",
   "profile": "saas",
   "prodOnly": true,
+  "waiverMode": "local",
   "nextAction": "Replace or escalate high-risk dependencies before shipping.",
   "failOn": "high",
   "failed": true,
@@ -281,6 +285,7 @@ Markdown output keeps the scan summary and PR-facing decision fields together:
 ```markdown
 - Licenses: `4 high-confidence`, `0 medium-confidence`, `1 low-confidence`
 - License issues: `1 missing`, `0 malformed`
+- Waiver mode: `local (.ohrisk-waivers.json)`
 - Threshold: failed on high (1 finding at or above threshold)
 
 | ID | Fingerprint | Severity | Package | Dependency | Reason | Recommendation | Action | Path |

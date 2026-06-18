@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.53.0 - 2026-06-19
+
+### Added
+
+- Reports now expose waiver mode so raw `--no-waivers` audits are distinguishable from normal local waiver scans.
+
 ## 0.52.1 - 2026-06-19
 
 ### Fixed
