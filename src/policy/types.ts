@@ -23,6 +23,7 @@ export type RiskDependencyType =
   | "unknown";
 
 export type RiskFinding = {
+  id: string;
   packageId: string;
   severity: RiskSeverity;
   reason: string;

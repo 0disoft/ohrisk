@@ -159,6 +159,7 @@ function renderFindings(findings: RiskFinding[]): string[] {
     "Findings:",
     ...findings.flatMap((finding) => [
       `- [${finding.severity}] ${finding.packageId}`,
+      `  id: ${finding.id}`,
       `  ${finding.reason}`,
       `  recommendation: ${finding.recommendation}`,
       `  action: ${finding.action}`,
@@ -177,11 +178,11 @@ function renderMarkdownFindings(findings: RiskFinding[]): string[] {
   return [
     "## Findings",
     "",
-    "| Severity | Package | Dependency | Reason | Recommendation | Action | Path |",
-    "| --- | --- | --- | --- | --- | --- | --- |",
+    "| ID | Severity | Package | Dependency | Reason | Recommendation | Action | Path |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ...findings.map(
       (finding) =>
-        `| ${finding.severity} | \`${escapeMarkdownTable(finding.packageId)}\` | ${escapeMarkdownTable(formatDependencyContext(finding))} | ${escapeMarkdownTable(finding.reason)} | ${finding.recommendation} | ${escapeMarkdownTable(finding.action)} | ${escapeMarkdownTable(formatPath(finding.paths[0]))} |`
+        `| \`${escapeMarkdownTable(finding.id)}\` | ${finding.severity} | \`${escapeMarkdownTable(finding.packageId)}\` | ${escapeMarkdownTable(formatDependencyContext(finding))} | ${escapeMarkdownTable(finding.reason)} | ${finding.recommendation} | ${escapeMarkdownTable(finding.action)} | ${escapeMarkdownTable(formatPath(finding.paths[0]))} |`
     )
   ];
 }

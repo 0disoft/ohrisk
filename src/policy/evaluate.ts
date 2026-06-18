@@ -1,5 +1,6 @@
 import type { DependencyNode } from "../graph/types";
 import type { NormalizedLicense } from "../license/types";
+import { buildFindingId } from "./finding-id";
 import type { UsageProfile } from "./profiles";
 import type {
   RiskDependencyScope,
@@ -44,16 +45,24 @@ export function evaluateLicenseRisk(input: {
 }): RiskFinding {
   const severity = classifySeverity(input.license, input.profile);
   const recommendation = recommendationFor(severity, input.dependency);
+  const paths = input.dependency.paths;
+  const packageId = input.license.packageId;
 
   return {
-    packageId: input.license.packageId,
+    id: buildFindingId({
+      packageId,
+      severity,
+      recommendation,
+      paths
+    }),
+    packageId,
     severity,
     reason: explainSeverity(input.license, input.profile, severity),
     action: actionFor(recommendation, input.license),
     dependencyType: input.dependency.dependencyType,
     dependencyScope: dependencyScopeFor(input.dependency),
     evidence: buildEvidence(input.license, input.dependency),
-    paths: input.dependency.paths,
+    paths,
     recommendation
   };
 }

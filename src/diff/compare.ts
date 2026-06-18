@@ -1,3 +1,4 @@
+import { buildFindingId } from "../policy/finding-id";
 import type { RiskFinding } from "../policy/types";
 
 export type RiskDiff = {
@@ -20,10 +21,5 @@ export function diffRiskFindings(input: {
 }
 
 function findingKey(finding: RiskFinding): string {
-  return [
-    finding.packageId,
-    finding.severity,
-    finding.recommendation,
-    finding.paths.map((items) => items.join(">")).join("|")
-  ].join("::");
+  return buildFindingId(finding);
 }

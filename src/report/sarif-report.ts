@@ -139,6 +139,7 @@ function resultFor(finding: RiskFinding, lockfileUri: string): {
     dependencyScope: string;
     paths: string[][];
     evidence: string[];
+    findingId: string;
   };
 } {
   const ruleId = ruleIdFor(finding.severity);
@@ -163,9 +164,10 @@ function resultFor(finding: RiskFinding, lockfileUri: string): {
       }
     ],
     partialFingerprints: {
-      primaryLocationLineHash: stableFingerprintFor(finding)
+      primaryLocationLineHash: finding.id
     },
     properties: {
+      findingId: finding.id,
       packageId: finding.packageId,
       reason: finding.reason,
       recommendation: finding.recommendation,
@@ -217,15 +219,6 @@ function securitySeverityFor(severity: RiskSeverity): string | undefined {
     case "low":
       return undefined;
   }
-}
-
-function stableFingerprintFor(finding: RiskFinding): string {
-  return [
-    finding.packageId,
-    finding.severity,
-    finding.recommendation,
-    finding.paths.map((items) => items.join(">")).join("|")
-  ].join("::");
 }
 
 function readPackageVersion(): string {

@@ -30,7 +30,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.21.0"]);
+    expect(stdout).toEqual(["ohrisk 0.22.0"]);
   });
 
   test("prints actionable findings for a Bun project", async () => {
@@ -49,6 +49,9 @@ describe("main", () => {
     expect(stdout.join("\n")).toContain("Status: profile-aware risk evaluated");
     expect(stdout.join("\n")).toContain("Findings:");
     expect(stdout.join("\n")).toContain("- [high] agpl-child@0.1.0");
+    expect(stdout.join("\n")).toContain(
+      "id: agpl-child@0.1.0::high::replace::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0"
+    );
     expect(stdout.join("\n")).toContain("recommendation: replace");
     expect(stdout.join("\n")).toContain(
       "action: Replace this package or escalate before shipping."
@@ -194,6 +197,7 @@ describe("main", () => {
         low: number;
       };
       findings: Array<{
+        id: string;
         packageId: string;
         severity: string;
         recommendation: string;
@@ -234,6 +238,7 @@ describe("main", () => {
     expect(payload.nextAction).toBe("Replace or escalate high-risk dependencies before shipping.");
     expect(payload.findings).toHaveLength(5);
     expect(payload.findings[0]).toMatchObject({
+      id: "agpl-child@0.1.0::high::replace::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0",
       packageId: "agpl-child@0.1.0",
       severity: "high",
       recommendation: "replace",
@@ -332,6 +337,7 @@ describe("main", () => {
           };
           properties: {
             packageId: string;
+            findingId: string;
             reason: string;
             recommendation: string;
             action: string;
@@ -345,7 +351,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.21.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.22.0");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
       "ohrisk/license-unknown",
@@ -366,6 +372,8 @@ describe("main", () => {
       "Action: Replace this package or escalate before shipping."
     );
     expect(payload.runs[0]?.results[0]?.properties).toMatchObject({
+      findingId:
+        "agpl-child@0.1.0::high::replace::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0",
       packageId: "agpl-child@0.1.0",
       reason: "License expression is high risk for saas.",
       recommendation: "replace",
@@ -400,9 +408,11 @@ describe("main", () => {
       "- Licenses: `4 high-confidence`, `0 medium-confidence`, `1 low-confidence`"
     );
     expect(output).toContain("- License issues: `1 missing`, `0 malformed`");
-    expect(output).toContain("| Severity | Package | Dependency | Reason | Recommendation | Action | Path |");
     expect(output).toContain(
-      "| high | `agpl-child@0.1.0` | production transitive | License expression is high risk for saas. | replace | Replace this package or escalate before shipping. |"
+      "| ID | Severity | Package | Dependency | Reason | Recommendation | Action | Path |"
+    );
+    expect(output).toContain(
+      "| `agpl-child@0.1.0::high::replace::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0` | high | `agpl-child@0.1.0` | production transitive | License expression is high risk for saas. | replace | Replace this package or escalate before shipping. |"
     );
     expect(output).toContain("## Next");
     expect(output).toContain("Replace or escalate high-risk dependencies before shipping.");
@@ -577,6 +587,7 @@ describe("main", () => {
       };
       nextAction: string;
       findings: Array<{
+        id: string;
         packageId: string;
         severity: string;
       }>;
@@ -600,6 +611,9 @@ describe("main", () => {
       "missing-license@4.0.0",
       "gpl-package@5.0.0"
     ]);
+    expect(payload.findings[0]?.id).toBe(
+      "missing-license@4.0.0::unknown::collect-evidence::fixture-bun-project>missing-license@4.0.0"
+    );
   });
 
   test("prints Markdown diff output", async () => {
@@ -617,10 +631,10 @@ describe("main", () => {
     expect(output).toContain("- Baseline: `main`");
     expect(output).toContain("- New risks: `0 high`, `1 review`, `1 unknown`, `0 low`");
     expect(output).toContain(
-      "| unknown | `missing-license@4.0.0` | production direct | Package metadata does not declare a license expression. | collect-evidence | Add or verify package license metadata before approving this package. |"
+      "| `missing-license@4.0.0::unknown::collect-evidence::fixture-bun-project>missing-license@4.0.0` | unknown | `missing-license@4.0.0` | production direct | Package metadata does not declare a license expression. | collect-evidence | Add or verify package license metadata before approving this package. |"
     );
     expect(output).toContain(
-      "| review | `gpl-package@5.0.0` | production direct | License expression should be reviewed before shipping under saas. | review | Review this package before shipping. |"
+      "| `gpl-package@5.0.0::review::review::fixture-bun-project>gpl-package@5.0.0` | review | `gpl-package@5.0.0` | production direct | License expression should be reviewed before shipping under saas. | review | Review this package before shipping. |"
     );
     expect(output).toContain("Collect evidence for new unknown license findings before merging.");
   });
