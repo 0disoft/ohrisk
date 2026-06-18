@@ -19,8 +19,9 @@ Run the release-ready local gate:
 bun run verify:release
 ```
 
-This runs the full Bun test suite and verifies the npm package contents with a
-dry-run pack.
+This runs the full Bun test suite, verifies the npm package contents with a
+dry-run pack, then installs the packed tarball into a temporary consumer project
+and runs the packaged `ohrisk` bin.
 
 ## Optional GitHub Gate
 
@@ -57,8 +58,8 @@ npm view ohrisk dist.tarball
 After the npm registry result is verified, tag the matching commit:
 
 ```bash
-git tag v0.58.0
-git push origin v0.58.0
+git tag v0.59.0
+git push origin v0.59.0
 ```
 
 Then create a GitHub Release using the notes from `CHANGELOG.md`.

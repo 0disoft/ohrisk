@@ -1,6 +1,6 @@
 {
   "name": "ohrisk",
-  "version": "0.58.0",
+  "version": "0.59.0",
   "description": "Catch open-source license risk before your PR ships.",
   "license": "MIT",
   "type": "module",
@@ -34,7 +34,7 @@
   "scripts": {
     "scan": "bun run src/cli/main.ts scan",
     "test": "bun test",
-    "verify:release": "bun test && npm pack --dry-run --json"
+    "verify:release": "bun test && npm pack --dry-run --json && bun run scripts/package-smoke.ts"
   },
   "files": [
     "CHANGELOG.md",

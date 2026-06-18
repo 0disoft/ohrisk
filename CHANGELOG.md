@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.59.0 - 2026-06-19
+
+### Added
+
+- Release verification now installs the packed tarball into a temporary consumer project and smoke-tests the packaged `ohrisk` bin.
+
 ## 0.58.0 - 2026-06-19
 
 ### Added

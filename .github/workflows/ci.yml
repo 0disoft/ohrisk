@@ -26,8 +26,5 @@ jobs:
           bun --version
           npm --version
 
-      - name: Run tests
-        run: bun test
-
-      - name: Verify package contents
-        run: npm pack --dry-run --json
+      - name: Run release verification
+        run: bun run verify:release

@@ -31,7 +31,7 @@ describe("package metadata", () => {
     };
 
     expect(packageJson.name).toBe("ohrisk");
-    expect(packageJson.version).toBe("0.58.0");
+    expect(packageJson.version).toBe("0.59.0");
     expect(packageJson.private).toBeUndefined();
     expect(packageJson.license).toBe("MIT");
     expect(packageJson.packageManager).toBe("bun@1.3.14");
@@ -44,7 +44,9 @@ describe("package metadata", () => {
     expect(packageJson.repository?.url).toBe("git+https://github.com/0disoft/ohrisk.git");
     expect(packageJson.dependencies?.["@yarnpkg/lockfile"]).toBe("1.1.0");
     expect(packageJson.dependencies?.yaml).toBe("2.9.0");
-    expect(packageJson.scripts?.["verify:release"]).toBe("bun test && npm pack --dry-run --json");
+    expect(packageJson.scripts?.["verify:release"]).toBe(
+      "bun test && npm pack --dry-run --json && bun run scripts/package-smoke.ts"
+    );
   });
 
   test("uses Bun as the packaged CLI runtime", () => {
