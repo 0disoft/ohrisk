@@ -20,6 +20,7 @@ export type ScanReportInput = {
 
 export function renderScanReport(input: ScanReportInput): string {
   const summary = buildScanSummary(input);
+  const nextAction = nextActionFor(input.riskFindings);
 
   if (input.json) {
     return JSON.stringify(
@@ -62,7 +63,7 @@ export function renderScanReport(input: ScanReportInput): string {
     "",
     ...renderFindings(input.riskFindings),
     "",
-    "Next: collect missing evidence or replace high-risk production dependencies."
+    `Next: ${nextAction}`
   ].join("\n");
 }
 
@@ -70,6 +71,8 @@ function renderMarkdownReport(
   input: ScanReportInput,
   summary: ReturnType<typeof buildScanSummary>
 ): string {
+  const nextAction = nextActionFor(input.riskFindings);
+
   return [
     "# Ohrisk scan",
     "",
@@ -87,7 +90,7 @@ function renderMarkdownReport(
     "",
     "## Next",
     "",
-    "Collect missing evidence or replace high-risk production dependencies."
+    nextAction
   ].join("\n");
 }
 
@@ -227,6 +230,26 @@ function formatPath(pathItems: string[] | undefined): string {
 
 function formatDependencyContext(finding: RiskFinding): string {
   return `${finding.dependencyType} ${finding.dependencyScope}`;
+}
+
+function nextActionFor(findings: RiskFinding[]): string {
+  if (findings.some((finding) => finding.recommendation === "replace")) {
+    return "Replace or escalate high-risk dependencies before shipping.";
+  }
+
+  if (findings.some((finding) => finding.recommendation === "collect-evidence")) {
+    return "Collect missing license evidence before approving this project.";
+  }
+
+  if (findings.some((finding) => finding.recommendation === "review")) {
+    return "Review flagged dependencies before shipping under this profile.";
+  }
+
+  if (findings.some((finding) => finding.recommendation === "exclude-dev-only")) {
+    return "Run with --prod or keep dev-only risk out of production.";
+  }
+
+  return "No action needed for this profile.";
 }
 
 function escapeMarkdownTable(value: string): string {

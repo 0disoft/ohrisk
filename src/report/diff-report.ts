@@ -13,6 +13,7 @@ export type DiffReportInput = {
 
 export function renderDiffReport(input: DiffReportInput): string {
   const summary = summarize(input.diff.newFindings);
+  const nextAction = nextActionFor(input.diff.newFindings);
 
   if (input.json) {
     return JSON.stringify(
@@ -47,7 +48,7 @@ export function renderDiffReport(input: DiffReportInput): string {
     "",
     ...renderNewFindings(input.diff.newFindings),
     "",
-    "Next: block or review new high-risk and unknown production findings before merging."
+    `Next: ${nextAction}`
   ].join("\n");
 }
 
@@ -55,6 +56,8 @@ function renderMarkdownReport(
   input: DiffReportInput,
   summary: Record<RiskSeverity, number>
 ): string {
+  const nextAction = nextActionFor(input.diff.newFindings);
+
   return [
     "# Ohrisk diff",
     "",
@@ -68,7 +71,7 @@ function renderMarkdownReport(
     "",
     "## Next",
     "",
-    "Block or review new high-risk and unknown production findings before merging."
+    nextAction
   ].join("\n");
 }
 
@@ -125,6 +128,30 @@ function renderMarkdownNewFindings(findings: RiskFinding[]): string[] {
 
 function formatDependencyContext(finding: RiskFinding): string {
   return `${finding.dependencyType} ${finding.dependencyScope}`;
+}
+
+function nextActionFor(findings: RiskFinding[]): string {
+  if (findings.length === 0) {
+    return "No new license risk introduced by this diff.";
+  }
+
+  if (findings.some((finding) => finding.recommendation === "replace")) {
+    return "Block or escalate new high-risk dependencies before merging.";
+  }
+
+  if (findings.some((finding) => finding.recommendation === "collect-evidence")) {
+    return "Collect evidence for new unknown license findings before merging.";
+  }
+
+  if (findings.some((finding) => finding.recommendation === "review")) {
+    return "Review new flagged dependencies before merging.";
+  }
+
+  if (findings.some((finding) => finding.recommendation === "exclude-dev-only")) {
+    return "Confirm new dev-only risk stays out of production before merging.";
+  }
+
+  return "No blocking action for new low-risk findings.";
 }
 
 function escapeMarkdownTable(value: string): string {
