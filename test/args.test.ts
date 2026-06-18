@@ -16,7 +16,8 @@ describe("parseArgs", () => {
       profile: "saas",
       prodOnly: false,
       json: false,
-      sarif: false
+      sarif: false,
+      markdown: false
     });
   });
 
@@ -33,7 +34,8 @@ describe("parseArgs", () => {
       profile: "distributed-app",
       prodOnly: true,
       json: true,
-      sarif: false
+      sarif: false,
+      markdown: false
     });
   });
 
@@ -50,7 +52,26 @@ describe("parseArgs", () => {
       profile: "saas",
       prodOnly: false,
       json: false,
-      sarif: true
+      sarif: true,
+      markdown: false
+    });
+  });
+
+  test("parses scan markdown output", () => {
+    const parsed = parseArgs(["scan", "--markdown"]);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+
+    expect(parsed.value).toEqual({
+      kind: "scan",
+      profile: "saas",
+      prodOnly: false,
+      json: false,
+      sarif: false,
+      markdown: true
     });
   });
 
@@ -68,6 +89,7 @@ describe("parseArgs", () => {
       prodOnly: false,
       json: false,
       sarif: false,
+      markdown: false,
       failOn: "high"
     });
   });
@@ -94,6 +116,7 @@ describe("parseArgs", () => {
       prodOnly: true,
       json: true,
       sarif: false,
+      markdown: false,
       failOn: "review"
     });
   });
@@ -156,6 +179,7 @@ describe("parseArgs", () => {
       profile: "distributed-app",
       prodOnly: true,
       json: true,
+      markdown: false,
       failOn: "unknown"
     });
   });

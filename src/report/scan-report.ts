@@ -15,6 +15,7 @@ export type ScanReportInput = {
   profile: string;
   prodOnly: boolean;
   json: boolean;
+  markdown: boolean;
 };
 
 export function renderScanReport(input: ScanReportInput): string {
@@ -42,6 +43,10 @@ export function renderScanReport(input: ScanReportInput): string {
     );
   }
 
+  if (input.markdown) {
+    return renderMarkdownReport(input, summary);
+  }
+
   return [
     "Ohrisk scan",
     `Project: ${input.project.rootDir}`,
@@ -57,6 +62,29 @@ export function renderScanReport(input: ScanReportInput): string {
     ...renderFindings(input.riskFindings),
     "",
     "Next: collect missing evidence or replace high-risk production dependencies."
+  ].join("\n");
+}
+
+function renderMarkdownReport(
+  input: ScanReportInput,
+  summary: ReturnType<typeof buildScanSummary>
+): string {
+  return [
+    "# Ohrisk scan",
+    "",
+    `- Project: \`${input.project.rootDir}\``,
+    `- Lockfile: \`${path.basename(input.project.lockfile.path)}\` (\`${input.project.lockfile.kind}\`)`,
+    `- Profile: \`${input.profile}\``,
+    `- Production only: \`${input.prodOnly ? "yes" : "no"}\``,
+    `- Dependencies: \`${summary.dependencyGraph.total} total\`, \`${summary.dependencyGraph.direct} direct\`, \`${summary.dependencyGraph.transitive} transitive\``,
+    `- Evidence: \`${summary.evidence.files} files\`, \`${summary.evidence.warnings} warnings\``,
+    `- Risks: \`${summary.risks.high} high\`, \`${summary.risks.review} review\`, \`${summary.risks.unknown} unknown\`, \`${summary.risks.low} low\``,
+    "",
+    ...renderMarkdownFindings(input.riskFindings),
+    "",
+    "## Next",
+    "",
+    "Collect missing evidence or replace high-risk production dependencies."
   ].join("\n");
 }
 
@@ -125,6 +153,23 @@ function renderFindings(findings: RiskFinding[]): string[] {
   ];
 }
 
+function renderMarkdownFindings(findings: RiskFinding[]): string[] {
+  if (findings.length === 0) {
+    return ["## Findings", "", "No findings."];
+  }
+
+  return [
+    "## Findings",
+    "",
+    "| Severity | Package | Recommendation | Path |",
+    "| --- | --- | --- | --- |",
+    ...findings.map(
+      (finding) =>
+        `| ${finding.severity} | \`${escapeMarkdownTable(finding.packageId)}\` | ${finding.recommendation} | ${escapeMarkdownTable(formatPath(finding.paths[0]))} |`
+    )
+  ];
+}
+
 function summarizeLicenses(normalizedLicenses: NormalizedLicense[]): {
   high: number;
   medium: number;
@@ -173,4 +218,8 @@ function summarizeRiskFindings(riskFindings: RiskFinding[]): Record<RiskSeverity
 
 function formatPath(pathItems: string[] | undefined): string {
   return pathItems?.join(" -> ") ?? "unknown";
+}
+
+function escapeMarkdownTable(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 }

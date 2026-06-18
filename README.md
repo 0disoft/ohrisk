@@ -34,6 +34,7 @@ The current implementation is the first npm-style vertical slice:
 - profile-aware risk evaluation for `saas` and `distributed-app`
 - terminal and JSON reports
 - SARIF 2.1.0 reports for code scanning upload
+- Markdown reports for PR comments and release notes
 - standalone license expression explanation
 - git ref diff reports that show only newly introduced findings
 
@@ -79,6 +80,12 @@ Print SARIF output for code scanning upload:
 bun run src/cli/main.ts scan --sarif
 ```
 
+Print a Markdown report:
+
+```bash
+bun run src/cli/main.ts scan --markdown --prod
+```
+
 Fail a local CI step when findings meet a threshold:
 
 ```bash
@@ -96,6 +103,7 @@ Compare the current findings against a baseline git ref:
 ```bash
 bun run src/cli/main.ts diff main --prod
 bun run src/cli/main.ts diff main --prod --fail-on unknown
+bun run src/cli/main.ts diff main --prod --markdown
 ```
 
 Print the package version:
@@ -110,6 +118,7 @@ Once installed as a package, the intended command shape is:
 ohrisk scan --profile saas --prod
 ohrisk ci --fail-on high
 ohrisk scan --sarif
+ohrisk scan --markdown --prod
 ohrisk explain AGPL-3.0-only --profile saas
 ohrisk diff main --prod --fail-on unknown
 ohrisk --version

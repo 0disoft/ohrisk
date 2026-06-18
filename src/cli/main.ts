@@ -130,7 +130,8 @@ async function runDiff(
       profile: command.profile,
       prodOnly: command.prodOnly,
       diff,
-      json: command.json
+      json: command.json,
+      markdown: command.markdown
     })
   );
 
@@ -201,7 +202,8 @@ async function runScan(
     riskFindings: scanned.value.riskFindings,
     profile: command.profile,
     prodOnly: command.prodOnly,
-    json: command.json
+    json: command.json,
+    markdown: command.markdown
   };
 
   io.stdout(command.sarif ? renderSarifReport(reportInput) : renderScanReport(reportInput));
@@ -270,9 +272,9 @@ function renderHelp(): string {
     "Ohrisk",
     "",
     "Usage:",
-    "  ohrisk scan [--profile saas|distributed-app] [--prod] [--json|--sarif]",
-    "  ohrisk ci [--profile saas|distributed-app] [--prod] [--json|--sarif] [--fail-on high|unknown|review|low]",
-    "  ohrisk diff <baseline-ref> [--profile saas|distributed-app] [--prod] [--json] [--fail-on high|unknown|review|low]",
+    "  ohrisk scan [--profile saas|distributed-app] [--prod] [--json|--sarif|--markdown]",
+    "  ohrisk ci [--profile saas|distributed-app] [--prod] [--json|--sarif|--markdown] [--fail-on high|unknown|review|low]",
+    "  ohrisk diff <baseline-ref> [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json]",
     "  ohrisk --version",
     "",
@@ -287,6 +289,7 @@ function renderHelp(): string {
     "  --prod                 Limit later scan stages to production dependencies.",
     "  --json                 Print machine-readable output.",
     "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
+    "  --markdown             Print a Markdown report for PRs or release notes.",
     "  --fail-on <severity>   CI threshold. Defaults to high for ci.",
     "  --version, -v          Print the Ohrisk package version."
   ].join("\n");

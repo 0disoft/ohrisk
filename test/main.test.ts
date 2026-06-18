@@ -29,7 +29,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.5.0"]);
+    expect(stdout).toEqual(["ohrisk 0.6.0"]);
   });
 
   test("prints actionable findings for a Bun project", async () => {
@@ -216,7 +216,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.5.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.6.0");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
       "ohrisk/license-unknown",
@@ -240,6 +240,22 @@ describe("main", () => {
     });
     expect(payload.runs[0]?.results[0]?.partialFingerprints.primaryLocationLineHash)
       .toContain("agpl-child@0.1.0");
+  });
+
+  test("prints Markdown scan output", async () => {
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
+    const exitCode = await main(["scan", "--markdown", "--prod"], io);
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+
+    const output = stdout.join("\n");
+    expect(output).toContain("# Ohrisk scan");
+    expect(output).toContain("- Profile: `saas`");
+    expect(output).toContain("- Production only: `yes`");
+    expect(output).toContain("| Severity | Package | Recommendation | Path |");
+    expect(output).toContain("| high | `agpl-child@0.1.0` | replace |");
+    expect(output).toContain("## Next");
   });
 
   test("returns non-zero from ci when findings meet the fail threshold", async () => {
@@ -325,6 +341,24 @@ describe("main", () => {
       "missing-license@4.0.0",
       "gpl-package@5.0.0"
     ]);
+  });
+
+  test("prints Markdown diff output", async () => {
+    const baselineLockfile = readFileSync(path.join(fixturesDir, "baseline-bun.lock"), "utf8");
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
+    io.readRefFile = () => ({ ok: true as const, value: baselineLockfile });
+
+    const exitCode = await main(["diff", "main", "--prod", "--markdown"], io);
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+
+    const output = stdout.join("\n");
+    expect(output).toContain("# Ohrisk diff");
+    expect(output).toContain("- Baseline: `main`");
+    expect(output).toContain("- New risks: `0 high`, `1 review`, `1 unknown`, `0 low`");
+    expect(output).toContain("| unknown | `missing-license@4.0.0` | collect-evidence |");
+    expect(output).toContain("| review | `gpl-package@5.0.0` | review |");
   });
 
   test("returns non-zero from diff when new findings meet the fail threshold", async () => {

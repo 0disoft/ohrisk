@@ -14,6 +14,7 @@ export type CliCommand =
       prodOnly: boolean;
       json: boolean;
       sarif: boolean;
+      markdown: boolean;
     }
   | {
       kind: "ci";
@@ -21,6 +22,7 @@ export type CliCommand =
       prodOnly: boolean;
       json: boolean;
       sarif: boolean;
+      markdown: boolean;
       failOn: RiskSeverity;
     }
   | {
@@ -29,6 +31,7 @@ export type CliCommand =
       profile: UsageProfile;
       prodOnly: boolean;
       json: boolean;
+      markdown: boolean;
       failOn?: RiskSeverity;
     }
   | {
@@ -90,6 +93,7 @@ function parseScanLikeArgs(
   let prodOnly = false;
   let json = false;
   let sarif = false;
+  let markdown = false;
   let failOn: RiskSeverity = "high";
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -136,18 +140,25 @@ function parseScanLikeArgs(
         prodOnly = true;
         break;
       case "--json":
-        if (sarif) {
+        if (sarif || markdown) {
           return outputFormatConflict("--json");
         }
 
         json = true;
         break;
       case "--sarif":
-        if (json) {
+        if (json || markdown) {
           return outputFormatConflict("--sarif");
         }
 
         sarif = true;
+        break;
+      case "--markdown":
+        if (json || sarif) {
+          return outputFormatConflict("--markdown");
+        }
+
+        markdown = true;
         break;
       case "--fail-on": {
         if (kind !== "ci") {
@@ -218,6 +229,7 @@ function parseScanLikeArgs(
       prodOnly,
       json,
       sarif,
+      markdown,
       failOn
     });
   }
@@ -227,7 +239,8 @@ function parseScanLikeArgs(
     profile,
     prodOnly,
     json,
-    sarif
+    sarif,
+    markdown
   });
 }
 
@@ -236,7 +249,7 @@ function isFailOnSeverity(value: string): value is RiskSeverity {
 }
 
 function supportedOptionsFor(kind: "scan" | "ci"): string[] {
-  const common = ["--profile", "--prod", "--json", "--sarif"];
+  const common = ["--profile", "--prod", "--json", "--sarif", "--markdown"];
   return kind === "ci" ? [...common, "--fail-on"] : common;
 }
 
@@ -247,7 +260,7 @@ function outputFormatConflict(option: string): Result<CliCommand, OhriskError> {
       category: "invalid_input",
       message: `${option} cannot be combined with another output format option.`,
       details: {
-        supportedOutputOptions: ["--json", "--sarif"]
+        supportedOutputOptions: ["--json", "--sarif", "--markdown"]
       }
     })
   );
@@ -349,6 +362,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
   let profile: UsageProfile = "saas";
   let prodOnly = false;
   let json = false;
+  let markdown = false;
   let failOn: RiskSeverity | undefined;
   let baselineRef: string | undefined;
 
@@ -396,7 +410,18 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
         prodOnly = true;
         break;
       case "--json":
+        if (markdown) {
+          return outputFormatConflict("--json");
+        }
+
         json = true;
+        break;
+      case "--markdown":
+        if (json) {
+          return outputFormatConflict("--markdown");
+        }
+
+        markdown = true;
         break;
       case "--fail-on": {
         const value = argv[index + 1];
@@ -441,7 +466,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
               category: "invalid_input",
               message: `Unknown diff option "${arg}".`,
               details: {
-                supportedOptions: ["--profile", "--prod", "--json", "--fail-on"]
+                supportedOptions: ["--profile", "--prod", "--json", "--markdown", "--fail-on"]
               }
             })
           );
@@ -485,6 +510,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
     profile,
     prodOnly,
     json,
+    markdown,
     ...(failOn ? { failOn } : {})
   });
 }
