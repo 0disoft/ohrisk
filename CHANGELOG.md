@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.15.0 - 2026-06-18
+## 0.15.1 - 2026-06-18
 
 First public release candidate for Ohrisk.
 
@@ -34,6 +34,7 @@ First public release candidate for Ohrisk.
 - Specific finding reason text for explicit commercial-use restriction evidence.
 - Markdown scan and diff reports include finding reasons for PR review.
 - Findings include human-readable action text alongside the stable recommendation enum.
+- SARIF result properties include structured reason and action fields.
 - Risk findings for low, review, high, and unknown license evidence.
 - Terminal findings sorted by severity with package path, recommendation, and evidence snippets.
 

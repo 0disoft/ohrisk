@@ -132,6 +132,7 @@ function resultFor(finding: RiskFinding, lockfileUri: string): {
   };
   properties: {
     packageId: string;
+    reason: string;
     recommendation: string;
     action: string;
     paths: string[][];
@@ -164,6 +165,7 @@ function resultFor(finding: RiskFinding, lockfileUri: string): {
     },
     properties: {
       packageId: finding.packageId,
+      reason: finding.reason,
       recommendation: finding.recommendation,
       action: finding.action,
       paths: finding.paths,
