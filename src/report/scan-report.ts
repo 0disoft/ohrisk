@@ -5,7 +5,7 @@ import type { DependencyGraph } from "../graph/types";
 import type { NormalizedLicense } from "../license/types";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
 import type { ProjectInput } from "../project/discover";
-import { buildThresholdSummary } from "./threshold-summary";
+import { buildThresholdSummary, formatThresholdSummary } from "./threshold-summary";
 
 export type ScanReportInput = {
   project: ProjectInput;
@@ -23,6 +23,7 @@ export type ScanReportInput = {
 export function renderScanReport(input: ScanReportInput): string {
   const summary = buildScanSummary(input);
   const nextAction = nextActionFor(input.riskFindings);
+  const thresholdSummary = buildThresholdSummary(input.riskFindings, input.failOn);
 
   if (input.json) {
     return JSON.stringify(
@@ -40,7 +41,7 @@ export function renderScanReport(input: ScanReportInput): string {
         licenses: summary.licenses,
         risks: summary.risks,
         nextAction,
-        ...buildThresholdSummary(input.riskFindings, input.failOn),
+        ...thresholdSummary,
         findings: input.riskFindings
       },
       null,
@@ -63,6 +64,7 @@ export function renderScanReport(input: ScanReportInput): string {
     `Licenses: ${summary.licenses.highConfidence} high-confidence, ${summary.licenses.mediumConfidence} medium-confidence, ${summary.licenses.lowConfidence} low-confidence`,
     `License issues: ${summary.licenses.missing} missing, ${summary.licenses.malformed} malformed`,
     `Risks: ${summary.risks.high} high, ${summary.risks.review} review, ${summary.risks.unknown} unknown, ${summary.risks.low} low`,
+    ...renderThresholdLines(thresholdSummary),
     "Status: profile-aware risk evaluated",
     "",
     ...renderFindings(input.riskFindings),
@@ -76,6 +78,7 @@ function renderMarkdownReport(
   summary: ReturnType<typeof buildScanSummary>
 ): string {
   const nextAction = nextActionFor(input.riskFindings);
+  const thresholdSummary = buildThresholdSummary(input.riskFindings, input.failOn);
 
   return [
     "# Ohrisk scan",
@@ -89,6 +92,7 @@ function renderMarkdownReport(
     `- Licenses: \`${summary.licenses.highConfidence} high-confidence\`, \`${summary.licenses.mediumConfidence} medium-confidence\`, \`${summary.licenses.lowConfidence} low-confidence\``,
     `- License issues: \`${summary.licenses.missing} missing\`, \`${summary.licenses.malformed} malformed\``,
     `- Risks: \`${summary.risks.high} high\`, \`${summary.risks.review} review\`, \`${summary.risks.unknown} unknown\`, \`${summary.risks.low} low\``,
+    ...renderMarkdownThresholdLines(thresholdSummary),
     "",
     ...renderMarkdownFindings(input.riskFindings),
     "",
@@ -226,6 +230,18 @@ function summarizeRiskFindings(riskFindings: RiskFinding[]): Record<RiskSeverity
       low: 0
     }
   );
+}
+
+function renderThresholdLines(thresholdSummary: ReturnType<typeof buildThresholdSummary>): string[] {
+  const thresholdLine = formatThresholdSummary(thresholdSummary);
+  return thresholdLine ? [thresholdLine] : [];
+}
+
+function renderMarkdownThresholdLines(
+  thresholdSummary: ReturnType<typeof buildThresholdSummary>
+): string[] {
+  const thresholdLine = formatThresholdSummary(thresholdSummary);
+  return thresholdLine ? [`- ${thresholdLine}`] : [];
 }
 
 function formatPath(pathItems: string[] | undefined): string {

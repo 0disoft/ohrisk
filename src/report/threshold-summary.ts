@@ -23,3 +23,18 @@ export function buildThresholdSummary(
     failingFindingCount
   };
 }
+
+export function formatThresholdSummary(summary: ThresholdSummary): string | undefined {
+  if (!summary.failOn || typeof summary.failed !== "boolean") {
+    return undefined;
+  }
+
+  if (typeof summary.failingFindingCount !== "number") {
+    return undefined;
+  }
+
+  const outcome = summary.failed ? "failed" : "passed";
+  const findingLabel = summary.failingFindingCount === 1 ? "finding" : "findings";
+
+  return `Threshold: ${outcome} on ${summary.failOn} (${summary.failingFindingCount} ${findingLabel} at or above threshold)`;
+}

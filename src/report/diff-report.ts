@@ -1,7 +1,7 @@
 import type { RiskDiff } from "../diff/compare";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
 import type { UsageProfile } from "../policy/profiles";
-import { buildThresholdSummary } from "./threshold-summary";
+import { buildThresholdSummary, formatThresholdSummary } from "./threshold-summary";
 
 export type DiffReportInput = {
   baselineRef: string;
@@ -16,6 +16,7 @@ export type DiffReportInput = {
 export function renderDiffReport(input: DiffReportInput): string {
   const summary = summarize(input.diff.newFindings);
   const nextAction = nextActionFor(input.diff.newFindings);
+  const thresholdSummary = buildThresholdSummary(input.diff.newFindings, input.failOn);
 
   if (input.json) {
     return JSON.stringify(
@@ -29,7 +30,7 @@ export function renderDiffReport(input: DiffReportInput): string {
         newFindingCount: input.diff.newFindings.length,
         newRisks: summary,
         nextAction,
-        ...buildThresholdSummary(input.diff.newFindings, input.failOn),
+        ...thresholdSummary,
         findings: input.diff.newFindings
       },
       null,
@@ -48,6 +49,7 @@ export function renderDiffReport(input: DiffReportInput): string {
     `Production only: ${input.prodOnly ? "yes" : "no"}`,
     `Findings: ${input.diff.currentFindings.length} current, ${input.diff.baselineFindings.length} baseline, ${input.diff.newFindings.length} new`,
     `New risks: ${summary.high} high, ${summary.review} review, ${summary.unknown} unknown, ${summary.low} low`,
+    ...renderThresholdLines(thresholdSummary),
     "Status: profile-aware risk diff evaluated",
     "",
     ...renderNewFindings(input.diff.newFindings),
@@ -61,6 +63,7 @@ function renderMarkdownReport(
   summary: Record<RiskSeverity, number>
 ): string {
   const nextAction = nextActionFor(input.diff.newFindings);
+  const thresholdSummary = buildThresholdSummary(input.diff.newFindings, input.failOn);
 
   return [
     "# Ohrisk diff",
@@ -70,6 +73,7 @@ function renderMarkdownReport(
     `- Production only: \`${input.prodOnly ? "yes" : "no"}\``,
     `- Findings: \`${input.diff.currentFindings.length} current\`, \`${input.diff.baselineFindings.length} baseline\`, \`${input.diff.newFindings.length} new\``,
     `- New risks: \`${summary.high} high\`, \`${summary.review} review\`, \`${summary.unknown} unknown\`, \`${summary.low} low\``,
+    ...renderMarkdownThresholdLines(thresholdSummary),
     "",
     ...renderMarkdownNewFindings(input.diff.newFindings),
     "",
@@ -92,6 +96,18 @@ function summarize(findings: RiskFinding[]): Record<RiskSeverity, number> {
       low: 0
     }
   );
+}
+
+function renderThresholdLines(thresholdSummary: ReturnType<typeof buildThresholdSummary>): string[] {
+  const thresholdLine = formatThresholdSummary(thresholdSummary);
+  return thresholdLine ? [thresholdLine] : [];
+}
+
+function renderMarkdownThresholdLines(
+  thresholdSummary: ReturnType<typeof buildThresholdSummary>
+): string[] {
+  const thresholdLine = formatThresholdSummary(thresholdSummary);
+  return thresholdLine ? [`- ${thresholdLine}`] : [];
 }
 
 function renderNewFindings(findings: RiskFinding[]): string[] {
