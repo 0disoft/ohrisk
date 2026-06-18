@@ -1,0 +1,55 @@
+import { describe, expect, test } from "bun:test";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { discoverProject } from "../src/project/discover";
+
+const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
+
+describe("discoverProject", () => {
+  test("finds a bun.lock project", () => {
+    const result = discoverProject({ cwd: path.join(fixturesDir, "bun-project") });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.rootDir).toBe(path.join(fixturesDir, "bun-project"));
+    expect(result.value.lockfile.kind).toBe("bun");
+    expect(path.basename(result.value.lockfile.path)).toBe("bun.lock");
+  });
+
+  test("walks up from a nested directory", () => {
+    const result = discoverProject({ cwd: path.join(fixturesDir, "bun-project", "packages", "app") });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.rootDir).toBe(path.join(fixturesDir, "bun-project"));
+  });
+
+  test("rejects projects without a supported lockfile", () => {
+    const result = discoverProject({ cwd: path.join(fixturesDir, "no-lockfile") });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected discovery to fail.");
+    }
+
+    expect(result.error.code).toBe("NO_SUPPORTED_LOCKFILE");
+  });
+
+  test("rejects projects with multiple lockfiles", () => {
+    const result = discoverProject({ cwd: path.join(fixturesDir, "multiple-lockfiles") });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected discovery to fail.");
+    }
+
+    expect(result.error.code).toBe("MULTIPLE_LOCKFILES");
+  });
+});
