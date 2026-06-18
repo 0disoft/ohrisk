@@ -23,6 +23,7 @@ describe("package metadata", () => {
         bun?: string;
       };
       packageManager?: string;
+      scripts?: Record<string, string>;
       repository?: {
         url?: string;
       };
@@ -40,6 +41,7 @@ describe("package metadata", () => {
     expect(packageJson.files).toEqual(["CHANGELOG.md", "src"]);
     expect(packageJson.publishConfig?.access).toBe("public");
     expect(packageJson.repository?.url).toBe("git+https://github.com/0disoft/ohrisk.git");
+    expect(packageJson.scripts?.["verify:release"]).toBe("bun test && npm pack --dry-run --json");
   });
 
   test("uses Bun as the packaged CLI runtime", () => {

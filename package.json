@@ -33,7 +33,8 @@
   },
   "scripts": {
     "scan": "bun run src/cli/main.ts scan",
-    "test": "bun test"
+    "test": "bun test",
+    "verify:release": "bun test && npm pack --dry-run --json"
   },
   "files": [
     "CHANGELOG.md",
