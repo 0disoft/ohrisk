@@ -10,6 +10,10 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     signals.push("notice-required");
   }
 
+  if (hasExplicitCommercialRestriction(evidence)) {
+    signals.push("commercial-restriction");
+  }
+
   const licenseExpression = readPackageLicenseExpression(evidence);
 
   if (!licenseExpression) {
@@ -64,6 +68,18 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
 
 export function normalizeAllLicenseEvidence(evidence: LicenseEvidence[]): NormalizedLicense[] {
   return evidence.map(normalizeLicenseEvidence);
+}
+
+function hasExplicitCommercialRestriction(evidence: LicenseEvidence): boolean {
+  return evidence.files.some((file) => (
+    /\bCommons Clause\b/i.test(file.text)
+    || /\bBusiness Source License\b/i.test(file.text)
+    || /\bBUSL\b/i.test(file.text)
+    || /\bNon-Commercial\b/i.test(file.text)
+    || /\bnoncommercial\b/i.test(file.text)
+    || /\bnot for commercial use\b/i.test(file.text)
+    || /\bcommercial use\s+(?:is\s+)?(?:prohibited|restricted|not permitted)\b/i.test(file.text)
+  ));
 }
 
 function readPackageLicenseExpression(evidence: LicenseEvidence): string | undefined {

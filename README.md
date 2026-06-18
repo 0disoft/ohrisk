@@ -32,6 +32,7 @@ The current implementation is the first npm-style vertical slice:
 - `package.json` license fields
 - common `LICENSE`, `LICENCE`, `COPYING`, and `NOTICE` files
 - SPDX-like license expression parsing
+- explicit commercial restriction text detection in license evidence
 - profile-aware risk evaluation for `saas` and `distributed-app`
 - terminal and JSON reports
 - SARIF 2.1.0 reports for code scanning upload
@@ -188,7 +189,7 @@ Ohrisk intentionally avoids legal `safe` or `unsafe` verdicts.
 
 - `low`: known low-risk license expression for the selected profile
 - `review`: review before shipping under the selected profile
-- `high`: replace or escalate before shipping under the selected profile
+- `high`: replace or escalate before shipping under the selected profile, including explicit commercial-use restrictions
 - `unknown`: missing, malformed, or unrecognized license evidence
 
 For example, GPL is treated differently for `saas` and `distributed-app`

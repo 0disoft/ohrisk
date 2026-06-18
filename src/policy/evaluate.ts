@@ -74,6 +74,10 @@ export function evaluateLicenseRisks(input: {
 }
 
 function classifySeverity(license: NormalizedLicense, profile: UsageProfile): RiskSeverity {
+  if (license.signals.includes("commercial-restriction")) {
+    return "high";
+  }
+
   if (license.signals.includes("missing") || license.signals.includes("malformed")) {
     return "unknown";
   }

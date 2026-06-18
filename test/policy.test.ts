@@ -186,4 +186,24 @@ describe("evaluateLicenseRisk", () => {
     expect(finding.severity).toBe("high");
     expect(finding.recommendation).toBe("exclude-dev-only");
   });
+
+  test("treats explicit commercial restriction signals as high risk", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "package@1.0.0",
+        original: "SEE LICENSE IN LICENSE",
+        choices: ["SEE LICENSE IN LICENSE"],
+        joiner: "single",
+        signals: ["commercial-restriction", "malformed", "custom-text"],
+        evidenceSources: ["source: local", "file: LICENSE (license)"],
+        confidence: "low"
+      },
+      dependency: baseDependency,
+      profile: "saas"
+    });
+
+    expect(finding.severity).toBe("high");
+    expect(finding.recommendation).toBe("replace");
+    expect(finding.evidence).toContain("signals: commercial-restriction, malformed, custom-text");
+  });
 });

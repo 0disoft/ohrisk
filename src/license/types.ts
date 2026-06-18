@@ -2,6 +2,7 @@ export type NormalizedLicenseSignal =
   | "missing"
   | "malformed"
   | "custom-text"
+  | "commercial-restriction"
   | "notice-required";
 
 export type NormalizedLicenseConfidence =

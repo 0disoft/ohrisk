@@ -179,4 +179,23 @@ describe("normalizeLicenseEvidence", () => {
       confidence: "low"
     });
   });
+
+  test("marks explicit commercial restriction text in license files", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "commons-clause-package@1.0.0",
+      packageJsonLicense: "SEE LICENSE IN LICENSE",
+      files: [
+        {
+          path: "LICENSE",
+          kind: "license",
+          text: "The software is provided under the Commons Clause License Condition."
+        }
+      ],
+      source: "local",
+      warnings: []
+    });
+
+    expect(normalized.signals).toEqual(["commercial-restriction", "malformed", "custom-text"]);
+    expect(normalized.confidence).toBe("low");
+  });
 });
