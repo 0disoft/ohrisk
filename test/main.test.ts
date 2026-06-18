@@ -28,7 +28,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.1.0"]);
+    expect(stdout).toEqual(["ohrisk 0.2.0"]);
   });
 
   test("prints actionable findings for a Bun project", async () => {
