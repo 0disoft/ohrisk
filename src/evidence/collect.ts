@@ -57,8 +57,8 @@ async function collectNodeEvidence(input: {
     });
   }
 
-  const nodeModulesPath = resolveNodeModulesPackage(input.node.name, input.projectRoot);
-  if (existsSync(nodeModulesPath) && statSync(nodeModulesPath).isDirectory()) {
+  const nodeModulesPath = findNodeModulesPackage(input.node, input.projectRoot);
+  if (nodeModulesPath) {
     return collectLocalPackageEvidence({
       packageId: input.node.id,
       packageDir: nodeModulesPath
@@ -192,6 +192,19 @@ function resolveLocalArtifact(resolved: string, projectRoot: string): string | u
 
   if (resolved.startsWith(".") || path.isAbsolute(resolved)) {
     return path.resolve(projectRoot, resolved);
+  }
+
+  return undefined;
+}
+
+function findNodeModulesPackage(node: DependencyNode, projectRoot: string): string | undefined {
+  const packageNames = [...new Set([...(node.installNames ?? []), node.name])];
+
+  for (const packageName of packageNames) {
+    const packagePath = resolveNodeModulesPackage(packageName, projectRoot);
+    if (existsSync(packagePath) && statSync(packagePath).isDirectory()) {
+      return packagePath;
+    }
   }
 
   return undefined;

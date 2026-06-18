@@ -5,6 +5,8 @@ import path from "node:path";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 import {
+  addUniqueInstallName,
+  dependencyInstallName,
   formatDependencyPathSegment,
   parseNpmPackageReference,
   resolveNpmDependencyReference
@@ -393,10 +395,15 @@ function walkDependency(input: {
   const nextSeen = new Set(input.seen);
   nextSeen.add(input.record.key);
 
+  const requestedName = input.requestedName ?? input.record.name;
+  const installName = dependencyInstallName({
+    requestedName,
+    actualName: input.record.name
+  });
   const nextPath = [
     ...input.path,
     formatDependencyPathSegment({
-      requestedName: input.requestedName ?? input.record.name,
+      requestedName,
       actualName: input.record.name,
       packageId: input.record.id
     })
@@ -406,6 +413,10 @@ function walkDependency(input: {
   if (existing) {
     existing.direct = existing.direct || input.direct;
     existing.dependencyType = mergeDependencyType(existing.dependencyType, input.dependencyType);
+    existing.installNames = addUniqueInstallName({
+      current: existing.installNames,
+      installName
+    });
     existing.paths.push(nextPath);
   } else {
     input.nodeMap.set(input.record.id, {
@@ -413,6 +424,7 @@ function walkDependency(input: {
       name: input.record.name,
       version: input.record.version,
       ecosystem: "npm",
+      ...(installName ? { installNames: [installName] } : {}),
       ...(input.record.resolved ? { resolved: input.record.resolved } : {}),
       ...(input.record.integrity ? { integrity: input.record.integrity } : {}),
       dependencyType: input.dependencyType,

@@ -105,12 +105,14 @@ describe("parseBunLockfile", () => {
     expect(result.value.nodes.find((node) => node.id === "permissive-parent@1.0.0"))
       .toMatchObject({
         name: "permissive-parent",
+        installNames: ["compat-parent"],
         direct: true,
         paths: [["fixture-bun-alias-project", "compat-parent -> permissive-parent@1.0.0"]]
       });
     expect(result.value.nodes.find((node) => node.id === "agpl-child@0.1.0"))
       .toMatchObject({
         name: "agpl-child",
+        installNames: ["compat-child"],
         direct: false,
         paths: [[
           "fixture-bun-alias-project",

@@ -12,6 +12,7 @@ export type DependencyNode = {
   name: string;
   version: string;
   ecosystem: PackageEcosystem;
+  installNames?: string[];
   resolved?: string;
   integrity?: string;
   dependencyType: DependencyType;

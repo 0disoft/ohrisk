@@ -317,6 +317,62 @@ describe("collectGraphEvidence", () => {
     }
   });
 
+  test("uses npm alias install names for node_modules package evidence", async () => {
+    const projectRoot = createInstalledPackageProject({
+      name: "permissive-parent",
+      installName: "compat-parent",
+      version: "1.0.0",
+      license: "MIT",
+      licenseText: "MIT License from aliased node_modules package."
+    });
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "package-lock.json",
+          nodes: [
+            {
+              id: "permissive-parent@1.0.0",
+              name: "permissive-parent",
+              installNames: ["compat-parent"],
+              version: "1.0.0",
+              ecosystem: "npm",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "compat-parent -> permissive-parent@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot,
+        fetchArtifact: async () => {
+          throw new Error("Registry fallback should not run when alias node_modules evidence exists.");
+        }
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+
+      expect(evidence.value).toEqual([
+        expect.objectContaining({
+          packageId: "permissive-parent@1.0.0",
+          packageJsonLicense: "MIT",
+          source: "local",
+          files: [
+            {
+              path: "LICENSE",
+              kind: "license",
+              text: "MIT License from aliased node_modules package."
+            }
+          ]
+        })
+      ]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("uses installed node_modules package evidence before remote tarball fetch", async () => {
     const projectRoot = createInstalledPackageProject({
       name: "remote-but-installed",
@@ -501,12 +557,13 @@ function createTarGz(files: Record<string, string>): Buffer {
 
 function createInstalledPackageProject(input: {
   name: string;
+  installName?: string;
   version: string;
   license: string;
   licenseText: string;
 }): string {
   const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-installed-package-"));
-  const packageDir = path.join(projectRoot, "node_modules", ...input.name.split("/"));
+  const packageDir = path.join(projectRoot, "node_modules", ...(input.installName ?? input.name).split("/"));
   mkdirSync(packageDir, { recursive: true });
   writeFileSync(
     path.join(packageDir, "package.json"),

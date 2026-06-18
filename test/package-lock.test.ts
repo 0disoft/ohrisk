@@ -159,6 +159,7 @@ describe("parsePackageLockfile", () => {
     expect(result.value.nodes.find((node) => node.id === "permissive-parent@1.0.0"))
       .toMatchObject({
         name: "permissive-parent",
+        installNames: ["compat-parent"],
         direct: true,
         paths: [[
           "fixture-package-lock-alias-project",
@@ -168,6 +169,7 @@ describe("parsePackageLockfile", () => {
     expect(result.value.nodes.find((node) => node.id === "agpl-child@0.1.0"))
       .toMatchObject({
         name: "agpl-child",
+        installNames: ["compat-child"],
         direct: false,
         paths: [[
           "fixture-package-lock-alias-project",

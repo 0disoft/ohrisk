@@ -57,3 +57,22 @@ export function formatDependencyPathSegment(input: {
     ? input.packageId
     : `${input.requestedName} -> ${input.packageId}`;
 }
+
+export function dependencyInstallName(input: {
+  requestedName: string;
+  actualName: string;
+}): string | undefined {
+  return input.requestedName === input.actualName ? undefined : input.requestedName;
+}
+
+export function addUniqueInstallName(input: {
+  current: string[] | undefined;
+  installName: string | undefined;
+}): string[] | undefined {
+  if (!input.installName) {
+    return input.current;
+  }
+
+  const current = input.current ?? [];
+  return current.includes(input.installName) ? current : [...current, input.installName];
+}

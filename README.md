@@ -26,7 +26,7 @@ The current implementation is the first npm-style vertical slice:
 - npm alias dependency resolution with alias context preserved in dependency paths
 - production and development dependency classification
 - local `file:` package artifact evidence
-- installed `node_modules` package evidence before network fallback
+- installed `node_modules` package evidence, including npm alias install names, before network fallback
 - remote HTTP(S) package tarball evidence when the lockfile points to a tarball
 - npm registry metadata lookup when the lockfile does not include a direct tarball URL
 - gzipped package tarball evidence
