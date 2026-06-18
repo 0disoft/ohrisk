@@ -239,6 +239,9 @@ describe("evaluateLicenseRisk", () => {
       });
 
       expect(finding.severity).toBe("high");
+      expect(finding.reason).toBe(
+        "License expression includes a source-available or commercial-use restriction for saas."
+      );
       expect(finding.recommendation).toBe("replace");
       expect(finding.action).toBe("Replace this package or escalate before shipping.");
     }

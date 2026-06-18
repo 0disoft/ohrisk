@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.37.0 - 2026-06-19
+## 0.38.0 - 2026-06-19
 
 First public release candidate for Ohrisk.
 
@@ -37,6 +37,7 @@ First public release candidate for Ohrisk.
 - `Zlib` is classified as a low-risk permissive license.
 - Explicit commercial restriction text detection for Commons Clause, BUSL, and non-commercial license evidence.
 - `UNLICENSED` packages get specific reason and action text instead of generic high-risk wording.
+- Source-available restriction licenses get specific high-risk reason text.
 - Recognizable standard license text in `LICENSE` and `COPYING` files is used as medium-confidence evidence when package license metadata is absent.
 - Recognizable standard license files can resolve malformed package metadata pointers such as `SEE LICENSE IN LICENSE`.
 - Standard license file detection covers `Unlicense` and `CC0-1.0` public-domain-style text.

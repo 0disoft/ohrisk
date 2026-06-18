@@ -35,13 +35,17 @@ const NETWORK_COPYLEFT_LICENSE_PREFIXES = [
   "AGPL"
 ];
 
-const COMMERCIAL_RESTRICTION_LICENSES = new Set([
+const SOURCE_AVAILABLE_RESTRICTION_LICENSES = new Set([
   "SSPL-1.0",
   "BUSL-1.1",
   "Commons-Clause",
   "Elastic-2.0",
   "PolyForm-Noncommercial-1.0.0",
-  "PolyForm-Free-Trial-1.0.0",
+  "PolyForm-Free-Trial-1.0.0"
+]);
+
+const COMMERCIAL_RESTRICTION_LICENSES = new Set([
+  ...SOURCE_AVAILABLE_RESTRICTION_LICENSES,
   "UNLICENSED"
 ]);
 
@@ -174,6 +178,10 @@ function explainSeverity(
     case "high":
       if (license.choices.includes("UNLICENSED")) {
         return "Package metadata explicitly marks the package as UNLICENSED.";
+      }
+
+      if (license.choices.some((choice) => SOURCE_AVAILABLE_RESTRICTION_LICENSES.has(choice))) {
+        return `License expression includes a source-available or commercial-use restriction for ${profile}.`;
       }
 
       if (license.signals.includes("commercial-restriction")) {
