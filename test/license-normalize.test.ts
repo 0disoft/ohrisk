@@ -257,6 +257,60 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
+  test("recognizes common GPL v2 family license file text", () => {
+    expect(
+      normalizeLicenseEvidence({
+        packageId: "gpl2-file-only@1.0.0",
+        files: [
+          {
+            path: "COPYING",
+            kind: "copying",
+            text: [
+              "GNU GENERAL PUBLIC LICENSE",
+              "Version 2, June 1991",
+              "",
+              "TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION"
+            ].join("\n")
+          }
+        ],
+        source: "local",
+        warnings: []
+      })
+    ).toMatchObject({
+      packageId: "gpl2-file-only@1.0.0",
+      original: "GPL-2.0-only",
+      expression: "GPL-2.0-only",
+      choices: ["GPL-2.0-only"],
+      confidence: "medium"
+    });
+
+    expect(
+      normalizeLicenseEvidence({
+        packageId: "lgpl21-file-only@1.0.0",
+        files: [
+          {
+            path: "COPYING.LESSER",
+            kind: "copying",
+            text: [
+              "GNU LESSER GENERAL PUBLIC LICENSE",
+              "Version 2.1, February 1999",
+              "",
+              "TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION"
+            ].join("\n")
+          }
+        ],
+        source: "local",
+        warnings: []
+      })
+    ).toMatchObject({
+      packageId: "lgpl21-file-only@1.0.0",
+      original: "LGPL-2.1-only",
+      expression: "LGPL-2.1-only",
+      choices: ["LGPL-2.1-only"],
+      confidence: "medium"
+    });
+  });
+
   test("marks explicit commercial restriction text in license files", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "commons-clause-package@1.0.0",

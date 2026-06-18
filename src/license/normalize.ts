@@ -174,8 +174,20 @@ function recognizeStandardLicenseText(text: string): string | undefined {
     return "LGPL-3.0-only";
   }
 
+  if (/\bGNU LESSER GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 2\.1\b/i.test(text)) {
+    return "LGPL-2.1-only";
+  }
+
+  if (/\bGNU LIBRARY GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 2\b/i.test(text)) {
+    return "LGPL-2.0-only";
+  }
+
   if (/\bGNU GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 3\b/i.test(text)) {
     return "GPL-3.0-only";
+  }
+
+  if (/\bGNU GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 2\b/i.test(text)) {
+    return "GPL-2.0-only";
   }
 
   if (/\bMozilla Public License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
