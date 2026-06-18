@@ -1,4 +1,5 @@
 import type { RiskDiff } from "../diff/compare";
+import { NOTICE_ACTION } from "../policy/evaluate";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
 import type { UsageProfile } from "../policy/profiles";
 import { buildThresholdSummary, formatThresholdSummary } from "./threshold-summary";
@@ -170,6 +171,10 @@ function nextActionFor(findings: RiskFinding[]): string {
 
   if (findings.some((finding) => finding.recommendation === "exclude-dev-only")) {
     return "Confirm new dev-only risk stays out of production before merging.";
+  }
+
+  if (findings.some((finding) => finding.action === NOTICE_ACTION)) {
+    return "Preserve required NOTICE or attribution files for newly introduced packages.";
   }
 
   return "No blocking action for new low-risk findings.";

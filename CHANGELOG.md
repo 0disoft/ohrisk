@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.38.0 - 2026-06-19
+## 0.39.0 - 2026-06-19
 
 First public release candidate for Ohrisk.
 
@@ -16,6 +16,7 @@ First public release candidate for Ohrisk.
 - `--json` output that reuses the terminal report finding model.
 - `--sarif` output for SARIF 2.1.0 code scanning upload.
 - `--markdown` output for PR comments and release notes.
+- Diff reports surface newly introduced NOTICE and attribution work as the next action.
 - `--output <file>` for writing scan, ci, diff, and explain reports to disk.
 - `ohrisk ci --fail-on <severity>` for non-zero exits when findings meet a configured threshold.
 - `ohrisk explain <license-expression>` for profile-aware license risk explanation without scanning a project.
