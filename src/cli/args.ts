@@ -13,12 +13,14 @@ export type CliCommand =
       profile: UsageProfile;
       prodOnly: boolean;
       json: boolean;
+      sarif: boolean;
     }
   | {
       kind: "ci";
       profile: UsageProfile;
       prodOnly: boolean;
       json: boolean;
+      sarif: boolean;
       failOn: RiskSeverity;
     }
   | {
@@ -75,6 +77,7 @@ function parseScanLikeArgs(
   let profile: UsageProfile = "saas";
   let prodOnly = false;
   let json = false;
+  let sarif = false;
   let failOn: RiskSeverity = "high";
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -121,7 +124,18 @@ function parseScanLikeArgs(
         prodOnly = true;
         break;
       case "--json":
+        if (sarif) {
+          return outputFormatConflict("--json");
+        }
+
         json = true;
+        break;
+      case "--sarif":
+        if (json) {
+          return outputFormatConflict("--sarif");
+        }
+
+        sarif = true;
         break;
       case "--fail-on": {
         if (kind !== "ci") {
@@ -191,6 +205,7 @@ function parseScanLikeArgs(
       profile,
       prodOnly,
       json,
+      sarif,
       failOn
     });
   }
@@ -199,7 +214,8 @@ function parseScanLikeArgs(
     kind,
     profile,
     prodOnly,
-    json
+    json,
+    sarif
   });
 }
 
@@ -208,8 +224,21 @@ function isFailOnSeverity(value: string): value is RiskSeverity {
 }
 
 function supportedOptionsFor(kind: "scan" | "ci"): string[] {
-  const common = ["--profile", "--prod", "--json"];
+  const common = ["--profile", "--prod", "--json", "--sarif"];
   return kind === "ci" ? [...common, "--fail-on"] : common;
+}
+
+function outputFormatConflict(option: string): Result<CliCommand, OhriskError> {
+  return err(
+    createError({
+      code: "INVALID_ARGUMENT",
+      category: "invalid_input",
+      message: `${option} cannot be combined with another output format option.`,
+      details: {
+        supportedOutputOptions: ["--json", "--sarif"]
+      }
+    })
+  );
 }
 
 function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {

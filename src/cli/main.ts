@@ -8,6 +8,7 @@ import { normalizeAllLicenseEvidence, normalizeLicenseEvidence } from "../licens
 import { evaluateLicenseRisk, evaluateLicenseRisks } from "../policy/evaluate";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
 import { renderExplainReport } from "../report/explain-report";
+import { renderSarifReport } from "../report/sarif-report";
 import { renderScanReport } from "../report/scan-report";
 import { discoverProject, type ProjectInput } from "../project/discover";
 import { exitCodeForError, formatError } from "../shared/errors";
@@ -127,18 +128,18 @@ async function runScan(
     profile: command.profile
   });
 
-  io.stdout(
-    renderScanReport({
-      project: discovered.value,
-      graph: scanGraph,
-      evidence: evidence.value,
-      normalizedLicenses,
-      riskFindings,
-      profile: command.profile,
-      prodOnly: command.prodOnly,
-      json: command.json
-    })
-  );
+  const reportInput = {
+    project: discovered.value,
+    graph: scanGraph,
+    evidence: evidence.value,
+    normalizedLicenses,
+    riskFindings,
+    profile: command.profile,
+    prodOnly: command.prodOnly,
+    json: command.json
+  };
+
+  io.stdout(command.sarif ? renderSarifReport(reportInput) : renderScanReport(reportInput));
 
   if (command.kind === "ci" && hasFailingFinding(riskFindings, command.failOn)) {
     return 1;
@@ -152,8 +153,8 @@ function renderHelp(): string {
     "Ohrisk",
     "",
     "Usage:",
-    "  ohrisk scan [--profile saas|distributed-app] [--prod] [--json]",
-    "  ohrisk ci [--profile saas|distributed-app] [--prod] [--json] [--fail-on high|unknown|review|low]",
+    "  ohrisk scan [--profile saas|distributed-app] [--prod] [--json|--sarif]",
+    "  ohrisk ci [--profile saas|distributed-app] [--prod] [--json|--sarif] [--fail-on high|unknown|review|low]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json]",
     "  ohrisk --version",
     "",
@@ -166,6 +167,7 @@ function renderHelp(): string {
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --prod                 Limit later scan stages to production dependencies.",
     "  --json                 Print machine-readable output.",
+    "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
     "  --fail-on <severity>   CI threshold. Defaults to high.",
     "  --version, -v          Print the Ohrisk package version."
   ].join("\n");

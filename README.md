@@ -33,9 +33,10 @@ The current implementation is the first npm-style vertical slice:
 - SPDX-like license expression parsing
 - profile-aware risk evaluation for `saas` and `distributed-app`
 - terminal and JSON reports
+- SARIF 2.1.0 reports for code scanning upload
 - standalone license expression explanation
 
-PR diff mode, SARIF, SBOM export, waiver workflows, GitHub App checks, and
+PR diff mode, SBOM export, waiver workflows, GitHub App checks, and
 multi-ecosystem adapters are not part of this slice yet.
 
 ## Usage
@@ -71,6 +72,12 @@ Print machine-readable output:
 bun run src/cli/main.ts scan --json
 ```
 
+Print SARIF output for code scanning upload:
+
+```bash
+bun run src/cli/main.ts scan --sarif
+```
+
 Fail a local CI step when findings meet a threshold:
 
 ```bash
@@ -94,6 +101,7 @@ Once installed as a package, the intended command shape is:
 ```bash
 ohrisk scan --profile saas --prod
 ohrisk ci --fail-on high
+ohrisk scan --sarif
 ohrisk explain AGPL-3.0-only --profile saas
 ohrisk --version
 ```

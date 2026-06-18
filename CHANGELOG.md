@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 - 2026-06-18
+## 0.4.0 - 2026-06-18
 
 First public release candidate for Ohrisk.
 
@@ -10,6 +10,7 @@ First public release candidate for Ohrisk.
 - `--profile saas` and `--profile distributed-app` risk profiles.
 - `--prod` filtering for production dependency scans.
 - `--json` output that reuses the terminal report finding model.
+- `--sarif` output for SARIF 2.1.0 code scanning upload.
 - `ohrisk ci --fail-on <severity>` for non-zero exits when findings meet a configured threshold.
 - `ohrisk explain <license-expression>` for profile-aware license risk explanation without scanning a project.
 - `--version` and `-v` package version output.
@@ -27,7 +28,7 @@ First public release candidate for Ohrisk.
 ### Not Included Yet
 
 - PR diff mode.
-- SARIF or SBOM output.
+- SBOM output.
 - Waiver, approval, or legal workflow management.
 - GitHub App integration.
 - Multi-ecosystem adapters beyond the first npm-style Bun lockfile path.

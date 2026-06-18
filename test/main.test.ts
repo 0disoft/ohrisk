@@ -28,7 +28,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.3.0"]);
+    expect(stdout).toEqual(["ohrisk 0.4.0"]);
   });
 
   test("prints actionable findings for a Bun project", async () => {
@@ -163,6 +163,82 @@ describe("main", () => {
         recommendation: "review"
       })
     );
+  });
+
+  test("prints SARIF report with stable rule ids and lockfile locations", async () => {
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
+    const exitCode = await main(["scan", "--sarif", "--prod"], io);
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+
+    const payload = JSON.parse(stdout.join("\n")) as {
+      $schema: string;
+      version: string;
+      runs: Array<{
+        tool: {
+          driver: {
+            name: string;
+            semanticVersion: string;
+            rules: Array<{
+              id: string;
+              defaultConfiguration: {
+                level: string;
+              };
+            }>;
+          };
+        };
+        results: Array<{
+          ruleId: string;
+          ruleIndex: number;
+          level: string;
+          message: {
+            text: string;
+          };
+          locations: Array<{
+            physicalLocation: {
+              artifactLocation: {
+                uri: string;
+              };
+              region: {
+                startLine: number;
+              };
+            };
+          }>;
+          partialFingerprints: {
+            primaryLocationLineHash: string;
+          };
+        }>;
+      }>;
+    };
+
+    expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
+    expect(payload.version).toBe("2.1.0");
+    expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.4.0");
+    expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
+      "ohrisk/license-high",
+      "ohrisk/license-unknown",
+      "ohrisk/license-review",
+      "ohrisk/license-low"
+    ]);
+    expect(payload.runs[0]?.results).toHaveLength(5);
+    expect(payload.runs[0]?.results[0]).toMatchObject({
+      ruleId: "ohrisk/license-high",
+      ruleIndex: 0,
+      level: "error"
+    });
+    expect(payload.runs[0]?.results[0]?.message.text).toContain("agpl-child@0.1.0");
+    expect(payload.runs[0]?.results[0]?.locations[0]?.physicalLocation).toEqual({
+      artifactLocation: {
+        uri: "bun.lock"
+      },
+      region: {
+        startLine: 1
+      }
+    });
+    expect(payload.runs[0]?.results[0]?.partialFingerprints.primaryLocationLineHash)
+      .toContain("agpl-child@0.1.0");
   });
 
   test("returns non-zero from ci when findings meet the fail threshold", async () => {

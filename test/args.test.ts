@@ -15,7 +15,8 @@ describe("parseArgs", () => {
       kind: "scan",
       profile: "saas",
       prodOnly: false,
-      json: false
+      json: false,
+      sarif: false
     });
   });
 
@@ -31,7 +32,25 @@ describe("parseArgs", () => {
       kind: "scan",
       profile: "distributed-app",
       prodOnly: true,
-      json: true
+      json: true,
+      sarif: false
+    });
+  });
+
+  test("parses scan sarif output", () => {
+    const parsed = parseArgs(["scan", "--sarif"]);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+
+    expect(parsed.value).toEqual({
+      kind: "scan",
+      profile: "saas",
+      prodOnly: false,
+      json: false,
+      sarif: true
     });
   });
 
@@ -48,6 +67,7 @@ describe("parseArgs", () => {
       profile: "saas",
       prodOnly: false,
       json: false,
+      sarif: false,
       failOn: "high"
     });
   });
@@ -73,8 +93,20 @@ describe("parseArgs", () => {
       profile: "distributed-app",
       prodOnly: true,
       json: true,
+      sarif: false,
       failOn: "review"
     });
+  });
+
+  test("rejects conflicting scan output formats", () => {
+    const parsed = parseArgs(["scan", "--json", "--sarif"]);
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) {
+      throw new Error("Expected conflicting output formats to fail.");
+    }
+
+    expect(parsed.error.code).toBe("INVALID_ARGUMENT");
   });
 
   test("parses explain expressions and options", () => {
