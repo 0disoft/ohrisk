@@ -112,11 +112,11 @@ function renderMarkdownNewFindings(findings: RiskFinding[]): string[] {
   return [
     "## New findings",
     "",
-    "| Severity | Package | Recommendation | Path |",
-    "| --- | --- | --- | --- |",
+    "| Severity | Package | Reason | Recommendation | Path |",
+    "| --- | --- | --- | --- | --- |",
     ...findings.map(
       (finding) =>
-        `| ${finding.severity} | \`${escapeMarkdownTable(finding.packageId)}\` | ${finding.recommendation} | ${escapeMarkdownTable(finding.paths[0]?.join(" -> ") ?? "unknown")} |`
+        `| ${finding.severity} | \`${escapeMarkdownTable(finding.packageId)}\` | ${escapeMarkdownTable(finding.reason)} | ${finding.recommendation} | ${escapeMarkdownTable(finding.paths[0]?.join(" -> ") ?? "unknown")} |`
     )
   ];
 }

@@ -154,6 +154,7 @@ Risks: 1 high, 1 review, 1 unknown, 2 low
 
 Findings:
 - [high] agpl-child@0.1.0
+  License expression is high risk for saas.
   recommendation: replace
   path: fixture-bun-project -> permissive-parent@1.0.0 -> agpl-child@0.1.0
   evidence: license: AGPL-3.0-only; dependency: production; transitive dependency
@@ -181,6 +182,14 @@ JSON output reuses the same finding model:
     }
   ]
 }
+```
+
+Markdown output keeps the PR-facing decision fields in one table:
+
+```markdown
+| Severity | Package | Reason | Recommendation | Path |
+| --- | --- | --- | --- | --- |
+| high | `agpl-child@0.1.0` | License expression is high risk for saas. | replace | fixture-bun-project -> permissive-parent@1.0.0 -> agpl-child@0.1.0 |
 ```
 
 ## Risk Language
