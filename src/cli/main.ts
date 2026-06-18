@@ -2,6 +2,7 @@
 import path from "node:path";
 
 import { parseArgs, type CliCommand } from "./args";
+import { collectGraphEvidence } from "../evidence/collect";
 import { parseBunLockfile } from "../graph/npm-bun-lock";
 import type { DependencyGraph } from "../graph/types";
 import { discoverProject, type ProjectInput } from "../project/discover";
@@ -51,22 +52,35 @@ function runScan(command: Extract<CliCommand, { kind: "scan" }>, io: CliIO): num
     return exitCodeForError(graph.error);
   }
 
-  io.stdout(renderScanSkeleton(discovered.value, graph.value, command));
+  const evidence = collectGraphEvidence({
+    graph: graph.value,
+    projectRoot: discovered.value.rootDir
+  });
+
+  if (isErr(evidence)) {
+    io.stderr(formatError(evidence.error));
+    return exitCodeForError(evidence.error);
+  }
+
+  io.stdout(renderScanSkeleton(discovered.value, graph.value, evidence.value, command));
   return 0;
 }
 
 function renderScanSkeleton(
   project: ProjectInput,
   graph: DependencyGraph,
+  evidence: Array<{ files: unknown[]; warnings: string[] }>,
   command: Extract<CliCommand, { kind: "scan" }>
 ): string {
   const directCount = graph.nodes.filter((node) => node.direct).length;
   const transitiveCount = graph.nodes.length - directCount;
+  const evidenceFileCount = evidence.reduce((sum, item) => sum + item.files.length, 0);
+  const evidenceWarningCount = evidence.reduce((sum, item) => sum + item.warnings.length, 0);
 
   if (command.json) {
     return JSON.stringify(
       {
-        status: "graph_parsed",
+        status: "package_evidence_collected",
         projectRoot: project.rootDir,
         lockfile: {
           kind: project.lockfile.kind,
@@ -78,6 +92,11 @@ function renderScanSkeleton(
           total: graph.nodes.length,
           direct: directCount,
           transitive: transitiveCount
+        },
+        evidence: {
+          packages: evidence.length,
+          files: evidenceFileCount,
+          warnings: evidenceWarningCount
         }
       },
       null,
@@ -92,8 +111,9 @@ function renderScanSkeleton(
     `Profile: ${command.profile}`,
     `Production only: ${command.prodOnly ? "yes" : "no"}`,
     `Dependencies: ${graph.nodes.length} total, ${directCount} direct, ${transitiveCount} transitive`,
-    "Status: dependency graph parsed",
-    "Next: collect package license evidence."
+    `Evidence: ${evidenceFileCount} files, ${evidenceWarningCount} warnings`,
+    "Status: package evidence collected",
+    "Next: normalize SPDX license expressions."
   ].join("\n");
 }
 

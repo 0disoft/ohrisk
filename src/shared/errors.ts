@@ -11,7 +11,10 @@ export type OhriskErrorCode =
   | "MULTIPLE_LOCKFILES"
   | "PROJECT_DISCOVERY_FAILED"
   | "BUN_LOCK_READ_FAILED"
-  | "BUN_LOCK_PARSE_FAILED";
+  | "BUN_LOCK_PARSE_FAILED"
+  | "PACKAGE_EVIDENCE_READ_FAILED"
+  | "PACKAGE_JSON_PARSE_FAILED"
+  | "TARBALL_PARSE_FAILED";
 
 export type OhriskError = {
   code: OhriskErrorCode;

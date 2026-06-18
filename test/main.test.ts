@@ -31,7 +31,8 @@ describe("main", () => {
     expect(stdout.join("\n")).toContain("Ohrisk scan");
     expect(stdout.join("\n")).toContain("Lockfile: bun.lock (bun)");
     expect(stdout.join("\n")).toContain("Dependencies: 4 total, 3 direct, 1 transitive");
-    expect(stdout.join("\n")).toContain("Status: dependency graph parsed");
+    expect(stdout.join("\n")).toContain("Evidence: 4 files, 0 warnings");
+    expect(stdout.join("\n")).toContain("Status: package evidence collected");
   });
 
   test("prints JSON scan skeleton when requested", async () => {
@@ -50,15 +51,25 @@ describe("main", () => {
         direct: number;
         transitive: number;
       };
+      evidence: {
+        packages: number;
+        files: number;
+        warnings: number;
+      };
     };
 
-    expect(payload.status).toBe("graph_parsed");
+    expect(payload.status).toBe("package_evidence_collected");
     expect(payload.profile).toBe("saas");
     expect(payload.prodOnly).toBe(true);
     expect(payload.dependencyGraph).toEqual({
       total: 4,
       direct: 3,
       transitive: 1
+    });
+    expect(payload.evidence).toEqual({
+      packages: 4,
+      files: 4,
+      warnings: 0
     });
   });
 

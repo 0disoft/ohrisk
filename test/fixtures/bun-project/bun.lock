@@ -18,7 +18,7 @@
   "packages": {
     "permissive-parent": [
       "permissive-parent@1.0.0",
-      "https://registry.npmjs.org/permissive-parent/-/permissive-parent-1.0.0.tgz",
+      "file:./.registry/permissive-parent",
       {
         "dependencies": {
           "agpl-child": "0.1.0",
@@ -28,19 +28,19 @@
     ],
     "agpl-child": [
       "agpl-child@0.1.0",
-      "https://registry.npmjs.org/agpl-child/-/agpl-child-0.1.0.tgz",
+      "file:./.registry/agpl-child",
       {},
       "sha512-agpl",
     ],
     "dual-license": [
       "dual-license@2.0.0",
-      "https://registry.npmjs.org/dual-license/-/dual-license-2.0.0.tgz",
+      "file:./.registry/dual-license",
       {},
       "sha512-dual",
     ],
     "dev-risk": [
       "dev-risk@3.0.0",
-      "https://registry.npmjs.org/dev-risk/-/dev-risk-3.0.0.tgz",
+      "file:./.registry/dev-risk",
       {},
       "sha512-dev",
     ],
