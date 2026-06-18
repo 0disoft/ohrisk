@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.61.0 - 2026-06-19
+
+### Fixed
+
+- `pnpm-lock.yaml` parsing now preserves nested optional and peer dependency edges from package snapshots.
+- Yarn v1 lockfile parsing now preserves nested optional dependency edges instead of reporting them as production edges.
+
 ## 0.60.0 - 2026-06-19
 
 ### Fixed

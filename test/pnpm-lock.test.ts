@@ -182,4 +182,65 @@ describe("parsePnpmLockfile", () => {
         ]]
       });
   });
+
+  test("keeps nested optional and peer dependency edges from snapshots", () => {
+    const result = parsePnpmLockText(
+      [
+        "lockfileVersion: '9.0'",
+        "importers:",
+        "  .:",
+        "    dependencies:",
+        "      prod-parent:",
+        "        specifier: 1.0.0",
+        "        version: 1.0.0",
+        "packages:",
+        "  /prod-parent@1.0.0: {}",
+        "  /regular-child@1.0.0: {}",
+        "  /optional-child@1.0.0: {}",
+        "  /peer-child@1.0.0: {}",
+        "snapshots:",
+        "  /prod-parent@1.0.0:",
+        "    dependencies:",
+        "      regular-child: 1.0.0",
+        "    optionalDependencies:",
+        "      optional-child: 1.0.0",
+        "    peerDependencies:",
+        "      peer-child: 1.0.0",
+        "  /regular-child@1.0.0: {}",
+        "  /optional-child@1.0.0: {}",
+        "  /peer-child@1.0.0: {}"
+      ].join("\n"),
+      "nested-edges-pnpm-lock.yaml"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "optional-child@1.0.0",
+      "peer-child@1.0.0",
+      "prod-parent@1.0.0",
+      "regular-child@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "regular-child@1.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: false,
+        paths: [["<root>", "prod-parent@1.0.0", "regular-child@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "optional-child@1.0.0"))
+      .toMatchObject({
+        dependencyType: "optional",
+        direct: false,
+        paths: [["<root>", "prod-parent@1.0.0", "optional-child@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "peer-child@1.0.0"))
+      .toMatchObject({
+        dependencyType: "peer",
+        direct: false,
+        paths: [["<root>", "prod-parent@1.0.0", "peer-child@1.0.0"]]
+      });
+  });
 });

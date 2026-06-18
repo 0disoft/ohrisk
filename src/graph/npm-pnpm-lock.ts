@@ -26,10 +26,10 @@ type PnpmPackageRecord = {
   id: string;
   resolved?: string;
   integrity?: string;
-  dependencies: Record<string, string>;
+  dependencies: PnpmDependencyEdge[];
 };
 
-type RootDependency = {
+type PnpmDependencyEdge = {
   name: string;
   range: string;
   type: DependencyType;
@@ -176,10 +176,7 @@ function parsePackageRecords(input: {
       id: `${identity.name}@${identity.version}`,
       ...(resolved ? { resolved } : {}),
       ...(integrity ? { integrity } : {}),
-      dependencies: {
-        ...readDependencyMap(packageEntry.dependencies),
-        ...readDependencyMap(snapshotEntry.dependencies)
-      }
+      dependencies: collectDependencyEdges(packageEntry, snapshotEntry)
     });
   }
 
@@ -247,20 +244,24 @@ function readResolvedArtifact(
   return undefined;
 }
 
-function collectRootDependencies(importer: Record<string, unknown> | undefined): RootDependency[] {
+function collectRootDependencies(importer: Record<string, unknown> | undefined): PnpmDependencyEdge[] {
   if (!importer) {
     return [];
   }
 
-  return [
-    ...dependencyEntries(importer.dependencies, "production"),
-    ...dependencyEntries(importer.devDependencies, "development"),
-    ...dependencyEntries(importer.optionalDependencies, "optional"),
-    ...dependencyEntries(importer.peerDependencies, "peer")
-  ];
+  return collectDependencyEdges(importer);
 }
 
-function dependencyEntries(value: unknown, type: DependencyType): RootDependency[] {
+function collectDependencyEdges(...sources: Record<string, unknown>[]): PnpmDependencyEdge[] {
+  return sources.flatMap((source) => [
+    ...dependencyEntries(source.dependencies, "production"),
+    ...dependencyEntries(source.devDependencies, "development"),
+    ...dependencyEntries(source.optionalDependencies, "optional"),
+    ...dependencyEntries(source.peerDependencies, "peer")
+  ]);
+}
+
+function dependencyEntries(value: unknown, type: DependencyType): PnpmDependencyEdge[] {
   return Object.entries(readImporterDependencyMap(value)).map(([name, range]) => ({
     name,
     range,
@@ -288,22 +289,6 @@ function readImporterDependencyMap(value: unknown): Record<string, string> {
       dependencies[name] = version;
     } else if (typeof specifier === "string" && specifier !== "") {
       dependencies[name] = specifier;
-    }
-  }
-
-  return dependencies;
-}
-
-function readDependencyMap(value: unknown): Record<string, string> {
-  const dependencies: Record<string, string> = {};
-  const dependencyRecord = readRecord(value);
-  if (!dependencyRecord) {
-    return dependencies;
-  }
-
-  for (const [name, range] of Object.entries(dependencyRecord)) {
-    if (typeof range === "string") {
-      dependencies[name] = range;
     }
   }
 
@@ -399,32 +384,39 @@ function walkDependency(input: {
     });
   }
 
-  for (const [childName, childRange] of Object.entries(input.record.dependencies)) {
-    const child = resolvePackageRecord({
+  for (const child of input.record.dependencies) {
+    const childRecord = resolvePackageRecord({
       packageIndex: input.packageIndex,
-      name: childName,
-      range: childRange
+      name: child.name,
+      range: child.range
     });
 
-    if (!child) {
+    if (!childRecord) {
       continue;
     }
 
     walkDependency({
-      record: child,
-      dependencyType: input.dependencyType,
+      record: childRecord,
+      dependencyType: dependencyTypeForChildEdge(input.dependencyType, child.type),
       direct: false,
       path: nextPath,
       packageIndex: input.packageIndex,
       nodeMap: input.nodeMap,
       seen: nextSeen,
-      requestedName: childName
+      requestedName: child.name
     });
   }
 }
 
 function mergeDependencyType(left: DependencyType, right: DependencyType): DependencyType {
   return dependencyTypeRank(left) >= dependencyTypeRank(right) ? left : right;
+}
+
+function dependencyTypeForChildEdge(
+  parentType: DependencyType,
+  childEdgeType: DependencyType
+): DependencyType {
+  return parentType === "production" ? childEdgeType : parentType;
 }
 
 function dependencyTypeRank(type: DependencyType): number {

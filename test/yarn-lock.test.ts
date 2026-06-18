@@ -128,4 +128,61 @@ describe("parseYarnLockfile", () => {
         ]]
       });
   });
+
+  test("keeps nested optional dependency edges from Yarn v1 entries", () => {
+    const result = parseYarnLockText({
+      packageJsonText: JSON.stringify({
+        name: "fixture-yarn-nested-optional-project",
+        dependencies: {
+          "prod-parent": "1.0.0"
+        }
+      }),
+      lockfileText: [
+        "prod-parent@1.0.0:",
+        "  version \"1.0.0\"",
+        "  dependencies:",
+        "    regular-child \"1.0.0\"",
+        "  optionalDependencies:",
+        "    optional-child \"1.0.0\"",
+        "",
+        "regular-child@1.0.0:",
+        "  version \"1.0.0\"",
+        "",
+        "optional-child@1.0.0:",
+        "  version \"1.0.0\""
+      ].join("\n"),
+      lockfilePath: "nested-optional-yarn.lock"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "optional-child@1.0.0",
+      "prod-parent@1.0.0",
+      "regular-child@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "regular-child@1.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: false,
+        paths: [[
+          "fixture-yarn-nested-optional-project",
+          "prod-parent@1.0.0",
+          "regular-child@1.0.0"
+        ]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "optional-child@1.0.0"))
+      .toMatchObject({
+        dependencyType: "optional",
+        direct: false,
+        paths: [[
+          "fixture-yarn-nested-optional-project",
+          "prod-parent@1.0.0",
+          "optional-child@1.0.0"
+        ]]
+      });
+  });
 });

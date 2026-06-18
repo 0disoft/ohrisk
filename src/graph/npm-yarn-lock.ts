@@ -37,7 +37,7 @@ type YarnPackageRecord = {
   id: string;
   resolved?: string;
   integrity?: string;
-  dependencies: Record<string, string>;
+  dependencies: YarnDependencyEdge[];
 };
 
 type PackageJsonShape = {
@@ -48,7 +48,7 @@ type PackageJsonShape = {
   peerDependencies?: unknown;
 };
 
-type RootDependency = {
+type YarnDependencyEdge = {
   name: string;
   range: string;
   type: DependencyType;
@@ -270,10 +270,7 @@ function parsePackageRecords(lockfile: Record<string, YarnLockEntry>): YarnPacka
       id: `${identity.name}@${entry.version}`,
       ...(resolved ? { resolved } : {}),
       ...(integrity ? { integrity } : {}),
-      dependencies: {
-        ...readDependencyMap(entry.dependencies),
-        ...readDependencyMap(entry.optionalDependencies)
-      }
+      dependencies: collectEntryDependencies(entry)
     });
   }
 
@@ -304,7 +301,7 @@ function parseDescriptor(descriptor: string): { name: string; range: string } | 
   return { name: parsed.name, range: parsed.reference };
 }
 
-function collectRootDependencies(packageJson: PackageJsonShape): RootDependency[] {
+function collectRootDependencies(packageJson: PackageJsonShape): YarnDependencyEdge[] {
   return [
     ...dependencyEntries(packageJson.dependencies, "production"),
     ...dependencyEntries(packageJson.devDependencies, "development"),
@@ -313,7 +310,14 @@ function collectRootDependencies(packageJson: PackageJsonShape): RootDependency[
   ];
 }
 
-function dependencyEntries(value: unknown, type: DependencyType): RootDependency[] {
+function collectEntryDependencies(entry: YarnLockEntry): YarnDependencyEdge[] {
+  return [
+    ...dependencyEntries(entry.dependencies, "production"),
+    ...dependencyEntries(entry.optionalDependencies, "optional")
+  ];
+}
+
+function dependencyEntries(value: unknown, type: DependencyType): YarnDependencyEdge[] {
   return Object.entries(readDependencyMap(value)).map(([name, range]) => ({
     name,
     range,
@@ -433,34 +437,41 @@ function walkDependency(input: {
     });
   }
 
-  for (const [childName, childRange] of Object.entries(input.record.dependencies)) {
-    const child = resolvePackageRecord({
+  for (const child of input.record.dependencies) {
+    const childRecord = resolvePackageRecord({
       descriptorIndex: input.descriptorIndex,
       nameIndex: input.nameIndex,
-      name: childName,
-      range: childRange
+      name: child.name,
+      range: child.range
     });
 
-    if (!child) {
+    if (!childRecord) {
       continue;
     }
 
     walkDependency({
-      record: child,
-      dependencyType: input.dependencyType,
+      record: childRecord,
+      dependencyType: dependencyTypeForChildEdge(input.dependencyType, child.type),
       direct: false,
       path: nextPath,
       descriptorIndex: input.descriptorIndex,
       nameIndex: input.nameIndex,
       nodeMap: input.nodeMap,
       seen: nextSeen,
-      requestedName: childName
+      requestedName: child.name
     });
   }
 }
 
 function mergeDependencyType(left: DependencyType, right: DependencyType): DependencyType {
   return dependencyTypeRank(left) >= dependencyTypeRank(right) ? left : right;
+}
+
+function dependencyTypeForChildEdge(
+  parentType: DependencyType,
+  childEdgeType: DependencyType
+): DependencyType {
+  return parentType === "production" ? childEdgeType : parentType;
 }
 
 function dependencyTypeRank(type: DependencyType): number {
