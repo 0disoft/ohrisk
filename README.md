@@ -70,6 +70,12 @@ Print machine-readable output:
 bun run src/cli/main.ts scan --json
 ```
 
+Fail a local CI step when findings meet a threshold:
+
+```bash
+bun run src/cli/main.ts ci --fail-on high
+```
+
 Print the package version:
 
 ```bash
@@ -80,6 +86,7 @@ Once installed as a package, the intended command shape is:
 
 ```bash
 ohrisk scan --profile saas --prod
+ohrisk ci --fail-on high
 ohrisk --version
 ```
 

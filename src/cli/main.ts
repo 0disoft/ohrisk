@@ -6,6 +6,7 @@ import { collectGraphEvidence } from "../evidence/collect";
 import { parseBunLockfile } from "../graph/npm-bun-lock";
 import { normalizeAllLicenseEvidence } from "../license/normalize";
 import { evaluateLicenseRisks } from "../policy/evaluate";
+import type { RiskFinding, RiskSeverity } from "../policy/types";
 import { renderScanReport } from "../report/scan-report";
 import { discoverProject, type ProjectInput } from "../project/discover";
 import { exitCodeForError, formatError } from "../shared/errors";
@@ -39,10 +40,15 @@ export async function main(
       return 0;
     case "scan":
       return runScan(command, io);
+    case "ci":
+      return runScan(command, io);
   }
 }
 
-async function runScan(command: Extract<CliCommand, { kind: "scan" }>, io: CliIO): Promise<number> {
+async function runScan(
+  command: Extract<CliCommand, { kind: "scan" | "ci" }>,
+  io: CliIO
+): Promise<number> {
   const discovered = discoverProject({ cwd: io.cwd });
 
   if (isErr(discovered)) {
@@ -93,6 +99,11 @@ async function runScan(command: Extract<CliCommand, { kind: "scan" }>, io: CliIO
       json: command.json
     })
   );
+
+  if (command.kind === "ci" && hasFailingFinding(riskFindings, command.failOn)) {
+    return 1;
+  }
+
   return 0;
 }
 
@@ -102,17 +113,37 @@ function renderHelp(): string {
     "",
     "Usage:",
     "  ohrisk scan [--profile saas|distributed-app] [--prod] [--json]",
+    "  ohrisk ci [--profile saas|distributed-app] [--prod] [--json] [--fail-on high|unknown|review|low]",
     "  ohrisk --version",
     "",
     "Commands:",
     "  scan    Find the current project and prepare a license-risk scan.",
+    "  ci      Run a scan and exit non-zero when findings meet the fail threshold.",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --prod                 Limit later scan stages to production dependencies.",
     "  --json                 Print machine-readable output.",
+    "  --fail-on <severity>   CI threshold. Defaults to high.",
     "  --version, -v          Print the Ohrisk package version."
   ].join("\n");
+}
+
+function hasFailingFinding(findings: RiskFinding[], failOn: RiskSeverity): boolean {
+  return findings.some((finding) => severityRank(finding.severity) >= severityRank(failOn));
+}
+
+function severityRank(severity: RiskSeverity): number {
+  switch (severity) {
+    case "low":
+      return 0;
+    case "review":
+      return 1;
+    case "unknown":
+      return 2;
+    case "high":
+      return 3;
+  }
 }
 
 function renderVersion(): string {

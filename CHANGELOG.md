@@ -10,6 +10,7 @@ First public release candidate for Ohrisk.
 - `--profile saas` and `--profile distributed-app` risk profiles.
 - `--prod` filtering for production dependency scans.
 - `--json` output that reuses the terminal report finding model.
+- `ohrisk ci --fail-on <severity>` for non-zero exits when findings meet a configured threshold.
 - `--version` and `-v` package version output.
 - Project discovery with clear failures for unsupported or ambiguous lockfiles.
 - Bun lockfile dependency graph parsing with direct, transitive, production, and development dependency context.
@@ -25,7 +26,6 @@ First public release candidate for Ohrisk.
 ### Not Included Yet
 
 - PR diff mode.
-- CI failure mode.
 - SARIF or SBOM output.
 - Waiver, approval, or legal workflow management.
 - GitHub App integration.

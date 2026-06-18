@@ -165,6 +165,25 @@ describe("main", () => {
     );
   });
 
+  test("returns non-zero from ci when findings meet the fail threshold", async () => {
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
+    const exitCode = await main(["ci", "--fail-on", "high"], io);
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toEqual([]);
+    expect(stdout.join("\n")).toContain("Risks: 2 high, 1 review, 1 unknown, 2 low");
+    expect(stdout.join("\n")).toContain("- [high] agpl-child@0.1.0");
+  });
+
+  test("returns zero from ci when findings stay below the fail threshold", async () => {
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "permissive-project"));
+    const exitCode = await main(["ci", "--fail-on", "high"], io);
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+    expect(stdout.join("\n")).toContain("Risks: 0 high, 0 review, 0 unknown, 1 low");
+  });
+
   test("returns user-input failure for unsupported projects", async () => {
     const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "no-lockfile"));
     const exitCode = await main(["scan"], io);
