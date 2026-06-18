@@ -39,7 +39,7 @@ The current implementation is the first npm-style vertical slice:
 - low-risk classification for common permissive, Zlib, and public-domain-style SPDX licenses
 - NOTICE evidence is surfaced as attribution-preservation action text without raising severity
 - high-risk classification for common source-available restriction licenses
-- explicit commercial restriction text detection in license evidence
+- explicit commercial restriction text detection in license evidence and package metadata
 - profile-aware risk evaluation for `saas` and `distributed-app`
 - terminal and JSON reports
 - SARIF 2.1.0 reports for code scanning upload

@@ -219,7 +219,10 @@ describe("evaluateLicenseRisk", () => {
 
   test("marks source-available restriction licenses as high risk", () => {
     for (const expression of [
+      "BUSL-1.1",
+      "Commons-Clause",
       "Elastic-2.0",
+      "SSPL-1.0",
       "PolyForm-Noncommercial-1.0.0",
       "PolyForm-Free-Trial-1.0.0"
     ]) {

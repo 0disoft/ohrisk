@@ -70,6 +70,32 @@ describe("parseSpdxExpression", () => {
     });
   });
 
+  test("normalizes common source-available restriction aliases", () => {
+    expect(parseSpdxExpression("Commons Clause")).toMatchObject({
+      original: "Commons Clause",
+      expression: "Commons-Clause",
+      choices: ["Commons-Clause"],
+      malformed: false,
+      usedAlias: true
+    });
+
+    expect(parseSpdxExpression("Business Source License 1.1")).toMatchObject({
+      original: "Business Source License 1.1",
+      expression: "BUSL-1.1",
+      choices: ["BUSL-1.1"],
+      malformed: false,
+      usedAlias: true
+    });
+
+    expect(parseSpdxExpression("Server Side Public License")).toMatchObject({
+      original: "Server Side Public License",
+      expression: "SSPL-1.0",
+      choices: ["SSPL-1.0"],
+      malformed: false,
+      usedAlias: true
+    });
+  });
+
   test("normalizes SPDX exception expressions to their base license", () => {
     expect(parseSpdxExpression("GPL-2.0-only WITH Classpath-exception-2.0")).toEqual({
       original: "GPL-2.0-only WITH Classpath-exception-2.0",
@@ -438,5 +464,23 @@ describe("normalizeLicenseEvidence", () => {
 
     expect(normalized.signals).toEqual(["commercial-restriction", "malformed", "custom-text"]);
     expect(normalized.confidence).toBe("low");
+  });
+
+  test("marks explicit commercial restriction text in package license metadata", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "metadata-restricted-package@1.0.0",
+      packageJsonLicense: "not for commercial use",
+      files: [],
+      source: "registry",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      packageId: "metadata-restricted-package@1.0.0",
+      original: "not for commercial use",
+      choices: ["not for commercial use"],
+      signals: ["commercial-restriction", "malformed"],
+      confidence: "low"
+    });
   });
 });

@@ -89,15 +89,55 @@ export function normalizeAllLicenseEvidence(evidence: LicenseEvidence[]): Normal
 }
 
 function hasExplicitCommercialRestriction(evidence: LicenseEvidence): boolean {
-  return evidence.files.some((file) => (
-    /\bCommons Clause\b/i.test(file.text)
-    || /\bBusiness Source License\b/i.test(file.text)
-    || /\bBUSL\b/i.test(file.text)
-    || /\bNon-Commercial\b/i.test(file.text)
-    || /\bnoncommercial\b/i.test(file.text)
-    || /\bnot for commercial use\b/i.test(file.text)
-    || /\bcommercial use\s+(?:is\s+)?(?:prohibited|restricted|not permitted)\b/i.test(file.text)
-  ));
+  return [
+    ...collectPackageLicenseTexts(evidence),
+    ...evidence.files.map((file) => file.text)
+  ].some(hasCommercialRestrictionText);
+}
+
+function collectPackageLicenseTexts(evidence: LicenseEvidence): string[] {
+  const texts: string[] = [];
+
+  if (evidence.packageJsonLicense) {
+    texts.push(evidence.packageJsonLicense);
+  }
+
+  const licenseObjectType = readLicenseObjectType(evidence.packageJsonLicenses);
+  if (licenseObjectType) {
+    texts.push(licenseObjectType);
+  }
+
+  if (Array.isArray(evidence.packageJsonLicenses)) {
+    for (const item of evidence.packageJsonLicenses) {
+      if (typeof item === "string") {
+        texts.push(item);
+        continue;
+      }
+
+      if (typeof item === "object" && item !== null && "type" in item) {
+        const type = (item as { type?: unknown }).type;
+        if (typeof type === "string") {
+          texts.push(type);
+        }
+      }
+    }
+  }
+
+  return texts;
+}
+
+function hasCommercialRestrictionText(text: string): boolean {
+  return /\bCommons Clause\b/i.test(text)
+    || /\bBusiness Source License\b/i.test(text)
+    || /\bBUSL\b/i.test(text)
+    || /\bServer Side Public License\b/i.test(text)
+    || /\bSSPL\b/i.test(text)
+    || /\bElastic License\b/i.test(text)
+    || /\bPolyForm\b/i.test(text)
+    || /\bNon-Commercial\b/i.test(text)
+    || /\bnoncommercial\b/i.test(text)
+    || /\bnot for commercial use\b/i.test(text)
+    || /\bcommercial use\s+(?:is\s+)?(?:prohibited|restricted|not permitted)\b/i.test(text);
 }
 
 function readLicenseExpressionEvidence(evidence: LicenseEvidence): LicenseExpressionEvidence | undefined {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.55.0 - 2026-06-19
+
+### Added
+
+- License normalization now recognizes common source-available restriction aliases such as Commons Clause, BUSL, SSPL, Elastic License, and PolyForm variants.
+- Package metadata license strings with explicit commercial-use restrictions now produce high-risk commercial restriction signals.
+
 ## 0.54.0 - 2026-06-19
 
 ### Added
