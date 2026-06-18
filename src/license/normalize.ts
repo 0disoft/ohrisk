@@ -2,6 +2,12 @@ import type { LicenseEvidence } from "../evidence/types";
 import type { NormalizedLicense, NormalizedLicenseSignal } from "./types";
 import { parseSpdxExpression } from "./spdx";
 
+type LicenseExpressionEvidence = {
+  expression: string;
+  source: "package-metadata" | "license-file";
+  filePath?: string;
+};
+
 export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedLicense {
   const signals: NormalizedLicenseSignal[] = [];
   const evidenceSources = describeEvidenceSources(evidence);
@@ -14,7 +20,7 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     signals.push("commercial-restriction");
   }
 
-  const licenseExpression = readPackageLicenseExpression(evidence);
+  const licenseExpression = readLicenseExpressionEvidence(evidence);
 
   if (!licenseExpression) {
     signals.push("missing");
@@ -33,7 +39,11 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     };
   }
 
-  const parsed = parseSpdxExpression(licenseExpression);
+  if (licenseExpression.source === "license-file") {
+    evidenceSources.push(`file license match: ${licenseExpression.expression} from ${licenseExpression.filePath}`);
+  }
+
+  const parsed = parseSpdxExpression(licenseExpression.expression);
 
   if (parsed.malformed) {
     signals.push("malformed");
@@ -62,7 +72,7 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     joiner: parsed.joiner,
     signals,
     evidenceSources,
-    confidence: parsed.usedAlias ? "medium" : "high"
+    confidence: parsed.usedAlias || licenseExpression.source === "license-file" ? "medium" : "high"
   };
 }
 
@@ -80,6 +90,18 @@ function hasExplicitCommercialRestriction(evidence: LicenseEvidence): boolean {
     || /\bnot for commercial use\b/i.test(file.text)
     || /\bcommercial use\s+(?:is\s+)?(?:prohibited|restricted|not permitted)\b/i.test(file.text)
   ));
+}
+
+function readLicenseExpressionEvidence(evidence: LicenseEvidence): LicenseExpressionEvidence | undefined {
+  const packageExpression = readPackageLicenseExpression(evidence);
+  if (packageExpression) {
+    return {
+      expression: packageExpression,
+      source: "package-metadata"
+    };
+  }
+
+  return readLicenseFileExpression(evidence);
 }
 
 function readPackageLicenseExpression(evidence: LicenseEvidence): string | undefined {
@@ -111,6 +133,71 @@ function readPackageLicenseExpression(evidence: LicenseEvidence): string | undef
     if (choices.length > 0) {
       return choices.join(" OR ");
     }
+  }
+
+  return undefined;
+}
+
+function readLicenseFileExpression(evidence: LicenseEvidence): LicenseExpressionEvidence | undefined {
+  for (const file of evidence.files) {
+    if (file.kind !== "license" && file.kind !== "copying") {
+      continue;
+    }
+
+    const expression = recognizeStandardLicenseText(file.text);
+    if (expression) {
+      return {
+        expression,
+        source: "license-file",
+        filePath: file.path
+      };
+    }
+  }
+
+  return undefined;
+}
+
+function recognizeStandardLicenseText(text: string): string | undefined {
+  if (/\bGNU AFFERO GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 3\b/i.test(text)) {
+    return "AGPL-3.0-only";
+  }
+
+  if (/\bGNU LESSER GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 3\b/i.test(text)) {
+    return "LGPL-3.0-only";
+  }
+
+  if (/\bGNU GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 3\b/i.test(text)) {
+    return "GPL-3.0-only";
+  }
+
+  if (/\bMozilla Public License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
+    return "MPL-2.0";
+  }
+
+  if (/\bEclipse Public License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
+    return "EPL-2.0";
+  }
+
+  if (/\bApache License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
+    return "Apache-2.0";
+  }
+
+  if (
+    /\bPermission is hereby granted, free of charge, to any person obtaining a copy\b/i.test(text)
+    && /\bTHE SOFTWARE IS PROVIDED "AS IS"/i.test(text)
+  ) {
+    return "MIT";
+  }
+
+  if (
+    /\bPermission to use, copy, modify, and\/or distribute this software\b/i.test(text)
+    && /\bTHE SOFTWARE IS PROVIDED "AS IS"/i.test(text)
+  ) {
+    return "ISC";
+  }
+
+  if (/\bRedistribution and use in source and binary forms\b/i.test(text)) {
+    return /\bNeither the name of\b/i.test(text) ? "BSD-3-Clause" : "BSD-2-Clause";
   }
 
   return undefined;

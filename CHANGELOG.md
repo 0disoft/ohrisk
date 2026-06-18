@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.27.0 - 2026-06-19
+## 0.28.0 - 2026-06-19
 
 First public release candidate for Ohrisk.
 
@@ -31,6 +31,7 @@ First public release candidate for Ohrisk.
 - SPDX-like license expression parsing with simple `AND` and `OR` handling.
 - SPDX `WITH` exception handling, deprecated package license object handling, and explicit `UNLICENSED` risk classification.
 - Explicit commercial restriction text detection for Commons Clause, BUSL, and non-commercial license evidence.
+- Recognizable standard license text in `LICENSE` and `COPYING` files is used as medium-confidence evidence when package license metadata is absent.
 - Specific finding reason text for explicit commercial-use restriction evidence.
 - Markdown scan and diff reports include finding reasons for PR review.
 - Findings include human-readable action text alongside the stable recommendation enum.

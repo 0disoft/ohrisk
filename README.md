@@ -33,6 +33,7 @@ The current implementation is the first npm-style vertical slice:
 - gzipped package tarball evidence
 - `package.json` license fields
 - common `LICENSE`, `LICENCE`, `COPYING`, and `NOTICE` files
+- medium-confidence standard license detection from recognizable `LICENSE` and `COPYING` file text
 - SPDX-like license expression parsing
 - explicit commercial restriction text detection in license evidence
 - profile-aware risk evaluation for `saas` and `distributed-app`

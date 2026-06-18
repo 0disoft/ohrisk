@@ -140,6 +140,46 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
+  test("uses recognizable license file text when package license metadata is absent", () => {
+    expect(
+      normalizeLicenseEvidence({
+        packageId: "license-file-only@1.0.0",
+        files: [
+          {
+            path: "LICENSE",
+            kind: "license",
+            text: [
+              "MIT License",
+              "",
+              "Copyright fixture.",
+              "",
+              "Permission is hereby granted, free of charge, to any person obtaining a copy",
+              "of this software and associated documentation files (the \"Software\"), to deal",
+              "in the Software without restriction.",
+              "",
+              "THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND."
+            ].join("\n")
+          }
+        ],
+        source: "local",
+        warnings: []
+      })
+    ).toEqual({
+      packageId: "license-file-only@1.0.0",
+      original: "MIT",
+      expression: "MIT",
+      choices: ["MIT"],
+      joiner: "single",
+      signals: [],
+      evidenceSources: [
+        "source: local",
+        "file: LICENSE (license)",
+        "file license match: MIT from LICENSE"
+      ],
+      confidence: "medium"
+    });
+  });
+
   test("reads deprecated package.json license objects", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "legacy-license-object@1.0.0",
