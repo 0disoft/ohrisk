@@ -210,7 +210,11 @@ describe("evaluateLicenseRisk", () => {
     });
 
     expect(finding.severity).toBe("high");
+    expect(finding.reason).toBe("Package metadata explicitly marks the package as UNLICENSED.");
     expect(finding.recommendation).toBe("replace");
+    expect(finding.action).toBe(
+      "Do not ship this package until license permissions are clarified."
+    );
   });
 
   test("marks source-available restriction licenses as high risk", () => {

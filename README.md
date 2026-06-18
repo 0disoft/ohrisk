@@ -226,7 +226,7 @@ Ohrisk intentionally avoids legal `safe` or `unsafe` verdicts.
 
 - `low`: known low-risk license expression for the selected profile
 - `review`: review before shipping under the selected profile
-- `high`: replace or escalate before shipping under the selected profile, including explicit commercial-use restrictions
+- `high`: replace or escalate before shipping under the selected profile, including explicit commercial-use restrictions and packages marked `UNLICENSED`
 - `unknown`: missing, malformed, or unrecognized license evidence
 
 For example, GPL is treated differently for `saas` and `distributed-app`

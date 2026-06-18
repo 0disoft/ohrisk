@@ -46,6 +46,8 @@ const COMMERCIAL_RESTRICTION_LICENSES = new Set([
 ]);
 
 const NO_ACTION_NEEDED = "No action needed for this profile.";
+const REPLACE_ACTION = "Replace this package or escalate before shipping.";
+const UNLICENSED_ACTION = "Do not ship this package until license permissions are clarified.";
 export const NOTICE_ACTION = "Preserve required NOTICE or attribution files when distributing this package.";
 
 export function evaluateLicenseRisk(input: {
@@ -170,6 +172,10 @@ function explainSeverity(
     case "review":
       return `License expression should be reviewed before shipping under ${profile}.`;
     case "high":
+      if (license.choices.includes("UNLICENSED")) {
+        return "Package metadata explicitly marks the package as UNLICENSED.";
+      }
+
       if (license.signals.includes("commercial-restriction")) {
         return `License evidence contains an explicit commercial-use restriction for ${profile}.`;
       }
@@ -233,7 +239,7 @@ function actionFor(recommendation: RiskRecommendation, license?: NormalizedLicen
     case "review":
       return "Review this package before shipping.";
     case "replace":
-      return "Replace this package or escalate before shipping.";
+      return license?.choices.includes("UNLICENSED") ? UNLICENSED_ACTION : REPLACE_ACTION;
     case "exclude-dev-only":
       return "Keep this package out of production or scan with --prod.";
     case "collect-evidence":

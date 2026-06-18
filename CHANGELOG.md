@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.36.0 - 2026-06-19
+## 0.37.0 - 2026-06-19
 
 First public release candidate for Ohrisk.
 
@@ -36,6 +36,7 @@ First public release candidate for Ohrisk.
 - Source-available restriction licenses `Elastic-2.0`, `PolyForm-Noncommercial-1.0.0`, and `PolyForm-Free-Trial-1.0.0` are classified as high risk.
 - `Zlib` is classified as a low-risk permissive license.
 - Explicit commercial restriction text detection for Commons Clause, BUSL, and non-commercial license evidence.
+- `UNLICENSED` packages get specific reason and action text instead of generic high-risk wording.
 - Recognizable standard license text in `LICENSE` and `COPYING` files is used as medium-confidence evidence when package license metadata is absent.
 - Recognizable standard license files can resolve malformed package metadata pointers such as `SEE LICENSE IN LICENSE`.
 - Standard license file detection covers `Unlicense` and `CC0-1.0` public-domain-style text.
