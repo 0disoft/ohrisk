@@ -18,6 +18,7 @@ describe("package metadata", () => {
       publishConfig?: {
         access?: string;
       };
+      files?: string[];
       repository?: {
         url?: string;
       };
@@ -30,6 +31,7 @@ describe("package metadata", () => {
     expect(packageJson.bin).toEqual({
       ohrisk: "./src/cli/main.ts"
     });
+    expect(packageJson.files).toEqual(["CHANGELOG.md", "src"]);
     expect(packageJson.publishConfig?.access).toBe("public");
     expect(packageJson.repository?.url).toBe("git+https://github.com/0disoft/ohrisk.git");
   });
