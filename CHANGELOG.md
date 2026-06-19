@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.70.0 - 2026-06-19
+
+### Fixed
+
+- Options that require values now reject the next option token instead of treating it as a file path, profile, lockfile path, or threshold value.
+
 ## 0.69.0 - 2026-06-19
 
 ### Fixed

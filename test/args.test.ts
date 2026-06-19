@@ -447,6 +447,47 @@ describe("parseArgs", () => {
     expect(parsed.error.code).toBe("INVALID_ARGUMENT");
   });
 
+  test("rejects option-looking tokens as missing option values", () => {
+    const cases = [
+      {
+        argv: ["scan", "--output", "--json"],
+        message: "--output requires a value."
+      },
+      {
+        argv: ["scan", "--lockfile", "--prod"],
+        message: "--lockfile requires a value."
+      },
+      {
+        argv: ["scan", "--profile", "--json"],
+        message: "--profile requires a value."
+      },
+      {
+        argv: ["ci", "--fail-on", "--json"],
+        message: "--fail-on requires a value."
+      },
+      {
+        argv: ["diff", "main", "--output", "--markdown"],
+        message: "--output requires a value."
+      },
+      {
+        argv: ["explain", "MIT", "--output", "--json"],
+        message: "--output requires a value."
+      }
+    ];
+
+    for (const testCase of cases) {
+      const parsed = parseArgs(testCase.argv);
+
+      expect(parsed.ok).toBe(false);
+      if (parsed.ok) {
+        throw new Error(`Expected ${testCase.argv.join(" ")} to fail.`);
+      }
+
+      expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+      expect(parsed.error.message).toBe(testCase.message);
+    }
+  });
+
   test("rejects diff without a baseline ref", () => {
     const parsed = parseArgs(["diff"]);
 

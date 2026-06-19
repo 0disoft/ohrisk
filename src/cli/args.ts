@@ -1,7 +1,7 @@
 import { createError, type OhriskError } from "../shared/errors";
 import { isUsageProfile, USAGE_PROFILES, type UsageProfile } from "../policy/profiles";
 import type { RiskSeverity } from "../policy/types";
-import { err, ok, type Result } from "../shared/result";
+import { err, isErr, ok, type Result } from "../shared/result";
 
 const FAIL_ON_SEVERITIES: RiskSeverity[] = ["high", "unknown", "review", "low"];
 const SCAN_OUTPUT_FORMAT_OPTIONS = ["--json", "--sarif", "--markdown", "--cyclonedx"];
@@ -192,13 +192,19 @@ function parseScanLikeArgs(
 
     switch (arg) {
       case "--profile": {
-        const value = argv[index + 1];
-        if (!value) {
+        const value = readRequiredOptionValue(argv, index, "--profile", {
+          supportedProfiles: [...USAGE_PROFILES]
+        });
+        if (isErr(value)) {
+          return value;
+        }
+
+        if (!isUsageProfile(value.value)) {
           return err(
             createError({
               code: "INVALID_ARGUMENT",
               category: "invalid_input",
-              message: "--profile requires a value.",
+              message: `Unsupported profile "${value.value}".`,
               details: {
                 supportedProfiles: [...USAGE_PROFILES]
               }
@@ -206,20 +212,7 @@ function parseScanLikeArgs(
           );
         }
 
-        if (!isUsageProfile(value)) {
-          return err(
-            createError({
-              code: "INVALID_ARGUMENT",
-              category: "invalid_input",
-              message: `Unsupported profile "${value}".`,
-              details: {
-                supportedProfiles: [...USAGE_PROFILES]
-              }
-            })
-          );
-        }
-
-        profile = value;
+        profile = value.value;
         index += 1;
         break;
       }
@@ -230,12 +223,12 @@ function parseScanLikeArgs(
         noWaivers = true;
         break;
       case "--lockfile": {
-        const value = argv[index + 1];
-        if (!value) {
-          return missingOptionValue("--lockfile");
+        const value = readRequiredOptionValue(argv, index, "--lockfile");
+        if (isErr(value)) {
+          return value;
         }
 
-        lockfilePath = value;
+        lockfilePath = value.value;
         index += 1;
         break;
       }
@@ -268,12 +261,12 @@ function parseScanLikeArgs(
         cyclonedx = true;
         break;
       case "--output": {
-        const value = argv[index + 1];
-        if (!value) {
-          return missingOptionValue("--output");
+        const value = readRequiredOptionValue(argv, index, "--output");
+        if (isErr(value)) {
+          return value;
         }
 
-        outputPath = value;
+        outputPath = value.value;
         index += 1;
         break;
       }
@@ -291,13 +284,19 @@ function parseScanLikeArgs(
           );
         }
 
-        const value = argv[index + 1];
-        if (!value) {
+        const value = readRequiredOptionValue(argv, index, "--fail-on", {
+          supportedSeverities: FAIL_ON_SEVERITIES
+        });
+        if (isErr(value)) {
+          return value;
+        }
+
+        if (!isFailOnSeverity(value.value)) {
           return err(
             createError({
               code: "INVALID_ARGUMENT",
               category: "invalid_input",
-              message: "--fail-on requires a value.",
+              message: `Unsupported fail-on severity "${value.value}".`,
               details: {
                 supportedSeverities: FAIL_ON_SEVERITIES
               }
@@ -305,20 +304,7 @@ function parseScanLikeArgs(
           );
         }
 
-        if (!isFailOnSeverity(value)) {
-          return err(
-            createError({
-              code: "INVALID_ARGUMENT",
-              category: "invalid_input",
-              message: `Unsupported fail-on severity "${value}".`,
-              details: {
-                supportedSeverities: FAIL_ON_SEVERITIES
-              }
-            })
-          );
-        }
-
-        failOn = value;
+        failOn = value.value;
         index += 1;
         break;
       }
@@ -425,12 +411,30 @@ function supportedOptionsFor(kind: "scan" | "ci"): string[] {
   return kind === "ci" ? [...common, "--fail-on", "--strict-waivers"] : common;
 }
 
-function missingOptionValue(option: string): Result<CliCommand, OhriskError> {
+function readRequiredOptionValue(
+  argv: string[],
+  index: number,
+  option: string,
+  details?: Record<string, unknown>
+): Result<string, OhriskError> {
+  const value = argv[index + 1];
+  if (!value || value.startsWith("-")) {
+    return missingOptionValue(option, details);
+  }
+
+  return ok(value);
+}
+
+function missingOptionValue(
+  option: string,
+  details?: Record<string, unknown>
+): Result<never, OhriskError> {
   return err(
     createError({
       code: "INVALID_ARGUMENT",
       category: "invalid_input",
-      message: `${option} requires a value.`
+      message: `${option} requires a value.`,
+      ...(details ? { details } : {})
     })
   );
 }
@@ -466,13 +470,19 @@ function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
 
     switch (arg) {
       case "--profile": {
-        const value = argv[index + 1];
-        if (!value) {
+        const value = readRequiredOptionValue(argv, index, "--profile", {
+          supportedProfiles: [...USAGE_PROFILES]
+        });
+        if (isErr(value)) {
+          return value;
+        }
+
+        if (!isUsageProfile(value.value)) {
           return err(
             createError({
               code: "INVALID_ARGUMENT",
               category: "invalid_input",
-              message: "--profile requires a value.",
+              message: `Unsupported profile "${value.value}".`,
               details: {
                 supportedProfiles: [...USAGE_PROFILES]
               }
@@ -480,20 +490,7 @@ function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
           );
         }
 
-        if (!isUsageProfile(value)) {
-          return err(
-            createError({
-              code: "INVALID_ARGUMENT",
-              category: "invalid_input",
-              message: `Unsupported profile "${value}".`,
-              details: {
-                supportedProfiles: [...USAGE_PROFILES]
-              }
-            })
-          );
-        }
-
-        profile = value;
+        profile = value.value;
         index += 1;
         break;
       }
@@ -501,12 +498,12 @@ function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
         json = true;
         break;
       case "--output": {
-        const value = argv[index + 1];
-        if (!value) {
-          return missingOptionValue("--output");
+        const value = readRequiredOptionValue(argv, index, "--output");
+        if (isErr(value)) {
+          return value;
         }
 
-        outputPath = value;
+        outputPath = value.value;
         index += 1;
         break;
       }
@@ -574,13 +571,19 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
 
     switch (arg) {
       case "--profile": {
-        const value = argv[index + 1];
-        if (!value) {
+        const value = readRequiredOptionValue(argv, index, "--profile", {
+          supportedProfiles: [...USAGE_PROFILES]
+        });
+        if (isErr(value)) {
+          return value;
+        }
+
+        if (!isUsageProfile(value.value)) {
           return err(
             createError({
               code: "INVALID_ARGUMENT",
               category: "invalid_input",
-              message: "--profile requires a value.",
+              message: `Unsupported profile "${value.value}".`,
               details: {
                 supportedProfiles: [...USAGE_PROFILES]
               }
@@ -588,20 +591,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
           );
         }
 
-        if (!isUsageProfile(value)) {
-          return err(
-            createError({
-              code: "INVALID_ARGUMENT",
-              category: "invalid_input",
-              message: `Unsupported profile "${value}".`,
-              details: {
-                supportedProfiles: [...USAGE_PROFILES]
-              }
-            })
-          );
-        }
-
-        profile = value;
+        profile = value.value;
         index += 1;
         break;
       }
@@ -609,12 +599,12 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
         prodOnly = true;
         break;
       case "--lockfile": {
-        const value = argv[index + 1];
-        if (!value) {
-          return missingOptionValue("--lockfile");
+        const value = readRequiredOptionValue(argv, index, "--lockfile");
+        if (isErr(value)) {
+          return value;
         }
 
-        lockfilePath = value;
+        lockfilePath = value.value;
         index += 1;
         break;
       }
@@ -633,23 +623,29 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
         markdown = true;
         break;
       case "--output": {
-        const value = argv[index + 1];
-        if (!value) {
-          return missingOptionValue("--output");
+        const value = readRequiredOptionValue(argv, index, "--output");
+        if (isErr(value)) {
+          return value;
         }
 
-        outputPath = value;
+        outputPath = value.value;
         index += 1;
         break;
       }
       case "--fail-on": {
-        const value = argv[index + 1];
-        if (!value) {
+        const value = readRequiredOptionValue(argv, index, "--fail-on", {
+          supportedSeverities: FAIL_ON_SEVERITIES
+        });
+        if (isErr(value)) {
+          return value;
+        }
+
+        if (!isFailOnSeverity(value.value)) {
           return err(
             createError({
               code: "INVALID_ARGUMENT",
               category: "invalid_input",
-              message: "--fail-on requires a value.",
+              message: `Unsupported fail-on severity "${value.value}".`,
               details: {
                 supportedSeverities: FAIL_ON_SEVERITIES
               }
@@ -657,20 +653,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
           );
         }
 
-        if (!isFailOnSeverity(value)) {
-          return err(
-            createError({
-              code: "INVALID_ARGUMENT",
-              category: "invalid_input",
-              message: `Unsupported fail-on severity "${value}".`,
-              details: {
-                supportedSeverities: FAIL_ON_SEVERITIES
-              }
-            })
-          );
-        }
-
-        failOn = value;
+        failOn = value.value;
         index += 1;
         break;
       }
