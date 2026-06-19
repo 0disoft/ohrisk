@@ -46,6 +46,12 @@ type PackageLockDependencyEdge = {
   type: DependencyType;
 };
 
+type PackageLockRootEntry = {
+  pkg: PackageLockPackage;
+  pathSegment: string;
+  packagePath?: string;
+};
+
 type PackageLockV1Dependency = {
   version?: unknown;
   resolved?: unknown;
@@ -115,30 +121,37 @@ export function parsePackageLockText(
       ? lockfile.name
       : undefined;
   const records = parsePackageRecords(lockfile.packages);
-  const rootDependencies = collectRootDependencies(rootPackage);
+  const rootEntries = readPackageLockRootEntries({
+    packages: lockfile.packages,
+    rootPackage,
+    rootName
+  });
   const nodeMap = new Map<string, DependencyNode>();
 
-  for (const rootDependency of rootDependencies) {
-    const record = resolvePackageRecord({
-      records,
-      name: rootDependency.name,
-      range: rootDependency.range
-    });
+  for (const rootEntry of rootEntries) {
+    for (const rootDependency of collectRootDependencies(rootEntry.pkg)) {
+      const record = resolvePackageRecord({
+        records,
+        name: rootDependency.name,
+        range: rootDependency.range,
+        parentPath: rootEntry.packagePath
+      });
 
-    if (!record) {
-      continue;
+      if (!record) {
+        continue;
+      }
+
+      walkDependency({
+        record,
+        dependencyType: rootDependency.type,
+        direct: true,
+        path: [rootEntry.pathSegment],
+        records,
+        nodeMap,
+        seen: new Set(),
+        requestedName: rootDependency.name
+      });
     }
-
-    walkDependency({
-      record,
-      dependencyType: rootDependency.type,
-      direct: true,
-      path: [rootName ?? "<root>"],
-      records,
-      nodeMap,
-      seen: new Set(),
-      requestedName: rootDependency.name
-    });
   }
 
   return ok({
@@ -254,6 +267,54 @@ function packageNameFromPath(packagePath: string): string | undefined {
   }
 
   return parts[0] || undefined;
+}
+
+function readPackageLockRootEntries(input: {
+  packages: Record<string, unknown>;
+  rootPackage: PackageLockPackage | undefined;
+  rootName?: string;
+}): PackageLockRootEntry[] {
+  const entries: PackageLockRootEntry[] = [];
+
+  if (input.rootPackage) {
+    entries.push({
+      pkg: input.rootPackage,
+      pathSegment: input.rootName ?? "<root>"
+    });
+  }
+
+  for (const [packagePath, rawPackage] of Object.entries(input.packages)) {
+    if (!isWorkspacePackagePath(packagePath)) {
+      continue;
+    }
+
+    const pkg = readPackage(rawPackage);
+    if (!pkg) {
+      continue;
+    }
+
+    entries.push({
+      pkg,
+      pathSegment: readPackageName(pkg) ?? packagePath,
+      packagePath
+    });
+  }
+
+  return entries;
+}
+
+function isWorkspacePackagePath(packagePath: string): boolean {
+  return packagePath !== "" && !isNodeModulesPackagePath(packagePath);
+}
+
+function isNodeModulesPackagePath(packagePath: string): boolean {
+  return packagePath === "node_modules"
+    || packagePath.startsWith("node_modules/")
+    || packagePath.includes("/node_modules/");
+}
+
+function readPackageName(pkg: PackageLockPackage): string | undefined {
+  return typeof pkg.name === "string" && pkg.name !== "" ? pkg.name : undefined;
 }
 
 function collectRootDependencies(rootPackage: PackageLockPackage | undefined): PackageLockDependencyEdge[] {

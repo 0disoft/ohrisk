@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.77.0 - 2026-06-19
+
+### Fixed
+
+- npm `package-lock.json` workspace package entries now scan their own dependency roots instead of relying only on the root package dependencies.
+
 ## 0.76.0 - 2026-06-19
 
 ### Fixed

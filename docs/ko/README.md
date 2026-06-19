@@ -24,6 +24,8 @@ ohrisk scan
 
 지원 락파일: `bun.lock`, `package-lock.json`, `pnpm-lock.yaml`, Yarn v1
 `yarn.lock`. 둘 이상이 있으면 `--lockfile <path>`로 명시적으로 선택한다.
+Bun, npm, pnpm 워크스페이스 락파일은 각 workspace/importer의 의존성을
+스캔 시작점으로 삼는다.
 
 ```bash
 ohrisk scan --lockfile package-lock.json

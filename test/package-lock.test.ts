@@ -280,4 +280,86 @@ describe("parsePackageLockfile", () => {
         ]]
       });
   });
+
+  test("uses every npm workspace package as a dependency graph root", () => {
+    const result = parsePackageLockText(
+      JSON.stringify({
+        name: "fixture-package-lock-workspaces",
+        lockfileVersion: 3,
+        packages: {
+          "": {
+            name: "fixture-package-lock-workspaces",
+            workspaces: [
+              "apps/*",
+              "packages/*"
+            ]
+          },
+          "apps/web": {
+            name: "workspace-web",
+            version: "1.0.0",
+            dependencies: {
+              "workspace-prod": "1.0.0"
+            }
+          },
+          "packages/tools": {
+            name: "workspace-tools",
+            version: "1.0.0",
+            devDependencies: {
+              "workspace-dev": "2.0.0"
+            }
+          },
+          "node_modules/workspace-prod": {
+            name: "workspace-prod",
+            version: "1.0.0",
+            dependencies: {
+              "workspace-child": "0.1.0"
+            }
+          },
+          "node_modules/workspace-prod/node_modules/workspace-child": {
+            name: "workspace-child",
+            version: "0.1.0"
+          },
+          "packages/tools/node_modules/workspace-dev": {
+            name: "workspace-dev",
+            version: "2.0.0"
+          }
+        }
+      }),
+      "workspace-package-lock.json"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.rootName).toBe("fixture-package-lock-workspaces");
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "workspace-child@0.1.0",
+      "workspace-dev@2.0.0",
+      "workspace-prod@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "workspace-prod@1.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: true,
+        paths: [["workspace-web", "workspace-prod@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "workspace-child@0.1.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: false,
+        paths: [[
+          "workspace-web",
+          "workspace-prod@1.0.0",
+          "workspace-child@0.1.0"
+        ]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "workspace-dev@2.0.0"))
+      .toMatchObject({
+        dependencyType: "development",
+        direct: true,
+        paths: [["workspace-tools", "workspace-dev@2.0.0"]]
+      });
+  });
 });
