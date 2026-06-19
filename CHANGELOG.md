@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.113.0 - 2026-06-20
+
+### Fixed
+
+- Oversized registry metadata and tarball responses are now cancelled when their `Content-Length` exceeds Ohrisk's configured response limit, so rejected streamed responses do not stay open after the scan moves on.
+
 ## 0.112.0 - 2026-06-20
 
 ### Fixed

@@ -820,6 +820,7 @@ async function readResponseBodyWithLimit(input: {
 }): Promise<Result<Buffer, OhriskError>> {
   const contentLength = readContentLength(input.response.headers);
   if (contentLength !== undefined && contentLength > input.maxBytes) {
+    await cancelReadableBody(input.response.body);
     return err(
       input.createTooLargeError({
         maxBytes: input.maxBytes,
@@ -840,6 +841,14 @@ async function readResponseBodyWithLimit(input: {
   }
 
   return err(input.createUnreadableBodyError());
+}
+
+async function cancelReadableBody(body: ReadableStream<Uint8Array> | undefined): Promise<void> {
+  if (!body) {
+    return;
+  }
+
+  await body.cancel().catch(() => undefined);
 }
 
 async function readStreamBodyWithLimit(input: {

@@ -2392,6 +2392,7 @@ describe("collectGraphEvidence", () => {
 
   test("rejects oversized registry metadata before reading the response body", async () => {
     let bodyRead = false;
+    let bodyCancelled = false;
 
     const evidence = await collectGraphEvidence({
       graph: {
@@ -2417,6 +2418,11 @@ describe("collectGraphEvidence", () => {
         headers: {
           get: (name) => name.toLowerCase() === "content-length" ? "9" : null
         },
+        body: new ReadableStream<Uint8Array>({
+          cancel() {
+            bodyCancelled = true;
+          }
+        }),
         arrayBuffer: async () => {
           bodyRead = true;
           return new ArrayBuffer(0);
@@ -2425,6 +2431,7 @@ describe("collectGraphEvidence", () => {
     });
 
     expect(bodyRead).toBe(false);
+    expect(bodyCancelled).toBe(true);
     expect(evidence.ok).toBe(false);
     if (evidence.ok) {
       throw new Error("Expected oversized registry metadata to fail.");
@@ -2506,6 +2513,68 @@ describe("collectGraphEvidence", () => {
       resolved: "https://registry.example.test/oversized-remote/-/oversized-remote-1.0.0.tgz",
       maxBytes: 8,
       observedBytes: 9
+    });
+  });
+
+  test("rejects oversized remote tarball content lengths and cancels the response body", async () => {
+    let bodyRead = false;
+    let bodyCancelled = false;
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "oversized-remote-length@1.0.0",
+            name: "oversized-remote-length",
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved: "https://registry.example.test/oversized-remote-length/-/oversized-remote-length-1.0.0.tgz",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "oversized-remote-length@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      tarballMaxBytes: 8,
+      fetchArtifact: async () => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        headers: {
+          get: (name) => name.toLowerCase() === "content-length" ? "9" : null
+        },
+        body: new ReadableStream<Uint8Array>({
+          cancel() {
+            bodyCancelled = true;
+          }
+        }),
+        arrayBuffer: async () => {
+          bodyRead = true;
+          return new ArrayBuffer(0);
+        }
+      })
+    });
+
+    expect(bodyRead).toBe(false);
+    expect(bodyCancelled).toBe(true);
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected oversized remote tarball content length to fail.");
+    }
+
+    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
+    expect(evidence.error.category).toBe("unsupported_input");
+    expect(evidence.error.message).toBe(
+      "Package tarball response exceeded the maximum supported size."
+    );
+    expect(evidence.error.details).toMatchObject({
+      packageId: "oversized-remote-length@1.0.0",
+      resolved: "https://registry.example.test/oversized-remote-length/-/oversized-remote-length-1.0.0.tgz",
+      maxBytes: 8,
+      observedBytes: 9,
+      contentLength: 9
     });
   });
 });
