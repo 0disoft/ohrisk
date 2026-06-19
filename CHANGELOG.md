@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.88.0 - 2026-06-19
+
+### Fixed
+
+- Kept the exported `OhriskErrorCode` type aligned with every runtime error code emitted by lockfile and workspace parsing paths.
+
 ## 0.87.0 - 2026-06-19
 
 ### Fixed
