@@ -32,6 +32,7 @@ type ArtifactFetchResponse = {
 
 type ArtifactFetchOptions = {
   signal?: AbortSignal;
+  redirect?: "manual";
 };
 
 type ArtifactFetcher = (
@@ -855,7 +856,10 @@ async function readArtifactWithTimeout<T>(input: {
 
   try {
     const readPromise = input
-      .fetchArtifact(input.url, { signal: controller.signal })
+      .fetchArtifact(input.url, {
+        signal: controller.signal,
+        redirect: "manual"
+      })
       .then((response) => input.readResponse(response));
     return await Promise.race([readPromise, timeoutPromise]);
   } finally {
@@ -1173,5 +1177,8 @@ function defaultArtifactFetcher(
   url: string,
   options?: ArtifactFetchOptions
 ): Promise<ArtifactFetchResponse> {
-  return options?.signal ? fetch(url, { signal: options.signal }) : fetch(url);
+  return fetch(url, {
+    ...(options?.signal ? { signal: options.signal } : {}),
+    redirect: options?.redirect ?? "manual"
+  });
 }

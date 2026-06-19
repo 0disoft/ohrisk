@@ -460,6 +460,8 @@ describe("collectGraphEvidence", () => {
       "package/LICENSE": "ISC License fixture text."
     });
 
+    let fetchRedirectMode: string | undefined;
+
     const evidence = await collectGraphEvidence({
       graph: {
         lockfilePath: "bun.lock",
@@ -478,7 +480,10 @@ describe("collectGraphEvidence", () => {
         ]
       },
       projectRoot: bunProjectDir,
-      fetchArtifact: async () => okArtifactResponseFromBuffer(tarball)
+      fetchArtifact: async (_url, options) => {
+        fetchRedirectMode = options?.redirect;
+        return okArtifactResponseFromBuffer(tarball);
+      }
     });
 
     expect(evidence.ok).toBe(true);
@@ -500,6 +505,7 @@ describe("collectGraphEvidence", () => {
         ]
       })
     ]);
+    expect(fetchRedirectMode).toBe("manual");
   });
 
   test("rejects local tarballs that do not match lockfile integrity", async () => {
@@ -1539,6 +1545,59 @@ describe("collectGraphEvidence", () => {
 
     expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
     expect(evidence.error.category).toBe("network");
+  });
+
+  test("does not automatically follow remote tarball redirects", async () => {
+    const fetchedUrls: string[] = [];
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "redirect-remote@1.0.0",
+            name: "redirect-remote",
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved: "https://registry.example.test/redirect-remote/-/redirect-remote-1.0.0.tgz",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "redirect-remote@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async (url, options) => {
+        fetchedUrls.push(`${url} ${options?.redirect ?? "none"}`);
+        return {
+          ok: false,
+          status: 302,
+          statusText: "Found",
+          headers: {
+            get: (name) => name.toLowerCase() === "location"
+              ? "http://127.0.0.1:4873/redirect-remote/-/redirect-remote-1.0.0.tgz"
+              : null
+          },
+          arrayBuffer: async () => new ArrayBuffer(0)
+        };
+      }
+    });
+
+    expect(fetchedUrls).toEqual([
+      "https://registry.example.test/redirect-remote/-/redirect-remote-1.0.0.tgz manual"
+    ]);
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected redirecting remote tarball fetch to fail.");
+    }
+
+    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
+    expect(evidence.error.category).toBe("network");
+    expect(evidence.error.details).toMatchObject({
+      packageId: "redirect-remote@1.0.0",
+      resolved: "https://registry.example.test/redirect-remote/-/redirect-remote-1.0.0.tgz",
+      status: 302,
+      statusText: "Found"
+    });
   });
 
   test("rejects remote tarball URLs that target local or private hosts before fetch", async () => {

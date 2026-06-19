@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.104.0 - 2026-06-20
+
+### Fixed
+
+- Remote artifact fetches now request manual redirect handling so tarball URLs cannot be silently followed to another host.
+
 ## 0.103.0 - 2026-06-20
 
 ### Fixed
