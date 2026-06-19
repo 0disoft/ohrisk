@@ -1693,6 +1693,16 @@ describe("collectGraphEvidence", () => {
         resolved: "http://[::1]/local-remote/-/local-remote-1.0.0.tgz",
         artifactHost: "::1",
         reason: "loopback_ipv6"
+      },
+      {
+        resolved: "http://[::ffff:127.0.0.1]/mapped-local-remote/-/mapped-local-remote-1.0.0.tgz",
+        artifactHost: "::ffff:7f00:1",
+        reason: "loopback_ipv4"
+      },
+      {
+        resolved: "http://[::ffff:0a00:0005]/mapped-private-remote/-/mapped-private-remote-1.0.0.tgz",
+        artifactHost: "::ffff:a00:5",
+        reason: "private_ipv4"
       }
     ];
 

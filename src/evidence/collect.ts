@@ -1124,9 +1124,9 @@ function blockedIpv6HostReason(host: string): string | undefined {
   if (host === "::") return "unspecified_ipv6";
   if (host === "::1") return "loopback_ipv6";
 
-  const ipv4Mapped = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (ipv4Mapped?.[1]) {
-    return blockedIpv4HostReason(ipv4Mapped[1]);
+  const ipv4Mapped = mappedIpv4FromIpv6Host(host);
+  if (ipv4Mapped) {
+    return blockedIpv4HostReason(ipv4Mapped);
   }
 
   const firstHextet = firstIpv6Hextet(host);
@@ -1142,6 +1142,38 @@ function blockedIpv6HostReason(host: string): string | undefined {
   if (firstHextet === 0x2001 && second === 0x0db8) return "documentation_ipv6";
 
   return undefined;
+}
+
+function mappedIpv4FromIpv6Host(host: string): string | undefined {
+  const dotted = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+  if (dotted?.[1]) {
+    return dotted[1];
+  }
+
+  const hex = host.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+  if (!hex?.[1] || !hex[2]) {
+    return undefined;
+  }
+
+  const high = Number.parseInt(hex[1], 16);
+  const low = Number.parseInt(hex[2], 16);
+  if (
+    !Number.isInteger(high)
+    || !Number.isInteger(low)
+    || high < 0
+    || high > 0xffff
+    || low < 0
+    || low > 0xffff
+  ) {
+    return undefined;
+  }
+
+  return [
+    (high >> 8) & 0xff,
+    high & 0xff,
+    (low >> 8) & 0xff,
+    low & 0xff
+  ].join(".");
 }
 
 function firstIpv6Hextet(host: string): number | undefined {

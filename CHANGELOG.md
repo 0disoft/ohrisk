@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.106.0 - 2026-06-20
+
+### Fixed
+
+- IPv4-mapped IPv6 artifact hosts now classify their embedded IPv4 address before fetch, so mapped loopback and private addresses are rejected with the same host policy as ordinary IPv4 literals.
+
 ## 0.105.0 - 2026-06-20
 
 ### Fixed
