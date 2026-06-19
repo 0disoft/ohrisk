@@ -73,26 +73,24 @@ async function runDiff(
   command: Extract<CliCommand, { kind: "diff" }>,
   io: CliIO
 ): Promise<number> {
-  const current = await scanProject({
+  const currentProject = loadProjectGraph({
     cwd: io.cwd,
     lockfilePath: command.lockfilePath,
-    profile: command.profile,
-    prodOnly: command.prodOnly,
-    applyWaivers: false
+    prodOnly: command.prodOnly
   });
 
-  if (isErr(current)) {
-    io.stderr(formatError(current.error));
-    return exitCodeForError(current.error);
+  if (isErr(currentProject)) {
+    io.stderr(formatError(currentProject.error));
+    return exitCodeForError(currentProject.error);
   }
 
   const relativeLockfilePath = path.relative(
-    current.value.project.rootDir,
-    current.value.project.lockfile.path
+    currentProject.value.project.rootDir,
+    currentProject.value.project.lockfile.path
   );
   const readRefFile = io.readRefFile ?? readGitRefFile;
   const baselineLockfile = readRefFile({
-    projectRoot: current.value.project.rootDir,
+    projectRoot: currentProject.value.project.rootDir,
     ref: command.baselineRef,
     relativePath: relativeLockfilePath
   });
@@ -102,9 +100,9 @@ async function runDiff(
     return exitCodeForError(baselineLockfile.error);
   }
 
-  const baselinePackageJson = current.value.project.lockfile.kind === "yarn-lock"
+  const baselinePackageJson = currentProject.value.project.lockfile.kind === "yarn-lock"
     ? readRefFile({
-        projectRoot: current.value.project.rootDir,
+        projectRoot: currentProject.value.project.rootDir,
         ref: command.baselineRef,
         relativePath: "package.json"
       })
@@ -117,7 +115,7 @@ async function runDiff(
 
   const baselineWorkspacePackageJsons = baselinePackageJson && !isErr(baselinePackageJson)
     ? readBaselineYarnWorkspacePackageJsons({
-        projectRoot: current.value.project.rootDir,
+        projectRoot: currentProject.value.project.rootDir,
         baselineRef: command.baselineRef,
         rootPackageJsonText: baselinePackageJson.value,
         readRefFile
@@ -130,7 +128,7 @@ async function runDiff(
   }
 
   const baselineGraph = parseLockfileTextForKind({
-    kind: current.value.project.lockfile.kind,
+    kind: currentProject.value.project.lockfile.kind,
     text: baselineLockfile.value,
     lockfilePath: `${command.baselineRef}:${relativeLockfilePath}`,
     packageJsonText: baselinePackageJson?.value,
@@ -143,10 +141,10 @@ async function runDiff(
     return exitCodeForError(baselineGraph.error);
   }
 
-  const scanGraph = filterGraphForProdOnly(baselineGraph.value, command.prodOnly);
+  const baselineScanGraph = filterGraphForProdOnly(baselineGraph.value, command.prodOnly);
   const baselineEvidence = await collectGraphEvidence({
-    graph: scanGraph,
-    projectRoot: current.value.project.rootDir
+    graph: baselineScanGraph,
+    projectRoot: currentProject.value.project.rootDir
   });
 
   if (isErr(baselineEvidence)) {
@@ -157,9 +155,20 @@ async function runDiff(
   const baselineLicenses = normalizeAllLicenseEvidence(baselineEvidence.value);
   const baselineFindings = evaluateLicenseRisks({
     licenses: baselineLicenses,
-    dependencies: scanGraph.nodes,
+    dependencies: baselineScanGraph.nodes,
     profile: command.profile
   });
+  const current = await evaluateProjectScan({
+    ...currentProject.value,
+    profile: command.profile,
+    applyWaivers: false
+  });
+
+  if (isErr(current)) {
+    io.stderr(formatError(current.error));
+    return exitCodeForError(current.error);
+  }
+
   const diff = diffRiskFindings({
     baselineFindings,
     currentFindings: current.value.riskFindings
@@ -314,6 +323,31 @@ async function scanProject(input: {
   prodOnly: boolean;
   applyWaivers: boolean;
 }) {
+  const loaded = loadProjectGraph({
+    cwd: input.cwd,
+    lockfilePath: input.lockfilePath,
+    prodOnly: input.prodOnly
+  });
+
+  if (isErr(loaded)) {
+    return loaded;
+  }
+
+  return evaluateProjectScan({
+    ...loaded.value,
+    profile: input.profile,
+    applyWaivers: input.applyWaivers
+  });
+}
+
+function loadProjectGraph(input: {
+  cwd: string;
+  lockfilePath?: string;
+  prodOnly: boolean;
+}): Result<{
+  project: ProjectInput;
+  scanGraph: DependencyGraph;
+}, OhriskError> {
   const discovered = discoverProject({
     cwd: input.cwd,
     ...(input.lockfilePath ? { lockfilePath: input.lockfilePath } : {})
@@ -331,9 +365,21 @@ async function scanProject(input: {
 
   const scanGraph = filterGraphForProdOnly(graph.value, input.prodOnly);
 
+  return ok({
+    project: discovered.value,
+    scanGraph
+  });
+}
+
+async function evaluateProjectScan(input: {
+  project: ProjectInput;
+  scanGraph: DependencyGraph;
+  profile: Extract<CliCommand, { kind: "scan" | "ci" | "diff" }>["profile"];
+  applyWaivers: boolean;
+}) {
   const evidence = await collectGraphEvidence({
-    graph: scanGraph,
-    projectRoot: discovered.value.rootDir
+    graph: input.scanGraph,
+    projectRoot: input.project.rootDir
   });
 
   if (isErr(evidence)) {
@@ -343,15 +389,15 @@ async function scanProject(input: {
   const normalizedLicenses = normalizeAllLicenseEvidence(evidence.value);
   const riskFindings = evaluateLicenseRisks({
     licenses: normalizedLicenses,
-    dependencies: scanGraph.nodes,
+    dependencies: input.scanGraph.nodes,
     profile: input.profile
   });
   if (!input.applyWaivers) {
     return {
       ok: true as const,
       value: {
-        project: discovered.value,
-        graph: scanGraph,
+        project: input.project,
+        graph: input.scanGraph,
         evidence: evidence.value,
         normalizedLicenses,
         riskFindings,
@@ -362,7 +408,7 @@ async function scanProject(input: {
     };
   }
 
-  const waivers = readRiskWaivers(discovered.value.rootDir);
+  const waivers = readRiskWaivers(input.project.rootDir);
 
   if (isErr(waivers)) {
     return waivers;
@@ -376,8 +422,8 @@ async function scanProject(input: {
   return {
     ok: true as const,
     value: {
-      project: discovered.value,
-      graph: scanGraph,
+      project: input.project,
+      graph: input.scanGraph,
       evidence: evidence.value,
       normalizedLicenses,
       riskFindings: appliedWaivers.activeFindings,

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.119.0 - 2026-06-20
+
+### Fixed
+
+- `ohrisk diff` now reads and validates the requested baseline ref before collecting current package evidence, so invalid baselines fail without first touching current remote package artifacts.
+
 ## 0.118.0 - 2026-06-20
 
 ### Fixed

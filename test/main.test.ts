@@ -123,7 +123,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.118.0"]);
+    expect(stdout).toEqual(["ohrisk 0.119.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -533,7 +533,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.118.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.119.0");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
@@ -1345,6 +1345,68 @@ describe("main", () => {
       "Threshold: passed on high (0 findings at or above threshold)"
     );
     expect(stdout.join("\n")).toContain("Next: No action needed for this profile.");
+  });
+
+  test("diff reports baseline read failures before collecting current package evidence", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-diff-baseline-first-"));
+
+    try {
+      writeFileSync(
+        path.join(projectRoot, "package-lock.json"),
+        JSON.stringify(
+          {
+            name: "fixture-diff-baseline-first",
+            version: "0.0.0",
+            lockfileVersion: 3,
+            packages: {
+              "": {
+                name: "fixture-diff-baseline-first",
+                version: "0.0.0",
+                dependencies: {
+                  "blocked-artifact": "1.0.0"
+                }
+              },
+              "node_modules/blocked-artifact": {
+                version: "1.0.0",
+                resolved: "http://127.0.0.1/blocked-artifact-1.0.0.tgz"
+              }
+            }
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      let baselineReads = 0;
+      io.readRefFile = () => {
+        baselineReads += 1;
+        return err(createError({
+          code: "GIT_REF_READ_FAILED",
+          category: "unsupported_input",
+          message: "Failed to read the baseline file from the requested git ref.",
+          details: {
+            ref: "missing-baseline",
+            relativePath: "package-lock.json",
+            cause: "fixture baseline unavailable"
+          }
+        }));
+      };
+
+      const exitCode = await main(["diff", "missing-baseline"], io);
+
+      expect(exitCode).toBe(2);
+      expect(baselineReads).toBe(1);
+      expect(stdout).toEqual([]);
+      expect(stderr).toHaveLength(1);
+      expect(stderr[0]).toContain("GIT_REF_READ_FAILED");
+      expect(stderr[0]).toContain("fixture baseline unavailable");
+      expect(stderr[0]).not.toContain("TARBALL_FETCH_FAILED");
+      expect(stderr[0]).not.toContain("127.0.0.1");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 
   test("prints only new or changed findings for a git ref diff", async () => {
