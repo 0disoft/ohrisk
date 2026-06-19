@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.96.0 - 2026-06-19
+
+### Fixed
+
+- Remote evidence timeouts now cover response body reads as well as the initial fetch, preventing scans from hanging after response headers arrive.
+
 ## 0.95.0 - 2026-06-19
 
 ### Fixed

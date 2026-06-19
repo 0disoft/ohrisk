@@ -167,32 +167,39 @@ async function collectRegistryTarballEvidence(input: {
   const metadataUrl = npmRegistryPackageUrl(input.node.name);
 
   try {
-    const response = await fetchArtifactWithTimeout({
+    const metadataText = await readArtifactWithTimeout({
       fetchArtifact: input.fetchArtifact,
       url: metadataUrl,
-      timeoutMs: input.fetchTimeoutMs
+      timeoutMs: input.fetchTimeoutMs,
+      readResponse: async (response) => {
+        if (!response.ok) {
+          return err(
+            createError({
+              code: "REGISTRY_METADATA_FETCH_FAILED",
+              category: "network",
+              message: "Failed to fetch npm registry metadata.",
+              details: {
+                packageId: input.node.id,
+                registryUrl: metadataUrl,
+                status: response.status,
+                statusText: response.statusText
+              }
+            })
+          );
+        }
+
+        return ok(Buffer.from(await response.arrayBuffer()).toString("utf8"));
+      }
     });
 
-    if (!response.ok) {
-      return err(
-        createError({
-          code: "REGISTRY_METADATA_FETCH_FAILED",
-          category: "network",
-          message: "Failed to fetch npm registry metadata.",
-          details: {
-            packageId: input.node.id,
-            registryUrl: metadataUrl,
-            status: response.status,
-            statusText: response.statusText
-          }
-        })
-      );
+    if (!metadataText.ok) {
+      return err(metadataText.error);
     }
 
     const metadata = parseRegistryMetadata({
       packageId: input.node.id,
       registryUrl: metadataUrl,
-      text: Buffer.from(await response.arrayBuffer()).toString("utf8")
+      text: metadataText.value
     });
     if (!metadata.ok) {
       return err(metadata.error);
@@ -406,34 +413,40 @@ async function collectRemoteTarballEvidence(input: {
   }
 
   try {
-    const response = await fetchArtifactWithTimeout({
+    const tarball = await readArtifactWithTimeout({
       fetchArtifact: input.fetchArtifact,
       url: input.resolved,
-      timeoutMs: input.fetchTimeoutMs
+      timeoutMs: input.fetchTimeoutMs,
+      readResponse: async (response) => {
+        if (!response.ok) {
+          return err(
+            createError({
+              code: "TARBALL_FETCH_FAILED",
+              category: "network",
+              message: "Failed to fetch package tarball.",
+              details: {
+                packageId: input.packageId,
+                resolved: input.resolved,
+                status: response.status,
+                statusText: response.statusText
+              }
+            })
+          );
+        }
+
+        return ok(Buffer.from(await response.arrayBuffer()));
+      }
     });
 
-    if (!response.ok) {
-      return err(
-        createError({
-          code: "TARBALL_FETCH_FAILED",
-          category: "network",
-          message: "Failed to fetch package tarball.",
-          details: {
-            packageId: input.packageId,
-            resolved: input.resolved,
-            status: response.status,
-            statusText: response.statusText
-          }
-        })
-      );
+    if (!tarball.ok) {
+      return err(tarball.error);
     }
 
-    const tarball = Buffer.from(await response.arrayBuffer());
     const verified = verifyPackageIntegrity({
       packageId: input.packageId,
       resolved: input.resolved,
       integrity: input.integrity,
-      tarball
+      tarball: tarball.value
     });
 
     if (!verified.ok) {
@@ -442,7 +455,7 @@ async function collectRemoteTarballEvidence(input: {
 
     return collectTarballEvidence({
       packageId: input.packageId,
-      tarball
+      tarball: tarball.value
     });
   } catch (cause) {
     return err(
@@ -460,11 +473,12 @@ async function collectRemoteTarballEvidence(input: {
   }
 }
 
-async function fetchArtifactWithTimeout(input: {
+async function readArtifactWithTimeout<T>(input: {
   fetchArtifact: ArtifactFetcher;
   url: string;
   timeoutMs: number;
-}): Promise<ArtifactFetchResponse> {
+  readResponse: (response: ArtifactFetchResponse) => Promise<T>;
+}): Promise<T> {
   const controller = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
 
@@ -476,10 +490,10 @@ async function fetchArtifactWithTimeout(input: {
   });
 
   try {
-    return await Promise.race([
-      input.fetchArtifact(input.url, { signal: controller.signal }),
-      timeoutPromise
-    ]);
+    const readPromise = input
+      .fetchArtifact(input.url, { signal: controller.signal })
+      .then((response) => input.readResponse(response));
+    return await Promise.race([readPromise, timeoutPromise]);
   } finally {
     if (timeout) {
       clearTimeout(timeout);
