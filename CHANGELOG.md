@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.81.0 - 2026-06-19
+
+### Fixed
+
+- Local package directories and package tarballs now reject non-object `package.json` metadata as package metadata failures instead of accepting arrays as empty package records.
+
 ## 0.80.0 - 2026-06-19
 
 ### Fixed

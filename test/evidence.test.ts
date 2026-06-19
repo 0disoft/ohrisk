@@ -83,6 +83,35 @@ describe("collectLocalPackageEvidence", () => {
       rmSync(packageDir, { recursive: true, force: true });
     }
   });
+
+  test("reports non-object local package.json as package metadata failure", () => {
+    const packageDir = mkdtempSync(path.join(tmpdir(), "ohrisk-local-package-json-shape-"));
+
+    try {
+      writeFileSync(path.join(packageDir, "package.json"), "[]", "utf8");
+      writeFileSync(path.join(packageDir, "LICENSE"), "MIT License fixture text.", "utf8");
+
+      const result = collectLocalPackageEvidence({
+        packageId: "local-invalid-package-json@1.0.0",
+        packageDir
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected non-object local package.json to fail.");
+      }
+
+      expect(result.error.code).toBe("PACKAGE_JSON_PARSE_FAILED");
+      expect(result.error.category).toBe("unsupported_input");
+      expect(result.error.message).toBe("Failed to parse package.json from package artifact.");
+      expect(result.error.details).toMatchObject({
+        packageId: "local-invalid-package-json@1.0.0",
+        packageJsonPath: path.join(packageDir, "package.json")
+      });
+    } finally {
+      rmSync(packageDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("collectTarballEvidence", () => {
@@ -160,6 +189,30 @@ describe("collectTarballEvidence", () => {
     expect(result.error.message).toBe("Failed to parse package.json from package tarball.");
     expect(result.error.details).toMatchObject({
       packageId: "tarball-malformed-package-json@1.0.0"
+    });
+  });
+
+  test("reports non-object package.json inside tarballs as package metadata failure", () => {
+    const tarball = createTarGz({
+      "package/package.json": "[]",
+      "package/LICENSE": "MIT License fixture text."
+    });
+
+    const result = collectTarballEvidence({
+      packageId: "tarball-invalid-package-json@1.0.0",
+      tarball
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected non-object tarball package.json to fail.");
+    }
+
+    expect(result.error.code).toBe("PACKAGE_JSON_PARSE_FAILED");
+    expect(result.error.category).toBe("unsupported_input");
+    expect(result.error.message).toBe("Failed to parse package.json from package tarball.");
+    expect(result.error.details).toMatchObject({
+      packageId: "tarball-invalid-package-json@1.0.0"
     });
   });
 

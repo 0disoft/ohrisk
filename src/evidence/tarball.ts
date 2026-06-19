@@ -72,7 +72,12 @@ function readPackageJson(input: {
   data: Buffer;
 }): Result<Record<string, unknown>, OhriskError> {
   try {
-    return ok(JSON.parse(input.data.toString("utf8")) as Record<string, unknown>);
+    const packageJson = JSON.parse(input.data.toString("utf8")) as unknown;
+    if (!isObjectRecord(packageJson)) {
+      throw new Error("Expected package.json to contain an object.");
+    }
+
+    return ok(packageJson);
   } catch (cause) {
     return err(
       createError({
@@ -154,7 +159,7 @@ function readLicenseFields(packageJson: Record<string, unknown>): {
 } {
   const license = packageJson.license;
   const licenses = packageJson.licenses;
-  const legacyLicenseObject = isPlainLicenseObject(license) ? license : undefined;
+  const legacyLicenseObject = isObjectRecord(license) ? license : undefined;
 
   return {
     ...(typeof license === "string" ? { packageJsonLicense: license } : {}),
@@ -163,7 +168,7 @@ function readLicenseFields(packageJson: Record<string, unknown>): {
   };
 }
 
-function isPlainLicenseObject(value: unknown): value is Record<string, unknown> {
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
