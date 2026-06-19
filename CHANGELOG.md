@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.93.0 - 2026-06-19
+
+### Fixed
+
+- Package tarball parsing now rejects entries with invalid tar header checksums before trusting package metadata.
+
 ## 0.92.0 - 2026-06-19
 
 ### Fixed

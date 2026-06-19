@@ -105,9 +105,11 @@ function parseTarEntries(tarball: Buffer): TarEntry[] {
 
     const name = readNullTerminated(header, 0, 100);
     const prefix = readNullTerminated(header, 345, 155);
-    const size = parseOctal(readNullTerminated(header, 124, 12));
     const type = readNullTerminated(header, 156, 1) || "0";
     const fullPath = prefix ? `${prefix}/${name}` : name;
+    assertValidHeaderChecksum(header, fullPath);
+
+    const size = parseOctal(readNullTerminated(header, 124, 12), "size");
     const dataStart = offset + 512;
     const dataEnd = dataStart + size;
 
@@ -186,19 +188,31 @@ function readNullTerminated(buffer: Buffer, start: number, length: number): stri
   return slice.subarray(0, end === -1 ? slice.length : end).toString("utf8").trim();
 }
 
-function parseOctal(value: string): number {
+function assertValidHeaderChecksum(header: Buffer, entryPath: string): void {
+  const expected = parseOctal(readNullTerminated(header, 148, 8), "checksum");
+  const checksumHeader = Buffer.from(header);
+
+  checksumHeader.fill(" ", 148, 156);
+
+  const actual = checksumHeader.reduce((sum, byte) => sum + byte, 0);
+  if (actual !== expected) {
+    throw new Error(`Tar entry ${entryPath || "(unnamed)"} has an invalid header checksum.`);
+  }
+}
+
+function parseOctal(value: string, fieldName: "checksum" | "size"): number {
   const trimmed = value.trim();
   if (trimmed === "") {
     return 0;
   }
 
   if (!/^[0-7]+$/.test(trimmed)) {
-    throw new Error("Tar entry contains an invalid octal size.");
+    throw new Error(`Tar entry contains an invalid octal ${fieldName}.`);
   }
 
   const parsed = Number.parseInt(trimmed, 8);
   if (!Number.isSafeInteger(parsed)) {
-    throw new Error("Tar entry size is too large to parse safely.");
+    throw new Error(`Tar entry ${fieldName} is too large to parse safely.`);
   }
 
   return parsed;

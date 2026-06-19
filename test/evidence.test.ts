@@ -247,6 +247,36 @@ describe("collectTarballEvidence", () => {
     });
   });
 
+  test("rejects tarball entries with invalid header checksums before trusting package metadata", () => {
+    const packageJson = JSON.stringify({
+      name: "tarball-invalid-checksum",
+      version: "1.0.0",
+      license: "MIT"
+    });
+    const tarball = createInvalidChecksumTarGz({
+      filePath: "package/package.json",
+      content: packageJson
+    });
+
+    const result = collectTarballEvidence({
+      packageId: "tarball-invalid-checksum@1.0.0",
+      tarball
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected invalid tarball header checksum to fail.");
+    }
+
+    expect(result.error.code).toBe("TARBALL_PARSE_FAILED");
+    expect(result.error.category).toBe("unsupported_input");
+    expect(result.error.message).toBe("Failed to parse package tarball evidence.");
+    expect(result.error.details).toMatchObject({
+      packageId: "tarball-invalid-checksum@1.0.0",
+      cause: "Tar entry package/package.json has an invalid header checksum."
+    });
+  });
+
   test("reads tarball license evidence filename variants", () => {
     const tarball = createTarGz({
       "package/package.json": JSON.stringify({
@@ -1316,6 +1346,23 @@ function createTruncatedTarGz(input: {
   return gzipSync(Buffer.concat([
     createTarHeader(input.filePath, input.declaredSize),
     data
+  ]));
+}
+
+function createInvalidChecksumTarGz(input: {
+  filePath: string;
+  content: string;
+}): Buffer {
+  const data = Buffer.from(input.content, "utf8");
+  const header = createTarHeader(input.filePath, data.length);
+
+  header.write("000000\0 ", 148, 8, "ascii");
+
+  return gzipSync(Buffer.concat([
+    header,
+    data,
+    Buffer.alloc(Math.ceil(data.length / 512) * 512 - data.length),
+    Buffer.alloc(1024)
   ]));
 }
 
