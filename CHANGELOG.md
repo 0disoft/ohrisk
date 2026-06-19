@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.67.0 - 2026-06-19
+
+### Fixed
+
+- Registry metadata JSON parse failures now report unsupported input instead of a network read failure.
+
 ## 0.66.0 - 2026-06-19
 
 ### Fixed

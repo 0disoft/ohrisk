@@ -774,6 +774,45 @@ describe("collectGraphEvidence", () => {
     expect(evidence.error.category).toBe("unsupported_input");
   });
 
+  test("reports malformed registry metadata as unsupported input", async () => {
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "metadata-malformed@1.0.0",
+            name: "metadata-malformed",
+            version: "1.0.0",
+            ecosystem: "npm",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "metadata-malformed@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async () => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        arrayBuffer: async () => Uint8Array.of(123).buffer
+      })
+    });
+
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected malformed registry metadata to fail.");
+    }
+
+    expect(evidence.error.code).toBe("REGISTRY_METADATA_FETCH_FAILED");
+    expect(evidence.error.category).toBe("unsupported_input");
+    expect(evidence.error.message).toBe("npm registry metadata was not valid JSON.");
+    expect(evidence.error.details).toMatchObject({
+      packageId: "metadata-malformed@1.0.0",
+      registryUrl: "https://registry.npmjs.org/metadata-malformed"
+    });
+  });
+
   test("does not replace unsupported resolved artifacts with registry packages", async () => {
     const evidence = await collectGraphEvidence({
       graph: {

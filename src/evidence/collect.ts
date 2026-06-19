@@ -168,8 +168,16 @@ async function collectRegistryTarballEvidence(input: {
       );
     }
 
-    const metadata = JSON.parse(Buffer.from(await response.arrayBuffer()).toString("utf8")) as unknown;
-    const tarballUrl = readRegistryTarballUrl(metadata, input.node.version);
+    const metadata = parseRegistryMetadata({
+      packageId: input.node.id,
+      registryUrl: metadataUrl,
+      text: Buffer.from(await response.arrayBuffer()).toString("utf8")
+    });
+    if (!metadata.ok) {
+      return err(metadata.error);
+    }
+
+    const tarballUrl = readRegistryTarballUrl(metadata.value, input.node.version);
 
     if (!tarballUrl) {
       return err(
@@ -201,6 +209,29 @@ async function collectRegistryTarballEvidence(input: {
         details: {
           packageId: input.node.id,
           registryUrl: metadataUrl,
+          cause: cause instanceof Error ? cause.message : String(cause)
+        }
+      })
+    );
+  }
+}
+
+function parseRegistryMetadata(input: {
+  packageId: string;
+  registryUrl: string;
+  text: string;
+}): Result<unknown, OhriskError> {
+  try {
+    return ok(JSON.parse(input.text) as unknown);
+  } catch (cause) {
+    return err(
+      createError({
+        code: "REGISTRY_METADATA_FETCH_FAILED",
+        category: "unsupported_input",
+        message: "npm registry metadata was not valid JSON.",
+        details: {
+          packageId: input.packageId,
+          registryUrl: input.registryUrl,
           cause: cause instanceof Error ? cause.message : String(cause)
         }
       })
