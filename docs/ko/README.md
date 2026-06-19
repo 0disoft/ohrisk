@@ -196,4 +196,5 @@ Ohrisk가 `high`나 `unknown`을 보고하면, 그 다음은 사람이 판단한
 - [CI 사용 가이드](../ci.md) — GitHub Actions PR 게이트 및 아티팩트 예시
 - [Waiver 가이드](../waivers.md) — 라이선스 리스크 waiver 안전 사용법
 - [Profile 가이드](../profiles.md) — saas와 distributed-app 중 선택 기준
+- [Report Formats 가이드](../report-formats.md) — 출력 형식별 포함 내용과 차이
 - [CHANGELOG.md](../../CHANGELOG.md) — 버전별 변경 이력
