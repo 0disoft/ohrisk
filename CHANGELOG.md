@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.103.0 - 2026-06-20
+
+### Fixed
+
+- Remote package tarball URLs now reject obvious localhost, private, link-local, and reserved host targets before fetch.
+
 ## 0.102.0 - 2026-06-20
 
 ### Fixed

@@ -1377,6 +1377,63 @@ describe("collectGraphEvidence", () => {
     });
   });
 
+  test("rejects registry tarball URLs that target local network hosts before fetching tarballs", async () => {
+    const tarballUrl = "http://169.254.169.254/latest/meta-data/metadata-local-tarball.tgz";
+    const fetchedUrls: string[] = [];
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "metadata-local-tarball@1.0.0",
+            name: "metadata-local-tarball",
+            version: "1.0.0",
+            ecosystem: "npm",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "metadata-local-tarball@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async (url) => {
+        fetchedUrls.push(url);
+        if (url !== "https://registry.npmjs.org/metadata-local-tarball") {
+          throw new Error("Blocked registry tarball URL should not be fetched.");
+        }
+
+        return okArtifactResponseFromBuffer(JSON.stringify({
+          versions: {
+            "1.0.0": {
+              dist: {
+                tarball: tarballUrl
+              }
+            }
+          }
+        }));
+      }
+    });
+
+    expect(fetchedUrls).toEqual(["https://registry.npmjs.org/metadata-local-tarball"]);
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected local-network registry tarball URL to fail.");
+    }
+
+    expect(evidence.error.code).toBe("REGISTRY_METADATA_FETCH_FAILED");
+    expect(evidence.error.category).toBe("unsupported_input");
+    expect(evidence.error.message).toBe("npm registry metadata included an unsupported tarball URL.");
+    expect(evidence.error.details).toMatchObject({
+      packageId: "metadata-local-tarball@1.0.0",
+      registryUrl: "https://registry.npmjs.org/metadata-local-tarball",
+      version: "1.0.0",
+      tarballUrl,
+      artifactHost: "169.254.169.254",
+      reason: "link_local_ipv4"
+    });
+  });
+
   test("reports malformed registry metadata as unsupported input", async () => {
     const evidence = await collectGraphEvidence({
       graph: {
@@ -1482,6 +1539,76 @@ describe("collectGraphEvidence", () => {
 
     expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
     expect(evidence.error.category).toBe("network");
+  });
+
+  test("rejects remote tarball URLs that target local or private hosts before fetch", async () => {
+    const blockedUrls = [
+      {
+        resolved: "http://localhost:4873/local-remote/-/local-remote-1.0.0.tgz",
+        artifactHost: "localhost",
+        reason: "localhost"
+      },
+      {
+        resolved: "http://127.0.0.1:4873/local-remote/-/local-remote-1.0.0.tgz",
+        artifactHost: "127.0.0.1",
+        reason: "loopback_ipv4"
+      },
+      {
+        resolved: "http://10.0.0.5/private-remote/-/private-remote-1.0.0.tgz",
+        artifactHost: "10.0.0.5",
+        reason: "private_ipv4"
+      },
+      {
+        resolved: "http://[::1]/local-remote/-/local-remote-1.0.0.tgz",
+        artifactHost: "::1",
+        reason: "loopback_ipv6"
+      }
+    ];
+
+    for (const { resolved, artifactHost, reason } of blockedUrls) {
+      let fetchCalled = false;
+
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "bun.lock",
+          nodes: [
+            {
+              id: "blocked-remote@1.0.0",
+              name: "blocked-remote",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved,
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "blocked-remote@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot: bunProjectDir,
+        fetchArtifact: async () => {
+          fetchCalled = true;
+          return okArtifactResponseFromBuffer(Uint8Array.of(1, 2, 3));
+        }
+      });
+
+      expect(fetchCalled).toBe(false);
+      expect(evidence.ok).toBe(false);
+      if (evidence.ok) {
+        throw new Error("Expected blocked remote tarball URL to fail.");
+      }
+
+      expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
+      expect(evidence.error.category).toBe("unsupported_input");
+      expect(evidence.error.message).toBe(
+        "Package tarball URL targets an unsupported or blocked host."
+      );
+      expect(evidence.error.details).toMatchObject({
+        packageId: "blocked-remote@1.0.0",
+        resolved,
+        artifactHost,
+        reason
+      });
+    }
   });
 
   test("rejects registry metadata responses without readable body streams", async () => {

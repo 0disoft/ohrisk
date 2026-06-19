@@ -73,7 +73,7 @@ The current implementation is the first npm-style vertical slice:
 - production, development, optional, and peer dependency classification
 - local `file:` package artifact evidence
 - installed `node_modules` package evidence, including npm alias install names, before network fallback
-- remote HTTP(S) package tarball evidence when the lockfile points to a tarball
+- remote HTTP(S) package tarball evidence when the lockfile points to a tarball, with obvious local and private network hosts blocked before fetch
 - lockfile integrity verification for local and remote package tarballs
 - npm registry metadata lookup when the lockfile does not include a direct tarball URL
 - gzipped package tarball evidence

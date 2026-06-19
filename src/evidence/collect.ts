@@ -7,6 +7,7 @@ import {
   statSync,
   type Stats
 } from "node:fs";
+import { isIP } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -429,20 +430,20 @@ async function collectRegistryTarballEvidence(input: {
       );
     }
 
-    if (!isHttpUrl(tarballUrl)) {
-      return err(
-        createError({
-          code: "REGISTRY_METADATA_FETCH_FAILED",
-          category: "unsupported_input",
-          message: "npm registry metadata included an unsupported tarball URL.",
-          details: {
-            packageId: input.node.id,
-            registryUrl: metadataUrl,
-            version: input.node.version,
-            tarballUrl
-          }
-        })
-      );
+    const tarballUrlValidation = validateRemoteArtifactUrl({
+      code: "REGISTRY_METADATA_FETCH_FAILED",
+      packageId: input.node.id,
+      resolved: tarballUrl,
+      message: "npm registry metadata included an unsupported tarball URL.",
+      details: {
+        registryUrl: metadataUrl,
+        version: input.node.version,
+        tarballUrl
+      }
+    });
+
+    if (!tarballUrlValidation.ok) {
+      return err(tarballUrlValidation.error);
     }
 
     return collectRemoteTarballEvidence({
@@ -643,6 +644,20 @@ async function collectRemoteTarballEvidence(input: {
       source: "unavailable",
       warnings: [`Unsupported resolved artifact specifier: ${input.resolved}`]
     });
+  }
+
+  const urlValidation = validateRemoteArtifactUrl({
+    code: "TARBALL_FETCH_FAILED",
+    packageId: input.packageId,
+    resolved: input.resolved,
+    message: "Package tarball URL targets an unsupported or blocked host.",
+    details: {
+      resolved: input.resolved
+    }
+  });
+
+  if (!urlValidation.ok) {
+    return err(urlValidation.error);
   }
 
   try {
@@ -851,7 +866,156 @@ async function readArtifactWithTimeout<T>(input: {
 }
 
 function isHttpUrl(value: string): boolean {
-  return value.startsWith("https://") || value.startsWith("http://");
+  const url = parseHttpUrl(value);
+  return url !== undefined;
+}
+
+function validateRemoteArtifactUrl(input: {
+  code: "REGISTRY_METADATA_FETCH_FAILED" | "TARBALL_FETCH_FAILED";
+  packageId: string;
+  resolved: string;
+  message: string;
+  details: Record<string, unknown>;
+}): Result<void, OhriskError> {
+  const url = parseHttpUrl(input.resolved);
+  if (!url) {
+    return err(
+      createError({
+        code: input.code,
+        category: "unsupported_input",
+        message: input.message,
+        details: {
+          packageId: input.packageId,
+          ...input.details,
+          reason: "unsupported_or_invalid_url"
+        }
+      })
+    );
+  }
+
+  const blockedHostReason = blockedRemoteArtifactHostReason(url.hostname);
+  if (blockedHostReason) {
+    return err(
+      createError({
+        code: input.code,
+        category: "unsupported_input",
+        message: input.message,
+        details: {
+          packageId: input.packageId,
+          ...input.details,
+          artifactHost: normalizeUrlHostname(url.hostname),
+          reason: blockedHostReason
+        }
+      })
+    );
+  }
+
+  return ok(undefined);
+}
+
+function parseHttpUrl(value: string): URL | undefined {
+  try {
+    const url = new URL(value);
+    return (url.protocol === "https:" || url.protocol === "http:") && url.hostname !== ""
+      ? url
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function blockedRemoteArtifactHostReason(hostname: string): string | undefined {
+  const host = normalizeUrlHostname(hostname);
+  if (host === "localhost" || host.endsWith(".localhost")) {
+    return "localhost";
+  }
+
+  const ipVersion = isIP(host);
+  if (ipVersion === 4) {
+    return blockedIpv4HostReason(host);
+  }
+
+  if (ipVersion === 6) {
+    return blockedIpv6HostReason(host);
+  }
+
+  return undefined;
+}
+
+function normalizeUrlHostname(hostname: string): string {
+  return hostname.toLowerCase().replace(/^\[/, "").replace(/\]$/, "").replace(/\.$/, "");
+}
+
+function blockedIpv4HostReason(host: string): string | undefined {
+  const octets = host.split(".").map((part) => Number(part));
+  if (
+    octets.length !== 4
+    || octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)
+  ) {
+    return "invalid_ipv4";
+  }
+
+  const [a, b, c] = octets as [number, number, number, number];
+  if (a === 0) return "unspecified_ipv4";
+  if (a === 10) return "private_ipv4";
+  if (a === 100 && b >= 64 && b <= 127) return "shared_address_ipv4";
+  if (a === 127) return "loopback_ipv4";
+  if (a === 169 && b === 254) return "link_local_ipv4";
+  if (a === 172 && b >= 16 && b <= 31) return "private_ipv4";
+  if (a === 192 && b === 168) return "private_ipv4";
+  if (a === 192 && b === 0 && c === 2) return "documentation_ipv4";
+  if (a === 192 && b === 0) return "non_public_ipv4";
+  if (a === 198 && (b === 18 || b === 19)) return "benchmarking_ipv4";
+  if (a === 198 && b === 51 && c === 100) return "documentation_ipv4";
+  if (a === 203 && b === 0 && c === 113) return "documentation_ipv4";
+  if (a >= 224) return "multicast_or_reserved_ipv4";
+
+  return undefined;
+}
+
+function blockedIpv6HostReason(host: string): string | undefined {
+  if (host === "::") return "unspecified_ipv6";
+  if (host === "::1") return "loopback_ipv6";
+
+  const ipv4Mapped = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (ipv4Mapped?.[1]) {
+    return blockedIpv4HostReason(ipv4Mapped[1]);
+  }
+
+  const firstHextet = firstIpv6Hextet(host);
+  if (firstHextet === undefined) {
+    return "invalid_ipv6";
+  }
+
+  if ((firstHextet & 0xfe00) === 0xfc00) return "unique_local_ipv6";
+  if ((firstHextet & 0xffc0) === 0xfe80) return "link_local_ipv6";
+  if ((firstHextet & 0xff00) === 0xff00) return "multicast_ipv6";
+
+  const second = secondIpv6Hextet(host);
+  if (firstHextet === 0x2001 && second === 0x0db8) return "documentation_ipv6";
+
+  return undefined;
+}
+
+function firstIpv6Hextet(host: string): number | undefined {
+  const part = host.split(":").find((segment) => segment !== "");
+  if (!part) {
+    return undefined;
+  }
+
+  const value = Number.parseInt(part, 16);
+  return Number.isInteger(value) && value >= 0 && value <= 0xffff ? value : undefined;
+}
+
+function secondIpv6Hextet(host: string): number | undefined {
+  const parts = host.split(":").filter((segment) => segment !== "");
+  const part = parts[1];
+  if (!part) {
+    return undefined;
+  }
+
+  const value = Number.parseInt(part, 16);
+  return Number.isInteger(value) && value >= 0 && value <= 0xffff ? value : undefined;
 }
 
 function verifyPackageIntegrity(input: {
