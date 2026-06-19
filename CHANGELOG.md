@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.71.0 - 2026-06-19
+
+### Fixed
+
+- Source-available shorthand license expressions such as `BUSL`, `SSPL`, and `Elastic License` now normalize to high-risk source-available licenses instead of falling through as unknown identifiers.
+
 ## 0.70.0 - 2026-06-19
 
 ### Fixed

@@ -12,8 +12,10 @@ const LICENSE_ALIASES = new Map<string, string>([
   ["bsd license", "BSD-3-Clause"],
   ["business source license", "BUSL-1.1"],
   ["business source license 1.1", "BUSL-1.1"],
+  ["busl", "BUSL-1.1"],
   ["commons clause", "Commons-Clause"],
   ["commons clause license condition", "Commons-Clause"],
+  ["elastic license", "Elastic-2.0"],
   ["elastic license 2.0", "Elastic-2.0"],
   ["2-clause bsd", "BSD-2-Clause"],
   ["3-clause bsd", "BSD-3-Clause"],
@@ -25,6 +27,7 @@ const LICENSE_ALIASES = new Map<string, string>([
   ["polyform noncommercial 1.0.0", "PolyForm-Noncommercial-1.0.0"],
   ["server side public license", "SSPL-1.0"],
   ["server side public license 1.0", "SSPL-1.0"],
+  ["sspl", "SSPL-1.0"],
   ["the mit license", "MIT"],
   ["unlicensed", "UNLICENSED"]
 ]);

@@ -87,10 +87,34 @@ describe("parseSpdxExpression", () => {
       usedAlias: true
     });
 
+    expect(parseSpdxExpression("BUSL")).toMatchObject({
+      original: "BUSL",
+      expression: "BUSL-1.1",
+      choices: ["BUSL-1.1"],
+      malformed: false,
+      usedAlias: true
+    });
+
     expect(parseSpdxExpression("Server Side Public License")).toMatchObject({
       original: "Server Side Public License",
       expression: "SSPL-1.0",
       choices: ["SSPL-1.0"],
+      malformed: false,
+      usedAlias: true
+    });
+
+    expect(parseSpdxExpression("SSPL")).toMatchObject({
+      original: "SSPL",
+      expression: "SSPL-1.0",
+      choices: ["SSPL-1.0"],
+      malformed: false,
+      usedAlias: true
+    });
+
+    expect(parseSpdxExpression("Elastic License")).toMatchObject({
+      original: "Elastic License",
+      expression: "Elastic-2.0",
+      choices: ["Elastic-2.0"],
       malformed: false,
       usedAlias: true
     });
