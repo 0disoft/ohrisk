@@ -257,6 +257,10 @@ function findNodeModulesPackage(node: DependencyNode, projectRoot: string): stri
 
   for (const packageName of packageNames) {
     const packagePath = resolveNodeModulesPackage(packageName, projectRoot);
+    if (!packagePath) {
+      continue;
+    }
+
     if (
       existsSync(packagePath)
       && statSync(packagePath).isDirectory()
@@ -269,8 +273,42 @@ function findNodeModulesPackage(node: DependencyNode, projectRoot: string): stri
   return undefined;
 }
 
-function resolveNodeModulesPackage(packageName: string, projectRoot: string): string {
-  return path.join(projectRoot, "node_modules", ...packageName.split("/"));
+function resolveNodeModulesPackage(packageName: string, projectRoot: string): string | undefined {
+  const segments = nodeModulesPackageSegments(packageName);
+  if (!segments) {
+    return undefined;
+  }
+
+  return path.join(projectRoot, "node_modules", ...segments);
+}
+
+function nodeModulesPackageSegments(packageName: string): string[] | undefined {
+  if (packageName === "" || packageName.includes("\\") || packageName.includes(":")) {
+    return undefined;
+  }
+
+  const segments = packageName.split("/");
+  if (segments.length === 1) {
+    return isSafeNodeModulesSegment(segments[0]) && !segments[0].startsWith("@")
+      ? segments
+      : undefined;
+  }
+
+  if (
+    segments.length === 2
+    && segments[0].startsWith("@")
+    && segments[0].length > 1
+    && isSafeNodeModulesSegment(segments[0])
+    && isSafeNodeModulesSegment(segments[1])
+  ) {
+    return segments;
+  }
+
+  return undefined;
+}
+
+function isSafeNodeModulesSegment(segment: string): boolean {
+  return segment !== "" && segment !== "." && segment !== "..";
 }
 
 function installedPackageMatchesNode(input: {

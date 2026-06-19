@@ -744,6 +744,60 @@ describe("collectGraphEvidence", () => {
     }
   });
 
+  test("uses scoped installed node_modules package evidence", async () => {
+    const projectRoot = createInstalledPackageProject({
+      name: "@scope/installed-fixture",
+      version: "1.0.0",
+      license: "MIT",
+      licenseText: "MIT License from scoped node_modules package."
+    });
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "package-lock.json",
+          nodes: [
+            {
+              id: "@scope/installed-fixture@1.0.0",
+              name: "@scope/installed-fixture",
+              version: "1.0.0",
+              ecosystem: "npm",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "@scope/installed-fixture@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot,
+        fetchArtifact: async () => {
+          throw new Error("Registry fallback should not run when scoped node_modules evidence exists.");
+        }
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+
+      expect(evidence.value).toEqual([
+        expect.objectContaining({
+          packageId: "@scope/installed-fixture@1.0.0",
+          packageJsonLicense: "MIT",
+          source: "local",
+          files: [
+            {
+              path: "LICENSE",
+              kind: "license",
+              text: "MIT License from scoped node_modules package."
+            }
+          ]
+        })
+      ]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("uses npm alias install names for node_modules package evidence", async () => {
     const projectRoot = createInstalledPackageProject({
       name: "permissive-parent",
@@ -906,6 +960,89 @@ describe("collectGraphEvidence", () => {
       ]);
       expect(evidence.value[0]).toMatchObject({
         packageId: "stale-installed@2.0.0",
+        packageJsonLicense: "Apache-2.0",
+        source: "tarball",
+        files: [
+          {
+            path: "LICENSE",
+            kind: "license",
+            text: "Apache License from lockfile tarball."
+          }
+        ]
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("does not resolve invalid package names outside node_modules", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-node-modules-escape-"));
+    const escapedPackageDir = path.join(projectRoot, "escaped-installed");
+    mkdirSync(escapedPackageDir, { recursive: true });
+    writeFileSync(
+      path.join(escapedPackageDir, "package.json"),
+      JSON.stringify({
+        name: "../escaped-installed",
+        version: "2.0.0",
+        license: "MIT"
+      }),
+      "utf8"
+    );
+    writeFileSync(path.join(escapedPackageDir, "LICENSE"), "MIT License from escaped path.", "utf8");
+
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "../escaped-installed",
+        version: "2.0.0",
+        license: "Apache-2.0"
+      }),
+      "package/LICENSE": "Apache License from lockfile tarball."
+    });
+    const fetchedUrls: string[] = [];
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "package-lock.json",
+          nodes: [
+            {
+              id: "../escaped-installed@2.0.0",
+              name: "../escaped-installed",
+              version: "2.0.0",
+              ecosystem: "npm",
+              resolved: "https://registry.example.test/escaped-installed/-/escaped-installed-2.0.0.tgz",
+              integrity: integrityFor(tarball),
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "../escaped-installed@2.0.0"]]
+            }
+          ]
+        },
+        projectRoot,
+        fetchArtifact: async (url) => {
+          fetchedUrls.push(url);
+          return {
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            arrayBuffer: async () => tarball.buffer.slice(
+              tarball.byteOffset,
+              tarball.byteOffset + tarball.byteLength
+            ) as ArrayBuffer
+          };
+        }
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+
+      expect(fetchedUrls).toEqual([
+        "https://registry.example.test/escaped-installed/-/escaped-installed-2.0.0.tgz"
+      ]);
+      expect(evidence.value[0]).toMatchObject({
+        packageId: "../escaped-installed@2.0.0",
         packageJsonLicense: "Apache-2.0",
         source: "tarball",
         files: [

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.82.0 - 2026-06-19
+
+### Fixed
+
+- `node_modules` evidence lookup now rejects invalid package names before resolving paths, preventing malformed lockfile package names from escaping the `node_modules` directory.
+
 ## 0.81.0 - 2026-06-19
 
 ### Fixed
