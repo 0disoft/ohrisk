@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.79.0 - 2026-06-19
+
+### Fixed
+
+- `ohrisk diff` now reads Yarn v1 workspace package manifests from the baseline git ref so unchanged workspace dependency risks are not reported as new findings.
+
 ## 0.78.0 - 2026-06-19
 
 ### Fixed

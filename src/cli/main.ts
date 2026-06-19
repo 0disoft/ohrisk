@@ -9,7 +9,12 @@ import { readGitRefFile, type GitRefFileReader } from "../git/ref-file";
 import { parseBunLockfile, parseBunLockText } from "../graph/npm-bun-lock";
 import { parsePackageLockfile, parsePackageLockText } from "../graph/npm-package-lock";
 import { parsePnpmLockfile, parsePnpmLockText } from "../graph/npm-pnpm-lock";
-import { parseYarnLockfile, parseYarnLockText } from "../graph/npm-yarn-lock";
+import {
+  findYarnWorkspacePackageJsonPaths,
+  parseYarnLockfile,
+  parseYarnLockText,
+  type YarnWorkspacePackageJsonInput
+} from "../graph/npm-yarn-lock";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
 import { normalizeAllLicenseEvidence, normalizeLicenseEvidence } from "../license/normalize";
 import { evaluateLicenseRisk, evaluateLicenseRisks } from "../policy/evaluate";
@@ -110,12 +115,22 @@ async function runDiff(
     return exitCodeForError(baselinePackageJson.error);
   }
 
+  const baselineWorkspacePackageJsons = baselinePackageJson && !isErr(baselinePackageJson)
+    ? readBaselineYarnWorkspacePackageJsons({
+        projectRoot: current.value.project.rootDir,
+        baselineRef: command.baselineRef,
+        rootPackageJsonText: baselinePackageJson.value,
+        readRefFile
+      })
+    : undefined;
+
   const baselineGraph = parseLockfileTextForKind({
     kind: current.value.project.lockfile.kind,
     text: baselineLockfile.value,
     lockfilePath: `${command.baselineRef}:${relativeLockfilePath}`,
     packageJsonText: baselinePackageJson?.value,
-    packageJsonPath: `${command.baselineRef}:package.json`
+    packageJsonPath: `${command.baselineRef}:package.json`,
+    workspacePackageJsonTexts: baselineWorkspacePackageJsons
   });
 
   if (isErr(baselineGraph)) {
@@ -402,6 +417,7 @@ function parseLockfileTextForKind(input: {
   lockfilePath: string;
   packageJsonText?: string;
   packageJsonPath?: string;
+  workspacePackageJsonTexts?: YarnWorkspacePackageJsonInput[];
 }): Result<DependencyGraph, OhriskError> {
   switch (input.kind) {
     case "bun":
@@ -415,8 +431,55 @@ function parseLockfileTextForKind(input: {
         lockfileText: input.text,
         packageJsonText: input.packageJsonText ?? "{}",
         lockfilePath: input.lockfilePath,
-        packageJsonPath: input.packageJsonPath
+        packageJsonPath: input.packageJsonPath,
+        workspacePackageJsonTexts: input.workspacePackageJsonTexts
       });
+  }
+}
+
+function readBaselineYarnWorkspacePackageJsons(input: {
+  projectRoot: string;
+  baselineRef: string;
+  rootPackageJsonText: string;
+  readRefFile: GitRefFileReader;
+}): YarnWorkspacePackageJsonInput[] {
+  const rootPackageJson = tryParseObject(input.rootPackageJsonText);
+  if (!rootPackageJson) {
+    return [];
+  }
+
+  const packageJsons: YarnWorkspacePackageJsonInput[] = [];
+  for (const workspacePackageJsonPath of findYarnWorkspacePackageJsonPaths({
+    projectRoot: input.projectRoot,
+    workspaces: rootPackageJson.workspaces
+  })) {
+    const baselinePackageJson = input.readRefFile({
+      projectRoot: input.projectRoot,
+      ref: input.baselineRef,
+      relativePath: workspacePackageJsonPath.relativePackageJsonPath
+    });
+    if (isErr(baselinePackageJson)) {
+      continue;
+    }
+
+    packageJsons.push({
+      packageJsonText: baselinePackageJson.value,
+      packageJsonPath: `${input.baselineRef}:${workspacePackageJsonPath.relativePackageJsonPath}`,
+      workspacePath: workspacePackageJsonPath.workspacePath
+    });
+  }
+
+  return packageJsons;
+}
+
+function tryParseObject(input: string): Record<string, unknown> | undefined {
+  try {
+    const parsed = JSON.parse(input) as unknown;
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : undefined;
+  } catch {
+    return undefined;
   }
 }
 

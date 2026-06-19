@@ -49,10 +49,16 @@ type PackageJsonShape = {
   peerDependencies?: unknown;
 };
 
-type YarnWorkspacePackageJsonInput = {
+export type YarnWorkspacePackageJsonInput = {
   packageJsonText: string;
   packageJsonPath?: string;
   workspacePath?: string;
+};
+
+export type YarnWorkspacePackageJsonPath = {
+  packageJsonPath: string;
+  relativePackageJsonPath: string;
+  workspacePath: string;
 };
 
 type YarnRootEntry = {
@@ -259,8 +265,44 @@ function readWorkspacePackageJsonTexts(input: {
   lockfilePath: string;
 }): Result<YarnWorkspacePackageJsonInput[], OhriskError> {
   const packageJsons: YarnWorkspacePackageJsonInput[] = [];
+  const workspacePackageJsonPaths = findYarnWorkspacePackageJsonPaths({
+    projectRoot: input.projectRoot,
+    workspaces: input.rootPackageJson.workspaces
+  });
+
+  for (const workspacePackageJsonPath of workspacePackageJsonPaths) {
+    try {
+      packageJsons.push({
+        packageJsonText: readFileSync(workspacePackageJsonPath.packageJsonPath, "utf8"),
+        packageJsonPath: workspacePackageJsonPath.packageJsonPath,
+        workspacePath: workspacePackageJsonPath.workspacePath
+      });
+    } catch (cause) {
+      return err(
+        createError({
+          code: "YARN_WORKSPACE_PACKAGE_JSON_READ_FAILED",
+          category: "filesystem",
+          message: "Failed to read package.json for a Yarn workspace dependency root.",
+          details: {
+            lockfilePath: input.lockfilePath,
+            packageJsonPath: workspacePackageJsonPath.packageJsonPath,
+            cause: cause instanceof Error ? cause.message : String(cause)
+          }
+        })
+      );
+    }
+  }
+
+  return ok(packageJsons);
+}
+
+export function findYarnWorkspacePackageJsonPaths(input: {
+  projectRoot: string;
+  workspaces: unknown;
+}): YarnWorkspacePackageJsonPath[] {
+  const locations: YarnWorkspacePackageJsonPath[] = [];
   const seen = new Set<string>();
-  const patterns = readWorkspacePatterns(input.rootPackageJson.workspaces);
+  const patterns = readWorkspacePatterns(input.workspaces);
   const excludedWorkspacePaths = new Set(
     patterns
       .filter((pattern) => pattern.startsWith("!"))
@@ -275,39 +317,27 @@ function readWorkspacePackageJsonTexts(input: {
 
     for (const workspacePath of expandWorkspacePattern(input.projectRoot, pattern)) {
       const packageJsonPath = path.join(workspacePath, "package.json");
+      const relativePackageJsonPath = path
+        .relative(input.projectRoot, packageJsonPath)
+        .replace(/\\/g, "/");
       if (
-        seen.has(packageJsonPath)
+        seen.has(relativePackageJsonPath)
         || excludedWorkspacePaths.has(path.resolve(workspacePath))
         || !existsSync(packageJsonPath)
       ) {
         continue;
       }
 
-      try {
-        packageJsons.push({
-          packageJsonText: readFileSync(packageJsonPath, "utf8"),
-          packageJsonPath,
-          workspacePath: path.relative(input.projectRoot, workspacePath).replace(/\\/g, "/")
-        });
-        seen.add(packageJsonPath);
-      } catch (cause) {
-        return err(
-          createError({
-            code: "YARN_WORKSPACE_PACKAGE_JSON_READ_FAILED",
-            category: "filesystem",
-            message: "Failed to read package.json for a Yarn workspace dependency root.",
-            details: {
-              lockfilePath: input.lockfilePath,
-              packageJsonPath,
-              cause: cause instanceof Error ? cause.message : String(cause)
-            }
-          })
-        );
-      }
+      locations.push({
+        packageJsonPath,
+        relativePackageJsonPath,
+        workspacePath: path.relative(input.projectRoot, workspacePath).replace(/\\/g, "/")
+      });
+      seen.add(relativePackageJsonPath);
     }
   }
 
-  return ok(packageJsons);
+  return locations;
 }
 
 function readWorkspacePatterns(value: unknown): string[] {
