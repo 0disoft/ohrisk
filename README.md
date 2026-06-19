@@ -80,7 +80,7 @@ The current implementation is the first npm-style vertical slice:
 - common `LICENSE`, `LICENCE`, `UNLICENSE`, `COPYING`, and `NOTICE` file variants
 - medium-confidence standard license detection from recognizable `LICENSE` and `COPYING` file text, including GPL-family v2/v3 text, Zlib text, public-domain-style text, and malformed metadata pointers
 - SPDX-like license expression parsing
-- common human-readable license metadata alias normalization
+- common human-readable license metadata alias normalization, including slash and comma dual-license shorthands
 - low-risk classification for common permissive, Zlib, and public-domain-style SPDX licenses
 - NOTICE evidence is surfaced as attribution-preservation action text without raising severity
 - high-risk classification for common source-available restriction licenses

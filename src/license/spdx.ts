@@ -68,6 +68,11 @@ export function parseSpdxExpression(input: string): ParsedSpdxExpression {
     };
   }
 
+  const shorthandOrExpression = parseShorthandOrExpression(original);
+  if (shorthandOrExpression) {
+    return shorthandOrExpression;
+  }
+
   const joiner = detectJoiner(original);
   const tokens = original
     .replace(/[()]/g, " ")
@@ -94,6 +99,37 @@ export function parseSpdxExpression(input: string): ParsedSpdxExpression {
     joiner,
     malformed: false,
     usedAlias: tokens.some((token) => token.usedAlias)
+  };
+}
+
+function parseShorthandOrExpression(original: string): ParsedSpdxExpression | undefined {
+  if (detectJoiner(original) !== "single" || !/[\/,]/.test(original)) {
+    return undefined;
+  }
+
+  const rawTokens = original
+    .replace(/[()]/g, " ")
+    .split(/\s*(?:\/|,)\s*/)
+    .map((token) => token.trim());
+
+  if (rawTokens.length < 2 || rawTokens.some((token) => token.length === 0)) {
+    return undefined;
+  }
+
+  const tokens = rawTokens.map((token) => normalizeLicenseToken(token));
+  if (tokens.some((token) => token.malformed || token.normalized === undefined)) {
+    return undefined;
+  }
+
+  const normalizedTokens = tokens.map((token) => token.normalized as string);
+
+  return {
+    original,
+    expression: normalizedTokens.join(" OR "),
+    choices: [...new Set(normalizedTokens)],
+    joiner: "or",
+    malformed: false,
+    usedAlias: true
   };
 }
 

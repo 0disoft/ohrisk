@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.72.0 - 2026-06-19
+
+### Fixed
+
+- Slash- and comma-separated package license shorthands such as `MIT/Apache-2.0` and `MIT, Apache-2.0` now normalize as `OR` choices instead of falling through as malformed metadata.
+
 ## 0.71.0 - 2026-06-19
 
 ### Fixed

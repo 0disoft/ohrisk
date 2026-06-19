@@ -15,6 +15,26 @@ describe("parseSpdxExpression", () => {
     });
   });
 
+  test("normalizes common shorthand OR separators", () => {
+    expect(parseSpdxExpression("MIT/Apache-2.0")).toEqual({
+      original: "MIT/Apache-2.0",
+      expression: "MIT OR Apache-2.0",
+      choices: ["MIT", "Apache-2.0"],
+      joiner: "or",
+      malformed: false,
+      usedAlias: true
+    });
+
+    expect(parseSpdxExpression("MIT, Apache-2.0")).toEqual({
+      original: "MIT, Apache-2.0",
+      expression: "MIT OR Apache-2.0",
+      choices: ["MIT", "Apache-2.0"],
+      joiner: "or",
+      malformed: false,
+      usedAlias: true
+    });
+  });
+
   test("parses simple AND expressions", () => {
     expect(parseSpdxExpression("MIT AND Apache-2.0")).toEqual({
       original: "MIT AND Apache-2.0",
@@ -169,6 +189,27 @@ describe("normalizeLicenseEvidence", () => {
       signals: [],
       evidenceSources: ["source: local", "package.json license: MIT OR Apache-2.0"],
       confidence: "high"
+    });
+  });
+
+  test("uses slash-separated package.json licenses as medium-confidence expression aliases", () => {
+    expect(
+      normalizeLicenseEvidence({
+        packageId: "slash-dual-license@1.0.0",
+        packageJsonLicense: "MIT/Apache-2.0",
+        files: [],
+        source: "local",
+        warnings: []
+      })
+    ).toEqual({
+      packageId: "slash-dual-license@1.0.0",
+      original: "MIT/Apache-2.0",
+      expression: "MIT OR Apache-2.0",
+      choices: ["MIT", "Apache-2.0"],
+      joiner: "or",
+      signals: [],
+      evidenceSources: ["source: local", "package.json license: MIT/Apache-2.0"],
+      confidence: "medium"
     });
   });
 
