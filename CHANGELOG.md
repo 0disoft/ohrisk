@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.95.0 - 2026-06-19
+
+### Fixed
+
+- Remote registry and tarball evidence fetches now use a bounded timeout so stalled network reads fail honestly instead of hanging scans indefinitely.
+
 ## 0.94.0 - 2026-06-19
 
 ### Fixed

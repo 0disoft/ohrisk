@@ -1370,6 +1370,48 @@ describe("collectGraphEvidence", () => {
     expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
     expect(evidence.error.category).toBe("network");
   });
+
+  test("times out stalled remote tarball fetches", async () => {
+    let fetchSignal: AbortSignal | undefined;
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "stalled-remote@1.0.0",
+            name: "stalled-remote",
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved: "https://registry.example.test/stalled-remote/-/stalled-remote-1.0.0.tgz",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "stalled-remote@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchTimeoutMs: 1,
+      fetchArtifact: async (_url, options) => {
+        fetchSignal = options?.signal;
+        return await new Promise<never>(() => {});
+      }
+    });
+
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected stalled remote tarball fetch to fail.");
+    }
+
+    expect(fetchSignal?.aborted).toBe(true);
+    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
+    expect(evidence.error.category).toBe("network");
+    expect(evidence.error.details).toMatchObject({
+      packageId: "stalled-remote@1.0.0",
+      resolved: "https://registry.example.test/stalled-remote/-/stalled-remote-1.0.0.tgz",
+      cause: "Artifact fetch timed out after 1ms."
+    });
+  });
 });
 
 function createTarGz(files: Record<string, string>): Buffer {

@@ -17,7 +17,16 @@ type ArtifactFetchResponse = {
   arrayBuffer: () => Promise<ArrayBuffer>;
 };
 
-type ArtifactFetcher = (url: string) => Promise<ArtifactFetchResponse>;
+type ArtifactFetchOptions = {
+  signal?: AbortSignal;
+};
+
+type ArtifactFetcher = (
+  url: string,
+  options?: ArtifactFetchOptions
+) => Promise<ArtifactFetchResponse>;
+
+const ARTIFACT_FETCH_TIMEOUT_MS = 30_000;
 
 const SUPPORTED_INTEGRITY_DIGEST_BYTES = {
   sha1: 20,
@@ -32,14 +41,17 @@ export async function collectGraphEvidence(input: {
   graph: DependencyGraph;
   projectRoot: string;
   fetchArtifact?: ArtifactFetcher;
+  fetchTimeoutMs?: number;
 }): Promise<Result<LicenseEvidence[], OhriskError>> {
   const evidence: LicenseEvidence[] = [];
+  const fetchTimeoutMs = input.fetchTimeoutMs ?? ARTIFACT_FETCH_TIMEOUT_MS;
 
   for (const node of input.graph.nodes) {
     const collected = await collectNodeEvidence({
       node,
       projectRoot: input.projectRoot,
-      fetchArtifact: input.fetchArtifact ?? defaultArtifactFetcher
+      fetchArtifact: input.fetchArtifact ?? defaultArtifactFetcher,
+      fetchTimeoutMs
     });
 
     if (!collected.ok) {
@@ -56,6 +68,7 @@ async function collectNodeEvidence(input: {
   node: DependencyNode;
   projectRoot: string;
   fetchArtifact: ArtifactFetcher;
+  fetchTimeoutMs: number;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   const explicitLocalPath = input.node.resolved
     ? resolveLocalArtifact(input.node.resolved, input.projectRoot)
@@ -79,7 +92,8 @@ async function collectNodeEvidence(input: {
   if (!input.node.resolved) {
     return collectRegistryTarballEvidence({
       node: input.node,
-      fetchArtifact: input.fetchArtifact
+      fetchArtifact: input.fetchArtifact,
+      fetchTimeoutMs: input.fetchTimeoutMs
     });
   }
 
@@ -88,7 +102,8 @@ async function collectNodeEvidence(input: {
       packageId: input.node.id,
       resolved: input.node.resolved,
       integrity: input.node.integrity,
-      fetchArtifact: input.fetchArtifact
+      fetchArtifact: input.fetchArtifact,
+      fetchTimeoutMs: input.fetchTimeoutMs
     });
   }
 
@@ -147,11 +162,16 @@ function collectLocalPathEvidence(input: {
 async function collectRegistryTarballEvidence(input: {
   node: DependencyNode;
   fetchArtifact: ArtifactFetcher;
+  fetchTimeoutMs: number;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   const metadataUrl = npmRegistryPackageUrl(input.node.name);
 
   try {
-    const response = await input.fetchArtifact(metadataUrl);
+    const response = await fetchArtifactWithTimeout({
+      fetchArtifact: input.fetchArtifact,
+      url: metadataUrl,
+      timeoutMs: input.fetchTimeoutMs
+    });
 
     if (!response.ok) {
       return err(
@@ -215,7 +235,8 @@ async function collectRegistryTarballEvidence(input: {
       packageId: input.node.id,
       resolved: tarballUrl,
       integrity: input.node.integrity,
-      fetchArtifact: input.fetchArtifact
+      fetchArtifact: input.fetchArtifact,
+      fetchTimeoutMs: input.fetchTimeoutMs
     });
   } catch (cause) {
     return err(
@@ -373,6 +394,7 @@ async function collectRemoteTarballEvidence(input: {
   resolved: string;
   integrity?: string;
   fetchArtifact: ArtifactFetcher;
+  fetchTimeoutMs: number;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   if (!isHttpUrl(input.resolved)) {
     return ok({
@@ -384,7 +406,11 @@ async function collectRemoteTarballEvidence(input: {
   }
 
   try {
-    const response = await input.fetchArtifact(input.resolved);
+    const response = await fetchArtifactWithTimeout({
+      fetchArtifact: input.fetchArtifact,
+      url: input.resolved,
+      timeoutMs: input.fetchTimeoutMs
+    });
 
     if (!response.ok) {
       return err(
@@ -431,6 +457,33 @@ async function collectRemoteTarballEvidence(input: {
         }
       })
     );
+  }
+}
+
+async function fetchArtifactWithTimeout(input: {
+  fetchArtifact: ArtifactFetcher;
+  url: string;
+  timeoutMs: number;
+}): Promise<ArtifactFetchResponse> {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`Artifact fetch timed out after ${input.timeoutMs}ms.`));
+    }, input.timeoutMs);
+  });
+
+  try {
+    return await Promise.race([
+      input.fetchArtifact(input.url, { signal: controller.signal }),
+      timeoutPromise
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
   }
 }
 
@@ -589,6 +642,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function defaultArtifactFetcher(url: string): Promise<ArtifactFetchResponse> {
-  return fetch(url);
+function defaultArtifactFetcher(
+  url: string,
+  options?: ArtifactFetchOptions
+): Promise<ArtifactFetchResponse> {
+  return options?.signal ? fetch(url, { signal: options.signal }) : fetch(url);
 }
