@@ -16,7 +16,7 @@ export function classifyEvidenceFile(path: string): LicenseEvidenceFileKind | un
   }
 
   if (
-    normalized === "unlicense"
+    hasEvidenceName(normalized, "unlicense")
     || hasEvidenceName(normalized, "license")
     || hasEvidenceName(normalized, "licence")
   ) {

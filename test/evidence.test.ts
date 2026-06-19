@@ -19,6 +19,7 @@ const bunProjectDir = path.join(fixturesDir, "bun-project");
 describe("classifyEvidenceFile", () => {
   test("classifies common license evidence filename variants", () => {
     expect(classifyEvidenceFile("UNLICENSE")).toBe("license");
+    expect(classifyEvidenceFile("UNLICENSE.md")).toBe("license");
     expect(classifyEvidenceFile("LICENSE-MIT")).toBe("license");
     expect(classifyEvidenceFile("LICENCE_APACHE")).toBe("license");
     expect(classifyEvidenceFile("NOTICE_THIRD_PARTY")).toBe("notice");
@@ -61,7 +62,7 @@ describe("collectLocalPackageEvidence", () => {
         }),
         "utf8"
       );
-      writeFileSync(path.join(packageDir, "UNLICENSE"), "Unlicense fixture text.", "utf8");
+      writeFileSync(path.join(packageDir, "UNLICENSE.md"), "Unlicense fixture text.", "utf8");
       writeFileSync(path.join(packageDir, "NOTICE_THIRD_PARTY"), "Notice fixture text.", "utf8");
 
       const result = collectLocalPackageEvidence({
@@ -76,7 +77,7 @@ describe("collectLocalPackageEvidence", () => {
 
       expect(result.value.files.map((file) => file.path)).toEqual([
         "NOTICE_THIRD_PARTY",
-        "UNLICENSE"
+        "UNLICENSE.md"
       ]);
       expect(result.value.files.map((file) => file.kind)).toEqual(["notice", "license"]);
       expect(result.value.warnings).toEqual([]);

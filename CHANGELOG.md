@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.121.0 - 2026-06-20
+
+### Fixed
+
+- `UNLICENSE` evidence file variants such as `UNLICENSE.md` are now recognized during package license evidence collection.
+
 ## 0.120.0 - 2026-06-20
 
 ### Fixed
