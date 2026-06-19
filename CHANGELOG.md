@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.76.0 - 2026-06-19
+
+### Fixed
+
+- Bun workspace lockfiles and pnpm workspace lockfiles now scan dependencies from every workspace/importer entry instead of only the root or first entry.
+
 ## 0.75.0 - 2026-06-19
 
 ### Fixed

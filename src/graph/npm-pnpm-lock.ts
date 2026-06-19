@@ -35,6 +35,11 @@ type PnpmDependencyEdge = {
   type: DependencyType;
 };
 
+type PnpmImporterEntry = {
+  importer: Record<string, unknown>;
+  pathSegment: string;
+};
+
 export function parsePnpmLockfile(
   lockfilePath: string
 ): Result<DependencyGraph, OhriskError> {
@@ -80,35 +85,36 @@ export function parsePnpmLockText(
     );
   }
 
-  const rootImporter = readRootImporter(importers);
+  const importerEntries = readImporterEntries(importers);
   const packages = readRecord(lockfile.packages) ?? {};
   const snapshots = readRecord(lockfile.snapshots) ?? {};
   const records = parsePackageRecords({ packages, snapshots });
   const packageIndex = indexPackagesByName(records);
-  const rootDependencies = collectRootDependencies(rootImporter);
   const nodeMap = new Map<string, DependencyNode>();
 
-  for (const rootDependency of rootDependencies) {
-    const record = resolvePackageRecord({
-      packageIndex,
-      name: rootDependency.name,
-      range: rootDependency.range
-    });
+  for (const importerEntry of importerEntries) {
+    for (const rootDependency of collectRootDependencies(importerEntry.importer)) {
+      const record = resolvePackageRecord({
+        packageIndex,
+        name: rootDependency.name,
+        range: rootDependency.range
+      });
 
-    if (!record) {
-      continue;
+      if (!record) {
+        continue;
+      }
+
+      walkDependency({
+        record,
+        dependencyType: rootDependency.type,
+        direct: true,
+        path: [importerEntry.pathSegment],
+        packageIndex,
+        nodeMap,
+        seen: new Set(),
+        requestedName: rootDependency.name
+      });
     }
-
-    walkDependency({
-      record,
-      dependencyType: rootDependency.type,
-      direct: true,
-      path: ["<root>"],
-      packageIndex,
-      nodeMap,
-      seen: new Set(),
-      requestedName: rootDependency.name
-    });
   }
 
   return ok({
@@ -143,8 +149,22 @@ function parseLockfileYaml(
   }
 }
 
-function readRootImporter(importers: Record<string, unknown>): Record<string, unknown> | undefined {
-  return readRecord(importers["."]) ?? Object.values(importers).map(readRecord).find(Boolean);
+function readImporterEntries(importers: Record<string, unknown>): PnpmImporterEntry[] {
+  return Object.entries(importers).flatMap(([key, value]) => {
+    const importer = readRecord(value);
+    if (!importer) {
+      return [];
+    }
+
+    return [{
+      importer,
+      pathSegment: importerPathSegment(key)
+    }];
+  });
+}
+
+function importerPathSegment(key: string): string {
+  return key === "." ? "<root>" : key;
 }
 
 function parsePackageRecords(input: {

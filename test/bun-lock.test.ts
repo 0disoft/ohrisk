@@ -217,4 +217,77 @@ describe("parseBunLockfile", () => {
         ]]
       });
   });
+
+  test("uses every Bun workspace as a dependency graph root", () => {
+    const result = parseBunLockText(
+      JSON.stringify({
+        workspaces: {
+          "apps/web": {
+            name: "web-app",
+            dependencies: {
+              "workspace-prod": "1.0.0"
+            }
+          },
+          "packages/tools": {
+            name: "tooling",
+            devDependencies: {
+              "workspace-dev": "2.0.0"
+            }
+          }
+        },
+        packages: {
+          "workspace-prod": [
+            "workspace-prod@1.0.0",
+            "",
+            {
+              dependencies: {
+                "workspace-child": "0.1.0"
+              }
+            }
+          ],
+          "workspace-child": [
+            "workspace-child@0.1.0",
+            "",
+            {}
+          ],
+          "workspace-dev": [
+            "workspace-dev@2.0.0",
+            "",
+            {}
+          ]
+        }
+      }),
+      "multi-workspace-bun.lock"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.rootName).toBeUndefined();
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "workspace-child@0.1.0",
+      "workspace-dev@2.0.0",
+      "workspace-prod@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "workspace-prod@1.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: true,
+        paths: [["web-app", "workspace-prod@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "workspace-child@0.1.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: false,
+        paths: [["web-app", "workspace-prod@1.0.0", "workspace-child@0.1.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "workspace-dev@2.0.0"))
+      .toMatchObject({
+        dependencyType: "development",
+        direct: true,
+        paths: [["tooling", "workspace-dev@2.0.0"]]
+      });
+  });
 });

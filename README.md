@@ -68,6 +68,7 @@ The current implementation is the first npm-style vertical slice:
 - Bun `bun.lock`, npm `package-lock.json`, pnpm `pnpm-lock.yaml`, and Yarn v1 `yarn.lock` project discovery
 - explicit lockfile selection with `--lockfile <path>` for projects that contain more than one supported lockfile
 - direct and transitive dependency graph extraction
+- Bun and pnpm workspace lockfiles are scanned from every workspace/importer entry
 - npm alias dependency resolution, including pnpm alias package keys, with alias context preserved in dependency paths
 - production, development, optional, and peer dependency classification
 - local `file:` package artifact evidence

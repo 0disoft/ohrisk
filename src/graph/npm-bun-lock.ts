@@ -47,6 +47,12 @@ type BunLockDependencyEdge = {
   type: DependencyType;
 };
 
+type BunWorkspaceEntry = {
+  key: string;
+  workspace: BunLockWorkspace;
+  pathSegment: string;
+};
+
 export function parseBunLockfile(
   lockfilePath: string
 ): Result<DependencyGraph, OhriskError> {
@@ -79,27 +85,28 @@ export function parseBunLockText(
   const lockfile = parsed.value;
   const packages = parsePackageRecords(lockfile.packages ?? {});
   const packageIndex = indexPackagesByName(packages);
-  const rootWorkspace = lockfile.workspaces?.[""] ?? firstWorkspace(lockfile.workspaces);
-  const rootName = typeof rootWorkspace?.name === "string" ? rootWorkspace.name : undefined;
-  const rootDependencies = collectRootDependencies(rootWorkspace);
+  const workspaceEntries = readWorkspaceEntries(lockfile.workspaces);
+  const rootName = readRootName(workspaceEntries);
   const nodeMap = new Map<string, DependencyNode>();
 
-  for (const rootDependency of rootDependencies) {
-    const record = resolvePackageRecord(packageIndex, rootDependency.name, rootDependency.range);
-    if (!record) {
-      continue;
-    }
+  for (const workspaceEntry of workspaceEntries) {
+    for (const rootDependency of collectRootDependencies(workspaceEntry.workspace)) {
+      const record = resolvePackageRecord(packageIndex, rootDependency.name, rootDependency.range);
+      if (!record) {
+        continue;
+      }
 
-    walkDependency({
-      record,
-      dependencyType: rootDependency.type,
-      direct: true,
-      path: [rootName ?? "<root>"],
-      packageIndex,
-      nodeMap,
-      seen: new Set(),
-      requestedName: rootDependency.name
-    });
+      walkDependency({
+        record,
+        dependencyType: rootDependency.type,
+        direct: true,
+        path: [workspaceEntry.pathSegment],
+        packageIndex,
+        nodeMap,
+        seen: new Set(),
+        requestedName: rootDependency.name
+      });
+    }
   }
 
   return ok({
@@ -205,14 +212,64 @@ function indexPackagesByName(records: BunLockPackageRecord[]): Map<string, BunLo
   return index;
 }
 
-function firstWorkspace(
+function readWorkspaceEntries(
   workspaces: Record<string, BunLockWorkspace> | undefined
-): BunLockWorkspace | undefined {
+): BunWorkspaceEntry[] {
   if (!workspaces) {
-    return undefined;
+    return [];
   }
 
-  return Object.values(workspaces)[0];
+  const rootWorkspace = isObjectRecord(workspaces[""]) ? workspaces[""] : undefined;
+  const rootName = readWorkspaceName(rootWorkspace);
+
+  return Object.entries(workspaces).flatMap(([key, workspace]) => {
+    if (!isObjectRecord(workspace)) {
+      return [];
+    }
+
+    return [{
+      key,
+      workspace,
+      pathSegment: workspacePathSegment({ key, workspace, rootName })
+    }];
+  });
+}
+
+function readRootName(workspaceEntries: BunWorkspaceEntry[]): string | undefined {
+  const explicitRoot = workspaceEntries.find((entry) => entry.key === "");
+  const explicitRootName = readWorkspaceName(explicitRoot?.workspace);
+  if (explicitRootName) {
+    return explicitRootName;
+  }
+
+  if (workspaceEntries.length === 1) {
+    return readWorkspaceName(workspaceEntries[0]?.workspace);
+  }
+
+  return undefined;
+}
+
+function readWorkspaceName(workspace: BunLockWorkspace | undefined): string | undefined {
+  return typeof workspace?.name === "string" && workspace.name !== ""
+    ? workspace.name
+    : undefined;
+}
+
+function workspacePathSegment(input: {
+  key: string;
+  workspace: BunLockWorkspace;
+  rootName?: string;
+}): string {
+  if (input.key === "") {
+    return input.rootName ?? "<root>";
+  }
+
+  const workspaceName = readWorkspaceName(input.workspace);
+  if (workspaceName) {
+    return workspaceName;
+  }
+
+  return input.key;
 }
 
 function collectRootDependencies(workspace: BunLockWorkspace | undefined): BunLockDependencyEdge[] {

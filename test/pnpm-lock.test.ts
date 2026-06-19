@@ -243,4 +243,63 @@ describe("parsePnpmLockfile", () => {
         paths: [["<root>", "prod-parent@1.0.0", "peer-child@1.0.0"]]
       });
   });
+
+  test("uses every pnpm importer as a dependency graph root", () => {
+    const result = parsePnpmLockText(
+      [
+        "lockfileVersion: '9.0'",
+        "importers:",
+        "  apps/web:",
+        "    dependencies:",
+        "      workspace-prod:",
+        "        specifier: 1.0.0",
+        "        version: 1.0.0",
+        "  packages/tools:",
+        "    devDependencies:",
+        "      workspace-dev:",
+        "        specifier: 2.0.0",
+        "        version: 2.0.0",
+        "packages:",
+        "  /workspace-prod@1.0.0: {}",
+        "  /workspace-child@0.1.0: {}",
+        "  /workspace-dev@2.0.0: {}",
+        "snapshots:",
+        "  /workspace-prod@1.0.0:",
+        "    dependencies:",
+        "      workspace-child: 0.1.0",
+        "  /workspace-child@0.1.0: {}",
+        "  /workspace-dev@2.0.0: {}"
+      ].join("\n"),
+      "multi-importer-pnpm-lock.yaml"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "workspace-child@0.1.0",
+      "workspace-dev@2.0.0",
+      "workspace-prod@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "workspace-prod@1.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: true,
+        paths: [["apps/web", "workspace-prod@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "workspace-child@0.1.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: false,
+        paths: [["apps/web", "workspace-prod@1.0.0", "workspace-child@0.1.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "workspace-dev@2.0.0"))
+      .toMatchObject({
+        dependencyType: "development",
+        direct: true,
+        paths: [["packages/tools", "workspace-dev@2.0.0"]]
+      });
+  });
 });
