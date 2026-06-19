@@ -7,6 +7,11 @@ import { NOTICE_ACTION } from "../policy/evaluate";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
 import type { RiskWaiver, WaivedRiskFinding } from "../policy/waivers";
 import type { ProjectInput } from "../project/discover";
+import {
+  formatMarkdownInlineCode,
+  formatMarkdownTableCell,
+  formatMarkdownTableCode
+} from "./markdown";
 import { buildThresholdSummary, formatThresholdSummary } from "./threshold-summary";
 
 export type ScanReportInput = {
@@ -107,17 +112,17 @@ function renderMarkdownReport(
   return [
     "# Ohrisk scan",
     "",
-    `- Project: \`${input.project.rootDir}\``,
-    `- Lockfile: \`${path.basename(input.project.lockfile.path)}\` (\`${input.project.lockfile.kind}\`)`,
-    `- Profile: \`${input.profile}\``,
-    `- Production only: \`${input.prodOnly ? "yes" : "no"}\``,
-    `- Dependencies: \`${summary.dependencyGraph.total} total\`, \`${summary.dependencyGraph.direct} direct\`, \`${summary.dependencyGraph.transitive} transitive\``,
-    `- Evidence: \`${summary.evidence.files} files\`, \`${summary.evidence.warnings} warnings\``,
-    `- Licenses: \`${summary.licenses.highConfidence} high-confidence\`, \`${summary.licenses.mediumConfidence} medium-confidence\`, \`${summary.licenses.lowConfidence} low-confidence\``,
-    `- License issues: \`${summary.licenses.missing} missing\`, \`${summary.licenses.malformed} malformed\``,
-    `- Risks: \`${summary.risks.high} high\`, \`${summary.risks.review} review\`, \`${summary.risks.unknown} unknown\`, \`${summary.risks.low} low\``,
-    `- Waiver mode: \`${formatWaiverMode(input.waiverMode)}\``,
-    `- Waived: \`${summary.waivers.applied} applied\`, \`${summary.waivers.expired} expired\`, \`${summary.waivers.unmatched} unmatched\``,
+    `- Project: ${formatMarkdownInlineCode(input.project.rootDir)}`,
+    `- Lockfile: ${formatMarkdownInlineCode(path.basename(input.project.lockfile.path))} (${formatMarkdownInlineCode(input.project.lockfile.kind)})`,
+    `- Profile: ${formatMarkdownInlineCode(input.profile)}`,
+    `- Production only: ${formatMarkdownInlineCode(input.prodOnly ? "yes" : "no")}`,
+    `- Dependencies: ${formatMarkdownInlineCode(`${summary.dependencyGraph.total} total`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.direct} direct`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.transitive} transitive`)}`,
+    `- Evidence: ${formatMarkdownInlineCode(`${summary.evidence.files} files`)}, ${formatMarkdownInlineCode(`${summary.evidence.warnings} warnings`)}`,
+    `- Licenses: ${formatMarkdownInlineCode(`${summary.licenses.highConfidence} high-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.mediumConfidence} medium-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.lowConfidence} low-confidence`)}`,
+    `- License issues: ${formatMarkdownInlineCode(`${summary.licenses.missing} missing`)}, ${formatMarkdownInlineCode(`${summary.licenses.malformed} malformed`)}`,
+    `- Risks: ${formatMarkdownInlineCode(`${summary.risks.high} high`)}, ${formatMarkdownInlineCode(`${summary.risks.review} review`)}, ${formatMarkdownInlineCode(`${summary.risks.unknown} unknown`)}, ${formatMarkdownInlineCode(`${summary.risks.low} low`)}`,
+    `- Waiver mode: ${formatMarkdownInlineCode(formatWaiverMode(input.waiverMode))}`,
+    `- Waived: ${formatMarkdownInlineCode(`${summary.waivers.applied} applied`)}, ${formatMarkdownInlineCode(`${summary.waivers.expired} expired`)}, ${formatMarkdownInlineCode(`${summary.waivers.unmatched} unmatched`)}`,
     ...renderMarkdownThresholdLines(thresholdSummary),
     ...renderMarkdownWaiverDriftLines(waiverDriftSummary),
     "",
@@ -292,7 +297,7 @@ function renderMarkdownFindings(findings: RiskFinding[]): string[] {
     "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ...findings.map(
       (finding) =>
-        `| \`${escapeMarkdownTable(finding.id)}\` | \`${escapeMarkdownTable(finding.fingerprint)}\` | ${finding.severity} | \`${escapeMarkdownTable(finding.packageId)}\` | ${escapeMarkdownTable(formatDependencyContext(finding))} | ${escapeMarkdownTable(finding.reason)} | ${finding.recommendation} | ${escapeMarkdownTable(finding.action)} | ${escapeMarkdownTable(formatPath(finding.paths[0]))} |`
+        `| ${formatMarkdownTableCode(finding.id)} | ${formatMarkdownTableCode(finding.fingerprint)} | ${finding.severity} | ${formatMarkdownTableCode(finding.packageId)} | ${formatMarkdownTableCell(formatDependencyContext(finding))} | ${formatMarkdownTableCell(finding.reason)} | ${finding.recommendation} | ${formatMarkdownTableCell(finding.action)} | ${formatMarkdownTableCell(formatPath(finding.paths[0]))} |`
     )
   ];
 }
@@ -309,7 +314,7 @@ function renderMarkdownWaivedFindings(waivedFindings: WaivedRiskFinding[]): stri
     "| --- | --- | --- | --- | --- | --- | --- |",
     ...waivedFindings.map(
       (waived) =>
-        `| \`${escapeMarkdownTable(waived.finding.id)}\` | \`${escapeMarkdownTable(waived.finding.fingerprint)}\` | ${waived.finding.severity} | \`${escapeMarkdownTable(waived.finding.packageId)}\` | ${waived.matchedBy} | ${escapeMarkdownTable(waived.waiver.reason)} | ${escapeMarkdownTable(waived.finding.action)} |`
+        `| ${formatMarkdownTableCode(waived.finding.id)} | ${formatMarkdownTableCode(waived.finding.fingerprint)} | ${waived.finding.severity} | ${formatMarkdownTableCode(waived.finding.packageId)} | ${waived.matchedBy} | ${formatMarkdownTableCell(waived.waiver.reason)} | ${formatMarkdownTableCell(waived.finding.action)} |`
     )
   ];
 }
@@ -326,7 +331,7 @@ function renderMarkdownExpiredWaivers(expiredWaivers: RiskWaiver[]): string[] {
     "| --- | --- | --- |",
     ...expiredWaivers.map(
       (waiver) =>
-        `| ${escapeMarkdownTable(formatWaiverTarget(waiver))} | ${escapeMarkdownTable(waiver.expiresOn ?? "unknown")} | ${escapeMarkdownTable(waiver.reason)} |`
+        `| ${formatMarkdownTableCell(formatWaiverTarget(waiver))} | ${formatMarkdownTableCell(waiver.expiresOn ?? "unknown")} | ${formatMarkdownTableCell(waiver.reason)} |`
     )
   ];
 }
@@ -343,7 +348,7 @@ function renderMarkdownUnmatchedWaivers(unmatchedWaivers: RiskWaiver[]): string[
     "| --- | --- |",
     ...unmatchedWaivers.map(
       (waiver) =>
-        `| ${escapeMarkdownTable(formatWaiverTarget(waiver))} | ${escapeMarkdownTable(waiver.reason)} |`
+        `| ${formatMarkdownTableCell(formatWaiverTarget(waiver))} | ${formatMarkdownTableCell(waiver.reason)} |`
     )
   ];
 }
@@ -473,8 +478,4 @@ function nextActionFor(findings: RiskFinding[]): string {
   }
 
   return "No action needed for this profile.";
-}
-
-function escapeMarkdownTable(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 }

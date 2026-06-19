@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.69.0 - 2026-06-19
+
+### Fixed
+
+- Markdown scan and diff reports now preserve table structure when dynamic fields contain backticks, pipes, or newlines.
+- Markdown report escaping is shared across scan and diff output to prevent formatter drift.
+
 ## 0.68.0 - 2026-06-19
 
 ### Fixed

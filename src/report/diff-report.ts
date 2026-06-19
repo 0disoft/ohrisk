@@ -2,6 +2,11 @@ import type { RiskDiff } from "../diff/compare";
 import { NOTICE_ACTION } from "../policy/evaluate";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
 import type { UsageProfile } from "../policy/profiles";
+import {
+  formatMarkdownInlineCode,
+  formatMarkdownTableCell,
+  formatMarkdownTableCode
+} from "./markdown";
 import { buildThresholdSummary, formatThresholdSummary } from "./threshold-summary";
 
 export type DiffReportInput = {
@@ -69,11 +74,11 @@ function renderMarkdownReport(
   return [
     "# Ohrisk diff",
     "",
-    `- Baseline: \`${input.baselineRef}\``,
-    `- Profile: \`${input.profile}\``,
-    `- Production only: \`${input.prodOnly ? "yes" : "no"}\``,
-    `- Findings: \`${input.diff.currentFindings.length} current\`, \`${input.diff.baselineFindings.length} baseline\`, \`${input.diff.newFindings.length} new or changed\``,
-    `- New or changed risks: \`${summary.high} high\`, \`${summary.review} review\`, \`${summary.unknown} unknown\`, \`${summary.low} low\``,
+    `- Baseline: ${formatMarkdownInlineCode(input.baselineRef)}`,
+    `- Profile: ${formatMarkdownInlineCode(input.profile)}`,
+    `- Production only: ${formatMarkdownInlineCode(input.prodOnly ? "yes" : "no")}`,
+    `- Findings: ${formatMarkdownInlineCode(`${input.diff.currentFindings.length} current`)}, ${formatMarkdownInlineCode(`${input.diff.baselineFindings.length} baseline`)}, ${formatMarkdownInlineCode(`${input.diff.newFindings.length} new or changed`)}`,
+    `- New or changed risks: ${formatMarkdownInlineCode(`${summary.high} high`)}, ${formatMarkdownInlineCode(`${summary.review} review`)}, ${formatMarkdownInlineCode(`${summary.unknown} unknown`)}, ${formatMarkdownInlineCode(`${summary.low} low`)}`,
     ...renderMarkdownThresholdLines(thresholdSummary),
     "",
     ...renderMarkdownNewFindings(input.diff.newFindings),
@@ -144,7 +149,7 @@ function renderMarkdownNewFindings(findings: RiskFinding[]): string[] {
     "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ...findings.map(
       (finding) =>
-        `| \`${escapeMarkdownTable(finding.id)}\` | \`${escapeMarkdownTable(finding.fingerprint)}\` | ${finding.severity} | \`${escapeMarkdownTable(finding.packageId)}\` | ${escapeMarkdownTable(formatDependencyContext(finding))} | ${escapeMarkdownTable(finding.reason)} | ${finding.recommendation} | ${escapeMarkdownTable(finding.action)} | ${escapeMarkdownTable(finding.paths[0]?.join(" -> ") ?? "unknown")} |`
+        `| ${formatMarkdownTableCode(finding.id)} | ${formatMarkdownTableCode(finding.fingerprint)} | ${finding.severity} | ${formatMarkdownTableCode(finding.packageId)} | ${formatMarkdownTableCell(formatDependencyContext(finding))} | ${formatMarkdownTableCell(finding.reason)} | ${finding.recommendation} | ${formatMarkdownTableCell(finding.action)} | ${formatMarkdownTableCell(finding.paths[0]?.join(" -> ") ?? "unknown")} |`
     )
   ];
 }
@@ -179,8 +184,4 @@ function nextActionFor(findings: RiskFinding[]): string {
   }
 
   return "No blocking action for new or changed low-risk findings.";
-}
-
-function escapeMarkdownTable(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 }
