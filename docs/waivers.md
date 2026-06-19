@@ -5,8 +5,10 @@ without removing it from reports. A waiver records a decision — you accepted
 this risk for now — so the finding stays visible while CI stays green.
 
 A waiver does not remove the risk. The finding still appears in terminal, JSON,
-Markdown, SARIF, and CycloneDX reports, marked as waived. Waiving is not a legal
-judgment. It does not make a package safe to use or prove compliance.
+Markdown, and SARIF reports, marked as waived. CycloneDX output includes the
+`ohrisk:waiverMode` metadata and active finding properties, but does not list
+waived findings. Waiving is not a legal judgment. It does not make a package
+safe to use or prove compliance.
 
 ## Waiver file
 
@@ -95,8 +97,10 @@ window so stale waivers surface naturally:
 
 When a waiver expires, it stops matching findings. The finding returns to the
 active set and counts toward the CI threshold again. The expired waiver is
-reported in the `expiredWaivers` section of JSON, Markdown, and SARIF output so
-you can review or renew it.
+reported in the `expiredWaivers` array of JSON output and in Markdown reports.
+SARIF output summarizes expired and unmatched waivers as count properties
+(`ohriskExpiredWaiverCount`, `ohriskUnmatchedWaiverCount`) rather than listing
+individual waiver objects.
 
 By default, expired waivers do not affect the exit code — they are reported
 only. Use `--strict-waivers` to fail CI when any expired waiver is present.
