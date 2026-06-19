@@ -36,4 +36,34 @@ describe("readGitRefFile", () => {
 
     expect(result.error.code).toBe("GIT_REF_READ_FAILED");
   });
+
+  test("rejects baseline paths that escape the project root", () => {
+    const result = readGitRefFile({
+      projectRoot: path.join(fixturesDir, "bun-project"),
+      ref: "HEAD",
+      relativePath: "../baseline-bun.lock"
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected an escaping baseline path to fail.");
+    }
+
+    expect(result.error.code).toBe("GIT_REF_PATH_OUTSIDE_PROJECT");
+  });
+
+  test("rejects absolute baseline paths", () => {
+    const result = readGitRefFile({
+      projectRoot: path.join(fixturesDir, "bun-project"),
+      ref: "HEAD",
+      relativePath: path.join(fixturesDir, "baseline-bun.lock")
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected an absolute baseline path to fail.");
+    }
+
+    expect(result.error.code).toBe("GIT_REF_PATH_OUTSIDE_PROJECT");
+  });
 });

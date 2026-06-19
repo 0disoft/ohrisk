@@ -16,9 +16,15 @@ export const readGitRefFile: GitRefFileReader = (input) => {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"]
     }).trim();
-    const refPath = path
-      .join(path.relative(gitRoot, input.projectRoot), input.relativePath)
-      .replace(/\\/g, "/");
+    const refPath = toGitObjectPath({
+      gitRoot,
+      projectRoot: input.projectRoot,
+      relativePath: input.relativePath
+    });
+
+    if (!refPath.ok) {
+      return refPath;
+    }
 
     return ok(
       execFileSync("git", [
@@ -26,7 +32,7 @@ export const readGitRefFile: GitRefFileReader = (input) => {
         gitRoot,
         "show",
         "--end-of-options",
-        `${input.ref}:${refPath}`
+        `${input.ref}:${refPath.value}`
       ], {
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"]
@@ -47,3 +53,41 @@ export const readGitRefFile: GitRefFileReader = (input) => {
     );
   }
 };
+
+function toGitObjectPath(input: {
+  gitRoot: string;
+  projectRoot: string;
+  relativePath: string;
+}): Result<string, OhriskError> {
+  const projectRelativePath = path.relative(input.gitRoot, input.projectRoot);
+  const lockfileRelativePath = path.normalize(input.relativePath);
+
+  if (
+    isOutsideRelativePath(projectRelativePath) ||
+    isOutsideRelativePath(lockfileRelativePath) ||
+    path.isAbsolute(input.relativePath)
+  ) {
+    return err(
+      createError({
+        code: "GIT_REF_PATH_OUTSIDE_PROJECT",
+        category: "invalid_input",
+        message: "Baseline file paths must stay inside the current project root.",
+        details: {
+          relativePath: input.relativePath
+        }
+      })
+    );
+  }
+
+  return ok(
+    path.join(projectRelativePath, lockfileRelativePath).replace(/\\/g, "/")
+  );
+}
+
+function isOutsideRelativePath(relativePath: string): boolean {
+  return (
+    relativePath === ".." ||
+    relativePath.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativePath)
+  );
+}

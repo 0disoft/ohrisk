@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.86.0 - 2026-06-19
+
+### Fixed
+
+- Git baseline reads now reject lockfile paths that escape the current project root, preventing diff baselines from reading sibling repository files.
+
 ## 0.85.0 - 2026-06-19
 
 ### Fixed
