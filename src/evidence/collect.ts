@@ -902,11 +902,16 @@ async function readStreamBodyWithLimit(input: {
 
 function readContentLength(headers: ArtifactFetchResponse["headers"]): number | undefined {
   const value = headers?.get("content-length");
-  if (value === undefined || value === null || value.trim() === "") {
+  const trimmed = value?.trim();
+  if (trimmed === undefined || trimmed === "") {
     return undefined;
   }
 
-  const parsed = Number(value);
+  if (!/^\d+$/.test(trimmed)) {
+    return undefined;
+  }
+
+  const parsed = Number(trimmed);
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }
 

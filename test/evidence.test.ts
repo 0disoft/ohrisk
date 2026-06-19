@@ -2724,6 +2724,80 @@ describe("collectGraphEvidence", () => {
       contentLength: 9
     });
   });
+
+  test("ignores non-decimal content lengths and enforces the streamed body limit", async () => {
+    let cancelled = false;
+    let pullCount = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pullCount += 1;
+        controller.enqueue(
+          pullCount === 1
+            ? Uint8Array.of(1, 2, 3, 4, 5)
+            : Uint8Array.of(6, 7, 8, 9)
+        );
+      },
+      cancel() {
+        cancelled = true;
+        return new Promise<never>(() => {});
+      }
+    });
+
+    const evidence = await expectResultBeforeCleanupStall({
+      promise: collectGraphEvidence({
+        graph: {
+          lockfilePath: "bun.lock",
+          nodes: [
+            {
+              id: "invalid-content-length-remote@1.0.0",
+              name: "invalid-content-length-remote",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved: "https://registry.example.test/invalid-content-length-remote/-/invalid-content-length-remote-1.0.0.tgz",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "invalid-content-length-remote@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot: bunProjectDir,
+        tarballMaxBytes: 8,
+        fetchArtifact: async () => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          headers: {
+            get: (name) => name.toLowerCase() === "content-length" ? "9e0" : null
+          },
+          body,
+          arrayBuffer: async () => {
+            throw new Error("Streamed responses should not fall back to arrayBuffer().");
+          }
+        })
+      }),
+      message: "Expected invalid content-length response to fall back to streamed size enforcement."
+    });
+
+    expect(pullCount).toBeGreaterThanOrEqual(2);
+    expect(cancelled).toBe(true);
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected invalid content-length remote tarball to fail.");
+    }
+
+    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
+    expect(evidence.error.category).toBe("unsupported_input");
+    expect(evidence.error.message).toBe(
+      "Package tarball response exceeded the maximum supported size."
+    );
+    expect(evidence.error.details).toMatchObject({
+      packageId: "invalid-content-length-remote@1.0.0",
+      resolved: "https://registry.example.test/invalid-content-length-remote/-/invalid-content-length-remote-1.0.0.tgz",
+      maxBytes: 8,
+      observedBytes: 9
+    });
+    expect(evidence.error.details).not.toHaveProperty("contentLength");
+  });
 });
 
 async function expectResultBeforeCleanupStall<T>(input: {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.118.0 - 2026-06-20
+
+### Fixed
+
+- Remote artifact response handling now only trusts decimal `Content-Length` values, falling back to streamed byte limits for malformed size headers.
+
 ## 0.117.0 - 2026-06-20
 
 ### Fixed
