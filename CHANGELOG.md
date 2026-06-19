@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.97.0 - 2026-06-19
+
+### Fixed
+
+- Remote registry metadata and tarball evidence reads now enforce bounded response sizes, preventing oversized artifact responses from being loaded into memory during scans.
+
 ## 0.96.0 - 2026-06-19
 
 ### Fixed

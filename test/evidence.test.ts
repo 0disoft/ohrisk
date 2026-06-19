@@ -1459,6 +1459,125 @@ describe("collectGraphEvidence", () => {
       cause: "Artifact fetch timed out after 1ms."
     });
   });
+
+  test("rejects oversized registry metadata before reading the response body", async () => {
+    let bodyRead = false;
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "oversized-metadata@1.0.0",
+            name: "oversized-metadata",
+            version: "1.0.0",
+            ecosystem: "npm",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "oversized-metadata@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      registryMetadataMaxBytes: 8,
+      fetchArtifact: async () => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        headers: {
+          get: (name) => name.toLowerCase() === "content-length" ? "9" : null
+        },
+        arrayBuffer: async () => {
+          bodyRead = true;
+          return new ArrayBuffer(0);
+        }
+      })
+    });
+
+    expect(bodyRead).toBe(false);
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected oversized registry metadata to fail.");
+    }
+
+    expect(evidence.error.code).toBe("REGISTRY_METADATA_FETCH_FAILED");
+    expect(evidence.error.category).toBe("unsupported_input");
+    expect(evidence.error.message).toBe(
+      "npm registry metadata response exceeded the maximum supported size."
+    );
+    expect(evidence.error.details).toMatchObject({
+      packageId: "oversized-metadata@1.0.0",
+      registryUrl: "https://registry.npmjs.org/oversized-metadata",
+      maxBytes: 8,
+      observedBytes: 9,
+      contentLength: 9
+    });
+  });
+
+  test("rejects remote tarball streams that exceed the maximum response size", async () => {
+    let cancelled = false;
+    let pullCount = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pullCount += 1;
+        controller.enqueue(
+          pullCount === 1
+            ? Uint8Array.of(1, 2, 3, 4, 5)
+            : Uint8Array.of(6, 7, 8, 9)
+        );
+      },
+      cancel() {
+        cancelled = true;
+      }
+    });
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "oversized-remote@1.0.0",
+            name: "oversized-remote",
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved: "https://registry.example.test/oversized-remote/-/oversized-remote-1.0.0.tgz",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "oversized-remote@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      tarballMaxBytes: 8,
+      fetchArtifact: async () => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        body,
+        arrayBuffer: async () => {
+          throw new Error("Streamed responses should not fall back to arrayBuffer().");
+        }
+      })
+    });
+
+    expect(cancelled).toBe(true);
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected oversized remote tarball stream to fail.");
+    }
+
+    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
+    expect(evidence.error.category).toBe("unsupported_input");
+    expect(evidence.error.message).toBe(
+      "Package tarball response exceeded the maximum supported size."
+    );
+    expect(evidence.error.details).toMatchObject({
+      packageId: "oversized-remote@1.0.0",
+      resolved: "https://registry.example.test/oversized-remote/-/oversized-remote-1.0.0.tgz",
+      maxBytes: 8,
+      observedBytes: 9
+    });
+  });
 });
 
 function createTarGz(files: Record<string, string>): Buffer {

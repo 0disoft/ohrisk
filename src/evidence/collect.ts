@@ -14,6 +14,10 @@ type ArtifactFetchResponse = {
   ok: boolean;
   status: number;
   statusText: string;
+  headers?: {
+    get: (name: string) => string | null;
+  };
+  body?: ReadableStream<Uint8Array> | null;
   arrayBuffer: () => Promise<ArrayBuffer>;
 };
 
@@ -27,6 +31,8 @@ type ArtifactFetcher = (
 ) => Promise<ArtifactFetchResponse>;
 
 const ARTIFACT_FETCH_TIMEOUT_MS = 30_000;
+const REGISTRY_METADATA_MAX_BYTES = 10 * 1024 * 1024;
+const PACKAGE_TARBALL_MAX_BYTES = 100 * 1024 * 1024;
 
 const SUPPORTED_INTEGRITY_DIGEST_BYTES = {
   sha1: 20,
@@ -42,16 +48,22 @@ export async function collectGraphEvidence(input: {
   projectRoot: string;
   fetchArtifact?: ArtifactFetcher;
   fetchTimeoutMs?: number;
+  registryMetadataMaxBytes?: number;
+  tarballMaxBytes?: number;
 }): Promise<Result<LicenseEvidence[], OhriskError>> {
   const evidence: LicenseEvidence[] = [];
   const fetchTimeoutMs = input.fetchTimeoutMs ?? ARTIFACT_FETCH_TIMEOUT_MS;
+  const registryMetadataMaxBytes = input.registryMetadataMaxBytes ?? REGISTRY_METADATA_MAX_BYTES;
+  const tarballMaxBytes = input.tarballMaxBytes ?? PACKAGE_TARBALL_MAX_BYTES;
 
   for (const node of input.graph.nodes) {
     const collected = await collectNodeEvidence({
       node,
       projectRoot: input.projectRoot,
       fetchArtifact: input.fetchArtifact ?? defaultArtifactFetcher,
-      fetchTimeoutMs
+      fetchTimeoutMs,
+      registryMetadataMaxBytes,
+      tarballMaxBytes
     });
 
     if (!collected.ok) {
@@ -69,6 +81,8 @@ async function collectNodeEvidence(input: {
   projectRoot: string;
   fetchArtifact: ArtifactFetcher;
   fetchTimeoutMs: number;
+  registryMetadataMaxBytes: number;
+  tarballMaxBytes: number;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   const explicitLocalPath = input.node.resolved
     ? resolveLocalArtifact(input.node.resolved, input.projectRoot)
@@ -93,7 +107,9 @@ async function collectNodeEvidence(input: {
     return collectRegistryTarballEvidence({
       node: input.node,
       fetchArtifact: input.fetchArtifact,
-      fetchTimeoutMs: input.fetchTimeoutMs
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      registryMetadataMaxBytes: input.registryMetadataMaxBytes,
+      tarballMaxBytes: input.tarballMaxBytes
     });
   }
 
@@ -103,7 +119,8 @@ async function collectNodeEvidence(input: {
       resolved: input.node.resolved,
       integrity: input.node.integrity,
       fetchArtifact: input.fetchArtifact,
-      fetchTimeoutMs: input.fetchTimeoutMs
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      tarballMaxBytes: input.tarballMaxBytes
     });
   }
 
@@ -163,6 +180,8 @@ async function collectRegistryTarballEvidence(input: {
   node: DependencyNode;
   fetchArtifact: ArtifactFetcher;
   fetchTimeoutMs: number;
+  registryMetadataMaxBytes: number;
+  tarballMaxBytes: number;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   const metadataUrl = npmRegistryPackageUrl(input.node.name);
 
@@ -188,7 +207,26 @@ async function collectRegistryTarballEvidence(input: {
           );
         }
 
-        return ok(Buffer.from(await response.arrayBuffer()).toString("utf8"));
+        const metadataBody = await readResponseBodyWithLimit({
+          response,
+          maxBytes: input.registryMetadataMaxBytes,
+          createTooLargeError: (limit) => createError({
+            code: "REGISTRY_METADATA_FETCH_FAILED",
+            category: "unsupported_input",
+            message: "npm registry metadata response exceeded the maximum supported size.",
+            details: {
+              packageId: input.node.id,
+              registryUrl: metadataUrl,
+              ...artifactBodyLimitDetails(limit)
+            }
+          })
+        });
+
+        if (!metadataBody.ok) {
+          return err(metadataBody.error);
+        }
+
+        return ok(metadataBody.value.toString("utf8"));
       }
     });
 
@@ -243,7 +281,8 @@ async function collectRegistryTarballEvidence(input: {
       resolved: tarballUrl,
       integrity: input.node.integrity,
       fetchArtifact: input.fetchArtifact,
-      fetchTimeoutMs: input.fetchTimeoutMs
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      tarballMaxBytes: input.tarballMaxBytes
     });
   } catch (cause) {
     return err(
@@ -402,6 +441,7 @@ async function collectRemoteTarballEvidence(input: {
   integrity?: string;
   fetchArtifact: ArtifactFetcher;
   fetchTimeoutMs: number;
+  tarballMaxBytes: number;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   if (!isHttpUrl(input.resolved)) {
     return ok({
@@ -434,7 +474,20 @@ async function collectRemoteTarballEvidence(input: {
           );
         }
 
-        return ok(Buffer.from(await response.arrayBuffer()));
+        return readResponseBodyWithLimit({
+          response,
+          maxBytes: input.tarballMaxBytes,
+          createTooLargeError: (limit) => createError({
+            code: "TARBALL_FETCH_FAILED",
+            category: "unsupported_input",
+            message: "Package tarball response exceeded the maximum supported size.",
+            details: {
+              packageId: input.packageId,
+              resolved: input.resolved,
+              ...artifactBodyLimitDetails(limit)
+            }
+          })
+        });
       }
     });
 
@@ -471,6 +524,110 @@ async function collectRemoteTarballEvidence(input: {
       })
     );
   }
+}
+
+type ArtifactBodyLimit = {
+  maxBytes: number;
+  observedBytes: number;
+  contentLength?: number;
+};
+
+function artifactBodyLimitDetails(limit: ArtifactBodyLimit): Record<string, unknown> {
+  return limit.contentLength === undefined
+    ? {
+        maxBytes: limit.maxBytes,
+        observedBytes: limit.observedBytes
+      }
+    : {
+        maxBytes: limit.maxBytes,
+        observedBytes: limit.observedBytes,
+        contentLength: limit.contentLength
+      };
+}
+
+async function readResponseBodyWithLimit(input: {
+  response: ArtifactFetchResponse;
+  maxBytes: number;
+  createTooLargeError: (limit: ArtifactBodyLimit) => OhriskError;
+}): Promise<Result<Buffer, OhriskError>> {
+  const contentLength = readContentLength(input.response.headers);
+  if (contentLength !== undefined && contentLength > input.maxBytes) {
+    return err(
+      input.createTooLargeError({
+        maxBytes: input.maxBytes,
+        observedBytes: contentLength,
+        contentLength
+      })
+    );
+  }
+
+  if (input.response.body) {
+    return readStreamBodyWithLimit({
+      body: input.response.body,
+      maxBytes: input.maxBytes,
+      ...(contentLength === undefined ? {} : { contentLength }),
+      createTooLargeError: input.createTooLargeError
+    });
+  }
+
+  const body = Buffer.from(await input.response.arrayBuffer());
+  if (body.byteLength > input.maxBytes) {
+    return err(
+      input.createTooLargeError({
+        maxBytes: input.maxBytes,
+        observedBytes: body.byteLength,
+        ...(contentLength === undefined ? {} : { contentLength })
+      })
+    );
+  }
+
+  return ok(body);
+}
+
+async function readStreamBodyWithLimit(input: {
+  body: ReadableStream<Uint8Array>;
+  maxBytes: number;
+  contentLength?: number;
+  createTooLargeError: (limit: ArtifactBodyLimit) => OhriskError;
+}): Promise<Result<Buffer, OhriskError>> {
+  const reader = input.body.getReader();
+  const chunks: Buffer[] = [];
+  let observedBytes = 0;
+
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) {
+        return ok(Buffer.concat(chunks, observedBytes));
+      }
+
+      observedBytes += chunk.value.byteLength;
+      if (observedBytes > input.maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        return err(
+          input.createTooLargeError({
+            maxBytes: input.maxBytes,
+            observedBytes,
+            ...(input.contentLength === undefined ? {} : { contentLength: input.contentLength })
+          })
+        );
+      }
+
+      chunks.push(Buffer.from(chunk.value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function readContentLength(headers: ArtifactFetchResponse["headers"]): number | undefined {
+  const value = headers?.get("content-length");
+  if (value === undefined || value === null || value.trim() === "") {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
 async function readArtifactWithTimeout<T>(input: {
