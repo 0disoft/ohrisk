@@ -5,6 +5,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { main, type CliIO } from "../src/cli/main";
+import { createError } from "../src/shared/errors";
+import { err } from "../src/shared/result";
 
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -439,6 +441,33 @@ describe("main", () => {
     } finally {
       rmSync(outputRoot, { recursive: true, force: true });
     }
+  });
+
+  test("returns a filesystem failure when writing report output fails", async () => {
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
+    io.writeReport = (input) => err(createError({
+      code: "REPORT_WRITE_FAILED",
+      category: "filesystem",
+      message: "Failed to write the requested report file.",
+      details: {
+        outputPath: input.outputPath,
+        resolvedPath: path.join(io.cwd, input.outputPath),
+        cause: "fixture writer failure"
+      }
+    }));
+
+    const exitCode = await main(
+      ["scan", "--json", "--prod", "--output", "reports/scan.json"],
+      io
+    );
+
+    expect(exitCode).toBe(1);
+    expect(stdout).toEqual([]);
+    expect(stderr).toHaveLength(1);
+    expect(stderr[0]).toContain("REPORT_WRITE_FAILED: Failed to write the requested report file.");
+    expect(stderr[0]).toContain("outputPath: reports/scan.json");
+    expect(stderr[0]).toContain(`resolvedPath: ${path.join(io.cwd, "reports/scan.json")}`);
+    expect(stderr[0]).toContain("cause: fixture writer failure");
   });
 
   test("prints SARIF report with stable rule ids and lockfile locations", async () => {
