@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.98.0 - 2026-06-20
+
+### Fixed
+
+- Local package tarball evidence now enforces the same maximum artifact size before reading bytes, preventing oversized `file:` artifacts from being loaded into memory.
+
 ## 0.97.0 - 2026-06-19
 
 ### Fixed

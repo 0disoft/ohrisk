@@ -1,5 +1,13 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  readSync,
+  statSync,
+  type Stats
+} from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,6 +41,7 @@ type ArtifactFetcher = (
 const ARTIFACT_FETCH_TIMEOUT_MS = 30_000;
 const REGISTRY_METADATA_MAX_BYTES = 10 * 1024 * 1024;
 const PACKAGE_TARBALL_MAX_BYTES = 100 * 1024 * 1024;
+const LOCAL_ARTIFACT_READ_CHUNK_BYTES = 64 * 1024;
 
 const SUPPORTED_INTEGRITY_DIGEST_BYTES = {
   sha1: 20,
@@ -91,7 +100,8 @@ async function collectNodeEvidence(input: {
   if (explicitLocalPath) {
     return collectLocalPathEvidence({
       node: input.node,
-      localPath: explicitLocalPath
+      localPath: explicitLocalPath,
+      tarballMaxBytes: input.tarballMaxBytes
     });
   }
 
@@ -135,6 +145,7 @@ async function collectNodeEvidence(input: {
 function collectLocalPathEvidence(input: {
   node: DependencyNode;
   localPath: string;
+  tarballMaxBytes: number;
 }): Result<LicenseEvidence, OhriskError> {
   if (!existsSync(input.localPath)) {
     return err(
@@ -151,19 +162,49 @@ function collectLocalPathEvidence(input: {
     );
   }
 
-  if (statSync(input.localPath).isDirectory()) {
+  const artifactStats = readLocalArtifactStats({
+    filePath: input.localPath,
+    packageId: input.node.id,
+    resolved: input.node.resolved
+  });
+
+  if (!artifactStats.ok) {
+    return err(artifactStats.error);
+  }
+
+  if (artifactStats.value.isDirectory()) {
     return collectLocalPackageEvidence({
       packageId: input.node.id,
       packageDir: input.localPath
     });
   }
 
-  const tarball = readFileSync(input.localPath);
+  if (artifactStats.value.size > input.tarballMaxBytes) {
+    return err(localArtifactTooLargeError({
+      packageId: input.node.id,
+      resolved: input.node.resolved,
+      artifactPath: input.localPath,
+      maxBytes: input.tarballMaxBytes,
+      observedBytes: artifactStats.value.size
+    }));
+  }
+
+  const tarball = readLocalArtifactFileWithLimit({
+    filePath: input.localPath,
+    packageId: input.node.id,
+    resolved: input.node.resolved,
+    maxBytes: input.tarballMaxBytes
+  });
+
+  if (!tarball.ok) {
+    return err(tarball.error);
+  }
+
   const verified = verifyPackageIntegrity({
     packageId: input.node.id,
     resolved: input.node.resolved,
     integrity: input.node.integrity,
-    tarball
+    tarball: tarball.value
   });
 
   if (!verified.ok) {
@@ -172,7 +213,116 @@ function collectLocalPathEvidence(input: {
 
   return collectTarballEvidence({
     packageId: input.node.id,
-    tarball
+    tarball: tarball.value
+  });
+}
+
+function readLocalArtifactStats(input: {
+  filePath: string;
+  packageId: string;
+  resolved: string | undefined;
+}): Result<Stats, OhriskError> {
+  try {
+    return ok(statSync(input.filePath));
+  } catch (cause) {
+    return err(
+      createError({
+        code: "PACKAGE_EVIDENCE_READ_FAILED",
+        category: "filesystem",
+        message: "Failed to inspect resolved package artifact.",
+        details: {
+          packageId: input.packageId,
+          resolved: input.resolved,
+          artifactPath: input.filePath,
+          cause: cause instanceof Error ? cause.message : String(cause)
+        }
+      })
+    );
+  }
+}
+
+function readLocalArtifactFileWithLimit(input: {
+  filePath: string;
+  packageId: string;
+  resolved: string | undefined;
+  maxBytes: number;
+}): Result<Buffer, OhriskError> {
+  const chunks: Buffer[] = [];
+  let observedBytes = 0;
+  let fileDescriptor: number | undefined;
+
+  try {
+    fileDescriptor = openSync(input.filePath, "r");
+
+    while (true) {
+      const readSize = Math.min(
+        LOCAL_ARTIFACT_READ_CHUNK_BYTES,
+        Math.max(1, input.maxBytes + 1 - observedBytes)
+      );
+      const chunk = Buffer.alloc(readSize);
+      const bytesRead = readSync(fileDescriptor, chunk, 0, chunk.length, null);
+      if (bytesRead === 0) {
+        return ok(Buffer.concat(chunks, observedBytes));
+      }
+
+      observedBytes += bytesRead;
+      if (observedBytes > input.maxBytes) {
+        return err(localArtifactTooLargeError({
+          packageId: input.packageId,
+          resolved: input.resolved,
+          artifactPath: input.filePath,
+          maxBytes: input.maxBytes,
+          observedBytes
+        }));
+      }
+
+      chunks.push(bytesRead === chunk.length ? chunk : chunk.subarray(0, bytesRead));
+    }
+  } catch (cause) {
+    return err(
+      createError({
+        code: "PACKAGE_EVIDENCE_READ_FAILED",
+        category: "filesystem",
+        message: "Failed to read resolved package artifact.",
+        details: {
+          packageId: input.packageId,
+          resolved: input.resolved,
+          artifactPath: input.filePath,
+          cause: cause instanceof Error ? cause.message : String(cause)
+        }
+      })
+    );
+  } finally {
+    if (fileDescriptor !== undefined) {
+      try {
+        closeSync(fileDescriptor);
+      } catch {
+        // Preserve the primary read or size error.
+      }
+    }
+  }
+}
+
+function localArtifactTooLargeError(input: {
+  packageId: string;
+  resolved: string | undefined;
+  artifactPath: string;
+  maxBytes: number;
+  observedBytes: number;
+}): OhriskError {
+  return createError({
+    code: "PACKAGE_EVIDENCE_READ_FAILED",
+    category: "unsupported_input",
+    message: "Resolved package artifact exceeded the maximum supported size.",
+    details: {
+      packageId: input.packageId,
+      resolved: input.resolved,
+      artifactPath: input.artifactPath,
+      ...artifactBodyLimitDetails({
+        maxBytes: input.maxBytes,
+        observedBytes: input.observedBytes
+      })
+    }
   });
 }
 

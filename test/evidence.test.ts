@@ -489,6 +489,54 @@ describe("collectGraphEvidence", () => {
     }
   });
 
+  test("rejects oversized local tarballs before reading package evidence", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-local-size-limit-"));
+    const tarballPath = path.join(projectRoot, "oversized-local-fixture.tgz");
+    writeFileSync(tarballPath, Buffer.alloc(9));
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "bun.lock",
+          nodes: [
+            {
+              id: "oversized-local-fixture@1.0.0",
+              name: "oversized-local-fixture",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved: "file:oversized-local-fixture.tgz",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "oversized-local-fixture@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot,
+        tarballMaxBytes: 8
+      });
+
+      expect(evidence.ok).toBe(false);
+      if (evidence.ok) {
+        throw new Error("Expected oversized local tarball to fail.");
+      }
+
+      expect(evidence.error.code).toBe("PACKAGE_EVIDENCE_READ_FAILED");
+      expect(evidence.error.category).toBe("unsupported_input");
+      expect(evidence.error.message).toBe(
+        "Resolved package artifact exceeded the maximum supported size."
+      );
+      expect(evidence.error.details).toMatchObject({
+        packageId: "oversized-local-fixture@1.0.0",
+        resolved: "file:oversized-local-fixture.tgz",
+        artifactPath: tarballPath,
+        maxBytes: 8,
+        observedBytes: 9
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("resolves URL-encoded file dependency artifact paths", async () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-encoded-file-artifact-"));
     const tarball = createTarGz({
