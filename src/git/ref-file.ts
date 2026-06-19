@@ -86,7 +86,7 @@ function readFailedError(input: {
   return createError({
     code: "GIT_REF_READ_FAILED",
     category: "unsupported_input",
-    message: "Failed to read the baseline lockfile from the requested git ref.",
+    message: "Failed to read the baseline file from the requested git ref.",
     details: {
       ref: input.input.ref,
       relativePath: input.input.relativePath,

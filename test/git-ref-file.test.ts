@@ -35,6 +35,7 @@ describe("readGitRefFile", () => {
     }
 
     expect(result.error.code).toBe("GIT_REF_READ_FAILED");
+    expect(result.error.message).toBe("Failed to read the baseline file from the requested git ref.");
   });
 
   test("reports missing files in a baseline ref distinctly", () => {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.90.0 - 2026-06-19
+
+### Fixed
+
+- Git baseline read failures now refer to the failed baseline file, not only lockfiles, because the same reader also loads Yarn workspace manifests during diff scans.
+
 ## 0.89.0 - 2026-06-19
 
 ### Fixed
