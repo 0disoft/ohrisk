@@ -206,6 +206,11 @@ function readLicenseFileExpression(evidence: LicenseEvidence): LicenseExpression
 }
 
 function recognizeStandardLicenseText(text: string): string | undefined {
+  const spdxIdentifier = readSpdxLicenseIdentifier(text);
+  if (spdxIdentifier) {
+    return spdxIdentifier;
+  }
+
   if (/\bGNU AFFERO GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 3\b/i.test(text)) {
     return "AGPL-3.0-only";
   }
@@ -277,6 +282,25 @@ function recognizeStandardLicenseText(text: string): string | undefined {
   }
 
   return undefined;
+}
+
+function readSpdxLicenseIdentifier(text: string): string | undefined {
+  for (const line of text.split(/\r?\n/)) {
+    const match = line.match(/\bSPDX-License-Identifier:\s*(.+)$/i);
+    const expression = match?.[1] ? cleanSpdxIdentifierExpression(match[1]) : undefined;
+    if (expression) {
+      return expression;
+    }
+  }
+
+  return undefined;
+}
+
+function cleanSpdxIdentifierExpression(value: string): string {
+  return value
+    .replace(/\s*\*\/\s*$/, "")
+    .replace(/\s*-->\s*$/, "")
+    .trim();
 }
 
 function addLicenseFileMatchSource(

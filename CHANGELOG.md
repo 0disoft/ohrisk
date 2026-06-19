@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.74.0 - 2026-06-19
+
+### Fixed
+
+- License files containing `SPDX-License-Identifier:` now provide medium-confidence SPDX expression evidence instead of falling through as custom text.
+
 ## 0.73.0 - 2026-06-19
 
 ### Fixed

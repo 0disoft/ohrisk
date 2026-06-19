@@ -295,6 +295,36 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
+  test("uses SPDX license identifiers from license files", () => {
+    expect(
+      normalizeLicenseEvidence({
+        packageId: "spdx-identifier-file-only@1.0.0",
+        files: [
+          {
+            path: "LICENSE",
+            kind: "license",
+            text: "SPDX-License-Identifier: MIT OR Apache-2.0\n"
+          }
+        ],
+        source: "tarball",
+        warnings: []
+      })
+    ).toEqual({
+      packageId: "spdx-identifier-file-only@1.0.0",
+      original: "MIT OR Apache-2.0",
+      expression: "MIT OR Apache-2.0",
+      choices: ["MIT", "Apache-2.0"],
+      joiner: "or",
+      signals: [],
+      evidenceSources: [
+        "source: tarball",
+        "file: LICENSE (license)",
+        "file license match: MIT OR Apache-2.0 from LICENSE"
+      ],
+      confidence: "medium"
+    });
+  });
+
   test("reads deprecated package.json license objects", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "legacy-license-object@1.0.0",
