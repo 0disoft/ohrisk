@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.100.0 - 2026-06-20
+
+### Fixed
+
+- Project lockfile reads now enforce maximum input sizes before parsing Bun, npm, pnpm, and Yarn lockfiles, including Yarn root and workspace package manifests.
+
 ## 0.99.0 - 2026-06-20
 
 ### Fixed

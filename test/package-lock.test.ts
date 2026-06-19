@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -56,6 +58,35 @@ describe("parsePackageLockfile", () => {
     }
 
     expect(result.error.code).toBe("PACKAGE_LOCK_PARSE_FAILED");
+  });
+
+  test("rejects oversized package-lock files before parsing", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-package-lock-size-"));
+    const lockfilePath = path.join(projectRoot, "package-lock.json");
+
+    try {
+      writeFileSync(lockfilePath, Buffer.alloc(9));
+
+      const result = parsePackageLockfile(lockfilePath, { maxBytes: 8 });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected oversized package-lock file to fail.");
+      }
+
+      expect(result.error.code).toBe("PACKAGE_LOCK_READ_FAILED");
+      expect(result.error.category).toBe("unsupported_input");
+      expect(result.error.message).toBe(
+        "package-lock.json exceeded the maximum supported size."
+      );
+      expect(result.error.details).toMatchObject({
+        lockfilePath,
+        maxBytes: 8,
+        observedBytes: 9
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 
   test("parses old package-lock v1 dependency trees", () => {

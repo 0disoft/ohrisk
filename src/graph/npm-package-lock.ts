@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 import {
@@ -8,6 +6,12 @@ import {
   formatDependencyPathSegment,
   resolveNpmDependencyReference
 } from "./npm-spec";
+import {
+  inputFileReadErrorCategory,
+  inputFileReadErrorDetails,
+  LOCKFILE_MAX_BYTES,
+  readInputTextFile
+} from "./read-input-file";
 import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
 
 type PackageLockPackage = {
@@ -63,23 +67,31 @@ type PackageLockV1Dependency = {
 };
 
 export function parsePackageLockfile(
-  lockfilePath: string
+  lockfilePath: string,
+  options: { maxBytes?: number } = {}
 ): Result<DependencyGraph, OhriskError> {
-  try {
-    return parsePackageLockText(readFileSync(lockfilePath, "utf8"), lockfilePath);
-  } catch (cause) {
+  const lockfileText = readInputTextFile({
+    filePath: lockfilePath,
+    maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES
+  });
+
+  if (!lockfileText.ok) {
     return err(
       createError({
         code: "PACKAGE_LOCK_READ_FAILED",
-        category: "filesystem",
-        message: "Failed to read package-lock.json.",
+        category: inputFileReadErrorCategory(lockfileText.error),
+        message: lockfileText.error.kind === "too_large"
+          ? "package-lock.json exceeded the maximum supported size."
+          : "Failed to read package-lock.json.",
         details: {
           lockfilePath,
-          cause: cause instanceof Error ? cause.message : String(cause)
+          ...inputFileReadErrorDetails(lockfileText.error)
         }
       })
     );
   }
+
+  return parsePackageLockText(lockfileText.value, lockfilePath);
 }
 
 export function parsePackageLockText(

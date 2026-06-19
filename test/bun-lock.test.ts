@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -60,6 +62,33 @@ describe("parseBunLockfile", () => {
     }
 
     expect(result.error.code).toBe("BUN_LOCK_PARSE_FAILED");
+  });
+
+  test("rejects oversized Bun lockfiles before parsing", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-bun-lock-size-"));
+    const lockfilePath = path.join(projectRoot, "bun.lock");
+
+    try {
+      writeFileSync(lockfilePath, Buffer.alloc(9));
+
+      const result = parseBunLockfile(lockfilePath, { maxBytes: 8 });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected oversized Bun lockfile to fail.");
+      }
+
+      expect(result.error.code).toBe("BUN_LOCK_READ_FAILED");
+      expect(result.error.category).toBe("unsupported_input");
+      expect(result.error.message).toBe("bun.lock exceeded the maximum supported size.");
+      expect(result.error.details).toMatchObject({
+        lockfilePath,
+        maxBytes: 8,
+        observedBytes: 9
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 
   test("resolves npm alias dependencies to the actual package identity", () => {

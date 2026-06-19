@@ -79,6 +79,115 @@ describe("parseYarnLockfile", () => {
     expect(result.error.code).toBe("YARN_PACKAGE_JSON_PARSE_FAILED");
   });
 
+  test("rejects oversized Yarn lockfiles before parsing", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-yarn-lock-size-"));
+    const lockfilePath = path.join(projectRoot, "yarn.lock");
+    const packageJsonPath = path.join(projectRoot, "package.json");
+
+    try {
+      writeFileSync(lockfilePath, Buffer.alloc(9));
+      writeFileSync(packageJsonPath, JSON.stringify({ name: "fixture-yarn-size" }), "utf8");
+
+      const result = parseYarnLockfile(lockfilePath, packageJsonPath, {
+        lockfileMaxBytes: 8
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected oversized Yarn lockfile to fail.");
+      }
+
+      expect(result.error.code).toBe("YARN_LOCK_READ_FAILED");
+      expect(result.error.category).toBe("unsupported_input");
+      expect(result.error.message).toBe("yarn.lock exceeded the maximum supported size.");
+      expect(result.error.details).toMatchObject({
+        lockfilePath,
+        maxBytes: 8,
+        observedBytes: 9
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects oversized Yarn root package manifests before parsing", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-yarn-root-package-size-"));
+    const lockfilePath = path.join(projectRoot, "yarn.lock");
+    const packageJsonPath = path.join(projectRoot, "package.json");
+
+    try {
+      writeFileSync(lockfilePath, "", "utf8");
+      writeFileSync(packageJsonPath, Buffer.alloc(9));
+
+      const result = parseYarnLockfile(lockfilePath, packageJsonPath, {
+        packageJsonMaxBytes: 8
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected oversized Yarn package.json to fail.");
+      }
+
+      expect(result.error.code).toBe("YARN_PACKAGE_JSON_READ_FAILED");
+      expect(result.error.category).toBe("unsupported_input");
+      expect(result.error.message).toBe(
+        "package.json for yarn.lock root dependencies exceeded the maximum supported size."
+      );
+      expect(result.error.details).toMatchObject({
+        lockfilePath,
+        packageJsonPath,
+        maxBytes: 8,
+        observedBytes: 9
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects oversized Yarn workspace package manifests before parsing", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-yarn-workspace-size-"));
+    const workspaceDir = path.join(projectRoot, "packages", "app");
+    const lockfilePath = path.join(projectRoot, "yarn.lock");
+    const packageJsonPath = path.join(projectRoot, "package.json");
+    const workspacePackageJsonPath = path.join(workspaceDir, "package.json");
+
+    try {
+      mkdirSync(workspaceDir, { recursive: true });
+      writeFileSync(lockfilePath, "", "utf8");
+      writeFileSync(
+        packageJsonPath,
+        JSON.stringify({
+          workspaces: ["packages/*"]
+        }),
+        "utf8"
+      );
+      writeFileSync(workspacePackageJsonPath, Buffer.alloc(81));
+
+      const result = parseYarnLockfile(lockfilePath, packageJsonPath, {
+        packageJsonMaxBytes: 80
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected oversized Yarn workspace package.json to fail.");
+      }
+
+      expect(result.error.code).toBe("YARN_WORKSPACE_PACKAGE_JSON_READ_FAILED");
+      expect(result.error.category).toBe("unsupported_input");
+      expect(result.error.message).toBe(
+        "package.json for a Yarn workspace dependency root exceeded the maximum supported size."
+      );
+      expect(result.error.details).toMatchObject({
+        lockfilePath,
+        packageJsonPath: workspacePackageJsonPath,
+        maxBytes: 80,
+        observedBytes: 81
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("resolves npm alias dependencies to the actual package identity", () => {
     const result = parseYarnLockText({
       packageJsonText: JSON.stringify({

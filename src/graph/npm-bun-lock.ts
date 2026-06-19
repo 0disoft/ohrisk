@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
@@ -10,6 +9,12 @@ import {
   parseNpmPackageReference,
   resolveNpmDependencyReference
 } from "./npm-spec";
+import {
+  inputFileReadErrorCategory,
+  inputFileReadErrorDetails,
+  LOCKFILE_MAX_BYTES,
+  readInputTextFile
+} from "./read-input-file";
 import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
 
 type BunLockWorkspace = {
@@ -55,23 +60,31 @@ type BunWorkspaceEntry = {
 };
 
 export function parseBunLockfile(
-  lockfilePath: string
+  lockfilePath: string,
+  options: { maxBytes?: number } = {}
 ): Result<DependencyGraph, OhriskError> {
-  try {
-    return parseBunLockText(readFileSync(lockfilePath, "utf8"), lockfilePath);
-  } catch (cause) {
+  const lockfileText = readInputTextFile({
+    filePath: lockfilePath,
+    maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES
+  });
+
+  if (!lockfileText.ok) {
     return err(
       createError({
         code: "BUN_LOCK_READ_FAILED",
-        category: "filesystem",
-        message: "Failed to read bun.lock.",
+        category: inputFileReadErrorCategory(lockfileText.error),
+        message: lockfileText.error.kind === "too_large"
+          ? "bun.lock exceeded the maximum supported size."
+          : "Failed to read bun.lock.",
         details: {
           lockfilePath,
-          cause: cause instanceof Error ? cause.message : String(cause)
+          ...inputFileReadErrorDetails(lockfileText.error)
         }
       })
     );
   }
+
+  return parseBunLockText(lockfileText.value, lockfilePath);
 }
 
 export function parseBunLockText(

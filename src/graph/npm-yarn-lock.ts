@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
@@ -11,6 +11,13 @@ import {
   parseNpmPackageReference,
   resolveNpmDependencyReference
 } from "./npm-spec";
+import {
+  inputFileReadErrorCategory,
+  inputFileReadErrorDetails,
+  LOCKFILE_MAX_BYTES,
+  PACKAGE_JSON_MAX_BYTES,
+  readInputTextFile
+} from "./read-input-file";
 import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
 
 const require = createRequire(import.meta.url);
@@ -74,45 +81,54 @@ type YarnDependencyEdge = {
 
 export function parseYarnLockfile(
   lockfilePath: string,
-  packageJsonPath = path.join(path.dirname(lockfilePath), "package.json")
+  packageJsonPath = path.join(path.dirname(lockfilePath), "package.json"),
+  options: {
+    lockfileMaxBytes?: number;
+    packageJsonMaxBytes?: number;
+  } = {}
 ): Result<DependencyGraph, OhriskError> {
-  let lockfileText: string;
-  let packageJsonText: string;
-
-  try {
-    lockfileText = readFileSync(lockfilePath, "utf8");
-  } catch (cause) {
+  const lockfileText = readInputTextFile({
+    filePath: lockfilePath,
+    maxBytes: options.lockfileMaxBytes ?? LOCKFILE_MAX_BYTES
+  });
+  if (!lockfileText.ok) {
     return err(
       createError({
         code: "YARN_LOCK_READ_FAILED",
-        category: "filesystem",
-        message: "Failed to read yarn.lock.",
+        category: inputFileReadErrorCategory(lockfileText.error),
+        message: lockfileText.error.kind === "too_large"
+          ? "yarn.lock exceeded the maximum supported size."
+          : "Failed to read yarn.lock.",
         details: {
           lockfilePath,
-          cause: cause instanceof Error ? cause.message : String(cause)
+          ...inputFileReadErrorDetails(lockfileText.error)
         }
       })
     );
   }
 
-  try {
-    packageJsonText = readFileSync(packageJsonPath, "utf8");
-  } catch (cause) {
+  const packageJsonText = readInputTextFile({
+    filePath: packageJsonPath,
+    maxBytes: options.packageJsonMaxBytes ?? PACKAGE_JSON_MAX_BYTES
+  });
+  if (!packageJsonText.ok) {
     return err(
       createError({
         code: "YARN_PACKAGE_JSON_READ_FAILED",
-        category: "filesystem",
-        message: "Failed to read package.json for yarn.lock root dependencies.",
+        category: inputFileReadErrorCategory(packageJsonText.error),
+        message: packageJsonText.error.kind === "too_large"
+          ? "package.json for yarn.lock root dependencies exceeded the maximum supported size."
+          : "Failed to read package.json for yarn.lock root dependencies.",
         details: {
           lockfilePath,
           packageJsonPath,
-          cause: cause instanceof Error ? cause.message : String(cause)
+          ...inputFileReadErrorDetails(packageJsonText.error)
         }
       })
     );
   }
 
-  const parsedRootPackageJson = parsePackageJson(packageJsonText, packageJsonPath);
+  const parsedRootPackageJson = parsePackageJson(packageJsonText.value, packageJsonPath);
   if (!parsedRootPackageJson.ok) {
     return parsedRootPackageJson;
   }
@@ -120,15 +136,16 @@ export function parseYarnLockfile(
   const workspacePackageJsonTexts = readWorkspacePackageJsonTexts({
     projectRoot: path.dirname(packageJsonPath),
     rootPackageJson: parsedRootPackageJson.value,
-    lockfilePath
+    lockfilePath,
+    packageJsonMaxBytes: options.packageJsonMaxBytes ?? PACKAGE_JSON_MAX_BYTES
   });
   if (!workspacePackageJsonTexts.ok) {
     return workspacePackageJsonTexts;
   }
 
   return parseYarnLockText({
-    lockfileText,
-    packageJsonText,
+    lockfileText: lockfileText.value,
+    packageJsonText: packageJsonText.value,
     lockfilePath,
     packageJsonPath,
     workspacePackageJsonTexts: workspacePackageJsonTexts.value
@@ -263,6 +280,7 @@ function readWorkspacePackageJsonTexts(input: {
   projectRoot: string;
   rootPackageJson: PackageJsonShape;
   lockfilePath: string;
+  packageJsonMaxBytes: number;
 }): Result<YarnWorkspacePackageJsonInput[], OhriskError> {
   const packageJsons: YarnWorkspacePackageJsonInput[] = [];
   const workspacePackageJsonPaths = findYarnWorkspacePackageJsonPaths({
@@ -271,26 +289,34 @@ function readWorkspacePackageJsonTexts(input: {
   });
 
   for (const workspacePackageJsonPath of workspacePackageJsonPaths) {
-    try {
+    const packageJsonText = readInputTextFile({
+      filePath: workspacePackageJsonPath.packageJsonPath,
+      maxBytes: input.packageJsonMaxBytes
+    });
+
+    if (packageJsonText.ok) {
       packageJsons.push({
-        packageJsonText: readFileSync(workspacePackageJsonPath.packageJsonPath, "utf8"),
+        packageJsonText: packageJsonText.value,
         packageJsonPath: workspacePackageJsonPath.packageJsonPath,
         workspacePath: workspacePackageJsonPath.workspacePath
       });
-    } catch (cause) {
-      return err(
-        createError({
-          code: "YARN_WORKSPACE_PACKAGE_JSON_READ_FAILED",
-          category: "filesystem",
-          message: "Failed to read package.json for a Yarn workspace dependency root.",
-          details: {
-            lockfilePath: input.lockfilePath,
-            packageJsonPath: workspacePackageJsonPath.packageJsonPath,
-            cause: cause instanceof Error ? cause.message : String(cause)
-          }
-        })
-      );
+      continue;
     }
+
+    return err(
+      createError({
+        code: "YARN_WORKSPACE_PACKAGE_JSON_READ_FAILED",
+        category: inputFileReadErrorCategory(packageJsonText.error),
+        message: packageJsonText.error.kind === "too_large"
+          ? "package.json for a Yarn workspace dependency root exceeded the maximum supported size."
+          : "Failed to read package.json for a Yarn workspace dependency root.",
+        details: {
+          lockfilePath: input.lockfilePath,
+          packageJsonPath: workspacePackageJsonPath.packageJsonPath,
+          ...inputFileReadErrorDetails(packageJsonText.error)
+        }
+      })
+    );
   }
 
   return ok(packageJsons);

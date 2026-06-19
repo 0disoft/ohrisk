@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -56,6 +58,33 @@ describe("parsePnpmLockfile", () => {
     }
 
     expect(result.error.code).toBe("PNPM_LOCK_PARSE_FAILED");
+  });
+
+  test("rejects oversized pnpm lockfiles before parsing", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-pnpm-lock-size-"));
+    const lockfilePath = path.join(projectRoot, "pnpm-lock.yaml");
+
+    try {
+      writeFileSync(lockfilePath, Buffer.alloc(9));
+
+      const result = parsePnpmLockfile(lockfilePath, { maxBytes: 8 });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected oversized pnpm lockfile to fail.");
+      }
+
+      expect(result.error.code).toBe("PNPM_LOCK_READ_FAILED");
+      expect(result.error.category).toBe("unsupported_input");
+      expect(result.error.message).toBe("pnpm-lock.yaml exceeded the maximum supported size.");
+      expect(result.error.details).toMatchObject({
+        lockfilePath,
+        maxBytes: 8,
+        observedBytes: 9
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 
   test("reports pnpm lockfiles without importers as unsupported input", () => {
