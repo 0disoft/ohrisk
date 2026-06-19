@@ -77,13 +77,19 @@ describe("documentation contract", () => {
       path.join(repoRoot, "docs", "report-formats.md"),
       "utf8"
     );
+    const sarifSection = extractSection(doc, "## SARIF");
+    expect(sarifSection).not.toBe("");
 
     // SARIF includes waived findings as suppressed results
-    expect(doc).toContain("suppressed results");
+    expect(sarifSection).toContain(
+      "- **Waived findings**: included as suppressed results"
+    );
     // SARIF summarizes expired/unmatched as count properties, not object lists
-    expect(doc).toContain("ohriskExpiredWaiverCount");
-    expect(doc).toContain("ohriskUnmatchedWaiverCount");
-    expect(doc).toContain("NOT listed as individual objects");
+    expect(sarifSection).toContain(
+      "- **Expired/unmatched waivers**: NOT listed as individual objects. Summarized as count properties"
+    );
+    expect(sarifSection).toContain("ohriskExpiredWaiverCount");
+    expect(sarifSection).toContain("ohriskUnmatchedWaiverCount");
   });
 
   test("docs/report-formats.md preserves CycloneDX boundary statements", () => {
@@ -91,10 +97,19 @@ describe("documentation contract", () => {
       path.join(repoRoot, "docs", "report-formats.md"),
       "utf8"
     );
+    const cyclonedxSection = extractSection(doc, "## CycloneDX");
+    expect(cyclonedxSection).not.toBe("");
 
     // CycloneDX does not list waived findings
-    expect(doc).toContain("NOT listed");
+    expect(cyclonedxSection).toContain(
+      "- **Waived findings**: NOT listed. CycloneDX does not receive waived finding data."
+    );
+    expect(cyclonedxSection).toContain(
+      "- **Expired/unmatched waivers**: NOT listed."
+    );
     // CycloneDX includes waiver mode metadata
-    expect(doc).toContain("ohrisk:waiverMode");
+    expect(cyclonedxSection).toContain(
+      "- **Waiver mode**: `ohrisk:waiverMode` in metadata properties"
+    );
   });
 });
