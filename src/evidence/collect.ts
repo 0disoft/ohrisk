@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { lookup } from "node:dns/promises";
 import {
   closeSync,
   existsSync,
@@ -40,6 +41,13 @@ type ArtifactFetcher = (
   options?: ArtifactFetchOptions
 ) => Promise<ArtifactFetchResponse>;
 
+type ArtifactHostResolution = {
+  address: string;
+  family: number;
+};
+
+type ArtifactHostResolver = (hostname: string) => Promise<ArtifactHostResolution[]>;
+
 const ARTIFACT_FETCH_TIMEOUT_MS = 30_000;
 const REGISTRY_METADATA_MAX_BYTES = 10 * 1024 * 1024;
 const PACKAGE_TARBALL_MAX_BYTES = 100 * 1024 * 1024;
@@ -63,8 +71,13 @@ export async function collectGraphEvidence(input: {
   registryMetadataMaxBytes?: number;
   tarballMaxBytes?: number;
   installedPackageJsonMaxBytes?: number;
+  resolveArtifactHost?: ArtifactHostResolver;
 }): Promise<Result<LicenseEvidence[], OhriskError>> {
   const evidence: LicenseEvidence[] = [];
+  const fetchArtifact = input.fetchArtifact ?? defaultArtifactFetcher;
+  const resolveArtifactHost =
+    input.resolveArtifactHost ??
+    (input.fetchArtifact ? undefined : defaultArtifactHostResolver);
   const fetchTimeoutMs = input.fetchTimeoutMs ?? ARTIFACT_FETCH_TIMEOUT_MS;
   const registryMetadataMaxBytes = input.registryMetadataMaxBytes ?? REGISTRY_METADATA_MAX_BYTES;
   const tarballMaxBytes = input.tarballMaxBytes ?? PACKAGE_TARBALL_MAX_BYTES;
@@ -75,7 +88,8 @@ export async function collectGraphEvidence(input: {
     const collected = await collectNodeEvidence({
       node,
       projectRoot: input.projectRoot,
-      fetchArtifact: input.fetchArtifact ?? defaultArtifactFetcher,
+      fetchArtifact,
+      resolveArtifactHost,
       fetchTimeoutMs,
       registryMetadataMaxBytes,
       tarballMaxBytes,
@@ -96,6 +110,7 @@ async function collectNodeEvidence(input: {
   node: DependencyNode;
   projectRoot: string;
   fetchArtifact: ArtifactFetcher;
+  resolveArtifactHost: ArtifactHostResolver | undefined;
   fetchTimeoutMs: number;
   registryMetadataMaxBytes: number;
   tarballMaxBytes: number;
@@ -129,6 +144,7 @@ async function collectNodeEvidence(input: {
     return collectRegistryTarballEvidence({
       node: input.node,
       fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
       fetchTimeoutMs: input.fetchTimeoutMs,
       registryMetadataMaxBytes: input.registryMetadataMaxBytes,
       tarballMaxBytes: input.tarballMaxBytes
@@ -141,6 +157,7 @@ async function collectNodeEvidence(input: {
       resolved: input.node.resolved,
       integrity: input.node.integrity,
       fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
       fetchTimeoutMs: input.fetchTimeoutMs,
       tarballMaxBytes: input.tarballMaxBytes
     });
@@ -341,11 +358,28 @@ function localArtifactTooLargeError(input: {
 async function collectRegistryTarballEvidence(input: {
   node: DependencyNode;
   fetchArtifact: ArtifactFetcher;
+  resolveArtifactHost: ArtifactHostResolver | undefined;
   fetchTimeoutMs: number;
   registryMetadataMaxBytes: number;
   tarballMaxBytes: number;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   const metadataUrl = npmRegistryPackageUrl(input.node.name);
+
+  const metadataUrlPreflight = await preflightRemoteArtifactFetchTarget({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    packageId: input.node.id,
+    resolved: metadataUrl,
+    message: "npm registry metadata URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve npm registry metadata host.",
+    details: {
+      registryUrl: metadataUrl
+    },
+    resolveArtifactHost: input.resolveArtifactHost
+  });
+
+  if (!metadataUrlPreflight.ok) {
+    return err(metadataUrlPreflight.error);
+  }
 
   try {
     const metadataText = await readArtifactWithTimeout({
@@ -431,29 +465,24 @@ async function collectRegistryTarballEvidence(input: {
       );
     }
 
-    const tarballUrlValidation = validateRemoteArtifactUrl({
-      code: "REGISTRY_METADATA_FETCH_FAILED",
-      packageId: input.node.id,
-      resolved: tarballUrl,
-      message: "npm registry metadata included an unsupported tarball URL.",
-      details: {
-        registryUrl: metadataUrl,
-        version: input.node.version,
-        tarballUrl
-      }
-    });
-
-    if (!tarballUrlValidation.ok) {
-      return err(tarballUrlValidation.error);
-    }
-
     return collectRemoteTarballEvidence({
       packageId: input.node.id,
       resolved: tarballUrl,
       integrity: input.node.integrity,
       fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
       fetchTimeoutMs: input.fetchTimeoutMs,
-      tarballMaxBytes: input.tarballMaxBytes
+      tarballMaxBytes: input.tarballMaxBytes,
+      urlError: {
+        code: "REGISTRY_METADATA_FETCH_FAILED",
+        message: "npm registry metadata included an unsupported tarball URL.",
+        resolveFailureMessage: "Failed to resolve registry tarball host.",
+        details: {
+          registryUrl: metadataUrl,
+          version: input.node.version,
+          tarballUrl
+        }
+      }
     });
   } catch (cause) {
     return err(
@@ -635,9 +664,39 @@ async function collectRemoteTarballEvidence(input: {
   resolved: string;
   integrity?: string;
   fetchArtifact: ArtifactFetcher;
+  resolveArtifactHost: ArtifactHostResolver | undefined;
   fetchTimeoutMs: number;
   tarballMaxBytes: number;
+  urlError?: {
+    code: "REGISTRY_METADATA_FETCH_FAILED" | "TARBALL_FETCH_FAILED";
+    message: string;
+    resolveFailureMessage: string;
+    details: Record<string, unknown>;
+  };
 }): Promise<Result<LicenseEvidence, OhriskError>> {
+  const urlError = input.urlError ?? {
+    code: "TARBALL_FETCH_FAILED" as const,
+    message: "Package tarball URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve package tarball host.",
+    details: {
+      resolved: input.resolved
+    }
+  };
+
+  const urlPreflight = await preflightRemoteArtifactFetchTarget({
+    code: urlError.code,
+    packageId: input.packageId,
+    resolved: input.resolved,
+    message: urlError.message,
+    resolveFailureMessage: urlError.resolveFailureMessage,
+    details: urlError.details,
+    resolveArtifactHost: input.resolveArtifactHost
+  });
+
+  if (!urlPreflight.ok) {
+    return err(urlPreflight.error);
+  }
+
   if (!isHttpUrl(input.resolved)) {
     return ok({
       packageId: input.packageId,
@@ -645,20 +704,6 @@ async function collectRemoteTarballEvidence(input: {
       source: "unavailable",
       warnings: [`Unsupported resolved artifact specifier: ${input.resolved}`]
     });
-  }
-
-  const urlValidation = validateRemoteArtifactUrl({
-    code: "TARBALL_FETCH_FAILED",
-    packageId: input.packageId,
-    resolved: input.resolved,
-    message: "Package tarball URL targets an unsupported or blocked host.",
-    details: {
-      resolved: input.resolved
-    }
-  });
-
-  if (!urlValidation.ok) {
-    return err(urlValidation.error);
   }
 
   try {
@@ -917,6 +962,100 @@ function validateRemoteArtifactUrl(input: {
   return ok(undefined);
 }
 
+async function preflightRemoteArtifactFetchTarget(input: {
+  code: "REGISTRY_METADATA_FETCH_FAILED" | "TARBALL_FETCH_FAILED";
+  packageId: string;
+  resolved: string;
+  message: string;
+  resolveFailureMessage: string;
+  details: Record<string, unknown>;
+  resolveArtifactHost: ArtifactHostResolver | undefined;
+}): Promise<Result<void, OhriskError>> {
+  const urlValidation = validateRemoteArtifactUrl({
+    code: input.code,
+    packageId: input.packageId,
+    resolved: input.resolved,
+    message: input.message,
+    details: input.details
+  });
+
+  if (!urlValidation.ok) {
+    return err(urlValidation.error);
+  }
+
+  if (!input.resolveArtifactHost) {
+    return ok(undefined);
+  }
+
+  const url = parseHttpUrl(input.resolved);
+  if (!url) {
+    return ok(undefined);
+  }
+
+  const artifactHost = normalizeUrlHostname(url.hostname);
+  if (!shouldResolveRemoteArtifactHost(artifactHost)) {
+    return ok(undefined);
+  }
+
+  let resolutions: ArtifactHostResolution[];
+  try {
+    resolutions = await input.resolveArtifactHost(artifactHost);
+  } catch (cause) {
+    return err(
+      createError({
+        code: input.code,
+        category: "network",
+        message: input.resolveFailureMessage,
+        details: {
+          packageId: input.packageId,
+          ...input.details,
+          artifactHost,
+          cause: cause instanceof Error ? cause.message : String(cause)
+        }
+      })
+    );
+  }
+
+  if (resolutions.length === 0) {
+    return err(
+      createError({
+        code: input.code,
+        category: "network",
+        message: input.resolveFailureMessage,
+        details: {
+          packageId: input.packageId,
+          ...input.details,
+          artifactHost,
+          reason: "empty_dns_response"
+        }
+      })
+    );
+  }
+
+  for (const resolution of resolutions) {
+    const resolvedAddress = normalizeUrlHostname(resolution.address);
+    const blockedHostReason = blockedRemoteArtifactHostReason(resolvedAddress);
+    if (blockedHostReason) {
+      return err(
+        createError({
+          code: input.code,
+          category: "unsupported_input",
+          message: input.message,
+          details: {
+            packageId: input.packageId,
+            ...input.details,
+            artifactHost,
+            resolvedAddress,
+            reason: blockedHostReason
+          }
+        })
+      );
+    }
+  }
+
+  return ok(undefined);
+}
+
 function parseHttpUrl(value: string): URL | undefined {
   try {
     const url = new URL(value);
@@ -944,6 +1083,10 @@ function blockedRemoteArtifactHostReason(hostname: string): string | undefined {
   }
 
   return undefined;
+}
+
+function shouldResolveRemoteArtifactHost(hostname: string): boolean {
+  return isIP(hostname) === 0 && blockedRemoteArtifactHostReason(hostname) === undefined;
 }
 
 function normalizeUrlHostname(hostname: string): string {
@@ -1180,5 +1323,12 @@ function defaultArtifactFetcher(
   return fetch(url, {
     ...(options?.signal ? { signal: options.signal } : {}),
     redirect: options?.redirect ?? "manual"
+  });
+}
+
+async function defaultArtifactHostResolver(hostname: string): Promise<ArtifactHostResolution[]> {
+  return lookup(hostname, {
+    all: true,
+    verbatim: true
   });
 }

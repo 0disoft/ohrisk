@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.105.0 - 2026-06-20
+
+### Fixed
+
+- Remote artifact fetches now resolve hostname targets before fetch and reject DNS answers that point at localhost, private, link-local, or reserved network addresses.
+
 ## 0.104.0 - 2026-06-20
 
 ### Fixed

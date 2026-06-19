@@ -461,6 +461,7 @@ describe("collectGraphEvidence", () => {
     });
 
     let fetchRedirectMode: string | undefined;
+    const resolvedHosts: string[] = [];
 
     const evidence = await collectGraphEvidence({
       graph: {
@@ -480,6 +481,10 @@ describe("collectGraphEvidence", () => {
         ]
       },
       projectRoot: bunProjectDir,
+      resolveArtifactHost: async (hostname) => {
+        resolvedHosts.push(hostname);
+        return [{ address: "93.184.216.34", family: 4 }];
+      },
       fetchArtifact: async (_url, options) => {
         fetchRedirectMode = options?.redirect;
         return okArtifactResponseFromBuffer(tarball);
@@ -505,6 +510,7 @@ describe("collectGraphEvidence", () => {
         ]
       })
     ]);
+    expect(resolvedHosts).toEqual(["registry.example.test"]);
     expect(fetchRedirectMode).toBe("manual");
   });
 
@@ -1440,6 +1446,72 @@ describe("collectGraphEvidence", () => {
     });
   });
 
+  test("rejects registry tarball hostnames that resolve to private hosts before fetching tarballs", async () => {
+    const tarballUrl = "https://tarballs.example.test/metadata-dns-private-1.0.0.tgz";
+    const fetchedUrls: string[] = [];
+    const resolvedHosts: string[] = [];
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "metadata-dns-private@1.0.0",
+            name: "metadata-dns-private",
+            version: "1.0.0",
+            ecosystem: "npm",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "metadata-dns-private@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      resolveArtifactHost: async (hostname) => {
+        resolvedHosts.push(hostname);
+        return hostname === "registry.npmjs.org"
+          ? [{ address: "104.16.0.1", family: 4 }]
+          : [{ address: "169.254.169.254", family: 4 }];
+      },
+      fetchArtifact: async (url) => {
+        fetchedUrls.push(url);
+        if (url !== "https://registry.npmjs.org/metadata-dns-private") {
+          throw new Error("DNS-private registry tarball URL should not be fetched.");
+        }
+
+        return okArtifactResponseFromBuffer(JSON.stringify({
+          versions: {
+            "1.0.0": {
+              dist: {
+                tarball: tarballUrl
+              }
+            }
+          }
+        }));
+      }
+    });
+
+    expect(resolvedHosts).toEqual(["registry.npmjs.org", "tarballs.example.test"]);
+    expect(fetchedUrls).toEqual(["https://registry.npmjs.org/metadata-dns-private"]);
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected DNS-private registry tarball host to fail.");
+    }
+
+    expect(evidence.error.code).toBe("REGISTRY_METADATA_FETCH_FAILED");
+    expect(evidence.error.category).toBe("unsupported_input");
+    expect(evidence.error.message).toBe("npm registry metadata included an unsupported tarball URL.");
+    expect(evidence.error.details).toMatchObject({
+      packageId: "metadata-dns-private@1.0.0",
+      registryUrl: "https://registry.npmjs.org/metadata-dns-private",
+      version: "1.0.0",
+      tarballUrl,
+      artifactHost: "tarballs.example.test",
+      resolvedAddress: "169.254.169.254",
+      reason: "link_local_ipv4"
+    });
+  });
+
   test("reports malformed registry metadata as unsupported input", async () => {
     const evidence = await collectGraphEvidence({
       graph: {
@@ -1668,6 +1740,104 @@ describe("collectGraphEvidence", () => {
         reason
       });
     }
+  });
+
+  test("rejects remote tarball hostnames that resolve to private hosts before fetch", async () => {
+    let fetchCalled = false;
+    const resolvedHosts: string[] = [];
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "dns-private-remote@1.0.0",
+            name: "dns-private-remote",
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved: "https://tarballs.example.test/dns-private-remote-1.0.0.tgz",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "dns-private-remote@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      resolveArtifactHost: async (hostname) => {
+        resolvedHosts.push(hostname);
+        return [{ address: "10.0.0.5", family: 4 }];
+      },
+      fetchArtifact: async () => {
+        fetchCalled = true;
+        return okArtifactResponseFromBuffer(Uint8Array.of(1, 2, 3));
+      }
+    });
+
+    expect(resolvedHosts).toEqual(["tarballs.example.test"]);
+    expect(fetchCalled).toBe(false);
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected DNS-private remote tarball host to fail.");
+    }
+
+    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
+    expect(evidence.error.category).toBe("unsupported_input");
+    expect(evidence.error.message).toBe(
+      "Package tarball URL targets an unsupported or blocked host."
+    );
+    expect(evidence.error.details).toMatchObject({
+      packageId: "dns-private-remote@1.0.0",
+      resolved: "https://tarballs.example.test/dns-private-remote-1.0.0.tgz",
+      artifactHost: "tarballs.example.test",
+      resolvedAddress: "10.0.0.5",
+      reason: "private_ipv4"
+    });
+  });
+
+  test("reports DNS resolution failures before remote tarball fetch", async () => {
+    let fetchCalled = false;
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "dns-failure-remote@1.0.0",
+            name: "dns-failure-remote",
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved: "https://tarballs.example.test/dns-failure-remote-1.0.0.tgz",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "dns-failure-remote@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      resolveArtifactHost: async () => {
+        throw new Error("DNS unavailable");
+      },
+      fetchArtifact: async () => {
+        fetchCalled = true;
+        return okArtifactResponseFromBuffer(Uint8Array.of(1, 2, 3));
+      }
+    });
+
+    expect(fetchCalled).toBe(false);
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected DNS resolution failure to fail before fetch.");
+    }
+
+    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
+    expect(evidence.error.category).toBe("network");
+    expect(evidence.error.message).toBe("Failed to resolve package tarball host.");
+    expect(evidence.error.details).toMatchObject({
+      packageId: "dns-failure-remote@1.0.0",
+      resolved: "https://tarballs.example.test/dns-failure-remote-1.0.0.tgz",
+      artifactHost: "tarballs.example.test",
+      cause: "DNS unavailable"
+    });
   });
 
   test("rejects registry metadata responses without readable body streams", async () => {
