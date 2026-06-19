@@ -25,6 +25,7 @@ export const readGitRefFile: GitRefFileReader = (input) => {
         "-C",
         gitRoot,
         "show",
+        "--end-of-options",
         `${input.ref}:${refPath}`
       ], {
         encoding: "utf8",

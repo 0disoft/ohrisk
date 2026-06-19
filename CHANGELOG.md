@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.85.0 - 2026-06-19
+
+### Fixed
+
+- Git baseline reads now stop option parsing before the refspec, preventing option-like refs from being misread as successful baseline file contents.
+
 ## 0.84.0 - 2026-06-19
 
 ### Fixed

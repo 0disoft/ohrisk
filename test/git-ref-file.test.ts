@@ -21,4 +21,19 @@ describe("readGitRefFile", () => {
 
     expect(result.value).toContain('"name": "fixture-bun-project"');
   });
+
+  test("does not treat option-like refs as git show options", () => {
+    const result = readGitRefFile({
+      projectRoot: path.join(fixturesDir, "bun-project"),
+      ref: "--format=%H",
+      relativePath: "bun.lock"
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected option-like ref to fail instead of returning git show output.");
+    }
+
+    expect(result.error.code).toBe("GIT_REF_READ_FAILED");
+  });
 });
