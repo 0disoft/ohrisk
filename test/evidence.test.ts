@@ -613,6 +613,54 @@ describe("collectGraphEvidence", () => {
     }
   });
 
+  test("redacts credential-like URL text in local artifact error details", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-local-redaction-"));
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "package-lock.json",
+          nodes: [
+            {
+              id: "credential-looking-local@1.0.0",
+              name: "credential-looking-local",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved: "file:https://fixture-token:fixture-secret@missing-local.tgz",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "credential-looking-local@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot
+      });
+
+      expect(evidence.ok).toBe(false);
+      if (evidence.ok) {
+        throw new Error("Expected missing credential-looking local artifact to fail.");
+      }
+
+      expect(evidence.error.code).toBe("PACKAGE_EVIDENCE_READ_FAILED");
+      expect(evidence.error.category).toBe("filesystem");
+      expect(evidence.error.details).toMatchObject({
+        packageId: "credential-looking-local@1.0.0",
+        resolved: "file:https://redacted@missing-local.tgz"
+      });
+
+      const details = JSON.stringify(evidence.error.details);
+      expect(details).toContain("redacted@missing-local.tgz");
+      expect(details).not.toContain("fixture-token");
+      expect(details).not.toContain("fixture-secret");
+
+      const formatted = formatError(evidence.error);
+      expect(formatted).not.toContain("fixture-token");
+      expect(formatted).not.toContain("fixture-secret");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("resolves URL-encoded file dependency artifact paths", async () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-encoded-file-artifact-"));
     const tarball = createTarGz({

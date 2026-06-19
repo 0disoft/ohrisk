@@ -185,8 +185,8 @@ function collectLocalPathEvidence(input: {
         message: "Resolved package artifact does not exist.",
         details: {
           packageId: input.node.id,
-          resolved: input.node.resolved,
-          artifactPath: input.localPath
+          resolved: safeOptionalUrlForErrorDetails(input.node.resolved),
+          artifactPath: safeUrlForErrorDetails(input.localPath)
         }
       })
     );
@@ -262,9 +262,9 @@ function readLocalArtifactStats(input: {
         message: "Failed to inspect resolved package artifact.",
         details: {
           packageId: input.packageId,
-          resolved: input.resolved,
-          artifactPath: input.filePath,
-          cause: cause instanceof Error ? cause.message : String(cause)
+          resolved: safeOptionalUrlForErrorDetails(input.resolved),
+          artifactPath: safeUrlForErrorDetails(input.filePath),
+          cause: safeUrlForErrorDetails(cause instanceof Error ? cause.message : String(cause))
         }
       })
     );
@@ -316,9 +316,9 @@ function readLocalArtifactFileWithLimit(input: {
         message: "Failed to read resolved package artifact.",
         details: {
           packageId: input.packageId,
-          resolved: input.resolved,
-          artifactPath: input.filePath,
-          cause: cause instanceof Error ? cause.message : String(cause)
+          resolved: safeOptionalUrlForErrorDetails(input.resolved),
+          artifactPath: safeUrlForErrorDetails(input.filePath),
+          cause: safeUrlForErrorDetails(cause instanceof Error ? cause.message : String(cause))
         }
       })
     );
@@ -346,8 +346,8 @@ function localArtifactTooLargeError(input: {
     message: "Resolved package artifact exceeded the maximum supported size.",
     details: {
       packageId: input.packageId,
-      resolved: input.resolved,
-      artifactPath: input.artifactPath,
+      resolved: safeOptionalUrlForErrorDetails(input.resolved),
+      artifactPath: safeUrlForErrorDetails(input.artifactPath),
       ...artifactBodyLimitDetails({
         maxBytes: input.maxBytes,
         observedBytes: input.observedBytes
@@ -1086,7 +1086,7 @@ function parseHttpUrl(value: string): URL | undefined {
 
 function redactUrlCredentialsInDetails(details: Record<string, unknown>): Record<string, unknown> {
   const redacted = { ...details };
-  for (const key of ["registryUrl", "resolved", "tarballUrl"]) {
+  for (const key of ["registryUrl", "resolved", "tarballUrl", "artifactPath"]) {
     const value = redacted[key];
     if (typeof value === "string") {
       redacted[key] = safeUrlForErrorDetails(value);
@@ -1096,11 +1096,15 @@ function redactUrlCredentialsInDetails(details: Record<string, unknown>): Record
   return redacted;
 }
 
+function safeOptionalUrlForErrorDetails(value: string | undefined): string | undefined {
+  return value === undefined ? undefined : safeUrlForErrorDetails(value);
+}
+
 function safeUrlForErrorDetails(value: string): string {
   try {
     const url = new URL(value);
     if (url.username === "" && url.password === "") {
-      return value;
+      return redactUrlCredentialsInText(value);
     }
 
     if (url.username !== "") {
@@ -1112,11 +1116,20 @@ function safeUrlForErrorDetails(value: string): string {
 
     return url.toString();
   } catch {
-    return value.replace(
-      /^([a-z][a-z0-9+.-]*:\/\/)([^@/?#\s]*)(@)/i,
+    return redactUrlCredentialsInText(value);
+  }
+}
+
+function redactUrlCredentialsInText(value: string): string {
+  return value
+    .replace(
+      /([a-z][a-z0-9+.-]*:\/\/)([^@/?#\s\\]*)(@)/gi,
+      "$1redacted$3"
+    )
+    .replace(
+      /([a-z][a-z0-9+.-]{1,}:\\+)([^@/?#\s\\]*)(@)/gi,
       "$1redacted$3"
     );
-  }
 }
 
 function blockedRemoteArtifactHostReason(hostname: string): string | undefined {
@@ -1337,7 +1350,7 @@ function verifyPackageIntegrity(input: {
         message: "Package artifact integrity could not be verified because no supported digest was found.",
         details: {
           packageId: input.packageId,
-          resolved: input.resolved,
+          resolved: safeOptionalUrlForErrorDetails(input.resolved),
           integrity: input.integrity,
           supportedAlgorithms: ["sha512", "sha384", "sha256", "sha1"]
         }
@@ -1366,7 +1379,7 @@ function verifyPackageIntegrity(input: {
       message: "Package artifact integrity did not match the lockfile digest.",
       details: {
         packageId: input.packageId,
-        resolved: input.resolved,
+        resolved: safeOptionalUrlForErrorDetails(input.resolved),
         integrity: input.integrity,
         computed
       }

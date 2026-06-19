@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.110.0 - 2026-06-20
+
+### Fixed
+
+- Local artifact error details now redact credential-like URL text from resolved specifiers, derived artifact paths, and diagnostic causes.
+
 ## 0.109.0 - 2026-06-20
 
 ### Fixed
