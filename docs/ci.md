@@ -19,6 +19,12 @@ Global install is preferred over `bunx ohrisk` in CI because ohrisk runs in
 multiple steps. Installing once puts `ohrisk` on PATH for every subsequent step,
 and install failures surface before the scan step runs.
 
+For a stable CI gate, pin the version instead of tracking latest:
+
+```yaml
+- run: bun add -g ohrisk@<version>
+```
+
 ## PR gate: fail on high-risk licenses
 
 Block a PR when production-relevant findings meet the `high` threshold:

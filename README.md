@@ -384,5 +384,5 @@ bun run ../../../src/cli/main.ts scan --profile saas
 
 ## Documentation
 
-- [CI Usage Guide](docs/ci.md) — GitHub Actions examples for PR gates and artifacts
-- [한국어 사용 가이드](docs/ko/README.md) — Korean usage guide for developers
+- [CI Usage Guide](https://github.com/0disoft/ohrisk/blob/main/docs/ci.md) — GitHub Actions examples for PR gates and artifacts
+- [한국어 사용 가이드](https://github.com/0disoft/ohrisk/blob/main/docs/ko/README.md) — Korean usage guide for developers
