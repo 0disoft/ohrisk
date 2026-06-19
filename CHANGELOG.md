@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.123.0 - 2026-06-20
+
+### Fixed
+
+- npm package-lock v1 parsing now links hoisted dependencies through their requiring parents instead of treating them as direct root dependencies.
+
 ## 0.122.0 - 2026-06-20
 
 ### Fixed

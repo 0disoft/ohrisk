@@ -165,6 +165,71 @@ describe("parsePackageLockfile", () => {
       });
   });
 
+  test("links hoisted package-lock v1 dependencies through requiring parents", () => {
+    const result = parsePackageLockText(
+      JSON.stringify({
+        name: "fixture-package-lock-v1-hoisted",
+        lockfileVersion: 1,
+        dependencies: {
+          "prod-parent": {
+            version: "1.0.0",
+            requires: {
+              "hoisted-child": "2.0.0"
+            }
+          },
+          "hoisted-child": {
+            version: "2.0.0",
+            resolved: "file:../bun-project/.registry/hoisted-child"
+          },
+          "dev-parent": {
+            version: "3.0.0",
+            dev: true,
+            requires: {
+              "dev-hoisted-child": "4.0.0"
+            }
+          },
+          "dev-hoisted-child": {
+            version: "4.0.0",
+            resolved: "file:../bun-project/.registry/dev-hoisted-child"
+          }
+        }
+      }),
+      "package-lock-v1-hoisted.json"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "dev-hoisted-child@4.0.0",
+      "dev-parent@3.0.0",
+      "hoisted-child@2.0.0",
+      "prod-parent@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "hoisted-child@2.0.0"))
+      .toMatchObject({
+        direct: false,
+        dependencyType: "production",
+        paths: [[
+          "fixture-package-lock-v1-hoisted",
+          "prod-parent@1.0.0",
+          "hoisted-child@2.0.0"
+        ]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "dev-hoisted-child@4.0.0"))
+      .toMatchObject({
+        direct: false,
+        dependencyType: "development",
+        paths: [[
+          "fixture-package-lock-v1-hoisted",
+          "dev-parent@3.0.0",
+          "dev-hoisted-child@4.0.0"
+        ]]
+      });
+  });
+
   test("resolves npm alias dependencies to the actual package identity", () => {
     const result = parsePackageLockText(
       JSON.stringify({

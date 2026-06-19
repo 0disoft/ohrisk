@@ -179,11 +179,16 @@ function parsePackageLockV1(input: {
   dependencies: Record<string, unknown>;
 }): Result<DependencyGraph, OhriskError> {
   const rootName = typeof input.lockfile.name === "string" ? input.lockfile.name : undefined;
+  const rootDependencies = readV1DependencyMap(input.dependencies);
+  const referencedRootDependencies = collectReferencedRootV1DependencyNames(rootDependencies);
   const nodeMap = new Map<string, DependencyNode>();
 
-  for (const [name, rawDependency] of Object.entries(input.dependencies)) {
-    const dependency = readV1Dependency(rawDependency);
+  for (const [name, dependency] of Object.entries(rootDependencies)) {
     if (!dependency || typeof dependency.version !== "string") {
+      continue;
+    }
+
+    if (referencedRootDependencies.has(name)) {
       continue;
     }
 
@@ -193,6 +198,7 @@ function parsePackageLockV1(input: {
       dependencyType: dependencyTypeForV1Dependency(dependency),
       direct: true,
       path: [rootName ?? "<root>"],
+      rootDependencies,
       nodeMap,
       seen: new Set()
     });
@@ -464,6 +470,7 @@ function walkV1Dependency(input: {
   dependencyType: DependencyType;
   direct: boolean;
   path: string[];
+  rootDependencies: Record<string, PackageLockV1Dependency>;
   nodeMap: Map<string, DependencyNode>;
   seen: Set<string>;
 }): void {
@@ -511,7 +518,7 @@ function walkV1Dependency(input: {
   const childNames = new Set([...Object.keys(nestedDependencies), ...requiredNames]);
 
   for (const childName of childNames) {
-    const child = nestedDependencies[childName];
+    const child = nestedDependencies[childName] ?? input.rootDependencies[childName];
     if (!child) {
       continue;
     }
@@ -525,10 +532,27 @@ function walkV1Dependency(input: {
       ),
       direct: false,
       path: nextPath,
+      rootDependencies: input.rootDependencies,
       nodeMap: input.nodeMap,
       seen: nextSeen
     });
   }
+}
+
+function collectReferencedRootV1DependencyNames(
+  rootDependencies: Record<string, PackageLockV1Dependency>
+): Set<string> {
+  const referenced = new Set<string>();
+
+  for (const dependency of Object.values(rootDependencies)) {
+    for (const name of Object.keys(readDependencyMap(dependency.requires))) {
+      if (rootDependencies[name]) {
+        referenced.add(name);
+      }
+    }
+  }
+
+  return referenced;
 }
 
 function mergeDependencyType(left: DependencyType, right: DependencyType): DependencyType {
