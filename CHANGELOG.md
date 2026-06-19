@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.92.0 - 2026-06-19
+
+### Fixed
+
+- Package tarball parsing now rejects entries whose declared size extends beyond the archive data before trusting package metadata.
+
 ## 0.91.0 - 2026-06-19
 
 ### Fixed

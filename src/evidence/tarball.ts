@@ -111,6 +111,10 @@ function parseTarEntries(tarball: Buffer): TarEntry[] {
     const dataStart = offset + 512;
     const dataEnd = dataStart + size;
 
+    if (!Number.isSafeInteger(dataEnd) || dataEnd < dataStart || dataEnd > tarball.length) {
+      throw new Error(`Tar entry ${fullPath || "(unnamed)"} extends beyond archive data.`);
+    }
+
     if (type === "0" || type === "") {
       entries.push({
         path: fullPath,
@@ -183,8 +187,21 @@ function readNullTerminated(buffer: Buffer, start: number, length: number): stri
 }
 
 function parseOctal(value: string): number {
-  const parsed = Number.parseInt(value.trim() || "0", 8);
-  return Number.isNaN(parsed) ? 0 : parsed;
+  const trimmed = value.trim();
+  if (trimmed === "") {
+    return 0;
+  }
+
+  if (!/^[0-7]+$/.test(trimmed)) {
+    throw new Error("Tar entry contains an invalid octal size.");
+  }
+
+  const parsed = Number.parseInt(trimmed, 8);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error("Tar entry size is too large to parse safely.");
+  }
+
+  return parsed;
 }
 
 function roundUpToBlock(size: number): number {

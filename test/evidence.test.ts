@@ -216,6 +216,37 @@ describe("collectTarballEvidence", () => {
     });
   });
 
+  test("rejects truncated tarball entries before trusting package metadata", () => {
+    const packageJson = JSON.stringify({
+      name: "tarball-truncated-entry",
+      version: "1.0.0",
+      license: "MIT"
+    });
+    const tarball = createTruncatedTarGz({
+      filePath: "package/package.json",
+      content: packageJson,
+      declaredSize: Buffer.byteLength(packageJson, "utf8") + 1024
+    });
+
+    const result = collectTarballEvidence({
+      packageId: "tarball-truncated-entry@1.0.0",
+      tarball
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected truncated tarball entry to fail.");
+    }
+
+    expect(result.error.code).toBe("TARBALL_PARSE_FAILED");
+    expect(result.error.category).toBe("unsupported_input");
+    expect(result.error.message).toBe("Failed to parse package tarball evidence.");
+    expect(result.error.details).toMatchObject({
+      packageId: "tarball-truncated-entry@1.0.0",
+      cause: "Tar entry package/package.json extends beyond archive data."
+    });
+  });
+
   test("reads tarball license evidence filename variants", () => {
     const tarball = createTarGz({
       "package/package.json": JSON.stringify({
@@ -1267,27 +1298,45 @@ function createTarGz(files: Record<string, string>): Buffer {
 
   for (const [filePath, content] of Object.entries(files)) {
     const data = Buffer.from(content, "utf8");
-    const header = Buffer.alloc(512);
-
-    header.write(filePath, 0, 100, "utf8");
-    header.write("0000644\0", 100, 8, "ascii");
-    header.write("0000000\0", 108, 8, "ascii");
-    header.write("0000000\0", 116, 8, "ascii");
-    header.write(data.length.toString(8).padStart(11, "0") + "\0", 124, 12, "ascii");
-    header.write("00000000000\0", 136, 12, "ascii");
-    header.fill(" ", 148, 156);
-    header.write("0", 156, 1, "ascii");
-    header.write("ustar\0", 257, 6, "ascii");
-    header.write("00", 263, 2, "ascii");
-
-    const checksum = header.reduce((sum, byte) => sum + byte, 0);
-    header.write(checksum.toString(8).padStart(6, "0") + "\0 ", 148, 8, "ascii");
+    const header = createTarHeader(filePath, data.length);
 
     chunks.push(header, data, Buffer.alloc(Math.ceil(data.length / 512) * 512 - data.length));
   }
 
   chunks.push(Buffer.alloc(1024));
   return gzipSync(Buffer.concat(chunks));
+}
+
+function createTruncatedTarGz(input: {
+  filePath: string;
+  content: string;
+  declaredSize: number;
+}): Buffer {
+  const data = Buffer.from(input.content, "utf8");
+  return gzipSync(Buffer.concat([
+    createTarHeader(input.filePath, input.declaredSize),
+    data
+  ]));
+}
+
+function createTarHeader(filePath: string, size: number): Buffer {
+  const header = Buffer.alloc(512);
+
+  header.write(filePath, 0, 100, "utf8");
+  header.write("0000644\0", 100, 8, "ascii");
+  header.write("0000000\0", 108, 8, "ascii");
+  header.write("0000000\0", 116, 8, "ascii");
+  header.write(size.toString(8).padStart(11, "0") + "\0", 124, 12, "ascii");
+  header.write("00000000000\0", 136, 12, "ascii");
+  header.fill(" ", 148, 156);
+  header.write("0", 156, 1, "ascii");
+  header.write("ustar\0", 257, 6, "ascii");
+  header.write("00", 263, 2, "ascii");
+
+  const checksum = header.reduce((sum, byte) => sum + byte, 0);
+  header.write(checksum.toString(8).padStart(6, "0") + "\0 ", 148, 8, "ascii");
+
+  return header;
 }
 
 function integrityFor(value: Buffer): string {
