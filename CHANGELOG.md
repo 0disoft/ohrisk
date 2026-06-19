@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.109.0 - 2026-06-20
+
+### Fixed
+
+- Remote artifact URLs with embedded credentials are now rejected before fetch, and credential-bearing URL fields are redacted in error details.
+
 ## 0.108.0 - 2026-06-20
 
 ### Fixed

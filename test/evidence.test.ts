@@ -11,6 +11,7 @@ import { classifyEvidenceFile } from "../src/evidence/license-files";
 import { collectLocalPackageEvidence } from "../src/evidence/local-package";
 import { collectTarballEvidence } from "../src/evidence/tarball";
 import { parseBunLockfile } from "../src/graph/npm-bun-lock";
+import { formatError } from "../src/shared/errors";
 
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 const bunProjectDir = path.join(fixturesDir, "bun-project");
@@ -1446,6 +1447,69 @@ describe("collectGraphEvidence", () => {
     });
   });
 
+  test("rejects credentialed registry tarball URLs before fetch and redacts details", async () => {
+    const tarballUrl =
+      "https://fixture-token:fixture-secret@tarballs.example.test/credentialed-metadata-1.0.0.tgz";
+    const fetchedUrls: string[] = [];
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "metadata-credentialed-tarball@1.0.0",
+            name: "metadata-credentialed-tarball",
+            version: "1.0.0",
+            ecosystem: "npm",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "metadata-credentialed-tarball@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async (url) => {
+        fetchedUrls.push(url);
+        if (url !== "https://registry.npmjs.org/metadata-credentialed-tarball") {
+          throw new Error("Credentialed registry tarball URL should not be fetched.");
+        }
+
+        return okArtifactResponseFromBuffer(JSON.stringify({
+          versions: {
+            "1.0.0": {
+              dist: {
+                tarball: tarballUrl
+              }
+            }
+          }
+        }));
+      }
+    });
+
+    expect(fetchedUrls).toEqual(["https://registry.npmjs.org/metadata-credentialed-tarball"]);
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected credentialed registry tarball URL to fail.");
+    }
+
+    expect(evidence.error.code).toBe("REGISTRY_METADATA_FETCH_FAILED");
+    expect(evidence.error.category).toBe("unsupported_input");
+    expect(evidence.error.message).toBe("npm registry metadata included an unsupported tarball URL.");
+    expect(evidence.error.details).toMatchObject({
+      packageId: "metadata-credentialed-tarball@1.0.0",
+      registryUrl: "https://registry.npmjs.org/metadata-credentialed-tarball",
+      version: "1.0.0",
+      tarballUrl:
+        "https://redacted:redacted@tarballs.example.test/credentialed-metadata-1.0.0.tgz",
+      artifactHost: "tarballs.example.test",
+      reason: "url_credentials_not_supported"
+    });
+
+    const formatted = formatError(evidence.error);
+    expect(formatted).not.toContain("fixture-token");
+    expect(formatted).not.toContain("fixture-secret");
+  });
+
   test("rejects registry tarball hostnames that resolve to private hosts before fetching tarballs", async () => {
     const tarballUrl = "https://tarballs.example.test/metadata-dns-private-1.0.0.tgz";
     const fetchedUrls: string[] = [];
@@ -1582,6 +1646,45 @@ describe("collectGraphEvidence", () => {
         warnings: ["Unsupported resolved artifact specifier: workspace:*"]
       }
     ]);
+  });
+
+  test("redacts credentials from unsupported resolved artifact warnings", async () => {
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "malformed-credentialed-remote@1.0.0",
+            name: "malformed-credentialed-remote",
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved: "https://fixture-token:fixture-secret@",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "malformed-credentialed-remote@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async () => {
+        throw new Error("Malformed credentialed URLs should not be fetched.");
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+
+    const warnings = evidence.value[0]?.warnings ?? [];
+    expect(evidence.value[0]).toMatchObject({
+      packageId: "malformed-credentialed-remote@1.0.0",
+      files: [],
+      source: "unavailable",
+      warnings: ["Unsupported resolved artifact specifier: https://redacted@"]
+    });
+    expect(warnings.join("\n")).not.toContain("fixture-token");
+    expect(warnings.join("\n")).not.toContain("fixture-secret");
   });
 
   test("reports remote tarball fetch failures", async () => {
@@ -1800,6 +1903,57 @@ describe("collectGraphEvidence", () => {
         reason
       });
     }
+  });
+
+  test("rejects credentialed remote tarball URLs before fetch and redacts details", async () => {
+    let fetchCalled = false;
+    const resolved =
+      "https://fixture-token:fixture-secret@registry.example.test/credentialed-remote-1.0.0.tgz";
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "credentialed-remote@1.0.0",
+            name: "credentialed-remote",
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved,
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "credentialed-remote@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async () => {
+        fetchCalled = true;
+        return okArtifactResponseFromBuffer(Uint8Array.of(1, 2, 3));
+      }
+    });
+
+    expect(fetchCalled).toBe(false);
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected credentialed remote tarball URL to fail.");
+    }
+
+    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
+    expect(evidence.error.category).toBe("unsupported_input");
+    expect(evidence.error.message).toBe(
+      "Package tarball URL targets an unsupported or blocked host."
+    );
+    expect(evidence.error.details).toMatchObject({
+      packageId: "credentialed-remote@1.0.0",
+      resolved: "https://redacted:redacted@registry.example.test/credentialed-remote-1.0.0.tgz",
+      artifactHost: "registry.example.test",
+      reason: "url_credentials_not_supported"
+    });
+
+    const formatted = formatError(evidence.error);
+    expect(formatted).not.toContain("fixture-token");
+    expect(formatted).not.toContain("fixture-secret");
   });
 
   test("allows public embedded IPv4 remote tarball hosts", async () => {

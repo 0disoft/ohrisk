@@ -168,7 +168,7 @@ async function collectNodeEvidence(input: {
     packageId: input.node.id,
     files: [],
     source: "unavailable",
-    warnings: [`Unsupported resolved artifact specifier: ${input.node.resolved}`]
+    warnings: [`Unsupported resolved artifact specifier: ${safeUrlForErrorDetails(input.node.resolved)}`]
   });
 }
 
@@ -680,7 +680,7 @@ async function collectRemoteTarballEvidence(input: {
     message: "Package tarball URL targets an unsupported or blocked host.",
     resolveFailureMessage: "Failed to resolve package tarball host.",
     details: {
-      resolved: input.resolved
+      resolved: safeUrlForErrorDetails(input.resolved)
     }
   };
 
@@ -703,7 +703,7 @@ async function collectRemoteTarballEvidence(input: {
       packageId: input.packageId,
       files: [],
       source: "unavailable",
-      warnings: [`Unsupported resolved artifact specifier: ${input.resolved}`]
+      warnings: [`Unsupported resolved artifact specifier: ${safeUrlForErrorDetails(input.resolved)}`]
     });
   }
 
@@ -721,7 +721,7 @@ async function collectRemoteTarballEvidence(input: {
               message: "Failed to fetch package tarball.",
               details: {
                 packageId: input.packageId,
-                resolved: input.resolved,
+                resolved: safeUrlForErrorDetails(input.resolved),
                 status: response.status,
                 statusText: response.statusText
               }
@@ -738,7 +738,7 @@ async function collectRemoteTarballEvidence(input: {
             message: "Package tarball response exceeded the maximum supported size.",
             details: {
               packageId: input.packageId,
-              resolved: input.resolved,
+              resolved: safeUrlForErrorDetails(input.resolved),
               ...artifactBodyLimitDetails(limit)
             }
           }),
@@ -748,7 +748,7 @@ async function collectRemoteTarballEvidence(input: {
             message: "Package tarball response did not expose a readable body stream.",
             details: {
               packageId: input.packageId,
-              resolved: input.resolved
+              resolved: safeUrlForErrorDetails(input.resolved)
             }
           })
         });
@@ -782,7 +782,7 @@ async function collectRemoteTarballEvidence(input: {
         message: "Failed to fetch package tarball.",
         details: {
           packageId: input.packageId,
-          resolved: input.resolved,
+          resolved: safeUrlForErrorDetails(input.resolved),
           cause: cause instanceof Error ? cause.message : String(cause)
         }
       })
@@ -936,8 +936,24 @@ function validateRemoteArtifactUrl(input: {
         message: input.message,
         details: {
           packageId: input.packageId,
-          ...input.details,
+          ...redactUrlCredentialsInDetails(input.details),
           reason: "unsupported_or_invalid_url"
+        }
+      })
+    );
+  }
+
+  if (url.username !== "" || url.password !== "") {
+    return err(
+      createError({
+        code: input.code,
+        category: "unsupported_input",
+        message: input.message,
+        details: {
+          packageId: input.packageId,
+          ...redactUrlCredentialsInDetails(input.details),
+          artifactHost: normalizeUrlHostname(url.hostname),
+          reason: "url_credentials_not_supported"
         }
       })
     );
@@ -952,7 +968,7 @@ function validateRemoteArtifactUrl(input: {
         message: input.message,
         details: {
           packageId: input.packageId,
-          ...input.details,
+          ...redactUrlCredentialsInDetails(input.details),
           artifactHost: normalizeUrlHostname(url.hostname),
           reason: blockedHostReason
         }
@@ -1009,7 +1025,7 @@ async function preflightRemoteArtifactFetchTarget(input: {
         message: input.resolveFailureMessage,
         details: {
           packageId: input.packageId,
-          ...input.details,
+          ...redactUrlCredentialsInDetails(input.details),
           artifactHost,
           cause: cause instanceof Error ? cause.message : String(cause)
         }
@@ -1025,7 +1041,7 @@ async function preflightRemoteArtifactFetchTarget(input: {
         message: input.resolveFailureMessage,
         details: {
           packageId: input.packageId,
-          ...input.details,
+          ...redactUrlCredentialsInDetails(input.details),
           artifactHost,
           reason: "empty_dns_response"
         }
@@ -1044,7 +1060,7 @@ async function preflightRemoteArtifactFetchTarget(input: {
           message: input.message,
           details: {
             packageId: input.packageId,
-            ...input.details,
+            ...redactUrlCredentialsInDetails(input.details),
             artifactHost,
             resolvedAddress,
             reason: blockedHostReason
@@ -1065,6 +1081,41 @@ function parseHttpUrl(value: string): URL | undefined {
       : undefined;
   } catch {
     return undefined;
+  }
+}
+
+function redactUrlCredentialsInDetails(details: Record<string, unknown>): Record<string, unknown> {
+  const redacted = { ...details };
+  for (const key of ["registryUrl", "resolved", "tarballUrl"]) {
+    const value = redacted[key];
+    if (typeof value === "string") {
+      redacted[key] = safeUrlForErrorDetails(value);
+    }
+  }
+
+  return redacted;
+}
+
+function safeUrlForErrorDetails(value: string): string {
+  try {
+    const url = new URL(value);
+    if (url.username === "" && url.password === "") {
+      return value;
+    }
+
+    if (url.username !== "") {
+      url.username = "redacted";
+    }
+    if (url.password !== "") {
+      url.password = "redacted";
+    }
+
+    return url.toString();
+  } catch {
+    return value.replace(
+      /^([a-z][a-z0-9+.-]*:\/\/)([^@/?#\s]*)(@)/i,
+      "$1redacted$3"
+    );
   }
 }
 
