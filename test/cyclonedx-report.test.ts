@@ -49,11 +49,34 @@ describe("renderCycloneDxReport", () => {
       riskFindings: [],
       waiverMode: "local"
     })) as {
+      metadata: {
+        properties: Array<{
+          name: string;
+          value: string;
+        }>;
+      };
       dependencies: Array<{
         ref: string;
         dependsOn: string[];
       }>;
     };
+
+    expect(payload.metadata.properties).toContainEqual({
+      name: "ohrisk:projectRoot",
+      value: "."
+    });
+    expect(payload.metadata.properties).toContainEqual({
+      name: "ohrisk:lockfilePath",
+      value: "bun.lock"
+    });
+    expect(payload.metadata.properties).not.toContainEqual({
+      name: "ohrisk:projectRoot",
+      value: "/fixture-alias-project"
+    });
+    expect(payload.metadata.properties).not.toContainEqual({
+      name: "ohrisk:lockfilePath",
+      value: "/fixture-alias-project/bun.lock"
+    });
 
     expect(payload.dependencies).toContainEqual({
       ref: "pkg:npm/permissive-parent@1.0.0",

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.91.0 - 2026-06-19
+
+### Fixed
+
+- CycloneDX SBOM metadata now avoids exposing local project root and lockfile absolute paths in CI artifacts.
+
 ## 0.90.0 - 2026-06-19
 
 ### Fixed

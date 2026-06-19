@@ -15,7 +15,7 @@ describe("release documentation", () => {
     expect(releasing).toContain("npm whoami");
     expect(releasing).toContain("npm publish --access public");
     expect(releasing).toContain("npm view ohrisk version");
-    expect(releasing).toContain("git tag v0.90.0");
+    expect(releasing).toContain("git tag v0.91.0");
     expect(releasing).toContain("CHANGELOG.md");
   });
 });

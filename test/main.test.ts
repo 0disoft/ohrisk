@@ -121,7 +121,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.90.0"]);
+    expect(stdout).toEqual(["ohrisk 0.91.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -504,7 +504,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.90.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.91.0");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
@@ -633,7 +633,8 @@ describe("main", () => {
   });
 
   test("prints CycloneDX SBOM output", async () => {
-    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
+    const projectRoot = path.join(fixturesDir, "bun-project");
+    const { io, stdout, stderr } = createTestIO(projectRoot);
     const exitCode = await main(["scan", "--cyclonedx", "--prod"], io);
 
     expect(exitCode).toBe(0);
@@ -692,13 +693,25 @@ describe("main", () => {
       "bom-ref": "project"
     });
     expect(payload.metadata.properties).toContainEqual({
+      name: "ohrisk:projectRoot",
+      value: "."
+    });
+    expect(payload.metadata.properties).toContainEqual({
       name: "ohrisk:lockfileKind",
       value: "bun"
+    });
+    expect(payload.metadata.properties).toContainEqual({
+      name: "ohrisk:lockfilePath",
+      value: "bun.lock"
     });
     expect(payload.metadata.properties).toContainEqual({
       name: "ohrisk:waiverMode",
       value: "local"
     });
+    for (const property of payload.metadata.properties) {
+      expect(property.value).not.toContain(projectRoot);
+      expect(property.value).not.toContain(fixturesDir);
+    }
     expect(payload.components).toHaveLength(5);
     expect(payload.components.map((component) => component.name)).not.toContain("dev-risk");
 

@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import type { DependencyGraph, DependencyNode } from "../graph/types";
 import type { NormalizedLicense } from "../license/types";
 import type { RiskFinding } from "../policy/types";
@@ -65,7 +67,7 @@ export function renderCycloneDxReport(input: CycloneDxReportInput): string {
         properties: [
           {
             name: "ohrisk:projectRoot",
-            value: input.project.rootDir
+            value: "."
           },
           {
             name: "ohrisk:lockfileKind",
@@ -73,7 +75,7 @@ export function renderCycloneDxReport(input: CycloneDxReportInput): string {
           },
           {
             name: "ohrisk:lockfilePath",
-            value: input.project.lockfile.path
+            value: projectRelativePath(input.project.rootDir, input.project.lockfile.path)
           },
           {
             name: "ohrisk:waiverMode",
@@ -100,6 +102,19 @@ export function renderCycloneDxReport(input: CycloneDxReportInput): string {
     null,
     2
   );
+}
+
+function projectRelativePath(projectRoot: string, targetPath: string): string {
+  const relativePath = path.relative(projectRoot, targetPath);
+  if (
+    relativePath &&
+    !relativePath.startsWith("..") &&
+    !path.isAbsolute(relativePath)
+  ) {
+    return relativePath.replace(/\\/g, "/");
+  }
+
+  return path.basename(targetPath);
 }
 
 function renderComponent(input: {
