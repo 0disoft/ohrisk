@@ -112,7 +112,7 @@ function renderMarkdownReport(
   return [
     "# Ohrisk scan",
     "",
-    `- Project: ${formatMarkdownInlineCode(input.project.rootDir)}`,
+    `- Project: ${formatMarkdownInlineCode(markdownProjectLabel(input))}`,
     `- Lockfile: ${formatMarkdownInlineCode(path.basename(input.project.lockfile.path))} (${formatMarkdownInlineCode(input.project.lockfile.kind)})`,
     `- Profile: ${formatMarkdownInlineCode(input.profile)}`,
     `- Production only: ${formatMarkdownInlineCode(input.prodOnly ? "yes" : "no")}`,
@@ -138,6 +138,10 @@ function renderMarkdownReport(
     "",
     nextAction
   ].join("\n");
+}
+
+function markdownProjectLabel(input: ScanReportInput): string {
+  return input.graph.rootName ?? ".";
 }
 
 function buildWaiverDriftSummary(input: ScanReportInput):

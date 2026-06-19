@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.120.0 - 2026-06-20
+
+### Fixed
+
+- Markdown scan reports now show the package/project name instead of the absolute project root, keeping PR-facing artifacts from leaking local or CI workspace paths.
+
 ## 0.119.0 - 2026-06-20
 
 ### Fixed

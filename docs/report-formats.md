@@ -48,6 +48,7 @@ Formatted for PR comments, release notes, or documentation.
 - **Unmatched waivers**: table with columns Target, Reason
 - **Waiver mode**: shown as inline code in the summary
 - **Strict waiver drift**: shown as inline code in the summary when `--strict-waivers` is set
+- **Local paths**: the project summary uses the package/project name, not the absolute project root, so PR-facing artifacts do not expose local or CI workspace paths
 
 ## SARIF
 
