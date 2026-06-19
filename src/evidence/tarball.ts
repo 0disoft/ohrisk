@@ -124,6 +124,10 @@ function collectTarEvidenceFiles(entries: TarEntry[]): LicenseEvidenceFile[] {
   return entries
     .map((entry) => {
       const normalized = normalizePackagePath(entry.path);
+      if (!isRootPackageFile(normalized)) {
+        return undefined;
+      }
+
       const kind = classifyEvidenceFile(normalized);
 
       if (!kind) {
@@ -138,6 +142,10 @@ function collectTarEvidenceFiles(entries: TarEntry[]): LicenseEvidenceFile[] {
     })
     .filter((entry): entry is LicenseEvidenceFile => entry !== undefined)
     .sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function isRootPackageFile(normalizedPath: string): boolean {
+  return normalizedPath.length > 0 && !normalizedPath.includes("/");
 }
 
 function readLicenseFields(packageJson: Record<string, unknown>): {

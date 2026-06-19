@@ -197,6 +197,35 @@ describe("collectTarballEvidence", () => {
     ]);
     expect(result.value.warnings).toEqual([]);
   });
+
+  test("ignores nested tarball license evidence files", () => {
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "tarball-nested-license",
+        version: "1.0.0",
+        license: "MIT"
+      }),
+      "package/vendor/gpl-package/LICENSE": "Nested GPL fixture text.",
+      "package/fixtures/NOTICE": "Nested notice fixture text.",
+      "package/README.md": "Package README fixture text."
+    });
+
+    const result = collectTarballEvidence({
+      packageId: "tarball-nested-license@1.0.0",
+      tarball
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.packageJsonLicense).toBe("MIT");
+    expect(result.value.files).toEqual([]);
+    expect(result.value.warnings).toEqual([
+      "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found."
+    ]);
+  });
 });
 
 describe("collectGraphEvidence", () => {

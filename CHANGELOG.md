@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.73.0 - 2026-06-19
+
+### Fixed
+
+- Tarball evidence collection now ignores nested license-like files such as `vendor/LICENSE` so vendored fixtures or examples are not mistaken for the package's own license evidence.
+
 ## 0.72.0 - 2026-06-19
 
 ### Fixed
