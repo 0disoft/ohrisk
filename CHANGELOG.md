@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.114.0 - 2026-06-20
+
+### Fixed
+
+- Artifact response cancellation no longer blocks scan failures when a stream's `cancel()` handler stalls, so oversized registry metadata and tarball responses fail promptly after cleanup has been requested.
+
 ## 0.113.0 - 2026-06-20
 
 ### Fixed

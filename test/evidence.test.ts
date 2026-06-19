@@ -2394,40 +2394,44 @@ describe("collectGraphEvidence", () => {
     let bodyRead = false;
     let bodyCancelled = false;
 
-    const evidence = await collectGraphEvidence({
-      graph: {
-        lockfilePath: "bun.lock",
-        nodes: [
-          {
-            id: "oversized-metadata@1.0.0",
-            name: "oversized-metadata",
-            version: "1.0.0",
-            ecosystem: "npm",
-            dependencyType: "production",
-            direct: true,
-            paths: [["root", "oversized-metadata@1.0.0"]]
-          }
-        ]
-      },
-      projectRoot: bunProjectDir,
-      registryMetadataMaxBytes: 8,
-      fetchArtifact: async () => ({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        headers: {
-          get: (name) => name.toLowerCase() === "content-length" ? "9" : null
+    const evidence = await expectResultBeforeCleanupStall({
+      promise: collectGraphEvidence({
+        graph: {
+          lockfilePath: "bun.lock",
+          nodes: [
+            {
+              id: "oversized-metadata@1.0.0",
+              name: "oversized-metadata",
+              version: "1.0.0",
+              ecosystem: "npm",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "oversized-metadata@1.0.0"]]
+            }
+          ]
         },
-        body: new ReadableStream<Uint8Array>({
-          cancel() {
-            bodyCancelled = true;
+        projectRoot: bunProjectDir,
+        registryMetadataMaxBytes: 8,
+        fetchArtifact: async () => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          headers: {
+            get: (name) => name.toLowerCase() === "content-length" ? "9" : null
+          },
+          body: new ReadableStream<Uint8Array>({
+            cancel() {
+              bodyCancelled = true;
+              return new Promise<never>(() => {});
+            }
+          }),
+          arrayBuffer: async () => {
+            bodyRead = true;
+            return new ArrayBuffer(0);
           }
-        }),
-        arrayBuffer: async () => {
-          bodyRead = true;
-          return new ArrayBuffer(0);
-        }
-      })
+        })
+      }),
+      message: "Expected oversized registry metadata to fail without waiting for body cancellation."
     });
 
     expect(bodyRead).toBe(false);
@@ -2465,36 +2469,40 @@ describe("collectGraphEvidence", () => {
       },
       cancel() {
         cancelled = true;
+        return new Promise<never>(() => {});
       }
     });
 
-    const evidence = await collectGraphEvidence({
-      graph: {
-        lockfilePath: "bun.lock",
-        nodes: [
-          {
-            id: "oversized-remote@1.0.0",
-            name: "oversized-remote",
-            version: "1.0.0",
-            ecosystem: "npm",
-            resolved: "https://registry.example.test/oversized-remote/-/oversized-remote-1.0.0.tgz",
-            dependencyType: "production",
-            direct: true,
-            paths: [["root", "oversized-remote@1.0.0"]]
+    const evidence = await expectResultBeforeCleanupStall({
+      promise: collectGraphEvidence({
+        graph: {
+          lockfilePath: "bun.lock",
+          nodes: [
+            {
+              id: "oversized-remote@1.0.0",
+              name: "oversized-remote",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved: "https://registry.example.test/oversized-remote/-/oversized-remote-1.0.0.tgz",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "oversized-remote@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot: bunProjectDir,
+        tarballMaxBytes: 8,
+        fetchArtifact: async () => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          body,
+          arrayBuffer: async () => {
+            throw new Error("Streamed responses should not fall back to arrayBuffer().");
           }
-        ]
-      },
-      projectRoot: bunProjectDir,
-      tarballMaxBytes: 8,
-      fetchArtifact: async () => ({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        body,
-        arrayBuffer: async () => {
-          throw new Error("Streamed responses should not fall back to arrayBuffer().");
-        }
-      })
+        })
+      }),
+      message: "Expected oversized remote tarball stream to fail without waiting for body cancellation."
     });
 
     expect(cancelled).toBe(true);
@@ -2520,41 +2528,45 @@ describe("collectGraphEvidence", () => {
     let bodyRead = false;
     let bodyCancelled = false;
 
-    const evidence = await collectGraphEvidence({
-      graph: {
-        lockfilePath: "bun.lock",
-        nodes: [
-          {
-            id: "oversized-remote-length@1.0.0",
-            name: "oversized-remote-length",
-            version: "1.0.0",
-            ecosystem: "npm",
-            resolved: "https://registry.example.test/oversized-remote-length/-/oversized-remote-length-1.0.0.tgz",
-            dependencyType: "production",
-            direct: true,
-            paths: [["root", "oversized-remote-length@1.0.0"]]
-          }
-        ]
-      },
-      projectRoot: bunProjectDir,
-      tarballMaxBytes: 8,
-      fetchArtifact: async () => ({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        headers: {
-          get: (name) => name.toLowerCase() === "content-length" ? "9" : null
+    const evidence = await expectResultBeforeCleanupStall({
+      promise: collectGraphEvidence({
+        graph: {
+          lockfilePath: "bun.lock",
+          nodes: [
+            {
+              id: "oversized-remote-length@1.0.0",
+              name: "oversized-remote-length",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved: "https://registry.example.test/oversized-remote-length/-/oversized-remote-length-1.0.0.tgz",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "oversized-remote-length@1.0.0"]]
+            }
+          ]
         },
-        body: new ReadableStream<Uint8Array>({
-          cancel() {
-            bodyCancelled = true;
+        projectRoot: bunProjectDir,
+        tarballMaxBytes: 8,
+        fetchArtifact: async () => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          headers: {
+            get: (name) => name.toLowerCase() === "content-length" ? "9" : null
+          },
+          body: new ReadableStream<Uint8Array>({
+            cancel() {
+              bodyCancelled = true;
+              return new Promise<never>(() => {});
+            }
+          }),
+          arrayBuffer: async () => {
+            bodyRead = true;
+            return new ArrayBuffer(0);
           }
-        }),
-        arrayBuffer: async () => {
-          bodyRead = true;
-          return new ArrayBuffer(0);
-        }
-      })
+        })
+      }),
+      message: "Expected oversized remote tarball content length to fail without waiting for body cancellation."
     });
 
     expect(bodyRead).toBe(false);
@@ -2578,6 +2590,26 @@ describe("collectGraphEvidence", () => {
     });
   });
 });
+
+async function expectResultBeforeCleanupStall<T>(input: {
+  promise: Promise<T>;
+  message: string;
+}): Promise<T> {
+  const cleanupStallTestTimeoutMs = 100;
+  const result = await Promise.race([
+    input.promise,
+    new Promise<"timed-out">((resolve) => {
+      setTimeout(() => resolve("timed-out"), cleanupStallTestTimeoutMs);
+    })
+  ]);
+
+  expect(result).not.toBe("timed-out");
+  if (result === "timed-out") {
+    throw new Error(input.message);
+  }
+
+  return result;
+}
 
 function okArtifactResponseFromBuffer(input: Buffer | Uint8Array | string): {
   ok: true;
