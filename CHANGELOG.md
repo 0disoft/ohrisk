@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.75.0 - 2026-06-19
+
+### Fixed
+
+- CycloneDX SBOM dependency relationships now preserve child edges when dependency paths contain npm alias segments such as `compat-parent -> actual-package@1.0.0`.
+
 ## 0.74.0 - 2026-06-19
 
 ### Fixed

@@ -74,7 +74,7 @@ CycloneDX 1.5 JSON SBOM for supply chain tools.
 - **Waiver mode**: `ohrisk:waiverMode` in metadata properties
 - **CI artifact**: suitable as an SBOM artifact for compliance pipelines
 
-CycloneDX is an SBOM, not a risk report. It focuses on component inventory with license and active finding properties. For waived finding suppression details, SARIF output includes them as suppressed results. For full expired and unmatched waiver object review, use JSON or Markdown output.
+CycloneDX is an SBOM, not a risk report. It focuses on component inventory, dependency relationships, license metadata, and active finding properties. For waived finding suppression details, SARIF output includes them as suppressed results. For full expired and unmatched waiver object review, use JSON or Markdown output.
 
 ## Waiver mode field
 

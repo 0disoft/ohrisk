@@ -228,8 +228,9 @@ function directChildRefs(node: DependencyNode, nodes: DependencyNode[]): string[
 
   for (const candidate of nodes) {
     for (const path of candidate.paths) {
-      const nodeIndex = path.indexOf(node.id);
-      const childId = nodeIndex >= 0 ? path[nodeIndex + 1] : undefined;
+      const packagePath = path.map(packageIdFromPathSegment);
+      const nodeIndex = packagePath.indexOf(node.id);
+      const childId = nodeIndex >= 0 ? packagePath[nodeIndex + 1] : undefined;
       if (childId) {
         childIds.add(childId);
       }
@@ -239,4 +240,8 @@ function directChildRefs(node: DependencyNode, nodes: DependencyNode[]): string[
   return nodes
     .filter((candidate) => childIds.has(candidate.id))
     .map((candidate) => componentBomRef(candidate));
+}
+
+function packageIdFromPathSegment(segment: string): string {
+  return segment.split(" -> ").at(-1)?.trim() ?? segment;
 }
