@@ -384,6 +384,7 @@ bun run ../../../src/cli/main.ts scan --profile saas
 
 ## Documentation
 
+- [Documentation Index](https://github.com/0disoft/ohrisk/blob/main/docs/README.md) — All guides in one place
 - [CI Usage Guide](https://github.com/0disoft/ohrisk/blob/main/docs/ci.md) — GitHub Actions examples for PR gates and artifacts
 - [Waiver Guide](https://github.com/0disoft/ohrisk/blob/main/docs/waivers.md) — Managing license risk waivers safely
 - [Profile Guide](https://github.com/0disoft/ohrisk/blob/main/docs/profiles.md) — Choosing between saas and distributed-app

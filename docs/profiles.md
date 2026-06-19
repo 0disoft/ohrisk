@@ -52,7 +52,7 @@ distribution model.
 | Weak copyleft | LGPL-3.0, MPL-2.0, EPL-2.0 | review | review |
 | Strong copyleft (GPL) | GPL-2.0, GPL-3.0 | review | high |
 | Network copyleft | AGPL-3.0 | high | high |
-| Source-available restriction | SSPL-1.0, BUSL-1.1, Commons-Clause, Elastic-2.0 | high | high |
+| Source-available restriction | SSPL-1.0, BUSL-1.1, Commons-Clause, Elastic-2.0, PolyForm-Noncommercial-1.0.0, PolyForm-Free-Trial-1.0.0 | high | high |
 | UNLICENSED | UNLICENSED | high | high |
 | Missing or malformed | (no license declared) | unknown | unknown |
 | Unrecognized | (license not in Ohrisk's known set) | unknown | unknown |
