@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 
@@ -11,21 +12,28 @@ export type GitRefFileReader = (input: {
 }) => Result<string, OhriskError>;
 
 export const readGitRefFile: GitRefFileReader = (input) => {
+  let gitRoot: string;
+
   try {
-    const gitRoot = execFileSync("git", ["-C", input.projectRoot, "rev-parse", "--show-toplevel"], {
+    gitRoot = execFileSync("git", ["-C", input.projectRoot, "rev-parse", "--show-toplevel"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"]
     }).trim();
-    const refPath = toGitObjectPath({
-      gitRoot,
-      projectRoot: input.projectRoot,
-      relativePath: input.relativePath
-    });
+  } catch (cause) {
+    return err(readFailedError({ input, cause }));
+  }
 
-    if (!refPath.ok) {
-      return refPath;
-    }
+  const refPath = toGitObjectPath({
+    gitRoot,
+    projectRoot: input.projectRoot,
+    relativePath: input.relativePath
+  });
 
+  if (!refPath.ok) {
+    return refPath;
+  }
+
+  try {
     return ok(
       execFileSync("git", [
         "-C",
@@ -39,20 +47,68 @@ export const readGitRefFile: GitRefFileReader = (input) => {
       })
     );
   } catch (cause) {
-    return err(
-      createError({
-        code: "GIT_REF_READ_FAILED",
-        category: "unsupported_input",
-        message: "Failed to read the baseline lockfile from the requested git ref.",
-        details: {
-          ref: input.ref,
-          relativePath: input.relativePath,
-          cause: cause instanceof Error ? cause.message : String(cause)
-        }
-      })
-    );
+    return err(gitShowError({ input, cause }));
   }
 };
+
+function gitShowError(input: {
+  input: {
+    ref: string;
+    relativePath: string;
+  };
+  cause: unknown;
+}): OhriskError {
+  const cause = readProcessErrorText(input.cause);
+
+  if (cause.includes("does not exist in")) {
+    return createError({
+      code: "GIT_REF_FILE_NOT_FOUND",
+      category: "invalid_input",
+      message: "The requested baseline file does not exist in the git ref.",
+      details: {
+        ref: input.input.ref,
+        relativePath: input.input.relativePath,
+        cause
+      }
+    });
+  }
+
+  return readFailedError(input);
+}
+
+function readFailedError(input: {
+  input: {
+    ref: string;
+    relativePath: string;
+  };
+  cause: unknown;
+}): OhriskError {
+  return createError({
+    code: "GIT_REF_READ_FAILED",
+    category: "unsupported_input",
+    message: "Failed to read the baseline lockfile from the requested git ref.",
+    details: {
+      ref: input.input.ref,
+      relativePath: input.input.relativePath,
+      cause: readProcessErrorText(input.cause)
+    }
+  });
+}
+
+function readProcessErrorText(cause: unknown): string {
+  if (isObjectRecord(cause)) {
+    const stderr = cause.stderr;
+    if (typeof stderr === "string" && stderr.trim() !== "") {
+      return stderr.trim();
+    }
+
+    if (stderr instanceof Buffer && stderr.toString("utf8").trim() !== "") {
+      return stderr.toString("utf8").trim();
+    }
+  }
+
+  return cause instanceof Error ? cause.message : String(cause);
+}
 
 function toGitObjectPath(input: {
   gitRoot: string;
@@ -90,4 +146,8 @@ function isOutsideRelativePath(relativePath: string): boolean {
     relativePath.startsWith(`..${path.sep}`) ||
     path.isAbsolute(relativePath)
   );
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }

@@ -122,7 +122,12 @@ async function runDiff(
         rootPackageJsonText: baselinePackageJson.value,
         readRefFile
       })
-    : undefined;
+    : ok([]);
+
+  if (isErr(baselineWorkspacePackageJsons)) {
+    io.stderr(formatError(baselineWorkspacePackageJsons.error));
+    return exitCodeForError(baselineWorkspacePackageJsons.error);
+  }
 
   const baselineGraph = parseLockfileTextForKind({
     kind: current.value.project.lockfile.kind,
@@ -130,7 +135,7 @@ async function runDiff(
     lockfilePath: `${command.baselineRef}:${relativeLockfilePath}`,
     packageJsonText: baselinePackageJson?.value,
     packageJsonPath: `${command.baselineRef}:package.json`,
-    workspacePackageJsonTexts: baselineWorkspacePackageJsons
+    workspacePackageJsonTexts: baselineWorkspacePackageJsons.value
   });
 
   if (isErr(baselineGraph)) {
@@ -442,10 +447,10 @@ function readBaselineYarnWorkspacePackageJsons(input: {
   baselineRef: string;
   rootPackageJsonText: string;
   readRefFile: GitRefFileReader;
-}): YarnWorkspacePackageJsonInput[] {
+}): Result<YarnWorkspacePackageJsonInput[], OhriskError> {
   const rootPackageJson = tryParseObject(input.rootPackageJsonText);
   if (!rootPackageJson) {
-    return [];
+    return ok([]);
   }
 
   const packageJsons: YarnWorkspacePackageJsonInput[] = [];
@@ -459,7 +464,11 @@ function readBaselineYarnWorkspacePackageJsons(input: {
       relativePath: workspacePackageJsonPath.relativePackageJsonPath
     });
     if (isErr(baselinePackageJson)) {
-      continue;
+      if (baselinePackageJson.error.code === "GIT_REF_FILE_NOT_FOUND") {
+        continue;
+      }
+
+      return baselinePackageJson;
     }
 
     packageJsons.push({
@@ -469,7 +478,7 @@ function readBaselineYarnWorkspacePackageJsons(input: {
     });
   }
 
-  return packageJsons;
+  return ok(packageJsons);
 }
 
 function tryParseObject(input: string): Record<string, unknown> | undefined {

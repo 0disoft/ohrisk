@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.87.0 - 2026-06-19
+
+### Fixed
+
+- Git baseline reads now report missing files separately from other git ref failures, allowing newly added Yarn workspaces to diff cleanly without hiding non-missing baseline read errors.
+
 ## 0.86.0 - 2026-06-19
 
 ### Fixed

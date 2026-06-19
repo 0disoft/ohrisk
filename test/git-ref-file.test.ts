@@ -37,6 +37,21 @@ describe("readGitRefFile", () => {
     expect(result.error.code).toBe("GIT_REF_READ_FAILED");
   });
 
+  test("reports missing files in a baseline ref distinctly", () => {
+    const result = readGitRefFile({
+      projectRoot: path.join(fixturesDir, "bun-project"),
+      ref: "HEAD",
+      relativePath: "missing.lock"
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected a missing baseline file to fail.");
+    }
+
+    expect(result.error.code).toBe("GIT_REF_FILE_NOT_FOUND");
+  });
+
   test("rejects baseline paths that escape the project root", () => {
     const result = readGitRefFile({
       projectRoot: path.join(fixturesDir, "bun-project"),
