@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
@@ -21,7 +22,7 @@ type BunLockWorkspace = {
 
 type BunLockPackageTuple = [
   resolution?: unknown,
-  registry?: unknown,
+  registryOrMetadata?: unknown,
   metadata?: unknown,
   integrity?: unknown
 ];
@@ -170,23 +171,64 @@ function parsePackageRecords(packages: Record<string, BunLockPackageTuple>): Bun
       continue;
     }
 
-    const metadata = isObjectRecord(tuple[2]) ? tuple[2] : {};
+    const tupleFields = readPackageTupleFields({
+      identity,
+      tuple
+    });
+    const metadata = tupleFields.metadata;
     const dependencies = collectDependencyEdges(metadata);
-    const resolved = typeof tuple[1] === "string" && tuple[1] !== "" ? tuple[1] : undefined;
-    const integrity = typeof tuple[3] === "string" && tuple[3] !== "" ? tuple[3] : undefined;
 
     records.push({
       key,
       name: identity.name,
       version: identity.version,
       id: `${identity.name}@${identity.version}`,
-      ...(resolved ? { resolved } : {}),
-      ...(integrity ? { integrity } : {}),
+      ...(tupleFields.resolved ? { resolved: tupleFields.resolved } : {}),
+      ...(tupleFields.integrity ? { integrity: tupleFields.integrity } : {}),
       dependencies
     });
   }
 
   return records;
+}
+
+function readPackageTupleFields(input: {
+  identity: { name: string; version: string };
+  tuple: BunLockPackageTuple;
+}): {
+  resolved?: string;
+  metadata: Record<string, unknown>;
+  integrity?: string;
+} {
+  const registryOrMetadata = input.tuple[1];
+  const metadataOrIntegrity = input.tuple[2];
+  const integrity = input.tuple[3];
+
+  if (typeof registryOrMetadata === "string") {
+    const resolved = registryOrMetadata !== "" ? registryOrMetadata : undefined;
+    const parsedIntegrity = typeof integrity === "string" && integrity !== ""
+      ? integrity
+      : undefined;
+
+    return {
+      metadata: isObjectRecord(metadataOrIntegrity) ? metadataOrIntegrity : {},
+      ...(resolved ? { resolved } : {}),
+      ...(parsedIntegrity ? { integrity: parsedIntegrity } : {})
+    };
+  }
+
+  const resolved = isLocalArtifactReference(input.identity.version)
+    ? input.identity.version
+    : undefined;
+  const parsedIntegrity = typeof metadataOrIntegrity === "string" && metadataOrIntegrity !== ""
+    ? metadataOrIntegrity
+    : undefined;
+
+  return {
+    metadata: isObjectRecord(registryOrMetadata) ? registryOrMetadata : {},
+    ...(resolved ? { resolved } : {}),
+    ...(parsedIntegrity ? { integrity: parsedIntegrity } : {})
+  };
 }
 
 function parsePackageIdentity(input: string): { name: string; version: string } | undefined {
@@ -198,6 +240,13 @@ function parsePackageIdentity(input: string): { name: string; version: string } 
   }
 
   return { name: parsed.name, version: parsed.reference };
+}
+
+function isLocalArtifactReference(value: string): boolean {
+  return value.startsWith("file:")
+    || value.startsWith(".")
+    || path.isAbsolute(value)
+    || /^[A-Za-z]:[\\/]/.test(value);
 }
 
 function indexPackagesByName(records: BunLockPackageRecord[]): Map<string, BunLockPackageRecord[]> {

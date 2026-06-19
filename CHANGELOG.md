@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.80.0 - 2026-06-19
+
+### Fixed
+
+- `node_modules` package evidence is now used only when the installed package name and version match the lockfile node, preventing stale installs from masking the license evidence for the locked package version.
+- Bun local tarball lock entries now preserve the artifact reference, dependency metadata, and integrity from Bun's three-field tuple shape.
+
 ## 0.79.0 - 2026-06-19
 
 ### Fixed

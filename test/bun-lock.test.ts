@@ -122,6 +122,70 @@ describe("parseBunLockfile", () => {
       });
   });
 
+  test("preserves Bun local tarball tuple metadata", () => {
+    const result = parseBunLockText(
+      JSON.stringify({
+        workspaces: {
+          "": {
+            name: "fixture-bun-local-tarball",
+            dependencies: {
+              "local-tarball": "file:C:/fixtures/local-tarball-2.0.0.tgz"
+            }
+          }
+        },
+        packages: {
+          "local-tarball": [
+            "local-tarball@C:/fixtures/local-tarball-2.0.0.tgz",
+            {
+              dependencies: {
+                "local-child": "1.0.0"
+              }
+            },
+            "sha512-local-tarball"
+          ],
+          "local-child": [
+            "local-child@1.0.0",
+            "",
+            {},
+            "sha512-local-child"
+          ]
+        }
+      }),
+      "local-tarball-bun.lock"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "local-child@1.0.0",
+      "local-tarball@C:/fixtures/local-tarball-2.0.0.tgz"
+    ]);
+    expect(result.value.nodes.find((node) =>
+      node.id === "local-tarball@C:/fixtures/local-tarball-2.0.0.tgz"
+    )).toMatchObject({
+      name: "local-tarball",
+      version: "C:/fixtures/local-tarball-2.0.0.tgz",
+      resolved: "C:/fixtures/local-tarball-2.0.0.tgz",
+      integrity: "sha512-local-tarball",
+      paths: [[
+        "fixture-bun-local-tarball",
+        "local-tarball@C:/fixtures/local-tarball-2.0.0.tgz"
+      ]]
+    });
+    expect(result.value.nodes.find((node) => node.id === "local-child@1.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [[
+          "fixture-bun-local-tarball",
+          "local-tarball@C:/fixtures/local-tarball-2.0.0.tgz",
+          "local-child@1.0.0"
+        ]]
+      });
+  });
+
   test("preserves nested optional and peer dependency edge types", () => {
     const result = parseBunLockText(
       JSON.stringify({

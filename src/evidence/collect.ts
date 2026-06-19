@@ -257,7 +257,11 @@ function findNodeModulesPackage(node: DependencyNode, projectRoot: string): stri
 
   for (const packageName of packageNames) {
     const packagePath = resolveNodeModulesPackage(packageName, projectRoot);
-    if (existsSync(packagePath) && statSync(packagePath).isDirectory()) {
+    if (
+      existsSync(packagePath)
+      && statSync(packagePath).isDirectory()
+      && installedPackageMatchesNode({ node, packagePath })
+    ) {
       return packagePath;
     }
   }
@@ -267,6 +271,23 @@ function findNodeModulesPackage(node: DependencyNode, projectRoot: string): stri
 
 function resolveNodeModulesPackage(packageName: string, projectRoot: string): string {
   return path.join(projectRoot, "node_modules", ...packageName.split("/"));
+}
+
+function installedPackageMatchesNode(input: {
+  node: DependencyNode;
+  packagePath: string;
+}): boolean {
+  try {
+    const packageJson = JSON.parse(
+      readFileSync(path.join(input.packagePath, "package.json"), "utf8")
+    ) as unknown;
+
+    return isRecord(packageJson)
+      && packageJson.name === input.node.name
+      && packageJson.version === input.node.version;
+  } catch {
+    return false;
+  }
 }
 
 async function collectRemoteTarballEvidence(input: {

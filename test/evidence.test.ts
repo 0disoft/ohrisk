@@ -793,6 +793,81 @@ describe("collectGraphEvidence", () => {
     }
   });
 
+  test("ignores stale node_modules package evidence that does not match the lockfile node", async () => {
+    const projectRoot = createInstalledPackageProject({
+      name: "stale-installed",
+      version: "1.0.0",
+      license: "MIT",
+      licenseText: "MIT License from stale node_modules."
+    });
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "stale-installed",
+        version: "2.0.0",
+        license: "Apache-2.0"
+      }),
+      "package/LICENSE": "Apache License from lockfile tarball."
+    });
+    const fetchedUrls: string[] = [];
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "package-lock.json",
+          nodes: [
+            {
+              id: "stale-installed@2.0.0",
+              name: "stale-installed",
+              version: "2.0.0",
+              ecosystem: "npm",
+              resolved: "https://registry.example.test/stale-installed/-/stale-installed-2.0.0.tgz",
+              integrity: integrityFor(tarball),
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "stale-installed@2.0.0"]]
+            }
+          ]
+        },
+        projectRoot,
+        fetchArtifact: async (url) => {
+          fetchedUrls.push(url);
+          return {
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            arrayBuffer: async () => tarball.buffer.slice(
+              tarball.byteOffset,
+              tarball.byteOffset + tarball.byteLength
+            ) as ArrayBuffer
+          };
+        }
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+
+      expect(fetchedUrls).toEqual([
+        "https://registry.example.test/stale-installed/-/stale-installed-2.0.0.tgz"
+      ]);
+      expect(evidence.value[0]).toMatchObject({
+        packageId: "stale-installed@2.0.0",
+        packageJsonLicense: "Apache-2.0",
+        source: "tarball",
+        files: [
+          {
+            path: "LICENSE",
+            kind: "license",
+            text: "Apache License from lockfile tarball."
+          }
+        ]
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("reports missing registry tarball metadata", async () => {
     const evidence = await collectGraphEvidence({
       graph: {
