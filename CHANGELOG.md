@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.99.0 - 2026-06-20
+
+### Fixed
+
+- Local package directory evidence now bounds `package.json` and license evidence file reads, preventing oversized local metadata or NOTICE/LICENSE files from being loaded into memory.
+
 ## 0.98.0 - 2026-06-20
 
 ### Fixed

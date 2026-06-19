@@ -112,6 +112,77 @@ describe("collectLocalPackageEvidence", () => {
       rmSync(packageDir, { recursive: true, force: true });
     }
   });
+
+  test("rejects oversized local package.json before parsing metadata", () => {
+    const packageDir = mkdtempSync(path.join(tmpdir(), "ohrisk-local-package-json-size-"));
+    const packageJsonPath = path.join(packageDir, "package.json");
+
+    try {
+      writeFileSync(packageJsonPath, Buffer.alloc(9));
+      writeFileSync(path.join(packageDir, "LICENSE"), "MIT License fixture text.", "utf8");
+
+      const result = collectLocalPackageEvidence({
+        packageId: "local-oversized-package-json@1.0.0",
+        packageDir,
+        packageJsonMaxBytes: 8
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected oversized local package.json to fail.");
+      }
+
+      expect(result.error.code).toBe("PACKAGE_EVIDENCE_READ_FAILED");
+      expect(result.error.category).toBe("unsupported_input");
+      expect(result.error.message).toBe(
+        "Package artifact package.json exceeded the maximum supported size."
+      );
+      expect(result.error.details).toMatchObject({
+        packageId: "local-oversized-package-json@1.0.0",
+        packageJsonPath,
+        maxBytes: 8,
+        observedBytes: 9
+      });
+    } finally {
+      rmSync(packageDir, { recursive: true, force: true });
+    }
+  });
+
+  test("skips oversized local license evidence files without failing the package", () => {
+    const packageDir = mkdtempSync(path.join(tmpdir(), "ohrisk-local-license-size-"));
+
+    try {
+      writeFileSync(
+        path.join(packageDir, "package.json"),
+        JSON.stringify({
+          name: "local-oversized-license",
+          version: "1.0.0",
+          license: "MIT"
+        }),
+        "utf8"
+      );
+      writeFileSync(path.join(packageDir, "LICENSE"), Buffer.alloc(9));
+
+      const result = collectLocalPackageEvidence({
+        packageId: "local-oversized-license@1.0.0",
+        packageDir,
+        evidenceFileMaxBytes: 8
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value.packageJsonLicense).toBe("MIT");
+      expect(result.value.files).toEqual([]);
+      expect(result.value.warnings).toEqual([
+        "Skipped LICENSE: evidence file exceeded the maximum supported size (maxBytes: 8, observedBytes: 9)."
+      ]);
+    } finally {
+      rmSync(packageDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("collectTarballEvidence", () => {
