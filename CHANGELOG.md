@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.112.0 - 2026-06-20
+
+### Fixed
+
+- Remote artifact body streams are now cancelled when the artifact fetch timeout fires, preventing stalled response readers from surviving after the CLI has already reported a timeout.
+
 ## 0.111.0 - 2026-06-20
 
 ### Fixed

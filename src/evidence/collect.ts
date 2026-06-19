@@ -387,7 +387,7 @@ async function collectRegistryTarballEvidence(input: {
       fetchArtifact: input.fetchArtifact,
       url: metadataUrl,
       timeoutMs: input.fetchTimeoutMs,
-      readResponse: async (response) => {
+      readResponse: async (response, signal) => {
         if (!response.ok) {
           return err(
             createError({
@@ -406,6 +406,7 @@ async function collectRegistryTarballEvidence(input: {
 
         const metadataBody = await readResponseBodyWithLimit({
           response,
+          signal,
           maxBytes: input.registryMetadataMaxBytes,
           createTooLargeError: (limit) => createError({
             code: "REGISTRY_METADATA_FETCH_FAILED",
@@ -712,7 +713,7 @@ async function collectRemoteTarballEvidence(input: {
       fetchArtifact: input.fetchArtifact,
       url: input.resolved,
       timeoutMs: input.fetchTimeoutMs,
-      readResponse: async (response) => {
+      readResponse: async (response, signal) => {
         if (!response.ok) {
           return err(
             createError({
@@ -731,6 +732,7 @@ async function collectRemoteTarballEvidence(input: {
 
         return readResponseBodyWithLimit({
           response,
+          signal,
           maxBytes: input.tarballMaxBytes,
           createTooLargeError: (limit) => createError({
             code: "TARBALL_FETCH_FAILED",
@@ -811,6 +813,7 @@ function artifactBodyLimitDetails(limit: ArtifactBodyLimit): Record<string, unkn
 
 async function readResponseBodyWithLimit(input: {
   response: ArtifactFetchResponse;
+  signal: AbortSignal;
   maxBytes: number;
   createTooLargeError: (limit: ArtifactBodyLimit) => OhriskError;
   createUnreadableBodyError: () => OhriskError;
@@ -829,6 +832,7 @@ async function readResponseBodyWithLimit(input: {
   if (input.response.body) {
     return readStreamBodyWithLimit({
       body: input.response.body,
+      signal: input.signal,
       maxBytes: input.maxBytes,
       ...(contentLength === undefined ? {} : { contentLength }),
       createTooLargeError: input.createTooLargeError
@@ -840,15 +844,25 @@ async function readResponseBodyWithLimit(input: {
 
 async function readStreamBodyWithLimit(input: {
   body: ReadableStream<Uint8Array>;
+  signal: AbortSignal;
   maxBytes: number;
   contentLength?: number;
   createTooLargeError: (limit: ArtifactBodyLimit) => OhriskError;
 }): Promise<Result<Buffer, OhriskError>> {
   const reader = input.body.getReader();
+  const cancelReader = () => {
+    void reader.cancel().catch(() => undefined);
+  };
   const chunks: Buffer[] = [];
   let observedBytes = 0;
 
   try {
+    if (input.signal.aborted) {
+      cancelReader();
+    } else {
+      input.signal.addEventListener("abort", cancelReader, { once: true });
+    }
+
     while (true) {
       const chunk = await reader.read();
       if (chunk.done) {
@@ -870,6 +884,7 @@ async function readStreamBodyWithLimit(input: {
       chunks.push(Buffer.from(chunk.value));
     }
   } finally {
+    input.signal.removeEventListener("abort", cancelReader);
     reader.releaseLock();
   }
 }
@@ -888,15 +903,17 @@ async function readArtifactWithTimeout<T>(input: {
   fetchArtifact: ArtifactFetcher;
   url: string;
   timeoutMs: number;
-  readResponse: (response: ArtifactFetchResponse) => Promise<T>;
+  readResponse: (response: ArtifactFetchResponse, signal: AbortSignal) => Promise<T>;
 }): Promise<T> {
   const controller = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
+  let timeoutError: Error | undefined;
 
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeout = setTimeout(() => {
+      timeoutError = new Error(`Artifact fetch timed out after ${input.timeoutMs}ms.`);
       controller.abort();
-      reject(new Error(`Artifact fetch timed out after ${input.timeoutMs}ms.`));
+      reject(timeoutError);
     }, input.timeoutMs);
   });
 
@@ -906,7 +923,14 @@ async function readArtifactWithTimeout<T>(input: {
         signal: controller.signal,
         redirect: "manual"
       })
-      .then((response) => input.readResponse(response));
+      .then((response) => input.readResponse(response, controller.signal))
+      .then((result) => {
+        if (timeoutError) {
+          throw timeoutError;
+        }
+
+        return result;
+      });
     return await Promise.race([readPromise, timeoutPromise]);
   } finally {
     if (timeout) {

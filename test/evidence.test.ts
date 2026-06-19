@@ -2335,6 +2335,7 @@ describe("collectGraphEvidence", () => {
 
   test("times out stalled remote tarball body reads", async () => {
     let fetchSignal: AbortSignal | undefined;
+    let bodyCancelled = false;
 
     const evidence = await collectGraphEvidence({
       graph: {
@@ -2361,7 +2362,10 @@ describe("collectGraphEvidence", () => {
           status: 200,
           statusText: "OK",
           body: new ReadableStream<Uint8Array>({
-            pull: async () => await new Promise<never>(() => {})
+            pull: async () => await new Promise<never>(() => {}),
+            cancel() {
+              bodyCancelled = true;
+            }
           }),
           arrayBuffer: async () => {
             throw new Error("Streamed responses should not fall back to arrayBuffer().");
@@ -2376,6 +2380,7 @@ describe("collectGraphEvidence", () => {
     }
 
     expect(fetchSignal?.aborted).toBe(true);
+    expect(bodyCancelled).toBe(true);
     expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
     expect(evidence.error.category).toBe("network");
     expect(evidence.error.details).toMatchObject({
