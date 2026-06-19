@@ -1210,6 +1210,55 @@ describe("collectGraphEvidence", () => {
     expect(evidence.error.category).toBe("unsupported_input");
   });
 
+  test("reports unsupported registry tarball URLs instead of treating evidence as unavailable", async () => {
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "metadata-file-url@1.0.0",
+            name: "metadata-file-url",
+            version: "1.0.0",
+            ecosystem: "npm",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "metadata-file-url@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async () => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        arrayBuffer: async () => Buffer.from(JSON.stringify({
+          versions: {
+            "1.0.0": {
+              dist: {
+                tarball: "file:metadata-file-url-1.0.0.tgz"
+              }
+            }
+          }
+        })).buffer
+      })
+    });
+
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected unsupported registry tarball URL to fail.");
+    }
+
+    expect(evidence.error.code).toBe("REGISTRY_METADATA_FETCH_FAILED");
+    expect(evidence.error.category).toBe("unsupported_input");
+    expect(evidence.error.message).toBe("npm registry metadata included an unsupported tarball URL.");
+    expect(evidence.error.details).toMatchObject({
+      packageId: "metadata-file-url@1.0.0",
+      registryUrl: "https://registry.npmjs.org/metadata-file-url",
+      version: "1.0.0",
+      tarballUrl: "file:metadata-file-url-1.0.0.tgz"
+    });
+  });
+
   test("reports malformed registry metadata as unsupported input", async () => {
     const evidence = await collectGraphEvidence({
       graph: {

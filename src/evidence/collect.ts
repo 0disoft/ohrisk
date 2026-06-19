@@ -195,6 +195,22 @@ async function collectRegistryTarballEvidence(input: {
       );
     }
 
+    if (!isHttpUrl(tarballUrl)) {
+      return err(
+        createError({
+          code: "REGISTRY_METADATA_FETCH_FAILED",
+          category: "unsupported_input",
+          message: "npm registry metadata included an unsupported tarball URL.",
+          details: {
+            packageId: input.node.id,
+            registryUrl: metadataUrl,
+            version: input.node.version,
+            tarballUrl
+          }
+        })
+      );
+    }
+
     return collectRemoteTarballEvidence({
       packageId: input.node.id,
       resolved: tarballUrl,

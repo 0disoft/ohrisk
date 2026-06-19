@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.94.0 - 2026-06-19
+
+### Fixed
+
+- Registry metadata now fails clearly when it advertises a non-HTTP tarball URL instead of treating package evidence as silently unavailable.
+
 ## 0.93.0 - 2026-06-19
 
 ### Fixed
