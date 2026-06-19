@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.115.0 - 2026-06-20
+
+### Fixed
+
+- Failed registry metadata and tarball HTTP responses now cancel their response bodies without waiting for cleanup, so error responses do not leave unread artifact streams behind.
+
 ## 0.114.0 - 2026-06-20
 
 ### Fixed

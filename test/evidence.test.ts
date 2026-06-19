@@ -1394,6 +1394,63 @@ describe("collectGraphEvidence", () => {
     expect(evidence.error.category).toBe("unsupported_input");
   });
 
+  test("cancels failed registry metadata response bodies without waiting for cleanup", async () => {
+    let bodyRead = false;
+    let bodyCancelled = false;
+
+    const evidence = await expectResultBeforeCleanupStall({
+      promise: collectGraphEvidence({
+        graph: {
+          lockfilePath: "bun.lock",
+          nodes: [
+            {
+              id: "failed-metadata@1.0.0",
+              name: "failed-metadata",
+              version: "1.0.0",
+              ecosystem: "npm",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "failed-metadata@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot: bunProjectDir,
+        fetchArtifact: async () => ({
+          ok: false,
+          status: 503,
+          statusText: "Service Unavailable",
+          body: new ReadableStream<Uint8Array>({
+            cancel() {
+              bodyCancelled = true;
+              return new Promise<never>(() => {});
+            }
+          }),
+          arrayBuffer: async () => {
+            bodyRead = true;
+            return new ArrayBuffer(0);
+          }
+        })
+      }),
+      message: "Expected failed registry metadata to fail without waiting for body cancellation."
+    });
+
+    expect(bodyRead).toBe(false);
+    expect(bodyCancelled).toBe(true);
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected failed registry metadata to fail.");
+    }
+
+    expect(evidence.error.code).toBe("REGISTRY_METADATA_FETCH_FAILED");
+    expect(evidence.error.category).toBe("network");
+    expect(evidence.error.message).toBe("Failed to fetch npm registry metadata.");
+    expect(evidence.error.details).toMatchObject({
+      packageId: "failed-metadata@1.0.0",
+      status: 503,
+      statusText: "Service Unavailable"
+    });
+  });
+
   test("reports unsupported registry tarball URLs instead of treating evidence as unavailable", async () => {
     const evidence = await collectGraphEvidence({
       graph: {
@@ -1736,31 +1793,48 @@ describe("collectGraphEvidence", () => {
   });
 
   test("reports remote tarball fetch failures", async () => {
-    const evidence = await collectGraphEvidence({
-      graph: {
-        lockfilePath: "bun.lock",
-        nodes: [
-          {
-            id: "missing-remote@9.9.9",
-            name: "missing-remote",
-            version: "9.9.9",
-            ecosystem: "npm",
-            resolved: "https://registry.example.test/missing-remote/-/missing-remote-9.9.9.tgz",
-            dependencyType: "production",
-            direct: true,
-            paths: [["root", "missing-remote@9.9.9"]]
+    let bodyRead = false;
+    let bodyCancelled = false;
+
+    const evidence = await expectResultBeforeCleanupStall({
+      promise: collectGraphEvidence({
+        graph: {
+          lockfilePath: "bun.lock",
+          nodes: [
+            {
+              id: "missing-remote@9.9.9",
+              name: "missing-remote",
+              version: "9.9.9",
+              ecosystem: "npm",
+              resolved: "https://registry.example.test/missing-remote/-/missing-remote-9.9.9.tgz",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "missing-remote@9.9.9"]]
+            }
+          ]
+        },
+        projectRoot: bunProjectDir,
+        fetchArtifact: async () => ({
+          ok: false,
+          status: 404,
+          statusText: "Not Found",
+          body: new ReadableStream<Uint8Array>({
+            cancel() {
+              bodyCancelled = true;
+              return new Promise<never>(() => {});
+            }
+          }),
+          arrayBuffer: async () => {
+            bodyRead = true;
+            return new ArrayBuffer(0);
           }
-        ]
-      },
-      projectRoot: bunProjectDir,
-      fetchArtifact: async () => ({
-        ok: false,
-        status: 404,
-        statusText: "Not Found",
-        arrayBuffer: async () => new ArrayBuffer(0)
-      })
+        })
+      }),
+      message: "Expected failed remote tarball fetch to fail without waiting for body cancellation."
     });
 
+    expect(bodyRead).toBe(false);
+    expect(bodyCancelled).toBe(true);
     expect(evidence.ok).toBe(false);
     if (evidence.ok) {
       throw new Error("Expected remote tarball fetch to fail.");

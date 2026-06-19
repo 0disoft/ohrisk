@@ -389,6 +389,7 @@ async function collectRegistryTarballEvidence(input: {
       timeoutMs: input.fetchTimeoutMs,
       readResponse: async (response, signal) => {
         if (!response.ok) {
+          cancelReadableBody(response.body);
           return err(
             createError({
               code: "REGISTRY_METADATA_FETCH_FAILED",
@@ -715,6 +716,7 @@ async function collectRemoteTarballEvidence(input: {
       timeoutMs: input.fetchTimeoutMs,
       readResponse: async (response, signal) => {
         if (!response.ok) {
+          cancelReadableBody(response.body);
           return err(
             createError({
               code: "TARBALL_FETCH_FAILED",
@@ -843,7 +845,7 @@ async function readResponseBodyWithLimit(input: {
   return err(input.createUnreadableBodyError());
 }
 
-function cancelReadableBody(body: ReadableStream<Uint8Array> | undefined): void {
+function cancelReadableBody(body: ReadableStream<Uint8Array> | null | undefined): void {
   if (!body) {
     return;
   }
