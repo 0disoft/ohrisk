@@ -349,6 +349,37 @@ describe("collectTarballEvidence", () => {
     });
   });
 
+  test("rejects tarballs that exceed the maximum unpacked size before parsing entries", () => {
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "tarball-expanded-too-large",
+        version: "1.0.0",
+        license: "MIT"
+      }),
+      "package/LICENSE": "MIT License fixture text."
+    });
+
+    const result = collectTarballEvidence({
+      packageId: "tarball-expanded-too-large@1.0.0",
+      tarball,
+      unpackedMaxBytes: 512
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected oversized expanded tarball to fail.");
+    }
+
+    expect(result.error.code).toBe("TARBALL_PARSE_FAILED");
+    expect(result.error.category).toBe("unsupported_input");
+    expect(result.error.message).toBe("Failed to decompress package tarball evidence.");
+    expect(result.error.details).toMatchObject({
+      packageId: "tarball-expanded-too-large@1.0.0",
+      maxUnpackedBytes: 512
+    });
+    expect(String(result.error.details?.cause)).toContain("512");
+  });
+
   test("reads tarball license evidence filename variants", () => {
     const tarball = createTarGz({
       "package/package.json": JSON.stringify({

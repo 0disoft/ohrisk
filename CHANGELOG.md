@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.116.0 - 2026-06-20
+
+### Fixed
+
+- Package tarball decompression is now bounded by a maximum unpacked size, preventing small compressed artifacts from expanding into oversized in-memory tar data during evidence collection.
+
 ## 0.115.0 - 2026-06-20
 
 ### Fixed

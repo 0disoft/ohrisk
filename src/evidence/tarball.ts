@@ -11,12 +11,24 @@ type TarEntry = {
   data: Buffer;
 };
 
+const PACKAGE_TARBALL_UNPACKED_MAX_BYTES = 100 * 1024 * 1024;
+
 export function collectTarballEvidence(input: {
   packageId: string;
   tarball: Buffer | Uint8Array;
+  unpackedMaxBytes?: number;
 }): Result<LicenseEvidence, OhriskError> {
+  const unpacked = gunzipTarballWithLimit({
+    packageId: input.packageId,
+    tarball: input.tarball,
+    maxBytes: input.unpackedMaxBytes ?? PACKAGE_TARBALL_UNPACKED_MAX_BYTES
+  });
+  if (!unpacked.ok) {
+    return err(unpacked.error);
+  }
+
   try {
-    const entries = parseTarEntries(gunzipSync(input.tarball));
+    const entries = parseTarEntries(unpacked.value);
     const packageJsonEntry = entries.find((entry) => normalizePackagePath(entry.path) === "package.json");
 
     if (!packageJsonEntry) {
@@ -60,6 +72,29 @@ export function collectTarballEvidence(input: {
         message: "Failed to parse package tarball evidence.",
         details: {
           packageId: input.packageId,
+          cause: cause instanceof Error ? cause.message : String(cause)
+        }
+      })
+    );
+  }
+}
+
+function gunzipTarballWithLimit(input: {
+  packageId: string;
+  tarball: Buffer | Uint8Array;
+  maxBytes: number;
+}): Result<Buffer, OhriskError> {
+  try {
+    return ok(gunzipSync(input.tarball, { maxOutputLength: input.maxBytes }));
+  } catch (cause) {
+    return err(
+      createError({
+        code: "TARBALL_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Failed to decompress package tarball evidence.",
+        details: {
+          packageId: input.packageId,
+          maxUnpackedBytes: input.maxBytes,
           cause: cause instanceof Error ? cause.message : String(cause)
         }
       })
