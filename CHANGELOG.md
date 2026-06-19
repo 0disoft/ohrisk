@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.84.0 - 2026-06-19
+
+### Fixed
+
+- Yarn workspace discovery now ignores workspace patterns that resolve outside the project root instead of scanning sibling directories as project roots.
+
 ## 0.83.0 - 2026-06-19
 
 ### Fixed

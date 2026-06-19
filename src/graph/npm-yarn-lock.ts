@@ -302,11 +302,13 @@ export function findYarnWorkspacePackageJsonPaths(input: {
 }): YarnWorkspacePackageJsonPath[] {
   const locations: YarnWorkspacePackageJsonPath[] = [];
   const seen = new Set<string>();
+  const projectRoot = path.resolve(input.projectRoot);
   const patterns = readWorkspacePatterns(input.workspaces);
   const excludedWorkspacePaths = new Set(
     patterns
       .filter((pattern) => pattern.startsWith("!"))
-      .flatMap((pattern) => expandWorkspacePattern(input.projectRoot, pattern.slice(1)))
+      .flatMap((pattern) => expandWorkspacePattern(projectRoot, pattern.slice(1)))
+      .filter((workspacePath) => isInsideDirectory(projectRoot, workspacePath))
       .map((workspacePath) => path.resolve(workspacePath))
   );
 
@@ -315,10 +317,14 @@ export function findYarnWorkspacePackageJsonPaths(input: {
       continue;
     }
 
-    for (const workspacePath of expandWorkspacePattern(input.projectRoot, pattern)) {
+    for (const workspacePath of expandWorkspacePattern(projectRoot, pattern)) {
+      if (!isInsideDirectory(projectRoot, workspacePath)) {
+        continue;
+      }
+
       const packageJsonPath = path.join(workspacePath, "package.json");
       const relativePackageJsonPath = path
-        .relative(input.projectRoot, packageJsonPath)
+        .relative(projectRoot, packageJsonPath)
         .replace(/\\/g, "/");
       if (
         seen.has(relativePackageJsonPath)
@@ -331,7 +337,7 @@ export function findYarnWorkspacePackageJsonPaths(input: {
       locations.push({
         packageJsonPath,
         relativePackageJsonPath,
-        workspacePath: path.relative(input.projectRoot, workspacePath).replace(/\\/g, "/")
+        workspacePath: path.relative(projectRoot, workspacePath).replace(/\\/g, "/")
       });
       seen.add(relativePackageJsonPath);
     }
@@ -389,6 +395,15 @@ function expandWorkspaceSegments(currentPath: string, segments: string[]): strin
   }
 
   return expandWorkspaceSegments(path.join(currentPath, segment), rest);
+}
+
+function isInsideDirectory(rootPath: string, candidatePath: string): boolean {
+  const relativePath = path.relative(rootPath, path.resolve(candidatePath));
+  return relativePath === "" || (
+    relativePath !== ".."
+    && !relativePath.startsWith(`..${path.sep}`)
+    && !path.isAbsolute(relativePath)
+  );
 }
 
 function listChildDirectories(parentPath: string): string[] {

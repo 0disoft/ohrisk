@@ -58,8 +58,8 @@ npm view ohrisk dist.tarball
 After the npm registry result is verified, tag the matching commit:
 
 ```bash
-git tag v0.83.0
-git push origin v0.83.0
+git tag v0.84.0
+git push origin v0.84.0
 ```
 
 Then create a GitHub Release using the notes from `CHANGELOG.md`.

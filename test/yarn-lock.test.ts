@@ -331,6 +331,54 @@ describe("parseYarnLockfile", () => {
       rmSync(projectDir, { recursive: true, force: true });
     }
   });
+
+  test("ignores Yarn workspace patterns that resolve outside the project root", () => {
+    const tempRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-yarn-outside-workspace-"));
+    const projectDir = path.join(tempRoot, "project");
+    const outsideDir = path.join(tempRoot, "outside");
+
+    try {
+      mkdirSync(projectDir, { recursive: true });
+      mkdirSync(outsideDir, { recursive: true });
+      writeFileSync(
+        path.join(projectDir, "package.json"),
+        JSON.stringify({
+          name: "fixture-yarn-outside-workspace",
+          private: true,
+          workspaces: [
+            "../outside"
+          ]
+        })
+      );
+      writeFileSync(
+        path.join(outsideDir, "package.json"),
+        JSON.stringify({
+          name: "outside-workspace",
+          dependencies: {
+            "outside-risk": "9.9.9"
+          }
+        })
+      );
+      writeFileSync(
+        path.join(projectDir, "yarn.lock"),
+        [
+          "outside-risk@9.9.9:",
+          "  version \"9.9.9\""
+        ].join("\n")
+      );
+
+      const result = parseYarnLockfile(path.join(projectDir, "yarn.lock"));
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value.nodes).toEqual([]);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 function yarnWorkspaceLockfileText(): string {
