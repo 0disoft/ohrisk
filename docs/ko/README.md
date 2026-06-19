@@ -193,4 +193,5 @@ Ohrisk가 `high`나 `unknown`을 보고하면, 그 다음은 사람이 판단한
 ## 더 보기
 
 - [영문 README](../../README.md) — 전체 기능 목록, 출력 형태, 개발 가이드
+- [CI 사용 가이드](../ci.md) — GitHub Actions PR 게이트 및 아티팩트 예시
 - [CHANGELOG.md](../../CHANGELOG.md) — 버전별 변경 이력
