@@ -139,6 +139,30 @@ describe("collectTarballEvidence", () => {
     expect(result.value.packageJsonLicenses).toEqual({ type: "BSD" });
   });
 
+  test("reports malformed package.json inside tarballs as package metadata failure", () => {
+    const tarball = createTarGz({
+      "package/package.json": "{",
+      "package/LICENSE": "MIT License fixture text."
+    });
+
+    const result = collectTarballEvidence({
+      packageId: "tarball-malformed-package-json@1.0.0",
+      tarball
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected malformed package.json to fail.");
+    }
+
+    expect(result.error.code).toBe("PACKAGE_JSON_PARSE_FAILED");
+    expect(result.error.category).toBe("unsupported_input");
+    expect(result.error.message).toBe("Failed to parse package.json from package tarball.");
+    expect(result.error.details).toMatchObject({
+      packageId: "tarball-malformed-package-json@1.0.0"
+    });
+  });
+
   test("reads tarball license evidence filename variants", () => {
     const tarball = createTarGz({
       "package/package.json": JSON.stringify({

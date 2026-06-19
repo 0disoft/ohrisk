@@ -32,7 +32,14 @@ export function collectTarballEvidence(input: {
       );
     }
 
-    const packageJson = JSON.parse(packageJsonEntry.data.toString("utf8")) as Record<string, unknown>;
+    const packageJson = readPackageJson({
+      packageId: input.packageId,
+      data: packageJsonEntry.data
+    });
+    if (!packageJson.ok) {
+      return err(packageJson.error);
+    }
+
     const files = collectTarEvidenceFiles(entries);
     const warnings = files.length === 0
       ? ["No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found."]
@@ -40,7 +47,7 @@ export function collectTarballEvidence(input: {
 
     return ok({
       packageId: input.packageId,
-      ...readLicenseFields(packageJson),
+      ...readLicenseFields(packageJson.value),
       files,
       source: "tarball",
       warnings
@@ -51,6 +58,27 @@ export function collectTarballEvidence(input: {
         code: "TARBALL_PARSE_FAILED",
         category: "unsupported_input",
         message: "Failed to parse package tarball evidence.",
+        details: {
+          packageId: input.packageId,
+          cause: cause instanceof Error ? cause.message : String(cause)
+        }
+      })
+    );
+  }
+}
+
+function readPackageJson(input: {
+  packageId: string;
+  data: Buffer;
+}): Result<Record<string, unknown>, OhriskError> {
+  try {
+    return ok(JSON.parse(input.data.toString("utf8")) as Record<string, unknown>);
+  } catch (cause) {
+    return err(
+      createError({
+        code: "PACKAGE_JSON_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Failed to parse package.json from package tarball.",
         details: {
           packageId: input.packageId,
           cause: cause instanceof Error ? cause.message : String(cause)

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.68.0 - 2026-06-19
+
+### Fixed
+
+- Malformed `package.json` files inside package tarballs now report package metadata parse failures instead of generic tarball parse failures.
+
 ## 0.67.0 - 2026-06-19
 
 ### Fixed
