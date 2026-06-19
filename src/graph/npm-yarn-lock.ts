@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
@@ -42,10 +42,22 @@ type YarnPackageRecord = {
 
 type PackageJsonShape = {
   name?: unknown;
+  workspaces?: unknown;
   dependencies?: unknown;
   devDependencies?: unknown;
   optionalDependencies?: unknown;
   peerDependencies?: unknown;
+};
+
+type YarnWorkspacePackageJsonInput = {
+  packageJsonText: string;
+  packageJsonPath?: string;
+  workspacePath?: string;
+};
+
+type YarnRootEntry = {
+  packageJson: PackageJsonShape;
+  pathSegment: string;
 };
 
 type YarnDependencyEdge = {
@@ -94,11 +106,26 @@ export function parseYarnLockfile(
     );
   }
 
+  const parsedRootPackageJson = parsePackageJson(packageJsonText, packageJsonPath);
+  if (!parsedRootPackageJson.ok) {
+    return parsedRootPackageJson;
+  }
+
+  const workspacePackageJsonTexts = readWorkspacePackageJsonTexts({
+    projectRoot: path.dirname(packageJsonPath),
+    rootPackageJson: parsedRootPackageJson.value,
+    lockfilePath
+  });
+  if (!workspacePackageJsonTexts.ok) {
+    return workspacePackageJsonTexts;
+  }
+
   return parseYarnLockText({
     lockfileText,
     packageJsonText,
     lockfilePath,
-    packageJsonPath
+    packageJsonPath,
+    workspacePackageJsonTexts: workspacePackageJsonTexts.value
   });
 }
 
@@ -107,12 +134,20 @@ export function parseYarnLockText(input: {
   packageJsonText: string;
   lockfilePath?: string;
   packageJsonPath?: string;
+  workspacePackageJsonTexts?: YarnWorkspacePackageJsonInput[];
 }): Result<DependencyGraph, OhriskError> {
   const lockfilePath = input.lockfilePath ?? "yarn.lock";
   const packageJsonPath = input.packageJsonPath ?? "package.json";
   const parsedPackageJson = parsePackageJson(input.packageJsonText, packageJsonPath);
   if (!parsedPackageJson.ok) {
     return parsedPackageJson;
+  }
+
+  const parsedWorkspacePackageJsons = parseWorkspacePackageJsons(
+    input.workspacePackageJsonTexts ?? []
+  );
+  if (!parsedWorkspacePackageJsons.ok) {
+    return parsedWorkspacePackageJsons;
   }
 
   const parsedLockfile = parseLockfile(input.lockfileText, lockfilePath);
@@ -126,32 +161,40 @@ export function parseYarnLockText(input: {
   const records = parsePackageRecords(parsedLockfile.value);
   const descriptorIndex = indexPackagesByDescriptor(records);
   const nameIndex = indexPackagesByName(records);
-  const rootDependencies = collectRootDependencies(parsedPackageJson.value);
+  const rootEntries: YarnRootEntry[] = [
+    {
+      packageJson: parsedPackageJson.value,
+      pathSegment: rootName ?? "<root>"
+    },
+    ...parsedWorkspacePackageJsons.value
+  ];
   const nodeMap = new Map<string, DependencyNode>();
 
-  for (const rootDependency of rootDependencies) {
-    const record = resolvePackageRecord({
-      descriptorIndex,
-      nameIndex,
-      name: rootDependency.name,
-      range: rootDependency.range
-    });
+  for (const rootEntry of rootEntries) {
+    for (const rootDependency of collectRootDependencies(rootEntry.packageJson)) {
+      const record = resolvePackageRecord({
+        descriptorIndex,
+        nameIndex,
+        name: rootDependency.name,
+        range: rootDependency.range
+      });
 
-    if (!record) {
-      continue;
+      if (!record) {
+        continue;
+      }
+
+      walkDependency({
+        record,
+        dependencyType: rootDependency.type,
+        direct: true,
+        path: [rootEntry.pathSegment],
+        descriptorIndex,
+        nameIndex,
+        nodeMap,
+        seen: new Set(),
+        requestedName: rootDependency.name
+      });
     }
-
-    walkDependency({
-      record,
-      dependencyType: rootDependency.type,
-      direct: true,
-      path: [rootName ?? "<root>"],
-      descriptorIndex,
-      nameIndex,
-      nodeMap,
-      seen: new Set(),
-      requestedName: rootDependency.name
-    });
   }
 
   return ok({
@@ -185,6 +228,169 @@ function parsePackageJson(
       })
     );
   }
+}
+
+function parseWorkspacePackageJsons(
+  workspaces: YarnWorkspacePackageJsonInput[]
+): Result<YarnRootEntry[], OhriskError> {
+  const entries: YarnRootEntry[] = [];
+
+  for (const workspace of workspaces) {
+    const packageJsonPath = workspace.packageJsonPath ?? "workspace-package.json";
+    const parsed = parsePackageJson(workspace.packageJsonText, packageJsonPath);
+    if (!parsed.ok) {
+      return parsed;
+    }
+
+    entries.push({
+      packageJson: parsed.value,
+      pathSegment: readPackageName(parsed.value)
+        ?? workspace.workspacePath
+        ?? packageJsonPath
+    });
+  }
+
+  return ok(entries);
+}
+
+function readWorkspacePackageJsonTexts(input: {
+  projectRoot: string;
+  rootPackageJson: PackageJsonShape;
+  lockfilePath: string;
+}): Result<YarnWorkspacePackageJsonInput[], OhriskError> {
+  const packageJsons: YarnWorkspacePackageJsonInput[] = [];
+  const seen = new Set<string>();
+  const patterns = readWorkspacePatterns(input.rootPackageJson.workspaces);
+  const excludedWorkspacePaths = new Set(
+    patterns
+      .filter((pattern) => pattern.startsWith("!"))
+      .flatMap((pattern) => expandWorkspacePattern(input.projectRoot, pattern.slice(1)))
+      .map((workspacePath) => path.resolve(workspacePath))
+  );
+
+  for (const pattern of patterns) {
+    if (pattern.startsWith("!")) {
+      continue;
+    }
+
+    for (const workspacePath of expandWorkspacePattern(input.projectRoot, pattern)) {
+      const packageJsonPath = path.join(workspacePath, "package.json");
+      if (
+        seen.has(packageJsonPath)
+        || excludedWorkspacePaths.has(path.resolve(workspacePath))
+        || !existsSync(packageJsonPath)
+      ) {
+        continue;
+      }
+
+      try {
+        packageJsons.push({
+          packageJsonText: readFileSync(packageJsonPath, "utf8"),
+          packageJsonPath,
+          workspacePath: path.relative(input.projectRoot, workspacePath).replace(/\\/g, "/")
+        });
+        seen.add(packageJsonPath);
+      } catch (cause) {
+        return err(
+          createError({
+            code: "YARN_WORKSPACE_PACKAGE_JSON_READ_FAILED",
+            category: "filesystem",
+            message: "Failed to read package.json for a Yarn workspace dependency root.",
+            details: {
+              lockfilePath: input.lockfilePath,
+              packageJsonPath,
+              cause: cause instanceof Error ? cause.message : String(cause)
+            }
+          })
+        );
+      }
+    }
+  }
+
+  return ok(packageJsons);
+}
+
+function readWorkspacePatterns(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string");
+  }
+
+  if (isObjectRecord(value) && Array.isArray(value.packages)) {
+    return value.packages.filter((item): item is string => typeof item === "string");
+  }
+
+  return [];
+}
+
+function expandWorkspacePattern(projectRoot: string, pattern: string): string[] {
+  if (pattern.startsWith("!")) {
+    return [];
+  }
+
+  const normalized = pattern.replace(/\\/g, "/").replace(/^\.?\//, "");
+  const segments = normalized.split("/").filter(Boolean);
+  return expandWorkspaceSegments(projectRoot, segments);
+}
+
+function expandWorkspaceSegments(currentPath: string, segments: string[]): string[] {
+  if (segments.length === 0) {
+    return isDirectory(currentPath) ? [currentPath] : [];
+  }
+
+  const [segment, ...rest] = segments;
+  if (!segment) {
+    return [];
+  }
+
+  if (segment === "**") {
+    return [
+      ...expandWorkspaceSegments(currentPath, rest),
+      ...listChildDirectories(currentPath).flatMap((childPath) =>
+        expandWorkspaceSegments(childPath, segments)
+      )
+    ];
+  }
+
+  if (segment.includes("*")) {
+    const matcher = wildcardSegmentMatcher(segment);
+    return listChildDirectories(currentPath)
+      .filter((childPath) => matcher.test(path.basename(childPath)))
+      .flatMap((childPath) => expandWorkspaceSegments(childPath, rest));
+  }
+
+  return expandWorkspaceSegments(path.join(currentPath, segment), rest);
+}
+
+function listChildDirectories(parentPath: string): string[] {
+  try {
+    return readdirSync(parentPath, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name !== "node_modules")
+      .map((entry) => path.join(parentPath, entry.name));
+  } catch {
+    return [];
+  }
+}
+
+function wildcardSegmentMatcher(segment: string): RegExp {
+  const escaped = segment
+    .split("*")
+    .map((part) => part.replace(/[\\^$+?.()|[\]{}]/g, "\\$&"))
+    .join("[^/]*");
+  return new RegExp(`^${escaped}$`);
+}
+
+function isDirectory(targetPath: string): boolean {
+  try {
+    return statSync(targetPath).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function readPackageName(packageJson: PackageJsonShape): string | undefined {
+  return typeof packageJson.name === "string" && packageJson.name !== ""
+    ? packageJson.name
+    : undefined;
 }
 
 function parseLockfile(

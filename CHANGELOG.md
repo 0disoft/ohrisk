@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.78.0 - 2026-06-19
+
+### Fixed
+
+- Yarn v1 workspace package manifests are now scanned as dependency roots instead of relying only on the root `package.json`.
+
 ## 0.77.0 - 2026-06-19
 
 ### Fixed

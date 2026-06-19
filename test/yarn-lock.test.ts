@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -185,4 +186,164 @@ describe("parseYarnLockfile", () => {
         ]]
       });
   });
+
+  test("uses every provided Yarn workspace package manifest as a dependency graph root", () => {
+    const result = parseYarnLockText({
+      packageJsonText: JSON.stringify({
+        name: "fixture-yarn-workspaces",
+        private: true,
+        workspaces: [
+          "apps/*",
+          "packages/*"
+        ]
+      }),
+      workspacePackageJsonTexts: [
+        {
+          packageJsonPath: "apps/web/package.json",
+          workspacePath: "apps/web",
+          packageJsonText: JSON.stringify({
+            name: "workspace-web",
+            dependencies: {
+              "workspace-prod": "1.0.0"
+            }
+          })
+        },
+        {
+          packageJsonPath: "packages/tools/package.json",
+          workspacePath: "packages/tools",
+          packageJsonText: JSON.stringify({
+            name: "workspace-tools",
+            devDependencies: {
+              "workspace-dev": "2.0.0"
+            }
+          })
+        }
+      ],
+      lockfileText: yarnWorkspaceLockfileText(),
+      lockfilePath: "workspace-yarn.lock"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.rootName).toBe("fixture-yarn-workspaces");
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "workspace-child@0.1.0",
+      "workspace-dev@2.0.0",
+      "workspace-prod@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "workspace-prod@1.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: true,
+        paths: [["workspace-web", "workspace-prod@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "workspace-child@0.1.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: false,
+        paths: [["workspace-web", "workspace-prod@1.0.0", "workspace-child@0.1.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "workspace-dev@2.0.0"))
+      .toMatchObject({
+        dependencyType: "development",
+        direct: true,
+        paths: [["workspace-tools", "workspace-dev@2.0.0"]]
+      });
+  });
+
+  test("reads Yarn workspace package manifests from disk", () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-yarn-workspace-"));
+
+    try {
+      mkdirSync(path.join(projectDir, "apps", "web"), { recursive: true });
+      mkdirSync(path.join(projectDir, "packages", "tools"), { recursive: true });
+      mkdirSync(path.join(projectDir, "packages", "skip"), { recursive: true });
+      writeFileSync(
+        path.join(projectDir, "package.json"),
+        JSON.stringify({
+          name: "fixture-yarn-workspaces",
+          private: true,
+          workspaces: {
+            packages: [
+              "apps/*",
+              "packages/*",
+              "!packages/skip"
+            ]
+          }
+        })
+      );
+      writeFileSync(
+        path.join(projectDir, "apps", "web", "package.json"),
+        JSON.stringify({
+          name: "workspace-web",
+          dependencies: {
+            "workspace-prod": "1.0.0"
+          }
+        })
+      );
+      writeFileSync(
+        path.join(projectDir, "packages", "tools", "package.json"),
+        JSON.stringify({
+          name: "workspace-tools",
+          devDependencies: {
+            "workspace-dev": "2.0.0"
+          }
+        })
+      );
+      writeFileSync(
+        path.join(projectDir, "packages", "skip", "package.json"),
+        JSON.stringify({
+          name: "workspace-skip",
+          dependencies: {
+            "skipped-risk": "9.9.9"
+          }
+        })
+      );
+      writeFileSync(path.join(projectDir, "yarn.lock"), yarnWorkspaceLockfileText());
+
+      const result = parseYarnLockfile(path.join(projectDir, "yarn.lock"));
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value.nodes.map((node) => node.id)).toEqual([
+        "workspace-child@0.1.0",
+        "workspace-dev@2.0.0",
+        "workspace-prod@1.0.0"
+      ]);
+      expect(result.value.nodes.find((node) => node.id === "workspace-prod@1.0.0"))
+        .toMatchObject({
+          direct: true,
+          paths: [["workspace-web", "workspace-prod@1.0.0"]]
+        });
+      expect(result.value.nodes.find((node) => node.id === "workspace-dev@2.0.0"))
+        .toMatchObject({
+          dependencyType: "development",
+          direct: true,
+          paths: [["workspace-tools", "workspace-dev@2.0.0"]]
+        });
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
 });
+
+function yarnWorkspaceLockfileText(): string {
+  return [
+    "workspace-prod@1.0.0:",
+    "  version \"1.0.0\"",
+    "  dependencies:",
+    "    workspace-child \"0.1.0\"",
+    "",
+    "workspace-child@0.1.0:",
+    "  version \"0.1.0\"",
+    "",
+    "workspace-dev@2.0.0:",
+    "  version \"2.0.0\""
+  ].join("\n");
+}
