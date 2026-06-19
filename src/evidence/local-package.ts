@@ -1,21 +1,19 @@
-import {
-  closeSync,
-  existsSync,
-  openSync,
-  readSync,
-  readdirSync,
-  statSync
-} from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
+import {
+  readTextFileWithLimit,
+  textFileReadErrorCategory,
+  textFileReadErrorDetails,
+  type TextFileReadError
+} from "../shared/read-text-file";
 import { err, ok, type Result } from "../shared/result";
 import { classifyEvidenceFile } from "./license-files";
 import type { LicenseEvidence, LicenseEvidenceFile } from "./types";
 
 const LOCAL_PACKAGE_JSON_MAX_BYTES = 1024 * 1024;
 const LOCAL_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-const LOCAL_TEXT_READ_CHUNK_BYTES = 64 * 1024;
 
 export function collectLocalPackageEvidence(input: {
   packageId: string;
@@ -116,12 +114,12 @@ function readPackageJson(input: {
       return err(
         createError({
           code: "PACKAGE_EVIDENCE_READ_FAILED",
-          category: "unsupported_input",
-          message: "Package artifact package.json exceeded the maximum supported size.",
+          category: textFileReadErrorCategory(packageJsonText.error),
+          message: packageJsonReadFailedMessage(packageJsonText.error),
           details: {
             packageId,
             packageJsonPath,
-            ...readLimitDetails(packageJsonText.error)
+            ...textFileReadErrorDetails(packageJsonText.error)
           }
         })
       );
@@ -199,7 +197,7 @@ function readEvidenceFiles(input: {
       });
 
       if (!text.ok) {
-        input.warnings.push(oversizedEvidenceFileWarning(entry.name, text.error));
+        input.warnings.push(evidenceFileReadWarning(entry.name, text.error));
         continue;
       }
 
@@ -221,69 +219,14 @@ function readEvidenceFiles(input: {
   };
 }
 
-type ReadLimitExceeded = {
-  maxBytes: number;
-  observedBytes: number;
-};
-
-function readTextFileWithLimit(input: {
-  filePath: string;
-  maxBytes: number;
-}): Result<string, ReadLimitExceeded> {
-  const stats = statSync(input.filePath);
-  if (stats.size > input.maxBytes) {
-    return err({
-      maxBytes: input.maxBytes,
-      observedBytes: stats.size
-    });
-  }
-
-  const chunks: Buffer[] = [];
-  let observedBytes = 0;
-  let fileDescriptor: number | undefined;
-
-  try {
-    fileDescriptor = openSync(input.filePath, "r");
-
-    while (true) {
-      const readSize = Math.min(
-        LOCAL_TEXT_READ_CHUNK_BYTES,
-        Math.max(1, input.maxBytes + 1 - observedBytes)
-      );
-      const chunk = Buffer.alloc(readSize);
-      const bytesRead = readSync(fileDescriptor, chunk, 0, chunk.length, null);
-      if (bytesRead === 0) {
-        return ok(Buffer.concat(chunks, observedBytes).toString("utf8"));
-      }
-
-      observedBytes += bytesRead;
-      if (observedBytes > input.maxBytes) {
-        return err({
-          maxBytes: input.maxBytes,
-          observedBytes
-        });
-      }
-
-      chunks.push(bytesRead === chunk.length ? chunk : chunk.subarray(0, bytesRead));
-    }
-  } finally {
-    if (fileDescriptor !== undefined) {
-      try {
-        closeSync(fileDescriptor);
-      } catch {
-        // Preserve the primary read or size result.
-      }
-    }
-  }
+function packageJsonReadFailedMessage(error: TextFileReadError): string {
+  return error.kind === "too_large"
+    ? "Package artifact package.json exceeded the maximum supported size."
+    : "Failed to read package artifact package.json.";
 }
 
-function readLimitDetails(limit: ReadLimitExceeded): Record<string, unknown> {
-  return {
-    maxBytes: limit.maxBytes,
-    observedBytes: limit.observedBytes
-  };
-}
-
-function oversizedEvidenceFileWarning(fileName: string, limit: ReadLimitExceeded): string {
-  return `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${limit.maxBytes}, observedBytes: ${limit.observedBytes}).`;
+function evidenceFileReadWarning(fileName: string, error: TextFileReadError): string {
+  return error.kind === "too_large"
+    ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).`
+    : `Failed to read ${fileName}: ${error.cause}`;
 }

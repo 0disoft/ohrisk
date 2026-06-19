@@ -981,6 +981,73 @@ describe("collectGraphEvidence", () => {
     }
   });
 
+  test("ignores oversized node_modules package metadata before trusting installed evidence", async () => {
+    const projectRoot = createInstalledPackageProject({
+      name: "oversized-installed",
+      version: "1.0.0",
+      license: "MIT",
+      licenseText: "MIT License from oversized node_modules package."
+    });
+    const packageJsonPath = path.join(
+      projectRoot,
+      "node_modules",
+      "oversized-installed",
+      "package.json"
+    );
+
+    try {
+      writeFileSync(
+        packageJsonPath,
+        JSON.stringify({
+          name: "oversized-installed",
+          version: "1.0.0",
+          license: "MIT",
+          padding: "x".repeat(32)
+        }),
+        "utf8"
+      );
+
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "package-lock.json",
+          nodes: [
+            {
+              id: "oversized-installed@1.0.0",
+              name: "oversized-installed",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved: "workspace:oversized-installed",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "oversized-installed@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot,
+        installedPackageJsonMaxBytes: 8,
+        fetchArtifact: async () => {
+          throw new Error("Registry fallback should not run for unsupported resolved artifacts.");
+        }
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+
+      expect(evidence.value).toEqual([
+        {
+          packageId: "oversized-installed@1.0.0",
+          files: [],
+          source: "unavailable",
+          warnings: ["Unsupported resolved artifact specifier: workspace:oversized-installed"]
+        }
+      ]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("uses scoped installed node_modules package evidence", async () => {
     const projectRoot = createInstalledPackageProject({
       name: "@scope/installed-fixture",

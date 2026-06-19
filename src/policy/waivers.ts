@@ -1,11 +1,18 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
+import {
+  readTextFileWithLimit,
+  textFileReadErrorCategory,
+  textFileReadErrorDetails,
+  type TextFileReadError
+} from "../shared/read-text-file";
 import { err, ok, type Result } from "../shared/result";
 import type { RiskFinding } from "./types";
 
 export const DEFAULT_WAIVER_FILE_NAME = ".ohrisk-waivers.json";
+export const WAIVER_FILE_MAX_BYTES = 1024 * 1024;
 
 export type RiskWaiver = {
   id?: string;
@@ -27,25 +34,32 @@ export type AppliedRiskWaivers = {
   unmatchedWaivers: RiskWaiver[];
 };
 
-export function readRiskWaivers(projectRoot: string): Result<RiskWaiver[], OhriskError> {
+export function readRiskWaivers(
+  projectRoot: string,
+  options?: {
+    waiverFileMaxBytes?: number;
+  }
+): Result<RiskWaiver[], OhriskError> {
   const waiverPath = path.join(projectRoot, DEFAULT_WAIVER_FILE_NAME);
 
   if (!existsSync(waiverPath)) {
     return ok([]);
   }
 
-  let text: string;
-  try {
-    text = readFileSync(waiverPath, "utf8");
-  } catch (cause) {
+  const text = readTextFileWithLimit({
+    filePath: waiverPath,
+    maxBytes: options?.waiverFileMaxBytes ?? WAIVER_FILE_MAX_BYTES
+  });
+
+  if (!text.ok) {
     return err(
       createError({
         code: "WAIVER_FILE_READ_FAILED",
-        category: "filesystem",
-        message: "Failed to read the Ohrisk waiver file.",
+        category: textFileReadErrorCategory(text.error),
+        message: waiverFileReadFailedMessage(text.error),
         details: {
           path: waiverPath,
-          cause: cause instanceof Error ? cause.message : String(cause)
+          ...textFileReadErrorDetails(text.error)
         }
       })
     );
@@ -53,7 +67,7 @@ export function readRiskWaivers(projectRoot: string): Result<RiskWaiver[], Ohris
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(text) as unknown;
+    parsed = JSON.parse(text.value) as unknown;
   } catch (cause) {
     return err(
       createError({
@@ -83,6 +97,12 @@ export function readRiskWaivers(projectRoot: string): Result<RiskWaiver[], Ohris
   }
 
   return waivers;
+}
+
+function waiverFileReadFailedMessage(error: TextFileReadError): string {
+  return error.kind === "too_large"
+    ? "Ohrisk waiver file exceeded the maximum supported size."
+    : "Failed to read the Ohrisk waiver file.";
 }
 
 export function applyRiskWaivers(input: {

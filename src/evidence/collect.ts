@@ -3,7 +3,6 @@ import {
   closeSync,
   existsSync,
   openSync,
-  readFileSync,
   readSync,
   statSync,
   type Stats
@@ -16,6 +15,7 @@ import { collectTarballEvidence } from "./tarball";
 import type { LicenseEvidence } from "./types";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
 import { createError, type OhriskError } from "../shared/errors";
+import { readTextFileWithLimit } from "../shared/read-text-file";
 import { err, ok, type Result } from "../shared/result";
 
 type ArtifactFetchResponse = {
@@ -41,6 +41,7 @@ type ArtifactFetcher = (
 const ARTIFACT_FETCH_TIMEOUT_MS = 30_000;
 const REGISTRY_METADATA_MAX_BYTES = 10 * 1024 * 1024;
 const PACKAGE_TARBALL_MAX_BYTES = 100 * 1024 * 1024;
+const INSTALLED_PACKAGE_JSON_MAX_BYTES = 1024 * 1024;
 const LOCAL_ARTIFACT_READ_CHUNK_BYTES = 64 * 1024;
 
 const SUPPORTED_INTEGRITY_DIGEST_BYTES = {
@@ -59,11 +60,14 @@ export async function collectGraphEvidence(input: {
   fetchTimeoutMs?: number;
   registryMetadataMaxBytes?: number;
   tarballMaxBytes?: number;
+  installedPackageJsonMaxBytes?: number;
 }): Promise<Result<LicenseEvidence[], OhriskError>> {
   const evidence: LicenseEvidence[] = [];
   const fetchTimeoutMs = input.fetchTimeoutMs ?? ARTIFACT_FETCH_TIMEOUT_MS;
   const registryMetadataMaxBytes = input.registryMetadataMaxBytes ?? REGISTRY_METADATA_MAX_BYTES;
   const tarballMaxBytes = input.tarballMaxBytes ?? PACKAGE_TARBALL_MAX_BYTES;
+  const installedPackageJsonMaxBytes =
+    input.installedPackageJsonMaxBytes ?? INSTALLED_PACKAGE_JSON_MAX_BYTES;
 
   for (const node of input.graph.nodes) {
     const collected = await collectNodeEvidence({
@@ -72,7 +76,8 @@ export async function collectGraphEvidence(input: {
       fetchArtifact: input.fetchArtifact ?? defaultArtifactFetcher,
       fetchTimeoutMs,
       registryMetadataMaxBytes,
-      tarballMaxBytes
+      tarballMaxBytes,
+      installedPackageJsonMaxBytes
     });
 
     if (!collected.ok) {
@@ -92,6 +97,7 @@ async function collectNodeEvidence(input: {
   fetchTimeoutMs: number;
   registryMetadataMaxBytes: number;
   tarballMaxBytes: number;
+  installedPackageJsonMaxBytes: number;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   const explicitLocalPath = input.node.resolved
     ? resolveLocalArtifact(input.node.resolved, input.projectRoot)
@@ -105,7 +111,11 @@ async function collectNodeEvidence(input: {
     });
   }
 
-  const nodeModulesPath = findNodeModulesPackage(input.node, input.projectRoot);
+  const nodeModulesPath = findNodeModulesPackage({
+    node: input.node,
+    projectRoot: input.projectRoot,
+    packageJsonMaxBytes: input.installedPackageJsonMaxBytes
+  });
   if (nodeModulesPath) {
     return collectLocalPackageEvidence({
       packageId: input.node.id,
@@ -509,19 +519,27 @@ function decodeFilePathSpecifier(value: string): string {
   }
 }
 
-function findNodeModulesPackage(node: DependencyNode, projectRoot: string): string | undefined {
-  const packageNames = [...new Set([...(node.installNames ?? []), node.name])];
+function findNodeModulesPackage(input: {
+  node: DependencyNode;
+  projectRoot: string;
+  packageJsonMaxBytes: number;
+}): string | undefined {
+  const packageNames = [...new Set([...(input.node.installNames ?? []), input.node.name])];
 
   for (const packageName of packageNames) {
-    const packagePath = resolveNodeModulesPackage(packageName, projectRoot);
+    const packagePath = resolveNodeModulesPackage(packageName, input.projectRoot);
     if (!packagePath) {
       continue;
     }
 
     if (
       existsSync(packagePath)
-      && statSync(packagePath).isDirectory()
-      && installedPackageMatchesNode({ node, packagePath })
+      && isReadableDirectory(packagePath)
+      && installedPackageMatchesNode({
+        node: input.node,
+        packagePath,
+        maxBytes: input.packageJsonMaxBytes
+      })
     ) {
       return packagePath;
     }
@@ -568,14 +586,30 @@ function isSafeNodeModulesSegment(segment: string): boolean {
   return segment !== "" && segment !== "." && segment !== "..";
 }
 
+function isReadableDirectory(filePath: string): boolean {
+  try {
+    return statSync(filePath).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 function installedPackageMatchesNode(input: {
   node: DependencyNode;
   packagePath: string;
+  maxBytes: number;
 }): boolean {
   try {
-    const packageJson = JSON.parse(
-      readFileSync(path.join(input.packagePath, "package.json"), "utf8")
-    ) as unknown;
+    const packageJsonText = readTextFileWithLimit({
+      filePath: path.join(input.packagePath, "package.json"),
+      maxBytes: input.maxBytes
+    });
+
+    if (!packageJsonText.ok) {
+      return false;
+    }
+
+    const packageJson = JSON.parse(packageJsonText.value) as unknown;
 
     return isRecord(packageJson)
       && packageJson.name === input.node.name

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.101.0 - 2026-06-20
+
+### Fixed
+
+- Waiver files and installed `node_modules` package metadata checks now use bounded reads before parsing or trusting package evidence.
+
 ## 0.100.0 - 2026-06-20
 
 ### Fixed
