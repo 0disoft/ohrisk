@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.83.0 - 2026-06-19
+
+### Fixed
+
+- URL-encoded `file:` dependency artifact paths now resolve to the decoded local path before reading package evidence.
+
 ## 0.82.0 - 2026-06-19
 
 ### Fixed

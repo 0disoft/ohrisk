@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { collectLocalPackageEvidence } from "./local-package";
 import { collectTarballEvidence } from "./tarball";
@@ -240,8 +241,15 @@ function parseRegistryMetadata(input: {
 }
 
 function resolveLocalArtifact(resolved: string, projectRoot: string): string | undefined {
+  if (resolved.startsWith("file://")) {
+    const filePath = resolveFileUrl(resolved);
+    if (filePath) {
+      return filePath;
+    }
+  }
+
   if (resolved.startsWith("file:")) {
-    const specifier = resolved.slice("file:".length);
+    const specifier = decodeFilePathSpecifier(resolved.slice("file:".length));
     return path.resolve(projectRoot, specifier);
   }
 
@@ -250,6 +258,22 @@ function resolveLocalArtifact(resolved: string, projectRoot: string): string | u
   }
 
   return undefined;
+}
+
+function resolveFileUrl(value: string): string | undefined {
+  try {
+    return fileURLToPath(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function decodeFilePathSpecifier(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 function findNodeModulesPackage(node: DependencyNode, projectRoot: string): string | undefined {

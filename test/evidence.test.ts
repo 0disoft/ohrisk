@@ -428,6 +428,63 @@ describe("collectGraphEvidence", () => {
     }
   });
 
+  test("resolves URL-encoded file dependency artifact paths", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-encoded-file-artifact-"));
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "encoded-file-fixture",
+        version: "1.0.0",
+        license: "MIT"
+      }),
+      "package/LICENSE": "MIT License from encoded file artifact."
+    });
+    writeFileSync(path.join(projectRoot, "encoded file fixture.tgz"), tarball);
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "package-lock.json",
+          nodes: [
+            {
+              id: "encoded-file-fixture@1.0.0",
+              name: "encoded-file-fixture",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved: "file:encoded%20file%20fixture.tgz",
+              integrity: integrityFor(tarball),
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "encoded-file-fixture@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+
+      expect(evidence.value).toEqual([
+        expect.objectContaining({
+          packageId: "encoded-file-fixture@1.0.0",
+          packageJsonLicense: "MIT",
+          source: "tarball",
+          files: [
+            {
+              path: "LICENSE",
+              kind: "license",
+              text: "MIT License from encoded file artifact."
+            }
+          ]
+        })
+      ]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("rejects malformed integrity digests before comparing tarball bytes", async () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-malformed-integrity-"));
     const tarball = createTarGz({
