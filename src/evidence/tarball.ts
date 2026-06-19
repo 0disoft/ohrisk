@@ -12,11 +12,13 @@ type TarEntry = {
 };
 
 const PACKAGE_TARBALL_UNPACKED_MAX_BYTES = 100 * 1024 * 1024;
+const PACKAGE_TARBALL_MAX_ENTRIES = 50_000;
 
 export function collectTarballEvidence(input: {
   packageId: string;
   tarball: Buffer | Uint8Array;
   unpackedMaxBytes?: number;
+  maxEntries?: number;
 }): Result<LicenseEvidence, OhriskError> {
   const unpacked = gunzipTarballWithLimit({
     packageId: input.packageId,
@@ -28,7 +30,10 @@ export function collectTarballEvidence(input: {
   }
 
   try {
-    const entries = parseTarEntries(unpacked.value);
+    const entries = parseTarEntries({
+      tarball: unpacked.value,
+      maxEntries: input.maxEntries ?? PACKAGE_TARBALL_MAX_ENTRIES
+    });
     const packageJsonEntry = entries.find((entry) => normalizePackagePath(entry.path) === "package.json");
 
     if (!packageJsonEntry) {
@@ -128,14 +133,23 @@ function readPackageJson(input: {
   }
 }
 
-function parseTarEntries(tarball: Buffer): TarEntry[] {
+function parseTarEntries(input: {
+  tarball: Buffer;
+  maxEntries: number;
+}): TarEntry[] {
   const entries: TarEntry[] = [];
   let offset = 0;
+  let observedEntries = 0;
 
-  while (offset + 512 <= tarball.length) {
-    const header = tarball.subarray(offset, offset + 512);
+  while (offset + 512 <= input.tarball.length) {
+    const header = input.tarball.subarray(offset, offset + 512);
     if (isZeroBlock(header)) {
       break;
+    }
+
+    observedEntries += 1;
+    if (observedEntries > input.maxEntries) {
+      throw new Error(`Package tarball exceeded the maximum entry count (${input.maxEntries}).`);
     }
 
     const name = readNullTerminated(header, 0, 100);
@@ -148,7 +162,7 @@ function parseTarEntries(tarball: Buffer): TarEntry[] {
     const dataStart = offset + 512;
     const dataEnd = dataStart + size;
 
-    if (!Number.isSafeInteger(dataEnd) || dataEnd < dataStart || dataEnd > tarball.length) {
+    if (!Number.isSafeInteger(dataEnd) || dataEnd < dataStart || dataEnd > input.tarball.length) {
       throw new Error(`Tar entry ${fullPath || "(unnamed)"} extends beyond archive data.`);
     }
 
@@ -156,7 +170,7 @@ function parseTarEntries(tarball: Buffer): TarEntry[] {
       entries.push({
         path: fullPath,
         type,
-        data: tarball.subarray(dataStart, dataEnd)
+        data: input.tarball.subarray(dataStart, dataEnd)
       });
     }
 

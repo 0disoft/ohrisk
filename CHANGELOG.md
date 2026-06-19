@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.117.0 - 2026-06-20
+
+### Fixed
+
+- Package tarball parsing now enforces a maximum entry count, preventing archives with excessive headers from consuming unbounded parser work inside the unpacked size limit.
+
 ## 0.116.0 - 2026-06-20
 
 ### Fixed

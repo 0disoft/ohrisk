@@ -380,6 +380,36 @@ describe("collectTarballEvidence", () => {
     expect(String(result.error.details?.cause)).toContain("512");
   });
 
+  test("rejects tarballs that exceed the maximum entry count before collecting evidence", () => {
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "tarball-too-many-entries",
+        version: "1.0.0",
+        license: "MIT"
+      }),
+      "package/LICENSE": "MIT License fixture text."
+    });
+
+    const result = collectTarballEvidence({
+      packageId: "tarball-too-many-entries@1.0.0",
+      tarball,
+      maxEntries: 1
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected tarball with too many entries to fail.");
+    }
+
+    expect(result.error.code).toBe("TARBALL_PARSE_FAILED");
+    expect(result.error.category).toBe("unsupported_input");
+    expect(result.error.message).toBe("Failed to parse package tarball evidence.");
+    expect(result.error.details).toMatchObject({
+      packageId: "tarball-too-many-entries@1.0.0",
+      cause: "Package tarball exceeded the maximum entry count (1)."
+    });
+  });
+
   test("reads tarball license evidence filename variants", () => {
     const tarball = createTarGz({
       "package/package.json": JSON.stringify({
