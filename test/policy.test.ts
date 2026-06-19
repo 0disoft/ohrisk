@@ -148,6 +148,34 @@ describe("evaluateLicenseRisk", () => {
     expect(finding.recommendation).toBe("allow");
   });
 
+  test("does not let permissive metadata hide explicit commercial restriction evidence", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "package@1.0.0",
+        original: "MIT",
+        expression: "MIT",
+        choices: ["MIT"],
+        joiner: "single",
+        signals: ["commercial-restriction"],
+        evidenceSources: [
+          "source: local",
+          "package.json license: MIT",
+          "file: LICENSE (license)"
+        ],
+        confidence: "high"
+      },
+      dependency: baseDependency,
+      profile: "saas"
+    });
+
+    expect(finding.severity).toBe("high");
+    expect(finding.reason).toBe(
+      "License evidence contains an explicit commercial-use restriction for saas."
+    );
+    expect(finding.recommendation).toBe("replace");
+    expect(finding.action).toBe("Replace this package or escalate before shipping.");
+  });
+
   test("uses the riskiest branch for AND expressions", () => {
     const finding = evaluateLicenseRisk({
       license: {

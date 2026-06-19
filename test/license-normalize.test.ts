@@ -561,6 +561,34 @@ describe("normalizeLicenseEvidence", () => {
     expect(normalized.confidence).toBe("low");
   });
 
+  test("preserves commercial restriction signals even when package metadata is parseable", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "metadata-mit-restricted-file@1.0.0",
+      packageJsonLicense: "MIT",
+      files: [
+        {
+          path: "LICENSE",
+          kind: "license",
+          text: "Commercial use is prohibited."
+        }
+      ],
+      source: "local",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      packageId: "metadata-mit-restricted-file@1.0.0",
+      original: "MIT",
+      expression: "MIT",
+      choices: ["MIT"],
+      joiner: "single",
+      signals: ["commercial-restriction"],
+      confidence: "high"
+    });
+    expect(normalized.evidenceSources).toContain("package.json license: MIT");
+    expect(normalized.evidenceSources).toContain("file: LICENSE (license)");
+  });
+
   test("marks explicit commercial restriction text in package license metadata", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "metadata-restricted-package@1.0.0",

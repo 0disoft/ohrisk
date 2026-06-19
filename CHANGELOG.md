@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.122.0 - 2026-06-20
+
+### Fixed
+
+- Explicit commercial-use restriction evidence now remains high risk even when package metadata declares a permissive license.
+
 ## 0.121.0 - 2026-06-20
 
 ### Fixed
