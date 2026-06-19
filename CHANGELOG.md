@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.108.0 - 2026-06-20
+
+### Fixed
+
+- Remote artifact IPv6 host checks now reject additional special-purpose ranges such as local-use NAT64, discard-only, Teredo, benchmarking, and ORCHID addresses before fetch.
+
 ## 0.107.0 - 2026-06-20
 
 ### Fixed

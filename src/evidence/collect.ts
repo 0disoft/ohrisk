@@ -47,6 +47,7 @@ type ArtifactHostResolution = {
 };
 
 type ArtifactHostResolver = (hostname: string) => Promise<ArtifactHostResolution[]>;
+type Ipv6Hextets = [number, number, number, number, number, number, number, number];
 
 const ARTIFACT_FETCH_TIMEOUT_MS = 30_000;
 const REGISTRY_METADATA_MAX_BYTES = 10 * 1024 * 1024;
@@ -1129,17 +1130,49 @@ function blockedIpv6HostReason(host: string): string | undefined {
     return blockedIpv4HostReason(embeddedIpv4);
   }
 
-  const firstHextet = firstIpv6Hextet(host);
-  if (firstHextet === undefined) {
+  const hextets = expandIpv6Hextets(host);
+  if (!hextets) {
     return "invalid_ipv6";
+  }
+
+  const [firstHextet, secondHextet, thirdHextet, fourthHextet] = hextets;
+
+  if (
+    firstHextet === 0x0064
+    && secondHextet === 0xff9b
+    && thirdHextet === 0x0001
+  ) {
+    return "local_nat64_ipv6";
+  }
+
+  if (
+    firstHextet === 0x0100
+    && secondHextet === 0
+    && thirdHextet === 0
+    && fourthHextet === 0
+  ) {
+    return "discard_ipv6";
   }
 
   if ((firstHextet & 0xfe00) === 0xfc00) return "unique_local_ipv6";
   if ((firstHextet & 0xffc0) === 0xfe80) return "link_local_ipv6";
   if ((firstHextet & 0xff00) === 0xff00) return "multicast_ipv6";
 
-  const second = secondIpv6Hextet(host);
-  if (firstHextet === 0x2001 && second === 0x0db8) return "documentation_ipv6";
+  if (firstHextet === 0x2001 && secondHextet === 0) return "teredo_ipv6";
+  if (
+    firstHextet === 0x2001
+    && secondHextet === 0x0002
+    && thirdHextet === 0
+  ) {
+    return "benchmarking_ipv6";
+  }
+  if (
+    firstHextet === 0x2001
+    && ((secondHextet & 0xfff0) === 0x0010 || (secondHextet & 0xfff0) === 0x0020)
+  ) {
+    return "orchid_ipv6";
+  }
+  if (firstHextet === 0x2001 && secondHextet === 0x0db8) return "documentation_ipv6";
 
   return undefined;
 }
@@ -1193,7 +1226,7 @@ function ipv4FromHextets(high: number, low: number): string {
   ].join(".");
 }
 
-function expandIpv6Hextets(host: string): number[] | undefined {
+function expandIpv6Hextets(host: string): Ipv6Hextets | undefined {
   if (host.includes(".")) {
     return undefined;
   }
@@ -1230,29 +1263,8 @@ function expandIpv6Hextets(host: string): number[] | undefined {
   });
 
   return hextets.every((hextet): hextet is number => hextet !== undefined)
-    ? hextets
+    ? hextets as Ipv6Hextets
     : undefined;
-}
-
-function firstIpv6Hextet(host: string): number | undefined {
-  const part = host.split(":").find((segment) => segment !== "");
-  if (!part) {
-    return undefined;
-  }
-
-  const value = Number.parseInt(part, 16);
-  return Number.isInteger(value) && value >= 0 && value <= 0xffff ? value : undefined;
-}
-
-function secondIpv6Hextet(host: string): number | undefined {
-  const parts = host.split(":").filter((segment) => segment !== "");
-  const part = parts[1];
-  if (!part) {
-    return undefined;
-  }
-
-  const value = Number.parseInt(part, 16);
-  return Number.isInteger(value) && value >= 0 && value <= 0xffff ? value : undefined;
 }
 
 function verifyPackageIntegrity(input: {

@@ -1723,6 +1723,36 @@ describe("collectGraphEvidence", () => {
         resolved: "http://[::127.0.0.1]/compatible-local-remote/-/compatible-local-remote-1.0.0.tgz",
         artifactHost: "::7f00:1",
         reason: "loopback_ipv4"
+      },
+      {
+        resolved: "http://[64:ff9b:1::1]/local-nat64-remote/-/local-nat64-remote-1.0.0.tgz",
+        artifactHost: "64:ff9b:1::1",
+        reason: "local_nat64_ipv6"
+      },
+      {
+        resolved: "http://[100::1]/discard-remote/-/discard-remote-1.0.0.tgz",
+        artifactHost: "100::1",
+        reason: "discard_ipv6"
+      },
+      {
+        resolved: "http://[2001::1]/teredo-remote/-/teredo-remote-1.0.0.tgz",
+        artifactHost: "2001::1",
+        reason: "teredo_ipv6"
+      },
+      {
+        resolved: "http://[2001:2::1]/benchmarking-remote/-/benchmarking-remote-1.0.0.tgz",
+        artifactHost: "2001:2::1",
+        reason: "benchmarking_ipv6"
+      },
+      {
+        resolved: "http://[2001:10::1]/orchid-remote/-/orchid-remote-1.0.0.tgz",
+        artifactHost: "2001:10::1",
+        reason: "orchid_ipv6"
+      },
+      {
+        resolved: "http://[2001:20::1]/orchidv2-remote/-/orchidv2-remote-1.0.0.tgz",
+        artifactHost: "2001:20::1",
+        reason: "orchid_ipv6"
       }
     ];
 
