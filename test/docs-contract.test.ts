@@ -22,19 +22,18 @@ function extractSection(text: string, heading: string): string {
 }
 
 describe("documentation contract", () => {
-  test("README Documentation section docs links are GitHub absolute URLs", () => {
+  test("README Documentation section links are package-safe GitHub docs URLs", () => {
     const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
     const section = extractSection(readme, "## Documentation");
     expect(section).not.toBe("");
 
     const links = extractLinks(section);
-    const docsLinks = links.filter((l) => l.url.includes("/docs/"));
 
-    expect(docsLinks.length).toBeGreaterThan(0);
+    expect(links.length).toBeGreaterThan(0);
 
-    for (const link of docsLinks) {
-      expect(link.url).toMatch(
-        /^https:\/\/github\.com\/0disoft\/ohrisk\/blob\/main\/docs\//
+    for (const link of links) {
+      expect(link.url, `${link.text}: ${link.url}`).toMatch(
+        /^https:\/\/github\.com\/0disoft\/ohrisk\/blob\/main\/docs\/[\w/-]+\.md(?:#[\w.-]+)?$/
       );
     }
   });
