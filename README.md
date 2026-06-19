@@ -12,6 +12,50 @@ It is a local CLI for developers who need a quick answer to questions like:
 Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 `high`, and `unknown` findings for the selected usage profile.
 
+## When to use it
+
+Run Ohrisk when you are about to add or upgrade a dependency and want a fast,
+local read on whether the license evidence introduces risk for your shipping
+model. It sits between "I just installed a package" and "legal review."
+
+- before opening a PR that adds or changes dependencies
+- before cutting a release or tagging a build
+- when a transitive dependency surprise appears in a lockfile diff
+- when you need a SARIF or SBOM artifact for a compliance pipeline
+
+Ohrisk does not approve or block packages on its own. It gives you the
+evidence and a profile-aware severity so you can decide.
+
+## Commands
+
+| Command | What it answers |
+| --- | --- |
+| `ohrisk scan` | What does my dependency tree look like right now? Non-failing local decision aid. |
+| `ohrisk ci` | Should this PR fail the build? Runs a scan and exits non-zero when findings meet `--fail-on`. |
+| `ohrisk diff <ref>` | What changed since the baseline git ref? Surfaces only new or meaningfully changed findings. |
+| `ohrisk explain <expr>` | How would Ohrisk classify this license expression for a profile, without scanning a project? |
+
+## Usage profiles
+
+Ohrisk evaluates the same dependency tree differently depending on how you ship
+software, because redistribution changes license obligations.
+
+- `saas` (default): you run the service and do not redistribute the package
+  binaries to users. GPL-only copyleft such as GPL-2.0 and GPL-3.0 is treated
+  as `review` rather than an immediate block, because SaaS usage does not
+  trigger redistribution obligations. AGPL and source-available restrictions
+  remain `high`.
+- `distributed-app`: you ship the package to users. GPL becomes `high` because
+  redistribution obligations apply. Weak copyleft (LGPL, MPL, EPL) is flagged as
+  `review`.
+
+Pick the profile that matches how the dependency reaches your users:
+
+```bash
+ohrisk scan --profile saas
+ohrisk scan --profile distributed-app
+```
+
 ## Runtime
 
 Ohrisk is distributed as an npm package, but the CLI runs on Bun. Make sure
@@ -176,7 +220,7 @@ Waive a finding locally by ID or fingerprint in `.ohrisk-waivers.json`:
     {
       "id": "agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0",
       "reason": "Accepted for this release after internal review.",
-      "expiresOn": "2099-12-31"
+      "expiresOn": "2026-09-30"
     }
   ]
 }
@@ -337,3 +381,7 @@ Run the fixture scan manually:
 cd test/fixtures/bun-project
 bun run ../../../src/cli/main.ts scan --profile saas
 ```
+
+## Documentation
+
+- [한국어 사용 가이드](docs/ko/README.md) — Korean usage guide for developers
