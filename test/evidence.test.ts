@@ -1770,6 +1770,48 @@ describe("collectGraphEvidence", () => {
     expect(evidence.error.category).toBe("network");
   });
 
+  test("redacts credential-like URL text from remote fetch failure causes", async () => {
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "cause-redaction-remote@1.0.0",
+            name: "cause-redaction-remote",
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved: "https://registry.example.test/cause-redaction-remote/-/cause-redaction-remote-1.0.0.tgz",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "cause-redaction-remote@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async () => {
+        throw new Error(
+          "upstream diagnostic mentioned https://fixture-token:fixture-secret@debug.example.test/tarball.tgz"
+        );
+      }
+    });
+
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected remote tarball fetch cause to fail.");
+    }
+
+    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
+    expect(evidence.error.category).toBe("network");
+    expect(evidence.error.details).toMatchObject({
+      packageId: "cause-redaction-remote@1.0.0",
+      cause: "upstream diagnostic mentioned https://redacted@debug.example.test/tarball.tgz"
+    });
+
+    const formatted = formatError(evidence.error);
+    expect(formatted).not.toContain("fixture-token");
+    expect(formatted).not.toContain("fixture-secret");
+  });
+
   test("does not automatically follow remote tarball redirects", async () => {
     const fetchedUrls: string[] = [];
     const evidence = await collectGraphEvidence({

@@ -299,8 +299,8 @@ function readLocalArtifactFileWithLimit(input: {
       if (observedBytes > input.maxBytes) {
         return err(localArtifactTooLargeError({
           packageId: input.packageId,
-          resolved: input.resolved,
-          artifactPath: input.filePath,
+          resolved: safeOptionalUrlForErrorDetails(input.resolved),
+          artifactPath: safeUrlForErrorDetails(input.filePath),
           maxBytes: input.maxBytes,
           observedBytes
         }));
@@ -494,7 +494,7 @@ async function collectRegistryTarballEvidence(input: {
         details: {
           packageId: input.node.id,
           registryUrl: metadataUrl,
-          cause: cause instanceof Error ? cause.message : String(cause)
+          cause: safeErrorCauseForDetails(cause)
         }
       })
     );
@@ -517,7 +517,7 @@ function parseRegistryMetadata(input: {
         details: {
           packageId: input.packageId,
           registryUrl: input.registryUrl,
-          cause: cause instanceof Error ? cause.message : String(cause)
+          cause: safeErrorCauseForDetails(cause)
         }
       })
     );
@@ -783,7 +783,7 @@ async function collectRemoteTarballEvidence(input: {
         details: {
           packageId: input.packageId,
           resolved: safeUrlForErrorDetails(input.resolved),
-          cause: cause instanceof Error ? cause.message : String(cause)
+          cause: safeErrorCauseForDetails(cause)
         }
       })
     );
@@ -1027,7 +1027,7 @@ async function preflightRemoteArtifactFetchTarget(input: {
           packageId: input.packageId,
           ...redactUrlCredentialsInDetails(input.details),
           artifactHost,
-          cause: cause instanceof Error ? cause.message : String(cause)
+          cause: safeErrorCauseForDetails(cause)
         }
       })
     );
@@ -1098,6 +1098,10 @@ function redactUrlCredentialsInDetails(details: Record<string, unknown>): Record
 
 function safeOptionalUrlForErrorDetails(value: string | undefined): string | undefined {
   return value === undefined ? undefined : safeUrlForErrorDetails(value);
+}
+
+function safeErrorCauseForDetails(cause: unknown): string {
+  return safeUrlForErrorDetails(cause instanceof Error ? cause.message : String(cause));
 }
 
 function safeUrlForErrorDetails(value: string): string {

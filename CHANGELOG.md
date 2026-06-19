@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.111.0 - 2026-06-20
+
+### Fixed
+
+- Artifact fetch diagnostic causes now redact credential-like URL text before surfacing errors.
+
 ## 0.110.0 - 2026-06-20
 
 ### Fixed
