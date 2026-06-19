@@ -1703,6 +1703,26 @@ describe("collectGraphEvidence", () => {
         resolved: "http://[::ffff:0a00:0005]/mapped-private-remote/-/mapped-private-remote-1.0.0.tgz",
         artifactHost: "::ffff:a00:5",
         reason: "private_ipv4"
+      },
+      {
+        resolved: "http://[64:ff9b::7f00:1]/nat64-local-remote/-/nat64-local-remote-1.0.0.tgz",
+        artifactHost: "64:ff9b::7f00:1",
+        reason: "loopback_ipv4"
+      },
+      {
+        resolved: "http://[64:ff9b::0a00:5]/nat64-private-remote/-/nat64-private-remote-1.0.0.tgz",
+        artifactHost: "64:ff9b::a00:5",
+        reason: "private_ipv4"
+      },
+      {
+        resolved: "http://[2002:7f00:0001::]/six-to-four-local-remote/-/six-to-four-local-remote-1.0.0.tgz",
+        artifactHost: "2002:7f00:1::",
+        reason: "loopback_ipv4"
+      },
+      {
+        resolved: "http://[::127.0.0.1]/compatible-local-remote/-/compatible-local-remote-1.0.0.tgz",
+        artifactHost: "::7f00:1",
+        reason: "loopback_ipv4"
       }
     ];
 
@@ -1750,6 +1770,58 @@ describe("collectGraphEvidence", () => {
         reason
       });
     }
+  });
+
+  test("allows public embedded IPv4 remote tarball hosts", async () => {
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "public-embedded-remote",
+        version: "1.0.0",
+        license: "MIT"
+      }),
+      "package/LICENSE": "MIT License fixture text."
+    });
+    const fetchedUrls: string[] = [];
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "public-embedded-remote@1.0.0",
+            name: "public-embedded-remote",
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved: "https://[64:ff9b::5db8:d822]/public-embedded-remote-1.0.0.tgz",
+            integrity: integrityFor(tarball),
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "public-embedded-remote@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async (url) => {
+        fetchedUrls.push(url);
+        return okArtifactResponseFromBuffer(tarball);
+      }
+    });
+
+    expect(fetchedUrls).toEqual([
+      "https://[64:ff9b::5db8:d822]/public-embedded-remote-1.0.0.tgz"
+    ]);
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+
+    expect(evidence.value).toEqual([
+      expect.objectContaining({
+        packageId: "public-embedded-remote@1.0.0",
+        packageJsonLicense: "MIT",
+        source: "tarball"
+      })
+    ]);
   });
 
   test("rejects remote tarball hostnames that resolve to private hosts before fetch", async () => {

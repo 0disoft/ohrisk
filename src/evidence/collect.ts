@@ -1124,9 +1124,9 @@ function blockedIpv6HostReason(host: string): string | undefined {
   if (host === "::") return "unspecified_ipv6";
   if (host === "::1") return "loopback_ipv6";
 
-  const ipv4Mapped = mappedIpv4FromIpv6Host(host);
-  if (ipv4Mapped) {
-    return blockedIpv4HostReason(ipv4Mapped);
+  const embeddedIpv4 = embeddedIpv4FromIpv6Host(host);
+  if (embeddedIpv4) {
+    return blockedIpv4HostReason(embeddedIpv4);
   }
 
   const firstHextet = firstIpv6Hextet(host);
@@ -1144,36 +1144,94 @@ function blockedIpv6HostReason(host: string): string | undefined {
   return undefined;
 }
 
-function mappedIpv4FromIpv6Host(host: string): string | undefined {
+function embeddedIpv4FromIpv6Host(host: string): string | undefined {
   const dotted = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
   if (dotted?.[1]) {
     return dotted[1];
   }
 
-  const hex = host.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
-  if (!hex?.[1] || !hex[2]) {
+  const hextets = expandIpv6Hextets(host);
+  if (!hextets) {
     return undefined;
   }
 
-  const high = Number.parseInt(hex[1], 16);
-  const low = Number.parseInt(hex[2], 16);
   if (
-    !Number.isInteger(high)
-    || !Number.isInteger(low)
-    || high < 0
-    || high > 0xffff
-    || low < 0
-    || low > 0xffff
+    hextets.slice(0, 5).every((hextet) => hextet === 0)
+    && hextets[5] === 0xffff
   ) {
-    return undefined;
+    return ipv4FromHextets(hextets[6], hextets[7]);
   }
 
+  if (
+    hextets.slice(0, 6).every((hextet) => hextet === 0)
+    && (hextets[6] !== 0 || hextets[7] > 1)
+  ) {
+    return ipv4FromHextets(hextets[6], hextets[7]);
+  }
+
+  if (
+    hextets[0] === 0x0064
+    && hextets[1] === 0xff9b
+    && hextets.slice(2, 6).every((hextet) => hextet === 0)
+  ) {
+    return ipv4FromHextets(hextets[6], hextets[7]);
+  }
+
+  if (hextets[0] === 0x2002) {
+    return ipv4FromHextets(hextets[1], hextets[2]);
+  }
+
+  return undefined;
+}
+
+function ipv4FromHextets(high: number, low: number): string {
   return [
     (high >> 8) & 0xff,
     high & 0xff,
     (low >> 8) & 0xff,
     low & 0xff
   ].join(".");
+}
+
+function expandIpv6Hextets(host: string): number[] | undefined {
+  if (host.includes(".")) {
+    return undefined;
+  }
+
+  const [left = "", right = "", extra] = host.split("::");
+  if (extra !== undefined) {
+    return undefined;
+  }
+
+  const leftParts = left === "" ? [] : left.split(":");
+  const rightParts = right === "" ? [] : right.split(":");
+  const hasCompression = host.includes("::");
+  const missingCount = hasCompression ? 8 - leftParts.length - rightParts.length : 0;
+  if ((!hasCompression && leftParts.length !== 8) || missingCount < 0) {
+    return undefined;
+  }
+
+  const parts = [
+    ...leftParts,
+    ...Array.from({ length: missingCount }, () => "0"),
+    ...rightParts
+  ];
+  if (parts.length !== 8) {
+    return undefined;
+  }
+
+  const hextets = parts.map((part) => {
+    if (!/^[0-9a-f]{1,4}$/i.test(part)) {
+      return undefined;
+    }
+
+    const value = Number.parseInt(part, 16);
+    return Number.isInteger(value) && value >= 0 && value <= 0xffff ? value : undefined;
+  });
+
+  return hextets.every((hextet): hextet is number => hextet !== undefined)
+    ? hextets
+    : undefined;
 }
 
 function firstIpv6Hextet(host: string): number | undefined {

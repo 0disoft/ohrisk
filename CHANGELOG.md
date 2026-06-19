@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.107.0 - 2026-06-20
+
+### Fixed
+
+- IPv6 artifact hosts that embed IPv4 addresses through NAT64, 6to4, or IPv4-compatible forms now reuse the IPv4 host block policy before fetch.
+
 ## 0.106.0 - 2026-06-20
 
 ### Fixed
