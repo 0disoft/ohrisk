@@ -478,15 +478,7 @@ describe("collectGraphEvidence", () => {
         ]
       },
       projectRoot: bunProjectDir,
-      fetchArtifact: async () => ({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        arrayBuffer: async () => tarball.buffer.slice(
-          tarball.byteOffset,
-          tarball.byteOffset + tarball.byteLength
-        ) as ArrayBuffer
-      })
+      fetchArtifact: async () => okArtifactResponseFromBuffer(tarball)
     });
 
     expect(evidence.ok).toBe(true);
@@ -749,15 +741,7 @@ describe("collectGraphEvidence", () => {
         ]
       },
       projectRoot: bunProjectDir,
-      fetchArtifact: async () => ({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        arrayBuffer: async () => tarball.buffer.slice(
-          tarball.byteOffset,
-          tarball.byteOffset + tarball.byteLength
-        ) as ArrayBuffer
-      })
+      fetchArtifact: async () => okArtifactResponseFromBuffer(tarball)
     });
 
     expect(evidence.ok).toBe(false);
@@ -804,31 +788,18 @@ describe("collectGraphEvidence", () => {
         fetchedUrls.push(url);
 
         if (url === "https://registry.npmjs.org/registry-fixture") {
-          return {
-            ok: true,
-            status: 200,
-            statusText: "OK",
-            arrayBuffer: async () => Buffer.from(JSON.stringify({
-              versions: {
-                "1.0.0": {
-                  dist: {
-                    tarball: "https://registry.example.test/registry-fixture/-/registry-fixture-1.0.0.tgz"
-                  }
+          return okArtifactResponseFromBuffer(JSON.stringify({
+            versions: {
+              "1.0.0": {
+                dist: {
+                  tarball: "https://registry.example.test/registry-fixture/-/registry-fixture-1.0.0.tgz"
                 }
               }
-            })).buffer
-          };
+            }
+          }));
         }
 
-        return {
-          ok: true,
-          status: 200,
-          statusText: "OK",
-          arrayBuffer: async () => tarball.buffer.slice(
-            tarball.byteOffset,
-            tarball.byteOffset + tarball.byteLength
-          ) as ArrayBuffer
-        };
+        return okArtifactResponseFromBuffer(tarball);
       }
     });
 
@@ -881,31 +852,18 @@ describe("collectGraphEvidence", () => {
         fetchedUrls.push(url);
 
         if (url === "https://registry.npmjs.org/@scope%2Fregistry-fixture") {
-          return {
-            ok: true,
-            status: 200,
-            statusText: "OK",
-            arrayBuffer: async () => Buffer.from(JSON.stringify({
-              versions: {
-                "1.0.0": {
-                  dist: {
-                    tarball: "https://registry.example.test/@scope/registry-fixture/-/registry-fixture-1.0.0.tgz"
-                  }
+          return okArtifactResponseFromBuffer(JSON.stringify({
+            versions: {
+              "1.0.0": {
+                dist: {
+                  tarball: "https://registry.example.test/@scope/registry-fixture/-/registry-fixture-1.0.0.tgz"
                 }
               }
-            })).buffer
-          };
+            }
+          }));
         }
 
-        return {
-          ok: true,
-          status: 200,
-          statusText: "OK",
-          arrayBuffer: async () => tarball.buffer.slice(
-            tarball.byteOffset,
-            tarball.byteOffset + tarball.byteLength
-          ) as ArrayBuffer
-        };
+        return okArtifactResponseFromBuffer(tarball);
       }
     });
 
@@ -1242,15 +1200,7 @@ describe("collectGraphEvidence", () => {
         projectRoot,
         fetchArtifact: async (url) => {
           fetchedUrls.push(url);
-          return {
-            ok: true,
-            status: 200,
-            statusText: "OK",
-            arrayBuffer: async () => tarball.buffer.slice(
-              tarball.byteOffset,
-              tarball.byteOffset + tarball.byteLength
-            ) as ArrayBuffer
-          };
+          return okArtifactResponseFromBuffer(tarball);
         }
       });
 
@@ -1325,15 +1275,7 @@ describe("collectGraphEvidence", () => {
         projectRoot,
         fetchArtifact: async (url) => {
           fetchedUrls.push(url);
-          return {
-            ok: true,
-            status: 200,
-            statusText: "OK",
-            arrayBuffer: async () => tarball.buffer.slice(
-              tarball.byteOffset,
-              tarball.byteOffset + tarball.byteLength
-            ) as ArrayBuffer
-          };
+          return okArtifactResponseFromBuffer(tarball);
         }
       });
 
@@ -1379,12 +1321,7 @@ describe("collectGraphEvidence", () => {
         ]
       },
       projectRoot: bunProjectDir,
-      fetchArtifact: async () => ({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        arrayBuffer: async () => Buffer.from(JSON.stringify({ versions: {} })).buffer
-      })
+      fetchArtifact: async () => okArtifactResponseFromBuffer(JSON.stringify({ versions: {} }))
     });
 
     expect(evidence.ok).toBe(false);
@@ -1413,11 +1350,7 @@ describe("collectGraphEvidence", () => {
         ]
       },
       projectRoot: bunProjectDir,
-      fetchArtifact: async () => ({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        arrayBuffer: async () => Buffer.from(JSON.stringify({
+      fetchArtifact: async () => okArtifactResponseFromBuffer(JSON.stringify({
           versions: {
             "1.0.0": {
               dist: {
@@ -1425,8 +1358,7 @@ describe("collectGraphEvidence", () => {
               }
             }
           }
-        })).buffer
-      })
+        }))
     });
 
     expect(evidence.ok).toBe(false);
@@ -1462,12 +1394,7 @@ describe("collectGraphEvidence", () => {
         ]
       },
       projectRoot: bunProjectDir,
-      fetchArtifact: async () => ({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        arrayBuffer: async () => Uint8Array.of(123).buffer
-      })
+      fetchArtifact: async () => okArtifactResponseFromBuffer(Uint8Array.of(123))
     });
 
     expect(evidence.ok).toBe(false);
@@ -1557,6 +1484,101 @@ describe("collectGraphEvidence", () => {
     expect(evidence.error.category).toBe("network");
   });
 
+  test("rejects registry metadata responses without readable body streams", async () => {
+    let arrayBufferRead = false;
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "bodyless-metadata@1.0.0",
+            name: "bodyless-metadata",
+            version: "1.0.0",
+            ecosystem: "npm",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "bodyless-metadata@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async () => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        arrayBuffer: async () => {
+          arrayBufferRead = true;
+          return Buffer.from(JSON.stringify({ versions: {} })).buffer;
+        }
+      })
+    });
+
+    expect(arrayBufferRead).toBe(false);
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected bodyless registry metadata to fail.");
+    }
+
+    expect(evidence.error.code).toBe("REGISTRY_METADATA_FETCH_FAILED");
+    expect(evidence.error.category).toBe("unsupported_input");
+    expect(evidence.error.message).toBe(
+      "npm registry metadata response did not expose a readable body stream."
+    );
+    expect(evidence.error.details).toMatchObject({
+      packageId: "bodyless-metadata@1.0.0",
+      registryUrl: "https://registry.npmjs.org/bodyless-metadata"
+    });
+  });
+
+  test("rejects remote tarball responses without readable body streams", async () => {
+    let arrayBufferRead = false;
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "bodyless-remote@1.0.0",
+            name: "bodyless-remote",
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved: "https://registry.example.test/bodyless-remote/-/bodyless-remote-1.0.0.tgz",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "bodyless-remote@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async () => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        arrayBuffer: async () => {
+          arrayBufferRead = true;
+          return Uint8Array.of(1, 2, 3).buffer;
+        }
+      })
+    });
+
+    expect(arrayBufferRead).toBe(false);
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected bodyless remote tarball to fail.");
+    }
+
+    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
+    expect(evidence.error.category).toBe("unsupported_input");
+    expect(evidence.error.message).toBe(
+      "Package tarball response did not expose a readable body stream."
+    );
+    expect(evidence.error.details).toMatchObject({
+      packageId: "bodyless-remote@1.0.0",
+      resolved: "https://registry.example.test/bodyless-remote/-/bodyless-remote-1.0.0.tgz"
+    });
+  });
+
   test("times out stalled remote tarball fetches", async () => {
     let fetchSignal: AbortSignal | undefined;
 
@@ -1626,7 +1648,12 @@ describe("collectGraphEvidence", () => {
           ok: true,
           status: 200,
           statusText: "OK",
-          arrayBuffer: async () => await new Promise<never>(() => {})
+          body: new ReadableStream<Uint8Array>({
+            pull: async () => await new Promise<never>(() => {})
+          }),
+          arrayBuffer: async () => {
+            throw new Error("Streamed responses should not fall back to arrayBuffer().");
+          }
         };
       }
     });
@@ -1765,6 +1792,35 @@ describe("collectGraphEvidence", () => {
     });
   });
 });
+
+function okArtifactResponseFromBuffer(input: Buffer | Uint8Array | string): {
+  ok: true;
+  status: 200;
+  statusText: string;
+  body: ReadableStream<Uint8Array>;
+  arrayBuffer: () => Promise<ArrayBuffer>;
+} {
+  return {
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    body: readableStreamFromBuffer(input),
+    arrayBuffer: async () => {
+      throw new Error("Streamed test responses should not fall back to arrayBuffer().");
+    }
+  };
+}
+
+function readableStreamFromBuffer(input: Buffer | Uint8Array | string): ReadableStream<Uint8Array> {
+  const bytes = typeof input === "string" ? Buffer.from(input) : input;
+
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
+      controller.close();
+    }
+  });
+}
 
 function createTarGz(files: Record<string, string>): Buffer {
   const chunks: Buffer[] = [];

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.102.0 - 2026-06-20
+
+### Fixed
+
+- Remote registry metadata and tarball reads now require a readable response body stream instead of falling back to unbounded `arrayBuffer()` reads.
+
 ## 0.101.0 - 2026-06-20
 
 ### Fixed

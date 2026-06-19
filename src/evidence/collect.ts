@@ -379,6 +379,15 @@ async function collectRegistryTarballEvidence(input: {
               registryUrl: metadataUrl,
               ...artifactBodyLimitDetails(limit)
             }
+          }),
+          createUnreadableBodyError: () => createError({
+            code: "REGISTRY_METADATA_FETCH_FAILED",
+            category: "unsupported_input",
+            message: "npm registry metadata response did not expose a readable body stream.",
+            details: {
+              packageId: input.node.id,
+              registryUrl: metadataUrl
+            }
           })
         });
 
@@ -670,6 +679,15 @@ async function collectRemoteTarballEvidence(input: {
               resolved: input.resolved,
               ...artifactBodyLimitDetails(limit)
             }
+          }),
+          createUnreadableBodyError: () => createError({
+            code: "TARBALL_FETCH_FAILED",
+            category: "unsupported_input",
+            message: "Package tarball response did not expose a readable body stream.",
+            details: {
+              packageId: input.packageId,
+              resolved: input.resolved
+            }
           })
         });
       }
@@ -733,6 +751,7 @@ async function readResponseBodyWithLimit(input: {
   response: ArtifactFetchResponse;
   maxBytes: number;
   createTooLargeError: (limit: ArtifactBodyLimit) => OhriskError;
+  createUnreadableBodyError: () => OhriskError;
 }): Promise<Result<Buffer, OhriskError>> {
   const contentLength = readContentLength(input.response.headers);
   if (contentLength !== undefined && contentLength > input.maxBytes) {
@@ -754,18 +773,7 @@ async function readResponseBodyWithLimit(input: {
     });
   }
 
-  const body = Buffer.from(await input.response.arrayBuffer());
-  if (body.byteLength > input.maxBytes) {
-    return err(
-      input.createTooLargeError({
-        maxBytes: input.maxBytes,
-        observedBytes: body.byteLength,
-        ...(contentLength === undefined ? {} : { contentLength })
-      })
-    );
-  }
-
-  return ok(body);
+  return err(input.createUnreadableBodyError());
 }
 
 async function readStreamBodyWithLimit(input: {
