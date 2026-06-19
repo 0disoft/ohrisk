@@ -564,7 +564,8 @@ function renderScanHelp(): string {
     "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
     "  --markdown             Print a Markdown report for PRs or release notes.",
     "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
-    "  --output <file>        Write report output to a file instead of stdout."
+    "  --output <file>        Write report output to a file instead of stdout.",
+    "  --help, -h             Print this help text."
   ].join("\n");
 }
 
@@ -586,7 +587,8 @@ function renderCiHelp(): string {
     "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
     "  --fail-on <severity>   CI threshold. Defaults to high.",
     "  --strict-waivers       Fail CI when local waivers are expired or unmatched.",
-    "  --output <file>        Write report output to a file instead of stdout."
+    "  --output <file>        Write report output to a file instead of stdout.",
+    "  --help, -h             Print this help text."
   ].join("\n");
 }
 
@@ -604,7 +606,8 @@ function renderDiffHelp(): string {
     "  --json                 Print machine-readable output.",
     "  --markdown             Print a Markdown report for PRs or release notes.",
     "  --fail-on <severity>   Optional diff threshold.",
-    "  --output <file>        Write report output to a file instead of stdout."
+    "  --output <file>        Write report output to a file instead of stdout.",
+    "  --help, -h             Print this help text."
   ].join("\n");
 }
 
@@ -618,7 +621,8 @@ function renderExplainHelp(): string {
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --json                 Print machine-readable output.",
-    "  --output <file>        Write report output to a file instead of stdout."
+    "  --output <file>        Write report output to a file instead of stdout.",
+    "  --help, -h             Print this help text."
   ].join("\n");
 }
 
@@ -635,7 +639,10 @@ function renderHelpCommandHelp(): string {
     "  diff",
     "  explain",
     "  help",
-    "  version"
+    "  version",
+    "",
+    "Options:",
+    "  --help, -h             Print this help text."
   ].join("\n");
 }
 
@@ -646,7 +653,10 @@ function renderVersionHelp(): string {
     "Usage:",
     "  ohrisk version",
     "  ohrisk --version",
-    "  ohrisk -v"
+    "  ohrisk -v",
+    "",
+    "Options:",
+    "  --help, -h             Print this help text."
   ].join("\n");
 }
 

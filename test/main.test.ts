@@ -51,6 +51,7 @@ describe("main", () => {
     expect(scanOutput).toContain("ohrisk scan [--lockfile <path>]");
     expect(scanOutput).toContain("--lockfile <path>");
     expect(scanOutput).toContain("--cyclonedx");
+    expect(scanOutput).toContain("--help, -h");
     expect(scanOutput).not.toContain("--fail-on");
 
     const ci = createTestIO(fixturesDir);
@@ -62,6 +63,7 @@ describe("main", () => {
     expect(ciOutput).toContain("Ohrisk ci");
     expect(ciOutput).toContain("--fail-on <severity>");
     expect(ciOutput).toContain("--strict-waivers");
+    expect(ciOutput).toContain("--help, -h");
 
     const diff = createTestIO(fixturesDir);
     const diffExitCode = await main(["help", "diff"], diff.io);
@@ -72,6 +74,7 @@ describe("main", () => {
     expect(diffOutput).toContain("Ohrisk diff");
     expect(diffOutput).toContain("ohrisk diff <baseline-ref>");
     expect(diffOutput).toContain("--markdown");
+    expect(diffOutput).toContain("--help, -h");
     expect(diffOutput).not.toContain("--sarif");
 
     const explain = createTestIO(fixturesDir);
@@ -83,6 +86,7 @@ describe("main", () => {
     expect(explainOutput).toContain("Ohrisk explain");
     expect(explainOutput).toContain("ohrisk explain <license-expression>");
     expect(explainOutput).toContain("--json");
+    expect(explainOutput).toContain("--help, -h");
 
     const scanFlag = createTestIO(fixturesDir);
     const scanFlagExitCode = await main(["scan", "--help"], scanFlag.io);
@@ -90,6 +94,16 @@ describe("main", () => {
     expect(scanFlagExitCode).toBe(0);
     expect(scanFlag.stderr).toEqual([]);
     expect(scanFlag.stdout.join("\n")).toContain("Ohrisk scan");
+    expect(scanFlag.stdout.join("\n")).toContain("--help, -h");
+
+    const helpFlag = createTestIO(fixturesDir);
+    const helpFlagExitCode = await main(["help", "--help"], helpFlag.io);
+
+    expect(helpFlagExitCode).toBe(0);
+    expect(helpFlag.stderr).toEqual([]);
+    expect(helpFlag.stdout.join("\n")).toContain("Ohrisk help");
+    expect(helpFlag.stdout.join("\n")).toContain("ohrisk help [command]");
+    expect(helpFlag.stdout.join("\n")).toContain("--help, -h");
 
     const versionFlag = createTestIO(fixturesDir);
     const versionFlagExitCode = await main(["version", "--help"], versionFlag.io);
@@ -97,6 +111,8 @@ describe("main", () => {
     expect(versionFlagExitCode).toBe(0);
     expect(versionFlag.stderr).toEqual([]);
     expect(versionFlag.stdout.join("\n")).toContain("Ohrisk version");
+    expect(versionFlag.stdout.join("\n")).toContain("ohrisk --version");
+    expect(versionFlag.stdout.join("\n")).toContain("--help, -h");
   });
 
   test("prints package version", async () => {
@@ -105,7 +121,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.88.0"]);
+    expect(stdout).toEqual(["ohrisk 0.89.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -488,7 +504,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.88.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.89.0");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",

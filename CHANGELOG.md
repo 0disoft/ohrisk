@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.89.0 - 2026-06-19
+
+### Fixed
+
+- Command-specific help output now lists the supported `--help` and `-h` flags for every help target.
+
 ## 0.88.0 - 2026-06-19
 
 ### Fixed
