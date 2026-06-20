@@ -31,7 +31,7 @@ import { renderScanReport } from "../report/scan-report";
 import { writeReportFile, type ReportWriter } from "../report/write-output";
 import { discoverProject, type ProjectInput } from "../project/discover";
 import { exitCodeForError, formatError, type OhriskError } from "../shared/errors";
-import { isErr, ok, type Result } from "../shared/result";
+import { err, isErr, ok, type Result } from "../shared/result";
 
 export type CliIO = {
   cwd: string;
@@ -130,13 +130,29 @@ async function runDiff(
     return exitCodeForError(baselineWorkspacePackageJsons.error);
   }
 
+  const baselinePnpmWorkspace = currentProject.value.project.lockfile.kind === "pnpm-lock"
+    ? readOptionalBaselineFile({
+        projectRoot: currentProject.value.project.rootDir,
+        baselineRef: command.baselineRef,
+        relativePath: "pnpm-workspace.yaml",
+        readRefFile
+      })
+    : ok(undefined);
+
+  if (isErr(baselinePnpmWorkspace)) {
+    io.stderr(formatError(baselinePnpmWorkspace.error));
+    return exitCodeForError(baselinePnpmWorkspace.error);
+  }
+
   const baselineGraph = parseLockfileTextForKind({
     kind: currentProject.value.project.lockfile.kind,
     text: baselineLockfile.value,
     lockfilePath: `${command.baselineRef}:${relativeLockfilePath}`,
     packageJsonText: baselinePackageJson?.value,
     packageJsonPath: `${command.baselineRef}:package.json`,
-    workspacePackageJsonTexts: baselineWorkspacePackageJsons.value
+    workspacePackageJsonTexts: baselineWorkspacePackageJsons.value,
+    pnpmWorkspaceText: baselinePnpmWorkspace.value,
+    pnpmWorkspacePath: `${command.baselineRef}:pnpm-workspace.yaml`
   });
 
   if (isErr(baselineGraph)) {
@@ -476,6 +492,8 @@ function parseLockfileTextForKind(input: {
   packageJsonText?: string;
   packageJsonPath?: string;
   workspacePackageJsonTexts?: YarnWorkspacePackageJsonInput[];
+  pnpmWorkspaceText?: string;
+  pnpmWorkspacePath?: string;
 }): Result<DependencyGraph, OhriskError> {
   switch (input.kind) {
     case "bun":
@@ -485,7 +503,10 @@ function parseLockfileTextForKind(input: {
     case "npm-shrinkwrap":
       return parsePackageLockText(input.text, input.lockfilePath);
     case "pnpm-lock":
-      return parsePnpmLockText(input.text, input.lockfilePath);
+      return parsePnpmLockText(input.text, input.lockfilePath, {
+        workspaceText: input.pnpmWorkspaceText,
+        workspacePath: input.pnpmWorkspacePath
+      });
     case "deno-lock":
       return parseDenoLockText(input.text, input.lockfilePath);
     case "yarn-lock":
@@ -536,6 +557,29 @@ function readBaselineYarnWorkspacePackageJsons(input: {
   }
 
   return ok(packageJsons);
+}
+
+function readOptionalBaselineFile(input: {
+  projectRoot: string;
+  baselineRef: string;
+  relativePath: string;
+  readRefFile: GitRefFileReader;
+}): Result<string | undefined, OhriskError> {
+  const result = input.readRefFile({
+    projectRoot: input.projectRoot,
+    ref: input.baselineRef,
+    relativePath: input.relativePath
+  });
+
+  if (!isErr(result)) {
+    return ok(result.value);
+  }
+
+  if (result.error.code === "GIT_REF_FILE_NOT_FOUND") {
+    return ok(undefined);
+  }
+
+  return err(result.error);
 }
 
 function tryParseObject(input: string): Record<string, unknown> | undefined {

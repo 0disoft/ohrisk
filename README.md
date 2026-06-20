@@ -74,11 +74,13 @@ The current implementation is the first npm-style vertical slice:
 - explicit lockfile selection with `--lockfile <path>` for projects that contain more than one supported lockfile
 - direct and transitive dependency graph extraction
 - Bun, npm, pnpm, and Yarn classic/Berry workspace projects are scanned from every workspace/importer package root
+- pnpm `catalog:` and `catalog:<name>` dependency specifiers are resolved from `pnpm-workspace.yaml`
 - Deno `deno.lock` projects are scanned for npm package dependencies recorded in `npm:` specifiers; remote URL imports and JSR packages are not scanned yet
 - npm alias dependency resolution, including pnpm alias package keys, with alias context preserved in dependency paths
 - production, development, optional, and peer dependency classification
 - local `file:` package artifact evidence
 - installed `node_modules` package evidence, including npm alias install names, before network fallback
+- Yarn Berry `.yarn/cache` package zip evidence before registry fallback for PnP installs without `node_modules`
 - remote HTTP(S) package tarball evidence when the lockfile points to a tarball, with credential-bearing URLs, obvious local, private, special-purpose, and DNS-resolved internal hosts blocked before fetch, DNS answers rechecked at the default connection boundary, and redirects followed only after each target is validated
 - lockfile integrity verification for local and remote package tarballs
 - npm registry metadata lookup when the lockfile does not include a direct tarball URL
@@ -157,9 +159,9 @@ Supported lockfiles:
 - `bun.lock`
 - `package-lock.json` with either a modern `packages` section or an npm v1 dependency tree
 - `npm-shrinkwrap.json` with the same package-lock parser support
-- `pnpm-lock.yaml` with `importers`, `packages`, and `snapshots` sections
+- `pnpm-lock.yaml` with `importers`, `packages`, and `snapshots` sections, including default and named catalogs from `pnpm-workspace.yaml`
 - `deno.lock` npm package entries from Deno v3/v4-style lockfiles
-- Yarn classic/Berry `yarn.lock` with root and workspace dependency sets from `package.json` manifests
+- Yarn classic/Berry `yarn.lock` with root and workspace dependency sets from `package.json` manifests, plus local `.yarn/cache` zip evidence for Berry/PnP installs
 
 Select a specific lockfile when a project contains more than one supported lockfile:
 

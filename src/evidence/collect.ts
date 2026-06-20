@@ -4,6 +4,7 @@ import {
   closeSync,
   existsSync,
   openSync,
+  readdirSync,
   readSync,
   realpathSync,
   statSync,
@@ -19,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { collectLocalPackageEvidence } from "./local-package";
 import { collectTarballEvidence } from "./tarball";
 import type { LicenseEvidence } from "./types";
+import { collectZipPackageEvidence } from "./zip-package";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
 import { createError, type OhriskError } from "../shared/errors";
 import { readTextFileWithLimit } from "../shared/read-text-file";
@@ -175,6 +177,19 @@ async function collectNodeEvidence(input: {
       packageId: input.node.id,
       packageDir: nodeModulesPath
     });
+  }
+
+  const yarnCacheEvidence = collectYarnCachePackageEvidence({
+    node: input.node,
+    projectRoot: input.projectRoot,
+    zipMaxBytes: input.tarballMaxBytes
+  });
+  if (!yarnCacheEvidence.ok) {
+    return err(yarnCacheEvidence.error);
+  }
+
+  if (yarnCacheEvidence.value) {
+    return ok(yarnCacheEvidence.value);
   }
 
   if (!input.node.resolved) {
@@ -756,6 +771,104 @@ function installedPackageMatchesNode(input: {
   } catch {
     return false;
   }
+}
+
+function collectYarnCachePackageEvidence(input: {
+  node: DependencyNode;
+  projectRoot: string;
+  zipMaxBytes: number;
+}): Result<LicenseEvidence | undefined, OhriskError> {
+  const cacheDir = path.join(input.projectRoot, ".yarn", "cache");
+  if (!existsSync(cacheDir) || !isReadableDirectory(cacheDir)) {
+    return ok(undefined);
+  }
+
+  const filenamePrefix = yarnCacheFilenamePrefix(input.node);
+  if (!filenamePrefix) {
+    return ok(undefined);
+  }
+
+  let entries;
+  try {
+    entries = readdirSync(cacheDir, { withFileTypes: true })
+      .filter((entry) =>
+        entry.isFile()
+        && entry.name.startsWith(filenamePrefix)
+        && entry.name.endsWith(".zip")
+      )
+      .sort((left, right) => left.name.localeCompare(right.name));
+  } catch (cause) {
+    return err(
+      createError({
+        code: "PACKAGE_EVIDENCE_READ_FAILED",
+        category: "filesystem",
+        message: "Failed to read Yarn package cache directory.",
+        details: {
+          packageId: input.node.id,
+          cacheDir,
+          cause: safeUrlForErrorDetails(cause instanceof Error ? cause.message : String(cause))
+        }
+      })
+    );
+  }
+
+  for (const entry of entries) {
+    const cachePath = path.join(cacheDir, entry.name);
+    const stats = readLocalArtifactStats({
+      filePath: cachePath,
+      packageId: input.node.id,
+      resolved: undefined
+    });
+    if (!stats.ok) {
+      return err(stats.error);
+    }
+
+    if (stats.value.size > input.zipMaxBytes) {
+      return err(localArtifactTooLargeError({
+        packageId: input.node.id,
+        resolved: undefined,
+        artifactPath: cachePath,
+        maxBytes: input.zipMaxBytes,
+        observedBytes: stats.value.size
+      }));
+    }
+
+    const zip = readLocalArtifactFileWithLimit({
+      filePath: cachePath,
+      packageId: input.node.id,
+      resolved: undefined,
+      maxBytes: input.zipMaxBytes
+    });
+    if (!zip.ok) {
+      return err(zip.error);
+    }
+
+    const evidence = collectZipPackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      packageVersion: input.node.version,
+      zip: zip.value
+    });
+    if (!evidence.ok) {
+      return err(evidence.error);
+    }
+
+    if (evidence.value) {
+      return ok(evidence.value);
+    }
+  }
+
+  return ok(undefined);
+}
+
+function yarnCacheFilenamePrefix(node: DependencyNode): string | undefined {
+  const slug = yarnCachePackageSlug(node.name);
+  return slug ? `${slug}-npm-${node.version}-` : undefined;
+}
+
+function yarnCachePackageSlug(packageName: string): string | undefined {
+  const segments = nodeModulesPackageSegments(packageName);
+  return segments ? segments.join("-") : undefined;
 }
 
 async function collectRemoteTarballEvidence(input: {

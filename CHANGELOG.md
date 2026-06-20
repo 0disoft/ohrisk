@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.129.0 - 2026-06-20
+
+### Added
+
+- pnpm `catalog:` and `catalog:<name>` dependency specifiers are now resolved
+  from `pnpm-workspace.yaml` for scan and git-ref diff graph extraction.
+- Yarn Berry `.yarn/cache` package zip files are now used as local package
+  evidence before registry fallback, covering PnP installs without
+  `node_modules`.
+
+### Fixed
+
+- Malformed `pnpm-workspace.yaml` catalog files now fail with a typed
+  `PNPM_WORKSPACE_PARSE_FAILED` error instead of silently dropping catalog
+  dependencies.
+
 ## 0.128.0 - 2026-06-20
 
 ### Added

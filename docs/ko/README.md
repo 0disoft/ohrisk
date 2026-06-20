@@ -40,6 +40,10 @@ ohrisk scan
 `--lockfile <path>`로 명시적으로 선택한다.
 Bun, npm, pnpm, Yarn classic/Berry 워크스페이스 프로젝트는 각 workspace/importer
 package root의 의존성을 스캔 시작점으로 삼는다.
+pnpm의 `catalog:`와 `catalog:<name>` 의존성 specifier는
+`pnpm-workspace.yaml`의 default/named catalog 정의로 해석한다.
+Yarn Berry/PnP 프로젝트는 `node_modules`가 없어도 로컬 `.yarn/cache` zip 패키지
+evidence를 registry fallback보다 먼저 사용한다.
 Deno는 `deno.lock`에 기록된 `npm:` 패키지 의존성을 스캔한다. 원격 URL import와
 JSR 패키지는 아직 스캔 대상이 아니다.
 

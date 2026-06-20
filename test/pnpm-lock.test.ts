@@ -212,6 +212,117 @@ describe("parsePnpmLockfile", () => {
       });
   });
 
+  test("resolves default and named pnpm catalog dependency specifiers", () => {
+    const result = parsePnpmLockText(
+      pnpmCatalogLockfileText(),
+      "catalog-pnpm-lock.yaml",
+      {
+        workspaceText: [
+          "catalog:",
+          "  prod-parent: 1.0.0",
+          "  dev-risk: 3.0.0",
+          "catalogs:",
+          "  react18:",
+          "    named-parent: 18.2.0"
+        ].join("\n"),
+        workspacePath: "pnpm-workspace.yaml"
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "dev-risk@3.0.0",
+      "named-parent@18.2.0",
+      "prod-child@0.1.0",
+      "prod-parent@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "prod-parent@1.0.0"))
+      .toMatchObject({
+        direct: true,
+        dependencyType: "production",
+        paths: [["<root>", "prod-parent@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "prod-child@0.1.0"))
+      .toMatchObject({
+        direct: false,
+        dependencyType: "production",
+        paths: [["<root>", "prod-parent@1.0.0", "prod-child@0.1.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "named-parent@18.2.0"))
+      .toMatchObject({
+        direct: true,
+        dependencyType: "production",
+        paths: [["<root>", "named-parent@18.2.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "dev-risk@3.0.0"))
+      .toMatchObject({
+        direct: true,
+        dependencyType: "development",
+        paths: [["<root>", "dev-risk@3.0.0"]]
+      });
+  });
+
+  test("reads pnpm catalog definitions from pnpm-workspace.yaml on disk", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-pnpm-catalog-"));
+    const lockfilePath = path.join(projectRoot, "pnpm-lock.yaml");
+    const workspacePath = path.join(projectRoot, "pnpm-workspace.yaml");
+
+    try {
+      writeFileSync(lockfilePath, pnpmCatalogLockfileText(), "utf8");
+      writeFileSync(
+        workspacePath,
+        [
+          "catalog:",
+          "  prod-parent: 1.0.0",
+          "  dev-risk: 3.0.0",
+          "catalogs:",
+          "  react18:",
+          "    named-parent: 18.2.0"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = parsePnpmLockfile(lockfilePath);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value.nodes.map((node) => node.id)).toEqual([
+        "dev-risk@3.0.0",
+        "named-parent@18.2.0",
+        "prod-child@0.1.0",
+        "prod-parent@1.0.0"
+      ]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("reports malformed pnpm-workspace.yaml catalog files as typed errors", () => {
+    const result = parsePnpmLockText(
+      pnpmCatalogLockfileText(),
+      "catalog-pnpm-lock.yaml",
+      {
+        workspaceText: "catalog: [unterminated",
+        workspacePath: "broken-pnpm-workspace.yaml"
+      }
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected malformed pnpm workspace file to fail.");
+    }
+
+    expect(result.error.code).toBe("PNPM_WORKSPACE_PARSE_FAILED");
+    expect(result.error.category).toBe("unsupported_input");
+  });
+
   test("keeps nested optional and peer dependency edges from snapshots", () => {
     const result = parsePnpmLockText(
       [
@@ -332,3 +443,34 @@ describe("parsePnpmLockfile", () => {
       });
   });
 });
+
+function pnpmCatalogLockfileText(): string {
+  return [
+    "lockfileVersion: '9.0'",
+    "importers:",
+    "  .:",
+    "    dependencies:",
+    "      prod-parent:",
+    "        specifier: \"catalog:\"",
+    "        version: \"catalog:\"",
+    "      named-parent:",
+    "        specifier: catalog:react18",
+    "        version: catalog:react18",
+    "    devDependencies:",
+    "      dev-risk:",
+    "        specifier: \"catalog:\"",
+    "        version: \"catalog:\"",
+    "packages:",
+    "  /prod-parent@1.0.0: {}",
+    "  /prod-child@0.1.0: {}",
+    "  /named-parent@18.2.0: {}",
+    "  /dev-risk@3.0.0: {}",
+    "snapshots:",
+    "  /prod-parent@1.0.0:",
+    "    dependencies:",
+    "      prod-child: 0.1.0",
+    "  /prod-child@0.1.0: {}",
+    "  /named-parent@18.2.0: {}",
+    "  /dev-risk@3.0.0: {}"
+  ].join("\n");
+}

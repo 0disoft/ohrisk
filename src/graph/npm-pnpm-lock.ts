@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { parse as parseYaml } from "yaml";
 
 import { createError, type OhriskError } from "../shared/errors";
@@ -24,6 +26,16 @@ type PnpmLockShape = {
   snapshots?: unknown;
 };
 
+type PnpmWorkspaceShape = {
+  catalog?: unknown;
+  catalogs?: unknown;
+};
+
+type PnpmCatalogs = {
+  defaultCatalog: Record<string, string>;
+  namedCatalogs: Map<string, Record<string, string>>;
+};
+
 type PnpmPackageRecord = {
   key: string;
   name: string;
@@ -47,7 +59,10 @@ type PnpmImporterEntry = {
 
 export function parsePnpmLockfile(
   lockfilePath: string,
-  options: { maxBytes?: number } = {}
+  options: {
+    maxBytes?: number;
+    workspaceMaxBytes?: number;
+  } = {}
 ): Result<DependencyGraph, OhriskError> {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -70,16 +85,40 @@ export function parsePnpmLockfile(
     );
   }
 
-  return parsePnpmLockText(lockfileText.value, lockfilePath);
+  const workspaceCatalogs = readPnpmWorkspaceCatalogs({
+    lockfilePath,
+    maxBytes: options.workspaceMaxBytes ?? LOCKFILE_MAX_BYTES
+  });
+  if (!workspaceCatalogs.ok) {
+    return workspaceCatalogs;
+  }
+
+  return parsePnpmLockText(lockfileText.value, lockfilePath, {
+    catalogs: workspaceCatalogs.value
+  });
 }
 
 export function parsePnpmLockText(
   input: string,
-  lockfilePath = "pnpm-lock.yaml"
+  lockfilePath = "pnpm-lock.yaml",
+  options: {
+    workspaceText?: string;
+    workspacePath?: string;
+    catalogs?: PnpmCatalogs;
+  } = {}
 ): Result<DependencyGraph, OhriskError> {
   const parsed = parseLockfileYaml(input, lockfilePath);
   if (!parsed.ok) {
     return parsed;
+  }
+
+  const catalogs = resolvePnpmCatalogs({
+    workspaceText: options.workspaceText,
+    workspacePath: options.workspacePath,
+    catalogs: options.catalogs
+  });
+  if (!catalogs.ok) {
+    return catalogs;
   }
 
   const lockfile = parsed.value;
@@ -98,15 +137,19 @@ export function parsePnpmLockText(
     );
   }
 
-  const importerEntries = readImporterEntries(importers);
+  const importerEntries = readImporterEntries(importers, catalogs.value);
   const packages = readRecord(lockfile.packages) ?? {};
   const snapshots = readRecord(lockfile.snapshots) ?? {};
-  const records = parsePackageRecords({ packages, snapshots });
+  const records = parsePackageRecords({
+    packages,
+    snapshots,
+    catalogs: catalogs.value
+  });
   const packageIndex = indexPackagesByName(records);
   const nodeMap = new Map<string, DependencyNode>();
 
   for (const importerEntry of importerEntries) {
-    for (const rootDependency of collectRootDependencies(importerEntry.importer)) {
+    for (const rootDependency of collectRootDependencies(importerEntry.importer, catalogs.value)) {
       const record = resolvePackageRecord({
         packageIndex,
         name: rootDependency.name,
@@ -162,7 +205,129 @@ function parseLockfileYaml(
   }
 }
 
-function readImporterEntries(importers: Record<string, unknown>): PnpmImporterEntry[] {
+function readPnpmWorkspaceCatalogs(input: {
+  lockfilePath: string;
+  maxBytes: number;
+}): Result<PnpmCatalogs, OhriskError> {
+  const workspacePath = path.join(path.dirname(input.lockfilePath), "pnpm-workspace.yaml");
+  if (!existsSync(workspacePath)) {
+    return ok(emptyPnpmCatalogs());
+  }
+
+  const workspaceText = readInputTextFile({
+    filePath: workspacePath,
+    maxBytes: input.maxBytes
+  });
+  if (!workspaceText.ok) {
+    return err(
+      createError({
+        code: "PNPM_WORKSPACE_READ_FAILED",
+        category: inputFileReadErrorCategory(workspaceText.error),
+        message: workspaceText.error.kind === "too_large"
+          ? "pnpm-workspace.yaml exceeded the maximum supported size."
+          : "Failed to read pnpm-workspace.yaml.",
+        details: {
+          workspacePath,
+          ...inputFileReadErrorDetails(workspaceText.error)
+        }
+      })
+    );
+  }
+
+  return parsePnpmWorkspaceCatalogsText(workspaceText.value, workspacePath);
+}
+
+function resolvePnpmCatalogs(input: {
+  workspaceText?: string;
+  workspacePath?: string;
+  catalogs?: PnpmCatalogs;
+}): Result<PnpmCatalogs, OhriskError> {
+  if (input.catalogs) {
+    return ok(input.catalogs);
+  }
+
+  if (input.workspaceText !== undefined) {
+    return parsePnpmWorkspaceCatalogsText(
+      input.workspaceText,
+      input.workspacePath ?? "pnpm-workspace.yaml"
+    );
+  }
+
+  return ok(emptyPnpmCatalogs());
+}
+
+function parsePnpmWorkspaceCatalogsText(
+  input: string,
+  workspacePath: string
+): Result<PnpmCatalogs, OhriskError> {
+  try {
+    const parsed = parseYaml(input) as unknown;
+    if (parsed === null || parsed === undefined) {
+      return ok(emptyPnpmCatalogs());
+    }
+
+    if (!isObjectRecord(parsed)) {
+      throw new Error("Expected a YAML mapping at the document root.");
+    }
+
+    const workspace = parsed as PnpmWorkspaceShape;
+    const namedCatalogs = new Map<string, Record<string, string>>();
+    const catalogs = readRecord(workspace.catalogs);
+    if (catalogs) {
+      for (const [name, value] of Object.entries(catalogs)) {
+        const catalog = readCatalogMap(value);
+        if (catalog) {
+          namedCatalogs.set(name, catalog);
+        }
+      }
+    }
+
+    return ok({
+      defaultCatalog: readCatalogMap(workspace.catalog) ?? {},
+      namedCatalogs
+    });
+  } catch (cause) {
+    return err(
+      createError({
+        code: "PNPM_WORKSPACE_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Failed to parse pnpm-workspace.yaml catalog definitions.",
+        details: {
+          workspacePath,
+          cause: cause instanceof Error ? cause.message : String(cause)
+        }
+      })
+    );
+  }
+}
+
+function emptyPnpmCatalogs(): PnpmCatalogs {
+  return {
+    defaultCatalog: {},
+    namedCatalogs: new Map()
+  };
+}
+
+function readCatalogMap(value: unknown): Record<string, string> | undefined {
+  const record = readRecord(value);
+  if (!record) {
+    return undefined;
+  }
+
+  const catalog: Record<string, string> = {};
+  for (const [name, range] of Object.entries(record)) {
+    if (typeof range === "string" && range !== "") {
+      catalog[name] = range;
+    }
+  }
+
+  return catalog;
+}
+
+function readImporterEntries(
+  importers: Record<string, unknown>,
+  catalogs: PnpmCatalogs
+): PnpmImporterEntry[] {
   return Object.entries(importers).flatMap(([key, value]) => {
     const importer = readRecord(value);
     if (!importer) {
@@ -170,7 +335,7 @@ function readImporterEntries(importers: Record<string, unknown>): PnpmImporterEn
     }
 
     return [{
-      importer,
+      importer: resolveImporterCatalogReferences(importer, catalogs),
       pathSegment: importerPathSegment(key)
     }];
   });
@@ -183,6 +348,7 @@ function importerPathSegment(key: string): string {
 function parsePackageRecords(input: {
   packages: Record<string, unknown>;
   snapshots: Record<string, unknown>;
+  catalogs: PnpmCatalogs;
 }): PnpmPackageRecord[] {
   const records: PnpmPackageRecord[] = [];
   const keys = new Set([...Object.keys(input.packages), ...Object.keys(input.snapshots)]);
@@ -209,7 +375,7 @@ function parsePackageRecords(input: {
       id: `${identity.name}@${identity.version}`,
       ...(resolved ? { resolved } : {}),
       ...(integrity ? { integrity } : {}),
-      dependencies: collectDependencyEdges(packageEntry, snapshotEntry)
+      dependencies: collectDependencyEdges(input.catalogs, packageEntry, snapshotEntry)
     });
   }
 
@@ -277,27 +443,132 @@ function readResolvedArtifact(
   return undefined;
 }
 
-function collectRootDependencies(importer: Record<string, unknown> | undefined): PnpmDependencyEdge[] {
+function resolveImporterCatalogReferences(
+  importer: Record<string, unknown>,
+  catalogs: PnpmCatalogs
+): Record<string, unknown> {
+  return {
+    ...importer,
+    dependencies: resolveDependencyCatalogReferences(importer.dependencies, catalogs),
+    devDependencies: resolveDependencyCatalogReferences(importer.devDependencies, catalogs),
+    optionalDependencies: resolveDependencyCatalogReferences(importer.optionalDependencies, catalogs),
+    peerDependencies: resolveDependencyCatalogReferences(importer.peerDependencies, catalogs)
+  };
+}
+
+function resolveDependencyCatalogReferences(
+  value: unknown,
+  catalogs: PnpmCatalogs
+): unknown {
+  const dependencies = readRecord(value);
+  if (!dependencies) {
+    return value;
+  }
+
+  const resolved: Record<string, unknown> = {};
+  for (const [name, rawDependency] of Object.entries(dependencies)) {
+    if (typeof rawDependency === "string") {
+      resolved[name] = resolveCatalogRange({
+        name,
+        range: rawDependency,
+        catalogs
+      });
+      continue;
+    }
+
+    const dependency = readRecord(rawDependency);
+    if (!dependency) {
+      resolved[name] = rawDependency;
+      continue;
+    }
+
+    const version = typeof dependency.version === "string"
+      ? resolveCatalogRange({
+          name,
+          range: dependency.version,
+          catalogs
+        })
+      : dependency.version;
+    const specifier = typeof dependency.specifier === "string"
+      ? resolveCatalogRange({
+          name,
+          range: dependency.specifier,
+          catalogs
+        })
+      : dependency.specifier;
+    resolved[name] = {
+      ...dependency,
+      ...(version !== undefined ? { version } : {}),
+      ...(specifier !== undefined ? { specifier } : {})
+    };
+  }
+
+  return resolved;
+}
+
+function resolveCatalogRange(input: {
+  name: string;
+  range: string;
+  catalogs: PnpmCatalogs;
+}): string {
+  const catalogName = parseCatalogReference(input.range);
+  if (catalogName === undefined) {
+    return input.range;
+  }
+
+  const catalog = catalogName === ""
+    ? input.catalogs.defaultCatalog
+    : input.catalogs.namedCatalogs.get(catalogName);
+  return catalog?.[input.name] ?? input.range;
+}
+
+function parseCatalogReference(value: string): string | undefined {
+  if (value === "catalog:") {
+    return "";
+  }
+
+  if (!value.startsWith("catalog:")) {
+    return undefined;
+  }
+
+  return value.slice("catalog:".length);
+}
+
+function collectRootDependencies(
+  importer: Record<string, unknown> | undefined,
+  catalogs: PnpmCatalogs
+): PnpmDependencyEdge[] {
   if (!importer) {
     return [];
   }
 
-  return collectDependencyEdges(importer);
+  return collectDependencyEdges(catalogs, importer);
 }
 
-function collectDependencyEdges(...sources: Record<string, unknown>[]): PnpmDependencyEdge[] {
+function collectDependencyEdges(
+  catalogs: PnpmCatalogs,
+  ...sources: Record<string, unknown>[]
+): PnpmDependencyEdge[] {
   return sources.flatMap((source) => [
-    ...dependencyEntries(source.dependencies, "production"),
-    ...dependencyEntries(source.devDependencies, "development"),
-    ...dependencyEntries(source.optionalDependencies, "optional"),
-    ...dependencyEntries(source.peerDependencies, "peer")
+    ...dependencyEntries(source.dependencies, "production", catalogs),
+    ...dependencyEntries(source.devDependencies, "development", catalogs),
+    ...dependencyEntries(source.optionalDependencies, "optional", catalogs),
+    ...dependencyEntries(source.peerDependencies, "peer", catalogs)
   ]);
 }
 
-function dependencyEntries(value: unknown, type: DependencyType): PnpmDependencyEdge[] {
+function dependencyEntries(
+  value: unknown,
+  type: DependencyType,
+  catalogs: PnpmCatalogs
+): PnpmDependencyEdge[] {
   return Object.entries(readImporterDependencyMap(value)).map(([name, range]) => ({
     name,
-    range,
+    range: resolveCatalogRange({
+      name,
+      range,
+      catalogs
+    }),
     type
   }));
 }

@@ -15,6 +15,7 @@ import { collectLocalPackageEvidence } from "../src/evidence/local-package";
 import { collectTarballEvidence } from "../src/evidence/tarball";
 import { parseBunLockfile } from "../src/graph/npm-bun-lock";
 import { formatError } from "../src/shared/errors";
+import { createZip } from "./helpers/zip";
 
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 const bunProjectDir = path.join(fixturesDir, "bun-project");
@@ -1430,6 +1431,204 @@ describe("collectGraphEvidence", () => {
           ]
         })
       ]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("uses Yarn Berry cache zip evidence before registry fallback", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-yarn-cache-"));
+    const cacheDir = path.join(projectRoot, ".yarn", "cache");
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(
+      path.join(cacheDir, "cache-fixture-npm-1.0.0-abc123.zip"),
+      createZip({
+        "node_modules/cache-fixture/package.json": JSON.stringify({
+          name: "cache-fixture",
+          version: "1.0.0",
+          license: "MIT"
+        }),
+        "node_modules/cache-fixture/LICENSE": "MIT License from Yarn cache."
+      }, { deflate: true })
+    );
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "yarn.lock",
+          nodes: [
+            {
+              id: "cache-fixture@1.0.0",
+              name: "cache-fixture",
+              version: "1.0.0",
+              ecosystem: "npm",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "cache-fixture@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot,
+        fetchArtifact: async () => {
+          throw new Error("Registry fallback should not run when Yarn cache evidence exists.");
+        }
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+
+      expect(evidence.value).toEqual([
+        expect.objectContaining({
+          packageId: "cache-fixture@1.0.0",
+          packageJsonLicense: "MIT",
+          source: "local",
+          files: [
+            {
+              path: "LICENSE",
+              kind: "license",
+              text: "MIT License from Yarn cache."
+            }
+          ]
+        })
+      ]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("uses scoped Yarn Berry cache zip evidence", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-yarn-cache-scoped-"));
+    const cacheDir = path.join(projectRoot, ".yarn", "cache");
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(
+      path.join(cacheDir, "@scope-cache-fixture-npm-2.0.0-def456.zip"),
+      createZip({
+        "node_modules/@scope/cache-fixture/package.json": JSON.stringify({
+          name: "@scope/cache-fixture",
+          version: "2.0.0",
+          license: "Apache-2.0"
+        }),
+        "node_modules/@scope/cache-fixture/LICENSE": "Apache License from scoped Yarn cache."
+      })
+    );
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "yarn.lock",
+          nodes: [
+            {
+              id: "@scope/cache-fixture@2.0.0",
+              name: "@scope/cache-fixture",
+              version: "2.0.0",
+              ecosystem: "npm",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "@scope/cache-fixture@2.0.0"]]
+            }
+          ]
+        },
+        projectRoot,
+        fetchArtifact: async () => {
+          throw new Error("Registry fallback should not run when scoped Yarn cache evidence exists.");
+        }
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+
+      expect(evidence.value[0]).toMatchObject({
+        packageId: "@scope/cache-fixture@2.0.0",
+        packageJsonLicense: "Apache-2.0",
+        source: "local"
+      });
+      expect(evidence.value[0]?.files).toEqual([
+        {
+          path: "LICENSE",
+          kind: "license",
+          text: "Apache License from scoped Yarn cache."
+        }
+      ]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("ignores stale Yarn cache zip evidence that does not match package metadata", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-yarn-cache-stale-"));
+    const cacheDir = path.join(projectRoot, ".yarn", "cache");
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "stale-cache-fixture",
+        version: "1.0.0",
+        license: "MIT"
+      }),
+      "package/LICENSE": "MIT License from registry tarball."
+    });
+    const fetchedUrls: string[] = [];
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(
+      path.join(cacheDir, "stale-cache-fixture-npm-1.0.0-stale.zip"),
+      createZip({
+        "node_modules/stale-cache-fixture/package.json": JSON.stringify({
+          name: "stale-cache-fixture",
+          version: "9.9.9",
+          license: "AGPL-3.0"
+        }),
+        "node_modules/stale-cache-fixture/LICENSE": "Stale cache license."
+      })
+    );
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "yarn.lock",
+          nodes: [
+            {
+              id: "stale-cache-fixture@1.0.0",
+              name: "stale-cache-fixture",
+              version: "1.0.0",
+              ecosystem: "npm",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "stale-cache-fixture@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot,
+        fetchArtifact: async (url) => {
+          fetchedUrls.push(url);
+
+          if (url === "https://registry.npmjs.org/stale-cache-fixture/1.0.0") {
+            return okArtifactResponseFromBuffer(JSON.stringify({
+              dist: {
+                tarball: "https://registry.example.test/stale-cache-fixture/-/stale-cache-fixture-1.0.0.tgz"
+              }
+            }));
+          }
+
+          return okArtifactResponseFromBuffer(tarball);
+        }
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+
+      expect(fetchedUrls).toEqual([
+        "https://registry.npmjs.org/stale-cache-fixture/1.0.0",
+        "https://registry.example.test/stale-cache-fixture/-/stale-cache-fixture-1.0.0.tgz"
+      ]);
+      expect(evidence.value[0]).toMatchObject({
+        packageId: "stale-cache-fixture@1.0.0",
+        packageJsonLicense: "MIT",
+        source: "tarball"
+      });
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }

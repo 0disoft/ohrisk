@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { main, type CliIO } from "../src/cli/main";
 import { createError } from "../src/shared/errors";
 import { err } from "../src/shared/result";
+import { createZip } from "./helpers/zip";
 
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -141,7 +142,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.128.0"]);
+    expect(stdout).toEqual(["ohrisk 0.129.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -444,6 +445,76 @@ describe("main", () => {
     expect(output).not.toContain("- [high] dev-risk@3.0.0");
   });
 
+  test("prints actionable findings for a Yarn Berry PnP cache project without node_modules", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-yarn-pnp-cache-"));
+    const cacheDir = path.join(projectRoot, ".yarn", "cache");
+    mkdirSync(cacheDir, { recursive: true });
+
+    try {
+      writeFileSync(
+        path.join(projectRoot, "package.json"),
+        JSON.stringify({
+          name: "fixture-yarn-pnp-cache",
+          dependencies: {
+            "pnp-cache-risk": "^1.0.0"
+          }
+        }),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectRoot, "yarn.lock"),
+        [
+          "__metadata:",
+          "  version: 8",
+          "  cacheKey: 10",
+          "",
+          "\"pnp-cache-risk@npm:^1.0.0\":",
+          "  version: 1.0.0",
+          "  resolution: \"pnp-cache-risk@npm:1.0.0\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(cacheDir, "pnp-cache-risk-npm-1.0.0-abc123.zip"),
+        createZip({
+          "node_modules/pnp-cache-risk/package.json": JSON.stringify({
+            name: "pnp-cache-risk",
+            version: "1.0.0",
+            license: "AGPL-3.0"
+          }),
+          "node_modules/pnp-cache-risk/LICENSE": "GNU Affero General Public License version 3"
+        }, { deflate: true })
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--json", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const payload = JSON.parse(stdout.join("\n")) as {
+        dependencyGraph: { total: number };
+        evidence: { packages: number };
+        findings: Array<{ packageId: string; severity: string; evidence: string[] }>;
+      };
+      expect(payload.dependencyGraph.total).toBe(1);
+      expect(payload.evidence.packages).toBe(1);
+      expect(payload.findings).toEqual([
+        expect.objectContaining({
+          packageId: "pnp-cache-risk@1.0.0",
+          severity: "high",
+          evidence: expect.arrayContaining([
+            "source: local",
+            "package.json license: AGPL-3.0",
+            "file: LICENSE (license)"
+          ])
+        })
+      ]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
 
   test("tightens GPL severity for distributed apps", async () => {
     const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
@@ -694,7 +765,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.128.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.129.0");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
@@ -1619,6 +1690,77 @@ describe("main", () => {
     expect(payload.currentFindingCount).toBe(0);
     expect(payload.baselineFindingCount).toBe(0);
     expect(payload.newFindingCount).toBe(0);
+  });
+
+  test("diff reads baseline pnpm catalog definitions from pnpm-workspace.yaml", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-pnpm-catalog-diff-"));
+    const lockfile = [
+      "lockfileVersion: '9.0'",
+      "importers:",
+      "  .:",
+      "    dependencies:",
+      "      catalog-prod:",
+      "        specifier: \"catalog:\"",
+      "        version: \"catalog:\"",
+      "packages:",
+      "  /catalog-prod@1.0.0: {}",
+      "snapshots:",
+      "  /catalog-prod@1.0.0: {}"
+    ].join("\n");
+    const workspace = [
+      "catalog:",
+      "  catalog-prod: 1.0.0"
+    ].join("\n");
+
+    try {
+      writeFileSync(path.join(projectRoot, "package.json"), JSON.stringify({ name: "catalog-diff" }));
+      writeFileSync(path.join(projectRoot, "pnpm-lock.yaml"), lockfile, "utf8");
+      writeFileSync(path.join(projectRoot, "pnpm-workspace.yaml"), workspace, "utf8");
+      writeLocalPackage(
+        projectRoot,
+        "catalog-prod",
+        "1.0.0",
+        "MIT",
+        "LICENSE",
+        "MIT License"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      io.readRefFile = ({ relativePath }) => {
+        if (relativePath === "pnpm-lock.yaml") {
+          return { ok: true as const, value: lockfile };
+        }
+
+        if (relativePath === "pnpm-workspace.yaml") {
+          return { ok: true as const, value: workspace };
+        }
+
+        return err(createError({
+          code: "GIT_REF_FILE_NOT_FOUND",
+          category: "invalid_input",
+          message: "Missing fixture baseline file.",
+          details: {
+            relativePath
+          }
+        }));
+      };
+
+      const exitCode = await main(["diff", "main", "--json", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const payload = JSON.parse(stdout.join("\n")) as {
+        currentFindingCount: number;
+        baselineFindingCount: number;
+        newFindingCount: number;
+      };
+      expect(payload.currentFindingCount).toBe(1);
+      expect(payload.baselineFindingCount).toBe(1);
+      expect(payload.newFindingCount).toBe(0);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 
   test("does not apply local waivers to git ref diff findings", async () => {
