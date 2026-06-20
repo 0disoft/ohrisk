@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.127.1 - 2026-06-20
+
+### Fixed
+
+- The default Node artifact fetcher now returns DNS lookup results in the shape
+  requested by Node's HTTP client, fixing `Invalid IP address: undefined`
+  failures when scanning real remote package tarballs.
+- Package tarball evidence now accepts npm tarballs that use a custom
+  top-level directory, such as `bun/package.json`, instead of only
+  `package/package.json`.
+- Registry metadata fallback now requests the exact package version endpoint
+  instead of the full package metadata document, avoiding oversized metadata
+  failures for packages with long histories such as `@types/node`.
+- Remote package tarballs that exceed Ohrisk's size limits now produce
+  unavailable package evidence instead of aborting the whole repository scan.
+- Package metadata now uses npm's normalized `bin` path form, avoiding publish
+  auto-correction warnings for the CLI entry.
+
 ## 0.127.0 - 2026-06-20
 
 ### Fixed

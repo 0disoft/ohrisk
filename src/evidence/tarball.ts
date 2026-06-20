@@ -34,7 +34,10 @@ export function collectTarballEvidence(input: {
       tarball: unpacked.value,
       maxEntries: input.maxEntries ?? PACKAGE_TARBALL_MAX_ENTRIES
     });
-    const packageJsonEntry = entries.find((entry) => normalizePackagePath(entry.path) === "package.json");
+    const packageRoot = findPackageRoot(entries);
+    const packageJsonEntry = packageRoot === undefined
+      ? undefined
+      : entries.find((entry) => normalizePackagePath(entry.path, packageRoot) === "package.json");
 
     if (!packageJsonEntry) {
       return err(
@@ -57,7 +60,7 @@ export function collectTarballEvidence(input: {
       return err(packageJson.error);
     }
 
-    const files = collectTarEvidenceFiles(entries);
+    const files = collectTarEvidenceFiles(entries, packageRoot);
     const warnings = files.length === 0
       ? ["No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found."]
       : [];
@@ -180,10 +183,30 @@ function parseTarEntries(input: {
   return entries;
 }
 
-function collectTarEvidenceFiles(entries: TarEntry[]): LicenseEvidenceFile[] {
+function findPackageRoot(entries: TarEntry[]): string | undefined {
+  if (entries.some((entry) => entry.path === "package.json")) {
+    return "";
+  }
+
+  const roots = entries
+    .map((entry) => {
+      const match = /^([^/]+)\/package\.json$/.exec(entry.path);
+      return match?.[1];
+    })
+    .filter((root): root is string => root !== undefined)
+    .sort();
+
+  if (roots.includes("package")) {
+    return "package";
+  }
+
+  return roots[0];
+}
+
+function collectTarEvidenceFiles(entries: TarEntry[], packageRoot: string): LicenseEvidenceFile[] {
   return entries
     .map((entry) => {
-      const normalized = normalizePackagePath(entry.path);
+      const normalized = normalizePackagePath(entry.path, packageRoot);
       if (!isRootPackageFile(normalized)) {
         return undefined;
       }
@@ -227,8 +250,12 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function normalizePackagePath(path: string): string {
-  return path.replace(/^package\//, "");
+function normalizePackagePath(path: string, packageRoot: string): string {
+  if (packageRoot === "") {
+    return path;
+  }
+
+  return path.startsWith(`${packageRoot}/`) ? path.slice(packageRoot.length + 1) : path;
 }
 
 function readNullTerminated(buffer: Buffer, start: number, length: number): string {

@@ -52,6 +52,18 @@ type ArtifactHostResolution = {
 };
 
 type ArtifactHostResolver = (hostname: string) => Promise<ArtifactHostResolution[]>;
+type ArtifactLookupOptions = number | {
+  all?: boolean;
+  family?: number;
+};
+type SecureArtifactLookupSelection = {
+  all: true;
+  resolutions: ArtifactHostResolution[];
+} | {
+  all: false;
+  address: string;
+  family: number;
+};
 type Ipv6Hextets = [number, number, number, number, number, number, number, number];
 type RemoteArtifactFetchPolicy = {
   code: "REGISTRY_METADATA_FETCH_FAILED" | "TARBALL_FETCH_FAILED";
@@ -410,7 +422,7 @@ async function collectRegistryTarballEvidence(input: {
   registryMetadataMaxBytes: number;
   tarballMaxBytes: number;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
-  const metadataUrl = npmRegistryPackageUrl(input.node.name);
+  const metadataUrl = npmRegistryPackageVersionUrl(input.node.name, input.node.version);
 
   const metadataUrlPreflight = await preflightRemoteArtifactFetchTarget({
     code: "REGISTRY_METADATA_FETCH_FAILED",
@@ -852,6 +864,10 @@ async function collectRemoteTarballEvidence(input: {
     });
 
     if (!tarball.ok) {
+      if (isPackageTarballTooLargeError(tarball.error)) {
+        return ok(unavailableOversizedTarballEvidence(input.packageId));
+      }
+
       return err(tarball.error);
     }
 
@@ -872,6 +888,10 @@ async function collectRemoteTarballEvidence(input: {
     });
 
     if (!evidence.ok) {
+      if (isPackageTarballTooLargeError(evidence.error)) {
+        return ok(unavailableOversizedTarballEvidence(input.packageId));
+      }
+
       return err(evidence.error);
     }
 
@@ -893,6 +913,28 @@ async function collectRemoteTarballEvidence(input: {
       })
     );
   }
+}
+
+function isPackageTarballTooLargeError(error: OhriskError): boolean {
+  return (
+    error.code === "TARBALL_FETCH_FAILED"
+    && error.message === "Package tarball response exceeded the maximum supported size."
+  ) || (
+    error.code === "TARBALL_PARSE_FAILED"
+    && error.message === "Failed to decompress package tarball evidence."
+    && typeof error.details.maxUnpackedBytes === "number"
+  );
+}
+
+function unavailableOversizedTarballEvidence(packageId: string): LicenseEvidence {
+  return {
+    packageId,
+    files: [],
+    source: "unavailable",
+    warnings: [
+      "Package tarball evidence exceeded Ohrisk's size limit and was not scanned."
+    ]
+  };
 }
 
 function resolveExistingLocalArtifactPath(input: {
@@ -1826,6 +1868,10 @@ function decodeIntegrityDigest(input: {
   return normalizedDecoded === normalizedInput ? decoded : undefined;
 }
 
+function npmRegistryPackageVersionUrl(name: string, version: string): string {
+  return `${npmRegistryPackageUrl(name)}/${encodeURIComponent(version)}`;
+}
+
 function npmRegistryPackageUrl(name: string): string {
   return `https://registry.npmjs.org/${encodeURIComponent(name).replace(/^%40/, "@")}`;
 }
@@ -1833,6 +1879,11 @@ function npmRegistryPackageUrl(name: string): string {
 function readRegistryTarballUrl(metadata: unknown, version: string): string | undefined {
   if (!isRecord(metadata)) {
     return undefined;
+  }
+
+  const dist = metadata.dist;
+  if (isRecord(dist) && typeof dist.tarball === "string") {
+    return dist.tarball;
   }
 
   const versions = metadata.versions;
@@ -1845,12 +1896,12 @@ function readRegistryTarballUrl(metadata: unknown, version: string): string | un
     return undefined;
   }
 
-  const dist = versionMetadata.dist;
-  if (!isRecord(dist) || typeof dist.tarball !== "string") {
+  const versionDist = versionMetadata.dist;
+  if (!isRecord(versionDist) || typeof versionDist.tarball !== "string") {
     return undefined;
   }
 
-  return dist.tarball;
+  return versionDist.tarball;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1903,48 +1954,111 @@ async function defaultArtifactHostResolver(hostname: string): Promise<ArtifactHo
   });
 }
 
-function secureArtifactLookup(
+export function secureArtifactLookup(
   hostname: string,
-  options: { family?: number },
-  callback: (error: Error | null, address: string, family: number) => void
+  options: ArtifactLookupOptions,
+  callback: (
+    error: Error | null,
+    addressOrAddresses: string | ArtifactHostResolution[],
+    family?: number
+  ) => void
 ): void {
   defaultArtifactHostResolver(hostname)
     .then((resolutions) => {
-      if (resolutions.length === 0) {
-        callback(new Error(`Artifact host ${normalizeUrlHostname(hostname)} returned no DNS addresses.`), "", 0);
+      const selection = selectSecureArtifactLookupResponse(hostname, options, resolutions);
+      if (!selection.ok) {
+        respondToSecureArtifactLookupError(callback, options, selection.error);
         return;
       }
 
-      const requestedFamily = options.family === 4 || options.family === 6 ? options.family : undefined;
-      const familyResolutions = requestedFamily === undefined
-        ? resolutions
-        : resolutions.filter((resolution) => resolution.family === requestedFamily);
-
-      if (familyResolutions.length === 0) {
-        callback(new Error(`Artifact host ${normalizeUrlHostname(hostname)} returned no matching DNS addresses.`), "", 0);
+      if (selection.value.all) {
+        callback(null, selection.value.resolutions);
         return;
       }
 
-      for (const resolution of familyResolutions) {
-        const blockedReason = blockedRemoteArtifactHostReason(resolution.address);
-        if (blockedReason) {
-          callback(
-            new Error(
-              `Blocked artifact host resolution for ${normalizeUrlHostname(hostname)}: ${normalizeUrlHostname(resolution.address)} (${blockedReason}).`
-            ),
-            "",
-            0
-          );
-          return;
-        }
-      }
-
-      const selected = familyResolutions[0];
-      callback(null, selected.address, selected.family);
+      callback(null, selection.value.address, selection.value.family);
     })
     .catch((cause) => {
-      callback(cause instanceof Error ? cause : new Error(String(cause)), "", 0);
+      respondToSecureArtifactLookupError(
+        callback,
+        options,
+        cause instanceof Error ? cause : new Error(String(cause))
+      );
     });
+}
+
+export function selectSecureArtifactLookupResponse(
+  hostname: string,
+  options: ArtifactLookupOptions | undefined,
+  resolutions: ArtifactHostResolution[]
+): Result<SecureArtifactLookupSelection, Error> {
+  const normalizedOptions = normalizeArtifactLookupOptions(options);
+  const normalizedHostname = normalizeUrlHostname(hostname);
+
+  if (resolutions.length === 0) {
+    return err(new Error(`Artifact host ${normalizedHostname} returned no DNS addresses.`));
+  }
+
+  const familyResolutions = normalizedOptions.family === undefined
+    ? resolutions
+    : resolutions.filter((resolution) => resolution.family === normalizedOptions.family);
+
+  if (familyResolutions.length === 0) {
+    return err(new Error(`Artifact host ${normalizedHostname} returned no matching DNS addresses.`));
+  }
+
+  for (const resolution of familyResolutions) {
+    const blockedReason = blockedRemoteArtifactHostReason(resolution.address);
+    if (blockedReason) {
+      return err(
+        new Error(
+          `Blocked artifact host resolution for ${normalizedHostname}: ${normalizeUrlHostname(resolution.address)} (${blockedReason}).`
+        )
+      );
+    }
+  }
+
+  if (normalizedOptions.all) {
+    return ok({
+      all: true,
+      resolutions: familyResolutions
+    });
+  }
+
+  const selected = familyResolutions[0] as ArtifactHostResolution;
+  return ok({
+    all: false,
+    address: selected.address,
+    family: selected.family
+  });
+}
+
+function normalizeArtifactLookupOptions(options: ArtifactLookupOptions | undefined): {
+  all: boolean;
+  family: number | undefined;
+} {
+  const family = typeof options === "number" ? options : options?.family;
+  return {
+    all: typeof options === "object" && options?.all === true,
+    family: family === 4 || family === 6 ? family : undefined
+  };
+}
+
+function respondToSecureArtifactLookupError(
+  callback: (
+    error: Error | null,
+    addressOrAddresses: string | ArtifactHostResolution[],
+    family?: number
+  ) => void,
+  options: ArtifactLookupOptions | undefined,
+  error: Error
+): void {
+  if (normalizeArtifactLookupOptions(options).all) {
+    callback(error, []);
+    return;
+  }
+
+  callback(error, "", 0);
 }
 
 function headersForIncomingMessage(headers: IncomingHttpHeaders): {

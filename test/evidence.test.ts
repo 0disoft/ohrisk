@@ -6,7 +6,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
-import { collectGraphEvidence } from "../src/evidence/collect";
+import {
+  collectGraphEvidence,
+  selectSecureArtifactLookupResponse
+} from "../src/evidence/collect";
 import { classifyEvidenceFile } from "../src/evidence/license-files";
 import { collectLocalPackageEvidence } from "../src/evidence/local-package";
 import { collectTarballEvidence } from "../src/evidence/tarball";
@@ -214,6 +217,36 @@ describe("collectTarballEvidence", () => {
         path: "LICENSE",
         kind: "license",
         text: "Apache License fixture text."
+      }
+    ]);
+  });
+
+  test("reads npm tarballs that use a custom top-level package directory", () => {
+    const tarball = createTarGz({
+      "bun/package.json": JSON.stringify({
+        name: "@types/bun",
+        version: "1.3.5",
+        license: "MIT"
+      }),
+      "bun/LICENSE": "MIT license text"
+    });
+
+    const result = collectTarballEvidence({
+      packageId: "@types/bun@1.3.5",
+      tarball
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.packageJsonLicense).toBe("MIT");
+    expect(result.value.files).toEqual([
+      {
+        path: "LICENSE",
+        kind: "license",
+        text: "MIT license text"
       }
     ]);
   });
@@ -477,6 +510,90 @@ describe("collectTarballEvidence", () => {
 });
 
 describe("collectGraphEvidence", () => {
+  test("formats secure DNS lookup responses for Node all-address lookup requests", () => {
+    const selection = selectSecureArtifactLookupResponse("registry.npmjs.org", {
+      all: true
+    }, [
+      {
+        address: "104.16.0.35",
+        family: 4
+      },
+      {
+        address: "2606:4700::6810:23",
+        family: 6
+      }
+    ]);
+
+    expect(selection.ok).toBe(true);
+    if (!selection.ok) {
+      throw selection.error;
+    }
+
+    expect(selection.value).toEqual({
+      all: true,
+      resolutions: [
+        {
+          address: "104.16.0.35",
+          family: 4
+        },
+        {
+          address: "2606:4700::6810:23",
+          family: 6
+        }
+      ]
+    });
+  });
+
+  test("filters secure DNS lookup arrays by requested address family", () => {
+    const selection = selectSecureArtifactLookupResponse("registry.npmjs.org", {
+      all: true,
+      family: 4
+    }, [
+      {
+        address: "104.16.0.35",
+        family: 4
+      },
+      {
+        address: "2606:4700::6810:23",
+        family: 6
+      }
+    ]);
+
+    expect(selection.ok).toBe(true);
+    if (!selection.ok) {
+      throw selection.error;
+    }
+
+    expect(selection.value).toEqual({
+      all: true,
+      resolutions: [
+        {
+          address: "104.16.0.35",
+          family: 4
+        }
+      ]
+    });
+  });
+
+  test("rejects blocked addresses from secure DNS lookup arrays", () => {
+    const selection = selectSecureArtifactLookupResponse("registry.npmjs.org", {
+      all: true
+    }, [
+      {
+        address: "127.0.0.1",
+        family: 4
+      }
+    ]);
+
+    expect(selection.ok).toBe(false);
+    if (selection.ok) {
+      throw new Error("Expected private DNS lookup result to be rejected.");
+    }
+
+    expect(selection.error.message).toContain("Blocked artifact host resolution");
+    expect(selection.error.message).toContain("loopback");
+  });
+
   test("collects evidence for every package in a parsed graph", async () => {
     const graph = parseBunLockfile(path.join(bunProjectDir, "bun.lock"));
 
@@ -1166,7 +1283,7 @@ describe("collectGraphEvidence", () => {
       fetchArtifact: async (url) => {
         fetchedUrls.push(url);
 
-        if (url === "https://registry.npmjs.org/registry-fixture") {
+        if (url === "https://registry.npmjs.org/registry-fixture/1.0.0") {
           return okArtifactResponseFromBuffer(JSON.stringify({
             versions: {
               "1.0.0": {
@@ -1188,7 +1305,7 @@ describe("collectGraphEvidence", () => {
     }
 
     expect(fetchedUrls).toEqual([
-      "https://registry.npmjs.org/registry-fixture",
+      "https://registry.npmjs.org/registry-fixture/1.0.0",
       "https://registry.example.test/registry-fixture/-/registry-fixture-1.0.0.tgz"
     ]);
     expect(evidence.value).toEqual([
@@ -1230,7 +1347,7 @@ describe("collectGraphEvidence", () => {
       fetchArtifact: async (url) => {
         fetchedUrls.push(url);
 
-        if (url === "https://registry.npmjs.org/@scope%2Fregistry-fixture") {
+        if (url === "https://registry.npmjs.org/@scope%2Fregistry-fixture/1.0.0") {
           return okArtifactResponseFromBuffer(JSON.stringify({
             versions: {
               "1.0.0": {
@@ -1252,7 +1369,7 @@ describe("collectGraphEvidence", () => {
     }
 
     expect(fetchedUrls).toEqual([
-      "https://registry.npmjs.org/@scope%2Fregistry-fixture",
+      "https://registry.npmjs.org/@scope%2Fregistry-fixture/1.0.0",
       "https://registry.example.test/@scope/registry-fixture/-/registry-fixture-1.0.0.tgz"
     ]);
     expect(evidence.value).toEqual([
@@ -1807,7 +1924,7 @@ describe("collectGraphEvidence", () => {
     expect(evidence.error.message).toBe("npm registry metadata included an unsupported tarball URL.");
     expect(evidence.error.details).toMatchObject({
       packageId: "metadata-file-url@1.0.0",
-      registryUrl: "https://registry.npmjs.org/metadata-file-url",
+      registryUrl: "https://registry.npmjs.org/metadata-file-url/1.0.0",
       version: "1.0.0",
       tarballUrl: "file:metadata-file-url-1.0.0.tgz"
     });
@@ -1835,7 +1952,7 @@ describe("collectGraphEvidence", () => {
       projectRoot: bunProjectDir,
       fetchArtifact: async (url) => {
         fetchedUrls.push(url);
-        if (url !== "https://registry.npmjs.org/metadata-local-tarball") {
+        if (url !== "https://registry.npmjs.org/metadata-local-tarball/1.0.0") {
           throw new Error("Blocked registry tarball URL should not be fetched.");
         }
 
@@ -1851,7 +1968,7 @@ describe("collectGraphEvidence", () => {
       }
     });
 
-    expect(fetchedUrls).toEqual(["https://registry.npmjs.org/metadata-local-tarball"]);
+    expect(fetchedUrls).toEqual(["https://registry.npmjs.org/metadata-local-tarball/1.0.0"]);
     expect(evidence.ok).toBe(false);
     if (evidence.ok) {
       throw new Error("Expected local-network registry tarball URL to fail.");
@@ -1862,7 +1979,7 @@ describe("collectGraphEvidence", () => {
     expect(evidence.error.message).toBe("npm registry metadata included an unsupported tarball URL.");
     expect(evidence.error.details).toMatchObject({
       packageId: "metadata-local-tarball@1.0.0",
-      registryUrl: "https://registry.npmjs.org/metadata-local-tarball",
+      registryUrl: "https://registry.npmjs.org/metadata-local-tarball/1.0.0",
       version: "1.0.0",
       tarballUrl,
       artifactHost: "169.254.169.254",
@@ -1893,7 +2010,7 @@ describe("collectGraphEvidence", () => {
       projectRoot: bunProjectDir,
       fetchArtifact: async (url) => {
         fetchedUrls.push(url);
-        if (url !== "https://registry.npmjs.org/metadata-credentialed-tarball") {
+        if (url !== "https://registry.npmjs.org/metadata-credentialed-tarball/1.0.0") {
           throw new Error("Credentialed registry tarball URL should not be fetched.");
         }
 
@@ -1909,7 +2026,7 @@ describe("collectGraphEvidence", () => {
       }
     });
 
-    expect(fetchedUrls).toEqual(["https://registry.npmjs.org/metadata-credentialed-tarball"]);
+    expect(fetchedUrls).toEqual(["https://registry.npmjs.org/metadata-credentialed-tarball/1.0.0"]);
     expect(evidence.ok).toBe(false);
     if (evidence.ok) {
       throw new Error("Expected credentialed registry tarball URL to fail.");
@@ -1920,7 +2037,7 @@ describe("collectGraphEvidence", () => {
     expect(evidence.error.message).toBe("npm registry metadata included an unsupported tarball URL.");
     expect(evidence.error.details).toMatchObject({
       packageId: "metadata-credentialed-tarball@1.0.0",
-      registryUrl: "https://registry.npmjs.org/metadata-credentialed-tarball",
+      registryUrl: "https://registry.npmjs.org/metadata-credentialed-tarball/1.0.0",
       version: "1.0.0",
       tarballUrl:
         "https://redacted:redacted@tarballs.example.test/credentialed-metadata-1.0.0.tgz",
@@ -1962,7 +2079,7 @@ describe("collectGraphEvidence", () => {
       },
       fetchArtifact: async (url) => {
         fetchedUrls.push(url);
-        if (url !== "https://registry.npmjs.org/metadata-dns-private") {
+        if (url !== "https://registry.npmjs.org/metadata-dns-private/1.0.0") {
           throw new Error("DNS-private registry tarball URL should not be fetched.");
         }
 
@@ -1979,7 +2096,7 @@ describe("collectGraphEvidence", () => {
     });
 
     expect(resolvedHosts).toEqual(["registry.npmjs.org", "tarballs.example.test"]);
-    expect(fetchedUrls).toEqual(["https://registry.npmjs.org/metadata-dns-private"]);
+    expect(fetchedUrls).toEqual(["https://registry.npmjs.org/metadata-dns-private/1.0.0"]);
     expect(evidence.ok).toBe(false);
     if (evidence.ok) {
       throw new Error("Expected DNS-private registry tarball host to fail.");
@@ -1990,7 +2107,7 @@ describe("collectGraphEvidence", () => {
     expect(evidence.error.message).toBe("npm registry metadata included an unsupported tarball URL.");
     expect(evidence.error.details).toMatchObject({
       packageId: "metadata-dns-private@1.0.0",
-      registryUrl: "https://registry.npmjs.org/metadata-dns-private",
+      registryUrl: "https://registry.npmjs.org/metadata-dns-private/1.0.0",
       version: "1.0.0",
       tarballUrl,
       artifactHost: "tarballs.example.test",
@@ -2029,7 +2146,7 @@ describe("collectGraphEvidence", () => {
     expect(evidence.error.message).toBe("npm registry metadata was not valid JSON.");
     expect(evidence.error.details).toMatchObject({
       packageId: "metadata-malformed@1.0.0",
-      registryUrl: "https://registry.npmjs.org/metadata-malformed"
+      registryUrl: "https://registry.npmjs.org/metadata-malformed/1.0.0"
     });
   });
 
@@ -2711,7 +2828,7 @@ describe("collectGraphEvidence", () => {
     );
     expect(evidence.error.details).toMatchObject({
       packageId: "bodyless-metadata@1.0.0",
-      registryUrl: "https://registry.npmjs.org/bodyless-metadata"
+      registryUrl: "https://registry.npmjs.org/bodyless-metadata/1.0.0"
     });
   });
 
@@ -2920,14 +3037,14 @@ describe("collectGraphEvidence", () => {
     );
     expect(evidence.error.details).toMatchObject({
       packageId: "oversized-metadata@1.0.0",
-      registryUrl: "https://registry.npmjs.org/oversized-metadata",
+      registryUrl: "https://registry.npmjs.org/oversized-metadata/1.0.0",
       maxBytes: 8,
       observedBytes: 9,
       contentLength: 9
     });
   });
 
-  test("rejects remote tarball streams that exceed the maximum response size", async () => {
+  test("reports unavailable evidence for remote tarball streams that exceed the maximum response size", async () => {
     let cancelled = false;
     let pullCount = 0;
     const body = new ReadableStream<Uint8Array>({
@@ -2974,29 +3091,28 @@ describe("collectGraphEvidence", () => {
           }
         })
       }),
-      message: "Expected oversized remote tarball stream to fail without waiting for body cancellation."
+      message: "Expected oversized remote tarball stream to resolve without waiting for body cancellation."
     });
 
     expect(cancelled).toBe(true);
-    expect(evidence.ok).toBe(false);
-    if (evidence.ok) {
-      throw new Error("Expected oversized remote tarball stream to fail.");
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
     }
 
-    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
-    expect(evidence.error.category).toBe("unsupported_input");
-    expect(evidence.error.message).toBe(
-      "Package tarball response exceeded the maximum supported size."
-    );
-    expect(evidence.error.details).toMatchObject({
-      packageId: "oversized-remote@1.0.0",
-      resolved: "https://registry.example.test/oversized-remote/-/oversized-remote-1.0.0.tgz",
-      maxBytes: 8,
-      observedBytes: 9
-    });
+    expect(evidence.value).toEqual([
+      expect.objectContaining({
+        packageId: "oversized-remote@1.0.0",
+        files: [],
+        source: "unavailable",
+        warnings: [
+          "Package tarball evidence exceeded Ohrisk's size limit and was not scanned."
+        ]
+      })
+    ]);
   });
 
-  test("rejects oversized remote tarball content lengths and cancels the response body", async () => {
+  test("reports unavailable evidence for oversized remote tarball content lengths", async () => {
     let bodyRead = false;
     let bodyCancelled = false;
 
@@ -3038,28 +3154,26 @@ describe("collectGraphEvidence", () => {
           }
         })
       }),
-      message: "Expected oversized remote tarball content length to fail without waiting for body cancellation."
+      message: "Expected oversized remote tarball content length to resolve without waiting for body cancellation."
     });
 
     expect(bodyRead).toBe(false);
     expect(bodyCancelled).toBe(true);
-    expect(evidence.ok).toBe(false);
-    if (evidence.ok) {
-      throw new Error("Expected oversized remote tarball content length to fail.");
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
     }
 
-    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
-    expect(evidence.error.category).toBe("unsupported_input");
-    expect(evidence.error.message).toBe(
-      "Package tarball response exceeded the maximum supported size."
-    );
-    expect(evidence.error.details).toMatchObject({
-      packageId: "oversized-remote-length@1.0.0",
-      resolved: "https://registry.example.test/oversized-remote-length/-/oversized-remote-length-1.0.0.tgz",
-      maxBytes: 8,
-      observedBytes: 9,
-      contentLength: 9
-    });
+    expect(evidence.value).toEqual([
+      expect.objectContaining({
+        packageId: "oversized-remote-length@1.0.0",
+        files: [],
+        source: "unavailable",
+        warnings: [
+          "Package tarball evidence exceeded Ohrisk's size limit and was not scanned."
+        ]
+      })
+    ]);
   });
 
   test("ignores non-decimal content lengths and enforces the streamed body limit", async () => {
@@ -3117,23 +3231,21 @@ describe("collectGraphEvidence", () => {
 
     expect(pullCount).toBeGreaterThanOrEqual(2);
     expect(cancelled).toBe(true);
-    expect(evidence.ok).toBe(false);
-    if (evidence.ok) {
-      throw new Error("Expected invalid content-length remote tarball to fail.");
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
     }
 
-    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
-    expect(evidence.error.category).toBe("unsupported_input");
-    expect(evidence.error.message).toBe(
-      "Package tarball response exceeded the maximum supported size."
-    );
-    expect(evidence.error.details).toMatchObject({
-      packageId: "invalid-content-length-remote@1.0.0",
-      resolved: "https://registry.example.test/invalid-content-length-remote/-/invalid-content-length-remote-1.0.0.tgz",
-      maxBytes: 8,
-      observedBytes: 9
-    });
-    expect(evidence.error.details).not.toHaveProperty("contentLength");
+    expect(evidence.value).toEqual([
+      expect.objectContaining({
+        packageId: "invalid-content-length-remote@1.0.0",
+        files: [],
+        source: "unavailable",
+        warnings: [
+          "Package tarball evidence exceeded Ohrisk's size limit and was not scanned."
+        ]
+      })
+    ]);
   });
 });
 
