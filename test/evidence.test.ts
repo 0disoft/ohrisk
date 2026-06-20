@@ -577,6 +577,51 @@ describe("collectGraphEvidence", () => {
     expect(fetchRedirectMode).toBe("manual");
   });
 
+  test("warns when remote tarball evidence cannot be verified against lockfile integrity", async () => {
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "remote-missing-integrity",
+        version: "1.2.3",
+        license: "ISC"
+      }),
+      "package/LICENSE": "ISC License fixture text."
+    });
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "remote-missing-integrity@1.2.3",
+            name: "remote-missing-integrity",
+            version: "1.2.3",
+            ecosystem: "npm",
+            resolved: "https://registry.example.test/remote-missing-integrity/-/remote-missing-integrity-1.2.3.tgz",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "remote-missing-integrity@1.2.3"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async () => okArtifactResponseFromBuffer(tarball)
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+
+    expect(evidence.value[0]).toMatchObject({
+      packageId: "remote-missing-integrity@1.2.3",
+      packageJsonLicense: "ISC",
+      source: "tarball",
+      warnings: [
+        "Package artifact integrity was not available in the lockfile; tarball contents were not verified."
+      ]
+    });
+  });
+
   test("rejects local tarballs that do not match lockfile integrity", async () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-local-integrity-"));
     const tarball = createTarGz({
@@ -624,6 +669,217 @@ describe("collectGraphEvidence", () => {
       });
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("warns when local tarball evidence cannot be verified against lockfile integrity", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-local-missing-integrity-"));
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "local-missing-integrity-fixture",
+        version: "1.0.0",
+        license: "MIT"
+      }),
+      "package/LICENSE": "MIT License fixture text."
+    });
+    const tarballPath = path.join(projectRoot, "local-missing-integrity-fixture.tgz");
+    writeFileSync(tarballPath, tarball);
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "bun.lock",
+          nodes: [
+            {
+              id: "local-missing-integrity-fixture@1.0.0",
+              name: "local-missing-integrity-fixture",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved: "file:local-missing-integrity-fixture.tgz",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "local-missing-integrity-fixture@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+
+      expect(evidence.value[0]).toMatchObject({
+        packageId: "local-missing-integrity-fixture@1.0.0",
+        packageJsonLicense: "MIT",
+        source: "tarball",
+        warnings: [
+          "Package artifact integrity was not available in the lockfile; tarball contents were not verified."
+        ]
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects file dependency artifact paths outside the project root", async () => {
+    const tempRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-local-artifact-escape-"));
+    const projectRoot = path.join(tempRoot, "project");
+    const outsidePackageDir = path.join(tempRoot, "outside-package");
+    mkdirSync(projectRoot, { recursive: true });
+    mkdirSync(outsidePackageDir, { recursive: true });
+    writeFileSync(
+      path.join(outsidePackageDir, "package.json"),
+      JSON.stringify({
+        name: "outside-package",
+        version: "1.0.0",
+        license: "MIT"
+      }),
+      "utf8"
+    );
+    writeFileSync(path.join(outsidePackageDir, "LICENSE"), "MIT License outside fixture.", "utf8");
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "bun.lock",
+          nodes: [
+            {
+              id: "outside-package@1.0.0",
+              name: "outside-package",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved: "file:../outside-package",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "outside-package@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot
+      });
+
+      expect(evidence.ok).toBe(false);
+      if (evidence.ok) {
+        throw new Error("Expected outside local artifact path to fail.");
+      }
+
+      expect(evidence.error.code).toBe("PACKAGE_EVIDENCE_READ_FAILED");
+      expect(evidence.error.category).toBe("unsupported_input");
+      expect(evidence.error.message).toBe("Resolved package artifact must stay inside the project or repository root.");
+      expect(evidence.error.details).toMatchObject({
+        packageId: "outside-package@1.0.0",
+        resolved: "file:../outside-package",
+        artifactPath: outsidePackageDir
+      });
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("allows verified local tarball artifact paths outside the project root", async () => {
+    const tempRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-local-artifact-pack-"));
+    const projectRoot = path.join(tempRoot, "project");
+    const packDir = path.join(tempRoot, "pack");
+    mkdirSync(projectRoot, { recursive: true });
+    mkdirSync(packDir, { recursive: true });
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "packed-fixture",
+        version: "1.0.0",
+        license: "MIT"
+      }),
+      "package/LICENSE": "MIT License packed fixture."
+    });
+    const tarballPath = path.join(packDir, "packed-fixture.tgz");
+    writeFileSync(tarballPath, tarball);
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "bun.lock",
+          nodes: [
+            {
+              id: "packed-fixture@1.0.0",
+              name: "packed-fixture",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved: tarballPath,
+              integrity: integrityFor(tarball),
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "packed-fixture@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+
+      expect(evidence.value[0]).toMatchObject({
+        packageId: "packed-fixture@1.0.0",
+        packageJsonLicense: "MIT",
+        source: "tarball",
+        warnings: []
+      });
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects external local tarball artifact paths without supported integrity", async () => {
+    const tempRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-local-artifact-bad-integrity-"));
+    const projectRoot = path.join(tempRoot, "project");
+    const packDir = path.join(tempRoot, "pack");
+    mkdirSync(projectRoot, { recursive: true });
+    mkdirSync(packDir, { recursive: true });
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "unverified-packed-fixture",
+        version: "1.0.0",
+        license: "MIT"
+      }),
+      "package/LICENSE": "MIT License packed fixture."
+    });
+    const tarballPath = path.join(packDir, "unverified-packed-fixture.tgz");
+    writeFileSync(tarballPath, tarball);
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "bun.lock",
+          nodes: [
+            {
+              id: "unverified-packed-fixture@1.0.0",
+              name: "unverified-packed-fixture",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved: tarballPath,
+              integrity: "sha512-not-base64",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "unverified-packed-fixture@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot
+      });
+
+      expect(evidence.ok).toBe(false);
+      if (evidence.ok) {
+        throw new Error("Expected unverified external local tarball path to fail.");
+      }
+
+      expect(evidence.error.code).toBe("PACKAGE_EVIDENCE_READ_FAILED");
+      expect(evidence.error.category).toBe("unsupported_input");
+      expect(evidence.error.message).toBe("Resolved package artifact must stay inside the project or repository root.");
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
     }
   });
 
@@ -1948,8 +2204,18 @@ describe("collectGraphEvidence", () => {
     expect(formatted).not.toContain("fixture-secret");
   });
 
-  test("does not automatically follow remote tarball redirects", async () => {
+  test("follows safe remote tarball redirects after validating each target", async () => {
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "redirect-remote",
+        version: "1.0.0",
+        license: "MIT"
+      }),
+      "package/LICENSE": "MIT License fixture text."
+    });
     const fetchedUrls: string[] = [];
+    const resolvedHosts: string[] = [];
+
     const evidence = await collectGraphEvidence({
       graph: {
         lockfilePath: "bun.lock",
@@ -1960,9 +2226,78 @@ describe("collectGraphEvidence", () => {
             version: "1.0.0",
             ecosystem: "npm",
             resolved: "https://registry.example.test/redirect-remote/-/redirect-remote-1.0.0.tgz",
+            integrity: integrityFor(tarball),
             dependencyType: "production",
             direct: true,
             paths: [["root", "redirect-remote@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      resolveArtifactHost: async (hostname) => {
+        resolvedHosts.push(hostname);
+        return [{ address: "93.184.216.34", family: 4 }];
+      },
+      fetchArtifact: async (url, options) => {
+        fetchedUrls.push(`${url} ${options?.redirect ?? "none"}`);
+
+        if (url === "https://registry.example.test/redirect-remote/-/redirect-remote-1.0.0.tgz") {
+          return {
+            ok: false,
+            status: 302,
+            statusText: "Found",
+            headers: {
+              get: (name) => name.toLowerCase() === "location"
+                ? "https://cdn.example.test/redirect-remote/-/redirect-remote-1.0.0.tgz"
+                : null
+            },
+            arrayBuffer: async () => new ArrayBuffer(0)
+          };
+        }
+
+        return okArtifactResponseFromBuffer(tarball);
+      }
+    });
+
+    expect(resolvedHosts).toEqual(["registry.example.test", "cdn.example.test"]);
+    expect(fetchedUrls).toEqual([
+      "https://registry.example.test/redirect-remote/-/redirect-remote-1.0.0.tgz manual",
+      "https://cdn.example.test/redirect-remote/-/redirect-remote-1.0.0.tgz manual"
+    ]);
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+
+    expect(evidence.value[0]).toMatchObject({
+      packageId: "redirect-remote@1.0.0",
+      packageJsonLicense: "MIT",
+      source: "tarball",
+      files: [
+        {
+          path: "LICENSE",
+          kind: "license",
+          text: "MIT License fixture text."
+        }
+      ]
+    });
+  });
+
+  test("rejects remote tarball redirects to blocked targets before fetching them", async () => {
+    const fetchedUrls: string[] = [];
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "redirect-local-remote@1.0.0",
+            name: "redirect-local-remote",
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved: "https://registry.example.test/redirect-local-remote/-/redirect-local-remote-1.0.0.tgz",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "redirect-local-remote@1.0.0"]]
           }
         ]
       },
@@ -1975,7 +2310,7 @@ describe("collectGraphEvidence", () => {
           statusText: "Found",
           headers: {
             get: (name) => name.toLowerCase() === "location"
-              ? "http://127.0.0.1:4873/redirect-remote/-/redirect-remote-1.0.0.tgz"
+              ? "http://127.0.0.1:4873/redirect-local-remote/-/redirect-local-remote-1.0.0.tgz"
               : null
           },
           arrayBuffer: async () => new ArrayBuffer(0)
@@ -1984,20 +2319,21 @@ describe("collectGraphEvidence", () => {
     });
 
     expect(fetchedUrls).toEqual([
-      "https://registry.example.test/redirect-remote/-/redirect-remote-1.0.0.tgz manual"
+      "https://registry.example.test/redirect-local-remote/-/redirect-local-remote-1.0.0.tgz manual"
     ]);
     expect(evidence.ok).toBe(false);
     if (evidence.ok) {
-      throw new Error("Expected redirecting remote tarball fetch to fail.");
+      throw new Error("Expected blocked redirect target to fail.");
     }
 
     expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
-    expect(evidence.error.category).toBe("network");
+    expect(evidence.error.category).toBe("unsupported_input");
     expect(evidence.error.details).toMatchObject({
-      packageId: "redirect-remote@1.0.0",
-      resolved: "https://registry.example.test/redirect-remote/-/redirect-remote-1.0.0.tgz",
-      status: 302,
-      statusText: "Found"
+      packageId: "redirect-local-remote@1.0.0",
+      redirectFrom: "https://registry.example.test/redirect-local-remote/-/redirect-local-remote-1.0.0.tgz",
+      redirectUrl: "http://127.0.0.1:4873/redirect-local-remote/-/redirect-local-remote-1.0.0.tgz",
+      artifactHost: "127.0.0.1",
+      reason: "loopback_ipv4"
     });
   });
 

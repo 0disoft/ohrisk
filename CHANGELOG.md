@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.127.0 - 2026-06-20
+
+### Fixed
+
+- SARIF reports now use the bundled CLI version constant instead of reading
+  `package.json` at runtime, so packaged npm installs can emit SARIF without
+  crashing outside the source repository.
+- Deno object-form npm dependency ranges such as `^4.3.0` now resolve to the
+  unique matching locked package record instead of dropping the transitive
+  dependency.
+- Release package smoke tests now exercise the packed CLI's JSON, SARIF,
+  CycloneDX, and Markdown scan outputs.
+- Remote artifact fetches now follow HTTP redirects only after validating each
+  target URL and DNS result, and the default Node fetch path validates the DNS
+  answer used for the actual connection.
+- The build step now fails when `package.json` and `src/cli/version.ts` declare
+  different versions, preventing packaged CLI version drift.
+
+## 0.126.0 - 2026-06-20
+
+### Added
+
+- npm `npm-shrinkwrap.json` projects are now discovered and scanned with the
+  package-lock parser while preserving the shrinkwrap lockfile kind in reports.
+
+## 0.125.0 - 2026-06-20
+
+### Added
+
+- Deno `deno.lock` projects are now discovered and scanned for npm package
+  dependencies recorded in the lockfile.
+
+## 0.124.0 - 2026-06-20
+
+### Changed
+
+- The published CLI now ships as a Node-compatible bundle, so npm, pnpm, Yarn,
+  npx, pnpm dlx, and yarn dlx users can run Ohrisk without installing Bun.
+
 ## 0.123.0 - 2026-06-20
 
 ### Fixed

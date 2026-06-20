@@ -60,6 +60,44 @@ describe("parsePackageLockfile", () => {
     expect(result.error.code).toBe("PACKAGE_LOCK_PARSE_FAILED");
   });
 
+  test("parses npm-shrinkwrap.json with the package-lock parser", () => {
+    const result = parsePackageLockText(
+      JSON.stringify({
+        name: "fixture-npm-shrinkwrap-project",
+        lockfileVersion: 3,
+        packages: {
+          "": {
+            name: "fixture-npm-shrinkwrap-project",
+            dependencies: {
+              "prod-package": "1.0.0"
+            }
+          },
+          "node_modules/prod-package": {
+            name: "prod-package",
+            version: "1.0.0"
+          }
+        }
+      }),
+      "npm-shrinkwrap.json"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.lockfilePath).toBe("npm-shrinkwrap.json");
+    expect(result.value.rootName).toBe("fixture-npm-shrinkwrap-project");
+    expect(result.value.nodes).toEqual([
+      expect.objectContaining({
+        id: "prod-package@1.0.0",
+        dependencyType: "production",
+        direct: true,
+        paths: [["fixture-npm-shrinkwrap-project", "prod-package@1.0.0"]]
+      })
+    ]);
+  });
+
   test("rejects oversized package-lock files before parsing", () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-package-lock-size-"));
     const lockfilePath = path.join(projectRoot, "package-lock.json");

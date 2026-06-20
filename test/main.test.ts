@@ -25,6 +25,24 @@ function createTestIO(cwd: string): { io: CliIO; stdout: string[]; stderr: strin
   };
 }
 
+function writeLocalPackage(
+  projectDir: string,
+  name: string,
+  version: string,
+  license: string,
+  evidenceFilename: string,
+  evidenceText: string
+): void {
+  const packageDir = path.join(projectDir, "node_modules", ...name.split("/"));
+  mkdirSync(packageDir, { recursive: true });
+  writeFileSync(
+    path.join(packageDir, "package.json"),
+    JSON.stringify({ name, version, license }),
+    "utf8"
+  );
+  writeFileSync(path.join(packageDir, evidenceFilename), evidenceText, "utf8");
+}
+
 describe("main", () => {
   test("prints help text", async () => {
     const { io, stdout, stderr } = createTestIO(fixturesDir);
@@ -123,7 +141,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.123.0"]);
+    expect(stdout).toEqual(["ohrisk 0.127.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -211,6 +229,83 @@ describe("main", () => {
     expect(output).not.toContain("- [high] dev-risk@3.0.0");
   });
 
+  test("prints actionable findings for an npm-shrinkwrap project", async () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-npm-shrinkwrap-project-"));
+
+    try {
+      writeFileSync(
+        path.join(projectDir, "package.json"),
+        JSON.stringify({
+          name: "fixture-npm-shrinkwrap-project",
+          version: "0.0.0",
+          dependencies: {
+            "permissive-parent": "1.0.0",
+            "gpl-package": "5.0.0"
+          }
+        }),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectDir, "npm-shrinkwrap.json"),
+        JSON.stringify({
+          name: "fixture-npm-shrinkwrap-project",
+          version: "0.0.0",
+          lockfileVersion: 3,
+          requires: true,
+          packages: {
+            "": {
+              name: "fixture-npm-shrinkwrap-project",
+              version: "0.0.0",
+              dependencies: {
+                "permissive-parent": "1.0.0",
+                "gpl-package": "5.0.0"
+              }
+            },
+            "node_modules/agpl-child": {
+              name: "agpl-child",
+              version: "0.1.0"
+            },
+            "node_modules/gpl-package": {
+              name: "gpl-package",
+              version: "5.0.0"
+            },
+            "node_modules/permissive-parent": {
+              name: "permissive-parent",
+              version: "1.0.0",
+              dependencies: {
+                "agpl-child": "0.1.0"
+              }
+            }
+          }
+        }),
+        "utf8"
+      );
+      writeLocalPackage(projectDir, "permissive-parent", "1.0.0", "MIT", "LICENSE", "MIT License");
+      writeLocalPackage(projectDir, "agpl-child", "0.1.0", "AGPL-3.0-only", "COPYING", "GNU Affero General Public License");
+      writeLocalPackage(projectDir, "gpl-package", "5.0.0", "GPL-3.0-only", "LICENSE", "GNU General Public License Version 3");
+
+      const { io, stdout, stderr } = createTestIO(projectDir);
+      const exitCode = await main(["scan", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Ohrisk scan");
+      expect(output).toContain("Lockfile: npm-shrinkwrap.json (npm-shrinkwrap)");
+      expect(output).toContain("Dependencies: 3 total, 2 direct, 1 transitive");
+      expect(output).toContain("Risks: 1 high, 1 review, 0 unknown, 1 low");
+      expect(output).toContain("- [high] agpl-child@0.1.0");
+      expect(output).toContain(
+        "path: fixture-npm-shrinkwrap-project -> permissive-parent@1.0.0 -> agpl-child@0.1.0"
+      );
+      expect(output).toContain("- [review] gpl-package@5.0.0");
+      expect(output).toContain("- [low] permissive-parent@1.0.0");
+    } finally {
+      rmSync(projectDir, { force: true, recursive: true });
+    }
+  });
+
   test("scans an explicit lockfile when a project has multiple lockfiles", async () => {
     const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "multiple-lockfiles"));
     const exitCode = await main(["scan", "--lockfile", "package-lock.json"], io);
@@ -260,6 +355,72 @@ describe("main", () => {
     expect(output).toContain("- [unknown] missing-license@4.0.0");
     expect(output).toContain("- [review] gpl-package@5.0.0");
     expect(output).not.toContain("- [high] dev-risk@3.0.0");
+  });
+
+  test("prints actionable findings for a Deno npm lockfile project", async () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-deno-project-"));
+
+    try {
+      writeFileSync(
+        path.join(projectDir, "deno.json"),
+        JSON.stringify({
+          imports: {
+            "permissive-parent": "npm:permissive-parent@1.0.0",
+            "gpl-package": "npm:gpl-package@5.0.0"
+          }
+        }),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectDir, "deno.lock"),
+        JSON.stringify({
+          version: "4",
+          specifiers: {
+            "npm:permissive-parent@1.0.0": "1.0.0",
+            "npm:gpl-package@5.0.0": "5.0.0"
+          },
+          npm: {
+            "permissive-parent@1.0.0": {
+              dependencies: {
+                "agpl-child": "0.1.0"
+              }
+            },
+            "agpl-child@0.1.0": {},
+            "gpl-package@5.0.0": {}
+          },
+          workspace: {
+            dependencies: [
+              "npm:permissive-parent@1.0.0",
+              "npm:gpl-package@5.0.0"
+            ]
+          }
+        }),
+        "utf8"
+      );
+      writeLocalPackage(projectDir, "permissive-parent", "1.0.0", "MIT", "LICENSE", "MIT License");
+      writeLocalPackage(projectDir, "agpl-child", "0.1.0", "AGPL-3.0-only", "COPYING", "GNU Affero General Public License");
+      writeLocalPackage(projectDir, "gpl-package", "5.0.0", "GPL-3.0-only", "LICENSE", "GNU General Public License Version 3");
+
+      const { io, stdout, stderr } = createTestIO(projectDir);
+      const exitCode = await main(["scan", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Ohrisk scan");
+      expect(output).toContain("Lockfile: deno.lock (deno-lock)");
+      expect(output).toContain("Dependencies: 3 total, 2 direct, 1 transitive");
+      expect(output).toContain("Risks: 1 high, 1 review, 0 unknown, 1 low");
+      expect(output).toContain("- [high] agpl-child@0.1.0");
+      expect(output).toContain(
+        `${path.basename(projectDir)} -> permissive-parent@1.0.0 -> agpl-child@0.1.0`
+      );
+      expect(output).toContain("- [review] gpl-package@5.0.0");
+      expect(output).toContain("- [low] permissive-parent@1.0.0");
+    } finally {
+      rmSync(projectDir, { force: true, recursive: true });
+    }
   });
 
   test("prints actionable findings for a Yarn v1 lockfile project", async () => {
@@ -533,7 +694,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.123.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.127.0");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",

@@ -44,6 +44,7 @@ export function renderCycloneDxReport(input: CycloneDxReportInput): string {
   const findingsByPackageId = new Map(
     input.riskFindings.map((finding) => [finding.packageId, finding])
   );
+  const childRefsByNodeId = directChildRefsByNodeId(input.graph.nodes);
 
   const components = input.graph.nodes.map((node) =>
     renderComponent({
@@ -95,7 +96,7 @@ export function renderCycloneDxReport(input: CycloneDxReportInput): string {
         },
         ...input.graph.nodes.map((node) => ({
           ref: componentBomRef(node),
-          dependsOn: directChildRefs(node, input.graph.nodes)
+          dependsOn: childRefsByNodeId.get(node.id) ?? []
         }))
       ]
     },
@@ -238,23 +239,41 @@ function componentScope(node: DependencyNode): "required" | "optional" | "exclud
   }
 }
 
-function directChildRefs(node: DependencyNode, nodes: DependencyNode[]): string[] {
-  const childIds = new Set<string>();
+function directChildRefsByNodeId(nodes: DependencyNode[]): Map<string, string[]> {
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const nodeOrder = new Map(nodes.map((node, index) => [node.id, index]));
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const childIdsByNodeId = new Map<string, Set<string>>();
 
   for (const candidate of nodes) {
     for (const path of candidate.paths) {
       const packagePath = path.map(packageIdFromPathSegment);
-      const nodeIndex = packagePath.indexOf(node.id);
-      const childId = nodeIndex >= 0 ? packagePath[nodeIndex + 1] : undefined;
-      if (childId) {
+      for (let index = 0; index < packagePath.length - 1; index += 1) {
+        const parentId = packagePath[index];
+        const childId = packagePath[index + 1];
+        if (!parentId || !childId || !nodeIds.has(parentId) || !nodeIds.has(childId)) {
+          continue;
+        }
+
+        const childIds = childIdsByNodeId.get(parentId) ?? new Set<string>();
         childIds.add(childId);
+        childIdsByNodeId.set(parentId, childIds);
       }
     }
   }
 
-  return nodes
-    .filter((candidate) => childIds.has(candidate.id))
-    .map((candidate) => componentBomRef(candidate));
+  const childRefsByNodeId = new Map<string, string[]>();
+  for (const [nodeId, childIds] of childIdsByNodeId.entries()) {
+    const childRefs = [...childIds]
+      .sort((left, right) => (nodeOrder.get(left) ?? 0) - (nodeOrder.get(right) ?? 0))
+      .flatMap((childId) => {
+        const childNode = nodeById.get(childId);
+        return childNode ? [componentBomRef(childNode)] : [];
+      });
+    childRefsByNodeId.set(nodeId, childRefs);
+  }
+
+  return childRefsByNodeId;
 }
 
 function packageIdFromPathSegment(segment: string): string {

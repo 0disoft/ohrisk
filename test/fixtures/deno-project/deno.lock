@@ -1,0 +1,22 @@
+{
+  "version": "4",
+  "specifiers": {
+    "npm:permissive-parent@1.0.0": "1.0.0",
+    "npm:gpl-package@5.0.0": "5.0.0"
+  },
+  "npm": {
+    "permissive-parent@1.0.0": {
+      "dependencies": {
+        "agpl-child": "0.1.0"
+      }
+    },
+    "agpl-child@0.1.0": {},
+    "gpl-package@5.0.0": {}
+  },
+  "workspace": {
+    "dependencies": [
+      "npm:permissive-parent@1.0.0",
+      "npm:gpl-package@5.0.0"
+    ]
+  }
+}

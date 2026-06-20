@@ -1,0 +1,6 @@
+{
+  "imports": {
+    "permissive-parent": "npm:permissive-parent@1.0.0",
+    "gpl-package": "npm:gpl-package@5.0.0"
+  }
+}

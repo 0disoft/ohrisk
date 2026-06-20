@@ -1,28 +1,32 @@
 # CI Usage Guide
 
 Examples for running Ohrisk in GitHub Actions. These examples assume ohrisk is
-published to npm and Bun is available on the runner.
+published to npm and Node.js `>=20.0.0` is available on the runner.
 
 Ohrisk does not provide a dedicated GitHub Action. These examples call the
 installed CLI directly in workflow steps.
 
 ## Prerequisites
 
-Ohrisk runs on Bun. Set up Bun on the runner and install ohrisk globally:
+The packaged Ohrisk CLI runs on Node.js. Set up Node on the runner and install
+ohrisk globally:
 
 ```yaml
-- uses: oven-sh/setup-bun@v2
-- run: bun add -g ohrisk
+- uses: actions/setup-node@v4
+  with:
+    node-version: 20
+- run: npm install -g ohrisk
 ```
 
-Global install is preferred over `bunx ohrisk` in CI because ohrisk runs in
-multiple steps. Installing once puts `ohrisk` on PATH for every subsequent step,
-and install failures surface before the scan step runs.
+Global install is preferred when ohrisk runs in multiple steps. Installing once
+puts `ohrisk` on PATH for every subsequent step, and install failures surface
+before the scan step runs. For a single-step gate, `npx`, `pnpm dlx`, `yarn dlx`,
+or `bunx` are also fine.
 
 For a stable CI gate, pin the version instead of tracking latest:
 
 ```yaml
-- run: bun add -g ohrisk@<version>
+- run: npm install -g ohrisk@<version>
 ```
 
 ## PR gate: fail on high-risk licenses
@@ -119,7 +123,12 @@ When a project has more than one supported lockfile, select one explicitly:
 
 ```yaml
 - run: ohrisk ci --lockfile package-lock.json --fail-on high
+- run: ohrisk ci --lockfile npm-shrinkwrap.json --fail-on high
+- run: ohrisk ci --lockfile deno.lock --fail-on high
 ```
+
+For Deno projects, Ohrisk currently scans npm package dependencies recorded in
+`deno.lock`. Remote URL imports and JSR packages are not scanned yet.
 
 ## Boundary
 

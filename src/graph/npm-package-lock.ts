@@ -70,6 +70,7 @@ export function parsePackageLockfile(
   lockfilePath: string,
   options: { maxBytes?: number } = {}
 ): Result<DependencyGraph, OhriskError> {
+  const lockfileLabel = packageLockLabel(lockfilePath);
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
     maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES
@@ -81,8 +82,8 @@ export function parsePackageLockfile(
         code: "PACKAGE_LOCK_READ_FAILED",
         category: inputFileReadErrorCategory(lockfileText.error),
         message: lockfileText.error.kind === "too_large"
-          ? "package-lock.json exceeded the maximum supported size."
-          : "Failed to read package-lock.json.",
+          ? `${lockfileLabel} exceeded the maximum supported size.`
+          : `Failed to read ${lockfileLabel}.`,
         details: {
           lockfilePath,
           ...inputFileReadErrorDetails(lockfileText.error)
@@ -98,6 +99,7 @@ export function parsePackageLockText(
   input: string,
   lockfilePath = "package-lock.json"
 ): Result<DependencyGraph, OhriskError> {
+  const lockfileLabel = packageLockLabel(lockfilePath);
   const parsed = parseLockfileJson(input, lockfilePath);
   if (!parsed.ok) {
     return parsed;
@@ -117,7 +119,7 @@ export function parsePackageLockText(
       createError({
         code: "PACKAGE_LOCK_PARSE_FAILED",
         category: "unsupported_input",
-        message: "Failed to parse package-lock.json. Ohrisk expects either a modern packages section or an npm v1 dependencies tree.",
+        message: `Failed to parse ${lockfileLabel}. Ohrisk expects either a modern packages section or an npm v1 dependencies tree.`,
         details: {
           lockfilePath,
           lockfileVersion: lockfile.lockfileVersion ?? "unknown"
@@ -215,6 +217,8 @@ function parseLockfileJson(
   input: string,
   lockfilePath: string
 ): Result<PackageLockShape, OhriskError> {
+  const lockfileLabel = packageLockLabel(lockfilePath);
+
   try {
     return ok(JSON.parse(input) as PackageLockShape);
   } catch (cause) {
@@ -222,7 +226,7 @@ function parseLockfileJson(
       createError({
         code: "PACKAGE_LOCK_PARSE_FAILED",
         category: "unsupported_input",
-        message: "Failed to parse package-lock.json.",
+        message: `Failed to parse ${lockfileLabel}.`,
         details: {
           lockfilePath,
           cause: cause instanceof Error ? cause.message : String(cause)
@@ -230,6 +234,10 @@ function parseLockfileJson(
       })
     );
   }
+}
+
+function packageLockLabel(lockfilePath: string): "package-lock.json" | "npm-shrinkwrap.json" {
+  return lockfilePath.endsWith("npm-shrinkwrap.json") ? "npm-shrinkwrap.json" : "package-lock.json";
 }
 
 function parsePackageRecords(packages: Record<string, unknown>): PackageLockRecord[] {
@@ -377,10 +385,12 @@ function resolvePackageRecord(input: {
     ?? input.records.find((record) =>
       record.name === reference.lookupName && record.version === reference.lookupRange
     )
-    ?? input.records.find((record) =>
-      record.name === reference.lookupName && reference.lookupRange.includes(record.version)
-    )
-    ?? input.records.find((record) => record.name === reference.lookupName);
+    ?? onlyPackageRecordWithName(input.records, reference.lookupName);
+}
+
+function onlyPackageRecordWithName(records: PackageLockRecord[], name: string): PackageLockRecord | undefined {
+  const matches = records.filter((record) => record.name === name);
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 function walkDependency(input: {

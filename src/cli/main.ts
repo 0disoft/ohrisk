@@ -1,11 +1,14 @@
-#!/usr/bin/env bun
-import { readFileSync } from "node:fs";
+#!/usr/bin/env node
+import { realpathSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { parseArgs, type CliCommand, type HelpTarget } from "./args";
+import { OHRISK_VERSION } from "./version";
 import { diffRiskFindings } from "../diff/compare";
 import { collectGraphEvidence } from "../evidence/collect";
 import { readGitRefFile, type GitRefFileReader } from "../git/ref-file";
+import { parseDenoLockfile, parseDenoLockText } from "../graph/deno-lock";
 import { parseBunLockfile, parseBunLockText } from "../graph/npm-bun-lock";
 import { parsePackageLockfile, parsePackageLockText } from "../graph/npm-package-lock";
 import { parsePnpmLockfile, parsePnpmLockText } from "../graph/npm-pnpm-lock";
@@ -440,8 +443,12 @@ function parseProjectLockfile(project: ProjectInput): Result<DependencyGraph, Oh
       return parseBunLockfile(project.lockfile.path);
     case "package-lock":
       return parsePackageLockfile(project.lockfile.path);
+    case "npm-shrinkwrap":
+      return parsePackageLockfile(project.lockfile.path);
     case "pnpm-lock":
       return parsePnpmLockfile(project.lockfile.path);
+    case "deno-lock":
+      return parseDenoLockfile(project.lockfile.path);
     case "yarn-lock":
       return parseYarnLockfile(project.lockfile.path);
   }
@@ -475,8 +482,12 @@ function parseLockfileTextForKind(input: {
       return parseBunLockText(input.text, input.lockfilePath);
     case "package-lock":
       return parsePackageLockText(input.text, input.lockfilePath);
+    case "npm-shrinkwrap":
+      return parsePackageLockText(input.text, input.lockfilePath);
     case "pnpm-lock":
       return parsePnpmLockText(input.text, input.lockfilePath);
+    case "deno-lock":
+      return parseDenoLockText(input.text, input.lockfilePath);
     case "yarn-lock":
       return parseYarnLockText({
         lockfileText: input.text,
@@ -732,15 +743,19 @@ function emitReport(input: {
 
 
 function renderVersion(): string {
-  return `ohrisk ${readPackageVersion()}`;
+  return `ohrisk ${OHRISK_VERSION}`;
 }
 
-function readPackageVersion(): string {
-  const packageJson = JSON.parse(
-    readFileSync(new URL("../../package.json", import.meta.url), "utf8")
-  ) as { version?: unknown };
+function isCliEntrypoint(metaUrl: string, argvPath: string | undefined): boolean {
+  if (!argvPath) {
+    return false;
+  }
 
-  return typeof packageJson.version === "string" ? packageJson.version : "unknown";
+  try {
+    return realpathSync(fileURLToPath(metaUrl)) === realpathSync(argvPath);
+  } catch {
+    return path.resolve(fileURLToPath(metaUrl)) === path.resolve(argvPath);
+  }
 }
 
 function defaultIO(): CliIO {
@@ -751,7 +766,7 @@ function defaultIO(): CliIO {
   };
 }
 
-if (import.meta.main) {
+if (isCliEntrypoint(import.meta.url, process.argv[1])) {
   const exitCode = await main();
   process.exit(exitCode);
 }

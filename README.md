@@ -58,22 +58,28 @@ ohrisk scan --profile distributed-app
 
 ## Runtime
 
-Ohrisk is distributed as an npm package, but the CLI runs on Bun. Make sure
-`bun` is available on your `PATH` before running the installed `ohrisk` command.
+Ohrisk is distributed as an npm package, and the packaged CLI runs on Node.js
+`>=20.0.0`. Bun is used for Ohrisk development, tests, and packaging, but users
+do not need Bun installed to run the published CLI.
+
+Ohrisk scans Bun, npm package-lock/shrinkwrap, pnpm, Deno npm, and Yarn v1
+lockfiles regardless of which package manager you use to install the CLI.
 
 ## Current Scope
 
 The current implementation is the first npm-style vertical slice:
 
-- Bun `bun.lock`, npm `package-lock.json`, pnpm `pnpm-lock.yaml`, and Yarn v1 `yarn.lock` project discovery
+- Bun `bun.lock`, npm `package-lock.json`, npm `npm-shrinkwrap.json`, pnpm `pnpm-lock.yaml`, Deno `deno.lock`, and Yarn v1 `yarn.lock` project discovery
+- Node-compatible packaged CLI entrypoint for npm, pnpm, Yarn, npx, pnpm dlx, and yarn dlx users
 - explicit lockfile selection with `--lockfile <path>` for projects that contain more than one supported lockfile
 - direct and transitive dependency graph extraction
 - Bun, npm, pnpm, and Yarn v1 workspace projects are scanned from every workspace/importer package root
+- Deno `deno.lock` projects are scanned for npm package dependencies recorded in `npm:` specifiers; remote URL imports and JSR packages are not scanned yet
 - npm alias dependency resolution, including pnpm alias package keys, with alias context preserved in dependency paths
 - production, development, optional, and peer dependency classification
 - local `file:` package artifact evidence
 - installed `node_modules` package evidence, including npm alias install names, before network fallback
-- remote HTTP(S) package tarball evidence when the lockfile points to a tarball, with credential-bearing URLs, obvious local, private, special-purpose, and DNS-resolved internal hosts blocked before fetch and redirects left unfollowed
+- remote HTTP(S) package tarball evidence when the lockfile points to a tarball, with credential-bearing URLs, obvious local, private, special-purpose, and DNS-resolved internal hosts blocked before fetch, DNS answers rechecked at the default connection boundary, and redirects followed only after each target is validated
 - lockfile integrity verification for local and remote package tarballs
 - npm registry metadata lookup when the lockfile does not include a direct tarball URL
 - gzipped package tarball evidence
@@ -117,7 +123,19 @@ npm-style lockfiles are not part of this slice yet.
 Install globally after the package is published:
 
 ```bash
+npm install -g ohrisk
+pnpm add -g ohrisk
+yarn global add ohrisk
 bun add -g ohrisk
+```
+
+Run once without a global install:
+
+```bash
+npx ohrisk scan
+pnpm dlx ohrisk scan
+yarn dlx ohrisk scan
+bunx ohrisk scan
 ```
 
 Run a local scan from a supported project:
@@ -138,14 +156,18 @@ Supported lockfiles:
 
 - `bun.lock`
 - `package-lock.json` with either a modern `packages` section or an npm v1 dependency tree
+- `npm-shrinkwrap.json` with the same package-lock parser support
 - `pnpm-lock.yaml` with `importers`, `packages`, and `snapshots` sections
+- `deno.lock` npm package entries from Deno v3/v4-style lockfiles
 - Yarn v1 `yarn.lock` with root and workspace dependency sets from `package.json` manifests
 
 Select a specific lockfile when a project contains more than one supported lockfile:
 
 ```bash
 ohrisk scan --lockfile package-lock.json
+ohrisk scan --lockfile npm-shrinkwrap.json
 ohrisk ci --lockfile pnpm-lock.yaml --fail-on high
+ohrisk scan --lockfile deno.lock
 ohrisk diff main --lockfile bun.lock
 ```
 
@@ -265,6 +287,7 @@ Once installed as a package, the intended command shape is:
 ```bash
 ohrisk scan --profile saas --prod
 ohrisk scan --lockfile package-lock.json
+ohrisk scan --lockfile npm-shrinkwrap.json
 ohrisk ci --fail-on high
 ohrisk ci --strict-waivers
 ohrisk scan --no-waivers

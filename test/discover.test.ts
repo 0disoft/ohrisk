@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -35,6 +35,44 @@ describe("discoverProject", () => {
     expect(path.basename(result.value.lockfile.path)).toBe("package-lock.json");
   });
 
+  test("finds an npm-shrinkwrap.json project", () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-npm-shrinkwrap-discovery-"));
+
+    try {
+      writeFileSync(
+        path.join(projectDir, "package.json"),
+        JSON.stringify({ name: "fixture-npm-shrinkwrap-project" }),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectDir, "npm-shrinkwrap.json"),
+        JSON.stringify({
+          name: "fixture-npm-shrinkwrap-project",
+          lockfileVersion: 3,
+          packages: {
+            "": {
+              name: "fixture-npm-shrinkwrap-project"
+            }
+          }
+        }),
+        "utf8"
+      );
+
+      const result = discoverProject({ cwd: projectDir });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value.rootDir).toBe(projectDir);
+      expect(result.value.lockfile.kind).toBe("npm-shrinkwrap");
+      expect(path.basename(result.value.lockfile.path)).toBe("npm-shrinkwrap.json");
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
   test("finds a pnpm-lock.yaml project", () => {
     const result = discoverProject({ cwd: path.join(fixturesDir, "pnpm-project") });
 
@@ -59,6 +97,19 @@ describe("discoverProject", () => {
     expect(result.value.rootDir).toBe(path.join(fixturesDir, "yarn-project"));
     expect(result.value.lockfile.kind).toBe("yarn-lock");
     expect(path.basename(result.value.lockfile.path)).toBe("yarn.lock");
+  });
+
+  test("finds a Deno deno.lock project", () => {
+    const result = discoverProject({ cwd: path.join(fixturesDir, "deno-project") });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.rootDir).toBe(path.join(fixturesDir, "deno-project"));
+    expect(result.value.lockfile.kind).toBe("deno-lock");
+    expect(path.basename(result.value.lockfile.path)).toBe("deno.lock");
   });
 
   test("walks up from a nested directory", () => {

@@ -21,9 +21,15 @@ jobs:
         with:
           bun-version: 1.3.14
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Show tool versions
         run: |
           bun --version
+          node --version
           npm --version
 
       - name: Run release verification

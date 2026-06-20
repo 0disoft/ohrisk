@@ -4,7 +4,7 @@
   "workspaces": {
     "": {
       "name": "ohrisk",
-      "dependencies": {
+      "devDependencies": {
         "@yarnpkg/lockfile": "1.1.0",
         "yaml": "2.9.0",
       },

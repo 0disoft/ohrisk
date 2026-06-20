@@ -15,19 +15,22 @@ describe("release check workflow", () => {
       readFileSync(path.join(repoRoot, "package.json"), "utf8")
     ) as {
       engines?: {
-        bun?: string;
+        node?: string;
       };
       packageManager?: string;
     };
 
     expect(packageJson.packageManager).toBe("bun@1.3.14");
-    expect(packageJson.engines?.bun).toBe(">=1.3.0");
+    expect(packageJson.engines?.node).toBe(">=20.0.0");
     expect(workflow).toContain("name: Release Check");
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).not.toContain("pull_request:");
     expect(workflow).toContain("uses: actions/checkout@v4");
     expect(workflow).toContain("uses: oven-sh/setup-bun@v2");
     expect(workflow).toContain("bun-version: 1.3.14");
+    expect(workflow).toContain("uses: actions/setup-node@v4");
+    expect(workflow).toContain("node-version: 20");
+    expect(workflow).toContain("node --version");
     expect(workflow).toContain("run: bun run verify:release");
   });
 });

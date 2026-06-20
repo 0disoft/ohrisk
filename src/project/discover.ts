@@ -4,7 +4,13 @@ import path from "node:path";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 
-export type SupportedLockfileKind = "bun" | "package-lock" | "pnpm-lock" | "yarn-lock";
+export type SupportedLockfileKind =
+  | "bun"
+  | "package-lock"
+  | "npm-shrinkwrap"
+  | "pnpm-lock"
+  | "deno-lock"
+  | "yarn-lock";
 
 export type ProjectLockfile = {
   kind: SupportedLockfileKind;
@@ -24,16 +30,28 @@ export type DiscoverProjectOptions = {
 const SUPPORTED_LOCKFILES: Record<string, SupportedLockfileKind> = {
   "bun.lock": "bun",
   "package-lock.json": "package-lock",
+  "npm-shrinkwrap.json": "npm-shrinkwrap",
   "pnpm-lock.yaml": "pnpm-lock",
+  "deno.lock": "deno-lock",
   "yarn.lock": "yarn-lock"
 };
 
 const KNOWN_LOCKFILES = [
   "bun.lock",
   "package-lock.json",
+  "npm-shrinkwrap.json",
   "pnpm-lock.yaml",
+  "deno.lock",
   "yarn.lock"
 ] as const;
+
+const KNOWN_PROJECT_MANIFESTS = [
+  "package.json",
+  "deno.json",
+  "deno.jsonc"
+] as const;
+
+const SUPPORTED_LOCKFILE_MESSAGE = "Ohrisk currently supports bun.lock, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml, deno.lock, and Yarn v1 yarn.lock.";
 
 export function discoverProject(
   options: DiscoverProjectOptions = {}
@@ -50,15 +68,17 @@ export function discoverProject(
 
     for (const dir of ancestorsFrom(startDir)) {
       const lockfiles = findKnownLockfiles(dir);
-      const hasPackageManifest = existsSync(path.join(dir, "package.json"));
+      const hasProjectManifest = KNOWN_PROJECT_MANIFESTS.some((manifest) =>
+        existsSync(path.join(dir, manifest))
+      );
 
       if (lockfiles.length === 0) {
-        if (hasPackageManifest) {
+        if (hasProjectManifest) {
           return err(
             createError({
               code: "NO_SUPPORTED_LOCKFILE",
               category: "unsupported_input",
-              message: "Project manifest found, but no supported lockfile exists. Ohrisk currently supports bun.lock, package-lock.json, pnpm-lock.yaml, and Yarn v1 yarn.lock.",
+              message: `Project manifest found, but no supported lockfile exists. ${SUPPORTED_LOCKFILE_MESSAGE}`,
               details: {
                 rootDir: dir,
                 supportedLockfiles: Object.keys(SUPPORTED_LOCKFILES)
@@ -97,7 +117,7 @@ export function discoverProject(
           createError({
             code: "NO_SUPPORTED_LOCKFILE",
             category: "unsupported_input",
-            message: "No supported lockfile found. Ohrisk currently supports bun.lock, package-lock.json, pnpm-lock.yaml, and Yarn v1 yarn.lock.",
+            message: `No supported lockfile found. ${SUPPORTED_LOCKFILE_MESSAGE}`,
             details: {
               rootDir: dir,
               foundLockfiles: lockfiles,
@@ -133,7 +153,7 @@ export function discoverProject(
     createError({
       code: "NO_SUPPORTED_LOCKFILE",
       category: "unsupported_input",
-      message: "No supported lockfile found. Ohrisk currently supports bun.lock, package-lock.json, pnpm-lock.yaml, and Yarn v1 yarn.lock.",
+      message: `No supported lockfile found. ${SUPPORTED_LOCKFILE_MESSAGE}`,
       details: {
         startDir,
         supportedLockfiles: Object.keys(SUPPORTED_LOCKFILES)
@@ -155,7 +175,7 @@ function discoverExplicitLockfile(input: {
       createError({
         code: "UNSUPPORTED_LOCKFILE",
         category: "unsupported_input",
-        message: "Explicit lockfile path is not a supported lockfile name. Ohrisk currently supports bun.lock, package-lock.json, pnpm-lock.yaml, and Yarn v1 yarn.lock.",
+        message: `Explicit lockfile path is not a supported lockfile name. ${SUPPORTED_LOCKFILE_MESSAGE}`,
         details: {
           lockfilePath,
           supportedLockfiles: Object.keys(SUPPORTED_LOCKFILES)

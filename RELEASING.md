@@ -6,7 +6,8 @@ publish, tag, or change account settings.
 ## Preconditions
 
 - `main` is clean and pushed.
-- Bun is available locally. The package currently tests with Bun `1.3.14`.
+- Bun is available locally for development, tests, and packaging. The published
+  CLI runs on Node.js `>=20.0.0`.
 - npm authentication is available in the current shell.
 - The package name `ohrisk` is still available on npm.
 - GitHub Actions billing is available if you want to run the manual Release Check workflow.
@@ -19,9 +20,10 @@ Run the release-ready local gate:
 bun run verify:release
 ```
 
-This runs the full Bun test suite, verifies the npm package contents with a
-dry-run pack, then installs the packed tarball into a temporary consumer project
-and runs the packaged `ohrisk` bin.
+This runs the full Bun test suite, builds the Node-compatible CLI bundle,
+verifies the npm package contents with a dry-run pack, then installs the packed
+tarball into a temporary npm consumer project and runs the packaged `ohrisk`
+bin through Node.js.
 
 ## Optional GitHub Gate
 
@@ -58,8 +60,8 @@ npm view ohrisk dist.tarball
 After the npm registry result is verified, tag the matching commit:
 
 ```bash
-git tag v0.123.0
-git push origin v0.123.0
+git tag v0.127.0
+git push origin v0.127.0
 ```
 
 Then create a GitHub Release using the notes from `CHANGELOG.md`.

@@ -354,8 +354,7 @@ function resolvePackageRecord(input: {
   }
 
   return candidates.find((candidate) => candidate.version === reference.lookupRange)
-    ?? candidates.find((candidate) => reference.lookupRange.includes(candidate.version))
-    ?? candidates[0];
+    ?? undefined;
 }
 
 function normalizePnpmReference(value: string): string {

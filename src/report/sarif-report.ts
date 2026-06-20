@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import { OHRISK_VERSION } from "../cli/version";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
 import type { WaivedRiskFinding } from "../policy/waivers";
 import type { ScanReportInput } from "./scan-report";
@@ -94,7 +94,7 @@ export function renderSarifReport(input: ScanReportInput): string {
           tool: {
             driver: {
               name: "Ohrisk",
-              semanticVersion: readPackageVersion(),
+              semanticVersion: OHRISK_VERSION,
               informationUri: "https://github.com/0disoft/ohrisk",
               rules: RULES
             }
@@ -281,12 +281,4 @@ function securitySeverityFor(severity: RiskSeverity): string | undefined {
     case "low":
       return undefined;
   }
-}
-
-function readPackageVersion(): string {
-  const packageJson = JSON.parse(
-    readFileSync(new URL("../../package.json", import.meta.url), "utf8")
-  ) as { version?: unknown };
-
-  return typeof packageJson.version === "string" ? packageJson.version : "unknown";
 }

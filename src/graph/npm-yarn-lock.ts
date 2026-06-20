@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { createRequire } from "node:module";
 import path from "node:path";
+import * as yarnLockfileModule from "@yarnpkg/lockfile";
 
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
@@ -20,8 +20,7 @@ import {
 } from "./read-input-file";
 import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
 
-const require = createRequire(import.meta.url);
-const yarnLockfile = require("@yarnpkg/lockfile") as {
+const yarnLockfile = yarnLockfileModule as {
   parse: (input: string) => {
     type: "success" | "merge" | "conflict";
     object: Record<string, YarnLockEntry>;
@@ -653,9 +652,9 @@ function resolvePackageRecord(input: {
   const candidates = input.nameIndex.get(reference.lookupName) ?? [];
 
   return input.descriptorIndex.get(descriptor)
+    ?? (candidates.length === 1 ? candidates[0] : undefined)
     ?? candidates.find((candidate) => candidate.version === reference.lookupRange)
-    ?? candidates.find((candidate) => reference.lookupRange.includes(candidate.version))
-    ?? candidates[0];
+    ?? undefined;
 }
 
 function walkDependency(input: {

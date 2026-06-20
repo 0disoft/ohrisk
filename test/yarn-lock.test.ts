@@ -239,6 +239,34 @@ describe("parseYarnLockfile", () => {
       });
   });
 
+  test("does not link ambiguous Yarn dependency ranges by package name fallback", () => {
+    const result = parseYarnLockText({
+      packageJsonText: JSON.stringify({
+        name: "fixture-yarn-ambiguous-project",
+        dependencies: {
+          ambiguous: "^3.0.0"
+        }
+      }),
+      lockfileText: [
+        "ambiguous@1.0.0:",
+        "  version \"1.0.0\"",
+        "  resolved \"file:../bun-project/.registry/ambiguous-1\"",
+        "",
+        "ambiguous@2.0.0:",
+        "  version \"2.0.0\"",
+        "  resolved \"file:../bun-project/.registry/ambiguous-2\""
+      ].join("\n"),
+      lockfilePath: "ambiguous-yarn.lock"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes).toEqual([]);
+  });
+
   test("keeps nested optional dependency edges from Yarn v1 entries", () => {
     const result = parseYarnLockText({
       packageJsonText: JSON.stringify({
