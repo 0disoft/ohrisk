@@ -83,4 +83,75 @@ describe("renderCycloneDxReport", () => {
       dependsOn: ["pkg:npm/agpl-child@0.1.0"]
     });
   });
+
+  test("renders ecosystem-specific Package URLs for future PyPI and Maven graph adapters", () => {
+    const payload = JSON.parse(renderCycloneDxReport({
+      project: {
+        rootDir: "/fixture-polyglot-project",
+        lockfile: {
+          kind: "package-lock",
+          path: "/fixture-polyglot-project/package-lock.json"
+        }
+      },
+      graph: {
+        rootName: "fixture-polyglot-project",
+        lockfilePath: "package-lock.json",
+        nodes: [
+          {
+            id: "requests@2.32.3",
+            name: "requests",
+            version: "2.32.3",
+            ecosystem: "pypi",
+            dependencyType: "production",
+            direct: true,
+            paths: [["fixture-polyglot-project", "requests@2.32.3"]]
+          },
+          {
+            id: "org.example:demo-core@1.0.0",
+            name: "org.example:demo-core",
+            version: "1.0.0",
+            ecosystem: "maven",
+            dependencyType: "production",
+            direct: true,
+            paths: [["fixture-polyglot-project", "org.example:demo-core@1.0.0"]]
+          }
+        ]
+      },
+      normalizedLicenses: [],
+      riskFindings: [],
+      waiverMode: "local"
+    })) as {
+      components: Array<{
+        "bom-ref": string;
+        purl: string;
+        properties: Array<{
+          name: string;
+          value: string;
+        }>;
+      }>;
+    };
+
+    expect(payload.components).toEqual([
+      expect.objectContaining({
+        "bom-ref": "pkg:pypi/requests@2.32.3",
+        purl: "pkg:pypi/requests@2.32.3",
+        properties: expect.arrayContaining([
+          {
+            name: "ohrisk:ecosystem",
+            value: "pypi"
+          }
+        ])
+      }),
+      expect.objectContaining({
+        "bom-ref": "pkg:maven/org.example/demo-core@1.0.0",
+        purl: "pkg:maven/org.example/demo-core@1.0.0",
+        properties: expect.arrayContaining([
+          {
+            name: "ohrisk:ecosystem",
+            value: "maven"
+          }
+        ])
+      })
+    ]);
+  });
 });

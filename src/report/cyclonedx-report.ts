@@ -4,6 +4,7 @@ import type { DependencyGraph, DependencyNode } from "../graph/types";
 import type { NormalizedLicense } from "../license/types";
 import type { RiskFinding } from "../policy/types";
 import type { ProjectInput } from "../project/discover";
+import { packageUrl } from "./package-url";
 
 export type CycloneDxReportInput = {
   project: ProjectInput;
@@ -216,14 +217,6 @@ function renderLicenses(
 
 function componentBomRef(node: DependencyNode): string {
   return packageUrl(node);
-}
-
-function packageUrl(node: DependencyNode): string {
-  return `pkg:npm/${encodePurlName(node.name)}@${encodeURIComponent(node.version)}`;
-}
-
-function encodePurlName(name: string): string {
-  return name.split("/").map((part) => encodeURIComponent(part)).join("/");
 }
 
 function componentScope(node: DependencyNode): "required" | "optional" | "excluded" {

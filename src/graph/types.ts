@@ -1,4 +1,7 @@
-export type PackageEcosystem = "npm";
+export type PackageEcosystem =
+  | "npm"
+  | "pypi"
+  | "maven";
 
 export type DependencyType =
   | "production"
