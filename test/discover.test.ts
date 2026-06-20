@@ -86,7 +86,7 @@ describe("discoverProject", () => {
     expect(path.basename(result.value.lockfile.path)).toBe("pnpm-lock.yaml");
   });
 
-  test("finds a Yarn v1 yarn.lock project", () => {
+  test("finds a Yarn yarn.lock project", () => {
     const result = discoverProject({ cwd: path.join(fixturesDir, "yarn-project") });
 
     expect(result.ok).toBe(true);

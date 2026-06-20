@@ -324,6 +324,161 @@ describe("parseYarnLockfile", () => {
       });
   });
 
+  test("parses npm, alias, and patch records from a Yarn Berry lockfile", () => {
+    const result = parseYarnLockText({
+      packageJsonText: JSON.stringify({
+        name: "fixture-yarn-berry-project",
+        dependencies: {
+          "prod-parent": "^1.0.0",
+          "patched-child": "patch:patched-child@npm%3A2.0.0#./patched-child.patch",
+          "alias-parent": "npm:actual-parent@^3.0.0"
+        },
+        devDependencies: {
+          "dev-tool": "^4.0.0"
+        }
+      }),
+      lockfileText: [
+        "__metadata:",
+        "  version: 8",
+        "  cacheKey: 10",
+        "",
+        "\"prod-parent@npm:^1.0.0\":",
+        "  version: 1.0.1",
+        "  resolution: \"prod-parent@npm:1.0.1\"",
+        "  dependencies:",
+        "    regular-child: \"npm:^0.5.0\"",
+        "",
+        "\"regular-child@npm:^0.5.0\":",
+        "  version: 0.5.1",
+        "  resolution: \"regular-child@npm:0.5.1\"",
+        "",
+        "\"patched-child@patch:patched-child@npm%3A2.0.0#./patched-child.patch\":",
+        "  version: 2.0.0",
+        "  resolution: \"patched-child@patch:patched-child@npm%3A2.0.0#./patched-child.patch::version=2.0.0&hash=abc123\"",
+        "",
+        "\"alias-parent@npm:actual-parent@^3.0.0\":",
+        "  version: 3.1.0",
+        "  resolution: \"actual-parent@npm:3.1.0\"",
+        "",
+        "\"dev-tool@npm:^4.0.0\":",
+        "  version: 4.2.0",
+        "  resolution: \"dev-tool@npm:4.2.0\"",
+        "",
+        "\"workspace-local@workspace:*\":",
+        "  version: 0.0.0-use.local",
+        "  resolution: \"workspace-local@workspace:packages/local\""
+      ].join("\n"),
+      lockfilePath: "berry-yarn.lock"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "actual-parent@3.1.0",
+      "dev-tool@4.2.0",
+      "patched-child@2.0.0",
+      "prod-parent@1.0.1",
+      "regular-child@0.5.1"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "actual-parent@3.1.0"))
+      .toMatchObject({
+        name: "actual-parent",
+        installNames: ["alias-parent"],
+        direct: true,
+        paths: [["fixture-yarn-berry-project", "alias-parent -> actual-parent@3.1.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "regular-child@0.5.1"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: false,
+        paths: [[
+          "fixture-yarn-berry-project",
+          "prod-parent@1.0.1",
+          "regular-child@0.5.1"
+        ]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "dev-tool@4.2.0"))
+      .toMatchObject({
+        dependencyType: "development",
+        direct: true
+      });
+  });
+
+  test("uses Yarn Berry workspace manifests as roots without scanning workspace packages as npm packages", () => {
+    const result = parseYarnLockText({
+      packageJsonText: JSON.stringify({
+        name: "fixture-yarn-berry-workspaces",
+        private: true,
+        workspaces: [
+          "packages/*"
+        ],
+        dependencies: {
+          "root-prod": "^1.0.0"
+        }
+      }),
+      workspacePackageJsonTexts: [
+        {
+          packageJsonPath: "packages/web/package.json",
+          workspacePath: "packages/web",
+          packageJsonText: JSON.stringify({
+            name: "workspace-web",
+            dependencies: {
+              "workspace-prod": "^2.0.0",
+              "workspace-local": "workspace:*"
+            }
+          })
+        }
+      ],
+      lockfileText: [
+        "__metadata:",
+        "  version: 8",
+        "  cacheKey: 10",
+        "",
+        "\"root-prod@npm:^1.0.0\":",
+        "  version: 1.0.1",
+        "  resolution: \"root-prod@npm:1.0.1\"",
+        "",
+        "\"workspace-prod@npm:^2.0.0\":",
+        "  version: 2.0.1",
+        "  resolution: \"workspace-prod@npm:2.0.1\"",
+        "",
+        "\"workspace-local@workspace:*, workspace-local@workspace:packages/local\":",
+        "  version: 0.0.0-use.local",
+        "  resolution: \"workspace-local@workspace:packages/local\"",
+        "  dependencies:",
+        "    hidden-workspace-dep: \"npm:^9.0.0\"",
+        "",
+        "\"hidden-workspace-dep@npm:^9.0.0\":",
+        "  version: 9.0.1",
+        "  resolution: \"hidden-workspace-dep@npm:9.0.1\""
+      ].join("\n"),
+      lockfilePath: "berry-workspace-yarn.lock"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "root-prod@1.0.1",
+      "workspace-prod@2.0.1"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "root-prod@1.0.1"))
+      .toMatchObject({
+        direct: true,
+        paths: [["fixture-yarn-berry-workspaces", "root-prod@1.0.1"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "workspace-prod@2.0.1"))
+      .toMatchObject({
+        direct: true,
+        paths: [["workspace-web", "workspace-prod@2.0.1"]]
+      });
+  });
+
   test("uses every provided Yarn workspace package manifest as a dependency graph root", () => {
     const result = parseYarnLockText({
       packageJsonText: JSON.stringify({

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.128.0 - 2026-06-20
+
+### Added
+
+- Yarn Berry `yarn.lock` files are now parsed alongside Yarn classic lockfiles,
+  including `npm:` protocol descriptors, patched npm packages, and workspace
+  package roots.
+
+### Fixed
+
+- Real-world Yarn workspace scans now ignore local `workspace:` packages as npm
+  package evidence while still scanning each workspace package manifest as a
+  dependency root.
+
 ## 0.127.1 - 2026-06-20
 
 ### Fixed

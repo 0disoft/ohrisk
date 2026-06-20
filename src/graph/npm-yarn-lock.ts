@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import * as yarnLockfileModule from "@yarnpkg/lockfile";
+import { parse as parseYaml } from "yaml";
 
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
@@ -29,10 +30,18 @@ const yarnLockfile = yarnLockfileModule as {
 
 type YarnLockEntry = {
   version?: unknown;
+  resolution?: unknown;
   resolved?: unknown;
   integrity?: unknown;
   dependencies?: unknown;
   optionalDependencies?: unknown;
+};
+
+type YarnLockFormat = "classic" | "berry";
+
+type ParsedYarnLockfile = {
+  format: YarnLockFormat;
+  entries: Record<string, YarnLockEntry>;
 };
 
 type YarnPackageRecord = {
@@ -466,21 +475,25 @@ function readPackageName(packageJson: PackageJsonShape): string | undefined {
 function parseLockfile(
   input: string,
   lockfilePath: string
-): Result<Record<string, YarnLockEntry>, OhriskError> {
-  try {
-    if (hasMergeConflictMarkers(input)) {
-      return err(
-        createError({
-          code: "YARN_LOCK_PARSE_FAILED",
-          category: "unsupported_input",
-          message: "Failed to parse yarn.lock because it contains unresolved merge conflicts.",
-          details: {
-            lockfilePath
-          }
-        })
-      );
-    }
+): Result<ParsedYarnLockfile, OhriskError> {
+  if (hasMergeConflictMarkers(input)) {
+    return err(
+      createError({
+        code: "YARN_LOCK_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Failed to parse yarn.lock because it contains unresolved merge conflicts.",
+        details: {
+          lockfilePath
+        }
+      })
+    );
+  }
 
+  if (isYarnBerryLockfile(input)) {
+    return parseBerryLockfile(input, lockfilePath);
+  }
+
+  try {
     const parsed = yarnLockfile.parse(input);
     if (parsed.type === "conflict") {
       return err(
@@ -495,13 +508,58 @@ function parseLockfile(
       );
     }
 
-    return ok(parsed.object);
+    return ok({
+      format: "classic",
+      entries: parsed.object
+    });
   } catch (cause) {
     return err(
       createError({
         code: "YARN_LOCK_PARSE_FAILED",
         category: "unsupported_input",
-        message: "Failed to parse yarn.lock. Ohrisk currently supports Yarn v1 lockfiles.",
+        message: "Failed to parse yarn.lock. Ohrisk expects a Yarn classic or Berry lockfile.",
+        details: {
+          lockfilePath,
+          cause: cause instanceof Error ? cause.message : String(cause)
+        }
+      })
+    );
+  }
+}
+
+function isYarnBerryLockfile(input: string): boolean {
+  return /^__metadata:\s*$/m.test(input);
+}
+
+function parseBerryLockfile(
+  input: string,
+  lockfilePath: string
+): Result<ParsedYarnLockfile, OhriskError> {
+  try {
+    const parsed = parseYaml(input) as unknown;
+    if (!isObjectRecord(parsed)) {
+      throw new Error("Expected a YAML mapping at the document root.");
+    }
+
+    const entries: Record<string, YarnLockEntry> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (key === "__metadata" || !isObjectRecord(value)) {
+        continue;
+      }
+
+      entries[key] = value as YarnLockEntry;
+    }
+
+    return ok({
+      format: "berry",
+      entries
+    });
+  } catch (cause) {
+    return err(
+      createError({
+        code: "YARN_LOCK_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Failed to parse Yarn Berry lockfile.",
         details: {
           lockfilePath,
           cause: cause instanceof Error ? cause.message : String(cause)
@@ -517,16 +575,18 @@ function hasMergeConflictMarkers(input: string): boolean {
     || /^>>>>>>> .+$/m.test(input);
 }
 
-function parsePackageRecords(lockfile: Record<string, YarnLockEntry>): YarnPackageRecord[] {
+function parsePackageRecords(lockfile: ParsedYarnLockfile): YarnPackageRecord[] {
   const records: YarnPackageRecord[] = [];
 
-  for (const [key, entry] of Object.entries(lockfile)) {
+  for (const [key, entry] of Object.entries(lockfile.entries)) {
     if (typeof entry.version !== "string" || entry.version === "") {
       continue;
     }
 
     const descriptors = splitDescriptorKey(key);
-    const identity = descriptors.map(parseDescriptor).find(Boolean);
+    const identity = lockfile.format === "berry"
+      ? readBerryPackageIdentity({ key, entry })
+      : descriptors.map(parseDescriptor).find(Boolean);
     if (!identity) {
       continue;
     }
@@ -540,7 +600,10 @@ function parsePackageRecords(lockfile: Record<string, YarnLockEntry>): YarnPacka
 
     records.push({
       key,
-      descriptors,
+      descriptors: descriptorIndexKeys({
+        descriptors,
+        format: lockfile.format
+      }),
       name: identity.name,
       version: entry.version,
       id: `${identity.name}@${entry.version}`,
@@ -557,8 +620,37 @@ function splitDescriptorKey(key: string): string[] {
   return key.split(/,\s*/).map((descriptor) => descriptor.trim()).filter(Boolean);
 }
 
+function descriptorIndexKeys(input: {
+  descriptors: string[];
+  format: YarnLockFormat;
+}): string[] {
+  const keys = new Set<string>();
+
+  for (const descriptor of input.descriptors) {
+    const unquoted = unquoteDescriptor(descriptor);
+    keys.add(unquoted);
+
+    const parsed = input.format === "berry"
+      ? parseBerryDescriptor(unquoted)
+      : parseDescriptor(unquoted);
+    if (!parsed) {
+      continue;
+    }
+
+    keys.add(`${parsed.name}@${parsed.range}`);
+    keys.add(`${parsed.name}@npm:${parsed.range}`);
+  }
+
+  return [...keys];
+}
+
 function parseDescriptor(descriptor: string): { name: string; range: string } | undefined {
-  const unquoted = descriptor.replace(/^"|"$/g, "");
+  const unquoted = unquoteDescriptor(descriptor);
+  const berryDescriptor = parseBerryDescriptor(unquoted);
+  if (berryDescriptor) {
+    return berryDescriptor;
+  }
+
   const aliasMarker = "@npm:";
   const aliasIndex = unquoted.indexOf(aliasMarker);
   if (aliasIndex > 0) {
@@ -575,6 +667,123 @@ function parseDescriptor(descriptor: string): { name: string; range: string } | 
   }
 
   return { name: parsed.name, range: parsed.reference };
+}
+
+function parseBerryDescriptor(descriptor: string): { name: string; range: string } | undefined {
+  const npmLocator = parseBerryNpmLocator(descriptor);
+  if (npmLocator) {
+    const alias = parseNpmPackageReference(`npm:${npmLocator.reference}`);
+    return alias
+      ? { name: alias.name, range: alias.reference }
+      : { name: npmLocator.name, range: npmLocator.reference };
+  }
+
+  const patchLocator = parseBerryPatchLocator(descriptor);
+  if (patchLocator) {
+    return patchLocator;
+  }
+
+  return undefined;
+}
+
+function readBerryPackageIdentity(input: {
+  key: string;
+  entry: YarnLockEntry;
+}): { name: string; version: string } | undefined {
+  const resolution = typeof input.entry.resolution === "string"
+    ? input.entry.resolution
+    : undefined;
+  const parsedResolution = resolution ? parseBerryResolution(resolution) : undefined;
+  if (parsedResolution) {
+    return parsedResolution;
+  }
+
+  const descriptorIdentity = splitDescriptorKey(input.key)
+    .map((descriptor) => parseBerryDescriptor(unquoteDescriptor(descriptor)))
+    .find(Boolean);
+  return descriptorIdentity
+    ? { name: descriptorIdentity.name, version: descriptorIdentity.range }
+    : undefined;
+}
+
+function parseBerryResolution(value: string): { name: string; version: string } | undefined {
+  const unquoted = unquoteDescriptor(value);
+  const npmLocator = parseBerryNpmLocator(unquoted);
+  if (npmLocator) {
+    return {
+      name: npmLocator.name,
+      version: npmLocator.reference
+    };
+  }
+
+  const patchLocator = parseBerryPatchLocator(unquoted);
+  if (patchLocator) {
+    return {
+      name: patchLocator.name,
+      version: patchLocator.range
+    };
+  }
+
+  return undefined;
+}
+
+function parseBerryNpmLocator(value: string): { name: string; reference: string } | undefined {
+  const marker = "@npm:";
+  const index = value.indexOf(marker);
+  if (index <= 0) {
+    return undefined;
+  }
+
+  const name = value.slice(0, index);
+  const reference = value.slice(index + marker.length);
+  if (!isValidNpmPackageName(name) || reference === "") {
+    return undefined;
+  }
+
+  return { name, reference };
+}
+
+function parseBerryPatchLocator(value: string): { name: string; range: string } | undefined {
+  const marker = "@patch:";
+  const index = value.indexOf(marker);
+  if (index <= 0) {
+    return undefined;
+  }
+
+  const patchedLocator = value
+    .slice(index + marker.length)
+    .split("#")[0]
+    ?.split("::")[0];
+  if (!patchedLocator) {
+    return undefined;
+  }
+
+  const decodedLocator = safeDecodeURIComponent(patchedLocator);
+  const npmLocator = parseBerryNpmLocator(decodedLocator);
+  if (!npmLocator) {
+    return undefined;
+  }
+
+  const alias = parseNpmPackageReference(`npm:${npmLocator.reference}`);
+  return alias
+    ? { name: alias.name, range: alias.reference }
+    : { name: npmLocator.name, range: npmLocator.reference };
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function unquoteDescriptor(value: string): string {
+  return value.replace(/^"|"$/g, "");
+}
+
+function isValidNpmPackageName(value: string): boolean {
+  return /^(?:@[^/]+\/)?[^/@][^@]*$/.test(value);
 }
 
 function collectRootDependencies(packageJson: PackageJsonShape): YarnDependencyEdge[] {
@@ -647,14 +856,41 @@ function resolvePackageRecord(input: {
   name: string;
   range: string;
 }): YarnPackageRecord | undefined {
-  const descriptor = `${input.name}@${input.range}`;
   const reference = resolveNpmDependencyReference(input.name, input.range);
   const candidates = input.nameIndex.get(reference.lookupName) ?? [];
 
-  return input.descriptorIndex.get(descriptor)
+  return dependencyDescriptorCandidates({
+    name: input.name,
+    range: input.range,
+    reference
+  })
+    .map((descriptor) => input.descriptorIndex.get(descriptor))
+    .find((record): record is YarnPackageRecord => record !== undefined)
     ?? (candidates.length === 1 ? candidates[0] : undefined)
     ?? candidates.find((candidate) => candidate.version === reference.lookupRange)
     ?? undefined;
+}
+
+function dependencyDescriptorCandidates(input: {
+  name: string;
+  range: string;
+  reference: ReturnType<typeof resolveNpmDependencyReference>;
+}): string[] {
+  const candidates = new Set<string>();
+  candidates.add(`${input.name}@${input.range}`);
+  candidates.add(`${input.reference.lookupName}@${input.reference.lookupRange}`);
+  candidates.add(`${input.name}@npm:${input.range}`);
+  candidates.add(`${input.reference.lookupName}@npm:${input.reference.lookupRange}`);
+
+  if (input.range.startsWith("npm:")) {
+    const bareRange = input.range.slice("npm:".length);
+    candidates.add(`${input.name}@${bareRange}`);
+    candidates.add(`${input.name}@npm:${bareRange}`);
+    candidates.add(`${input.reference.lookupName}@${bareRange}`);
+    candidates.add(`${input.reference.lookupName}@npm:${bareRange}`);
+  }
+
+  return [...candidates].filter((candidate) => !candidate.endsWith("@"));
 }
 
 function walkDependency(input: {

@@ -20,6 +20,18 @@ export function resolveNpmDependencyReference(
     };
   }
 
+  if (range.startsWith("npm:")) {
+    const bareRange = range.slice("npm:".length);
+    if (bareRange !== "") {
+      return {
+        requestedName,
+        lookupName: requestedName,
+        lookupRange: bareRange,
+        aliased: false
+      };
+    }
+  }
+
   return {
     requestedName,
     lookupName: requestedName,

@@ -36,9 +36,9 @@ ohrisk scan
 ```
 
 지원 락파일: `bun.lock`, `package-lock.json`, `npm-shrinkwrap.json`,
-`pnpm-lock.yaml`, `deno.lock`, Yarn v1 `yarn.lock`. 둘 이상이 있으면
+`pnpm-lock.yaml`, `deno.lock`, Yarn classic/Berry `yarn.lock`. 둘 이상이 있으면
 `--lockfile <path>`로 명시적으로 선택한다.
-Bun, npm, pnpm, Yarn v1 워크스페이스 프로젝트는 각 workspace/importer
+Bun, npm, pnpm, Yarn classic/Berry 워크스페이스 프로젝트는 각 workspace/importer
 package root의 의존성을 스캔 시작점으로 삼는다.
 Deno는 `deno.lock`에 기록된 `npm:` 패키지 의존성을 스캔한다. 원격 URL import와
 JSR 패키지는 아직 스캔 대상이 아니다.

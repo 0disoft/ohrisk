@@ -51,7 +51,7 @@ const KNOWN_PROJECT_MANIFESTS = [
   "deno.jsonc"
 ] as const;
 
-const SUPPORTED_LOCKFILE_MESSAGE = "Ohrisk currently supports bun.lock, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml, deno.lock, and Yarn v1 yarn.lock.";
+const SUPPORTED_LOCKFILE_MESSAGE = "Ohrisk currently supports bun.lock, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml, deno.lock, and Yarn classic/Berry yarn.lock.";
 
 export function discoverProject(
   options: DiscoverProjectOptions = {}

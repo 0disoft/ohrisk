@@ -62,18 +62,18 @@ Ohrisk is distributed as an npm package, and the packaged CLI runs on Node.js
 `>=20.0.0`. Bun is used for Ohrisk development, tests, and packaging, but users
 do not need Bun installed to run the published CLI.
 
-Ohrisk scans Bun, npm package-lock/shrinkwrap, pnpm, Deno npm, and Yarn v1
+Ohrisk scans Bun, npm package-lock/shrinkwrap, pnpm, Deno npm, and Yarn
 lockfiles regardless of which package manager you use to install the CLI.
 
 ## Current Scope
 
 The current implementation is the first npm-style vertical slice:
 
-- Bun `bun.lock`, npm `package-lock.json`, npm `npm-shrinkwrap.json`, pnpm `pnpm-lock.yaml`, Deno `deno.lock`, and Yarn v1 `yarn.lock` project discovery
+- Bun `bun.lock`, npm `package-lock.json`, npm `npm-shrinkwrap.json`, pnpm `pnpm-lock.yaml`, Deno `deno.lock`, and Yarn classic/Berry `yarn.lock` project discovery
 - Node-compatible packaged CLI entrypoint for npm, pnpm, Yarn, npx, pnpm dlx, and yarn dlx users
 - explicit lockfile selection with `--lockfile <path>` for projects that contain more than one supported lockfile
 - direct and transitive dependency graph extraction
-- Bun, npm, pnpm, and Yarn v1 workspace projects are scanned from every workspace/importer package root
+- Bun, npm, pnpm, and Yarn classic/Berry workspace projects are scanned from every workspace/importer package root
 - Deno `deno.lock` projects are scanned for npm package dependencies recorded in `npm:` specifiers; remote URL imports and JSR packages are not scanned yet
 - npm alias dependency resolution, including pnpm alias package keys, with alias context preserved in dependency paths
 - production, development, optional, and peer dependency classification
@@ -159,7 +159,7 @@ Supported lockfiles:
 - `npm-shrinkwrap.json` with the same package-lock parser support
 - `pnpm-lock.yaml` with `importers`, `packages`, and `snapshots` sections
 - `deno.lock` npm package entries from Deno v3/v4-style lockfiles
-- Yarn v1 `yarn.lock` with root and workspace dependency sets from `package.json` manifests
+- Yarn classic/Berry `yarn.lock` with root and workspace dependency sets from `package.json` manifests
 
 Select a specific lockfile when a project contains more than one supported lockfile:
 
