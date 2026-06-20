@@ -9,7 +9,7 @@
     "node": ">=20.0.0"
   },
   "bin": {
-    "ohrisk": "./dist/cli.js"
+    "ohrisk": "dist/cli.js"
   },
   "repository": {
     "type": "git",

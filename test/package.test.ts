@@ -38,7 +38,7 @@ describe("package metadata", () => {
     expect(packageJson.packageManager).toBe("bun@1.3.14");
     expect(packageJson.engines?.node).toBe(">=20.0.0");
     expect(packageJson.bin).toEqual({
-      ohrisk: "./dist/cli.js"
+      ohrisk: "dist/cli.js"
     });
     expect(packageJson.files).toEqual(["CHANGELOG.md", "dist"]);
     expect(packageJson.publishConfig?.access).toBe("public");
