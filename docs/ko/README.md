@@ -35,8 +35,13 @@ bunx ohrisk scan
 ohrisk scan
 ```
 
-지원 락파일: `bun.lock`, `package-lock.json`, `npm-shrinkwrap.json`,
-`pnpm-lock.yaml`, `deno.lock`, Yarn classic/Berry `yarn.lock`. 둘 이상이 있으면
+지원 입력 파일: `bun.lock`, `package-lock.json`, `npm-shrinkwrap.json`,
+`pnpm-lock.yaml`, `deno.lock`, Rust `Cargo.lock`, Go `go.mod`, Python
+`uv.lock`, Python Pipenv `Pipfile.lock`, Python PDM `pdm.lock`, Python `poetry.lock`, pinned Python
+`requirements.txt`, Java Gradle `gradle.lockfile`, Java Maven `pom.xml`,
+.NET NuGet `packages.lock.json`, Ruby Bundler `Gemfile.lock`, PHP Composer
+`composer.lock`, CycloneDX JSON, SPDX JSON, Yarn classic/Berry `yarn.lock`.
+둘 이상이 있으면
 `--lockfile <path>`로 명시적으로 선택한다.
 Bun, npm, pnpm, Yarn classic/Berry 워크스페이스 프로젝트는 각 workspace/importer
 package root의 의존성을 스캔 시작점으로 삼는다.
@@ -46,10 +51,60 @@ Yarn Berry/PnP 프로젝트는 `node_modules`가 없어도 로컬 `.yarn/cache` 
 evidence를 registry fallback보다 먼저 사용한다.
 Deno는 `deno.lock`에 기록된 `npm:` 패키지 의존성을 스캔한다. 원격 URL import와
 JSR 패키지는 아직 스캔 대상이 아니다.
+Rust는 `Cargo.lock`에 기록된 crate를 스캔하고, 옆의 `Cargo.toml`이 있으면
+직접/개발 의존성 구분에 사용한다. evidence는 로컬 Cargo registry source나
+`vendor/<crate>`에서 읽는다. 아직 Cargo workspace member manifest 전체 해석이나
+crates.io 원격 artifact fetch는 지원하지 않는다.
+Go는 `go.mod`의 require와 옆의 `go.sum` module version을 스캔한다. evidence는
+로컬 Go module cache나 `vendor/<module>`에서 읽는다. `replace` directive, 전체 Go
+module parent graph 복원, Go proxy 원격 artifact fetch는 아직 지원하지 않는다.
+Python은 `uv.lock`, Pipenv `Pipfile.lock`, PDM `pdm.lock`, `poetry.lock`에 기록된 PyPI 패키지를
+스캔하고, 로컬 `.venv`/`venv`의 `*.dist-info/METADATA`와 license 파일을
+evidence로 읽는다. `Pipfile.lock`은 `default`와 `develop` 섹션의 정확한
+`==version` package entry만 지원한다. PDM `pdm.lock`과 `poetry.lock`은 옆의
+`pyproject.toml`이 있으면 직접/개발 의존성 구분에 사용한다. `requirements.txt`는 `name==version`처럼
+버전이 고정된 직접 의존성, `-r base.txt` 같은 include, `-c constraints.txt`의
+정확한 constraint pin을 지원한다. Pipenv/PDM VCS/path/editable entry,
+정확한 constraint pin이 없는 unpinned range, 원격 PyPI artifact fetch는 아직
+지원하지 않는다.
+Java는 Gradle dependency locking의 `gradle.lockfile`에 기록된 Maven 좌표를
+스캔하고, 로컬 `.m2/repository`의 POM license metadata를 evidence로 읽는다.
+Maven `pom.xml`은 직접 의존성 중 버전이 명시되어 있거나 같은 파일의
+`<properties>` 또는 same-file `dependencyManagement`로 해석되는 경우를 지원한다.
+외부 parent POM, BOM, Maven 전이 그래프 해석, Gradle 그래프 복원은 아직 지원하지 않는다.
+.NET은 NuGet `packages.lock.json`의 직접/전이 package dependency를 스캔하고,
+로컬 NuGet package cache의 `.nuspec` license metadata와 license 파일을 evidence로
+읽는다. `project.assets.json`, `packages.config`, `.csproj`의 직접 PackageReference
+스캔은 아직 지원하지 않는다.
+Ruby는 Bundler `Gemfile.lock`의 gem dependency를 스캔하고, 로컬 Bundler/RubyGems
+install path의 gemspec license metadata와 license 파일을 evidence로 읽는다.
+아직 Gemfile group 기반 개발/프로덕션 구분은 지원하지 않는다.
+PHP는 Composer `composer.lock`의 production/development package dependency를
+스캔하고, 옆의 `composer.json`이 있으면 root dependency 구분에 사용한다.
+evidence는 로컬 `vendor/<vendor>/<package>/composer.json`과 license 파일에서
+읽는다. Composer plugin/platform repository 해석과 Packagist 원격 artifact fetch는
+아직 지원하지 않는다.
+CycloneDX JSON과 SPDX JSON SBOM은 Package URL이 있는 package identity,
+dependency relationship, SBOM에 들어 있는 license evidence를 스캔한다. XML SBOM,
+SPDX tag-value/RDF, 임의 이름의 SBOM 파일 자동 판별은 아직 지원하지 않는다.
 
 ```bash
 ohrisk scan --lockfile package-lock.json
 ohrisk scan --lockfile npm-shrinkwrap.json
+ohrisk scan --lockfile Cargo.lock
+ohrisk scan --lockfile go.mod
+ohrisk scan --lockfile uv.lock
+ohrisk scan --lockfile Pipfile.lock
+ohrisk scan --lockfile pdm.lock
+ohrisk scan --lockfile poetry.lock
+ohrisk scan --lockfile requirements.txt
+ohrisk scan --lockfile gradle.lockfile
+ohrisk scan --lockfile pom.xml
+ohrisk scan --lockfile packages.lock.json
+ohrisk scan --lockfile Gemfile.lock
+ohrisk scan --lockfile composer.lock
+ohrisk scan --lockfile cyclonedx.json
+ohrisk scan --lockfile spdx.json
 ```
 
 ## SaaS 기준으로 스캔하기

@@ -62,30 +62,59 @@ Ohrisk is distributed as an npm package, and the packaged CLI runs on Node.js
 `>=20.0.0`. Bun is used for Ohrisk development, tests, and packaging, but users
 do not need Bun installed to run the published CLI.
 
-Ohrisk scans Bun, npm package-lock/shrinkwrap, pnpm, Deno npm, and Yarn
-lockfiles regardless of which package manager you use to install the CLI.
+Ohrisk scans Bun, npm package-lock/shrinkwrap, pnpm, Deno npm, Yarn, Rust Cargo,
+Go modules, Python uv/Pipenv/PDM/Poetry/requirements.txt, Java Gradle lockfiles,
+Maven `pom.xml`, .NET NuGet lockfiles, Ruby Bundler lockfiles, and PHP Composer
+lockfiles, plus CycloneDX and SPDX JSON SBOM inputs, regardless of which package
+manager you use to install the CLI.
 
 ## Current Scope
 
-The current implementation is the first npm-style vertical slice:
+The current implementation is the first local dependency-risk vertical slice:
 
-- Bun `bun.lock`, npm `package-lock.json`, npm `npm-shrinkwrap.json`, pnpm `pnpm-lock.yaml`, Deno `deno.lock`, and Yarn classic/Berry `yarn.lock` project discovery
+- Bun `bun.lock`, npm `package-lock.json`, npm `npm-shrinkwrap.json`, pnpm `pnpm-lock.yaml`, Deno `deno.lock`, Rust `Cargo.lock`, Go `go.mod`, Python `uv.lock`, Python Pipenv `Pipfile.lock`, Python PDM `pdm.lock`, Python `poetry.lock`, pinned Python `requirements.txt`, Java Gradle `gradle.lockfile`, Java Maven `pom.xml`, .NET NuGet `packages.lock.json`, Ruby Bundler `Gemfile.lock`, PHP Composer `composer.lock`, CycloneDX JSON, SPDX JSON, and Yarn classic/Berry `yarn.lock` project discovery
 - Node-compatible packaged CLI entrypoint for npm, pnpm, Yarn, npx, pnpm dlx, and yarn dlx users
-- explicit lockfile selection with `--lockfile <path>` for projects that contain more than one supported lockfile
-- direct and transitive dependency graph extraction
+- explicit dependency input selection with `--lockfile <path>` for projects that contain more than one supported input file
+- direct and transitive dependency graph extraction when the dependency input records parent/child relationships
 - Bun, npm, pnpm, and Yarn classic/Berry workspace projects are scanned from every workspace/importer package root
 - pnpm `catalog:` and `catalog:<name>` dependency specifiers are resolved from `pnpm-workspace.yaml`
 - Deno `deno.lock` projects are scanned for npm package dependencies recorded in `npm:` specifiers; remote URL imports and JSR packages are not scanned yet
+- Rust `Cargo.lock` projects are scanned for crates, using adjacent `Cargo.toml` root dependencies when available
+- Go `go.mod` projects are scanned for required modules and adjacent `go.sum` module versions when available
+- Python `uv.lock`, PDM `pdm.lock`, and `poetry.lock` projects are scanned for PyPI package dependencies recorded in the lockfile
+- Python Pipenv `Pipfile.lock` projects are scanned for exact `==version` PyPI package entries in the `default` and `develop` sections
+- Python PDM `pdm.lock` projects use adjacent `pyproject.toml` root dependencies when available and infer roots from lockfile dependency references otherwise
+- pinned Python `requirements.txt` files are scanned for direct PyPI package dependencies, following nested `-r` requirement files and exact `-c` constraint pins
+- Java Gradle `gradle.lockfile` projects are scanned for Maven coordinates recorded in dependency locking output
+- Java Maven `pom.xml` projects are scanned for direct dependencies with explicit, property-resolved, or same-file `dependencyManagement` versions
+- .NET NuGet `packages.lock.json` projects are scanned for direct and transitive package dependencies
+- Ruby Bundler `Gemfile.lock` projects are scanned for direct and transitive gem dependencies
+- PHP Composer `composer.lock` projects are scanned for production and development package dependencies, using adjacent `composer.json` root dependencies when available
+- CycloneDX JSON and SPDX JSON SBOM files are scanned for Package URL-backed package identities, dependency relationships, and embedded license evidence
 - npm alias dependency resolution, including pnpm alias package keys, with alias context preserved in dependency paths
 - production, development, optional, and peer dependency classification
 - local `file:` package artifact evidence
 - installed `node_modules` package evidence, including npm alias install names, before network fallback
 - Yarn Berry `.yarn/cache` package zip evidence before registry fallback for PnP installs without `node_modules`
+- local Cargo registry source and `vendor/<crate>` package evidence before unavailable fallback
+- local Go module cache and `vendor/<module>` package evidence before unavailable fallback
+- Python `.venv` and `venv` `*.dist-info/METADATA` package evidence before unavailable fallback
+- local Maven `.m2/repository` POM evidence before unavailable fallback for Gradle lockfile and Maven `pom.xml` coordinates
+- local NuGet package cache `.nuspec` evidence before unavailable fallback for `packages.lock.json` packages
+- local Bundler/RubyGems install path gemspec evidence before unavailable fallback for `Gemfile.lock` gems
+- local Composer `vendor/<vendor>/<package>/composer.json` evidence before unavailable fallback for `composer.lock` packages
 - remote HTTP(S) package tarball evidence when the lockfile points to a tarball, with credential-bearing URLs, obvious local, private, special-purpose, and DNS-resolved internal hosts blocked before fetch, DNS answers rechecked at the default connection boundary, and redirects followed only after each target is validated
 - lockfile integrity verification for local and remote package tarballs
 - npm registry metadata lookup when the lockfile does not include a direct tarball URL
 - gzipped package tarball evidence
 - `package.json` license fields
+- Cargo `Cargo.toml` package `license` fields
+- Python `METADATA` `License-Expression`, `License`, and recognized license classifier fields
+- Maven POM `<licenses>` names
+- NuGet `.nuspec` `<license>` expressions
+- Ruby gemspec `license` and `licenses` fields
+- Composer package `composer.json` `license` fields
+- CycloneDX and SPDX JSON package license declarations from SBOM metadata
 - common root-level `LICENSE`, `LICENCE`, `UNLICENSE`, `COPYING`, and `NOTICE` file variants
 - medium-confidence standard license detection from recognizable `LICENSE` and `COPYING` file text, including SPDX identifiers, GPL-family v2/v3 text, Zlib text, public-domain-style text, and malformed metadata pointers
 - SPDX-like license expression parsing
@@ -117,8 +146,16 @@ The current implementation is the first npm-style vertical slice:
 - explicit waiver mode in JSON, terminal, Markdown, and SARIF reports
 - explicit waiver mode in CycloneDX SBOM metadata
 
-Central approval workflows, GitHub App checks, and ecosystem adapters beyond
-npm-style lockfiles are not part of this slice yet.
+Central approval workflows, GitHub App checks, Cargo workspace member manifest
+resolution, Go `replace` directives, full Go module parent graph
+reconstruction, Pipenv and PDM VCS/path/editable entries, unpinned requirements ranges without exact constraint pins,
+external Maven parent/BOM resolution, Maven transitive graph
+resolution, Gradle graph reconstruction, NuGet `project.assets.json`,
+NuGet `packages.config`, direct `.csproj` PackageReference scanning, Ruby
+Gemfile group classification, Composer plugin/platform repository resolution,
+CycloneDX XML, SPDX tag-value/RDF, arbitrary SBOM filenames, and remote
+crates.io, Go proxy, PyPI, Maven, NuGet, RubyGems, or Packagist artifact
+fetching are not part of this slice yet.
 
 ## Usage
 
@@ -154,22 +191,50 @@ ohrisk help scan
 ohrisk version
 ```
 
-Supported lockfiles:
+Supported dependency input files:
 
 - `bun.lock`
 - `package-lock.json` with either a modern `packages` section or an npm v1 dependency tree
 - `npm-shrinkwrap.json` with the same package-lock parser support
 - `pnpm-lock.yaml` with `importers`, `packages`, and `snapshots` sections, including default and named catalogs from `pnpm-workspace.yaml`
 - `deno.lock` npm package entries from Deno v3/v4-style lockfiles
+- `Cargo.lock` crate entries from Rust Cargo projects, using adjacent `Cargo.toml` root dependencies when available and local Cargo registry source for evidence
+- `go.mod` module requirements plus adjacent `go.sum` module versions when available, using local Go module cache source for evidence
+- `uv.lock` package entries from Python uv projects, using installed `.venv`/`venv` dist-info metadata for local evidence
+- `Pipfile.lock` exact `==version` entries from Python Pipenv projects, using installed `.venv`/`venv` dist-info metadata for local evidence
+- `pdm.lock` package entries from Python PDM projects, using adjacent `pyproject.toml` root dependencies when available and installed `.venv`/`venv` dist-info metadata for local evidence
+- `poetry.lock` package entries from Python Poetry projects, using adjacent `pyproject.toml` root dependencies when available and installed `.venv`/`venv` dist-info metadata for local evidence
+- pinned `requirements.txt` entries such as `name==version`, nested `-r` requirement files, and exact `-c` constraint pins for ranged entries, using installed `.venv`/`venv` dist-info metadata for local evidence
+- `gradle.lockfile` Maven coordinates from Java Gradle dependency locking, using local `.m2/repository` POM metadata for evidence
+- Maven `pom.xml` direct dependencies with explicit versions or versions resolved from local `<properties>` or same-file `dependencyManagement`, using local `.m2/repository` POM metadata for evidence
+- .NET NuGet `packages.lock.json` package entries, using local NuGet cache `.nuspec` metadata for evidence
+- Ruby Bundler `Gemfile.lock` gem entries, using local Bundler/RubyGems gemspec metadata for evidence
+- PHP Composer `composer.lock` package entries, using adjacent `composer.json` root dependencies when available and local `vendor/` package metadata for evidence
+- CycloneDX JSON SBOM package entries with Package URL identities, dependency relationships, and embedded license evidence
+- SPDX JSON SBOM package entries with Package URL external refs, dependency relationships, and embedded license evidence
 - Yarn classic/Berry `yarn.lock` with root and workspace dependency sets from `package.json` manifests, plus local `.yarn/cache` zip evidence for Berry/PnP installs
 
-Select a specific lockfile when a project contains more than one supported lockfile:
+Select a specific dependency input when a project contains more than one supported input file:
 
 ```bash
 ohrisk scan --lockfile package-lock.json
 ohrisk scan --lockfile npm-shrinkwrap.json
 ohrisk ci --lockfile pnpm-lock.yaml --fail-on high
 ohrisk scan --lockfile deno.lock
+ohrisk scan --lockfile Cargo.lock
+ohrisk scan --lockfile go.mod
+ohrisk scan --lockfile uv.lock
+ohrisk scan --lockfile Pipfile.lock
+ohrisk scan --lockfile pdm.lock
+ohrisk scan --lockfile poetry.lock
+ohrisk scan --lockfile requirements.txt
+ohrisk scan --lockfile gradle.lockfile
+ohrisk scan --lockfile pom.xml
+ohrisk scan --lockfile packages.lock.json
+ohrisk scan --lockfile Gemfile.lock
+ohrisk scan --lockfile composer.lock
+ohrisk scan --lockfile cyclonedx.json
+ohrisk scan --lockfile spdx.json
 ohrisk diff main --lockfile bun.lock
 ```
 

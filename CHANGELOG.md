@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.130.0 - 2026-06-21
+
+### Added
+
+- Rust `Cargo.lock` projects are now discovered and scanned for crates, using
+  adjacent `Cargo.toml` root dependencies when available.
+- Go `go.mod` projects are now discovered and scanned for modules, using
+  adjacent `go.sum` entries when available.
+- Local Cargo registry source and Go module cache directories are now used as
+  license evidence sources before unavailable fallback.
+- Python `uv.lock` projects are now discovered and scanned for PyPI packages,
+  with local `.venv`/`venv` `*.dist-info/METADATA` license evidence.
+- Python Pipenv `Pipfile.lock` projects are now discovered and scanned for
+  exact `==version` package entries in the `default` and `develop` sections,
+  using the same local `.venv`/`venv` `*.dist-info/METADATA` license evidence.
+- Python PDM `pdm.lock` projects are now discovered and scanned for PyPI
+  packages, using adjacent `pyproject.toml` root dependencies when available.
+- Python `poetry.lock` projects are now discovered and scanned for PyPI
+  packages, using adjacent `pyproject.toml` root dependencies when available.
+- Pinned Python `requirements.txt` files are now discovered and scanned for
+  direct PyPI package dependencies, nested `-r` requirement files, and exact
+  `-c` constraint pins for ranged entries.
+- Java Gradle `gradle.lockfile` projects are now discovered and scanned for
+  Maven coordinates, with local `.m2/repository` POM license evidence.
+- Java Maven `pom.xml` projects are now discovered and scanned for direct
+  dependencies with explicit, property-resolved, or same-file
+  `dependencyManagement` versions.
+- .NET NuGet `packages.lock.json` projects are now discovered and scanned for
+  direct and transitive package dependencies, with local `.nuspec` license
+  evidence.
+- Ruby Bundler `Gemfile.lock` projects are now discovered and scanned for gem
+  dependencies, with local gemspec license evidence.
+- PHP Composer `composer.lock` projects are now discovered and scanned for
+  package dependencies, using adjacent `composer.json` root dependencies and
+  local `vendor/` package metadata when available.
+- CycloneDX JSON and SPDX JSON SBOM inputs are now discovered and scanned for
+  Package URL-backed dependency identities, relationships, and embedded license
+  evidence.
+- License evidence can now report ecosystem metadata sources such as Python
+  `METADATA`, Maven `pom.xml`, NuGet `.nuspec`, Ruby gemspec, and Composer
+  `composer.json`, plus CycloneDX and SPDX SBOM metadata, without labeling them
+  as `package.json` evidence.
+
 ## 0.129.0 - 2026-06-20
 
 ### Added

@@ -123,6 +123,31 @@ function collectPackageLicenseTexts(evidence: LicenseEvidence): string[] {
     }
   }
 
+  if (evidence.metadataLicense) {
+    texts.push(evidence.metadataLicense);
+  }
+
+  const metadataLicenseObjectType = readLicenseObjectType(evidence.metadataLicenses);
+  if (metadataLicenseObjectType) {
+    texts.push(metadataLicenseObjectType);
+  }
+
+  if (Array.isArray(evidence.metadataLicenses)) {
+    for (const item of evidence.metadataLicenses) {
+      if (typeof item === "string") {
+        texts.push(item);
+        continue;
+      }
+
+      if (typeof item === "object" && item !== null && "type" in item) {
+        const type = (item as { type?: unknown }).type;
+        if (typeof type === "string") {
+          texts.push(type);
+        }
+      }
+    }
+  }
+
   return texts;
 }
 
@@ -164,6 +189,36 @@ function readPackageLicenseExpression(evidence: LicenseEvidence): string | undef
 
   if (Array.isArray(evidence.packageJsonLicenses)) {
     const choices = evidence.packageJsonLicenses
+      .map((item) => {
+        if (typeof item === "string") {
+          return item;
+        }
+
+        if (typeof item === "object" && item !== null && "type" in item) {
+          const type = (item as { type?: unknown }).type;
+          return typeof type === "string" ? type : undefined;
+        }
+
+        return undefined;
+      })
+      .filter((item): item is string => item !== undefined);
+
+    if (choices.length > 0) {
+      return choices.join(" OR ");
+    }
+  }
+
+  if (evidence.metadataLicense) {
+    return evidence.metadataLicense;
+  }
+
+  const metadataLicenseObjectType = readLicenseObjectType(evidence.metadataLicenses);
+  if (metadataLicenseObjectType) {
+    return metadataLicenseObjectType;
+  }
+
+  if (Array.isArray(evidence.metadataLicenses)) {
+    const choices = evidence.metadataLicenses
       .map((item) => {
         if (typeof item === "string") {
           return item;
@@ -328,6 +383,15 @@ function describeEvidenceSources(evidence: LicenseEvidence): string[] {
 
   if (evidence.packageJsonLicenses !== undefined) {
     sources.push("package.json licenses field");
+  }
+
+  const metadataSource = evidence.metadataSource ?? "package metadata";
+  if (evidence.metadataLicense) {
+    sources.push(`${metadataSource} license: ${evidence.metadataLicense}`);
+  }
+
+  if (evidence.metadataLicenses !== undefined) {
+    sources.push(`${metadataSource} licenses field`);
   }
 
   for (const file of evidence.files) {

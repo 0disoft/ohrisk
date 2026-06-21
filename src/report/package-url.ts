@@ -8,6 +8,16 @@ export function packageUrl(node: DependencyNode): string {
       return `pkg:pypi/${encodeURIComponent(normalizePypiName(node.name))}@${encodeURIComponent(node.version)}`;
     case "maven":
       return mavenPackageUrl(node);
+    case "cargo":
+      return `pkg:cargo/${encodeURIComponent(node.name)}@${encodeURIComponent(node.version)}`;
+    case "go":
+      return `pkg:golang/${encodePurlPath(node.name)}@${encodeURIComponent(node.version)}`;
+    case "nuget":
+      return `pkg:nuget/${encodeURIComponent(node.name)}@${encodeURIComponent(node.version)}`;
+    case "gem":
+      return `pkg:gem/${encodeURIComponent(node.name)}@${encodeURIComponent(node.version)}`;
+    case "composer":
+      return `pkg:composer/${encodePurlPath(node.name)}@${encodeURIComponent(node.version)}`;
   }
 }
 

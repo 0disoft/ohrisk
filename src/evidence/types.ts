@@ -12,6 +12,7 @@ export type LicenseEvidenceFile = {
 
 export type LicenseEvidenceSource =
   | "local"
+  | "sbom"
   | "tarball"
   | "unavailable";
 
@@ -19,6 +20,9 @@ export type LicenseEvidence = {
   packageId: string;
   packageJsonLicense?: string;
   packageJsonLicenses?: unknown;
+  metadataLicense?: string;
+  metadataLicenses?: unknown;
+  metadataSource?: string;
   files: LicenseEvidenceFile[];
   source: LicenseEvidenceSource;
   warnings: string[];

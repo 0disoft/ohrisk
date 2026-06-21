@@ -1,7 +1,14 @@
+import type { LicenseEvidence } from "../evidence/types";
+
 export type PackageEcosystem =
   | "npm"
   | "pypi"
-  | "maven";
+  | "maven"
+  | "cargo"
+  | "go"
+  | "nuget"
+  | "gem"
+  | "composer";
 
 export type DependencyType =
   | "production"
@@ -27,4 +34,5 @@ export type DependencyGraph = {
   rootName?: string;
   lockfilePath: string;
   nodes: DependencyNode[];
+  embeddedEvidence?: LicenseEvidence[];
 };

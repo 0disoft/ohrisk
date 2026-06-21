@@ -7,8 +7,14 @@ import { parseArgs, type CliCommand, type HelpTarget } from "./args";
 import { OHRISK_VERSION } from "./version";
 import { diffRiskFindings } from "../diff/compare";
 import { collectGraphEvidence } from "../evidence/collect";
+import type { LicenseEvidence } from "../evidence/types";
 import { readGitRefFile, type GitRefFileReader } from "../git/ref-file";
+import { parseCycloneDxJsonFile, parseCycloneDxJsonText } from "../graph/cyclonedx-json";
+import { parseNugetLockfile, parseNugetLockText } from "../graph/dotnet-nuget-lock";
 import { parseDenoLockfile, parseDenoLockText } from "../graph/deno-lock";
+import { parseGoModFile, parseGoModText } from "../graph/go-mod";
+import { parseGradleLockfile, parseGradleLockText } from "../graph/java-gradle-lock";
+import { parseMavenPomFile, parseMavenPomText } from "../graph/java-maven-pom";
 import { parseBunLockfile, parseBunLockText } from "../graph/npm-bun-lock";
 import { parsePackageLockfile, parsePackageLockText } from "../graph/npm-package-lock";
 import { parsePnpmLockfile, parsePnpmLockText } from "../graph/npm-pnpm-lock";
@@ -18,6 +24,19 @@ import {
   parseYarnLockText,
   type YarnWorkspacePackageJsonInput
 } from "../graph/npm-yarn-lock";
+import { parsePdmLockfile, parsePdmLockText } from "../graph/python-pdm-lock";
+import { parsePipfileLockfile, parsePipfileLockText } from "../graph/python-pipfile-lock";
+import { parsePoetryLockfile, parsePoetryLockText } from "../graph/python-poetry-lock";
+import {
+  parseRequirementsFile,
+  parseRequirementsText,
+  type RequirementsIncludedFileReader
+} from "../graph/python-requirements";
+import { parseUvLockfile, parseUvLockText } from "../graph/python-uv-lock";
+import { parseGemfileLockfile, parseGemfileLockText } from "../graph/ruby-gemfile-lock";
+import { parseComposerLockfile, parseComposerLockText } from "../graph/php-composer-lock";
+import { parseCargoLockfile, parseCargoLockText } from "../graph/rust-cargo-lock";
+import { parseSpdxJsonFile, parseSpdxJsonText } from "../graph/spdx-json";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
 import { normalizeAllLicenseEvidence, normalizeLicenseEvidence } from "../license/normalize";
 import { evaluateLicenseRisk, evaluateLicenseRisks } from "../policy/evaluate";
@@ -144,6 +163,65 @@ async function runDiff(
     return exitCodeForError(baselinePnpmWorkspace.error);
   }
 
+  const baselinePyproject = (
+    currentProject.value.project.lockfile.kind === "pdm-lock"
+    || currentProject.value.project.lockfile.kind === "poetry-lock"
+  )
+    ? readOptionalBaselineFile({
+        projectRoot: currentProject.value.project.rootDir,
+        baselineRef: command.baselineRef,
+        relativePath: "pyproject.toml",
+        readRefFile
+      })
+    : ok(undefined);
+
+  if (isErr(baselinePyproject)) {
+    io.stderr(formatError(baselinePyproject.error));
+    return exitCodeForError(baselinePyproject.error);
+  }
+
+  const baselineCargoManifest = currentProject.value.project.lockfile.kind === "cargo-lock"
+    ? readOptionalBaselineFile({
+        projectRoot: currentProject.value.project.rootDir,
+        baselineRef: command.baselineRef,
+        relativePath: "Cargo.toml",
+        readRefFile
+      })
+    : ok(undefined);
+
+  if (isErr(baselineCargoManifest)) {
+    io.stderr(formatError(baselineCargoManifest.error));
+    return exitCodeForError(baselineCargoManifest.error);
+  }
+
+  const baselineGoSum = currentProject.value.project.lockfile.kind === "go-mod"
+    ? readOptionalBaselineFile({
+        projectRoot: currentProject.value.project.rootDir,
+        baselineRef: command.baselineRef,
+        relativePath: "go.sum",
+        readRefFile
+      })
+    : ok(undefined);
+
+  if (isErr(baselineGoSum)) {
+    io.stderr(formatError(baselineGoSum.error));
+    return exitCodeForError(baselineGoSum.error);
+  }
+
+  const baselineComposerJson = currentProject.value.project.lockfile.kind === "composer-lock"
+    ? readOptionalBaselineFile({
+        projectRoot: currentProject.value.project.rootDir,
+        baselineRef: command.baselineRef,
+        relativePath: "composer.json",
+        readRefFile
+      })
+    : ok(undefined);
+
+  if (isErr(baselineComposerJson)) {
+    io.stderr(formatError(baselineComposerJson.error));
+    return exitCodeForError(baselineComposerJson.error);
+  }
+
   const baselineGraph = parseLockfileTextForKind({
     kind: currentProject.value.project.lockfile.kind,
     text: baselineLockfile.value,
@@ -152,7 +230,19 @@ async function runDiff(
     packageJsonPath: `${command.baselineRef}:package.json`,
     workspacePackageJsonTexts: baselineWorkspacePackageJsons.value,
     pnpmWorkspaceText: baselinePnpmWorkspace.value,
-    pnpmWorkspacePath: `${command.baselineRef}:pnpm-workspace.yaml`
+    pnpmWorkspacePath: `${command.baselineRef}:pnpm-workspace.yaml`,
+    pyprojectText: baselinePyproject.value,
+    cargoManifestText: baselineCargoManifest.value,
+    goSumText: baselineGoSum.value,
+    composerJsonText: baselineComposerJson.value,
+    requirementsRootName: currentProject.value.scanGraph.rootName,
+    requirementsIncludedFileReader: currentProject.value.project.lockfile.kind === "requirements-txt"
+      ? createBaselineRequirementsIncludedFileReader({
+          projectRoot: currentProject.value.project.rootDir,
+          baselineRef: command.baselineRef,
+          readRefFile
+        })
+      : undefined
   });
 
   if (isErr(baselineGraph)) {
@@ -161,7 +251,7 @@ async function runDiff(
   }
 
   const baselineScanGraph = filterGraphForProdOnly(baselineGraph.value, command.prodOnly);
-  const baselineEvidence = await collectGraphEvidence({
+  const baselineEvidence = await collectEvidenceForGraph({
     graph: baselineScanGraph,
     projectRoot: currentProject.value.project.rootDir
   });
@@ -396,7 +486,7 @@ async function evaluateProjectScan(input: {
   profile: Extract<CliCommand, { kind: "scan" | "ci" | "diff" }>["profile"];
   applyWaivers: boolean;
 }) {
-  const evidence = await collectGraphEvidence({
+  const evidence = await collectEvidenceForGraph({
     graph: input.scanGraph,
     projectRoot: input.project.rootDir
   });
@@ -465,6 +555,34 @@ function parseProjectLockfile(project: ProjectInput): Result<DependencyGraph, Oh
       return parsePnpmLockfile(project.lockfile.path);
     case "deno-lock":
       return parseDenoLockfile(project.lockfile.path);
+    case "cargo-lock":
+      return parseCargoLockfile(project.lockfile.path);
+    case "go-mod":
+      return parseGoModFile(project.lockfile.path);
+    case "pipfile-lock":
+      return parsePipfileLockfile(project.lockfile.path);
+    case "pdm-lock":
+      return parsePdmLockfile(project.lockfile.path);
+    case "poetry-lock":
+      return parsePoetryLockfile(project.lockfile.path);
+    case "requirements-txt":
+      return parseRequirementsFile(project.lockfile.path);
+    case "uv-lock":
+      return parseUvLockfile(project.lockfile.path);
+    case "gradle-lock":
+      return parseGradleLockfile(project.lockfile.path);
+    case "maven-pom":
+      return parseMavenPomFile(project.lockfile.path);
+    case "nuget-lock":
+      return parseNugetLockfile(project.lockfile.path);
+    case "gemfile-lock":
+      return parseGemfileLockfile(project.lockfile.path);
+    case "composer-lock":
+      return parseComposerLockfile(project.lockfile.path);
+    case "cyclonedx-json":
+      return parseCycloneDxJsonFile(project.lockfile.path);
+    case "spdx-json":
+      return parseSpdxJsonFile(project.lockfile.path);
     case "yarn-lock":
       return parseYarnLockfile(project.lockfile.path);
   }
@@ -475,10 +593,44 @@ function filterGraphForProdOnly(graph: DependencyGraph, prodOnly: boolean): Depe
     return graph;
   }
 
+  const nodes = graph.nodes.filter(isProductionRelevantDependency);
+  const nodeIds = new Set(nodes.map((node) => node.id));
+
   return {
     ...graph,
-    nodes: graph.nodes.filter(isProductionRelevantDependency)
+    nodes,
+    embeddedEvidence: graph.embeddedEvidence?.filter((evidence) => nodeIds.has(evidence.packageId))
   };
+}
+
+async function collectEvidenceForGraph(input: {
+  graph: DependencyGraph;
+  projectRoot: string;
+}): Promise<Result<LicenseEvidence[], OhriskError>> {
+  const embeddedEvidence = input.graph.embeddedEvidence ?? [];
+  const embeddedEvidenceIds = new Set(embeddedEvidence.map((evidence) => evidence.packageId));
+  const graphNodeIds = new Set(input.graph.nodes.map((node) => node.id));
+  const relevantEmbeddedEvidence = embeddedEvidence.filter((evidence) =>
+    graphNodeIds.has(evidence.packageId)
+  );
+  const collectionGraph = embeddedEvidenceIds.size === 0
+    ? input.graph
+    : {
+        ...input.graph,
+        nodes: input.graph.nodes.filter((node) => !embeddedEvidenceIds.has(node.id)),
+        embeddedEvidence: []
+      };
+
+  const collected = await collectGraphEvidence({
+    graph: collectionGraph,
+    projectRoot: input.projectRoot
+  });
+
+  if (isErr(collected)) {
+    return collected;
+  }
+
+  return ok([...relevantEmbeddedEvidence, ...collected.value]);
 }
 
 function isProductionRelevantDependency(node: DependencyNode): boolean {
@@ -494,6 +646,12 @@ function parseLockfileTextForKind(input: {
   workspacePackageJsonTexts?: YarnWorkspacePackageJsonInput[];
   pnpmWorkspaceText?: string;
   pnpmWorkspacePath?: string;
+  pyprojectText?: string;
+  cargoManifestText?: string;
+  goSumText?: string;
+  composerJsonText?: string;
+  requirementsRootName?: string;
+  requirementsIncludedFileReader?: RequirementsIncludedFileReader;
 }): Result<DependencyGraph, OhriskError> {
   switch (input.kind) {
     case "bun":
@@ -509,6 +667,47 @@ function parseLockfileTextForKind(input: {
       });
     case "deno-lock":
       return parseDenoLockText(input.text, input.lockfilePath);
+    case "cargo-lock":
+      return parseCargoLockText(input.text, input.lockfilePath, {
+        manifestText: input.cargoManifestText
+      });
+    case "go-mod":
+      return parseGoModText(input.text, input.lockfilePath, {
+        goSumText: input.goSumText
+      });
+    case "pipfile-lock":
+      return parsePipfileLockText(input.text, input.lockfilePath);
+    case "pdm-lock":
+      return parsePdmLockText(input.text, input.lockfilePath, {
+        pyprojectText: input.pyprojectText
+      });
+    case "poetry-lock":
+      return parsePoetryLockText(input.text, input.lockfilePath, {
+        pyprojectText: input.pyprojectText
+      });
+    case "requirements-txt":
+      return parseRequirementsText(input.text, input.lockfilePath, {
+        rootName: input.requirementsRootName,
+        readIncludedFile: input.requirementsIncludedFileReader
+      });
+    case "uv-lock":
+      return parseUvLockText(input.text, input.lockfilePath);
+    case "gradle-lock":
+      return parseGradleLockText(input.text, input.lockfilePath);
+    case "maven-pom":
+      return parseMavenPomText(input.text, input.lockfilePath);
+    case "nuget-lock":
+      return parseNugetLockText(input.text, input.lockfilePath);
+    case "gemfile-lock":
+      return parseGemfileLockText(input.text, input.lockfilePath);
+    case "composer-lock":
+      return parseComposerLockText(input.text, input.lockfilePath, {
+        composerJsonText: input.composerJsonText
+      });
+    case "cyclonedx-json":
+      return parseCycloneDxJsonText(input.text, input.lockfilePath);
+    case "spdx-json":
+      return parseSpdxJsonText(input.text, input.lockfilePath);
     case "yarn-lock":
       return parseYarnLockText({
         lockfileText: input.text,
@@ -557,6 +756,78 @@ function readBaselineYarnWorkspacePackageJsons(input: {
   }
 
   return ok(packageJsons);
+}
+
+function createBaselineRequirementsIncludedFileReader(input: {
+  projectRoot: string;
+  baselineRef: string;
+  readRefFile: GitRefFileReader;
+}): RequirementsIncludedFileReader {
+  return ({ includePath, fromFilePath, directive }) => {
+    if (path.isAbsolute(includePath)) {
+      return err(
+        createError({
+          code: "REQUIREMENTS_PARSE_FAILED",
+          category: "unsupported_input",
+          message: "Failed to parse requirements.txt. Absolute nested requirement or constraint paths are not supported.",
+          details: {
+            lockfilePath: fromFilePath,
+            includePath,
+            directive
+          }
+        })
+      );
+    }
+
+    const fromRelativePath = stripBaselineRefPrefix(fromFilePath, input.baselineRef);
+    const includedRelativePath = normalizeBaselineRelativePath(
+      path.join(path.dirname(fromRelativePath), includePath)
+    );
+
+    if (!includedRelativePath) {
+      return err(
+        createError({
+          code: "REQUIREMENTS_PARSE_FAILED",
+          category: "unsupported_input",
+          message: "Failed to parse requirements.txt. Nested requirement or constraint paths must stay inside the requirements root.",
+          details: {
+            lockfilePath: fromFilePath,
+            includePath,
+            directive
+          }
+        })
+      );
+    }
+
+    const included = input.readRefFile({
+      projectRoot: input.projectRoot,
+      ref: input.baselineRef,
+      relativePath: includedRelativePath
+    });
+
+    if (isErr(included)) {
+      return err(included.error);
+    }
+
+    return ok({
+      path: `${input.baselineRef}:${includedRelativePath}`,
+      text: included.value
+    });
+  };
+}
+
+function stripBaselineRefPrefix(filePath: string, baselineRef: string): string {
+  const prefix = `${baselineRef}:`;
+  return filePath.startsWith(prefix) ? filePath.slice(prefix.length) : filePath;
+}
+
+function normalizeBaselineRelativePath(relativePath: string): string | undefined {
+  const normalized = path.normalize(relativePath).replace(/\\/g, "/");
+  if (normalized === "." || normalized.startsWith("../") || normalized === ".." || path.isAbsolute(normalized)) {
+    return undefined;
+  }
+
+  return normalized;
 }
 
 function readOptionalBaselineFile(input: {

@@ -142,7 +142,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.129.0"]);
+    expect(stdout).toEqual(["ohrisk 0.130.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -515,6 +515,579 @@ describe("main", () => {
     }
   });
 
+  test("prints actionable findings for a Rust Cargo.lock project with local Cargo cache evidence", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cargo-project-"));
+    const crateDir = path.join(
+      projectRoot,
+      ".cargo",
+      "registry",
+      "src",
+      "index.crates.io-abcdef",
+      "risk-crate-1.0.0"
+    );
+
+    try {
+      mkdirSync(crateDir, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "Cargo.toml"),
+        [
+          "[package]",
+          "name = \"fixture-rust\"",
+          "version = \"0.1.0\"",
+          "",
+          "[dependencies]",
+          "risk-crate = \"1\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectRoot, "Cargo.lock"),
+        [
+          "[[package]]",
+          "name = \"risk-crate\"",
+          "version = \"1.0.0\"",
+          "source = \"registry+https://github.com/rust-lang/crates.io-index\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(crateDir, "Cargo.toml"),
+        [
+          "[package]",
+          "name = \"risk-crate\"",
+          "version = \"1.0.0\"",
+          "license = \"AGPL-3.0-only\""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Lockfile: Cargo.lock (cargo-lock)");
+      expect(output).toContain("Dependencies: 1 total, 1 direct, 0 transitive");
+      expect(output).toContain("Risks: 1 high, 0 review, 0 unknown, 0 low");
+      expect(output).toContain("- [high] risk-crate@1.0.0");
+      expect(output).toContain("path: fixture-rust -> risk-crate@1.0.0");
+      expect(output).toContain("source: local; Cargo.toml license: AGPL-3.0-only");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("prints actionable findings for a Go module project with local module cache evidence", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-go-project-"));
+    const moduleDir = path.join(
+      projectRoot,
+      "pkg",
+      "mod",
+      "github.com",
+      "acme",
+      "risk@v1.0.0"
+    );
+
+    try {
+      mkdirSync(moduleDir, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "go.mod"),
+        [
+          "module example.com/fixture-go",
+          "",
+          "go 1.22",
+          "",
+          "require github.com/acme/risk v1.0.0"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectRoot, "go.sum"),
+        [
+          "github.com/acme/risk v1.0.0 h1:abc",
+          "github.com/acme/risk v1.0.0/go.mod h1:def"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(moduleDir, "LICENSE"),
+        "GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007\n",
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Lockfile: go.mod (go-mod)");
+      expect(output).toContain("Dependencies: 1 total, 1 direct, 0 transitive");
+      expect(output).toContain("Risks: 1 high, 0 review, 0 unknown, 0 low");
+      expect(output).toContain("- [high] github.com/acme/risk@v1.0.0");
+      expect(output).toContain("path: example.com/fixture-go -> github.com/acme/risk@v1.0.0");
+      expect(output).toContain("file license match: AGPL-3.0-only from LICENSE");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("prints actionable findings for a Python uv.lock project with local dist-info evidence", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-uv-project-"));
+    const distInfoDir = path.join(
+      projectRoot,
+      ".venv",
+      "Lib",
+      "site-packages",
+      "risk_pkg-1.0.0.dist-info"
+    );
+
+    try {
+      mkdirSync(distInfoDir, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "pyproject.toml"),
+        [
+          "[project]",
+          "name = \"fixture-python\"",
+          "version = \"0.1.0\"",
+          "dependencies = [\"risk-pkg==1.0.0\"]"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectRoot, "uv.lock"),
+        [
+          "version = 1",
+          "",
+          "[[package]]",
+          "name = \"fixture-python\"",
+          "version = \"0.1.0\"",
+          "source = { virtual = \".\" }",
+          "dependencies = [",
+          "    { name = \"risk-pkg\" },",
+          "]",
+          "",
+          "[[package]]",
+          "name = \"risk-pkg\"",
+          "version = \"1.0.0\"",
+          "source = { registry = \"https://pypi.org/simple\" }"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(distInfoDir, "METADATA"),
+        [
+          "Metadata-Version: 2.4",
+          "Name: risk-pkg",
+          "Version: 1.0.0",
+          "License-Expression: AGPL-3.0-only",
+          ""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Lockfile: uv.lock (uv-lock)");
+      expect(output).toContain("Dependencies: 1 total, 1 direct, 0 transitive");
+      expect(output).toContain("Risks: 1 high, 0 review, 0 unknown, 0 low");
+      expect(output).toContain("- [high] risk-pkg@1.0.0");
+      expect(output).toContain("path: fixture-python -> risk-pkg@1.0.0");
+      expect(output).toContain("source: local; METADATA license: AGPL-3.0-only");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("prints actionable findings for a Python Pipfile.lock project with local dist-info evidence", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-pipfile-project-"));
+    const distInfoDir = path.join(
+      projectRoot,
+      ".venv",
+      "Lib",
+      "site-packages",
+      "risk_pkg-1.0.0.dist-info"
+    );
+
+    try {
+      mkdirSync(distInfoDir, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "Pipfile"),
+        [
+          "[packages]",
+          "risk-pkg = \"*\"",
+          "",
+          "[dev-packages]",
+          "dev-risk = \"*\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectRoot, "Pipfile.lock"),
+        JSON.stringify({
+          default: {
+            "risk-pkg": {
+              version: "==1.0.0"
+            }
+          },
+          develop: {
+            "dev-risk": {
+              version: "==2.0.0"
+            }
+          }
+        }),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(distInfoDir, "METADATA"),
+        [
+          "Metadata-Version: 2.4",
+          "Name: risk-pkg",
+          "Version: 1.0.0",
+          "License-Expression: AGPL-3.0-only",
+          ""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Lockfile: Pipfile.lock (pipfile-lock)");
+      expect(output).toContain("Dependencies: 1 total, 1 direct, 0 transitive");
+      expect(output).toContain("Risks: 1 high, 0 review, 0 unknown, 0 low");
+      expect(output).toContain("- [high] risk-pkg@1.0.0");
+      expect(output).toContain("path: ohrisk-pipfile-project-");
+      expect(output).toContain("source: local; METADATA license: AGPL-3.0-only");
+      expect(output).not.toContain("dev-risk@2.0.0");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("prints actionable findings for a Python PDM pdm.lock project with local dist-info evidence", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-pdm-project-"));
+    const distInfoDir = path.join(
+      projectRoot,
+      ".venv",
+      "Lib",
+      "site-packages",
+      "risk_pkg-1.0.0.dist-info"
+    );
+
+    try {
+      mkdirSync(distInfoDir, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "pyproject.toml"),
+        [
+          "[project]",
+          "name = \"fixture-pdm\"",
+          "version = \"0.1.0\"",
+          "dependencies = [",
+          "    \"risk-pkg>=1.0.0\",",
+          "]",
+          "",
+          "[dependency-groups]",
+          "dev = [\"dev-risk>=2.0.0\"]"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectRoot, "pdm.lock"),
+        [
+          "[metadata]",
+          "groups = [\"default\", \"dev\"]",
+          "lock_version = \"4.5.0\"",
+          "",
+          "[[package]]",
+          "name = \"dev-risk\"",
+          "version = \"2.0.0\"",
+          "groups = [\"dev\"]",
+          "",
+          "[[package]]",
+          "name = \"risk-pkg\"",
+          "version = \"1.0.0\"",
+          "groups = [\"default\"]"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(distInfoDir, "METADATA"),
+        [
+          "Metadata-Version: 2.4",
+          "Name: risk-pkg",
+          "Version: 1.0.0",
+          "License-Expression: AGPL-3.0-only",
+          ""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Lockfile: pdm.lock (pdm-lock)");
+      expect(output).toContain("Dependencies: 1 total, 1 direct, 0 transitive");
+      expect(output).toContain("Risks: 1 high, 0 review, 0 unknown, 0 low");
+      expect(output).toContain("- [high] risk-pkg@1.0.0");
+      expect(output).toContain("path: fixture-pdm -> risk-pkg@1.0.0");
+      expect(output).toContain("source: local; METADATA license: AGPL-3.0-only");
+      expect(output).not.toContain("dev-risk@2.0.0");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("prints actionable findings for a Python requirements.txt project with local dist-info evidence", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-requirements-project-"));
+    const distInfoDir = path.join(
+      projectRoot,
+      ".venv",
+      "Lib",
+      "site-packages",
+      "risk_pkg-1.0.0.dist-info"
+    );
+
+    try {
+      mkdirSync(distInfoDir, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "requirements.txt"),
+        [
+          "--index-url https://pypi.org/simple",
+          "risk-pkg==1.0.0"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(distInfoDir, "METADATA"),
+        [
+          "Metadata-Version: 2.4",
+          "Name: risk-pkg",
+          "Version: 1.0.0",
+          "License-Expression: AGPL-3.0-only",
+          ""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Lockfile: requirements.txt (requirements-txt)");
+      expect(output).toContain("Dependencies: 1 total, 1 direct, 0 transitive");
+      expect(output).toContain("Risks: 1 high, 0 review, 0 unknown, 0 low");
+      expect(output).toContain("- [high] risk-pkg@1.0.0");
+      expect(output).toContain("source: local; METADATA license: AGPL-3.0-only");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("prints actionable findings for a Python poetry.lock project with local dist-info evidence", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-poetry-project-"));
+    const distInfoDir = path.join(
+      projectRoot,
+      ".venv",
+      "Lib",
+      "site-packages",
+      "risk_pkg-1.0.0.dist-info"
+    );
+
+    try {
+      mkdirSync(distInfoDir, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "pyproject.toml"),
+        [
+          "[tool.poetry]",
+          "name = \"fixture-poetry\"",
+          "version = \"0.1.0\"",
+          "",
+          "[tool.poetry.dependencies]",
+          "python = \"^3.12\"",
+          "risk-pkg = \"^1.0.0\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectRoot, "poetry.lock"),
+        [
+          "[[package]]",
+          "name = \"risk-pkg\"",
+          "version = \"1.0.0\"",
+          "optional = false",
+          "python-versions = \">=3.8\"",
+          "groups = [\"main\"]"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(distInfoDir, "METADATA"),
+        [
+          "Metadata-Version: 2.4",
+          "Name: risk-pkg",
+          "Version: 1.0.0",
+          "License-Expression: AGPL-3.0-only",
+          ""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Lockfile: poetry.lock (poetry-lock)");
+      expect(output).toContain("Dependencies: 1 total, 1 direct, 0 transitive");
+      expect(output).toContain("Risks: 1 high, 0 review, 0 unknown, 0 low");
+      expect(output).toContain("- [high] risk-pkg@1.0.0");
+      expect(output).toContain("path: fixture-poetry -> risk-pkg@1.0.0");
+      expect(output).toContain("source: local; METADATA license: AGPL-3.0-only");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("prints actionable findings for a Java Gradle lockfile project with local Maven POM evidence", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-gradle-project-"));
+    const pomDir = path.join(
+      projectRoot,
+      ".m2",
+      "repository",
+      "com",
+      "acme",
+      "risk",
+      "1.0.0"
+    );
+
+    try {
+      mkdirSync(pomDir, { recursive: true });
+      writeFileSync(path.join(projectRoot, "build.gradle"), "plugins { id 'java' }\n", "utf8");
+      writeFileSync(
+        path.join(projectRoot, "gradle.lockfile"),
+        "com.acme:risk:1.0.0=runtimeClasspath\n",
+        "utf8"
+      );
+      writeFileSync(
+        path.join(pomDir, "risk-1.0.0.pom"),
+        [
+          "<project>",
+          "  <licenses>",
+          "    <license>",
+          "      <name>AGPL-3.0-only</name>",
+          "    </license>",
+          "  </licenses>",
+          "</project>"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Lockfile: gradle.lockfile (gradle-lock)");
+      expect(output).toContain("Dependencies: 1 total, 1 direct, 0 transitive");
+      expect(output).toContain("Risks: 1 high, 0 review, 0 unknown, 0 low");
+      expect(output).toContain("- [high] com.acme:risk@1.0.0");
+      expect(output).toContain("path: ");
+      expect(output).toContain("com.acme:risk@1.0.0");
+      expect(output).toContain("source: local; pom.xml license: AGPL-3.0-only");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("prints actionable findings for a Java Maven pom.xml project with local POM evidence", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-maven-project-"));
+    const dependencyPomDir = path.join(
+      projectRoot,
+      ".m2",
+      "repository",
+      "com",
+      "acme",
+      "risk",
+      "1.0.0"
+    );
+
+    try {
+      mkdirSync(dependencyPomDir, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "pom.xml"),
+        [
+          "<project>",
+          "  <modelVersion>4.0.0</modelVersion>",
+          "  <groupId>com.example</groupId>",
+          "  <artifactId>fixture-maven</artifactId>",
+          "  <version>0.1.0</version>",
+          "  <dependencies>",
+          "    <dependency>",
+          "      <groupId>com.acme</groupId>",
+          "      <artifactId>risk</artifactId>",
+          "      <version>1.0.0</version>",
+          "    </dependency>",
+          "  </dependencies>",
+          "</project>"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(dependencyPomDir, "risk-1.0.0.pom"),
+        [
+          "<project>",
+          "  <licenses>",
+          "    <license>",
+          "      <name>AGPL-3.0-only</name>",
+          "    </license>",
+          "  </licenses>",
+          "</project>"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Lockfile: pom.xml (maven-pom)");
+      expect(output).toContain("Dependencies: 1 total, 1 direct, 0 transitive");
+      expect(output).toContain("Risks: 1 high, 0 review, 0 unknown, 0 low");
+      expect(output).toContain("- [high] com.acme:risk@1.0.0");
+      expect(output).toContain("path: fixture-maven -> com.acme:risk@1.0.0");
+      expect(output).toContain("source: local; pom.xml license: AGPL-3.0-only");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
 
   test("tightens GPL severity for distributed apps", async () => {
     const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
@@ -765,7 +1338,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.129.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.130.0");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
@@ -1027,6 +1600,136 @@ describe("main", () => {
       ref: "pkg:npm/permissive-parent@1.0.0",
       dependsOn: ["pkg:npm/agpl-child@0.1.0"]
     });
+  });
+
+  test("scans CycloneDX JSON SBOM input with embedded license evidence", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cyclonedx-input-"));
+
+    try {
+      writeFileSync(
+        path.join(projectRoot, "cyclonedx.json"),
+        JSON.stringify({
+          bomFormat: "CycloneDX",
+          specVersion: "1.5",
+          metadata: {
+            component: {
+              name: "fixture-cyclonedx-input",
+              "bom-ref": "root-app"
+            }
+          },
+          components: [
+            {
+              type: "library",
+              "bom-ref": "pkg:npm/permissive-parent@1.0.0",
+              purl: "pkg:npm/permissive-parent@1.0.0",
+              licenses: [{ license: { id: "MIT" } }]
+            },
+            {
+              type: "library",
+              "bom-ref": "agpl-child",
+              purl: "pkg:pypi/agpl-child@2.0.0",
+              licenses: [{ expression: "AGPL-3.0-only" }]
+            },
+            {
+              type: "library",
+              "bom-ref": "dev-risk",
+              purl: "pkg:maven/org.example/dev-risk@3.0.0",
+              scope: "excluded",
+              licenses: [{ license: { id: "GPL-3.0-only" } }]
+            }
+          ],
+          dependencies: [
+            {
+              ref: "root-app",
+              dependsOn: ["pkg:npm/permissive-parent@1.0.0", "dev-risk"]
+            },
+            {
+              ref: "pkg:npm/permissive-parent@1.0.0",
+              dependsOn: ["agpl-child"]
+            }
+          ]
+        }),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--lockfile", "cyclonedx.json", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Lockfile: cyclonedx.json (cyclonedx-json)");
+      expect(output).toContain("Dependencies: 2 total, 1 direct, 1 transitive");
+      expect(output).toContain("- [high] agpl-child@2.0.0");
+      expect(output).toContain("source: sbom; CycloneDX license: AGPL-3.0-only");
+      expect(output).not.toContain("dev-risk@3.0.0");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("scans SPDX JSON SBOM input with embedded license evidence", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-spdx-input-"));
+
+    try {
+      writeFileSync(
+        path.join(projectRoot, "spdx.json"),
+        JSON.stringify({
+          spdxVersion: "SPDX-2.3",
+          name: "fixture-spdx-input",
+          documentDescribes: ["SPDXRef-Package-parent"],
+          packages: [
+            {
+              SPDXID: "SPDXRef-Package-parent",
+              name: "permissive-parent",
+              licenseConcluded: "MIT",
+              externalRefs: [
+                {
+                  referenceCategory: "PACKAGE-MANAGER",
+                  referenceType: "purl",
+                  referenceLocator: "pkg:npm/permissive-parent@1.0.0"
+                }
+              ]
+            },
+            {
+              SPDXID: "SPDXRef-Package-child",
+              name: "agpl-child",
+              licenseDeclared: "AGPL-3.0-only",
+              externalRefs: [
+                {
+                  referenceCategory: "PACKAGE-MANAGER",
+                  referenceType: "purl",
+                  referenceLocator: "pkg:cargo/agpl-child@2.0.0"
+                }
+              ]
+            }
+          ],
+          relationships: [
+            {
+              spdxElementId: "SPDXRef-Package-parent",
+              relationshipType: "DEPENDS_ON",
+              relatedSpdxElement: "SPDXRef-Package-child"
+            }
+          ]
+        }),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--lockfile", "spdx.json"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Lockfile: spdx.json (spdx-json)");
+      expect(output).toContain("Dependencies: 2 total, 1 direct, 1 transitive");
+      expect(output).toContain("- [high] agpl-child@2.0.0");
+      expect(output).toContain("source: sbom; SPDX license: AGPL-3.0-only");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 
   test("prints Markdown scan output", async () => {
@@ -1749,6 +2452,590 @@ describe("main", () => {
 
       expect(exitCode).toBe(0);
       expect(stderr).toEqual([]);
+
+      const payload = JSON.parse(stdout.join("\n")) as {
+        currentFindingCount: number;
+        baselineFindingCount: number;
+        newFindingCount: number;
+      };
+      expect(payload.currentFindingCount).toBe(1);
+      expect(payload.baselineFindingCount).toBe(1);
+      expect(payload.newFindingCount).toBe(0);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("diff reads baseline pyproject.toml for Poetry root dependency classification", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-poetry-diff-"));
+    const distInfoDir = path.join(
+      projectRoot,
+      ".venv",
+      "Lib",
+      "site-packages",
+      "risk_pkg-1.0.0.dist-info"
+    );
+    const pyproject = [
+      "[tool.poetry]",
+      "name = \"fixture-poetry-diff\"",
+      "version = \"0.1.0\"",
+      "",
+      "[tool.poetry.dependencies]",
+      "python = \"^3.12\"",
+      "risk-pkg = \"^1.0.0\""
+    ].join("\n");
+    const lockfile = [
+      "[[package]]",
+      "name = \"risk-pkg\"",
+      "version = \"1.0.0\"",
+      "optional = false",
+      "python-versions = \">=3.8\"",
+      "groups = [\"main\"]"
+    ].join("\n");
+
+    try {
+      mkdirSync(distInfoDir, { recursive: true });
+      writeFileSync(path.join(projectRoot, "pyproject.toml"), pyproject, "utf8");
+      writeFileSync(path.join(projectRoot, "poetry.lock"), lockfile, "utf8");
+      writeFileSync(
+        path.join(distInfoDir, "METADATA"),
+        [
+          "Metadata-Version: 2.4",
+          "Name: risk-pkg",
+          "Version: 1.0.0",
+          "License-Expression: AGPL-3.0-only",
+          ""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const requestedBaselinePaths: string[] = [];
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      io.readRefFile = ({ relativePath }) => {
+        requestedBaselinePaths.push(relativePath);
+        if (relativePath === "poetry.lock") {
+          return { ok: true as const, value: lockfile };
+        }
+
+        if (relativePath === "pyproject.toml") {
+          return { ok: true as const, value: pyproject };
+        }
+
+        throw new Error(`Unexpected baseline path: ${relativePath}`);
+      };
+
+      const exitCode = await main(["diff", "main", "--json", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+      expect(requestedBaselinePaths).toEqual(["poetry.lock", "pyproject.toml"]);
+
+      const payload = JSON.parse(stdout.join("\n")) as {
+        currentFindingCount: number;
+        baselineFindingCount: number;
+        newFindingCount: number;
+      };
+      expect(payload.currentFindingCount).toBe(1);
+      expect(payload.baselineFindingCount).toBe(1);
+      expect(payload.newFindingCount).toBe(0);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("diff reads baseline pyproject.toml for PDM root dependency classification", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-pdm-diff-"));
+    const distInfoDir = path.join(
+      projectRoot,
+      ".venv",
+      "Lib",
+      "site-packages",
+      "risk_pkg-1.0.0.dist-info"
+    );
+    const pyproject = [
+      "[project]",
+      "name = \"fixture-pdm-diff\"",
+      "version = \"0.1.0\"",
+      "dependencies = [\"risk-pkg>=1.0.0\"]"
+    ].join("\n");
+    const lockfile = [
+      "[[package]]",
+      "name = \"risk-pkg\"",
+      "version = \"1.0.0\"",
+      "groups = [\"default\"]"
+    ].join("\n");
+
+    try {
+      mkdirSync(distInfoDir, { recursive: true });
+      writeFileSync(path.join(projectRoot, "pyproject.toml"), pyproject, "utf8");
+      writeFileSync(path.join(projectRoot, "pdm.lock"), lockfile, "utf8");
+      writeFileSync(
+        path.join(distInfoDir, "METADATA"),
+        [
+          "Metadata-Version: 2.4",
+          "Name: risk-pkg",
+          "Version: 1.0.0",
+          "License-Expression: AGPL-3.0-only",
+          ""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const requestedBaselinePaths: string[] = [];
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      io.readRefFile = ({ relativePath }) => {
+        requestedBaselinePaths.push(relativePath);
+        if (relativePath === "pdm.lock") {
+          return { ok: true as const, value: lockfile };
+        }
+
+        if (relativePath === "pyproject.toml") {
+          return { ok: true as const, value: pyproject };
+        }
+
+        throw new Error(`Unexpected baseline path: ${relativePath}`);
+      };
+
+      const exitCode = await main(["diff", "main", "--json", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+      expect(requestedBaselinePaths).toEqual(["pdm.lock", "pyproject.toml"]);
+
+      const payload = JSON.parse(stdout.join("\n")) as {
+        currentFindingCount: number;
+        baselineFindingCount: number;
+        newFindingCount: number;
+      };
+      expect(payload.currentFindingCount).toBe(1);
+      expect(payload.baselineFindingCount).toBe(1);
+      expect(payload.newFindingCount).toBe(0);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("diff reads baseline nested requirements and constraints files", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-requirements-diff-"));
+    const distInfoDir = path.join(
+      projectRoot,
+      ".venv",
+      "Lib",
+      "site-packages",
+      "risk_pkg-1.0.0.dist-info"
+    );
+    const requirements = [
+      "-c constraints.txt",
+      "-r base.txt"
+    ].join("\n");
+    const constraints = "risk-pkg==1.0.0\n";
+    const base = "risk-pkg>=1\n";
+
+    try {
+      mkdirSync(distInfoDir, { recursive: true });
+      writeFileSync(path.join(projectRoot, "requirements.txt"), requirements, "utf8");
+      writeFileSync(path.join(projectRoot, "constraints.txt"), constraints, "utf8");
+      writeFileSync(path.join(projectRoot, "base.txt"), base, "utf8");
+      writeFileSync(
+        path.join(distInfoDir, "METADATA"),
+        [
+          "Metadata-Version: 2.4",
+          "Name: risk-pkg",
+          "Version: 1.0.0",
+          "License-Expression: AGPL-3.0-only",
+          ""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const requestedBaselinePaths: string[] = [];
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      io.readRefFile = ({ relativePath }) => {
+        requestedBaselinePaths.push(relativePath);
+        if (relativePath === "requirements.txt") {
+          return { ok: true as const, value: requirements };
+        }
+
+        if (relativePath === "constraints.txt") {
+          return { ok: true as const, value: constraints };
+        }
+
+        if (relativePath === "base.txt") {
+          return { ok: true as const, value: base };
+        }
+
+        throw new Error(`Unexpected baseline path: ${relativePath}`);
+      };
+
+      const exitCode = await main(["diff", "main", "--json", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+      expect(requestedBaselinePaths).toEqual([
+        "requirements.txt",
+        "constraints.txt",
+        "base.txt"
+      ]);
+
+      const payload = JSON.parse(stdout.join("\n")) as {
+        currentFindingCount: number;
+        baselineFindingCount: number;
+        newFindingCount: number;
+      };
+      expect(payload.currentFindingCount).toBe(1);
+      expect(payload.baselineFindingCount).toBe(1);
+      expect(payload.newFindingCount).toBe(0);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("diff reads baseline Cargo.toml for Cargo root dependency classification", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cargo-diff-"));
+    const manifest = [
+      "[package]",
+      "name = \"fixture-rust-diff\"",
+      "version = \"0.1.0\"",
+      "",
+      "[dependencies]",
+      "risk-crate = \"1\""
+    ].join("\n");
+    const lockfile = [
+      "[[package]]",
+      "name = \"risk-crate\"",
+      "version = \"1.0.0\""
+    ].join("\n");
+
+    try {
+      writeFileSync(path.join(projectRoot, "Cargo.toml"), manifest, "utf8");
+      writeFileSync(path.join(projectRoot, "Cargo.lock"), lockfile, "utf8");
+
+      const requestedBaselinePaths: string[] = [];
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      io.readRefFile = ({ relativePath }) => {
+        requestedBaselinePaths.push(relativePath);
+        if (relativePath === "Cargo.lock") {
+          return { ok: true as const, value: lockfile };
+        }
+
+        if (relativePath === "Cargo.toml") {
+          return { ok: true as const, value: manifest };
+        }
+
+        throw new Error(`Unexpected baseline path: ${relativePath}`);
+      };
+
+      const exitCode = await main(["diff", "main", "--json", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+      expect(requestedBaselinePaths).toEqual(["Cargo.lock", "Cargo.toml"]);
+
+      const payload = JSON.parse(stdout.join("\n")) as {
+        currentFindingCount: number;
+        baselineFindingCount: number;
+        newFindingCount: number;
+      };
+      expect(payload.currentFindingCount).toBe(1);
+      expect(payload.baselineFindingCount).toBe(1);
+      expect(payload.newFindingCount).toBe(0);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("diff reads baseline go.sum for Go module versions", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-go-diff-"));
+    const goMod = [
+      "module example.com/fixture-go-diff",
+      "",
+      "go 1.22",
+      "",
+      "require github.com/acme/risk v1.0.0"
+    ].join("\n");
+    const goSum = [
+      "github.com/acme/risk v1.0.0 h1:abc",
+      "github.com/acme/transitive v0.2.0 h1:def"
+    ].join("\n");
+
+    try {
+      writeFileSync(path.join(projectRoot, "go.mod"), goMod, "utf8");
+      writeFileSync(path.join(projectRoot, "go.sum"), goSum, "utf8");
+
+      const requestedBaselinePaths: string[] = [];
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      io.readRefFile = ({ relativePath }) => {
+        requestedBaselinePaths.push(relativePath);
+        if (relativePath === "go.mod") {
+          return { ok: true as const, value: goMod };
+        }
+
+        if (relativePath === "go.sum") {
+          return { ok: true as const, value: goSum };
+        }
+
+        throw new Error(`Unexpected baseline path: ${relativePath}`);
+      };
+
+      const exitCode = await main(["diff", "main", "--json", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+      expect(requestedBaselinePaths).toEqual(["go.mod", "go.sum"]);
+
+      const payload = JSON.parse(stdout.join("\n")) as {
+        currentFindingCount: number;
+        baselineFindingCount: number;
+        newFindingCount: number;
+      };
+      expect(payload.currentFindingCount).toBe(2);
+      expect(payload.baselineFindingCount).toBe(2);
+      expect(payload.newFindingCount).toBe(0);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("prints actionable findings for a .NET NuGet packages.lock.json project", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-nuget-project-"));
+    const packageDir = path.join(
+      projectRoot,
+      ".nuget",
+      "packages",
+      "risk.package",
+      "1.0.0"
+    );
+
+    try {
+      mkdirSync(packageDir, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "packages.lock.json"),
+        JSON.stringify({
+          version: 1,
+          dependencies: {
+            net8: {
+              "Risk.Package": {
+                type: "Direct",
+                requested: "[1.0.0, )",
+                resolved: "1.0.0"
+              }
+            }
+          }
+        }),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(packageDir, "Risk.Package.nuspec"),
+        [
+          "<package>",
+          "  <metadata>",
+          "    <license type=\"expression\">AGPL-3.0-only</license>",
+          "  </metadata>",
+          "</package>"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Ohrisk scan");
+      expect(output).toContain("Lockfile: packages.lock.json (nuget-lock)");
+      expect(output).toContain("- [high] Risk.Package@1.0.0");
+      expect(output).toContain("dependency: production direct");
+      expect(output).toContain("nuspec license: AGPL-3.0-only");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("prints actionable findings for a Ruby Bundler Gemfile.lock project", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-gemfile-project-"));
+    const bundleRoot = path.join(projectRoot, "vendor", "bundle", "ruby", "3.3.0");
+    const packageDir = path.join(bundleRoot, "gems", "risk-gem-1.0.0");
+
+    try {
+      mkdirSync(packageDir, { recursive: true });
+      mkdirSync(path.join(bundleRoot, "specifications"), { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "Gemfile.lock"),
+        [
+          "GEM",
+          "  remote: https://rubygems.org/",
+          "  specs:",
+          "    risk-gem (1.0.0)",
+          "",
+          "PLATFORMS",
+          "  ruby",
+          "",
+          "DEPENDENCIES",
+          "  risk-gem",
+          "",
+          "BUNDLED WITH",
+          "   2.5.0"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(bundleRoot, "specifications", "risk-gem-1.0.0.gemspec"),
+        [
+          "Gem::Specification.new do |s|",
+          "  s.name = \"risk-gem\"",
+          "  s.version = \"1.0.0\"",
+          "  s.license = \"AGPL-3.0-only\"",
+          "end"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Ohrisk scan");
+      expect(output).toContain("Lockfile: Gemfile.lock (gemfile-lock)");
+      expect(output).toContain("- [high] risk-gem@1.0.0");
+      expect(output).toContain("dependency: production direct");
+      expect(output).toContain("gemspec license: AGPL-3.0-only");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("prints actionable findings for a PHP Composer composer.lock project", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-composer-project-"));
+    const safeDir = path.join(projectRoot, "vendor", "acme", "safe");
+    const riskDir = path.join(projectRoot, "vendor", "acme", "risk");
+    const devDir = path.join(projectRoot, "vendor", "acme", "dev-tool");
+
+    try {
+      mkdirSync(safeDir, { recursive: true });
+      mkdirSync(riskDir, { recursive: true });
+      mkdirSync(devDir, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "composer.json"),
+        JSON.stringify({
+          name: "acme/app",
+          require: {
+            "acme/safe": "^1.0"
+          },
+          "require-dev": {
+            "acme/dev-tool": "^3.0"
+          }
+        }),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectRoot, "composer.lock"),
+        JSON.stringify({
+          packages: [
+            {
+              name: "acme/safe",
+              version: "1.0.0",
+              require: {
+                php: ">=8.2",
+                "acme/risk": "^2.0"
+              }
+            },
+            {
+              name: "acme/risk",
+              version: "2.0.0"
+            }
+          ],
+          "packages-dev": [
+            {
+              name: "acme/dev-tool",
+              version: "3.0.0"
+            }
+          ]
+        }),
+        "utf8"
+      );
+      writeFileSync(path.join(safeDir, "composer.json"), JSON.stringify({ license: "MIT" }), "utf8");
+      writeFileSync(
+        path.join(riskDir, "composer.json"),
+        JSON.stringify({ license: "AGPL-3.0-only" }),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(devDir, "composer.json"),
+        JSON.stringify({ license: "GPL-3.0-only" }),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Ohrisk scan");
+      expect(output).toContain("Lockfile: composer.lock (composer-lock)");
+      expect(output).toContain("- [high] acme/risk@2.0.0");
+      expect(output).toContain("path: acme/app -> acme/safe@1.0.0 -> acme/risk@2.0.0");
+      expect(output).toContain("composer.json license: AGPL-3.0-only");
+      expect(output).not.toContain("acme/dev-tool@3.0.0");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("diff reads baseline composer.json for Composer root dependency classification", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-composer-diff-"));
+    const riskDir = path.join(projectRoot, "vendor", "acme", "risk");
+    const composerJson = JSON.stringify({
+      name: "acme/app",
+      require: {
+        "acme/risk": "^1.0"
+      }
+    });
+    const composerLock = JSON.stringify({
+      packages: [
+        {
+          name: "acme/risk",
+          version: "1.0.0"
+        }
+      ]
+    });
+
+    try {
+      mkdirSync(riskDir, { recursive: true });
+      writeFileSync(path.join(projectRoot, "composer.json"), composerJson, "utf8");
+      writeFileSync(path.join(projectRoot, "composer.lock"), composerLock, "utf8");
+      writeFileSync(
+        path.join(riskDir, "composer.json"),
+        JSON.stringify({ license: "AGPL-3.0-only" }),
+        "utf8"
+      );
+
+      const requestedBaselinePaths: string[] = [];
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      io.readRefFile = ({ relativePath }) => {
+        requestedBaselinePaths.push(relativePath);
+        if (relativePath === "composer.lock") {
+          return { ok: true as const, value: composerLock };
+        }
+
+        if (relativePath === "composer.json") {
+          return { ok: true as const, value: composerJson };
+        }
+
+        throw new Error(`Unexpected baseline path: ${relativePath}`);
+      };
+
+      const exitCode = await main(["diff", "main", "--json", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+      expect(requestedBaselinePaths).toEqual(["composer.lock", "composer.json"]);
 
       const payload = JSON.parse(stdout.join("\n")) as {
         currentFindingCount: number;

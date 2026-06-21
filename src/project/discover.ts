@@ -10,6 +10,20 @@ export type SupportedLockfileKind =
   | "npm-shrinkwrap"
   | "pnpm-lock"
   | "deno-lock"
+  | "cargo-lock"
+  | "go-mod"
+  | "pipfile-lock"
+  | "pdm-lock"
+  | "poetry-lock"
+  | "requirements-txt"
+  | "uv-lock"
+  | "gradle-lock"
+  | "maven-pom"
+  | "nuget-lock"
+  | "gemfile-lock"
+  | "composer-lock"
+  | "cyclonedx-json"
+  | "spdx-json"
   | "yarn-lock";
 
 export type ProjectLockfile = {
@@ -33,6 +47,23 @@ const SUPPORTED_LOCKFILES: Record<string, SupportedLockfileKind> = {
   "npm-shrinkwrap.json": "npm-shrinkwrap",
   "pnpm-lock.yaml": "pnpm-lock",
   "deno.lock": "deno-lock",
+  "Cargo.lock": "cargo-lock",
+  "go.mod": "go-mod",
+  "Pipfile.lock": "pipfile-lock",
+  "pdm.lock": "pdm-lock",
+  "poetry.lock": "poetry-lock",
+  "requirements.txt": "requirements-txt",
+  "uv.lock": "uv-lock",
+  "gradle.lockfile": "gradle-lock",
+  "pom.xml": "maven-pom",
+  "packages.lock.json": "nuget-lock",
+  "Gemfile.lock": "gemfile-lock",
+  "composer.lock": "composer-lock",
+  "bom.json": "cyclonedx-json",
+  "cyclonedx.json": "cyclonedx-json",
+  "sbom.cdx.json": "cyclonedx-json",
+  "spdx.json": "spdx-json",
+  "sbom.spdx.json": "spdx-json",
   "yarn.lock": "yarn-lock"
 };
 
@@ -42,16 +73,45 @@ const KNOWN_LOCKFILES = [
   "npm-shrinkwrap.json",
   "pnpm-lock.yaml",
   "deno.lock",
+  "Cargo.lock",
+  "go.mod",
+  "Pipfile.lock",
+  "pdm.lock",
+  "poetry.lock",
+  "requirements.txt",
+  "uv.lock",
+  "gradle.lockfile",
+  "pom.xml",
+  "packages.lock.json",
+  "Gemfile.lock",
+  "composer.lock",
+  "bom.json",
+  "cyclonedx.json",
+  "sbom.cdx.json",
+  "spdx.json",
+  "sbom.spdx.json",
   "yarn.lock"
 ] as const;
 
 const KNOWN_PROJECT_MANIFESTS = [
   "package.json",
   "deno.json",
-  "deno.jsonc"
+  "deno.jsonc",
+  "Cargo.toml",
+  "Pipfile",
+  "pyproject.toml",
+  "build.gradle",
+  "build.gradle.kts",
+  "composer.json",
+  "Gemfile",
+  "bom.json",
+  "cyclonedx.json",
+  "sbom.cdx.json",
+  "spdx.json",
+  "sbom.spdx.json"
 ] as const;
 
-const SUPPORTED_LOCKFILE_MESSAGE = "Ohrisk currently supports bun.lock, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml, deno.lock, and Yarn classic/Berry yarn.lock.";
+const SUPPORTED_LOCKFILE_MESSAGE = "Ohrisk currently supports bun.lock, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml, deno.lock, Cargo.lock, go.mod, Pipfile.lock, pdm.lock, poetry.lock, requirements.txt, uv.lock, gradle.lockfile, pom.xml, packages.lock.json, Gemfile.lock, composer.lock, CycloneDX JSON, SPDX JSON, and Yarn classic/Berry yarn.lock.";
 
 export function discoverProject(
   options: DiscoverProjectOptions = {}

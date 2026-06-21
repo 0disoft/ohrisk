@@ -84,7 +84,7 @@ describe("renderCycloneDxReport", () => {
     });
   });
 
-  test("renders ecosystem-specific Package URLs for future PyPI and Maven graph adapters", () => {
+  test("renders ecosystem-specific Package URLs for non-npm graph adapters", () => {
     const payload = JSON.parse(renderCycloneDxReport({
       project: {
         rootDir: "/fixture-polyglot-project",
@@ -114,6 +114,51 @@ describe("renderCycloneDxReport", () => {
             dependencyType: "production",
             direct: true,
             paths: [["fixture-polyglot-project", "org.example:demo-core@1.0.0"]]
+          },
+          {
+            id: "serde_json@1.0.117",
+            name: "serde_json",
+            version: "1.0.117",
+            ecosystem: "cargo",
+            dependencyType: "production",
+            direct: true,
+            paths: [["fixture-polyglot-project", "serde_json@1.0.117"]]
+          },
+          {
+            id: "github.com/acme/risk@v1.0.0",
+            name: "github.com/acme/risk",
+            version: "v1.0.0",
+            ecosystem: "go",
+            dependencyType: "production",
+            direct: true,
+            paths: [["fixture-polyglot-project", "github.com/acme/risk@v1.0.0"]]
+          },
+          {
+            id: "Risk.Package@1.0.0",
+            name: "Risk.Package",
+            version: "1.0.0",
+            ecosystem: "nuget",
+            dependencyType: "production",
+            direct: true,
+            paths: [["fixture-polyglot-project", "Risk.Package@1.0.0"]]
+          },
+          {
+            id: "risk-gem@1.0.0",
+            name: "risk-gem",
+            version: "1.0.0",
+            ecosystem: "gem",
+            dependencyType: "production",
+            direct: true,
+            paths: [["fixture-polyglot-project", "risk-gem@1.0.0"]]
+          },
+          {
+            id: "acme/risk@1.0.0",
+            name: "acme/risk",
+            version: "1.0.0",
+            ecosystem: "composer",
+            dependencyType: "production",
+            direct: true,
+            paths: [["fixture-polyglot-project", "acme/risk@1.0.0"]]
           }
         ]
       },
@@ -149,6 +194,56 @@ describe("renderCycloneDxReport", () => {
           {
             name: "ohrisk:ecosystem",
             value: "maven"
+          }
+        ])
+      }),
+      expect.objectContaining({
+        "bom-ref": "pkg:cargo/serde_json@1.0.117",
+        purl: "pkg:cargo/serde_json@1.0.117",
+        properties: expect.arrayContaining([
+          {
+            name: "ohrisk:ecosystem",
+            value: "cargo"
+          }
+        ])
+      }),
+      expect.objectContaining({
+        "bom-ref": "pkg:golang/github.com/acme/risk@v1.0.0",
+        purl: "pkg:golang/github.com/acme/risk@v1.0.0",
+        properties: expect.arrayContaining([
+          {
+            name: "ohrisk:ecosystem",
+            value: "go"
+          }
+        ])
+      }),
+      expect.objectContaining({
+        "bom-ref": "pkg:nuget/Risk.Package@1.0.0",
+        purl: "pkg:nuget/Risk.Package@1.0.0",
+        properties: expect.arrayContaining([
+          {
+            name: "ohrisk:ecosystem",
+            value: "nuget"
+          }
+        ])
+      }),
+      expect.objectContaining({
+        "bom-ref": "pkg:gem/risk-gem@1.0.0",
+        purl: "pkg:gem/risk-gem@1.0.0",
+        properties: expect.arrayContaining([
+          {
+            name: "ohrisk:ecosystem",
+            value: "gem"
+          }
+        ])
+      }),
+      expect.objectContaining({
+        "bom-ref": "pkg:composer/acme/risk@1.0.0",
+        purl: "pkg:composer/acme/risk@1.0.0",
+        properties: expect.arrayContaining([
+          {
+            name: "ohrisk:ecosystem",
+            value: "composer"
           }
         ])
       })

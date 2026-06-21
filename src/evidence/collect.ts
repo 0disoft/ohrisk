@@ -17,7 +17,14 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
+import { collectCargoPackageEvidence } from "./cargo-package";
+import { collectComposerPackageEvidence } from "./composer-package";
+import { collectGoModuleEvidence } from "./go-module";
 import { collectLocalPackageEvidence } from "./local-package";
+import { collectMavenPackageEvidence } from "./maven-package";
+import { collectNugetPackageEvidence } from "./nuget-package";
+import { collectPythonPackageEvidence } from "./python-package";
+import { collectRubyGemEvidence } from "./ruby-gem";
 import { collectTarballEvidence } from "./tarball";
 import type { LicenseEvidence } from "./types";
 import { collectZipPackageEvidence } from "./zip-package";
@@ -145,6 +152,68 @@ async function collectNodeEvidence(input: {
   tarballMaxBytes: number;
   installedPackageJsonMaxBytes: number;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
+  if (input.node.ecosystem === "pypi") {
+    return collectPythonPackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "maven") {
+    return collectMavenPackageEvidence({
+      packageId: input.node.id,
+      coordinates: input.node.name,
+      version: input.node.version,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "cargo") {
+    return collectCargoPackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "go") {
+    return collectGoModuleEvidence({
+      packageId: input.node.id,
+      modulePath: input.node.name,
+      version: input.node.version,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "nuget") {
+    return collectNugetPackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "gem") {
+    return collectRubyGemEvidence({
+      packageId: input.node.id,
+      gemName: input.node.name,
+      version: input.node.version,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "composer") {
+    return collectComposerPackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      projectRoot: input.projectRoot
+    });
+  }
+
   const explicitLocalPath = input.node.resolved
     ? resolveLocalArtifact({
       packageId: input.node.id,
