@@ -6,16 +6,16 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("release documentation", () => {
-  test("keeps manual publish gates explicit", () => {
+  test("keeps automated publish gates explicit", () => {
     const releasing = readFileSync(path.join(repoRoot, "RELEASING.md"), "utf8");
 
-    expect(releasing).toContain("human-run release checklist");
-    expect(releasing).toContain("npm authentication is available");
+    expect(releasing).toContain("Publish npm package");
+    expect(releasing).toContain("when a `v*` tag is pushed");
+    expect(releasing).toContain("NPM_TOKEN");
     expect(releasing).toContain("bun run verify:release");
-    expect(releasing).toContain("npm whoami");
-    expect(releasing).toContain("npm publish --access public");
-    expect(releasing).toContain("npm view ohrisk version");
     expect(releasing).toContain("git tag v0.148.0");
+    expect(releasing).toContain("package.json");
+    expect(releasing).toContain("npm view ohrisk version");
     expect(releasing).toContain("CHANGELOG.md");
   });
 });

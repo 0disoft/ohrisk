@@ -1,20 +1,23 @@
 # Releasing
 
-This is a human-run release checklist. Do not treat it as agent permission to
-publish, tag, or change account settings.
+This repository publishes from the `Publish npm package` GitHub Actions workflow
+when a `v*` tag is pushed. Local commands below are maintainer preparation
+steps, not agent permission to publish, tag, change secrets, or change account
+settings.
 
 ## Preconditions
 
 - `main` is clean and pushed.
 - Bun is available locally for development, tests, and packaging. The published
   CLI runs on Node.js `>=20.0.0`.
-- npm authentication is available in the current shell.
-- The package name `ohrisk` is still available on npm.
-- GitHub Actions billing is available if you want to run the manual Release Check workflow.
+- GitHub Actions has access to an `NPM_TOKEN` secret that can publish the
+  `ohrisk` package.
+- The npm registry does not already contain the release version.
+- GitHub Actions billing is available for the automated publish workflow.
 
 ## Local Gate
 
-Run the release-ready local gate:
+Run the release-ready local gate before tagging:
 
 ```bash
 bun run verify:release
@@ -25,43 +28,33 @@ verifies the npm package contents with a dry-run pack, then installs the packed
 tarball into a temporary npm consumer project and runs the packaged `ohrisk`
 bin through Node.js.
 
-## Optional GitHub Gate
+## Automated Publish
 
-If GitHub Actions runners are available for the account, run the manual
-`Release Check` workflow from the Actions tab.
-
-The workflow intentionally uses `workflow_dispatch` only. Push and pull request
-triggers are disabled until the account can run Actions without billing or
-spending-limit failures.
-
-## Publish
-
-Confirm npm auth:
-
-```bash
-npm whoami
-```
-
-Publish the public package:
-
-```bash
-npm publish --access public
-```
-
-Verify the registry result:
-
-```bash
-npm view ohrisk version
-npm view ohrisk dist.tarball
-```
-
-## Tag
-
-After the npm registry result is verified, tag the matching commit:
+After updating `package.json`, `src/cli/version.ts`, `CHANGELOG.md`, and this
+file's example tag when needed, push `main`, then push a version tag matching
+`package.json`:
 
 ```bash
 git tag v0.148.0
 git push origin v0.148.0
 ```
 
-Then create a GitHub Release using the notes from `CHANGELOG.md`.
+The publish workflow verifies that the tag version matches `package.json`, runs
+the local release gate, publishes the package to npm when that exact version is
+not already present, verifies the npm registry result, and creates a GitHub
+Release from the matching `CHANGELOG.md` section.
+
+## Manual Recovery
+
+If GitHub Actions is unavailable, a maintainer may perform the same sequence
+locally after confirming npm authentication:
+
+```bash
+npm whoami
+npm publish --access public
+npm view ohrisk version
+npm view ohrisk dist.tarball
+```
+
+After manual recovery, create or update the matching GitHub Release using the
+notes from `CHANGELOG.md`.
