@@ -112,4 +112,23 @@ describe("documentation contract", () => {
       "- **Waiver mode**: `ohrisk:waiverMode` in metadata properties"
     );
   });
+
+  test("docs/github-actions.md preserves PR comment and SARIF workflow boundaries", () => {
+    const doc = readFileSync(
+      path.join(repoRoot, "docs", "github-actions.md"),
+      "utf8"
+    );
+
+    expect(doc).toContain("ohrisk diff origin/main --prod --fail-on high");
+    expect(doc).toContain(
+      "ohrisk diff origin/main --prod --markdown --output reports/ohrisk-pr.md"
+    );
+    expect(doc).toContain("<!-- ohrisk-pr-comment -->");
+    expect(doc).toContain("pull-requests: write");
+    expect(doc).toContain("github.rest.issues.updateComment");
+    expect(doc).toContain("security-events: write");
+    expect(doc).toContain("github/codeql-action/upload-sarif@v3");
+    expect(doc).toContain("ohrisk ci --prod --strict-waivers");
+    expect(doc).toContain("Ohrisk is a risk decision aid, not legal advice.");
+  });
 });

@@ -437,6 +437,7 @@ Ohrisk가 `high`나 `unknown`을 보고하면, 그 다음은 사람이 판단한
 ## 더 보기
 
 - [영문 README](../../README.md) — 전체 기능 목록, 출력 형태, 개발 가이드
+- [GitHub Actions 가이드](../github-actions.md) — PR 게이트, PR 코멘트, SARIF 업로드 예시
 - [CI 사용 가이드](../ci.md) — GitHub Actions PR 게이트 및 아티팩트 예시
 - [Waiver 가이드](../waivers.md) — 라이선스 리스크 waiver 안전 사용법
 - [Profile 가이드](../profiles.md) — saas와 distributed-app 중 선택 기준
