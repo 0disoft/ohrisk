@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, type Dirent } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
@@ -37,6 +37,12 @@ type CargoRootDependency = {
   type: DependencyType;
 };
 
+export type CargoWorkspaceMemberManifestPath = {
+  memberPath: string;
+  manifestPath: string;
+  relativeManifestPath: string;
+};
+
 export function parseCargoLockfile(
   lockfilePath: string,
   options: { maxBytes?: number; manifestMaxBytes?: number } = {}
@@ -70,15 +76,27 @@ export function parseCargoLockfile(
     return manifest;
   }
 
+  const memberManifests = manifest.value
+    ? readCargoWorkspaceMemberManifests({
+        lockfilePath,
+        rootManifestText: manifest.value,
+        maxBytes: options.manifestMaxBytes ?? LOCKFILE_MAX_BYTES
+      })
+    : ok([]);
+  if (!memberManifests.ok) {
+    return memberManifests;
+  }
+
   return parseCargoLockText(lockfileText.value, lockfilePath, {
-    manifestText: manifest.value
+    manifestText: manifest.value,
+    memberManifestTexts: memberManifests.value
   });
 }
 
 export function parseCargoLockText(
   input: string,
   lockfilePath = "Cargo.lock",
-  options: { manifestText?: string } = {}
+  options: { manifestText?: string; memberManifestTexts?: string[]; rootName?: string } = {}
 ): Result<DependencyGraph, OhriskError> {
   try {
     const records = parseCargoPackageRecords(input);
@@ -95,11 +113,13 @@ export function parseCargoLockText(
       );
     }
 
-    const rootName = readCargoPackageName(options.manifestText)
+    const rootName = options.rootName
+      ?? readCargoPackageName(options.manifestText)
       ?? path.basename(path.dirname(lockfilePath))
       ?? "<cargo-project>";
     const rootDependencies = readCargoRootDependencies({
       manifestText: options.manifestText,
+      memberManifestTexts: options.memberManifestTexts,
       records
     });
     const nodeMap = new Map<string, DependencyNode>();
@@ -174,6 +194,257 @@ function readOptionalCargoManifest(input: {
   }
 
   return ok(manifestText.value);
+}
+
+function readCargoWorkspaceMemberManifests(input: {
+  lockfilePath: string;
+  rootManifestText: string;
+  maxBytes: number;
+}): Result<string[], OhriskError> {
+  const rootDir = path.dirname(input.lockfilePath);
+  const manifestTexts: string[] = [];
+
+  for (const memberManifest of findCargoWorkspaceMemberManifestPaths({
+    rootManifestText: input.rootManifestText,
+    lockfilePath: input.lockfilePath,
+    projectRoot: rootDir
+  })) {
+    if (!existsSync(memberManifest.manifestPath)) {
+      continue;
+    }
+
+    const manifestText = readInputTextFile({
+      filePath: memberManifest.manifestPath,
+      maxBytes: input.maxBytes
+    });
+    if (!manifestText.ok) {
+      return err(
+        createError({
+          code: "CARGO_MANIFEST_READ_FAILED",
+          category: inputFileReadErrorCategory(manifestText.error),
+          message: manifestText.error.kind === "too_large"
+            ? "Cargo workspace member Cargo.toml exceeded the maximum supported size."
+            : "Failed to read Cargo workspace member Cargo.toml.",
+          details: {
+            manifestPath: memberManifest.manifestPath,
+            ...inputFileReadErrorDetails(manifestText.error)
+          }
+        })
+      );
+    }
+
+    manifestTexts.push(manifestText.value);
+  }
+
+  return ok(manifestTexts);
+}
+
+export function findCargoWorkspaceMemberManifestPaths(input: {
+  rootManifestText: string;
+  lockfilePath: string;
+  projectRoot: string;
+}): CargoWorkspaceMemberManifestPath[] {
+  const rootDir = path.dirname(input.lockfilePath);
+  const paths = new Map<string, CargoWorkspaceMemberManifestPath>();
+  const excludedMemberPaths = new Set<string>();
+
+  for (const excludePath of readCargoWorkspaceExcludes(input.rootManifestText)) {
+    if (path.isAbsolute(excludePath)) {
+      continue;
+    }
+
+    for (const resolvedExcludePath of expandCargoWorkspaceMemberPath({
+      memberPath: excludePath,
+      rootDir,
+      projectRoot: input.projectRoot
+    })) {
+      const normalizedExcludePath = normalizeCargoWorkspaceMemberPath(resolvedExcludePath);
+      if (normalizedExcludePath) {
+        excludedMemberPaths.add(normalizedExcludePath);
+      }
+    }
+  }
+
+  for (const memberPath of readCargoWorkspaceMembers(input.rootManifestText)) {
+    if (path.isAbsolute(memberPath)) {
+      continue;
+    }
+
+    for (const resolvedMemberPath of expandCargoWorkspaceMemberPath({
+      memberPath,
+      rootDir,
+      projectRoot: input.projectRoot
+    })) {
+      const normalizedMemberPath = normalizeCargoWorkspaceMemberPath(resolvedMemberPath);
+      if (!normalizedMemberPath || excludedMemberPaths.has(normalizedMemberPath)) {
+        continue;
+      }
+
+      const manifestPath = path.resolve(rootDir, normalizedMemberPath, "Cargo.toml");
+      if (!isInsideDirectory(input.projectRoot, manifestPath)) {
+        continue;
+      }
+
+      const relativeManifestPath = normalizeRelativePath(
+        path.relative(input.projectRoot, manifestPath)
+      );
+      if (!relativeManifestPath) {
+        continue;
+      }
+
+      paths.set(relativeManifestPath, {
+        memberPath: normalizedMemberPath,
+        manifestPath,
+        relativeManifestPath
+      });
+    }
+  }
+
+  return [...paths.values()].sort((left, right) =>
+    left.relativeManifestPath.localeCompare(right.relativeManifestPath)
+  );
+}
+
+function expandCargoWorkspaceMemberPath(input: {
+  memberPath: string;
+  rootDir: string;
+  projectRoot: string;
+}): string[] {
+  if (!hasCargoWorkspaceGlob(input.memberPath)) {
+    return [input.memberPath];
+  }
+
+  const normalizedMemberPath = input.memberPath.replace(/\\/g, "/");
+  const segments = normalizedMemberPath.split("/").filter((segment) => segment.length > 0);
+
+  const expandedPaths = expandCargoWorkspaceMemberSegments({
+    segments,
+    index: 0,
+    currentPath: input.rootDir,
+    relativeSegments: [],
+    projectRoot: input.projectRoot
+  });
+
+  return expandedPaths
+    .filter((memberPath) => existsSync(path.resolve(input.rootDir, memberPath, "Cargo.toml")))
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function expandCargoWorkspaceMemberSegments(input: {
+  segments: string[];
+  index: number;
+  currentPath: string;
+  relativeSegments: string[];
+  projectRoot: string;
+}): string[] {
+  if (input.index >= input.segments.length) {
+    return [input.relativeSegments.join("/")];
+  }
+
+  const segment = input.segments[input.index];
+  if (!segment) {
+    return [];
+  }
+
+  if (!hasCargoWorkspaceGlob(segment)) {
+    const nextPath = path.resolve(input.currentPath, segment);
+    if (!isInsideDirectory(input.projectRoot, nextPath)) {
+      return [];
+    }
+
+    return expandCargoWorkspaceMemberSegments({
+      segments: input.segments,
+      index: input.index + 1,
+      currentPath: nextPath,
+      relativeSegments: [...input.relativeSegments, segment],
+      projectRoot: input.projectRoot
+    });
+  }
+
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(input.currentPath, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const globPattern = cargoWorkspaceGlobSegmentPattern(segment);
+
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .filter((entry) => globPattern.test(entry.name))
+    .flatMap((entry) => {
+      const nextPath = path.resolve(input.currentPath, entry.name);
+      if (!isInsideDirectory(input.projectRoot, nextPath)) {
+        return [];
+      }
+
+      return expandCargoWorkspaceMemberSegments({
+        segments: input.segments,
+        index: input.index + 1,
+        currentPath: nextPath,
+        relativeSegments: [...input.relativeSegments, entry.name],
+        projectRoot: input.projectRoot
+      });
+    });
+}
+
+function hasCargoWorkspaceGlob(value: string): boolean {
+  return value.includes("*") || value.includes("?");
+}
+
+function cargoWorkspaceGlobSegmentPattern(segment: string): RegExp {
+  const escaped = segment.replace(/[\\^$+*?.()|[\]{}]/g, "\\$&");
+  const pattern = escaped
+    .replace(/\\\*/g, "[^/]*")
+    .replace(/\\\?/g, "[^/]");
+  return new RegExp(`^${pattern}$`);
+}
+
+function readCargoWorkspaceMembers(input: string): string[] {
+  return readCargoWorkspaceStringArray(input, "members");
+}
+
+function readCargoWorkspaceExcludes(input: string): string[] {
+  return readCargoWorkspaceStringArray(input, "exclude");
+}
+
+function readCargoWorkspaceStringArray(input: string, key: "exclude" | "members"): string[] {
+  const members: string[] = [];
+  let section = "";
+  let activeMembersArray: string[] | undefined;
+
+  for (const rawLine of input.split(/\r?\n/)) {
+    const line = stripTomlComment(rawLine).trim();
+    if (line === "") {
+      continue;
+    }
+
+    if (activeMembersArray) {
+      activeMembersArray.push(line);
+      if (line.includes("]")) {
+        members.push(...readTomlStringArray(activeMembersArray.join("\n")));
+        activeMembersArray = undefined;
+      }
+      continue;
+    }
+
+    if (line.startsWith("[") && line.endsWith("]")) {
+      section = line.slice(1, -1);
+      continue;
+    }
+
+    if (section === "workspace" && line.startsWith(key) && line.includes("=")) {
+      const value = line.slice(line.indexOf("=") + 1).trim();
+      if (value.includes("[") && value.includes("]")) {
+        members.push(...readTomlStringArray(value));
+      } else if (value.startsWith("[")) {
+        activeMembersArray = [value];
+      }
+    }
+  }
+
+  return [...new Set(members)];
 }
 
 function parseCargoPackageRecords(input: string): CargoPackageRecord[] {
@@ -277,10 +548,16 @@ function parseCargoPackageRecords(input: string): CargoPackageRecord[] {
 
 function readCargoRootDependencies(input: {
   manifestText?: string;
+  memberManifestTexts?: string[];
   records: CargoPackageRecord[];
 }): CargoRootDependency[] {
-  if (input.manifestText) {
-    const roots = parseCargoManifestRootDependencies(input.manifestText, input.records);
+  const manifestTexts = [
+    ...(input.manifestText ? [input.manifestText] : []),
+    ...(input.memberManifestTexts ?? [])
+  ];
+
+  if (manifestTexts.length > 0) {
+    const roots = mergeCargoManifestRootDependencies(manifestTexts, input.records);
     if (roots.length > 0) {
       return roots;
     }
@@ -289,12 +566,61 @@ function readCargoRootDependencies(input: {
   return inferCargoRootDependencies(input.records);
 }
 
+function mergeCargoManifestRootDependencies(
+  manifestTexts: string[],
+  records: CargoPackageRecord[]
+): CargoRootDependency[] {
+  const roots = new Map<string, CargoRootDependency>();
+  const workspacePackageAliases = mergeCargoWorkspaceDependencyPackageAliases(manifestTexts);
+
+  for (const manifestText of manifestTexts) {
+    for (const dependency of parseCargoManifestRootDependencies(
+      manifestText,
+      records,
+      workspacePackageAliases
+    )) {
+      const existing = roots.get(dependency.name);
+      roots.set(dependency.name, existing
+        ? {
+            name: dependency.name,
+            version: existing.version ?? dependency.version,
+            type: mergeDependencyType(existing.type, dependency.type)
+          }
+        : dependency);
+    }
+  }
+
+  return [...roots.values()].sort((left, right) => left.name.localeCompare(right.name));
+}
+
 function parseCargoManifestRootDependencies(
   input: string,
-  records: CargoPackageRecord[]
+  records: CargoPackageRecord[],
+  workspacePackageAliases = new Map<string, string>()
 ): CargoRootDependency[] {
   const roots = new Map<string, DependencyType>();
   let section = "";
+  let activeDependencyTable: {
+    name: string;
+    packageName?: string;
+    workspace?: boolean;
+    type: DependencyType;
+  } | undefined;
+
+  const flushDependencyTable = (): void => {
+    if (!activeDependencyTable) {
+      return;
+    }
+
+    const dependencyName = activeDependencyTable.workspace === true
+      ? workspacePackageAliases.get(activeDependencyTable.name)
+        ?? activeDependencyTable.packageName
+        ?? activeDependencyTable.name
+      : activeDependencyTable.packageName ?? activeDependencyTable.name;
+
+    mergeRootDependency(roots, dependencyName, activeDependencyTable.type);
+    activeDependencyTable = undefined;
+  };
 
   for (const rawLine of input.split(/\r?\n/)) {
     const line = stripTomlComment(rawLine).trim();
@@ -303,7 +629,25 @@ function parseCargoManifestRootDependencies(
     }
 
     if (line.startsWith("[") && line.endsWith("]")) {
+      flushDependencyTable();
       section = line.slice(1, -1);
+      activeDependencyTable = readCargoManifestDependencyTable(section);
+      continue;
+    }
+
+    if (activeDependencyTable) {
+      const packageName = readStringAssignment(line, "package");
+      if (packageName) {
+        activeDependencyTable.packageName = packageName;
+      }
+      const workspace = readBooleanAssignment(line, "workspace");
+      if (workspace !== undefined) {
+        activeDependencyTable.workspace = workspace;
+      }
+      const optional = readBooleanAssignment(line, "optional");
+      if (optional === true && activeDependencyTable.type === "production") {
+        activeDependencyTable.type = "optional";
+      }
       continue;
     }
 
@@ -312,11 +656,13 @@ function parseCargoManifestRootDependencies(
       continue;
     }
 
-    const dependency = readCargoManifestDependency(line);
+    const dependency = readCargoManifestDependency(line, workspacePackageAliases);
     if (dependency) {
       mergeRootDependency(roots, dependency, dependencyType);
     }
   }
+
+  flushDependencyTable();
 
   const rootPackage = resolveCargoRootPackageRecord(input, records);
 
@@ -327,6 +673,58 @@ function parseCargoManifestRootDependencies(
       ...cargoRootDependencyVersion(rootPackage, name),
       type
     }));
+}
+
+function readCargoManifestDependencyTable(
+  section: string
+): { name: string; type: DependencyType } | undefined {
+  const parts = splitTomlDottedKey(section).map(unquoteTomlKey);
+  if (parts.length < 2) {
+    return undefined;
+  }
+
+  const dependencyName = parts.at(-1);
+  if (!dependencyName) {
+    return undefined;
+  }
+
+  if (parts[0] === "dependencies" && parts.length === 2) {
+    return {
+      name: dependencyName,
+      type: "production"
+    };
+  }
+
+  if (
+    (parts[0] === "dev-dependencies" || parts[0] === "build-dependencies")
+    && parts.length === 2
+  ) {
+    return {
+      name: dependencyName,
+      type: "development"
+    };
+  }
+
+  if (parts[0] !== "target" || parts.length < 4) {
+    return undefined;
+  }
+
+  const dependencySection = parts.at(-2);
+  if (dependencySection === "dependencies") {
+    return {
+      name: dependencyName,
+      type: "production"
+    };
+  }
+
+  if (dependencySection === "dev-dependencies" || dependencySection === "build-dependencies") {
+    return {
+      name: dependencyName,
+      type: "development"
+    };
+  }
+
+  return undefined;
 }
 
 function dependencyTypeForCargoManifestSection(section: string): DependencyType | undefined {
@@ -345,15 +743,28 @@ function dependencyTypeForCargoManifestSection(section: string): DependencyType 
   return undefined;
 }
 
-function readCargoManifestDependency(line: string): string | undefined {
+function readCargoManifestDependency(
+  line: string,
+  workspacePackageAliases = new Map<string, string>()
+): string | undefined {
   const separatorIndex = line.indexOf("=");
   if (separatorIndex <= 0) {
     return undefined;
   }
 
-  const key = unquoteTomlKey(line.slice(0, separatorIndex).trim());
+  const rawKey = line.slice(0, separatorIndex).trim();
+  const key = unquoteTomlKey(rawKey);
   const value = line.slice(separatorIndex + 1).trim();
+  const workspaceDependencyName = readCargoWorkspaceDottedDependencyKey(rawKey, value);
+  if (workspaceDependencyName) {
+    return workspacePackageAliases.get(workspaceDependencyName) ?? workspaceDependencyName;
+  }
+
   const packageName = readInlineTableString(value, "package");
+  if (readInlineTableBoolean(value, "workspace") === true) {
+    return workspacePackageAliases.get(key) ?? packageName ?? key;
+  }
+
   return packageName ?? key;
 }
 
@@ -520,9 +931,142 @@ function readStringAssignment(line: string, key: string): string | undefined {
   return match?.[1];
 }
 
+function readBooleanAssignment(line: string, key: string): boolean | undefined {
+  const match = new RegExp(`^${escapeRegExp(key)}\\s*=\\s*(true|false)\\b`).exec(line);
+  if (!match) {
+    return undefined;
+  }
+
+  return match[1] === "true";
+}
+
 function readInlineTableString(value: string, key: string): string | undefined {
   const match = new RegExp(`\\b${escapeRegExp(key)}\\s*=\\s*"([^"]*)"`).exec(value);
   return match?.[1];
+}
+
+function readInlineTableBoolean(value: string, key: string): boolean | undefined {
+  const match = new RegExp(`\\b${escapeRegExp(key)}\\s*=\\s*(true|false)\\b`).exec(value);
+  if (!match) {
+    return undefined;
+  }
+
+  return match[1] === "true";
+}
+
+function readTomlStringArray(value: string): string[] {
+  return [...value.matchAll(/"([^"]+)"/g)]
+    .map((match) => match[1])
+    .filter((item): item is string => item !== undefined && item !== "");
+}
+
+function mergeCargoWorkspaceDependencyPackageAliases(manifestTexts: string[]): Map<string, string> {
+  const aliases = new Map<string, string>();
+
+  for (const manifestText of manifestTexts) {
+    for (const [alias, packageName] of readCargoWorkspaceDependencyPackageAliases(manifestText)) {
+      aliases.set(alias, packageName);
+    }
+  }
+
+  return aliases;
+}
+
+function readCargoWorkspaceDependencyPackageAliases(input: string): Map<string, string> {
+  const aliases = new Map<string, string>();
+  let section = "";
+
+  for (const rawLine of input.split(/\r?\n/)) {
+    const line = stripTomlComment(rawLine).trim();
+    if (line === "") {
+      continue;
+    }
+
+    if (line.startsWith("[") && line.endsWith("]")) {
+      section = line.slice(1, -1);
+      continue;
+    }
+
+    if (section !== "workspace.dependencies") {
+      continue;
+    }
+
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const alias = unquoteTomlKey(line.slice(0, separatorIndex).trim());
+    const packageName = readInlineTableString(line.slice(separatorIndex + 1).trim(), "package");
+    if (alias && packageName) {
+      aliases.set(alias, packageName);
+    }
+  }
+
+  return aliases;
+}
+
+function readCargoWorkspaceDottedDependencyKey(
+  rawKey: string,
+  value: string
+): string | undefined {
+  if (value !== "true") {
+    return undefined;
+  }
+
+  const parts = splitTomlDottedKey(rawKey).map(unquoteTomlKey);
+  if (parts.length !== 2 || parts[1] !== "workspace") {
+    return undefined;
+  }
+
+  const dependencyName = parts[0];
+  return dependencyName && dependencyName.length > 0 ? dependencyName : undefined;
+}
+
+function splitTomlDottedKey(key: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let quote: "\"" | "'" | undefined;
+  let escaped = false;
+
+  for (const char of key) {
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+
+    if (quote === "\"" && char === "\\") {
+      current += char;
+      escaped = true;
+      continue;
+    }
+
+    if (quote) {
+      current += char;
+      if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    if (char === "\"" || char === "'") {
+      current += char;
+      quote = char;
+      continue;
+    }
+
+    if (char === ".") {
+      parts.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  parts.push(current.trim());
+  return parts;
 }
 
 function mergeRootDependency(
@@ -588,6 +1132,33 @@ function dependencyTypeRank(type: DependencyType): number {
     case "unknown":
       return 0;
   }
+}
+
+function isInsideDirectory(rootPath: string, candidatePath: string): boolean {
+  const relativePath = path.relative(rootPath, candidatePath);
+  return relativePath === "" || (
+    relativePath !== ".."
+    && !relativePath.startsWith(`..${path.sep}`)
+    && !path.isAbsolute(relativePath)
+  );
+}
+
+function normalizeRelativePath(relativePath: string): string | undefined {
+  const normalized = path.normalize(relativePath).replace(/\\/g, "/");
+  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || path.isAbsolute(normalized)) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
+function normalizeCargoWorkspaceMemberPath(memberPath: string): string | undefined {
+  const normalized = path.normalize(memberPath).replace(/\\/g, "/");
+  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || path.isAbsolute(normalized)) {
+    return undefined;
+  }
+
+  return normalized;
 }
 
 function escapeRegExp(input: string): string {

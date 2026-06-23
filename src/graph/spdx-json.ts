@@ -56,21 +56,28 @@ export function parseSpdxJsonText(
     return parsed;
   }
 
-  if (!isRecord(parsed.value) || !Array.isArray(parsed.value.packages)) {
+  return parseSpdxDocument(parsed.value, lockfilePath);
+}
+
+export function parseSpdxDocument(
+  document: unknown,
+  lockfilePath: string
+): Result<DependencyGraph, OhriskError> {
+  if (!isRecord(document) || !Array.isArray(document.packages)) {
     return spdxShapeError(lockfilePath);
   }
 
-  const packages = readSpdxPackageRecords(parsed.value.packages);
+  const packages = readSpdxPackageRecords(document.packages);
   if (packages.length === 0) {
     return spdxShapeError(lockfilePath);
   }
 
-  const dependencyMap = readSpdxDependencyMap(parsed.value.relationships, packages);
-  const rootName = typeof parsed.value.name === "string" && parsed.value.name !== ""
-    ? parsed.value.name
+  const dependencyMap = readSpdxDependencyMap(document.relationships, packages);
+  const rootName = typeof document.name === "string" && document.name !== ""
+    ? document.name
     : "<spdx-project>";
   const rootRefs = readSpdxRootRefs({
-    document: parsed.value,
+    document,
     packages,
     dependencyMap
   });
@@ -194,7 +201,8 @@ function readMeaningfulSpdxLicenseValue(value: unknown): string | undefined {
   }
 
   const trimmed = value.trim();
-  if (trimmed === "" || trimmed === "NOASSERTION" || trimmed === "NONE") {
+  const normalized = trimmed.toUpperCase();
+  if (trimmed === "" || normalized === "NOASSERTION" || normalized === "NONE") {
     return undefined;
   }
 
@@ -380,7 +388,7 @@ function spdxShapeError(lockfilePath: string): Result<never, OhriskError> {
     createError({
       code: "SPDX_PARSE_FAILED",
       category: "unsupported_input",
-      message: "Failed to parse SPDX JSON input. Ohrisk expected an SPDX document with package entries and Package URL external refs.",
+      message: "Failed to parse SPDX input. Ohrisk expected an SPDX document with package entries and Package URL external refs.",
       details: {
         lockfilePath
       }

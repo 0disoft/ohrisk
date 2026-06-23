@@ -178,12 +178,12 @@ function readLicenseExpressionEvidence(evidence: LicenseEvidence): LicenseExpres
 }
 
 function readPackageLicenseExpression(evidence: LicenseEvidence): string | undefined {
-  if (evidence.packageJsonLicense) {
+  if (evidence.packageJsonLicense && !isAbsentLicenseExpression(evidence.packageJsonLicense)) {
     return evidence.packageJsonLicense;
   }
 
   const licenseObjectType = readLicenseObjectType(evidence.packageJsonLicenses);
-  if (licenseObjectType) {
+  if (licenseObjectType && !isAbsentLicenseExpression(licenseObjectType)) {
     return licenseObjectType;
   }
 
@@ -201,19 +201,19 @@ function readPackageLicenseExpression(evidence: LicenseEvidence): string | undef
 
         return undefined;
       })
-      .filter((item): item is string => item !== undefined);
+      .filter((item): item is string => item !== undefined && !isAbsentLicenseExpression(item));
 
     if (choices.length > 0) {
       return choices.join(" OR ");
     }
   }
 
-  if (evidence.metadataLicense) {
+  if (evidence.metadataLicense && !isAbsentLicenseExpression(evidence.metadataLicense)) {
     return evidence.metadataLicense;
   }
 
   const metadataLicenseObjectType = readLicenseObjectType(evidence.metadataLicenses);
-  if (metadataLicenseObjectType) {
+  if (metadataLicenseObjectType && !isAbsentLicenseExpression(metadataLicenseObjectType)) {
     return metadataLicenseObjectType;
   }
 
@@ -231,7 +231,7 @@ function readPackageLicenseExpression(evidence: LicenseEvidence): string | undef
 
         return undefined;
       })
-      .filter((item): item is string => item !== undefined);
+      .filter((item): item is string => item !== undefined && !isAbsentLicenseExpression(item));
 
     if (choices.length > 0) {
       return choices.join(" OR ");
@@ -241,6 +241,11 @@ function readPackageLicenseExpression(evidence: LicenseEvidence): string | undef
   return undefined;
 }
 
+function isAbsentLicenseExpression(value: string): boolean {
+  const normalized = value.trim().toUpperCase();
+  return normalized === "NOASSERTION" || normalized === "NONE";
+}
+
 function readLicenseFileExpression(evidence: LicenseEvidence): LicenseExpressionEvidence | undefined {
   for (const file of evidence.files) {
     if (file.kind !== "license" && file.kind !== "copying") {
@@ -248,7 +253,7 @@ function readLicenseFileExpression(evidence: LicenseEvidence): LicenseExpression
     }
 
     const expression = recognizeStandardLicenseText(file.text);
-    if (expression) {
+    if (expression && !isAbsentLicenseExpression(expression)) {
       return {
         expression,
         source: "license-file",

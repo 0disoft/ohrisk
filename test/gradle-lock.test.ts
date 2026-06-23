@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
-import { parseGradleLockText } from "../src/graph/java-gradle-lock";
+import { parseGradleLockfile, parseGradleLockText } from "../src/graph/java-gradle-lock";
 
 describe("parseGradleLockText", () => {
   test("parses Maven coordinates from a Gradle dependency lockfile", () => {
@@ -40,6 +43,68 @@ describe("parseGradleLockText", () => {
         paths: [["fixture-java", "org.apache.commons:commons-lang3@3.14.0"]]
       })
     ]);
+  });
+
+  test("uses the project root name for legacy Gradle dependency-locks files", () => {
+    const result = parseGradleLockText(
+      "org.example:demo:1.2.3=runtimeClasspath\n",
+      "fixture-java/gradle/dependency-locks/runtimeClasspath.lockfile"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.rootName).toBe("fixture-java");
+    expect(result.value.nodes[0]?.paths).toEqual([
+      ["fixture-java", "org.example:demo@1.2.3"]
+    ]);
+  });
+
+  test("merges legacy Gradle dependency-locks directory files", () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-gradle-lock-dir-"));
+    const lockDir = path.join(projectDir, "gradle", "dependency-locks");
+
+    try {
+      mkdirSync(lockDir, { recursive: true });
+      writeFileSync(
+        path.join(lockDir, "runtimeClasspath.lockfile"),
+        "org.example:prod:1.0.0=runtimeClasspath\n",
+        "utf8"
+      );
+      writeFileSync(
+        path.join(lockDir, "testRuntimeClasspath.lockfile"),
+        "org.example:test:2.0.0=testRuntimeClasspath\n",
+        "utf8"
+      );
+
+      const result = parseGradleLockfile(lockDir);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      const rootName = path.basename(projectDir);
+      expect(result.value.rootName).toBe(rootName);
+      expect(result.value.nodes.map((node) => node.id)).toEqual([
+        "org.example:prod@1.0.0",
+        "org.example:test@2.0.0"
+      ]);
+      expect(result.value.nodes.find((node) => node.id === "org.example:prod@1.0.0"))
+        .toMatchObject({
+          dependencyType: "production",
+          paths: [[rootName, "org.example:prod@1.0.0"]]
+        });
+      expect(result.value.nodes.find((node) => node.id === "org.example:test@2.0.0"))
+        .toMatchObject({
+          dependencyType: "development",
+          paths: [[rootName, "org.example:test@2.0.0"]]
+        });
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
   });
 
   test("reports malformed lockfile entries as typed errors", () => {

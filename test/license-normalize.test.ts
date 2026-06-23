@@ -255,6 +255,49 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
+  test("treats SPDX absent-license markers as missing metadata", () => {
+    expect(
+      normalizeLicenseEvidence({
+        packageId: "noassertion-license@1.0.0",
+        metadataLicense: "NOASSERTION",
+        metadataSource: "SPDX",
+        files: [],
+        source: "sbom",
+        warnings: []
+      })
+    ).toEqual({
+      packageId: "noassertion-license@1.0.0",
+      choices: [],
+      joiner: "single",
+      signals: ["missing"],
+      evidenceSources: ["source: sbom", "SPDX license: NOASSERTION"],
+      confidence: "low"
+    });
+
+    expect(
+      normalizeLicenseEvidence({
+        packageId: "none-license-file-fallback@1.0.0",
+        packageJsonLicense: "NONE",
+        files: [
+          {
+            path: "LICENSE",
+            kind: "license",
+            text: "SPDX-License-Identifier: MIT\n"
+          }
+        ],
+        source: "local",
+        warnings: []
+      })
+    ).toMatchObject({
+      packageId: "none-license-file-fallback@1.0.0",
+      original: "MIT",
+      expression: "MIT",
+      choices: ["MIT"],
+      signals: [],
+      confidence: "medium"
+    });
+  });
+
   test("uses recognizable license file text when package license metadata is absent", () => {
     expect(
       normalizeLicenseEvidence({

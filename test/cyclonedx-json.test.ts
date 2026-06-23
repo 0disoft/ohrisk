@@ -86,6 +86,46 @@ describe("parseCycloneDxJsonText", () => {
     }));
   });
 
+  test("preserves CycloneDX NONE markers as embedded license evidence", () => {
+    const result = parseCycloneDxJsonText(JSON.stringify({
+      bomFormat: "CycloneDX",
+      specVersion: "1.5",
+      metadata: {
+        component: {
+          name: "fixture-cyclonedx-none",
+          "bom-ref": "root-app"
+        }
+      },
+      components: [
+        {
+          type: "library",
+          "bom-ref": "none-child",
+          purl: "pkg:npm/none-child@1.0.0",
+          licenses: [{ expression: "NONE" }]
+        }
+      ],
+      dependencies: [
+        {
+          ref: "root-app",
+          dependsOn: ["none-child"]
+        }
+      ]
+    }), "cyclonedx.json");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.embeddedEvidence).toContainEqual(expect.objectContaining({
+      packageId: "none-child@1.0.0",
+      metadataLicense: "NONE",
+      metadataSource: "CycloneDX",
+      source: "sbom",
+      warnings: []
+    }));
+  });
+
   test("reports malformed documents as typed CycloneDX errors", () => {
     const result = parseCycloneDxJsonText(JSON.stringify({
       bomFormat: "CycloneDX",

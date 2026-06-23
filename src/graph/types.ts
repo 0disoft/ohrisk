@@ -7,8 +7,26 @@ export type PackageEcosystem =
   | "cargo"
   | "go"
   | "nuget"
+  | "conan"
+  | "conda"
+  | "vcpkg"
+  | "bazel"
+  | "terraform"
+  | "helm"
+  | "nix"
+  | "unity"
+  | "cran"
+  | "julia"
+  | "hackage"
+  | "cpan"
+  | "luarocks"
+  | "carthage"
+  | "cocoapods"
+  | "hex"
   | "gem"
-  | "composer";
+  | "composer"
+  | "pub"
+  | "swift";
 
 export type DependencyType =
   | "production"

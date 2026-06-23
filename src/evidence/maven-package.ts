@@ -1,7 +1,5 @@
-import { existsSync } from "node:fs";
-import path from "node:path";
-
 import { createError, type OhriskError } from "../shared/errors";
+import { findMavenPomInRepository, mavenRepositoryRoots } from "../shared/maven-repository";
 import {
   readTextFileWithLimit,
   textFileReadErrorCategory,
@@ -105,34 +103,12 @@ function findMavenPom(input: {
   artifactId: string;
   version: string;
 }): string | undefined {
-  const relativePomPath = path.join(
-    ...input.groupId.split("."),
-    input.artifactId,
-    input.version,
-    `${input.artifactId}-${input.version}.pom`
-  );
-
-  for (const repositoryRoot of mavenRepositoryRoots(input.projectRoot)) {
-    const candidate = path.join(repositoryRoot, relativePomPath);
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-  }
-
-  return undefined;
-}
-
-function mavenRepositoryRoots(projectRoot: string): string[] {
-  const roots = [
-    path.join(projectRoot, ".m2", "repository")
-  ];
-
-  const home = process.env.USERPROFILE ?? process.env.HOME;
-  if (home) {
-    roots.push(path.join(home, ".m2", "repository"));
-  }
-
-  return [...new Set(roots.map((root) => path.resolve(root)))];
+  return findMavenPomInRepository({
+    repositoryRoots: mavenRepositoryRoots(input.projectRoot),
+    groupId: input.groupId,
+    artifactId: input.artifactId,
+    version: input.version
+  });
 }
 
 function readPomLicenseNames(text: string): string[] {

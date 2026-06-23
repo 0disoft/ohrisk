@@ -58,20 +58,103 @@ describe("parseGoModText", () => {
       });
   });
 
-  test("rejects replace directives instead of scanning the wrong module", () => {
+  test("tracks module replacement evidence without changing the required module identity", () => {
     const result = parseGoModText(
       [
         "module example.com/fixture-go",
         "",
         "require github.com/acme/risk v1.0.0",
-        "replace github.com/acme/risk => ../risk"
+        "replace github.com/acme/risk v1.0.0 => github.com/acme/risk-fork v1.0.1"
+      ].join("\n"),
+      "go.mod",
+      {
+        goSumText: [
+          "github.com/acme/risk v1.0.0 h1:abc",
+          "github.com/acme/risk-fork v1.0.1 h1:def",
+          "github.com/acme/risk-fork v1.0.1/go.mod h1:ghi"
+        ].join("\n")
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "github.com/acme/risk@v1.0.0"
+    ]);
+    expect(result.value.nodes[0]).toMatchObject({
+      id: "github.com/acme/risk@v1.0.0",
+      name: "github.com/acme/risk",
+      version: "v1.0.0",
+      resolved: "go-module:github.com/acme/risk-fork@v1.0.1",
+      direct: true,
+      paths: [["example.com/fixture-go", "github.com/acme/risk@v1.0.0"]]
+    });
+  });
+
+  test("uses exact module replacements before wildcard replacements", () => {
+    const result = parseGoModText(
+      [
+        "module example.com/fixture-go",
+        "",
+        "require github.com/acme/risk v1.0.0",
+        "replace (",
+        "  github.com/acme/risk => github.com/acme/risk-fork v1.0.1",
+        "  github.com/acme/risk v1.0.0 => github.com/acme/risk-hotfix v1.0.2",
+        ")"
+      ].join("\n"),
+      "go.mod"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes[0]).toMatchObject({
+      id: "github.com/acme/risk@v1.0.0",
+      resolved: "go-module:github.com/acme/risk-hotfix@v1.0.2"
+    });
+  });
+
+  test("records local path replacements as resolved module sources", () => {
+    const result = parseGoModText(
+      [
+        "module example.com/fixture-go",
+        "",
+        "require github.com/acme/risk v1.0.0",
+        "replace github.com/acme/risk => ./forks/risk"
+      ].join("\n"),
+      "go.mod"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes[0]).toMatchObject({
+      id: "github.com/acme/risk@v1.0.0",
+      resolved: "./forks/risk"
+    });
+  });
+
+  test("rejects module replacements without a replacement version", () => {
+    const result = parseGoModText(
+      [
+        "module example.com/fixture-go",
+        "",
+        "require github.com/acme/risk v1.0.0",
+        "replace github.com/acme/risk => github.com/acme/risk-fork"
       ].join("\n"),
       "go.mod"
     );
 
     expect(result.ok).toBe(false);
     if (result.ok) {
-      throw new Error("Expected replace directives to fail.");
+      throw new Error("Expected malformed replace directive to fail.");
     }
 
     expect(result.error.code).toBe("GO_MOD_PARSE_FAILED");

@@ -63,44 +63,85 @@ Ohrisk is distributed as an npm package, and the packaged CLI runs on Node.js
 do not need Bun installed to run the published CLI.
 
 Ohrisk scans Bun, npm package-lock/shrinkwrap, pnpm, Deno npm, Yarn, Rust Cargo,
-Go modules, Python uv/Pipenv/PDM/Poetry/requirements.txt, Java Gradle lockfiles,
-Maven `pom.xml`, .NET NuGet lockfiles, Ruby Bundler lockfiles, and PHP Composer
-lockfiles, plus CycloneDX and SPDX JSON SBOM inputs, regardless of which package
-manager you use to install the CLI.
+Go modules and workspaces, Python pylock/uv/Pipenv/PDM/Poetry/requirements.txt, Java Gradle lockfiles and version catalogs,
+Maven `pom.xml`, Bazel `MODULE.bazel`, .NET NuGet lockfiles, Conan locks, Conda environment specs and locks, vcpkg manifests, Haskell Stack locks, Perl Carton snapshots, LuaRocks locks, Dart/Flutter Pub locks,
+Terraform provider locks, Helm chart dependency metadata, Nix flake locks,
+Unity Package Manager locks, R renv locks, Julia manifests, SwiftPM pins,
+Carthage pins, CocoaPods locks, Elixir Mix locks, Erlang Rebar3 locks, Ruby Bundler lockfiles, and PHP Composer lockfiles, plus
+CycloneDX JSON/XML, SPDX JSON/RDF, and SPDX tag-value SBOM inputs, regardless of which
+package manager you use to install the CLI.
 
 ## Current Scope
 
 The current implementation is the first local dependency-risk vertical slice:
 
-- Bun `bun.lock`, npm `package-lock.json`, npm `npm-shrinkwrap.json`, pnpm `pnpm-lock.yaml`, Deno `deno.lock`, Rust `Cargo.lock`, Go `go.mod`, Python `uv.lock`, Python Pipenv `Pipfile.lock`, Python PDM `pdm.lock`, Python `poetry.lock`, pinned Python `requirements.txt`, Java Gradle `gradle.lockfile`, Java Maven `pom.xml`, .NET NuGet `packages.lock.json`, Ruby Bundler `Gemfile.lock`, PHP Composer `composer.lock`, CycloneDX JSON, SPDX JSON, and Yarn classic/Berry `yarn.lock` project discovery
+- Bun `bun.lock`, npm `package-lock.json`, npm `npm-shrinkwrap.json`, pnpm `pnpm-lock.yaml`, Deno `deno.lock`, Rust `Cargo.lock`, Go `go.work`, Go `go.mod`, Python `pylock.toml`, named Python `pylock.<name>.toml`, Python `uv.lock`, Python Pipenv `Pipfile.lock`, Python PDM `pdm.lock`, Python `poetry.lock`, Python `requirements.txt`, Java Gradle `gradle.lockfile`, Java Gradle `gradle/dependency-locks` directories and `gradle/dependency-locks/*.lockfile`, Java Gradle `gradle/libs.versions.toml`, Java Maven `pom.xml`, Bazel `MODULE.bazel`, .NET NuGet `packages.lock.json`, .NET restored `obj/project.assets.json`, .NET NuGet `packages.config`, .NET `*.csproj`, Conan `conan.lock`, Conda `environment.yml`, Conda `environment.yaml`, Conda `conda-lock.yml`, Conda `conda-lock.yaml`, vcpkg `vcpkg.json`, Terraform `.terraform.lock.hcl`, Helm `Chart.lock`, Helm `Chart.yaml`, Nix `flake.lock`, Unity Package Manager `Packages/packages-lock.json`, R `renv.lock`, Julia `Manifest.toml`, Haskell Stack `stack.yaml.lock`, Perl Carton `cpanfile.snapshot`, LuaRocks `luarocks.lock`, Dart/Flutter `pubspec.lock`, SwiftPM `Package.resolved`, Carthage `Cartfile.resolved`, CocoaPods `Podfile.lock`, Elixir Mix `mix.lock`, Erlang Rebar3 `rebar.lock`, Ruby Bundler `Gemfile.lock`, PHP Composer `composer.lock`, CycloneDX JSON/XML, SPDX JSON/RDF, SPDX tag-value `.spdx`, and Yarn classic/Berry `yarn.lock` project discovery
 - Node-compatible packaged CLI entrypoint for npm, pnpm, Yarn, npx, pnpm dlx, and yarn dlx users
 - explicit dependency input selection with `--lockfile <path>` for projects that contain more than one supported input file
 - direct and transitive dependency graph extraction when the dependency input records parent/child relationships
 - Bun, npm, pnpm, and Yarn classic/Berry workspace projects are scanned from every workspace/importer package root
 - pnpm `catalog:` and `catalog:<name>` dependency specifiers are resolved from `pnpm-workspace.yaml`
 - Deno `deno.lock` projects are scanned for npm package dependencies recorded in `npm:` specifiers; remote URL imports and JSR packages are not scanned yet
-- Rust `Cargo.lock` projects are scanned for crates, using adjacent `Cargo.toml` root dependencies when available
-- Go `go.mod` projects are scanned for required modules and adjacent `go.sum` module versions when available
+- Rust `Cargo.lock` projects are scanned for crates, using adjacent `Cargo.toml` root dependencies plus literal and segment `*`/`?` Cargo workspace member manifests such as `crates/*`, `crates/app-*`, `tools/?li`, and `crates/*/plugins/*` when available, honoring workspace `exclude` entries, `crate.workspace = true` dependency keys, workspace dependency package aliases, and table-form dependency sections such as `[dependencies.foo]`
+- Go `go.work` projects are scanned across workspace modules and apply workspace `replace` directives before module-level replacements; Go `go.mod` projects are scanned for required modules, Go `replace` directives, and adjacent `go.sum` module versions when available
+- Python `pylock.toml` and named `pylock.<name>.toml` projects are scanned for versioned PyPI package records; unversioned source-tree package records are not scanned yet
 - Python `uv.lock`, PDM `pdm.lock`, and `poetry.lock` projects are scanned for PyPI package dependencies recorded in the lockfile
-- Python Pipenv `Pipfile.lock` projects are scanned for exact `==version` PyPI package entries in the `default` and `develop` sections
-- Python PDM `pdm.lock` projects use adjacent `pyproject.toml` root dependencies when available and infer roots from lockfile dependency references otherwise
-- pinned Python `requirements.txt` files are scanned for direct PyPI package dependencies, following nested `-r` requirement files and exact `-c` constraint pins
-- Java Gradle `gradle.lockfile` projects are scanned for Maven coordinates recorded in dependency locking output
-- Java Maven `pom.xml` projects are scanned for direct dependencies with explicit, property-resolved, or same-file `dependencyManagement` versions
-- .NET NuGet `packages.lock.json` projects are scanned for direct and transitive package dependencies
+- Python Pipenv `Pipfile.lock` projects are scanned for exact `==version` PyPI package entries and project-root-contained local `path` or editable source entries in the `default` and `develop` sections
+- Python PDM `pdm.lock` projects use adjacent `pyproject.toml` root dependencies when available, infer roots from lockfile dependency references otherwise, and scan project-root-contained local `path` or relative `file:` source records
+- Python `requirements.txt` files are scanned for pinned direct PyPI package dependencies, project-root-contained local source entries, editable local source entries, nested `-r` requirement files, and exact `-c` constraint pins
+- Java Gradle `gradle.lockfile` and legacy `gradle/dependency-locks` directory projects are scanned for Maven coordinates recorded in dependency locking output; explicit `gradle/dependency-locks/*.lockfile` files are also accepted. Java Gradle `gradle/libs.versions.toml` projects are scanned for exact Maven library aliases from compact notation, `module` plus exact `version`, or `module` plus `version.ref`
+- Java Maven `pom.xml` projects are scanned for direct dependencies with explicit, property-resolved, same-file `dependencyManagement`, or local `.m2/repository` parent/imported-BOM `dependencyManagement` versions
+- Bazel `MODULE.bazel` projects are scanned for direct `bazel_dep` entries with literal exact `version` strings; nodep `repo_name = None` entries, `include()` expansion, overrides, module extensions, and `MODULE.bazel.lock` resolution output fail closed instead of being partial-scanned
+- .NET NuGet `packages.lock.json` and restored `obj/project.assets.json` projects are scanned for direct and transitive package dependencies; .NET NuGet `packages.config` and `*.csproj` files are scanned for direct package references, including versions resolved from the nearest `Directory.Packages.props` `PackageVersion` entries
+- Conan 2 `conan.lock` projects are scanned for recipe references from `requires`, `build_requires`, and `python_requires`; Conan binary package IDs, settings, options, user/channel, and recipe revisions are not modeled in Package URLs yet
+- Conda `environment.yml` and `environment.yaml` projects are scanned for exact Conda `name=version` pins and exact pip `name==version` pins; Conda `conda-lock.yml` and `conda-lock.yaml` projects are scanned for resolved `conda` and `pip` package entries and are preferred when both an environment spec and conda-lock output are present
+- vcpkg `vcpkg.json` projects are scanned from installed `vcpkg_installed/vcpkg/status` records when available, or from exact top-level `overrides` when installed status is absent; baseline and `version>=` constraints are not treated as resolved package versions
+- Terraform `.terraform.lock.hcl` projects are scanned for locked provider versions; provider constraints and platform hashes are not modeled in Package URLs yet
+- Helm `Chart.lock` and `Chart.yaml` projects are scanned for chart dependency entries; `Chart.lock` is preferred when both files are present
+- Nix `flake.lock` projects are scanned for reachable flake inputs from the root input graph; Nix derivation package graphs are not reconstructed
+- Unity Package Manager `Packages/packages-lock.json` projects are scanned for non-built-in package entries; Unity built-in modules, `Packages/manifest.json` without a lockfile, Asset Store `.unitypackage` archives, Addressables catalogs, and remote UPM registry metadata fetch are not scanned yet
+- R `renv.lock` projects are scanned for package records in the lockfile; dependency parent graphs, dev/prod groups, remote CRAN/GitHub/Bioconductor artifact fetch, and Packrat lockfiles are not scanned yet
+- Julia `Manifest.toml` projects are scanned for versioned `[[deps.Name]]` records; unversioned standard libraries are skipped, root/dev classification from `Project.toml` is not reconstructed yet, and remote Julia registry or package server artifact fetch is not scanned yet
+- Haskell Stack `stack.yaml.lock` projects are scanned for completed Hackage package pins; local Stack package database license metadata is used when present, while snapshot package expansion, git/path extra-deps, direct/transitive graph reconstruction, and Hackage metadata fetch are not scanned yet
+- Perl Carton `cpanfile.snapshot` projects are scanned for Carton snapshot v1 distribution pins and dependency paths inferred from `provides` and `requirements`; local Carton cache archive `META.json` or `META.yml` license metadata is used when present, while MetaCPAN artifact fetch is not scanned yet
+- LuaRocks `luarocks.lock` projects are scanned for literal `dependencies` table package pins; local `.rockspec` files in the project root or local rocks tree are used for literal string or string-table license metadata when present, while dependency graph reconstruction and LuaRocks metadata fetch are not scanned yet
+- Dart and Flutter `pubspec.lock` projects are scanned for concrete Pub package versions recorded in the lockfile
+- Swift Package Manager `Package.resolved` projects are scanned for pinned packages with resolved versions, revisions, or branches; Package.resolved does not expose parent dependency graphs, so packages are reported as root-level pins with unknown dependency type
+- Carthage `Cartfile.resolved` projects are scanned for resolved GitHub, git, and binary pins; Cartfile.resolved does not expose parent dependency graphs, so packages are reported as root-level pins with unknown dependency type
+- CocoaPods `Podfile.lock` projects are scanned for resolved pods; subspecs are collapsed to their root pod identity and dependency type is reported as unknown because Podfile.lock does not encode production/development groups
+- Elixir Mix `mix.lock` projects are scanned for resolved Hex package pins; mix.lock dependency graph and environment classification are not reconstructed in this slice, so packages are reported as root-level pins with unknown dependency type
+- Erlang Rebar3 `rebar.lock` projects are scanned for Hex `pkg` pins; git/path deps, plugin locks, profile-specific test deps, and Rebar dependency tree reconstruction are not scanned yet
 - Ruby Bundler `Gemfile.lock` projects are scanned for direct and transitive gem dependencies
 - PHP Composer `composer.lock` projects are scanned for production and development package dependencies, using adjacent `composer.json` root dependencies when available
-- CycloneDX JSON and SPDX JSON SBOM files are scanned for Package URL-backed package identities, dependency relationships, and embedded license evidence
+- CycloneDX JSON/XML, SPDX JSON/RDF, and SPDX tag-value SBOM files are scanned for Package URL-backed package identities, dependency relationships, and embedded license evidence
+- explicit `--lockfile` SBOM paths are sniffed by content when their filename does not use a supported SBOM name or suffix
 - npm alias dependency resolution, including pnpm alias package keys, with alias context preserved in dependency paths
 - production, development, optional, and peer dependency classification
 - local `file:` package artifact evidence
 - installed `node_modules` package evidence, including npm alias install names, before network fallback
 - Yarn Berry `.yarn/cache` package zip evidence before registry fallback for PnP installs without `node_modules`
 - local Cargo registry source and `vendor/<crate>` package evidence before unavailable fallback
-- local Go module cache and `vendor/<module>` package evidence before unavailable fallback
-- Python `.venv` and `venv` `*.dist-info/METADATA` package evidence before unavailable fallback
-- local Maven `.m2/repository` POM evidence before unavailable fallback for Gradle lockfile and Maven `pom.xml` coordinates
-- local NuGet package cache `.nuspec` evidence before unavailable fallback for `packages.lock.json` packages
+- local Go module cache, `vendor/<module>`, and project-root-contained local `replace` path evidence before unavailable fallback for `go.work` and `go.mod` scans
+- Python `.venv` and `venv` `*.dist-info/METADATA` package evidence, plus project-root-contained local source metadata and license files for `requirements.txt`, `Pipfile.lock`, and `pdm.lock` local source entries, before unavailable fallback
+- local Maven `.m2/repository` POMs for Maven parent/BOM version management and package license evidence before unavailable fallback for Gradle lockfile and Maven `pom.xml` coordinates
+- Bazel module license evidence falls back to unavailable until local Bazel registry metadata or remote Bazel registry fetching is supported
+- local NuGet package cache `.nuspec` evidence before unavailable fallback for `packages.lock.json`, `obj/project.assets.json`, `packages.config`, and `*.csproj` packages
+- local Conan cache `conanfile.py` metadata and package source license evidence before unavailable fallback for `conan.lock` recipes
+- local Conda package cache `info/index.json` metadata and license files before unavailable fallback for `environment.yml`, `environment.yaml`, `conda-lock.yml`, and `conda-lock.yaml` Conda packages
+- local vcpkg `vcpkg_installed/<triplet>/share/<port>/copyright` evidence before unavailable fallback for `vcpkg.json` packages
+- local Terraform `.terraform/providers` license file evidence before unavailable fallback for `.terraform.lock.hcl` providers
+- local Helm `charts/` `Chart.yaml` metadata and license file evidence before unavailable fallback for `Chart.lock` and `Chart.yaml` dependencies
+- local Nix path input license file evidence before unavailable fallback for `flake.lock` inputs
+- local Unity `Packages/` and `Library/PackageCache` package source evidence before unavailable fallback for `Packages/packages-lock.json` packages
+- local R `renv/library` DESCRIPTION metadata and license file evidence before unavailable fallback for `renv.lock` packages
+- local Julia depot `Project.toml` metadata and license file evidence before unavailable fallback for `Manifest.toml` packages
+- local Stack `.stack-work/install` package database metadata before unavailable fallback for Hackage packages
+- local Carton cache archive `META.json` or `META.yml` metadata before unavailable fallback for CPAN distributions
+- local Dart Pub cache package source evidence before unavailable fallback for `pubspec.lock` packages
+- local SwiftPM `.build/checkouts` and Xcode `SourcePackages/checkouts` package source evidence before unavailable fallback for `Package.resolved` packages
+- local Carthage `Carthage/Checkouts` package source evidence before unavailable fallback for `Cartfile.resolved` packages
+- local CocoaPods `Pods/<pod>` source and `Pods/Local Podspecs/<pod>.podspec.json` evidence before unavailable fallback for `Podfile.lock` packages
+- local Elixir/Erlang `deps/<package>` source and `mix.exs` or `rebar.config` license metadata before unavailable fallback for Hex packages
 - local Bundler/RubyGems install path gemspec evidence before unavailable fallback for `Gemfile.lock` gems
 - local Composer `vendor/<vendor>/<package>/composer.json` evidence before unavailable fallback for `composer.lock` packages
 - remote HTTP(S) package tarball evidence when the lockfile points to a tarball, with credential-bearing URLs, obvious local, private, special-purpose, and DNS-resolved internal hosts blocked before fetch, DNS answers rechecked at the default connection boundary, and redirects followed only after each target is validated
@@ -114,7 +155,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - NuGet `.nuspec` `<license>` expressions
 - Ruby gemspec `license` and `licenses` fields
 - Composer package `composer.json` `license` fields
-- CycloneDX and SPDX JSON package license declarations from SBOM metadata
+- CycloneDX JSON/XML and SPDX JSON/RDF/tag-value package license declarations from SBOM metadata
 - common root-level `LICENSE`, `LICENCE`, `UNLICENSE`, `COPYING`, and `NOTICE` file variants
 - medium-confidence standard license detection from recognizable `LICENSE` and `COPYING` file text, including SPDX identifiers, GPL-family v2/v3 text, Zlib text, public-domain-style text, and malformed metadata pointers
 - SPDX-like license expression parsing
@@ -146,15 +187,20 @@ The current implementation is the first local dependency-risk vertical slice:
 - explicit waiver mode in JSON, terminal, Markdown, and SARIF reports
 - explicit waiver mode in CycloneDX SBOM metadata
 
-Central approval workflows, GitHub App checks, Cargo workspace member manifest
-resolution, Go `replace` directives, full Go module parent graph
-reconstruction, Pipenv and PDM VCS/path/editable entries, unpinned requirements ranges without exact constraint pins,
-external Maven parent/BOM resolution, Maven transitive graph
-resolution, Gradle graph reconstruction, NuGet `project.assets.json`,
-NuGet `packages.config`, direct `.csproj` PackageReference scanning, Ruby
-Gemfile group classification, Composer plugin/platform repository resolution,
-CycloneDX XML, SPDX tag-value/RDF, arbitrary SBOM filenames, and remote
-crates.io, Go proxy, PyPI, Maven, NuGet, RubyGems, or Packagist artifact
+Central approval workflows, GitHub App checks, Go `go.work` use paths outside the project root, Go local `replace` paths outside the project root, full Go module parent graph
+reconstruction, Pipenv and PDM remote VCS entries, Pipenv and PDM local source paths outside the project root, remote VCS `requirements.txt` entries, unpinned requirements ranges without exact constraint pins,
+remote Maven parent/BOM fetching, Maven transitive graph
+resolution, external Maven repository resolution beyond local `.m2/repository`, Gradle graph reconstruction, Gradle version catalog rich versions, bundle aliases, plugin aliases, and usage-site configuration reconstruction, Bazel `MODULE.bazel` `include()` expansion, Bazel overrides, module extensions, `MODULE.bazel.lock` graph reconstruction, remote Bazel registry metadata fetching, Conan 1 graph lock support, Conan binary package ID and remote ConanCenter
+artifact fetching, unpinned or ranged Conda `environment.yml` specs, Conda environment transitive dependency reconstruction, explicit per-platform `conda-<platform>.lock` exports, remote Conda channel artifact fetching,
+Conda build/channel/subdir Package URL qualifiers, Terraform module scanning, remote Terraform Registry metadata fetching, Helm transitive chart graph
+reconstruction, remote Helm repository chart fetching, Nix derivation package graph reconstruction,
+Nixpkgs package license extraction, vcpkg baseline-only resolution without installed status,
+vcpkg feature/platform selection reconstruction, remote vcpkg registry metadata fetching, SwiftPM parent graph reconstruction,
+Carthage parent graph reconstruction, remote Swift package checkout fetching,
+Carthage remote checkout or binary framework license fetching, CocoaPods remote podspec or source
+fetching, Mix and Rebar3 dependency graph reconstruction, Rebar3 git/path deps, Rebar3 plugin locks, remote Hex.pm artifact fetching, Ruby
+Gemfile group classification, Composer plugin/platform repository resolution, remote
+crates.io, Go proxy, PyPI, Maven, NuGet, pub.dev, RubyGems, or Packagist artifact
 fetching are not part of this slice yet.
 
 ## Usage
@@ -198,20 +244,41 @@ Supported dependency input files:
 - `npm-shrinkwrap.json` with the same package-lock parser support
 - `pnpm-lock.yaml` with `importers`, `packages`, and `snapshots` sections, including default and named catalogs from `pnpm-workspace.yaml`
 - `deno.lock` npm package entries from Deno v3/v4-style lockfiles
-- `Cargo.lock` crate entries from Rust Cargo projects, using adjacent `Cargo.toml` root dependencies when available and local Cargo registry source for evidence
-- `go.mod` module requirements plus adjacent `go.sum` module versions when available, using local Go module cache source for evidence
+- `Cargo.lock` crate entries from Rust Cargo projects, using adjacent `Cargo.toml` root dependencies plus literal and segment `*`/`?` Cargo workspace member manifests such as `crates/*`, `crates/app-*`, `tools/?li`, and `crates/*/plugins/*` when available, honoring workspace `exclude` entries, `crate.workspace = true` dependency keys, workspace dependency package aliases, and table-form dependency sections such as `[dependencies.foo]`, plus local Cargo registry source for evidence
+- `go.work` workspace modules, workspace `replace` directives, module `go.mod` requirements, module `replace` directives, and adjacent `go.sum` module versions when available, using local Go module cache, `vendor/<module>`, and project-root-contained local replacement path evidence
+- `go.mod` module requirements, Go `replace` directives, and adjacent `go.sum` module versions when available, using local Go module cache, `vendor/<module>`, and project-root-contained local replacement path evidence
+- `pylock.toml` and `pylock.<name>.toml` versioned package entries from the PyPA lockfile specification, using dependency references for audit paths and installed `.venv`/`venv` dist-info metadata for local evidence
 - `uv.lock` package entries from Python uv projects, using installed `.venv`/`venv` dist-info metadata for local evidence
-- `Pipfile.lock` exact `==version` entries from Python Pipenv projects, using installed `.venv`/`venv` dist-info metadata for local evidence
-- `pdm.lock` package entries from Python PDM projects, using adjacent `pyproject.toml` root dependencies when available and installed `.venv`/`venv` dist-info metadata for local evidence
+- `Pipfile.lock` exact `==version` entries and project-root-contained local `path` or editable source entries from Python Pipenv projects, using installed `.venv`/`venv` dist-info metadata or local source metadata and license files for local evidence
+- `pdm.lock` package entries and project-root-contained local `path` or relative `file:` source records from Python PDM projects, using adjacent `pyproject.toml` root dependencies when available and installed `.venv`/`venv` dist-info metadata or local source metadata and license files for local evidence
 - `poetry.lock` package entries from Python Poetry projects, using adjacent `pyproject.toml` root dependencies when available and installed `.venv`/`venv` dist-info metadata for local evidence
-- pinned `requirements.txt` entries such as `name==version`, nested `-r` requirement files, and exact `-c` constraint pins for ranged entries, using installed `.venv`/`venv` dist-info metadata for local evidence
-- `gradle.lockfile` Maven coordinates from Java Gradle dependency locking, using local `.m2/repository` POM metadata for evidence
-- Maven `pom.xml` direct dependencies with explicit versions or versions resolved from local `<properties>` or same-file `dependencyManagement`, using local `.m2/repository` POM metadata for evidence
-- .NET NuGet `packages.lock.json` package entries, using local NuGet cache `.nuspec` metadata for evidence
+- pinned `requirements.txt` entries such as `name==version`, local source entries such as `-e ./local-package`, `./local-package`, `file:./local-package`, and `name @ file:./local-package`, nested `-r` requirement files, and exact `-c` constraint pins for ranged entries, using installed `.venv`/`venv` dist-info metadata or project-root-contained local source metadata and license files for local evidence
+- `gradle.lockfile`, legacy `gradle/dependency-locks` directories, and explicit `gradle/dependency-locks/*.lockfile` Maven coordinates from Java Gradle dependency locking, using local `.m2/repository` POM metadata for evidence
+- `gradle/libs.versions.toml` Maven library aliases with exact versions or `version.ref` values from the same catalog, using local `.m2/repository` POM metadata for evidence
+- Maven `pom.xml` direct dependencies with explicit versions or versions resolved from local `<properties>`, same-file `dependencyManagement`, or local `.m2/repository` parent/imported-BOM `dependencyManagement`, using local `.m2/repository` POM metadata for evidence
+- Bazel `MODULE.bazel` direct `bazel_dep` entries with literal exact versions, failing closed on graph-expanding constructs and using unavailable evidence fallback until Bazel registry evidence is supported
+- .NET NuGet `packages.lock.json` package entries, restored `obj/project.assets.json` package graph entries, `packages.config` package entries, and direct `*.csproj` `PackageReference` entries, resolving central versions from the nearest `Directory.Packages.props` when present and using local NuGet cache `.nuspec` metadata for evidence
+- Conan 2 `conan.lock` recipe references from `requires`, `build_requires`, and `python_requires`, using local Conan cache `conanfile.py` metadata and license files for evidence
+- Conda `environment.yml` and `environment.yaml` exact package pins plus Conda `conda-lock.yml` and `conda-lock.yaml` package entries, using local Conda package cache `info/index.json` metadata and license files for Conda package evidence
+- vcpkg `vcpkg.json` manifest dependencies resolved from installed `vcpkg_installed/vcpkg/status` records or exact top-level overrides, using installed `vcpkg_installed/<triplet>/share/<port>/copyright` files for evidence
+- Terraform `.terraform.lock.hcl` provider entries, using local `.terraform/providers` license files for evidence
+- Helm `Chart.lock` and `Chart.yaml` chart dependency entries, using local `charts/` `Chart.yaml` metadata and license files for evidence
+- Nix `flake.lock` reachable flake input entries, using local path input license files for evidence
+- Unity Package Manager `Packages/packages-lock.json` package entries, using local `Packages/` and `Library/PackageCache` source for evidence
+- R `renv.lock` package records, using local `renv/library` package source and DESCRIPTION metadata for evidence
+- Julia `Manifest.toml` versioned package records, using local Julia depot package source and `Project.toml` metadata for evidence
+- Haskell Stack `stack.yaml.lock` completed Hackage package pins, using local Stack package database metadata before unavailable evidence fallback
+- Perl Carton `cpanfile.snapshot` distribution pins, using local Carton cache archive metadata before unavailable evidence fallback
+- LuaRocks `luarocks.lock` dependency pins, using local `.rockspec` license metadata before unavailable evidence fallback
+- Dart/Flutter `pubspec.lock` package entries, using local `.dart_tool/package_config.json` and Pub cache package source for evidence
+- SwiftPM `Package.resolved` package pins, using local `.build/checkouts` or `SourcePackages/checkouts` package source for evidence
+- Carthage `Cartfile.resolved` package pins, using local `Carthage/Checkouts` package source for evidence
+- CocoaPods `Podfile.lock` pod entries, using local `Pods/` source and `Pods/Local Podspecs` metadata for evidence
+- Elixir Mix `mix.lock` and Erlang Rebar3 `rebar.lock` Hex package pins, using local `deps/` package source and `mix.exs` or `rebar.config` metadata for evidence
 - Ruby Bundler `Gemfile.lock` gem entries, using local Bundler/RubyGems gemspec metadata for evidence
 - PHP Composer `composer.lock` package entries, using adjacent `composer.json` root dependencies when available and local `vendor/` package metadata for evidence
-- CycloneDX JSON SBOM package entries with Package URL identities, dependency relationships, and embedded license evidence
-- SPDX JSON SBOM package entries with Package URL external refs, dependency relationships, and embedded license evidence
+- CycloneDX JSON/XML SBOM package entries with Package URL identities, dependency relationships, and embedded license evidence
+- SPDX JSON/RDF and tag-value SBOM package entries with Package URL external refs, dependency relationships, and embedded license evidence
 - Yarn classic/Berry `yarn.lock` with root and workspace dependency sets from `package.json` manifests, plus local `.yarn/cache` zip evidence for Berry/PnP installs
 
 Select a specific dependency input when a project contains more than one supported input file:
@@ -222,19 +289,55 @@ ohrisk scan --lockfile npm-shrinkwrap.json
 ohrisk ci --lockfile pnpm-lock.yaml --fail-on high
 ohrisk scan --lockfile deno.lock
 ohrisk scan --lockfile Cargo.lock
+ohrisk scan --lockfile go.work
 ohrisk scan --lockfile go.mod
+ohrisk scan --lockfile pylock.toml
 ohrisk scan --lockfile uv.lock
 ohrisk scan --lockfile Pipfile.lock
 ohrisk scan --lockfile pdm.lock
 ohrisk scan --lockfile poetry.lock
 ohrisk scan --lockfile requirements.txt
 ohrisk scan --lockfile gradle.lockfile
+ohrisk scan --lockfile gradle/dependency-locks
+ohrisk scan --lockfile gradle/dependency-locks/runtimeClasspath.lockfile
+ohrisk scan --lockfile gradle/libs.versions.toml
 ohrisk scan --lockfile pom.xml
+ohrisk scan --lockfile MODULE.bazel
 ohrisk scan --lockfile packages.lock.json
+ohrisk scan --lockfile obj/project.assets.json
+ohrisk scan --lockfile packages.config
+ohrisk scan --lockfile MyApp.csproj
+ohrisk scan --lockfile conan.lock
+ohrisk scan --lockfile environment.yml
+ohrisk scan --lockfile conda-lock.yml
+ohrisk scan --lockfile vcpkg.json
+ohrisk scan --lockfile .terraform.lock.hcl
+ohrisk scan --lockfile Chart.lock
+ohrisk scan --lockfile Chart.yaml
+ohrisk scan --lockfile flake.lock
+ohrisk scan --lockfile Packages/packages-lock.json
+ohrisk scan --lockfile renv.lock
+ohrisk scan --lockfile Manifest.toml
+ohrisk scan --lockfile stack.yaml.lock
+ohrisk scan --lockfile cpanfile.snapshot
+ohrisk scan --lockfile luarocks.lock
+ohrisk scan --lockfile pubspec.lock
+ohrisk scan --lockfile Package.resolved
+ohrisk scan --lockfile Cartfile.resolved
+ohrisk scan --lockfile Podfile.lock
+ohrisk scan --lockfile mix.lock
+ohrisk scan --lockfile rebar.lock
 ohrisk scan --lockfile Gemfile.lock
 ohrisk scan --lockfile composer.lock
 ohrisk scan --lockfile cyclonedx.json
+ohrisk scan --lockfile licenses.cdx.json
+ohrisk scan --lockfile cyclonedx.xml
+ohrisk scan --lockfile sbom.cdx.xml
 ohrisk scan --lockfile spdx.json
+ohrisk scan --lockfile licenses.spdx.json
+ohrisk scan --lockfile spdx.rdf
+ohrisk scan --lockfile sbom.spdx.rdf.xml
+ohrisk scan --lockfile sbom.spdx
 ohrisk diff main --lockfile bun.lock
 ```
 

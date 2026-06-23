@@ -17,15 +17,33 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
+import { collectBazelModuleEvidence } from "./bazel-module";
 import { collectCargoPackageEvidence } from "./cargo-package";
+import { collectCarthagePackageEvidence } from "./carthage-package";
+import { collectCocoapodsPackageEvidence } from "./cocoapods-package";
+import { collectCondaPackageEvidence } from "./conda-package";
+import { collectConanPackageEvidence } from "./conan-package";
 import { collectComposerPackageEvidence } from "./composer-package";
+import { collectCpanPackageEvidence } from "./cpan-package";
 import { collectGoModuleEvidence } from "./go-module";
+import { collectHackagePackageEvidence } from "./hackage-package";
+import { collectHelmChartEvidence } from "./helm-chart";
+import { collectHexPackageEvidence } from "./hex-package";
+import { collectJuliaPackageEvidence } from "./julia-package";
 import { collectLocalPackageEvidence } from "./local-package";
+import { collectLuarocksPackageEvidence } from "./luarocks-package";
 import { collectMavenPackageEvidence } from "./maven-package";
+import { collectNixPackageEvidence } from "./nix-package";
 import { collectNugetPackageEvidence } from "./nuget-package";
+import { collectPubPackageEvidence } from "./pub-package";
 import { collectPythonPackageEvidence } from "./python-package";
+import { collectRPackageEvidence } from "./r-package";
 import { collectRubyGemEvidence } from "./ruby-gem";
+import { collectSwiftPackageEvidence } from "./swift-package";
 import { collectTarballEvidence } from "./tarball";
+import { collectTerraformProviderEvidence } from "./terraform-provider";
+import { collectUnityPackageEvidence } from "./unity-package";
+import { collectVcpkgPackageEvidence } from "./vcpkg-package";
 import type { LicenseEvidence } from "./types";
 import { collectZipPackageEvidence } from "./zip-package";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
@@ -184,6 +202,7 @@ async function collectNodeEvidence(input: {
       packageId: input.node.id,
       modulePath: input.node.name,
       version: input.node.version,
+      resolved: input.node.resolved,
       projectRoot: input.projectRoot
     });
   }
@@ -193,6 +212,144 @@ async function collectNodeEvidence(input: {
       packageId: input.node.id,
       packageName: input.node.name,
       version: input.node.version,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "conan") {
+    return collectConanPackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "conda") {
+    return collectCondaPackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      resolved: input.node.resolved,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "vcpkg") {
+    return collectVcpkgPackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "bazel") {
+    return collectBazelModuleEvidence({
+      packageId: input.node.id
+    });
+  }
+
+  if (input.node.ecosystem === "terraform") {
+    return collectTerraformProviderEvidence({
+      packageId: input.node.id,
+      sourceAddress: input.node.name,
+      version: input.node.version,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "helm") {
+    return collectHelmChartEvidence({
+      packageId: input.node.id,
+      chartName: input.node.installNames?.[0] ?? input.node.name,
+      version: input.node.version,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "nix") {
+    return collectNixPackageEvidence({
+      packageId: input.node.id,
+      resolved: input.node.resolved,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "unity") {
+    return collectUnityPackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "cran") {
+    return collectRPackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "julia") {
+    return collectJuliaPackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "hackage") {
+    return collectHackagePackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "cpan") {
+    return collectCpanPackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      resolved: input.node.resolved,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "luarocks") {
+    return collectLuarocksPackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "carthage") {
+    return collectCarthagePackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "cocoapods") {
+    return collectCocoapodsPackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "hex") {
+    return collectHexPackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
       projectRoot: input.projectRoot
     });
   }
@@ -208,6 +365,23 @@ async function collectNodeEvidence(input: {
 
   if (input.node.ecosystem === "composer") {
     return collectComposerPackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "pub") {
+    return collectPubPackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      projectRoot: input.projectRoot
+    });
+  }
+
+  if (input.node.ecosystem === "swift") {
+    return collectSwiftPackageEvidence({
       packageId: input.node.id,
       packageName: input.node.name,
       projectRoot: input.projectRoot

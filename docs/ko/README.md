@@ -36,11 +36,21 @@ ohrisk scan
 ```
 
 지원 입력 파일: `bun.lock`, `package-lock.json`, `npm-shrinkwrap.json`,
-`pnpm-lock.yaml`, `deno.lock`, Rust `Cargo.lock`, Go `go.mod`, Python
-`uv.lock`, Python Pipenv `Pipfile.lock`, Python PDM `pdm.lock`, Python `poetry.lock`, pinned Python
-`requirements.txt`, Java Gradle `gradle.lockfile`, Java Maven `pom.xml`,
-.NET NuGet `packages.lock.json`, Ruby Bundler `Gemfile.lock`, PHP Composer
-`composer.lock`, CycloneDX JSON, SPDX JSON, Yarn classic/Berry `yarn.lock`.
+`pnpm-lock.yaml`, `deno.lock`, Rust `Cargo.lock`, Go `go.work`, Go `go.mod`, Python
+`pylock.toml`, Python `pylock.<name>.toml`, Python
+`uv.lock`, Python Pipenv `Pipfile.lock`, Python PDM `pdm.lock`, Python `poetry.lock`, Python
+`requirements.txt`, Java Gradle `gradle.lockfile`, Java Gradle `gradle/dependency-locks` 디렉터리와 `gradle/dependency-locks/*.lockfile`, Java Gradle `gradle/libs.versions.toml`, Java Maven `pom.xml`,
+Bazel `MODULE.bazel`,
+.NET NuGet `packages.lock.json`, .NET restored `obj/project.assets.json`,
+.NET NuGet `packages.config`, .NET `*.csproj`, Conan `conan.lock`,
+Conda `environment.yml`/`environment.yaml`/`conda-lock.yml`/`conda-lock.yaml`, vcpkg `vcpkg.json`,
+Terraform `.terraform.lock.hcl`, Helm `Chart.lock`, Helm `Chart.yaml`,
+Nix `flake.lock`, Unity Package Manager `Packages/packages-lock.json`,
+R `renv.lock`, Julia `Manifest.toml`, Haskell Stack `stack.yaml.lock`,
+Perl Carton `cpanfile.snapshot`, LuaRocks `luarocks.lock`, Dart/Flutter `pubspec.lock`,
+SwiftPM `Package.resolved`, Carthage `Cartfile.resolved`, CocoaPods `Podfile.lock`,
+Elixir Mix `mix.lock`, Erlang Rebar3 `rebar.lock`, Ruby Bundler `Gemfile.lock`, PHP Composer
+`composer.lock`, CycloneDX JSON/XML, SPDX JSON/RDF, SPDX tag-value `.spdx`, Yarn classic/Berry `yarn.lock`.
 둘 이상이 있으면
 `--lockfile <path>`로 명시적으로 선택한다.
 Bun, npm, pnpm, Yarn classic/Berry 워크스페이스 프로젝트는 각 workspace/importer
@@ -52,30 +62,147 @@ evidence를 registry fallback보다 먼저 사용한다.
 Deno는 `deno.lock`에 기록된 `npm:` 패키지 의존성을 스캔한다. 원격 URL import와
 JSR 패키지는 아직 스캔 대상이 아니다.
 Rust는 `Cargo.lock`에 기록된 crate를 스캔하고, 옆의 `Cargo.toml`이 있으면
-직접/개발 의존성 구분에 사용한다. evidence는 로컬 Cargo registry source나
-`vendor/<crate>`에서 읽는다. 아직 Cargo workspace member manifest 전체 해석이나
-crates.io 원격 artifact fetch는 지원하지 않는다.
-Go는 `go.mod`의 require와 옆의 `go.sum` module version을 스캔한다. evidence는
-로컬 Go module cache나 `vendor/<module>`에서 읽는다. `replace` directive, 전체 Go
-module parent graph 복원, Go proxy 원격 artifact fetch는 아직 지원하지 않는다.
-Python은 `uv.lock`, Pipenv `Pipfile.lock`, PDM `pdm.lock`, `poetry.lock`에 기록된 PyPI 패키지를
+직접/개발 의존성 구분에 사용한다. literal Cargo workspace member manifest와
+`crates/*`, `crates/app-*`, `tools/?li`, `crates/*/plugins/*` 같은 segment `*`/`?` Cargo workspace member pattern도
+직접/개발 의존성 구분에 사용하고, Cargo workspace `exclude` entry는 제외한다. member manifest의
+`crate.workspace = true` dependency key, workspace dependency package alias,
+table-form dependency section(`[dependencies.foo]`)도 root dependency로 처리한다.
+evidence는 로컬 Cargo registry source나 `vendor/<crate>`에서
+읽는다. 아직 crates.io 원격 artifact fetch는 지원하지 않는다.
+Go는 `go.work` workspace module, workspace `replace` directive, 각 module의
+`go.mod` require, module-level `replace` directive, 옆의 `go.sum` module version을
+스캔한다. `go.work`의 `replace`는 module `go.mod`의 `replace`보다 먼저 적용한다.
+module-to-module `replace`는 원래 require identity를 유지하되
+replacement module/version의 로컬 cache evidence를 읽고, 프로젝트 root 안의 local
+path `replace`는 해당 경로의 license evidence를 읽는다. evidence는 로컬 Go module
+cache, `vendor/<module>`, 프로젝트 root 안 local replacement path에서 읽는다. 프로젝트
+root 밖 `go.work use` path, 프로젝트 root 밖 local `replace` path, 전체 Go module parent graph 복원, Go proxy 원격 artifact
+fetch는 아직 지원하지 않는다.
+Python은 PyPA `pylock.toml`/`pylock.<name>.toml`, `uv.lock`, Pipenv `Pipfile.lock`, PDM `pdm.lock`, `poetry.lock`에 기록된 PyPI 패키지를
 스캔하고, 로컬 `.venv`/`venv`의 `*.dist-info/METADATA`와 license 파일을
 evidence로 읽는다. `Pipfile.lock`은 `default`와 `develop` 섹션의 정확한
-`==version` package entry만 지원한다. PDM `pdm.lock`과 `poetry.lock`은 옆의
-`pyproject.toml`이 있으면 직접/개발 의존성 구분에 사용한다. `requirements.txt`는 `name==version`처럼
-버전이 고정된 직접 의존성, `-r base.txt` 같은 include, `-c constraints.txt`의
-정확한 constraint pin을 지원한다. Pipenv/PDM VCS/path/editable entry,
-정확한 constraint pin이 없는 unpinned range, 원격 PyPI artifact fetch는 아직
+`==version` package entry와 프로젝트 root 안의 local `path`/editable source
+entry를 지원한다. PDM `pdm.lock`은 프로젝트 root 안의 local `path` 또는 상대
+`file:` source record를 지원하고, PDM `pdm.lock`과 `poetry.lock`은 옆의
+`pyproject.toml`이 있으면 직접/개발 의존성 구분에 사용한다. `pylock.toml`은
+version이 있는 package record를 스캔하고, lockfile 안의 dependency reference로
+감사용 경로를 복원한다. version이 없는 source-tree record는 아직 스캔하지 않는다.
+`requirements.txt`는 `name==version`처럼
+버전이 고정된 직접 의존성, 프로젝트 root 안의 local source entry, `-e ./local-package`
+같은 editable local source entry, `-r base.txt` 같은 include, `-c constraints.txt`의
+정확한 constraint pin을 지원한다. 로컬 source package는 `pyproject.toml`,
+`setup.cfg`, `PKG-INFO`의 name/version/license metadata와 root license 파일을
+evidence로 읽는다. Pipenv/PDM 원격 VCS entry, 프로젝트 root 밖 Pipenv/PDM local
+source path, 원격 VCS `requirements.txt` entry, 정확한 constraint pin이 없는 unpinned range, 원격 PyPI artifact fetch는 아직
 지원하지 않는다.
-Java는 Gradle dependency locking의 `gradle.lockfile`에 기록된 Maven 좌표를
+Java는 Gradle dependency locking의 `gradle.lockfile`, legacy
+`gradle/dependency-locks` 디렉터리, 명시 `gradle/dependency-locks/*.lockfile`에 기록된 Maven 좌표와
+Gradle version catalog `gradle/libs.versions.toml`의 exact Maven library alias를
 스캔하고, 로컬 `.m2/repository`의 POM license metadata를 evidence로 읽는다.
 Maven `pom.xml`은 직접 의존성 중 버전이 명시되어 있거나 같은 파일의
-`<properties>` 또는 same-file `dependencyManagement`로 해석되는 경우를 지원한다.
-외부 parent POM, BOM, Maven 전이 그래프 해석, Gradle 그래프 복원은 아직 지원하지 않는다.
-.NET은 NuGet `packages.lock.json`의 직접/전이 package dependency를 스캔하고,
-로컬 NuGet package cache의 `.nuspec` license metadata와 license 파일을 evidence로
-읽는다. `project.assets.json`, `packages.config`, `.csproj`의 직접 PackageReference
-스캔은 아직 지원하지 않는다.
+`<properties>`, same-file `dependencyManagement`, 또는 로컬 `.m2/repository`에 이미
+있는 parent/imported BOM POM의 `dependencyManagement`로 해석되는 경우를 지원한다.
+원격 parent/BOM fetching, 로컬 `.m2/repository` 밖의 외부 Maven repository resolution,
+Maven 전이 그래프 해석, Gradle 그래프 복원, Gradle version
+catalog rich version, bundle alias, plugin alias, usage-site configuration 복원은 아직 지원하지 않는다.
+Bazel은 `MODULE.bazel`의 직접 `bazel_dep` 중 literal exact `version`이 있는 entry를
+스캔한다. `dev_dependency = True`는 개발 의존성으로 분류한다. evidence는 아직
+로컬/원격 Bazel registry metadata를 읽지 않으므로 unavailable로 표시된다.
+`include()`로 나뉜 module fragment, override, module extension, `repo_name = None`
+nodep entry, `MODULE.bazel.lock` 기반 resolved graph 복원은 아직 지원하지 않는다.
+이런 graph 확장 문법이 보이면 부분 스캔으로 넘어가지 않고 실패 처리한다.
+.NET은 NuGet `packages.lock.json`과 restore 후 생성되는 `obj/project.assets.json`의
+직접/전이 package dependency를 스캔한다. `packages.config`에서는 exact `version`
+attribute가 있는 flat package entry를 스캔하고, `.csproj` 파일에서는 literal `Version`을
+가진 직접 `PackageReference`를 스캔한다. `.csproj`가 NuGet Central Package Management를
+쓰는 경우에는 가장 가까운 `Directory.Packages.props`의 literal `PackageVersion`을
+같이 읽는다. 조건부로 버전이 갈리거나 property 치환으로 resolved version을 알 수 없는
+경우에는 부분 스캔하지 않고 실패한다. 로컬 NuGet package cache의 `.nuspec`
+license metadata와 license 파일을 evidence로 읽는다. 중앙 패키지 관리처럼 `.csproj`만으로
+resolved version을 알 수 없는 경우에는 `obj/project.assets.json`을 지정해야 한다.
+Conan은 Conan 2 `conan.lock`의 `requires`, `build_requires`, `python_requires`에
+기록된 recipe reference를 스캔한다. evidence는 로컬 Conan cache의 `conanfile.py`
+license metadata와 license 파일에서 읽는다. Conan 1 graph lock, binary package ID,
+settings/options, user/channel, recipe revision의 PURL qualifier, 원격 ConanCenter artifact
+fetch는 아직 지원하지 않는다.
+Conda는 `environment.yml`과 `environment.yaml`의 exact Conda `name=version` pin,
+pip `name==version` pin, 그리고 `conda-lock.yml`/`conda-lock.yaml`에 기록된 resolved
+`conda`/`pip` package entry를 스캔한다. `conda-lock` 출력이 environment spec과 같이
+있으면 resolved lock 쪽을 우선한다. evidence는 로컬 Conda package cache의
+`info/index.json` license metadata와 license 파일에서 읽는다. version이 고정되지 않은
+`environment.yml` range, Conda environment 전이 의존성 복원, explicit
+`conda-<platform>.lock` export, 원격 Conda channel artifact fetch, Conda build/channel/subdir
+PURL qualifier는 아직 지원하지 않는다.
+vcpkg는 `vcpkg.json` manifest를 스캔한다. `vcpkg_installed/vcpkg/status`가 있으면
+설치된 package/version record를 기준으로 보고, status가 없으면 top-level `overrides`에
+정확한 version이 박힌 직접 의존성만 스캔한다. baseline이나 `version>=` constraint는
+resolved version이 아니므로 package version인 척하지 않는다. evidence는 로컬
+`vcpkg_installed/<triplet>/share/<port>/copyright`에서 읽는다. feature/platform 선택 복원,
+baseline만 있는 manifest 해석, 원격 vcpkg registry metadata fetch는 아직 지원하지 않는다.
+Terraform은 `.terraform.lock.hcl`에 고정된 provider version을 스캔한다. evidence는
+로컬 `.terraform/providers` cache의 license 파일에서 읽는다. provider constraint,
+platform hash, Terraform module scanning, 원격 Terraform Registry metadata fetch는 아직
+지원하지 않는다.
+Helm은 `Chart.lock`과 `Chart.yaml`의 chart dependency entry를 스캔하고, 두 파일이
+같이 있으면 `Chart.lock`을 우선한다. evidence는 로컬 `charts/` 아래의 `Chart.yaml`
+license metadata와 license 파일에서 읽는다. Helm transitive chart graph 복원과 원격
+chart repository fetch는 아직 지원하지 않는다.
+Nix는 `flake.lock`의 root input graph에서 reachable flake input을 스캔한다. 로컬 path
+input이면 해당 경로의 license 파일을 evidence로 읽는다. Nix derivation package graph
+복원, Nixpkgs package license extraction, 원격 input fetch는 아직 지원하지 않는다.
+Unity Package Manager는 `Packages/packages-lock.json`에 기록된 non-built-in package
+entry를 스캔한다. Unity built-in module은 제외하고, evidence는 로컬 `Packages/` 또는
+`Library/PackageCache`의 package source에서 읽는다. `Packages/manifest.json`만 있는
+프로젝트, Asset Store `.unitypackage`, Addressables catalog, 원격 UPM registry metadata
+fetch는 아직 지원하지 않는다.
+R은 `renv.lock`의 package record를 스캔하고, 로컬 `renv/library`의 package source에서
+DESCRIPTION license metadata와 license 파일을 evidence로 읽는다. renv lockfile은
+dependency parent graph를 직접 담지 않으므로 direct/transitive 관계와 dev/prod group은
+복원하지 않는다. Packrat lockfile, 원격 CRAN/GitHub/Bioconductor artifact fetch는 아직
+지원하지 않는다.
+Julia는 `Manifest.toml`의 versioned `[[deps.Name]]` package record를 스캔한다.
+version이 없는 standard library record는 제외하고, `deps = [...]`가 있으면 parent path를
+복원한다. 로컬 Julia depot의 package source와 `Project.toml` license metadata를 evidence로
+읽는다. `Project.toml` 기반 root/dev classification, 원격 Julia registry/package server
+artifact fetch는 아직 지원하지 않는다.
+Haskell Stack은 `stack.yaml.lock`의 completed Hackage package pin을 스캔한다.
+snapshot package expansion, git/path extra-deps, direct/transitive graph 복원,
+Hackage metadata fetch는 아직 지원하지 않는다. 로컬 Stack package database metadata가
+있으면 license evidence로 읽고, 없으면 unavailable로 표시한다.
+Perl Carton은 `cpanfile.snapshot`의 distribution pin을 스캔하고 `provides`와
+`requirements` metadata로 dependency path를 일부 복원한다. 로컬 Carton cache archive의
+`META.json` 또는 `META.yml` license metadata가 있으면 evidence로 읽고, MetaCPAN
+fetch는 아직 지원하지 않는다.
+LuaRocks는 `luarocks.lock`의 literal `dependencies` table package pin을 스캔한다.
+프로젝트 루트나 로컬 rocks tree 안의 `.rockspec`이 있으면 literal string 또는
+string table license metadata를 evidence로 읽고, dependency graph 복원과 LuaRocks
+metadata fetch는 아직 지원하지 않는다.
+Dart/Flutter는 `pubspec.lock`에 기록된 concrete Pub package version을 스캔하고,
+`.dart_tool/package_config.json` 또는 로컬 Pub cache의 package source에서 license
+evidence를 읽는다. pub.dev 원격 artifact fetch는 아직 지원하지 않는다.
+SwiftPM은 `Package.resolved`에 기록된 package pin을 스캔하고, 로컬
+`.build/checkouts` 또는 Xcode `SourcePackages/checkouts`의 package source에서
+license evidence를 읽는다. `Package.resolved`에는 parent dependency graph가 없기
+때문에 direct/transitive 관계 복원과 원격 Swift package checkout fetch는 아직
+지원하지 않는다.
+Carthage는 `Cartfile.resolved`에 기록된 GitHub, git, binary pin을 스캔하고,
+로컬 `Carthage/Checkouts`의 package source에서 license evidence를 읽는다.
+`Cartfile.resolved`에는 parent dependency graph가 없기 때문에 dependency type은
+unknown으로 표시한다. 원격 checkout이나 binary framework license fetch는 아직
+지원하지 않는다.
+CocoaPods는 `Podfile.lock`에 기록된 resolved pod를 스캔하고, subspec은 root pod
+identity로 접는다. dependency type은 `Podfile.lock`만으로 production/development
+group을 알 수 없어서 unknown으로 표시한다. evidence는 로컬 `Pods/<pod>` source와
+`Pods/Local Podspecs/<pod>.podspec.json`에서 읽는다. 원격 podspec/source fetch는
+아직 지원하지 않는다.
+Elixir Mix는 `mix.lock`에 기록된 Hex package pin을 스캔하고, 로컬 `deps/<package>`
+source와 `mix.exs`의 license metadata를 evidence로 읽는다. `mix.lock` dependency
+graph와 environment 분류는 아직 복원하지 않아서 dependency type은 unknown으로
+표시한다. 원격 Hex.pm artifact fetch는 아직 지원하지 않는다.
+Erlang Rebar3는 `rebar.lock`에 기록된 Hex `pkg` pin을 스캔하고, 로컬
+`deps/<package>` source와 `rebar.config` license metadata를 evidence로 읽는다.
+git/path dependency, plugin lock, profile-specific test dependency, Rebar dependency tree
+복원, 원격 Hex.pm artifact fetch는 아직 지원하지 않는다.
 Ruby는 Bundler `Gemfile.lock`의 gem dependency를 스캔하고, 로컬 Bundler/RubyGems
 install path의 gemspec license metadata와 license 파일을 evidence로 읽는다.
 아직 Gemfile group 기반 개발/프로덕션 구분은 지원하지 않는다.
@@ -84,27 +211,66 @@ PHP는 Composer `composer.lock`의 production/development package dependency를
 evidence는 로컬 `vendor/<vendor>/<package>/composer.json`과 license 파일에서
 읽는다. Composer plugin/platform repository 해석과 Packagist 원격 artifact fetch는
 아직 지원하지 않는다.
-CycloneDX JSON과 SPDX JSON SBOM은 Package URL이 있는 package identity,
-dependency relationship, SBOM에 들어 있는 license evidence를 스캔한다. XML SBOM,
-SPDX tag-value/RDF, 임의 이름의 SBOM 파일 자동 판별은 아직 지원하지 않는다.
+CycloneDX JSON/XML, SPDX JSON/RDF, SPDX tag-value SBOM은 Package URL이 있는 package
+identity, dependency relationship, SBOM에 들어 있는 license evidence를 스캔한다.
+프로젝트 자동 탐색은 지원 이름과 suffix 기준이고, `--lockfile`로 명시한 SBOM은
+이름이나 suffix가 없어도 CycloneDX JSON/XML, SPDX JSON/RDF, SPDX tag-value signature를
+앞부분에서 판별한다. `.cdx.json`, `.cdx.xml`, `.spdx.json`, `.spdx.rdf`,
+`.spdx.rdf.xml`, `.spdx` suffix도 계속 지원한다.
 
 ```bash
 ohrisk scan --lockfile package-lock.json
 ohrisk scan --lockfile npm-shrinkwrap.json
 ohrisk scan --lockfile Cargo.lock
+ohrisk scan --lockfile go.work
 ohrisk scan --lockfile go.mod
+ohrisk scan --lockfile pylock.toml
 ohrisk scan --lockfile uv.lock
 ohrisk scan --lockfile Pipfile.lock
 ohrisk scan --lockfile pdm.lock
 ohrisk scan --lockfile poetry.lock
 ohrisk scan --lockfile requirements.txt
 ohrisk scan --lockfile gradle.lockfile
+ohrisk scan --lockfile gradle/dependency-locks
+ohrisk scan --lockfile gradle/dependency-locks/runtimeClasspath.lockfile
+ohrisk scan --lockfile gradle/libs.versions.toml
 ohrisk scan --lockfile pom.xml
+ohrisk scan --lockfile MODULE.bazel
 ohrisk scan --lockfile packages.lock.json
+ohrisk scan --lockfile obj/project.assets.json
+ohrisk scan --lockfile packages.config
+ohrisk scan --lockfile MyApp.csproj
+ohrisk scan --lockfile conan.lock
+ohrisk scan --lockfile environment.yml
+ohrisk scan --lockfile conda-lock.yml
+ohrisk scan --lockfile vcpkg.json
+ohrisk scan --lockfile .terraform.lock.hcl
+ohrisk scan --lockfile Chart.lock
+ohrisk scan --lockfile Chart.yaml
+ohrisk scan --lockfile flake.lock
+ohrisk scan --lockfile Packages/packages-lock.json
+ohrisk scan --lockfile renv.lock
+ohrisk scan --lockfile Manifest.toml
+ohrisk scan --lockfile stack.yaml.lock
+ohrisk scan --lockfile cpanfile.snapshot
+ohrisk scan --lockfile luarocks.lock
+ohrisk scan --lockfile pubspec.lock
+ohrisk scan --lockfile Package.resolved
+ohrisk scan --lockfile Cartfile.resolved
+ohrisk scan --lockfile Podfile.lock
+ohrisk scan --lockfile mix.lock
+ohrisk scan --lockfile rebar.lock
 ohrisk scan --lockfile Gemfile.lock
 ohrisk scan --lockfile composer.lock
 ohrisk scan --lockfile cyclonedx.json
+ohrisk scan --lockfile licenses.cdx.json
+ohrisk scan --lockfile cyclonedx.xml
+ohrisk scan --lockfile sbom.cdx.xml
 ohrisk scan --lockfile spdx.json
+ohrisk scan --lockfile licenses.spdx.json
+ohrisk scan --lockfile spdx.rdf
+ohrisk scan --lockfile sbom.spdx.rdf.xml
+ohrisk scan --lockfile sbom.spdx
 ```
 
 ## SaaS 기준으로 스캔하기

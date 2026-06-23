@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { realpathSync } from "node:fs";
+import { readdirSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,12 +9,54 @@ import { diffRiskFindings } from "../diff/compare";
 import { collectGraphEvidence } from "../evidence/collect";
 import type { LicenseEvidence } from "../evidence/types";
 import { readGitRefFile, type GitRefFileReader } from "../git/ref-file";
+import { parseBazelModuleFile, parseBazelModuleText } from "../graph/bazel-module";
+import {
+  parseCartfileResolvedFile,
+  parseCartfileResolvedText
+} from "../graph/carthage-cartfile-resolved";
+import { parsePodfileLockfile, parsePodfileLockText } from "../graph/cocoapods-podfile-lock";
+import {
+  parseCondaEnvironmentFile,
+  parseCondaEnvironmentText
+} from "../graph/conda-environment";
+import { parseCondaLockfile, parseCondaLockText } from "../graph/conda-lock";
+import { parseConanLockfile, parseConanLockText } from "../graph/conan-lock";
 import { parseCycloneDxJsonFile, parseCycloneDxJsonText } from "../graph/cyclonedx-json";
-import { parseNugetLockfile, parseNugetLockText } from "../graph/dotnet-nuget-lock";
+import { parseCycloneDxXmlFile, parseCycloneDxXmlText } from "../graph/cyclonedx-xml";
+import {
+  parseDotnetProjectFile,
+  parseDotnetProjectText,
+  parseDirectoryPackagesPropsText,
+  findNearestDirectoryPackagesPropsPath,
+  parseNugetLockfile,
+  parseNugetLockText,
+  parseNugetPackagesConfigFile,
+  parseNugetPackagesConfigText,
+  parseNugetProjectAssetsFile,
+  parseNugetProjectAssetsText
+} from "../graph/dotnet-nuget-lock";
 import { parseDenoLockfile, parseDenoLockText } from "../graph/deno-lock";
+import { parsePubspecLockfile, parsePubspecLockText } from "../graph/dart-pubspec-lock";
+import { parseMixLockfile, parseMixLockText } from "../graph/elixir-mix-lock";
+import { parseRebarLockfile, parseRebarLockText } from "../graph/erlang-rebar-lock";
 import { parseGoModFile, parseGoModText } from "../graph/go-mod";
+import {
+  findGoWorkModulePaths,
+  parseGoWorkFile,
+  parseGoWorkText,
+  type GoWorkModuleInput
+} from "../graph/go-work";
+import { parseHelmChartFile, parseHelmChartText } from "../graph/helm-chart";
 import { parseGradleLockfile, parseGradleLockText } from "../graph/java-gradle-lock";
+import {
+  parseGradleVersionCatalogFile,
+  parseGradleVersionCatalogText
+} from "../graph/java-gradle-version-catalog";
 import { parseMavenPomFile, parseMavenPomText } from "../graph/java-maven-pom";
+import { parseJuliaManifestFile, parseJuliaManifestText } from "../graph/julia-manifest";
+import { parseStackLockfile, parseStackLockText } from "../graph/haskell-stack-lock";
+import { parseLuarocksLockfile, parseLuarocksLockText } from "../graph/lua-luarocks-lock";
+import { parseNixFlakeLockfile, parseNixFlakeLockText } from "../graph/nix-flake-lock";
 import { parseBunLockfile, parseBunLockText } from "../graph/npm-bun-lock";
 import { parsePackageLockfile, parsePackageLockText } from "../graph/npm-package-lock";
 import { parsePnpmLockfile, parsePnpmLockText } from "../graph/npm-pnpm-lock";
@@ -26,18 +68,38 @@ import {
 } from "../graph/npm-yarn-lock";
 import { parsePdmLockfile, parsePdmLockText } from "../graph/python-pdm-lock";
 import { parsePipfileLockfile, parsePipfileLockText } from "../graph/python-pipfile-lock";
+import { parsePylockFile, parsePylockText } from "../graph/python-pylock";
 import { parsePoetryLockfile, parsePoetryLockText } from "../graph/python-poetry-lock";
 import {
   parseRequirementsFile,
   parseRequirementsText,
   type RequirementsIncludedFileReader
 } from "../graph/python-requirements";
+import type { PythonLocalSourceFileReader } from "../graph/python-local-source";
 import { parseUvLockfile, parseUvLockText } from "../graph/python-uv-lock";
 import { parseGemfileLockfile, parseGemfileLockText } from "../graph/ruby-gemfile-lock";
+import {
+  parseCpanfileSnapshotFile,
+  parseCpanfileSnapshotText
+} from "../graph/perl-cpanfile-snapshot";
 import { parseComposerLockfile, parseComposerLockText } from "../graph/php-composer-lock";
-import { parseCargoLockfile, parseCargoLockText } from "../graph/rust-cargo-lock";
+import { parseRenvLockfile, parseRenvLockText } from "../graph/r-renv-lock";
+import {
+  findCargoWorkspaceMemberManifestPaths,
+  parseCargoLockfile,
+  parseCargoLockText
+} from "../graph/rust-cargo-lock";
 import { parseSpdxJsonFile, parseSpdxJsonText } from "../graph/spdx-json";
+import { parseSpdxRdfFile, parseSpdxRdfText } from "../graph/spdx-rdf";
+import { parseSpdxTagValueFile, parseSpdxTagValueText } from "../graph/spdx-tag-value";
+import {
+  parseSwiftPackageResolvedFile,
+  parseSwiftPackageResolvedText
+} from "../graph/swift-package-resolved";
+import { parseTerraformLockfile, parseTerraformLockText } from "../graph/terraform-lock";
+import { parseUnityPackagesLockfile, parseUnityPackagesLockText } from "../graph/unity-packages-lock";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
+import { parseVcpkgJsonFile, parseVcpkgJsonText } from "../graph/vcpkg-json";
 import { normalizeAllLicenseEvidence, normalizeLicenseEvidence } from "../license/normalize";
 import { evaluateLicenseRisk, evaluateLicenseRisks } from "../policy/evaluate";
 import { hasFindingAtOrAbove } from "../policy/severity";
@@ -111,10 +173,12 @@ async function runDiff(
     currentProject.value.project.lockfile.path
   );
   const readRefFile = io.readRefFile ?? readGitRefFile;
-  const baselineLockfile = readRefFile({
+  const baselineLockfile = readBaselinePrimaryLockfile({
     projectRoot: currentProject.value.project.rootDir,
+    lockfilePath: currentProject.value.project.lockfile.path,
     ref: command.baselineRef,
-    relativePath: relativeLockfilePath
+    relativePath: relativeLockfilePath,
+    readRefFile
   });
 
   if (isErr(baselineLockfile)) {
@@ -194,6 +258,21 @@ async function runDiff(
     return exitCodeForError(baselineCargoManifest.error);
   }
 
+  const baselineCargoMemberManifests = currentProject.value.project.lockfile.kind === "cargo-lock"
+    && baselineCargoManifest.value
+    ? readBaselineCargoMemberManifests({
+        project: currentProject.value.project,
+        baselineRef: command.baselineRef,
+        rootManifestText: baselineCargoManifest.value,
+        readRefFile
+      })
+    : ok(undefined);
+
+  if (isErr(baselineCargoMemberManifests)) {
+    io.stderr(formatError(baselineCargoMemberManifests.error));
+    return exitCodeForError(baselineCargoMemberManifests.error);
+  }
+
   const baselineGoSum = currentProject.value.project.lockfile.kind === "go-mod"
     ? readOptionalBaselineFile({
         projectRoot: currentProject.value.project.rootDir,
@@ -206,6 +285,20 @@ async function runDiff(
   if (isErr(baselineGoSum)) {
     io.stderr(formatError(baselineGoSum.error));
     return exitCodeForError(baselineGoSum.error);
+  }
+
+  const baselineGoWorkModules = currentProject.value.project.lockfile.kind === "go-work"
+    ? readBaselineGoWorkModuleInputs({
+        project: currentProject.value.project,
+        baselineRef: command.baselineRef,
+        goWorkText: baselineLockfile.value,
+        readRefFile
+      })
+    : ok(undefined);
+
+  if (isErr(baselineGoWorkModules)) {
+    io.stderr(formatError(baselineGoWorkModules.error));
+    return exitCodeForError(baselineGoWorkModules.error);
   }
 
   const baselineComposerJson = currentProject.value.project.lockfile.kind === "composer-lock"
@@ -222,10 +315,31 @@ async function runDiff(
     return exitCodeForError(baselineComposerJson.error);
   }
 
+  const baselineDirectoryPackagesProps = currentProject.value.project.lockfile.kind === "dotnet-project"
+    ? readBaselineDirectoryPackagesProps({
+        project: currentProject.value.project,
+        baselineRef: command.baselineRef,
+        readRefFile
+      })
+    : ok(undefined);
+
+  if (isErr(baselineDirectoryPackagesProps)) {
+    io.stderr(formatError(baselineDirectoryPackagesProps.error));
+    return exitCodeForError(baselineDirectoryPackagesProps.error);
+  }
+
+  const baselinePythonLocalSourceErrors = baselinePythonLocalSourceErrorsForKind(
+    currentProject.value.project.lockfile.kind
+  );
   const baselineGraph = parseLockfileTextForKind({
     kind: currentProject.value.project.lockfile.kind,
     text: baselineLockfile.value,
-    lockfilePath: `${command.baselineRef}:${relativeLockfilePath}`,
+    lockfilePath: baselineLockfilePathForKind({
+      kind: currentProject.value.project.lockfile.kind,
+      rootName: currentProject.value.scanGraph.rootName,
+      relativeLockfilePath,
+      baselineRef: command.baselineRef
+    }),
     packageJsonText: baselinePackageJson?.value,
     packageJsonPath: `${command.baselineRef}:package.json`,
     workspacePackageJsonTexts: baselineWorkspacePackageJsons.value,
@@ -233,14 +347,34 @@ async function runDiff(
     pnpmWorkspacePath: `${command.baselineRef}:pnpm-workspace.yaml`,
     pyprojectText: baselinePyproject.value,
     cargoManifestText: baselineCargoManifest.value,
+    cargoMemberManifestTexts: baselineCargoMemberManifests.value,
+    cargoRootName: currentProject.value.project.lockfile.kind === "cargo-lock"
+      ? currentProject.value.scanGraph.rootName
+      : undefined,
     goSumText: baselineGoSum.value,
+    goWorkModuleInputs: baselineGoWorkModules.value,
+    goWorkDir: path.dirname(currentProject.value.project.lockfile.path),
     composerJsonText: baselineComposerJson.value,
+    directoryPackagesPropsText: baselineDirectoryPackagesProps.value?.text,
+    directoryPackagesPropsPath: baselineDirectoryPackagesProps.value?.path,
+    dotnetProjectRootName: currentProject.value.project.lockfile.kind === "dotnet-project"
+      ? currentProject.value.scanGraph.rootName
+      : undefined,
+    projectRoot: currentProject.value.project.rootDir,
     requirementsRootName: currentProject.value.scanGraph.rootName,
     requirementsIncludedFileReader: currentProject.value.project.lockfile.kind === "requirements-txt"
       ? createBaselineRequirementsIncludedFileReader({
           projectRoot: currentProject.value.project.rootDir,
           baselineRef: command.baselineRef,
           readRefFile
+        })
+      : undefined,
+    pythonLocalSourceFileReader: baselinePythonLocalSourceErrors
+      ? createBaselinePythonLocalSourceFileReader({
+          projectRoot: currentProject.value.project.rootDir,
+          baselineRef: command.baselineRef,
+          readRefFile,
+          errors: baselinePythonLocalSourceErrors
         })
       : undefined
   });
@@ -557,6 +691,8 @@ function parseProjectLockfile(project: ProjectInput): Result<DependencyGraph, Oh
       return parseDenoLockfile(project.lockfile.path);
     case "cargo-lock":
       return parseCargoLockfile(project.lockfile.path);
+    case "go-work":
+      return parseGoWorkFile(project.lockfile.path);
     case "go-mod":
       return parseGoModFile(project.lockfile.path);
     case "pipfile-lock":
@@ -569,20 +705,79 @@ function parseProjectLockfile(project: ProjectInput): Result<DependencyGraph, Oh
       return parseRequirementsFile(project.lockfile.path);
     case "uv-lock":
       return parseUvLockfile(project.lockfile.path);
+    case "pylock":
+      return parsePylockFile(project.lockfile.path);
     case "gradle-lock":
       return parseGradleLockfile(project.lockfile.path);
+    case "gradle-version-catalog":
+      return parseGradleVersionCatalogFile(project.lockfile.path);
+    case "bazel-module":
+      return parseBazelModuleFile(project.lockfile.path);
     case "maven-pom":
-      return parseMavenPomFile(project.lockfile.path);
+      return parseMavenPomFile(project.lockfile.path, {
+        projectRoot: project.rootDir
+      });
     case "nuget-lock":
       return parseNugetLockfile(project.lockfile.path);
+    case "nuget-assets":
+      return parseNugetProjectAssetsFile(project.lockfile.path);
+    case "dotnet-project":
+      return parseDotnetProjectFile(project.lockfile.path);
+    case "nuget-packages-config":
+      return parseNugetPackagesConfigFile(project.lockfile.path);
+    case "conan-lock":
+      return parseConanLockfile(project.lockfile.path);
+    case "conda-environment":
+      return parseCondaEnvironmentFile(project.lockfile.path);
+    case "conda-lock":
+      return parseCondaLockfile(project.lockfile.path);
+    case "vcpkg-json":
+      return parseVcpkgJsonFile(project.lockfile.path);
+    case "terraform-lock":
+      return parseTerraformLockfile(project.lockfile.path);
+    case "helm-chart-lock":
+    case "helm-chart-yaml":
+      return parseHelmChartFile(project.lockfile.path);
+    case "nix-flake-lock":
+      return parseNixFlakeLockfile(project.lockfile.path);
+    case "unity-packages-lock":
+      return parseUnityPackagesLockfile(project.lockfile.path);
+    case "renv-lock":
+      return parseRenvLockfile(project.lockfile.path);
+    case "julia-manifest":
+      return parseJuliaManifestFile(project.lockfile.path);
+    case "stack-lock":
+      return parseStackLockfile(project.lockfile.path);
+    case "cpanfile-snapshot":
+      return parseCpanfileSnapshotFile(project.lockfile.path);
+    case "luarocks-lock":
+      return parseLuarocksLockfile(project.lockfile.path);
+    case "pubspec-lock":
+      return parsePubspecLockfile(project.lockfile.path);
+    case "swift-package-resolved":
+      return parseSwiftPackageResolvedFile(project.lockfile.path);
+    case "cartfile-resolved":
+      return parseCartfileResolvedFile(project.lockfile.path);
+    case "podfile-lock":
+      return parsePodfileLockfile(project.lockfile.path);
+    case "mix-lock":
+      return parseMixLockfile(project.lockfile.path);
+    case "rebar-lock":
+      return parseRebarLockfile(project.lockfile.path);
     case "gemfile-lock":
       return parseGemfileLockfile(project.lockfile.path);
     case "composer-lock":
       return parseComposerLockfile(project.lockfile.path);
     case "cyclonedx-json":
       return parseCycloneDxJsonFile(project.lockfile.path);
+    case "cyclonedx-xml":
+      return parseCycloneDxXmlFile(project.lockfile.path);
     case "spdx-json":
       return parseSpdxJsonFile(project.lockfile.path);
+    case "spdx-rdf":
+      return parseSpdxRdfFile(project.lockfile.path);
+    case "spdx-tag-value":
+      return parseSpdxTagValueFile(project.lockfile.path);
     case "yarn-lock":
       return parseYarnLockfile(project.lockfile.path);
   }
@@ -648,10 +843,19 @@ function parseLockfileTextForKind(input: {
   pnpmWorkspacePath?: string;
   pyprojectText?: string;
   cargoManifestText?: string;
+  cargoMemberManifestTexts?: string[];
+  cargoRootName?: string;
   goSumText?: string;
+  goWorkModuleInputs?: GoWorkModuleInput[];
+  goWorkDir?: string;
   composerJsonText?: string;
+  directoryPackagesPropsText?: string;
+  directoryPackagesPropsPath?: string;
+  dotnetProjectRootName?: string;
+  projectRoot?: string;
   requirementsRootName?: string;
   requirementsIncludedFileReader?: RequirementsIncludedFileReader;
+  pythonLocalSourceFileReader?: PythonLocalSourceFileReader;
 }): Result<DependencyGraph, OhriskError> {
   switch (input.kind) {
     case "bun":
@@ -669,17 +873,29 @@ function parseLockfileTextForKind(input: {
       return parseDenoLockText(input.text, input.lockfilePath);
     case "cargo-lock":
       return parseCargoLockText(input.text, input.lockfilePath, {
-        manifestText: input.cargoManifestText
+        manifestText: input.cargoManifestText,
+        memberManifestTexts: input.cargoMemberManifestTexts,
+        rootName: input.cargoRootName
+      });
+    case "go-work":
+      return parseGoWorkText(input.text, input.lockfilePath, {
+        moduleInputs: input.goWorkModuleInputs,
+        workspaceRootDir: input.projectRoot,
+        goWorkDir: input.goWorkDir
       });
     case "go-mod":
       return parseGoModText(input.text, input.lockfilePath, {
         goSumText: input.goSumText
       });
     case "pipfile-lock":
-      return parsePipfileLockText(input.text, input.lockfilePath);
+      return parsePipfileLockText(input.text, input.lockfilePath, {
+        readLocalSourceFile: input.pythonLocalSourceFileReader,
+        rootName: input.requirementsRootName
+      });
     case "pdm-lock":
       return parsePdmLockText(input.text, input.lockfilePath, {
-        pyprojectText: input.pyprojectText
+        pyprojectText: input.pyprojectText,
+        readLocalSourceFile: input.pythonLocalSourceFileReader
       });
     case "poetry-lock":
       return parsePoetryLockText(input.text, input.lockfilePath, {
@@ -688,16 +904,87 @@ function parseLockfileTextForKind(input: {
     case "requirements-txt":
       return parseRequirementsText(input.text, input.lockfilePath, {
         rootName: input.requirementsRootName,
-        readIncludedFile: input.requirementsIncludedFileReader
+        readIncludedFile: input.requirementsIncludedFileReader,
+        readLocalSourceFile: input.pythonLocalSourceFileReader
       });
     case "uv-lock":
       return parseUvLockText(input.text, input.lockfilePath);
+    case "pylock":
+      return parsePylockText(input.text, input.lockfilePath);
     case "gradle-lock":
       return parseGradleLockText(input.text, input.lockfilePath);
+    case "gradle-version-catalog":
+      return parseGradleVersionCatalogText(input.text, input.lockfilePath);
+    case "bazel-module":
+      return parseBazelModuleText(input.text, input.lockfilePath);
     case "maven-pom":
-      return parseMavenPomText(input.text, input.lockfilePath);
+      return parseMavenPomText(input.text, input.lockfilePath, {
+        projectRoot: input.projectRoot
+      });
     case "nuget-lock":
       return parseNugetLockText(input.text, input.lockfilePath);
+    case "nuget-assets":
+      return parseNugetProjectAssetsText(input.text, input.lockfilePath);
+    case "dotnet-project":
+      if (input.directoryPackagesPropsText) {
+        const centralPackageVersions = parseDirectoryPackagesPropsText(
+          input.directoryPackagesPropsText,
+          input.directoryPackagesPropsPath
+        );
+        if (isErr(centralPackageVersions)) {
+          return centralPackageVersions;
+        }
+
+        return parseDotnetProjectText(input.text, input.lockfilePath, {
+          centralPackageVersions: centralPackageVersions.value,
+          rootName: input.dotnetProjectRootName
+        });
+      }
+
+      return parseDotnetProjectText(input.text, input.lockfilePath, {
+        rootName: input.dotnetProjectRootName
+      });
+    case "nuget-packages-config":
+      return parseNugetPackagesConfigText(input.text, input.lockfilePath);
+    case "conan-lock":
+      return parseConanLockText(input.text, input.lockfilePath);
+    case "conda-environment":
+      return parseCondaEnvironmentText(input.text, input.lockfilePath);
+    case "conda-lock":
+      return parseCondaLockText(input.text, input.lockfilePath);
+    case "vcpkg-json":
+      return parseVcpkgJsonText(input.text, input.lockfilePath);
+    case "terraform-lock":
+      return parseTerraformLockText(input.text, input.lockfilePath);
+    case "helm-chart-lock":
+    case "helm-chart-yaml":
+      return parseHelmChartText(input.text, input.lockfilePath);
+    case "nix-flake-lock":
+      return parseNixFlakeLockText(input.text, input.lockfilePath);
+    case "unity-packages-lock":
+      return parseUnityPackagesLockText(input.text, input.lockfilePath);
+    case "renv-lock":
+      return parseRenvLockText(input.text, input.lockfilePath);
+    case "julia-manifest":
+      return parseJuliaManifestText(input.text, input.lockfilePath);
+    case "stack-lock":
+      return parseStackLockText(input.text, input.lockfilePath);
+    case "cpanfile-snapshot":
+      return parseCpanfileSnapshotText(input.text, input.lockfilePath);
+    case "luarocks-lock":
+      return parseLuarocksLockText(input.text, input.lockfilePath);
+    case "pubspec-lock":
+      return parsePubspecLockText(input.text, input.lockfilePath);
+    case "swift-package-resolved":
+      return parseSwiftPackageResolvedText(input.text, input.lockfilePath);
+    case "cartfile-resolved":
+      return parseCartfileResolvedText(input.text, input.lockfilePath);
+    case "podfile-lock":
+      return parsePodfileLockText(input.text, input.lockfilePath);
+    case "mix-lock":
+      return parseMixLockText(input.text, input.lockfilePath);
+    case "rebar-lock":
+      return parseRebarLockText(input.text, input.lockfilePath);
     case "gemfile-lock":
       return parseGemfileLockText(input.text, input.lockfilePath);
     case "composer-lock":
@@ -706,8 +993,14 @@ function parseLockfileTextForKind(input: {
       });
     case "cyclonedx-json":
       return parseCycloneDxJsonText(input.text, input.lockfilePath);
+    case "cyclonedx-xml":
+      return parseCycloneDxXmlText(input.text, input.lockfilePath);
     case "spdx-json":
       return parseSpdxJsonText(input.text, input.lockfilePath);
+    case "spdx-rdf":
+      return parseSpdxRdfText(input.text, input.lockfilePath);
+    case "spdx-tag-value":
+      return parseSpdxTagValueText(input.text, input.lockfilePath);
     case "yarn-lock":
       return parseYarnLockText({
         lockfileText: input.text,
@@ -717,6 +1010,178 @@ function parseLockfileTextForKind(input: {
         workspacePackageJsonTexts: input.workspacePackageJsonTexts
       });
   }
+}
+
+function readBaselineGoWorkModuleInputs(input: {
+  project: ProjectInput;
+  baselineRef: string;
+  goWorkText: string;
+  readRefFile: GitRefFileReader;
+}): Result<GoWorkModuleInput[] | undefined, OhriskError> {
+  const modulePaths = findGoWorkModulePaths({
+    goWorkText: input.goWorkText,
+    goWorkPath: input.project.lockfile.path,
+    projectRoot: input.project.rootDir
+  });
+  if (isErr(modulePaths)) {
+    return modulePaths;
+  }
+
+  const modules: GoWorkModuleInput[] = [];
+  for (const modulePath of modulePaths.value) {
+    const goModText = input.readRefFile({
+      projectRoot: input.project.rootDir,
+      ref: input.baselineRef,
+      relativePath: modulePath.goModRelativePath
+    });
+    if (isErr(goModText)) {
+      return goModText;
+    }
+
+    const goSumText = readOptionalBaselineFile({
+      projectRoot: input.project.rootDir,
+      baselineRef: input.baselineRef,
+      relativePath: modulePath.goSumRelativePath,
+      readRefFile: input.readRefFile
+    });
+    if (isErr(goSumText)) {
+      return goSumText;
+    }
+
+    modules.push({
+      usePath: modulePath.usePath,
+      moduleRootDir: modulePath.moduleRootDir,
+      goModPath: `${input.baselineRef}:${modulePath.goModRelativePath}`,
+      goModText: goModText.value,
+      ...(goSumText.value ? { goSumText: goSumText.value } : {})
+    });
+  }
+
+  return ok(modules);
+}
+
+function readBaselinePrimaryLockfile(input: {
+  projectRoot: string;
+  lockfilePath: string;
+  ref: string;
+  relativePath: string;
+  readRefFile: GitRefFileReader;
+}): Result<string, OhriskError> {
+  if (isGradleDependencyLocksDirectory(input.lockfilePath)) {
+    return readBaselineGradleDependencyLocksDirectory(input);
+  }
+
+  return input.readRefFile({
+    projectRoot: input.projectRoot,
+    ref: input.ref,
+    relativePath: input.relativePath
+  });
+}
+
+function readBaselineGradleDependencyLocksDirectory(input: {
+  projectRoot: string;
+  lockfilePath: string;
+  ref: string;
+  relativePath: string;
+  readRefFile: GitRefFileReader;
+}): Result<string, OhriskError> {
+  let entries: string[];
+  try {
+    entries = readdirSync(input.lockfilePath)
+      .filter((entry) => entry.toLowerCase().endsWith(".lockfile"))
+      .filter((entry) => isFile(path.join(input.lockfilePath, entry)))
+      .sort();
+  } catch (cause) {
+    return err(createError({
+      code: "GRADLE_LOCK_READ_FAILED",
+      category: "filesystem",
+      message: "Failed to read Gradle dependency locks directory.",
+      details: {
+        lockfilePath: input.lockfilePath,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+
+  const texts: string[] = [];
+  let firstMissingFile: OhriskError | undefined;
+  for (const entry of entries) {
+    const result = input.readRefFile({
+      projectRoot: input.projectRoot,
+      ref: input.ref,
+      relativePath: path.join(input.relativePath, entry)
+    });
+
+    if (isErr(result)) {
+      if (result.error.code === "GIT_REF_FILE_NOT_FOUND") {
+        firstMissingFile ??= result.error;
+        continue;
+      }
+
+      return result;
+    }
+
+    texts.push(result.value);
+  }
+
+  if (texts.length === 0) {
+    return firstMissingFile
+      ? err(firstMissingFile)
+      : err(createError({
+          code: "GRADLE_LOCK_PARSE_FAILED",
+          category: "unsupported_input",
+          message: "Failed to parse Gradle dependency locks directory. Ohrisk expected at least one *.lockfile.",
+          details: {
+            lockfilePath: input.lockfilePath,
+            reason: "no_lockfiles"
+          }
+        }));
+  }
+
+  return ok(texts.join("\n"));
+}
+
+function baselineLockfilePathForKind(input: {
+  kind: ProjectInput["lockfile"]["kind"];
+  rootName: string;
+  relativeLockfilePath: string;
+  baselineRef: string;
+}): string {
+  return input.kind === "gradle-lock"
+    ? path.join(input.rootName, input.relativeLockfilePath)
+    : `${input.baselineRef}:${input.relativeLockfilePath}`;
+}
+
+function readBaselineCargoMemberManifests(input: {
+  project: ProjectInput;
+  baselineRef: string;
+  rootManifestText: string;
+  readRefFile: GitRefFileReader;
+}): Result<string[] | undefined, OhriskError> {
+  const memberManifestPaths = findCargoWorkspaceMemberManifestPaths({
+    rootManifestText: input.rootManifestText,
+    lockfilePath: input.project.lockfile.path,
+    projectRoot: input.project.rootDir
+  });
+  const manifestTexts: string[] = [];
+
+  for (const memberManifestPath of memberManifestPaths) {
+    const manifestText = readOptionalBaselineFile({
+      projectRoot: input.project.rootDir,
+      baselineRef: input.baselineRef,
+      relativePath: memberManifestPath.relativeManifestPath,
+      readRefFile: input.readRefFile
+    });
+    if (isErr(manifestText)) {
+      return manifestText;
+    }
+
+    if (manifestText.value !== undefined) {
+      manifestTexts.push(manifestText.value);
+    }
+  }
+
+  return ok(manifestTexts);
 }
 
 function readBaselineYarnWorkspacePackageJsons(input: {
@@ -816,6 +1281,116 @@ function createBaselineRequirementsIncludedFileReader(input: {
   };
 }
 
+type BaselinePythonLocalSourceErrors = {
+  parseCode: OhriskError["code"];
+  displayName: string;
+};
+
+function baselinePythonLocalSourceErrorsForKind(
+  kind: ProjectInput["lockfile"]["kind"]
+): BaselinePythonLocalSourceErrors | undefined {
+  switch (kind) {
+    case "requirements-txt":
+      return {
+        parseCode: "REQUIREMENTS_PARSE_FAILED",
+        displayName: "requirements.txt"
+      };
+    case "pipfile-lock":
+      return {
+        parseCode: "PIPFILE_LOCK_PARSE_FAILED",
+        displayName: "Pipfile.lock"
+      };
+    case "pdm-lock":
+      return {
+        parseCode: "PDM_LOCK_PARSE_FAILED",
+        displayName: "pdm.lock"
+      };
+    default:
+      return undefined;
+  }
+}
+
+function createBaselinePythonLocalSourceFileReader(input: {
+  projectRoot: string;
+  baselineRef: string;
+  readRefFile: GitRefFileReader;
+  errors: BaselinePythonLocalSourceErrors;
+}): PythonLocalSourceFileReader {
+  return ({ sourcePath, relativeFilePath, fromFilePath }) => {
+    if (path.isAbsolute(sourcePath)) {
+      return err(
+        createError({
+          code: input.errors.parseCode,
+          category: "unsupported_input",
+          message: `Failed to parse ${input.errors.displayName}. Absolute local source paths are not supported.`,
+          details: {
+            lockfilePath: fromFilePath,
+            sourcePath,
+            relativeFilePath
+          }
+        })
+      );
+    }
+
+    const fromRelativePath = stripBaselineRefPrefix(fromFilePath, input.baselineRef);
+    const sourceRelativePath = normalizeBaselineRelativePath(
+      path.join(path.dirname(fromRelativePath), sourcePath)
+    );
+
+    if (!sourceRelativePath) {
+      return err(
+        createError({
+          code: input.errors.parseCode,
+          category: "unsupported_input",
+          message: `Failed to parse ${input.errors.displayName}. Local source paths must stay inside the project root.`,
+          details: {
+            lockfilePath: fromFilePath,
+            sourcePath,
+            relativeFilePath
+          }
+        })
+      );
+    }
+
+    const sourceFileRelativePath = normalizeBaselineRelativePath(
+      path.join(sourceRelativePath, relativeFilePath)
+    );
+
+    if (!sourceFileRelativePath) {
+      return err(
+        createError({
+          code: input.errors.parseCode,
+          category: "unsupported_input",
+          message: `Failed to parse ${input.errors.displayName}. Local source evidence paths must stay inside the local source root.`,
+          details: {
+            lockfilePath: fromFilePath,
+            sourcePath,
+            relativeFilePath
+          }
+        })
+      );
+    }
+
+    const sourceFile = readOptionalBaselineFile({
+      projectRoot: input.projectRoot,
+      baselineRef: input.baselineRef,
+      relativePath: sourceFileRelativePath,
+      readRefFile: input.readRefFile
+    });
+
+    if (isErr(sourceFile)) {
+      return sourceFile;
+    }
+
+    return ok(sourceFile.value === undefined
+      ? undefined
+      : {
+          path: `${input.baselineRef}:${sourceFileRelativePath}`,
+          text: sourceFile.value
+        });
+  };
+}
+
 function stripBaselineRefPrefix(filePath: string, baselineRef: string): string {
   const prefix = `${baselineRef}:`;
   return filePath.startsWith(prefix) ? filePath.slice(prefix.length) : filePath;
@@ -828,6 +1403,51 @@ function normalizeBaselineRelativePath(relativePath: string): string | undefined
   }
 
   return normalized;
+}
+
+function isGradleDependencyLocksDirectory(lockfilePath: string): boolean {
+  const segments = path.normalize(lockfilePath).split(path.sep);
+  return segments.length >= 2
+    && segments[segments.length - 1] === "dependency-locks"
+    && segments[segments.length - 2] === "gradle"
+    && isDirectory(lockfilePath);
+}
+
+function readBaselineDirectoryPackagesProps(input: {
+  project: ProjectInput;
+  baselineRef: string;
+  readRefFile: GitRefFileReader;
+}): Result<{ path: string; text: string } | undefined, OhriskError> {
+  const currentPropsPath = findNearestDirectoryPackagesPropsPath(input.project.lockfile.path);
+  if (!currentPropsPath) {
+    return ok(undefined);
+  }
+
+  const relativePath = normalizeBaselineRelativePath(
+    path.relative(input.project.rootDir, currentPropsPath)
+  );
+
+  if (!relativePath) {
+    return ok(undefined);
+  }
+
+  const baselineProps = readOptionalBaselineFile({
+    projectRoot: input.project.rootDir,
+    baselineRef: input.baselineRef,
+    relativePath,
+    readRefFile: input.readRefFile
+  });
+
+  if (isErr(baselineProps)) {
+    return baselineProps;
+  }
+
+  return ok(baselineProps.value === undefined
+    ? undefined
+    : {
+        path: `${input.baselineRef}:${relativePath}`,
+        text: baselineProps.value
+      });
 }
 
 function readOptionalBaselineFile(input: {
@@ -1070,6 +1690,22 @@ function isCliEntrypoint(metaUrl: string, argvPath: string | undefined): boolean
     return realpathSync(fileURLToPath(metaUrl)) === realpathSync(argvPath);
   } catch {
     return path.resolve(fileURLToPath(metaUrl)) === path.resolve(argvPath);
+  }
+}
+
+function isFile(pathname: string): boolean {
+  try {
+    return statSync(pathname).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function isDirectory(pathname: string): boolean {
+  try {
+    return statSync(pathname).isDirectory();
+  } catch {
+    return false;
   }
 }
 

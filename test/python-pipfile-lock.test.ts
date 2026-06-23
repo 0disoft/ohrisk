@@ -50,7 +50,78 @@ describe("parsePipfileLockText", () => {
       });
   });
 
-  test("rejects package entries without exact version pins", () => {
+  test("parses local path package entries with embedded license evidence", () => {
+    const files = new Map([
+      [
+        "./local-risk/pyproject.toml",
+        [
+          "[project]",
+          "name = \"local-risk\"",
+          "version = \"1.0.0\"",
+          "license = \"AGPL-3.0-only\""
+        ].join("\n")
+      ],
+      [
+        "./local-risk/LICENSE",
+        "GNU AFFERO GENERAL PUBLIC LICENSE Version 3\n"
+      ]
+    ]);
+
+    const result = parsePipfileLockText(JSON.stringify({
+      default: {
+        "local-risk": {
+          editable: true,
+          path: "./local-risk"
+        }
+      }
+    }), "fixture-python/Pipfile.lock", {
+      readLocalSourceFile: ({ sourcePath, relativeFilePath }) => {
+        const text = files.get(`${sourcePath}/${relativeFilePath}`);
+        return {
+          ok: true as const,
+          value: text === undefined
+            ? undefined
+            : {
+                path: `fixture-python/${sourcePath}/${relativeFilePath}`,
+                text
+              }
+        };
+      }
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes).toEqual([
+      expect.objectContaining({
+        id: "local-risk@1.0.0",
+        name: "local-risk",
+        version: "1.0.0",
+        ecosystem: "pypi",
+        dependencyType: "production",
+        direct: true,
+        paths: [["fixture-python", "local-risk@1.0.0"]]
+      })
+    ]);
+    expect(result.value.embeddedEvidence).toEqual([
+      expect.objectContaining({
+        packageId: "local-risk@1.0.0",
+        metadataLicense: "AGPL-3.0-only",
+        metadataSource: "pyproject.toml",
+        source: "local",
+        files: [
+          expect.objectContaining({
+            path: "local-risk/LICENSE",
+            kind: "license"
+          })
+        ]
+      })
+    ]);
+  });
+
+  test("rejects local path package entries when no local source reader is available", () => {
     const result = parsePipfileLockText(JSON.stringify({
       default: {
         editablePackage: {

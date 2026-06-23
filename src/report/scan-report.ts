@@ -75,7 +75,7 @@ export function renderScanReport(input: ScanReportInput): string {
   return [
     "Ohrisk scan",
     `Project: ${input.project.rootDir}`,
-    `Lockfile: ${path.basename(input.project.lockfile.path)} (${input.project.lockfile.kind})`,
+    `Lockfile: ${displayLockfilePath(input.project)} (${input.project.lockfile.kind})`,
     `Profile: ${input.profile}`,
     `Production only: ${input.prodOnly ? "yes" : "no"}`,
     `Dependencies: ${summary.dependencyGraph.total} total, ${summary.dependencyGraph.direct} direct, ${summary.dependencyGraph.transitive} transitive`,
@@ -113,7 +113,7 @@ function renderMarkdownReport(
     "# Ohrisk scan",
     "",
     `- Project: ${formatMarkdownInlineCode(markdownProjectLabel(input))}`,
-    `- Lockfile: ${formatMarkdownInlineCode(path.basename(input.project.lockfile.path))} (${formatMarkdownInlineCode(input.project.lockfile.kind)})`,
+    `- Lockfile: ${formatMarkdownInlineCode(displayLockfilePath(input.project))} (${formatMarkdownInlineCode(input.project.lockfile.kind)})`,
     `- Profile: ${formatMarkdownInlineCode(input.profile)}`,
     `- Production only: ${formatMarkdownInlineCode(input.prodOnly ? "yes" : "no")}`,
     `- Dependencies: ${formatMarkdownInlineCode(`${summary.dependencyGraph.total} total`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.direct} direct`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.transitive} transitive`)}`,
@@ -138,6 +138,11 @@ function renderMarkdownReport(
     "",
     nextAction
   ].join("\n");
+}
+
+function displayLockfilePath(project: ScanReportInput["project"]): string {
+  const relativePath = path.relative(project.rootDir, project.lockfile.path);
+  return relativePath === "" ? path.basename(project.lockfile.path) : relativePath;
 }
 
 function markdownProjectLabel(input: ScanReportInput): string {

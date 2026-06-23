@@ -1,5 +1,220 @@
 # Changelog
 
+## 0.148.0 - 2026-06-21
+
+### Added
+
+- Rust `Cargo.lock` scans now read literal and wildcard-segment Cargo
+  workspace member `Cargo.toml` manifests, such as `crates/*` and
+  `crates/*/plugins/*`, for root dependency classification, honoring workspace
+  `exclude` entries, `crate.workspace = true` dependency keys, workspace
+  dependency package aliases, table-form dependency sections such as
+  `[dependencies.foo]`, and baseline `diff` reads.
+- Gradle dependency locking scans now discover legacy
+  `gradle/dependency-locks` directories, merge their `*.lockfile` files as
+  Gradle lockfile inputs, and still accept explicit
+  `gradle/dependency-locks/*.lockfile` paths while preserving the project root
+  name in dependency paths.
+- CycloneDX JSON and SPDX JSON SBOM inputs are now accepted explicitly
+  with `--lockfile <name>.cdx.json` and
+  `--lockfile <name>.spdx.json`, matching the existing explicit SBOM
+  suffix handling for XML, RDF/XML, and tag-value inputs.
+- SPDX RDF/XML SBOM inputs are now discovered from `spdx.rdf`,
+  `bom.spdx.rdf`, `sbom.spdx.rdf`, and `sbom.spdx.rdf.xml`, accepted
+  explicitly with `--lockfile <name>.spdx.rdf` or
+  `--lockfile <name>.spdx.rdf.xml`, and scanned for Package URL external
+  refs, dependency relationships, and embedded license evidence.
+- Haskell Stack `stack.yaml.lock` inputs are now discovered and scanned for
+  completed Hackage package pins, using local Stack package database license
+  metadata before unavailable fallback.
+- Perl Carton `cpanfile.snapshot` inputs are now discovered and scanned for
+  Carton snapshot v1 distribution pins, including dependency paths inferred
+  from `provides` and `requirements` metadata, using local Carton cache archive
+  `META.json` or `META.yml` license metadata before unavailable fallback.
+- LuaRocks `luarocks.lock` inputs are now discovered and scanned for literal
+  `dependencies` table package pins, using local `.rockspec` literal string
+  or string-table license metadata before unavailable fallback.
+
+## 0.147.0 - 2026-06-21
+
+### Added
+
+- CycloneDX XML SBOM inputs are now discovered from `bom.xml`,
+  `cyclonedx.xml`, and `sbom.cdx.xml`, accepted explicitly with
+  `--lockfile <name>.cdx.xml`, and scanned for Package URL identities,
+  dependency relationships, and embedded license evidence.
+
+## 0.146.0 - 2026-06-21
+
+### Added
+
+- SPDX tag-value `.spdx` SBOM inputs are now discovered from `sbom.spdx`
+  and `bom.spdx`, accepted explicitly with `--lockfile <name>.spdx`, and
+  scanned for Package URL external refs, dependency relationships, and
+  embedded license evidence.
+
+## 0.145.0 - 2026-06-21
+
+### Added
+
+- Python Pipenv `Pipfile.lock` scans now support project-root-contained local
+  `path` entries, including editable local source packages, when the source
+  tree declares package name and version metadata.
+- Python PDM `pdm.lock` scans now support project-root-contained local `path`
+  and relative `file:` source records with embedded package metadata and
+  license evidence.
+- `diff` now reads baseline Pipenv and PDM local source metadata and license
+  files, so unchanged local-source license findings do not appear as new PR
+  risk.
+
+## 0.144.0 - 2026-06-21
+
+### Added
+
+- Python `requirements.txt` scans now support project-root-contained local
+  source requirements, including editable `-e ./path` / `--editable ./path`,
+  direct `./path`, `file:./path`, and `name @ file:./path` entries when the
+  local source declares package name and version metadata in `pyproject.toml`,
+  `setup.cfg`, or `PKG-INFO`.
+- Local Python source requirement evidence is embedded from the source tree, so
+  scans and diffs can evaluate `pyproject.toml` or `setup.cfg` license metadata
+  plus root license files without requiring the package to be installed into
+  `.venv`.
+
+## 0.143.0 - 2026-06-21
+
+### Added
+
+- Go `go.work` projects are now discovered and scanned across workspace
+  modules, including baseline `diff` reads for each workspace module's
+  `go.mod` and optional `go.sum` file.
+- Go workspace `replace` directives are applied ahead of workspace module
+  `go.mod` replacements, including wildcard `go.work` replacements that
+  override version-specific module replacements.
+
+## 0.142.0 - 2026-06-21
+
+### Added
+
+- Go `go.mod` scans now resolve `replace` directives while preserving the
+  original required module identity in findings.
+- Module-to-module Go replacements use the replacement module/version for local
+  Go module cache evidence, and project-root-contained local replacement paths
+  are scanned for license evidence.
+
+## 0.141.0 - 2026-06-21
+
+### Added
+
+- Maven `pom.xml` scans now resolve versionless direct dependencies from local
+  `.m2/repository` parent POM `dependencyManagement` entries and imported BOM
+  POMs when those POMs are already available locally.
+- Conda `environment.yml` and `environment.yaml` projects are now discovered and
+  scanned for exact Conda `name=version` pins and exact pip `name==version`
+  pins.
+- Gradle version catalog `gradle/libs.versions.toml` projects are now
+  discovered and scanned for exact Maven library aliases.
+- Bazel `MODULE.bazel` projects are now discovered and scanned for exact
+  `bazel_dep` module versions.
+- .NET `*.csproj` scans now resolve literal central package versions from the
+  nearest `Directory.Packages.props` file.
+
+## 0.139.0 - 2026-06-21
+
+### Added
+
+- Erlang Rebar3 `rebar.lock` projects are now discovered and scanned for Hex
+  package pins.
+- Local Hex package `rebar.config` license metadata is now used as evidence when
+  `mix.exs` license metadata is unavailable.
+
+## 0.138.0 - 2026-06-21
+
+### Added
+
+- Conda `conda-lock.yml` and `conda-lock.yaml` projects are now discovered and
+  scanned for locked Conda and pip package records.
+- Local Conda package cache `info/index.json` metadata and license files are now
+  used as Conda package evidence before unavailable fallback.
+
+## 0.137.0 - 2026-06-21
+
+### Added
+
+- vcpkg `vcpkg.json` manifest projects are now discovered and scanned from
+  installed `vcpkg_installed/vcpkg/status` records when available, or from
+  exact top-level `overrides` when installed status is absent.
+- Local `vcpkg_installed/<triplet>/share/<port>/copyright` files are now used
+  as vcpkg license evidence before unavailable fallback.
+
+## 0.136.0 - 2026-06-21
+
+### Added
+
+- Python `pylock.toml` and named `pylock.<name>.toml` projects are now
+  discovered and scanned for versioned PyPI package records, using dependency
+  references in the lock file to reconstruct audit paths.
+- R `renv.lock` projects are now discovered and scanned for locked package
+  records, with local `renv/library` DESCRIPTION license metadata and license
+  file evidence when available.
+- Julia `Manifest.toml` projects are now discovered and scanned for versioned
+  `[[deps.Name]]` package records, with local Julia depot `Project.toml`
+  license metadata and license file evidence when available.
+
+## 0.134.0 - 2026-06-21
+
+### Added
+
+- Unity Package Manager `Packages/packages-lock.json` projects are now
+  discovered and scanned for locked UPM package entries, skipping Unity built-in
+  modules and using local `Packages/` or `Library/PackageCache` source license
+  evidence when available.
+
+## 0.133.0 - 2026-06-21
+
+### Added
+
+- Terraform `.terraform.lock.hcl` inputs are now discovered and scanned for
+  locked provider versions, with local `.terraform/providers` license file
+  evidence when available.
+- Helm `Chart.lock` and `Chart.yaml` inputs are now discovered and scanned for
+  chart dependencies, with local `charts/` metadata and license file evidence
+  when available.
+- Nix `flake.lock` inputs are now discovered and scanned for reachable flake
+  inputs, with local path-input license file evidence when available.
+
+## 0.132.0 - 2026-06-21
+
+### Added
+
+- Conan 2 `conan.lock` inputs are now discovered and scanned for resolved
+  recipe references from `requires`, `build_requires`, and `python_requires`
+  arrays, with local Conan cache `conanfile.py` and license file evidence.
+
+## 0.131.0 - 2026-06-21
+
+### Added
+
+- .NET restored `obj/project.assets.json` inputs are now discovered and scanned
+  for resolved NuGet package graphs, including direct roots from
+  `projectFileDependencyGroups` and transitive target dependencies.
+- .NET `*.csproj` inputs are now discovered and scanned for direct literal
+  `PackageReference` dependencies when package versions are declared in the
+  project file.
+- .NET NuGet `packages.config` inputs are now discovered and scanned for flat
+  package entries with exact `version` attributes.
+- Dart and Flutter `pubspec.lock` inputs are now discovered and scanned for
+  concrete Pub package versions, with local Pub cache license evidence.
+- Swift Package Manager `Package.resolved` inputs are now discovered and
+  scanned for pinned packages, with local `.build/checkouts` or
+  `SourcePackages/checkouts` license evidence.
+- Carthage `Cartfile.resolved` inputs are now discovered and scanned for
+  resolved pins, with local `Carthage/Checkouts` license evidence.
+- CocoaPods `Podfile.lock` inputs are now discovered and scanned for resolved
+  pods, with local `Pods/` source and `Pods/Local Podspecs` license evidence.
+- Elixir Mix `mix.lock` inputs are now discovered and scanned for Hex package
+  pins, with local `deps/` source and `mix.exs` license evidence.
+
 ## 0.130.0 - 2026-06-21
 
 ### Added

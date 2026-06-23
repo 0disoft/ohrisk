@@ -76,6 +76,44 @@ describe("parseSpdxJsonText", () => {
     }));
   });
 
+  test("treats lowercase SPDX absent-license markers as unusable license evidence", () => {
+    const result = parseSpdxJsonText(JSON.stringify({
+      spdxVersion: "SPDX-2.3",
+      name: "fixture-spdx-lowercase-absent",
+      documentDescribes: ["SPDXRef-Package-lowercase-absent"],
+      packages: [
+        {
+          SPDXID: "SPDXRef-Package-lowercase-absent",
+          name: "lowercase-absent",
+          licenseDeclared: "noassertion",
+          externalRefs: [
+            {
+              referenceCategory: "PACKAGE-MANAGER",
+              referenceType: "purl",
+              referenceLocator: "pkg:npm/lowercase-absent@1.0.0"
+            }
+          ]
+        }
+      ]
+    }), "spdx.json");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    const evidence = result.value.embeddedEvidence?.find((item) =>
+      item.packageId === "lowercase-absent@1.0.0"
+    );
+    expect(evidence).toMatchObject({
+      packageId: "lowercase-absent@1.0.0",
+      metadataSource: "SPDX",
+      source: "sbom",
+      warnings: ["SPDX package did not declare usable license evidence."]
+    });
+    expect(evidence).not.toHaveProperty("metadataLicense");
+  });
+
   test("reports documents without package PURLs as typed SPDX errors", () => {
     const result = parseSpdxJsonText(JSON.stringify({
       spdxVersion: "SPDX-2.3",

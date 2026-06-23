@@ -19,10 +19,6 @@ export function parsePackageUrl(input: string): ParsedPackageUrl | undefined {
   }
 
   const purlType = withoutPrefix.slice(0, typeSeparatorIndex).toLowerCase();
-  const ecosystem = packageEcosystemForPurlType(purlType);
-  if (!ecosystem) {
-    return undefined;
-  }
 
   const pathAndVersion = stripPurlQualifiersAndSubpath(
     withoutPrefix.slice(typeSeparatorIndex + 1)
@@ -43,6 +39,14 @@ export function parsePackageUrl(input: string): ParsedPackageUrl | undefined {
     return undefined;
   }
 
+  const ecosystem = packageEcosystemForPurlType({
+    type: purlType,
+    pathSegments
+  });
+  if (!ecosystem) {
+    return undefined;
+  }
+
   const name = packageNameForPurlPath({
     ecosystem,
     pathSegments
@@ -55,12 +59,15 @@ export function parsePackageUrl(input: string): ParsedPackageUrl | undefined {
     ecosystem,
     name,
     version,
-    id: `${name}@${version}`
+    id: ecosystem === "conda" ? `conda:${name}@${version}` : `${name}@${version}`
   };
 }
 
-function packageEcosystemForPurlType(type: string): PackageEcosystem | undefined {
-  switch (type) {
+function packageEcosystemForPurlType(input: {
+  type: string;
+  pathSegments: string[];
+}): PackageEcosystem | undefined {
+  switch (input.type) {
     case "npm":
       return "npm";
     case "pypi":
@@ -73,10 +80,57 @@ function packageEcosystemForPurlType(type: string): PackageEcosystem | undefined
       return "go";
     case "nuget":
       return "nuget";
+    case "conan":
+      return "conan";
+    case "conda":
+      return "conda";
+    case "cran":
+      return "cran";
+    case "julia":
+      return "julia";
+    case "cpan":
+      return "cpan";
+    case "generic":
+      return genericPackageEcosystem(input.pathSegments);
+    case "cocoapods":
+      return "cocoapods";
+    case "hex":
+      return "hex";
     case "gem":
       return "gem";
     case "composer":
       return "composer";
+    case "pub":
+      return "pub";
+    case "swift":
+      return "swift";
+    default:
+      return undefined;
+  }
+}
+
+function genericPackageEcosystem(pathSegments: string[]): PackageEcosystem | undefined {
+  switch (pathSegments[0]) {
+    case "bazel-module":
+      return "bazel";
+    case "vcpkg":
+      return "vcpkg";
+    case "hackage":
+      return "hackage";
+    case "cpan":
+      return "cpan";
+    case "luarocks":
+      return "luarocks";
+    case "carthage":
+      return "carthage";
+    case "terraform-provider":
+      return "terraform";
+    case "helm":
+      return "helm";
+    case "nix":
+      return "nix";
+    case "unity":
+      return "unity";
     default:
       return undefined;
   }
@@ -101,12 +155,66 @@ function packageNameForPurlPath(input: {
       return mavenPackageName(input.pathSegments);
     case "composer":
       return input.pathSegments.length >= 2 ? input.pathSegments.join("/") : undefined;
+    case "bazel":
+      return input.pathSegments[0] === "bazel-module" && input.pathSegments.length === 2
+        ? input.pathSegments[1]
+        : undefined;
     case "go":
       return input.pathSegments.join("/");
+    case "vcpkg":
+      return input.pathSegments[0] === "vcpkg" && input.pathSegments.length === 2
+        ? input.pathSegments[1]
+        : undefined;
+    case "carthage":
+      return input.pathSegments[0] === "carthage" && input.pathSegments.length >= 2
+        ? input.pathSegments.slice(1).join("/")
+        : undefined;
+    case "terraform":
+      return input.pathSegments[0] === "terraform-provider" && input.pathSegments.length >= 4
+        ? input.pathSegments.slice(1).join("/")
+        : undefined;
+    case "helm":
+      if (input.pathSegments[0] !== "helm" || input.pathSegments.length < 2) {
+        return undefined;
+      }
+
+      return input.pathSegments.length >= 3
+        ? `${input.pathSegments[1]}/${input.pathSegments.slice(2).join("/")}`
+        : input.pathSegments.slice(1).join("/");
+    case "nix":
+      return input.pathSegments[0] === "nix" && input.pathSegments.length >= 2
+        ? input.pathSegments.slice(1).join("/")
+        : undefined;
+    case "unity":
+      return input.pathSegments[0] === "unity" && input.pathSegments.length === 2
+        ? input.pathSegments[1]
+        : undefined;
+    case "hackage":
+      return input.pathSegments[0] === "hackage" && input.pathSegments.length === 2
+        ? input.pathSegments[1]
+        : undefined;
+    case "cpan":
+      if (input.pathSegments[0] === "cpan" && input.pathSegments.length === 2) {
+        return input.pathSegments[1];
+      }
+
+      return input.pathSegments.length === 2 ? input.pathSegments[1] : undefined;
+    case "luarocks":
+      return input.pathSegments[0] === "luarocks" && input.pathSegments.length === 2
+        ? input.pathSegments[1]
+        : undefined;
     case "pypi":
     case "cargo":
     case "nuget":
+    case "conan":
+    case "conda":
+    case "cran":
+    case "julia":
+    case "cocoapods":
+    case "hex":
     case "gem":
+    case "pub":
+    case "swift":
       return input.pathSegments.join("/");
   }
 }

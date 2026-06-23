@@ -1,7 +1,14 @@
 import path from "node:path";
 
+import type { LicenseEvidence } from "../evidence/types";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
+import {
+  createDiskPythonLocalSourceFileReader,
+  normalizePythonLocalSourcePathSpec,
+  readPythonLocalSourcePackage,
+  type PythonLocalSourceFileReader
+} from "./python-local-source";
 import {
   inputFileReadErrorCategory,
   inputFileReadErrorDetails,
@@ -15,6 +22,18 @@ type PipfileLockRecord = {
   version: string;
   id: string;
   dependencyType: DependencyType;
+  evidence?: LicenseEvidence;
+};
+
+type PipfileLockParseOptions = {
+  readLocalSourceFile?: PythonLocalSourceFileReader;
+  rootName?: string;
+};
+
+const PIPFILE_LOCK_LOCAL_SOURCE_ERRORS = {
+  parseCode: "PIPFILE_LOCK_PARSE_FAILED",
+  readCode: "PIPFILE_LOCK_READ_FAILED",
+  displayName: "Pipfile.lock"
 };
 
 export function parsePipfileLockfile(
@@ -42,12 +61,19 @@ export function parsePipfileLockfile(
     );
   }
 
-  return parsePipfileLockText(lockfileText.value, lockfilePath);
+  return parsePipfileLockText(lockfileText.value, lockfilePath, {
+    readLocalSourceFile: createDiskPythonLocalSourceFileReader({
+      rootDir: path.dirname(lockfilePath),
+      maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES,
+      errors: PIPFILE_LOCK_LOCAL_SOURCE_ERRORS
+    })
+  });
 }
 
 export function parsePipfileLockText(
   input: string,
-  lockfilePath = "Pipfile.lock"
+  lockfilePath = "Pipfile.lock",
+  options: PipfileLockParseOptions = {}
 ): Result<DependencyGraph, OhriskError> {
   const parsed = parsePipfileLockJson(input, lockfilePath);
   if (!parsed.ok) {
@@ -58,7 +84,8 @@ export function parsePipfileLockText(
     lockfilePath,
     sectionName: "default",
     value: parsed.value.default,
-    dependencyType: "production"
+    dependencyType: "production",
+    readLocalSourceFile: options.readLocalSourceFile
   });
   if (!defaultRecords.ok) {
     return defaultRecords;
@@ -68,7 +95,8 @@ export function parsePipfileLockText(
     lockfilePath,
     sectionName: "develop",
     value: parsed.value.develop,
-    dependencyType: "development"
+    dependencyType: "development",
+    readLocalSourceFile: options.readLocalSourceFile
   });
   if (!developRecords.ok) {
     return developRecords;
@@ -89,13 +117,17 @@ export function parsePipfileLockText(
     );
   }
 
-  const rootName = path.basename(path.dirname(lockfilePath)) || "<pipfile-project>";
+  const rootName = options.rootName ?? (path.basename(path.dirname(lockfilePath)) || "<pipfile-project>");
+  const deduplicatedRecords = deduplicatePipfileLockRecords(records)
+    .sort((left, right) => left.id.localeCompare(right.id));
+  const embeddedEvidence = deduplicatedRecords
+    .map((record) => record.evidence)
+    .filter((evidence): evidence is NonNullable<PipfileLockRecord["evidence"]> => evidence !== undefined);
 
   return ok({
     rootName,
     lockfilePath,
-    nodes: deduplicatePipfileLockRecords(records)
-      .sort((left, right) => left.id.localeCompare(right.id))
+    nodes: deduplicatedRecords
       .map((record): DependencyNode => ({
         id: record.id,
         name: record.name,
@@ -104,7 +136,10 @@ export function parsePipfileLockText(
         dependencyType: record.dependencyType,
         direct: true,
         paths: [[rootName, record.id]]
-      }))
+      })),
+    ...(embeddedEvidence.length > 0
+      ? { embeddedEvidence: embeddedEvidence.sort((left, right) => left.packageId.localeCompare(right.packageId)) }
+      : {})
   });
 }
 
@@ -148,6 +183,7 @@ function readPipfileLockSection(input: {
   sectionName: "default" | "develop";
   value: unknown;
   dependencyType: DependencyType;
+  readLocalSourceFile?: PythonLocalSourceFileReader;
 }): Result<PipfileLockRecord[], OhriskError> {
   if (input.value === undefined) {
     return ok([]);
@@ -164,6 +200,24 @@ function readPipfileLockSection(input: {
         ...input,
         packageName: rawName
       });
+    }
+
+    const localSourcePath = readPipfileLockLocalSourcePath(rawEntry);
+    if (localSourcePath) {
+      const record = readPipfileLockLocalSourceRecord({
+        lockfilePath: input.lockfilePath,
+        sectionName: input.sectionName,
+        packageName: rawName,
+        sourcePath: localSourcePath,
+        dependencyType: input.dependencyType,
+        readLocalSourceFile: input.readLocalSourceFile
+      });
+      if (!record.ok) {
+        return record;
+      }
+
+      records.push(record.value);
+      continue;
     }
 
     const version = readExactPipfileLockVersion(rawEntry.version);
@@ -183,6 +237,45 @@ function readPipfileLockSection(input: {
   }
 
   return ok(records);
+}
+
+function readPipfileLockLocalSourcePath(entry: Record<string, unknown>): string | undefined {
+  const rawPath = entry.path;
+  if (typeof rawPath !== "string") {
+    return undefined;
+  }
+
+  return normalizePythonLocalSourcePathSpec(rawPath);
+}
+
+function readPipfileLockLocalSourceRecord(input: {
+  lockfilePath: string;
+  sectionName: string;
+  packageName: string;
+  sourcePath: string;
+  dependencyType: DependencyType;
+  readLocalSourceFile?: PythonLocalSourceFileReader;
+}): Result<PipfileLockRecord, OhriskError> {
+  const localSource = readPythonLocalSourcePackage({
+    source: {
+      sourcePath: input.sourcePath,
+      expectedName: input.packageName
+    },
+    fromFilePath: input.lockfilePath,
+    readLocalSourceFile: input.readLocalSourceFile,
+    errors: PIPFILE_LOCK_LOCAL_SOURCE_ERRORS
+  });
+  if (!localSource.ok) {
+    return localSource;
+  }
+
+  return ok({
+    name: localSource.value.name,
+    version: localSource.value.version,
+    id: localSource.value.id,
+    dependencyType: input.dependencyType,
+    evidence: localSource.value.evidence
+  });
 }
 
 function readExactPipfileLockVersion(value: unknown): string | undefined {

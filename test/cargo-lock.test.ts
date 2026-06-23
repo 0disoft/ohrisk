@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
-import { parseCargoLockText } from "../src/graph/rust-cargo-lock";
+import { parseCargoLockfile, parseCargoLockText } from "../src/graph/rust-cargo-lock";
 
 describe("parseCargoLockText", () => {
   test("parses direct, development, and transitive Cargo dependencies", () => {
@@ -73,6 +76,499 @@ describe("parseCargoLockText", () => {
         direct: true,
         paths: [["fixture-rust", "dev-risk@0.1.0"]]
       });
+  });
+
+  test("uses Cargo workspace member manifests as dependency roots", () => {
+    const cargoLock = [
+      "[[package]]",
+      "name = \"dev-tool\"",
+      "version = \"2.0.0\"",
+      "",
+      "[[package]]",
+      "name = \"prod-child\"",
+      "version = \"0.1.0\"",
+      "",
+      "[[package]]",
+      "name = \"prod-root\"",
+      "version = \"1.0.0\"",
+      "dependencies = [",
+      " \"prod-child 0.1.0\",",
+      "]",
+      "",
+      "[[package]]",
+      "name = \"actual-workspace\"",
+      "version = \"4.0.0\"",
+      "",
+      "[[package]]",
+      "name = \"workspace-shared\"",
+      "version = \"3.0.0\""
+    ].join("\n");
+
+    const result = parseCargoLockText(cargoLock, "workspace/Cargo.lock", {
+      manifestText: [
+        "[workspace]",
+        "members = [\"crates/app\", \"crates/tools\"]",
+        "",
+        "[workspace.dependencies]",
+        "renamed-workspace = { package = \"actual-workspace\", version = \"4\" }",
+        "workspace-shared = \"3\""
+      ].join("\n"),
+      memberManifestTexts: [
+        [
+          "[package]",
+          "name = \"app\"",
+          "version = \"0.1.0\"",
+          "",
+          "[dependencies]",
+          "prod-root = \"1\"",
+          "renamed-workspace.workspace = true",
+          "workspace-shared.workspace = true"
+        ].join("\n"),
+        [
+          "[package]",
+          "name = \"tools\"",
+          "version = \"0.1.0\"",
+          "",
+          "[dev-dependencies]",
+          "dev-tool = \"2\""
+        ].join("\n")
+      ]
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "actual-workspace@4.0.0",
+      "dev-tool@2.0.0",
+      "prod-child@0.1.0",
+      "prod-root@1.0.0",
+      "workspace-shared@3.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "prod-root@1.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: true
+      });
+    expect(result.value.nodes.find((node) => node.id === "prod-child@0.1.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: false
+      });
+    expect(result.value.nodes.find((node) => node.id === "dev-tool@2.0.0"))
+      .toMatchObject({
+        dependencyType: "development",
+        direct: true
+      });
+    expect(result.value.nodes.find((node) => node.id === "workspace-shared@3.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: true
+      });
+    expect(result.value.nodes.find((node) => node.id === "actual-workspace@4.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: true
+      });
+  });
+
+  test("uses Cargo dependency table sections as dependency roots", () => {
+    const result = parseCargoLockText(
+      [
+        "[[package]]",
+        "name = \"actual-table\"",
+        "version = \"1.0.0\"",
+        "",
+        "[[package]]",
+        "name = \"table-dev\"",
+        "version = \"2.0.0\"",
+        "",
+        "[[package]]",
+        "name = \"actual-workspace-table\"",
+        "version = \"3.0.0\"",
+        "",
+        "[[package]]",
+        "name = \"optional-table\"",
+        "version = \"4.0.0\"",
+        "",
+        "[[package]]",
+        "name = \"workspace-only\"",
+        "version = \"2.0.0\""
+      ].join("\n"),
+      "fixture-rust/Cargo.lock",
+      {
+        manifestText: [
+          "[package]",
+          "name = \"fixture-rust\"",
+          "version = \"0.1.0\"",
+          "",
+          "[workspace.dependencies]",
+          "workspace-table-alias = { package = \"actual-workspace-table\", version = \"3\" }",
+          "",
+          "[dependencies.table-alias]",
+          "package = \"actual-table\"",
+          "version = \"1\"",
+          "",
+          "[dependencies.workspace-table-alias]",
+          "workspace = true",
+          "",
+          "[dependencies.optional-table]",
+          "version = \"4\"",
+          "optional = true",
+          "",
+          "[target.'cfg(unix)'.dev-dependencies.table-dev]",
+          "version = \"2\"",
+          "",
+          "[workspace.dependencies.workspace-only]",
+          "version = \"2\""
+        ].join("\n")
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "actual-table@1.0.0",
+      "actual-workspace-table@3.0.0",
+      "optional-table@4.0.0",
+      "table-dev@2.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "actual-table@1.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: true
+      });
+    expect(result.value.nodes.find((node) => node.id === "actual-workspace-table@3.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: true
+      });
+    expect(result.value.nodes.find((node) => node.id === "optional-table@4.0.0"))
+      .toMatchObject({
+        dependencyType: "optional",
+        direct: true
+      });
+    expect(result.value.nodes.find((node) => node.id === "table-dev@2.0.0"))
+      .toMatchObject({
+        dependencyType: "development",
+        direct: true
+      });
+  });
+
+  test("reads literal Cargo workspace member manifests from disk", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cargo-workspace-"));
+    const appRoot = path.join(projectRoot, "crates", "app");
+
+    try {
+      mkdirSync(appRoot, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "Cargo.toml"),
+        [
+          "[workspace]",
+          "members = [",
+          "  \"crates/app\",",
+          "]"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(appRoot, "Cargo.toml"),
+        [
+          "[package]",
+          "name = \"app\"",
+          "version = \"0.1.0\"",
+          "",
+          "[dependencies]",
+          "workspace-risk = \"1\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectRoot, "Cargo.lock"),
+        [
+          "[[package]]",
+          "name = \"workspace-risk\"",
+          "version = \"1.0.0\""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = parseCargoLockfile(path.join(projectRoot, "Cargo.lock"));
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value.nodes).toHaveLength(1);
+      expect(result.value.nodes[0]).toMatchObject({
+        id: "workspace-risk@1.0.0",
+        dependencyType: "production",
+        direct: true
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("reads one-segment wildcard Cargo workspace member manifests and honors excludes", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cargo-workspace-wildcard-"));
+    const appRoot = path.join(projectRoot, "crates", "app");
+    const emptyRoot = path.join(projectRoot, "crates", "empty");
+    const ignoredRoot = path.join(projectRoot, "crates", "ignored");
+
+    try {
+      mkdirSync(appRoot, { recursive: true });
+      mkdirSync(emptyRoot, { recursive: true });
+      mkdirSync(ignoredRoot, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "Cargo.toml"),
+        [
+          "[workspace]",
+          "members = [\"crates/*\"]",
+          "exclude = [\"crates/ignored\"]"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(appRoot, "Cargo.toml"),
+        [
+          "[package]",
+          "name = \"app\"",
+          "version = \"0.1.0\"",
+          "",
+          "[dependencies]",
+          "workspace-risk = \"1\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(ignoredRoot, "Cargo.toml"),
+        [
+          "[package]",
+          "name = \"ignored\"",
+          "version = \"0.1.0\"",
+          "",
+          "[dependencies]",
+          "ignored-risk = \"1\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectRoot, "Cargo.lock"),
+        [
+          "[[package]]",
+          "name = \"workspace-risk\"",
+          "version = \"1.0.0\"",
+          "",
+          "[[package]]",
+          "name = \"ignored-risk\"",
+          "version = \"1.0.0\""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = parseCargoLockfile(path.join(projectRoot, "Cargo.lock"));
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value.nodes).toHaveLength(1);
+      expect(result.value.nodes[0]).toMatchObject({
+        id: "workspace-risk@1.0.0",
+        dependencyType: "production",
+        direct: true
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("reads nested wildcard Cargo workspace member manifests", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cargo-workspace-nested-wildcard-"));
+    const pluginRoot = path.join(projectRoot, "crates", "group-a", "plugins", "risk-plugin");
+    const ignoredRoot = path.join(projectRoot, "crates", "group-b", "plugins", "ignored-plugin");
+
+    try {
+      mkdirSync(pluginRoot, { recursive: true });
+      mkdirSync(ignoredRoot, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "Cargo.toml"),
+        [
+          "[workspace]",
+          "members = [\"crates/*/plugins/*\"]",
+          "exclude = [\"crates/group-b/plugins/*\"]"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(pluginRoot, "Cargo.toml"),
+        [
+          "[package]",
+          "name = \"risk-plugin\"",
+          "version = \"0.1.0\"",
+          "",
+          "[dependencies]",
+          "nested-risk = \"1\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(ignoredRoot, "Cargo.toml"),
+        [
+          "[package]",
+          "name = \"ignored-plugin\"",
+          "version = \"0.1.0\"",
+          "",
+          "[dependencies]",
+          "ignored-risk = \"1\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectRoot, "Cargo.lock"),
+        [
+          "[[package]]",
+          "name = \"nested-risk\"",
+          "version = \"1.0.0\"",
+          "",
+          "[[package]]",
+          "name = \"ignored-risk\"",
+          "version = \"1.0.0\""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = parseCargoLockfile(path.join(projectRoot, "Cargo.lock"));
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value.nodes).toHaveLength(1);
+      expect(result.value.nodes[0]).toMatchObject({
+        id: "nested-risk@1.0.0",
+        dependencyType: "production",
+        direct: true
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("reads segment star and question Cargo workspace member patterns and honors excludes", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cargo-workspace-partial-glob-"));
+    const appRoot = path.join(projectRoot, "crates", "app-core");
+    const ignoredRoot = path.join(projectRoot, "crates", "app-ignore");
+    const ignoredByPatternRoot = path.join(projectRoot, "crates", "app-ignored-core");
+    const cliRoot = path.join(projectRoot, "tools", "cli");
+
+    try {
+      mkdirSync(appRoot, { recursive: true });
+      mkdirSync(ignoredRoot, { recursive: true });
+      mkdirSync(ignoredByPatternRoot, { recursive: true });
+      mkdirSync(cliRoot, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "Cargo.toml"),
+        [
+          "[workspace]",
+          "members = [\"crates/app-*\", \"tools/?li\"]",
+          "exclude = [\"crates/app-ignore\", \"crates/app-ignored-*\"]"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(appRoot, "Cargo.toml"),
+        [
+          "[package]",
+          "name = \"app-core\"",
+          "version = \"0.1.0\"",
+          "",
+          "[dependencies]",
+          "partial-glob-risk = \"1\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(ignoredRoot, "Cargo.toml"),
+        [
+          "[package]",
+          "name = \"app-ignore\"",
+          "version = \"0.1.0\"",
+          "",
+          "[dependencies]",
+          "ignored-risk = \"1\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(ignoredByPatternRoot, "Cargo.toml"),
+        [
+          "[package]",
+          "name = \"app-ignored-core\"",
+          "version = \"0.1.0\"",
+          "",
+          "[dependencies]",
+          "pattern-ignored-risk = \"1\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(cliRoot, "Cargo.toml"),
+        [
+          "[package]",
+          "name = \"cli\"",
+          "version = \"0.1.0\"",
+          "",
+          "[dependencies]",
+          "question-glob-risk = \"1\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectRoot, "Cargo.lock"),
+        [
+          "[[package]]",
+          "name = \"partial-glob-risk\"",
+          "version = \"1.0.0\"",
+          "",
+          "[[package]]",
+          "name = \"question-glob-risk\"",
+          "version = \"1.0.0\"",
+          "",
+          "[[package]]",
+          "name = \"pattern-ignored-risk\"",
+          "version = \"1.0.0\"",
+          "",
+          "[[package]]",
+          "name = \"ignored-risk\"",
+          "version = \"1.0.0\""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = parseCargoLockfile(path.join(projectRoot, "Cargo.lock"));
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value.nodes.map((node) => node.id)).toEqual([
+        "partial-glob-risk@1.0.0",
+        "question-glob-risk@1.0.0"
+      ]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 
   test("uses package aliases from Cargo.toml when resolving lockfile records", () => {

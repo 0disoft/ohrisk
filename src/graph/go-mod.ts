@@ -11,11 +11,36 @@ import {
 } from "./read-input-file";
 import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
 
-type GoModuleRecord = {
+export type GoModuleRecord = {
   modulePath: string;
   version: string;
   dependencyType: DependencyType;
   direct: boolean;
+  replacement?: GoReplacementTarget;
+};
+
+export type GoReplacementTarget =
+  | {
+      kind: "module";
+      modulePath: string;
+      version: string;
+    }
+  | {
+      kind: "local";
+      path: string;
+    };
+
+export type GoReplaceDirective = {
+  oldModulePath: string;
+  oldVersion?: string;
+  target: GoReplacementTarget;
+};
+
+export type GoModParseOptions = {
+  goSumText?: string;
+  replacementOverrideGroups?: GoReplaceDirective[][];
+  localReplacementBaseDir?: string;
+  localReplacementRootDir?: string;
 };
 
 export function parseGoModFile(
@@ -59,7 +84,7 @@ export function parseGoModFile(
 export function parseGoModText(
   input: string,
   goModPath = "go.mod",
-  options: { goSumText?: string } = {}
+  options: GoModParseOptions = {}
 ): Result<DependencyGraph, OhriskError> {
   try {
     const goMod = parseGoModRecords(input, goModPath);
@@ -67,13 +92,36 @@ export function parseGoModText(
       return goMod;
     }
 
+    const localReplacements = normalizeGoReplacementDirectives(
+      goMod.value.replacements,
+      options.localReplacementBaseDir,
+      options.localReplacementRootDir
+    );
+    const replacementOverrideGroups = options.replacementOverrideGroups ?? [];
+
     const records = new Map<string, GoModuleRecord>();
-    for (const record of goMod.value.records) {
+    for (const record of goMod.value.records.map((record) =>
+      applyGoReplacement(record, localReplacements, replacementOverrideGroups)
+    )) {
       records.set(goRecordId(record), record);
     }
 
+    const replacementTargetIds = new Set(
+      [...records.values()]
+        .flatMap((record) =>
+          record.replacement?.kind === "module"
+            ? [`${record.replacement.modulePath}@${record.replacement.version}`]
+            : []
+        )
+    );
+
     if (options.goSumText) {
-      for (const record of parseGoSumRecords(options.goSumText)) {
+      for (const goSumRecord of parseGoSumRecords(options.goSumText)) {
+        if (replacementTargetIds.has(goRecordId(goSumRecord))) {
+          continue;
+        }
+
+        const record = applyGoReplacement(goSumRecord, localReplacements, replacementOverrideGroups);
         const id = goRecordId(record);
         const existing = records.get(id);
         records.set(id, existing
@@ -100,6 +148,7 @@ export function parseGoModText(
             name: record.modulePath,
             version: record.version,
             ecosystem: "go",
+            ...(record.replacement ? { resolved: goReplacementResolvedSpecifier(record.replacement) } : {}),
             dependencyType: record.dependencyType,
             direct: record.direct,
             paths: [[rootName, id]]
@@ -153,19 +202,21 @@ function readOptionalGoSum(input: {
   return ok(goSumText.value);
 }
 
-function parseGoModRecords(
+export function parseGoModRecords(
   input: string,
   goModPath: string
 ): Result<{
   modulePath?: string;
   records: GoModuleRecord[];
+  replacements: GoReplaceDirective[];
 }, OhriskError> {
   const records: GoModuleRecord[] = [];
+  const replacements: GoReplaceDirective[] = [];
   let modulePath: string | undefined;
   let block: "require" | "replace" | undefined;
 
   for (const [index, rawLine] of input.split(/\r?\n/).entries()) {
-    const line = stripGoComment(rawLine).trim();
+    const line = stripGoLineComment(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -177,7 +228,20 @@ function parseGoModRecords(
       }
 
       if (block === "replace") {
-        return unsupportedReplaceError(goModPath, index + 1, line);
+        const replacement = parseGoReplaceDirectiveLine({
+          line,
+          sourcePath: goModPath,
+          lineNumber: index + 1,
+          errorCode: "GO_MOD_PARSE_FAILED",
+          errorMessage: "Failed to parse go.mod replace directive."
+        });
+        if (!replacement.ok) {
+          return replacement;
+        }
+        if (replacement.value) {
+          replacements.push(replacement.value);
+        }
+        continue;
       }
 
       const record = parseRequireLine(line, rawLine);
@@ -211,18 +275,31 @@ function parseGoModRecords(
     }
 
     if (line.startsWith("replace ")) {
-      return unsupportedReplaceError(goModPath, index + 1, line);
+      const replacement = parseGoReplaceDirectiveLine({
+        line: line.slice("replace ".length).trim(),
+        sourcePath: goModPath,
+        lineNumber: index + 1,
+        errorCode: "GO_MOD_PARSE_FAILED",
+        errorMessage: "Failed to parse go.mod replace directive."
+      });
+      if (!replacement.ok) {
+        return replacement;
+      }
+      if (replacement.value) {
+        replacements.push(replacement.value);
+      }
     }
   }
 
   return ok({
     modulePath,
-    records
+    records,
+    replacements
   });
 }
 
 function parseRequireLine(line: string, rawLine: string): GoModuleRecord | undefined {
-  const parts = line.split(/\s+/);
+  const parts = splitGoDirectiveFields(line);
   const modulePath = parts[0];
   const version = parts[1];
   if (!modulePath || !version) {
@@ -237,6 +314,114 @@ function parseRequireLine(line: string, rawLine: string): GoModuleRecord | undef
     dependencyType: "production",
     direct: !indirect
   };
+}
+
+export function parseGoReplaceDirectiveLine(input: {
+  line: string;
+  sourcePath: string;
+  lineNumber: number;
+  errorCode: string;
+  errorMessage: string;
+}
+): Result<GoReplaceDirective | undefined, OhriskError> {
+  const parts = splitGoDirectiveFields(input.line);
+  if (parts.length === 0) {
+    return ok(undefined);
+  }
+
+  const arrowIndex = parts.indexOf("=>");
+  if (arrowIndex === -1) {
+    return replaceDirectiveError({
+      sourcePath: input.sourcePath,
+      line: input.lineNumber,
+      entry: input.line,
+      code: input.errorCode,
+      message: input.errorMessage,
+      reason: "missing_arrow"
+    });
+  }
+
+  const left = parts.slice(0, arrowIndex);
+  const right = parts.slice(arrowIndex + 1);
+  if (left.length !== 1 && left.length !== 2) {
+    return replaceDirectiveError({
+      sourcePath: input.sourcePath,
+      line: input.lineNumber,
+      entry: input.line,
+      code: input.errorCode,
+      message: input.errorMessage,
+      reason: "invalid_left_side"
+    });
+  }
+
+  const oldModulePath = left[0];
+  const oldVersion = left[1];
+  if (!oldModulePath) {
+    return replaceDirectiveError({
+      sourcePath: input.sourcePath,
+      line: input.lineNumber,
+      entry: input.line,
+      code: input.errorCode,
+      message: input.errorMessage,
+      reason: "missing_old_module_path"
+    });
+  }
+
+  if (right.length === 1) {
+    const localPath = right[0];
+    if (!localPath || !isGoLocalReplacementPath(localPath)) {
+      return replaceDirectiveError({
+        sourcePath: input.sourcePath,
+        line: input.lineNumber,
+        entry: input.line,
+        code: input.errorCode,
+        message: input.errorMessage,
+        reason: "replacement_without_version_must_be_local_path"
+      });
+    }
+
+    return ok({
+      oldModulePath,
+      ...(oldVersion ? { oldVersion } : {}),
+      target: {
+        kind: "local",
+        path: localPath
+      }
+    });
+  }
+
+  if (right.length === 2) {
+    const [modulePath, version] = right;
+    if (!modulePath || !version) {
+      return replaceDirectiveError({
+        sourcePath: input.sourcePath,
+        line: input.lineNumber,
+        entry: input.line,
+        code: input.errorCode,
+        message: input.errorMessage,
+        reason: "invalid_module_replacement"
+      });
+    }
+
+    return ok({
+      oldModulePath,
+      ...(oldVersion ? { oldVersion } : {}),
+      target: {
+        kind: "module",
+        modulePath,
+        version
+      }
+    });
+  }
+
+  return replaceDirectiveError({
+    sourcePath: input.sourcePath,
+    line: input.lineNumber,
+    entry: input.line,
+    code: input.errorCode,
+    message: input.errorMessage,
+    reason: "invalid_right_side"
+  });
 }
 
 function parseGoSumRecords(input: string): GoModuleRecord[] {
@@ -268,28 +453,224 @@ function parseGoSumRecords(input: string): GoModuleRecord[] {
   return [...records.values()];
 }
 
-function unsupportedReplaceError(
-  goModPath: string,
-  line: number,
-  entry: string
-): Result<never, OhriskError> {
+function replaceDirectiveError(input: {
+  sourcePath: string;
+  line: number;
+  entry: string;
+  code: string;
+  message: string;
+  reason: string;
+}): Result<never, OhriskError> {
   return err(
     createError({
-      code: "GO_MOD_PARSE_FAILED",
+      code: input.code,
       category: "unsupported_input",
-      message: "Failed to parse go.mod. Ohrisk v0 does not resolve Go replace directives.",
+      message: input.message,
       details: {
-        lockfilePath: goModPath,
-        line,
-        entry
+        lockfilePath: input.sourcePath,
+        line: input.line,
+        entry: input.entry,
+        reason: input.reason
       }
     })
   );
 }
 
-function stripGoComment(line: string): string {
-  const commentIndex = line.indexOf("//");
-  return commentIndex === -1 ? line : line.slice(0, commentIndex);
+function applyGoReplacement(
+  record: GoModuleRecord,
+  localReplacements: GoReplaceDirective[],
+  replacementOverrideGroups: GoReplaceDirective[][]
+): GoModuleRecord {
+  const replacement = findGoReplacement(record, localReplacements, replacementOverrideGroups);
+  return replacement
+    ? {
+        ...record,
+        replacement: replacement.target
+      }
+    : record;
+}
+
+function findGoReplacement(
+  record: GoModuleRecord,
+  localReplacements: GoReplaceDirective[],
+  replacementOverrideGroups: GoReplaceDirective[][]
+): GoReplaceDirective | undefined {
+  for (const replacements of replacementOverrideGroups) {
+    const override = findGoReplacementInGroup(record, replacements);
+    if (override) {
+      return override;
+    }
+  }
+
+  return findGoReplacementInGroup(record, localReplacements);
+}
+
+function findGoReplacementInGroup(
+  record: GoModuleRecord,
+  replacements: GoReplaceDirective[]
+): GoReplaceDirective | undefined {
+  const exact = replacements.find((replacement) =>
+    replacement.oldModulePath === record.modulePath && replacement.oldVersion === record.version
+  );
+  if (exact) {
+    return exact;
+  }
+
+  return replacements.find((replacement) =>
+    replacement.oldModulePath === record.modulePath && replacement.oldVersion === undefined
+  );
+}
+
+export function normalizeGoReplacementDirectives(
+  replacements: GoReplaceDirective[],
+  baseDir?: string,
+  rootDir?: string
+): GoReplaceDirective[] {
+  if (!baseDir || !rootDir) {
+    return replacements;
+  }
+
+  return replacements.map((replacement) => ({
+    ...replacement,
+    target: normalizeGoReplacementTarget(replacement.target, baseDir, rootDir)
+  }));
+}
+
+function normalizeGoReplacementTarget(
+  target: GoReplacementTarget,
+  baseDir: string,
+  rootDir: string
+): GoReplacementTarget {
+  if (target.kind !== "local") {
+    return target;
+  }
+
+  const absolutePath = path.resolve(baseDir, target.path);
+  const relativePath = path.relative(rootDir, absolutePath);
+  if (
+    relativePath === ""
+    || (
+      relativePath !== ".."
+      && !relativePath.startsWith(`..${path.sep}`)
+      && !path.isAbsolute(relativePath)
+    )
+  ) {
+    const normalized = relativePath === "" ? "." : relativePath.replace(/\\/g, "/");
+    return {
+      kind: "local",
+      path: normalized === "." || normalized.startsWith(".") ? normalized : `./${normalized}`
+    };
+  }
+
+  return {
+    kind: "local",
+    path: absolutePath
+  };
+}
+
+export function goReplacementResolvedSpecifier(replacement: GoReplacementTarget): string {
+  return replacement.kind === "module"
+    ? `go-module:${replacement.modulePath}@${replacement.version}`
+    : replacement.path;
+}
+
+export function stripGoLineComment(line: string): string {
+  let quote: "\"" | "`" | undefined;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+
+    if (quote === "\"") {
+      if (char === "\\") {
+        index += 1;
+        continue;
+      }
+      if (char === "\"") {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    if (quote === "`") {
+      if (char === "`") {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    if (char === "\"" || char === "`") {
+      quote = char;
+      continue;
+    }
+
+    if (char === "/" && next === "/") {
+      return line.slice(0, index);
+    }
+  }
+
+  return line;
+}
+
+export function splitGoDirectiveFields(line: string): string[] {
+  const fields: string[] = [];
+  let current = "";
+  let quote: "\"" | "`" | undefined;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index] ?? "";
+
+    if (quote === "\"") {
+      if (char === "\\") {
+        index += 1;
+        current += line[index] ?? "";
+        continue;
+      }
+      if (char === "\"") {
+        quote = undefined;
+        continue;
+      }
+      current += char;
+      continue;
+    }
+
+    if (quote === "`") {
+      if (char === "`") {
+        quote = undefined;
+        continue;
+      }
+      current += char;
+      continue;
+    }
+
+    if (char === "\"" || char === "`") {
+      quote = char;
+      continue;
+    }
+
+    if (/\s/.test(char)) {
+      if (current !== "") {
+        fields.push(current);
+        current = "";
+      }
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current !== "") {
+    fields.push(current);
+  }
+
+  return fields;
+}
+
+function isGoLocalReplacementPath(value: string): boolean {
+  return value.startsWith("./")
+    || value.startsWith("../")
+    || value === "."
+    || value === ".."
+    || path.isAbsolute(value);
 }
 
 function goRecordId(record: { modulePath: string; version: string }): string {

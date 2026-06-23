@@ -1,3 +1,4 @@
+import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
@@ -22,6 +23,10 @@ export function parseGradleLockfile(
   lockfilePath: string,
   options: { maxBytes?: number } = {}
 ): Result<DependencyGraph, OhriskError> {
+  if (isDirectory(lockfilePath)) {
+    return parseGradleDependencyLocksDirectory(lockfilePath, options);
+  }
+
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
     maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES
@@ -46,11 +51,68 @@ export function parseGradleLockfile(
   return parseGradleLockText(lockfileText.value, lockfilePath);
 }
 
+function parseGradleDependencyLocksDirectory(
+  lockfilePath: string,
+  options: { maxBytes?: number }
+): Result<DependencyGraph, OhriskError> {
+  let entries: string[];
+  try {
+    entries = readdirSync(lockfilePath)
+      .filter((entry) => entry.toLowerCase().endsWith(".lockfile"))
+      .filter((entry) => isFile(path.join(lockfilePath, entry)))
+      .sort();
+  } catch (cause) {
+    return err(
+      createError({
+        code: "GRADLE_LOCK_READ_FAILED",
+        category: "filesystem",
+        message: "Failed to read Gradle dependency locks directory.",
+        details: {
+          lockfilePath,
+          cause: cause instanceof Error ? cause.message : String(cause)
+        }
+      })
+    );
+  }
+
+  if (entries.length === 0) {
+    return err(
+      createError({
+        code: "GRADLE_LOCK_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Failed to parse Gradle dependency locks directory. Ohrisk expected at least one *.lockfile.",
+        details: {
+          lockfilePath,
+          reason: "no_lockfiles"
+        }
+      })
+    );
+  }
+
+  const nodeMap = new Map<string, DependencyNode>();
+  for (const entry of entries) {
+    const filePath = path.join(lockfilePath, entry);
+    const graph = parseGradleLockfile(filePath, options);
+    if (!graph.ok) {
+      return graph;
+    }
+
+    mergeGradleGraphNodes(nodeMap, graph.value.nodes);
+  }
+
+  const rootName = rootNameForGradleLockfile(lockfilePath);
+  return ok({
+    rootName,
+    lockfilePath,
+    nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id))
+  });
+}
+
 export function parseGradleLockText(
   input: string,
   lockfilePath = "gradle.lockfile"
 ): Result<DependencyGraph, OhriskError> {
-  const rootName = path.basename(path.dirname(lockfilePath)) || "<root>";
+  const rootName = rootNameForGradleLockfile(lockfilePath);
   const records = new Map<string, GradleLockRecord>();
 
   for (const [index, rawLine] of input.split(/\r?\n/).entries()) {
@@ -112,6 +174,62 @@ export function parseGradleLockText(
         };
       })
   });
+}
+
+function rootNameForGradleLockfile(lockfilePath: string): string {
+  const segments = path.normalize(lockfilePath).split(path.sep);
+  const isDependencyLockDirectory = segments.length >= 2
+    && segments[segments.length - 1] === "dependency-locks"
+    && segments[segments.length - 2] === "gradle";
+  const isDependencyLockfile = segments.length >= 3
+    && segments[segments.length - 1]?.toLowerCase().endsWith(".lockfile") === true
+    && segments[segments.length - 2] === "dependency-locks"
+    && segments[segments.length - 3] === "gradle";
+
+  if (isDependencyLockDirectory) {
+    const projectDir = segments[segments.length - 3];
+    return projectDir && projectDir !== "" ? projectDir : "<root>";
+  }
+
+  if (isDependencyLockfile) {
+    const projectDir = segments[segments.length - 4];
+    return projectDir && projectDir !== "" ? projectDir : "<root>";
+  }
+
+  return path.basename(path.dirname(lockfilePath)) || "<root>";
+}
+
+function mergeGradleGraphNodes(
+  nodeMap: Map<string, DependencyNode>,
+  nodes: DependencyNode[]
+): void {
+  for (const node of nodes) {
+    const existing = nodeMap.get(node.id);
+    if (!existing) {
+      nodeMap.set(node.id, { ...node });
+      continue;
+    }
+
+    existing.dependencyType = mergeDependencyType(existing.dependencyType, node.dependencyType);
+    existing.direct = existing.direct || node.direct;
+    existing.paths = uniquePaths([...existing.paths, ...node.paths]);
+  }
+}
+
+function uniquePaths(paths: string[][]): string[][] {
+  const seen = new Set<string>();
+  const unique: string[][] = [];
+  for (const pathParts of paths) {
+    const key = pathParts.join("\0");
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    unique.push(pathParts);
+  }
+
+  return unique;
 }
 
 function parseGradleLockLine(line: string): GradleLockRecord | undefined {
@@ -196,5 +314,21 @@ function dependencyTypeRank(type: DependencyType): number {
       return 1;
     case "unknown":
       return 0;
+  }
+}
+
+function isFile(pathname: string): boolean {
+  try {
+    return statSync(pathname).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function isDirectory(pathname: string): boolean {
+  try {
+    return statSync(pathname).isDirectory();
+  } catch {
+    return false;
   }
 }

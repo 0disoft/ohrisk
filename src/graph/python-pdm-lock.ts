@@ -1,8 +1,15 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 
+import type { LicenseEvidence } from "../evidence/types";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
+import {
+  createDiskPythonLocalSourceFileReader,
+  normalizePythonLocalSourcePathSpec,
+  readPythonLocalSourcePackage,
+  type PythonLocalSourceFileReader
+} from "./python-local-source";
 import {
   inputFileReadErrorCategory,
   inputFileReadErrorDetails,
@@ -17,11 +24,14 @@ type PdmPackageRecord = {
   id: string;
   dependencyType: DependencyType;
   dependencies: string[];
+  evidence?: LicenseEvidence;
 };
 
 type PartialPdmPackageRecord = {
   name?: string;
   version?: string;
+  sourcePath?: string;
+  unsupportedSource?: string;
   groups: string[];
   dependencies: string[];
 };
@@ -29,6 +39,17 @@ type PartialPdmPackageRecord = {
 type PdmRootDependency = {
   name: string;
   type: DependencyType;
+};
+
+type PdmLockParseOptions = {
+  pyprojectText?: string;
+  readLocalSourceFile?: PythonLocalSourceFileReader;
+};
+
+const PDM_LOCK_LOCAL_SOURCE_ERRORS = {
+  parseCode: "PDM_LOCK_PARSE_FAILED",
+  readCode: "PDM_LOCK_READ_FAILED",
+  displayName: "pdm.lock"
 };
 
 export function parsePdmLockfile(
@@ -65,17 +86,30 @@ export function parsePdmLockfile(
   }
 
   return parsePdmLockText(lockfileText.value, lockfilePath, {
-    pyprojectText: pyproject.value
+    pyprojectText: pyproject.value,
+    readLocalSourceFile: createDiskPythonLocalSourceFileReader({
+      rootDir: path.dirname(lockfilePath),
+      maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES,
+      errors: PDM_LOCK_LOCAL_SOURCE_ERRORS
+    })
   });
 }
 
 export function parsePdmLockText(
   input: string,
   lockfilePath = "pdm.lock",
-  options: { pyprojectText?: string } = {}
+  options: PdmLockParseOptions = {}
 ): Result<DependencyGraph, OhriskError> {
+  const parsedRecords = parsePdmPackageRecords(input, {
+    lockfilePath,
+    readLocalSourceFile: options.readLocalSourceFile
+  });
+  if (!parsedRecords.ok) {
+    return parsedRecords;
+  }
+
   try {
-    const records = parsePdmPackageRecords(input);
+    const records = parsedRecords.value;
     if (records.length === 0) {
       return err(
         createError({
@@ -118,7 +152,8 @@ export function parsePdmLockText(
     return ok({
       rootName,
       lockfilePath,
-      nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id))
+      nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+      ...embeddedEvidenceFromPdmRecords(records)
     });
   } catch (cause) {
     return err(
@@ -167,7 +202,10 @@ function readOptionalPyproject(input: {
   return ok(pyprojectText.value);
 }
 
-function parsePdmPackageRecords(input: string): PdmPackageRecord[] {
+function parsePdmPackageRecords(input: string, options: {
+  lockfilePath: string;
+  readLocalSourceFile?: PythonLocalSourceFileReader;
+}): Result<PdmPackageRecord[], OhriskError> {
   const records: PdmPackageRecord[] = [];
   let current: PartialPdmPackageRecord | undefined;
   let currentTable: "package" | "other" = "other";
@@ -194,13 +232,57 @@ function parsePdmPackageRecords(input: string): PdmPackageRecord[] {
     activeArray = undefined;
   };
 
-  const flushCurrent = (): void => {
+  const flushCurrent = (): Result<void, OhriskError> => {
     flushActiveArray();
     if (!current) {
-      return;
+      return ok(undefined);
     }
 
-    if (!current.name || !current.version) {
+    if (!current.name) {
+      throw new Error("Encountered a [[package]] record without a string name and version.");
+    }
+
+    if (current.unsupportedSource) {
+      return err(
+        createError({
+          code: "PDM_LOCK_PARSE_FAILED",
+          category: "unsupported_input",
+          message: "Failed to parse pdm.lock. Ohrisk supports project-root-contained local PDM source paths but not remote or absolute source entries.",
+          details: {
+            lockfilePath: options.lockfilePath,
+            packageName: current.name,
+            source: current.unsupportedSource
+          }
+        })
+      );
+    }
+
+    if (current.sourcePath) {
+      const localSource = readPythonLocalSourcePackage({
+        source: {
+          sourcePath: current.sourcePath,
+          expectedName: current.name
+        },
+        fromFilePath: options.lockfilePath,
+        readLocalSourceFile: options.readLocalSourceFile,
+        errors: PDM_LOCK_LOCAL_SOURCE_ERRORS
+      });
+      if (!localSource.ok) {
+        return localSource;
+      }
+
+      records.push({
+        name: localSource.value.name,
+        version: localSource.value.version,
+        id: localSource.value.id,
+        dependencyType: dependencyTypeForPdmRecord(current),
+        dependencies: current.dependencies,
+        evidence: localSource.value.evidence
+      });
+      return ok(undefined);
+    }
+
+    if (!current.version) {
       throw new Error("Encountered a [[package]] record without a string name and version.");
     }
 
@@ -211,89 +293,131 @@ function parsePdmPackageRecords(input: string): PdmPackageRecord[] {
       dependencyType: dependencyTypeForPdmRecord(current),
       dependencies: current.dependencies
     });
+
+    return ok(undefined);
   };
 
-  for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment(rawLine).trim();
-    if (line === "") {
-      continue;
-    }
-
-    if (activeArray) {
-      activeArray.lines.push(line);
-      if (line.includes("]")) {
-        flushActiveArray();
+  try {
+    for (const rawLine of input.split(/\r?\n/)) {
+      const line = stripTomlComment(rawLine).trim();
+      if (line === "") {
+        continue;
       }
-      continue;
-    }
 
-    if (line === "[[package]]") {
-      flushCurrent();
-      current = {
-        groups: [],
-        dependencies: []
-      };
-      currentTable = "package";
-      continue;
-    }
+      if (activeArray) {
+        activeArray.lines.push(line);
+        if (line.includes("]")) {
+          flushActiveArray();
+        }
+        continue;
+      }
 
-    if (!current) {
-      continue;
-    }
+      if (line === "[[package]]") {
+        const flushed = flushCurrent();
+        if (!flushed.ok) {
+          return flushed;
+        }
 
-    if (line.startsWith("[") && line.endsWith("]")) {
-      currentTable = "other";
-      continue;
-    }
+        current = {
+          groups: [],
+          dependencies: []
+        };
+        currentTable = "package";
+        continue;
+      }
 
-    if (currentTable !== "package") {
-      continue;
-    }
+      if (!current) {
+        continue;
+      }
 
-    const name = readStringAssignment(line, "name");
-    if (name !== undefined) {
-      current.name = name;
-      continue;
-    }
+      if (line.startsWith("[") && line.endsWith("]")) {
+        currentTable = "other";
+        continue;
+      }
 
-    const version = readStringAssignment(line, "version");
-    if (version !== undefined) {
-      current.version = version;
-      continue;
-    }
+      if (currentTable !== "package") {
+        continue;
+      }
 
-    const inlineGroups = readInlineStringArrayAssignment(line, "groups");
-    if (inlineGroups !== undefined) {
-      current.groups.push(...inlineGroups);
-      continue;
-    }
+      const name = readStringAssignment(line, "name");
+      if (name !== undefined) {
+        current.name = name;
+        continue;
+      }
 
-    const inlineDependencies = readInlineStringArrayAssignment(line, "dependencies");
-    if (inlineDependencies !== undefined) {
-      for (const dependency of inlineDependencies) {
-        const dependencyName = dependencyNameFromRequirement(dependency);
-        if (dependencyName && normalizePythonPackageName(dependencyName) !== "python") {
-          current.dependencies.push(dependencyName);
+      const version = readStringAssignment(line, "version");
+      if (version !== undefined) {
+        current.version = version;
+        continue;
+      }
+
+      const sourcePath = readPdmLocalSourceAssignment(line);
+      if (sourcePath !== undefined) {
+        if (sourcePath === "") {
+          current.unsupportedSource = readPdmSourceAssignmentValue(line) ?? "";
+        } else {
+          current.sourcePath = sourcePath;
+        }
+        continue;
+      }
+
+      const inlineGroups = readInlineStringArrayAssignment(line, "groups");
+      if (inlineGroups !== undefined) {
+        current.groups.push(...inlineGroups);
+        continue;
+      }
+
+      const inlineDependencies = readInlineStringArrayAssignment(line, "dependencies");
+      if (inlineDependencies !== undefined) {
+        for (const dependency of inlineDependencies) {
+          const dependencyName = dependencyNameFromRequirement(dependency);
+          if (dependencyName && normalizePythonPackageName(dependencyName) !== "python") {
+            current.dependencies.push(dependencyName);
+          }
+        }
+        continue;
+      }
+
+      const multilineArrayKey = readMultilineArrayAssignmentKey(line);
+      if (multilineArrayKey === "groups" || multilineArrayKey === "dependencies") {
+        activeArray = {
+          key: multilineArrayKey,
+          lines: [line.slice(line.indexOf("=") + 1).trim()]
+        };
+        if (line.includes("]")) {
+          flushActiveArray();
         }
       }
-      continue;
     }
 
-    const multilineArrayKey = readMultilineArrayAssignmentKey(line);
-    if (multilineArrayKey === "groups" || multilineArrayKey === "dependencies") {
-      activeArray = {
-        key: multilineArrayKey,
-        lines: [line.slice(line.indexOf("=") + 1).trim()]
-      };
-      if (line.includes("]")) {
-        flushActiveArray();
-      }
+    const flushed = flushCurrent();
+    if (!flushed.ok) {
+      return flushed;
     }
+
+    return ok(records);
+  } catch (cause) {
+    return err(
+      createError({
+        code: "PDM_LOCK_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Failed to parse pdm.lock.",
+        details: {
+          lockfilePath: options.lockfilePath,
+          cause: cause instanceof Error ? cause.message : String(cause)
+        }
+      })
+    );
   }
+}
 
-  flushCurrent();
+function embeddedEvidenceFromPdmRecords(records: PdmPackageRecord[]): Pick<DependencyGraph, "embeddedEvidence"> {
+  const embeddedEvidence = records
+    .map((record) => record.evidence)
+    .filter((evidence): evidence is LicenseEvidence => evidence !== undefined)
+    .sort((left, right) => left.packageId.localeCompare(right.packageId));
 
-  return records;
+  return embeddedEvidence.length > 0 ? { embeddedEvidence } : {};
 }
 
 function readPdmRootDependencies(input: {
@@ -507,6 +631,19 @@ function dependencyTypeForPdmRecord(record: PartialPdmPackageRecord): Dependency
 function readStringAssignment(line: string, key: string): string | undefined {
   const match = new RegExp(`^${escapeRegExp(key)}\\s*=\\s*"([^"]*)"`).exec(line);
   return match?.[1];
+}
+
+function readPdmLocalSourceAssignment(line: string): string | undefined {
+  const rawSource = readPdmSourceAssignmentValue(line);
+  if (rawSource === undefined) {
+    return undefined;
+  }
+
+  return normalizePythonLocalSourcePathSpec(rawSource) ?? "";
+}
+
+function readPdmSourceAssignmentValue(line: string): string | undefined {
+  return readStringAssignment(line, "path") ?? readStringAssignment(line, "url");
 }
 
 function readInlineStringArrayAssignment(line: string, key: string): string[] | undefined {

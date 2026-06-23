@@ -58,20 +58,27 @@ export function parseCycloneDxJsonText(
     return parsed;
   }
 
-  if (!isRecord(parsed.value) || parsed.value.bomFormat !== "CycloneDX") {
+  return parseCycloneDxDocument(parsed.value, lockfilePath);
+}
+
+export function parseCycloneDxDocument(
+  bom: unknown,
+  lockfilePath: string
+): Result<DependencyGraph, OhriskError> {
+  if (!isRecord(bom) || bom.bomFormat !== "CycloneDX") {
     return cycloneDxShapeError(lockfilePath);
   }
 
-  const components = readCycloneDxComponentRecords(parsed.value.components);
+  const components = readCycloneDxComponentRecords(bom.components);
   if (components.length === 0) {
     return cycloneDxShapeError(lockfilePath);
   }
 
   const aliases = buildComponentAliasMap(components);
-  const dependencyMap = readCycloneDxDependencyMap(parsed.value.dependencies, aliases);
-  const rootName = readCycloneDxRootName(parsed.value) ?? "<cyclonedx-project>";
+  const dependencyMap = readCycloneDxDependencyMap(bom.dependencies, aliases);
+  const rootName = readCycloneDxRootName(bom) ?? "<cyclonedx-project>";
   const rootRefs = readCycloneDxRootRefs({
-    bom: parsed.value,
+    bom,
     components,
     aliases,
     dependencyMap
@@ -217,8 +224,23 @@ function readOhriskEcosystem(properties: unknown): PackageEcosystem | undefined 
     case "cargo":
     case "go":
     case "nuget":
+    case "conan":
+    case "conda":
+    case "vcpkg":
+    case "bazel":
+    case "terraform":
+    case "helm":
+    case "nix":
+    case "unity":
+    case "cran":
+    case "julia":
+    case "carthage":
+    case "cocoapods":
+    case "hex":
     case "gem":
     case "composer":
+    case "pub":
+    case "swift":
       return property.value;
     default:
       return undefined;
@@ -509,7 +531,7 @@ function cycloneDxShapeError(lockfilePath: string): Result<never, OhriskError> {
     createError({
       code: "CYCLONEDX_PARSE_FAILED",
       category: "unsupported_input",
-      message: "Failed to parse CycloneDX JSON input. Ohrisk expected a CycloneDX document with component entries.",
+      message: "Failed to parse CycloneDX input. Ohrisk expected a CycloneDX document with component entries.",
       details: {
         lockfilePath
       }

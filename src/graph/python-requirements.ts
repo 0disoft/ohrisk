@@ -1,7 +1,16 @@
 import path from "node:path";
 
+import type { LicenseEvidence } from "../evidence/types";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
+import {
+  createDiskPythonLocalSourceFileReader,
+  normalizePythonLocalSourcePathSpec,
+  readPythonLocalSourcePackage,
+  type PythonLocalSource,
+  type PythonLocalSourceFile,
+  type PythonLocalSourceFileReader
+} from "./python-local-source";
 import {
   inputFileReadErrorCategory,
   inputFileReadErrorDetails,
@@ -14,6 +23,7 @@ type RequirementsRecord = {
   name: string;
   version: string;
   id: string;
+  evidence?: LicenseEvidence;
 };
 
 export type RequirementsIncludedFile = {
@@ -27,8 +37,12 @@ export type RequirementsIncludedFileReader = (input: {
   directive: "requirement" | "constraint";
 }) => Result<RequirementsIncludedFile, OhriskError>;
 
+export type RequirementsLocalSourceFile = PythonLocalSourceFile;
+export type RequirementsLocalSourceFileReader = PythonLocalSourceFileReader;
+
 type RequirementsParseOptions = {
   readIncludedFile?: RequirementsIncludedFileReader;
+  readLocalSourceFile?: RequirementsLocalSourceFileReader;
   rootName?: string;
 };
 
@@ -37,13 +51,21 @@ type RequirementsDirective = {
   path: string;
 };
 
+type RequirementsLocalSource = PythonLocalSource;
+
 type RequirementsLineEntry = {
   line: number;
   entry: string;
   directive?: RequirementsDirective;
+  localSource?: RequirementsLocalSource;
 };
 
 const MAX_REQUIREMENTS_INCLUDE_DEPTH = 32;
+const REQUIREMENTS_LOCAL_SOURCE_ERRORS = {
+  parseCode: "REQUIREMENTS_PARSE_FAILED",
+  readCode: "REQUIREMENTS_READ_FAILED",
+  displayName: "requirements.txt"
+};
 
 export function parseRequirementsFile(
   lockfilePath: string,
@@ -74,6 +96,10 @@ export function parseRequirementsFile(
     readIncludedFile: createDiskRequirementsIncludedFileReader({
       rootDir: path.dirname(lockfilePath),
       maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES
+    }),
+    readLocalSourceFile: createDiskRequirementsLocalSourceFileReader({
+      rootDir: path.dirname(lockfilePath),
+      maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES
     })
   });
 }
@@ -90,6 +116,7 @@ export function parseRequirementsText(
     lockfilePath,
     mode: "requirements",
     readIncludedFile: options.readIncludedFile,
+    readLocalSourceFile: options.readLocalSourceFile,
     constraints,
     seenFiles: new Set(),
     depth: 0
@@ -98,6 +125,10 @@ export function parseRequirementsText(
   if (!records.ok) {
     return records;
   }
+
+  const embeddedEvidence = [...records.value.values()]
+    .map((record) => record.evidence)
+    .filter((evidence): evidence is LicenseEvidence => evidence !== undefined);
 
   return ok({
     rootName,
@@ -112,7 +143,10 @@ export function parseRequirementsText(
         dependencyType: "production",
         direct: true,
         paths: [[rootName, record.id]]
-      }))
+      })),
+    ...(embeddedEvidence.length > 0
+      ? { embeddedEvidence: embeddedEvidence.sort((left, right) => left.packageId.localeCompare(right.packageId)) }
+      : {})
   });
 }
 
@@ -121,6 +155,7 @@ function parseRequirementsDocument(input: {
   lockfilePath: string;
   mode: "requirements" | "constraints";
   readIncludedFile?: RequirementsIncludedFileReader;
+  readLocalSourceFile?: RequirementsLocalSourceFileReader;
   constraints: Map<string, RequirementsRecord>;
   seenFiles: Set<string>;
   depth: number;
@@ -174,6 +209,16 @@ function parseRequirementsDocument(input: {
       continue;
     }
 
+    const localSource = parseLocalSourceRequirement(line);
+    if (localSource) {
+      entries.push({
+        line: index + 1,
+        entry: line,
+        localSource
+      });
+      continue;
+    }
+
     if (isUnsupportedRequirementDirective(line)) {
       return err(
         createError({
@@ -216,6 +261,7 @@ function parseRequirementsDocument(input: {
       lockfilePath: included.value.path,
       mode: "constraints",
       readIncludedFile: input.readIncludedFile,
+      readLocalSourceFile: input.readLocalSourceFile,
       constraints: input.constraints,
       seenFiles,
       depth: input.depth + 1
@@ -262,6 +308,7 @@ function parseRequirementsDocument(input: {
         lockfilePath: included.value.path,
         mode: "requirements",
         readIncludedFile: input.readIncludedFile,
+        readLocalSourceFile: input.readLocalSourceFile,
         constraints: input.constraints,
         seenFiles,
         depth: input.depth + 1
@@ -271,6 +318,37 @@ function parseRequirementsDocument(input: {
       }
 
       mergeRequirementsRecords(records, parsedIncluded.value);
+      continue;
+    }
+
+    if (entry.localSource) {
+      if (input.mode === "constraints") {
+        return err(
+          createError({
+            code: "REQUIREMENTS_PARSE_FAILED",
+            category: "unsupported_input",
+            message: "Failed to parse requirements.txt. Constraint files cannot declare local source requirements.",
+            details: {
+              lockfilePath: input.lockfilePath,
+              line: entry.line,
+              entry: entry.entry
+            }
+          })
+        );
+      }
+
+      const parsedLocalSource = readLocalSourceRequirement({
+        source: entry.localSource,
+        fromFilePath: input.lockfilePath,
+        readLocalSourceFile: input.readLocalSourceFile,
+        line: entry.line,
+        entry: entry.entry
+      });
+      if (!parsedLocalSource.ok) {
+        return parsedLocalSource;
+      }
+
+      records.set(parsedLocalSource.value.id, parsedLocalSource.value);
       continue;
     }
 
@@ -370,6 +448,67 @@ function parseConstrainedRequirement(
     version: constrained.version,
     id: `${match[1]}@${constrained.version}`
   };
+}
+
+function parseLocalSourceRequirement(line: string): RequirementsLocalSource | undefined {
+  const requirement = line.split(";", 1)[0]?.trim() ?? "";
+  const editableTarget = editableRequirementTarget(requirement);
+  if (editableTarget) {
+    const sourcePath = normalizePythonLocalSourcePathSpec(editableTarget);
+    return sourcePath ? { sourcePath } : undefined;
+  }
+
+  const directReferenceMatch =
+    /^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?\s*@\s*(.+)$/.exec(requirement);
+  if (directReferenceMatch?.[1] && directReferenceMatch[2]) {
+    const sourcePath = normalizePythonLocalSourcePathSpec(directReferenceMatch[2]);
+    return sourcePath
+      ? {
+          expectedName: directReferenceMatch[1],
+          sourcePath
+        }
+      : undefined;
+  }
+
+  const sourcePath = normalizePythonLocalSourcePathSpec(requirement);
+  return sourcePath ? { sourcePath } : undefined;
+}
+
+function editableRequirementTarget(line: string): string | undefined {
+  const spaced = /^(?:-e|--editable)\s+(.+)$/.exec(line);
+  if (spaced?.[1]) {
+    return spaced[1];
+  }
+
+  const assigned = /^--editable=(.+)$/.exec(line);
+  return assigned?.[1];
+}
+
+function readLocalSourceRequirement(input: {
+  source: RequirementsLocalSource;
+  fromFilePath: string;
+  readLocalSourceFile: RequirementsLocalSourceFileReader | undefined;
+  line: number;
+  entry: string;
+}): Result<RequirementsRecord, OhriskError> {
+  const localSource = readPythonLocalSourcePackage({
+    source: input.source,
+    fromFilePath: input.fromFilePath,
+    readLocalSourceFile: input.readLocalSourceFile,
+    line: input.line,
+    entry: input.entry,
+    errors: REQUIREMENTS_LOCAL_SOURCE_ERRORS
+  });
+  if (!localSource.ok) {
+    return localSource;
+  }
+
+  return ok({
+    name: localSource.value.name,
+    version: localSource.value.version,
+    id: localSource.value.id,
+    evidence: localSource.value.evidence
+  });
 }
 
 function parseRequirementDirective(line: string): RequirementsDirective | undefined {
@@ -481,6 +620,17 @@ function createDiskRequirementsIncludedFileReader(input: {
       text: includedText.value
     });
   };
+}
+
+function createDiskRequirementsLocalSourceFileReader(input: {
+  rootDir: string;
+  maxBytes: number;
+}): RequirementsLocalSourceFileReader {
+  return createDiskPythonLocalSourceFileReader({
+    rootDir: input.rootDir,
+    maxBytes: input.maxBytes,
+    errors: REQUIREMENTS_LOCAL_SOURCE_ERRORS
+  });
 }
 
 function mergeRequirementsRecords(
