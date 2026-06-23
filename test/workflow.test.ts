@@ -29,7 +29,7 @@ describe("release check workflow", () => {
     expect(workflow).toContain("uses: oven-sh/setup-bun@v2");
     expect(workflow).toContain("bun-version: 1.3.14");
     expect(workflow).toContain("uses: actions/setup-node@v4");
-    expect(workflow).toContain("node-version: 20");
+    expect(workflow).toContain("node-version: 24");
     expect(workflow).toContain("node --version");
     expect(workflow).toContain("run: bun run verify:release");
   });
