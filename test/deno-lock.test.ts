@@ -12,8 +12,7 @@ describe("parseDenoLockfile", () => {
         version: "4",
         specifiers: {
           "npm:permissive-parent@1.0.0": "1.0.0",
-          "npm:gpl-package@5.0.0": "5.0.0",
-          "jsr:@std/path@1": "1.0.0"
+          "npm:gpl-package@5.0.0": "5.0.0"
         },
         npm: {
           "permissive-parent@1.0.0": {
@@ -32,8 +31,7 @@ describe("parseDenoLockfile", () => {
         workspace: {
           dependencies: [
             "npm:permissive-parent@1.0.0",
-            "npm:gpl-package@5.0.0",
-            "jsr:@std/path@1"
+            "npm:gpl-package@5.0.0"
           ]
         }
       }),
@@ -168,24 +166,32 @@ describe("parseDenoLockfile", () => {
     expect(result.value.nodes.map((node) => node.id)).toEqual(["permissive-parent@1.0.0"]);
   });
 
-  test("ignores non-npm Deno lockfile entries", () => {
+  test("rejects root non-npm Deno lockfile entries instead of partial scanning", () => {
     const result = parseDenoLockText(
       JSON.stringify({
         version: "4",
         specifiers: {
+          "npm:permissive-parent@1.0.0": "1.0.0",
           "jsr:@std/path@1": "1.0.0",
           "https://deno.land/std/path/mod.ts": "https://deno.land/std/path/mod.ts"
         },
-        npm: {}
+        npm: {
+          "permissive-parent@1.0.0": {}
+        }
       })
     );
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
-      throw new Error(result.error.message);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected parseDenoLockText to fail.");
     }
 
-    expect(result.value.nodes).toEqual([]);
+    expect(result.error.code).toBe("DENO_LOCK_UNSUPPORTED_ROOT_SPECIFIER");
+    expect(result.error.category).toBe("unsupported_input");
+    expect(result.error.details?.unsupportedRootSpecifiers).toEqual([
+      "https://deno.land/std/path/mod.ts",
+      "jsr:@std/path@1"
+    ]);
   });
 
   test("reports malformed Deno lockfiles as typed errors", () => {

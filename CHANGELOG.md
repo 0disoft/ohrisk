@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.149.2 - 2026-06-23
+
+### Fixed
+
+- Deno `deno.lock` scans now fail closed when root JSR or remote URL
+  specifiers are present, avoiding partial reports that silently omit
+  unsupported Deno dependency sources.
+
 ## 0.149.1 - 2026-06-23
 
 ### Added

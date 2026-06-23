@@ -81,7 +81,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - direct and transitive dependency graph extraction when the dependency input records parent/child relationships
 - Bun, npm, pnpm, and Yarn classic/Berry workspace projects are scanned from every workspace/importer package root
 - pnpm `catalog:` and `catalog:<name>` dependency specifiers are resolved from `pnpm-workspace.yaml`
-- Deno `deno.lock` projects are scanned for npm package dependencies recorded in `npm:` specifiers; remote URL imports and JSR packages are not scanned yet
+- Deno `deno.lock` projects are scanned for npm package dependencies recorded in `npm:` specifiers; root remote URL imports and JSR packages fail closed instead of being silently skipped
 - Rust `Cargo.lock` projects are scanned for crates, using adjacent `Cargo.toml` root dependencies plus literal and segment `*`/`?` Cargo workspace member manifests such as `crates/*`, `crates/app-*`, `tools/?li`, and `crates/*/plugins/*` when available, honoring workspace `exclude` entries, `crate.workspace = true` dependency keys, workspace dependency package aliases, and table-form dependency sections such as `[dependencies.foo]`
 - Go `go.work` projects are scanned across workspace modules and apply workspace `replace` directives before module-level replacements; Go `go.mod` projects are scanned for required modules, Go `replace` directives, and adjacent `go.sum` module versions when available
 - Python `pylock.toml` and named `pylock.<name>.toml` projects are scanned for versioned PyPI package records; unversioned source-tree package records are not scanned yet

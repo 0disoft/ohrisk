@@ -59,8 +59,8 @@ pnpm의 `catalog:`와 `catalog:<name>` 의존성 specifier는
 `pnpm-workspace.yaml`의 default/named catalog 정의로 해석한다.
 Yarn Berry/PnP 프로젝트는 `node_modules`가 없어도 로컬 `.yarn/cache` zip 패키지
 evidence를 registry fallback보다 먼저 사용한다.
-Deno는 `deno.lock`에 기록된 `npm:` 패키지 의존성을 스캔한다. 원격 URL import와
-JSR 패키지는 아직 스캔 대상이 아니다.
+Deno는 `deno.lock`에 기록된 `npm:` 패키지 의존성을 스캔한다. root 원격 URL
+import와 JSR 패키지는 조용히 건너뛰지 않고 fail-closed로 실패한다.
 Rust는 `Cargo.lock`에 기록된 crate를 스캔하고, 옆의 `Cargo.toml`이 있으면
 직접/개발 의존성 구분에 사용한다. literal Cargo workspace member manifest와
 `crates/*`, `crates/app-*`, `tools/?li`, `crates/*/plugins/*` 같은 segment `*`/`?` Cargo workspace member pattern도

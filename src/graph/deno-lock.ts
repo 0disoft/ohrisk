@@ -93,6 +93,21 @@ export function parseDenoLockText(
   const lockfile = parsed.value;
   const npmPackages = readNpmPackageMap(lockfile);
   const specifiers = readSpecifierMap(lockfile);
+  const unsupportedRootSpecifiers = unsupportedDenoRootSpecifiers(lockfile, specifiers);
+  if (unsupportedRootSpecifiers.length > 0) {
+    return err(
+      createError({
+        code: "DENO_LOCK_UNSUPPORTED_ROOT_SPECIFIER",
+        category: "unsupported_input",
+        message: "Failed to parse deno.lock. Ohrisk v0 supports root npm: specifiers but not root JSR or remote URL specifiers.",
+        details: {
+          lockfilePath,
+          unsupportedRootSpecifiers
+        }
+      })
+    );
+  }
+
   const records = parseNpmRecords(npmPackages);
   const nodeMap = new Map<string, DependencyNode>();
   const rootName = rootNameForLockfile(lockfilePath);
@@ -192,11 +207,8 @@ function collectRootDependencies(
   lockfile: DenoLockShape,
   specifiers: Record<string, string>
 ): DenoDependencyEdge[] {
-  const workspaceDependencies = readWorkspaceDependencies(lockfile)
+  const rootSpecifiers = readDenoRootSpecifiers(lockfile, specifiers)
     .filter((specifier) => specifier.startsWith("npm:"));
-  const rootSpecifiers = workspaceDependencies.length > 0
-    ? workspaceDependencies
-    : Object.keys(specifiers).filter((specifier) => specifier.startsWith("npm:"));
   const edges: DenoDependencyEdge[] = [];
 
   for (const specifier of rootSpecifiers) {
@@ -213,6 +225,23 @@ function collectRootDependencies(
   }
 
   return edges;
+}
+
+function unsupportedDenoRootSpecifiers(
+  lockfile: DenoLockShape,
+  specifiers: Record<string, string>
+): string[] {
+  return readDenoRootSpecifiers(lockfile, specifiers)
+    .filter((specifier) => !specifier.startsWith("npm:"))
+    .sort();
+}
+
+function readDenoRootSpecifiers(
+  lockfile: DenoLockShape,
+  specifiers: Record<string, string>
+): string[] {
+  const workspaceDependencies = readWorkspaceDependencies(lockfile);
+  return workspaceDependencies.length > 0 ? workspaceDependencies : Object.keys(specifiers);
 }
 
 function readWorkspaceDependencies(lockfile: DenoLockShape): string[] {
