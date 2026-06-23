@@ -25,10 +25,10 @@ describe("release check workflow", () => {
     expect(workflow).toContain("name: Release Check");
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).not.toContain("pull_request:");
-    expect(workflow).toContain("uses: actions/checkout@v4");
+    expect(workflow).toContain("uses: actions/checkout@v7");
     expect(workflow).toContain("uses: oven-sh/setup-bun@v2");
     expect(workflow).toContain("bun-version: 1.3.14");
-    expect(workflow).toContain("uses: actions/setup-node@v4");
+    expect(workflow).toContain("uses: actions/setup-node@v6");
     expect(workflow).toContain("node-version: 24");
     expect(workflow).toContain("node --version");
     expect(workflow).toContain("run: bun run verify:release");
@@ -47,8 +47,8 @@ describe("npm publish workflow", () => {
     expect(workflow).toContain('- "v*"');
     expect(workflow).toContain("contents: write");
     expect(workflow).toContain("id-token: write");
-    expect(workflow).toContain("uses: actions/checkout@v4");
-    expect(workflow).toContain("uses: actions/setup-node@v4");
+    expect(workflow).toContain("uses: actions/checkout@v7");
+    expect(workflow).toContain("uses: actions/setup-node@v6");
     expect(workflow).toContain("registry-url: https://registry.npmjs.org");
     expect(workflow).toContain("uses: oven-sh/setup-bun@v2");
     expect(workflow).toContain("bun-version: 1.3.14");

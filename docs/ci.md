@@ -12,7 +12,7 @@ The packaged Ohrisk CLI runs on Node.js. Set up Node on the runner and install
 ohrisk globally:
 
 ```yaml
-- uses: actions/setup-node@v4
+- uses: actions/setup-node@v6
   with:
     node-version: 24
 - run: npm install -g ohrisk
