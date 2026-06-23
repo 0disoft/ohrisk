@@ -47,6 +47,13 @@ type DenoDependencyEdge = {
   type: DependencyType;
 };
 
+type UnsupportedDenoRootSpecifiers = {
+  unsupportedRootSpecifiers: string[];
+  jsrRootSpecifiers: string[];
+  remoteUrlRootSpecifiers: string[];
+  otherUnsupportedRootSpecifiers: string[];
+};
+
 type Semver = {
   major: number;
   minor: number;
@@ -94,7 +101,7 @@ export function parseDenoLockText(
   const npmPackages = readNpmPackageMap(lockfile);
   const specifiers = readSpecifierMap(lockfile);
   const unsupportedRootSpecifiers = unsupportedDenoRootSpecifiers(lockfile, specifiers);
-  if (unsupportedRootSpecifiers.length > 0) {
+  if (unsupportedRootSpecifiers.unsupportedRootSpecifiers.length > 0) {
     return err(
       createError({
         code: "DENO_LOCK_UNSUPPORTED_ROOT_SPECIFIER",
@@ -102,7 +109,7 @@ export function parseDenoLockText(
         message: "Failed to parse deno.lock. Ohrisk v0 supports root npm: specifiers but not root JSR or remote URL specifiers.",
         details: {
           lockfilePath,
-          unsupportedRootSpecifiers
+          ...unsupportedRootSpecifiers
         }
       })
     );
@@ -230,10 +237,24 @@ function collectRootDependencies(
 function unsupportedDenoRootSpecifiers(
   lockfile: DenoLockShape,
   specifiers: Record<string, string>
-): string[] {
-  return readDenoRootSpecifiers(lockfile, specifiers)
+): UnsupportedDenoRootSpecifiers {
+  const unsupportedRootSpecifiers = readDenoRootSpecifiers(lockfile, specifiers)
     .filter((specifier) => !specifier.startsWith("npm:"))
     .sort();
+
+  return {
+    unsupportedRootSpecifiers,
+    jsrRootSpecifiers: unsupportedRootSpecifiers
+      .filter((specifier) => specifier.startsWith("jsr:")),
+    remoteUrlRootSpecifiers: unsupportedRootSpecifiers
+      .filter(isRemoteUrlSpecifier),
+    otherUnsupportedRootSpecifiers: unsupportedRootSpecifiers
+      .filter((specifier) => !specifier.startsWith("jsr:") && !isRemoteUrlSpecifier(specifier))
+  };
+}
+
+function isRemoteUrlSpecifier(specifier: string): boolean {
+  return /^https?:\/\//i.test(specifier);
 }
 
 function readDenoRootSpecifiers(

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.150.1 - 2026-06-23
+
+### Fixed
+
+- Deno `deno.lock` unsupported-root diagnostics now separate JSR, remote URL,
+  and other unsupported root specifiers in structured error details while
+  preserving the existing combined `unsupportedRootSpecifiers` field.
+
 ## 0.150.0 - 2026-06-23
 
 ### Added

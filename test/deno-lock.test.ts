@@ -192,6 +192,11 @@ describe("parseDenoLockfile", () => {
       "https://deno.land/std/path/mod.ts",
       "jsr:@std/path@1"
     ]);
+    expect(result.error.details?.jsrRootSpecifiers).toEqual(["jsr:@std/path@1"]);
+    expect(result.error.details?.remoteUrlRootSpecifiers).toEqual([
+      "https://deno.land/std/path/mod.ts"
+    ]);
+    expect(result.error.details?.otherUnsupportedRootSpecifiers).toEqual([]);
   });
 
   test("reports malformed Deno lockfiles as typed errors", () => {
