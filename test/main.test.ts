@@ -425,6 +425,46 @@ describe("main", () => {
     }
   });
 
+  test("prints structured Deno unsupported root specifier details", async () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-deno-unsupported-project-"));
+
+    try {
+      writeFileSync(
+        path.join(projectDir, "deno.lock"),
+        JSON.stringify({
+          version: "4",
+          specifiers: {
+            "npm:permissive-parent@1.0.0": "1.0.0",
+            "jsr:@std/path@1": "1.0.0",
+            "https://deno.land/std/path/mod.ts": "https://deno.land/std/path/mod.ts",
+            "file:./local.ts": "file:./local.ts"
+          },
+          npm: {
+            "permissive-parent@1.0.0": {}
+          }
+        }),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectDir);
+      const exitCode = await main(["scan", "--json"], io);
+
+      expect(exitCode).toBe(2);
+      expect(stdout).toEqual([]);
+
+      const errorOutput = stderr.join("\n");
+      expect(errorOutput).toContain("DENO_LOCK_UNSUPPORTED_ROOT_SPECIFIER");
+      expect(errorOutput).toContain(
+        "unsupportedRootSpecifiers: file:./local.ts, https://deno.land/std/path/mod.ts, jsr:@std/path@1"
+      );
+      expect(errorOutput).toContain("jsrRootSpecifiers: jsr:@std/path@1");
+      expect(errorOutput).toContain("remoteUrlRootSpecifiers: https://deno.land/std/path/mod.ts");
+      expect(errorOutput).toContain("otherUnsupportedRootSpecifiers: file:./local.ts");
+    } finally {
+      rmSync(projectDir, { force: true, recursive: true });
+    }
+  });
+
   test("prints actionable findings for a Yarn lockfile project", async () => {
     const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "yarn-project"));
     const exitCode = await main(["scan", "--prod"], io);
@@ -575,6 +615,102 @@ describe("main", () => {
       expect(output).toContain("- [high] risk-crate@1.0.0");
       expect(output).toContain("path: fixture-rust -> risk-crate@1.0.0");
       expect(output).toContain("source: local; Cargo.toml license: AGPL-3.0-only");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("scans Rust Cargo workspace member manifests through the CLI", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cargo-workspace-"));
+    const appDir = path.join(projectRoot, "crates", "app");
+    const toolDir = path.join(projectRoot, "tools", "dev-tool");
+    const crateDir = path.join(
+      projectRoot,
+      ".cargo",
+      "registry",
+      "src",
+      "index.crates.io-abcdef",
+      "risk-crate-1.0.0"
+    );
+
+    try {
+      mkdirSync(appDir, { recursive: true });
+      mkdirSync(toolDir, { recursive: true });
+      mkdirSync(crateDir, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "Cargo.toml"),
+        [
+          "[workspace]",
+          "members = [\"crates/app\", \"tools/dev-tool\"]",
+          "",
+          "[workspace.dependencies]",
+          "renamed-risk = { package = \"risk-crate\", version = \"1\" }"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(appDir, "Cargo.toml"),
+        [
+          "[package]",
+          "name = \"app\"",
+          "version = \"0.1.0\"",
+          "",
+          "[dependencies]",
+          "renamed-risk.workspace = true"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(toolDir, "Cargo.toml"),
+        [
+          "[package]",
+          "name = \"dev-tool\"",
+          "version = \"0.1.0\"",
+          "",
+          "[dev-dependencies]",
+          "dev-only-risk = \"2\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectRoot, "Cargo.lock"),
+        [
+          "[[package]]",
+          "name = \"dev-only-risk\"",
+          "version = \"2.0.0\"",
+          "source = \"registry+https://github.com/rust-lang/crates.io-index\"",
+          "",
+          "[[package]]",
+          "name = \"risk-crate\"",
+          "version = \"1.0.0\"",
+          "source = \"registry+https://github.com/rust-lang/crates.io-index\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(crateDir, "Cargo.toml"),
+        [
+          "[package]",
+          "name = \"risk-crate\"",
+          "version = \"1.0.0\"",
+          "license = \"AGPL-3.0-only\""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Lockfile: Cargo.lock (cargo-lock)");
+      expect(output).toContain("Dependencies: 1 total, 1 direct, 0 transitive");
+      expect(output).toContain("- [high] risk-crate@1.0.0");
+      expect(output).toContain(`${path.basename(projectRoot)} -> risk-crate@1.0.0`);
+      expect(output).toContain("source: local; Cargo.toml license: AGPL-3.0-only");
+      expect(output).not.toContain("dev-only-risk@2.0.0");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
