@@ -143,7 +143,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.148.0"]);
+    expect(stdout).toEqual(["ohrisk 0.149.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -901,6 +901,60 @@ describe("main", () => {
       expect(output).toContain("Risks: 1 high, 0 review, 0 unknown, 0 low");
       expect(output).toContain("- [high] risk-pkg@1.0.0");
       expect(output).toContain("path: <root> -> risk-pkg@1.0.0");
+      expect(output).toContain("source: local; METADATA license: AGPL-3.0-only");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("prints actionable findings for a standalone Python pyproject.toml project with local dist-info evidence", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-pyproject-project-"));
+    const distInfoDir = path.join(
+      projectRoot,
+      ".venv",
+      "Lib",
+      "site-packages",
+      "risk_pkg-1.0.0.dist-info"
+    );
+
+    try {
+      mkdirSync(distInfoDir, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "pyproject.toml"),
+        [
+          "[project]",
+          "name = \"fixture-pyproject\"",
+          "version = \"0.1.0\"",
+          "dependencies = [",
+          "  \"risk-pkg==1.0.0\",",
+          "]"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(distInfoDir, "METADATA"),
+        [
+          "Metadata-Version: 2.4",
+          "Name: risk-pkg",
+          "Version: 1.0.0",
+          "License-Expression: AGPL-3.0-only",
+          ""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Lockfile: pyproject.toml (pyproject-toml)");
+      expect(output).toContain("Dependencies: 1 total, 1 direct, 0 transitive");
+      expect(output).toContain("Risks: 1 high, 0 review, 0 unknown, 0 low");
+      expect(output).toContain("- [high] risk-pkg@1.0.0");
+      expect(output).toContain("path: fixture-pyproject -> risk-pkg@1.0.0");
       expect(output).toContain("source: local; METADATA license: AGPL-3.0-only");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
@@ -1893,7 +1947,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.148.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.149.0");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",

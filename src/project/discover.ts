@@ -16,6 +16,7 @@ export type SupportedLockfileKind =
   | "pipfile-lock"
   | "pdm-lock"
   | "poetry-lock"
+  | "pyproject-toml"
   | "requirements-txt"
   | "uv-lock"
   | "pylock"
@@ -83,6 +84,7 @@ const SUPPORTED_LOCKFILES: Record<string, SupportedLockfileKind> = {
   "Pipfile.lock": "pipfile-lock",
   "pdm.lock": "pdm-lock",
   "poetry.lock": "poetry-lock",
+  "pyproject.toml": "pyproject-toml",
   "requirements.txt": "requirements-txt",
   "uv.lock": "uv-lock",
   "pylock.toml": "pylock",
@@ -145,6 +147,7 @@ const KNOWN_LOCKFILES = [
   "Pipfile.lock",
   "pdm.lock",
   "poetry.lock",
+  "pyproject.toml",
   "requirements.txt",
   "uv.lock",
   "pylock.toml",
@@ -254,7 +257,7 @@ const KNOWN_PROJECT_MANIFESTS = [
   "bom.spdx"
 ] as const;
 
-const SUPPORTED_LOCKFILE_MESSAGE = "Ohrisk currently supports bun.lock, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml, deno.lock, Cargo.lock, go.work, go.mod, Pipfile.lock, pdm.lock, poetry.lock, requirements.txt, uv.lock, pylock.toml, pylock.<name>.toml, gradle.lockfile, gradle/dependency-locks, gradle/dependency-locks/*.lockfile, gradle/libs.versions.toml, MODULE.bazel, pom.xml, packages.lock.json, obj/project.assets.json, packages.config, *.csproj, conan.lock, environment.yml, environment.yaml, conda-lock.yml, conda-lock.yaml, vcpkg.json, .terraform.lock.hcl, Chart.lock, Chart.yaml, flake.lock, Packages/packages-lock.json, renv.lock, Manifest.toml, stack.yaml.lock, cpanfile.snapshot, luarocks.lock, pubspec.lock, Package.resolved, Cartfile.resolved, Podfile.lock, mix.lock, rebar.lock, Gemfile.lock, composer.lock, CycloneDX JSON/XML, SPDX JSON/RDF, SPDX tag-value .spdx, and Yarn classic/Berry yarn.lock.";
+const SUPPORTED_LOCKFILE_MESSAGE = "Ohrisk currently supports bun.lock, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml, deno.lock, Cargo.lock, go.work, go.mod, Pipfile.lock, pdm.lock, poetry.lock, pyproject.toml, requirements.txt, uv.lock, pylock.toml, pylock.<name>.toml, gradle.lockfile, gradle/dependency-locks, gradle/dependency-locks/*.lockfile, gradle/libs.versions.toml, MODULE.bazel, pom.xml, packages.lock.json, obj/project.assets.json, packages.config, *.csproj, conan.lock, environment.yml, environment.yaml, conda-lock.yml, conda-lock.yaml, vcpkg.json, .terraform.lock.hcl, Chart.lock, Chart.yaml, flake.lock, Packages/packages-lock.json, renv.lock, Manifest.toml, stack.yaml.lock, cpanfile.snapshot, luarocks.lock, pubspec.lock, Package.resolved, Cartfile.resolved, Podfile.lock, mix.lock, rebar.lock, Gemfile.lock, composer.lock, CycloneDX JSON/XML, SPDX JSON/RDF, SPDX tag-value .spdx, and Yarn classic/Berry yarn.lock.";
 
 export function discoverProject(
   options: DiscoverProjectOptions = {}
@@ -542,6 +545,18 @@ function findGradleDependencyLockfiles(dir: string): string[] {
 function normalizeCompanionLockfiles(lockfiles: string[]): string[] {
   if (lockfiles.includes("go.work")) {
     return lockfiles.filter((lockfile) => lockfile !== "go.mod");
+  }
+
+  const hasResolvedPythonInput = lockfiles.some((lockfile) =>
+    lockfile === "Pipfile.lock"
+    || lockfile === "pdm.lock"
+    || lockfile === "poetry.lock"
+    || lockfile === "requirements.txt"
+    || lockfile === "uv.lock"
+    || isPylockTomlFile(lockfile)
+  );
+  if (hasResolvedPythonInput) {
+    return lockfiles.filter((lockfile) => lockfile !== "pyproject.toml");
   }
 
   if (lockfiles.includes("gradle.lockfile")) {

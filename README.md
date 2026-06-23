@@ -63,7 +63,7 @@ Ohrisk is distributed as an npm package, and the packaged CLI runs on Node.js
 do not need Bun installed to run the published CLI.
 
 Ohrisk scans Bun, npm package-lock/shrinkwrap, pnpm, Deno npm, Yarn, Rust Cargo,
-Go modules and workspaces, Python pylock/uv/Pipenv/PDM/Poetry/requirements.txt, Java Gradle lockfiles and version catalogs,
+Go modules and workspaces, Python pyproject/pylock/uv/Pipenv/PDM/Poetry/requirements.txt, Java Gradle lockfiles and version catalogs,
 Maven `pom.xml`, Bazel `MODULE.bazel`, .NET NuGet lockfiles, Conan locks, Conda environment specs and locks, vcpkg manifests, Haskell Stack locks, Perl Carton snapshots, LuaRocks locks, Dart/Flutter Pub locks,
 Terraform provider locks, Helm chart dependency metadata, Nix flake locks,
 Unity Package Manager locks, R renv locks, Julia manifests, SwiftPM pins,
@@ -75,7 +75,7 @@ package manager you use to install the CLI.
 
 The current implementation is the first local dependency-risk vertical slice:
 
-- Bun `bun.lock`, npm `package-lock.json`, npm `npm-shrinkwrap.json`, pnpm `pnpm-lock.yaml`, Deno `deno.lock`, Rust `Cargo.lock`, Go `go.work`, Go `go.mod`, Python `pylock.toml`, named Python `pylock.<name>.toml`, Python `uv.lock`, Python Pipenv `Pipfile.lock`, Python PDM `pdm.lock`, Python `poetry.lock`, Python `requirements.txt`, Java Gradle `gradle.lockfile`, Java Gradle `gradle/dependency-locks` directories and `gradle/dependency-locks/*.lockfile`, Java Gradle `gradle/libs.versions.toml`, Java Maven `pom.xml`, Bazel `MODULE.bazel`, .NET NuGet `packages.lock.json`, .NET restored `obj/project.assets.json`, .NET NuGet `packages.config`, .NET `*.csproj`, Conan `conan.lock`, Conda `environment.yml`, Conda `environment.yaml`, Conda `conda-lock.yml`, Conda `conda-lock.yaml`, vcpkg `vcpkg.json`, Terraform `.terraform.lock.hcl`, Helm `Chart.lock`, Helm `Chart.yaml`, Nix `flake.lock`, Unity Package Manager `Packages/packages-lock.json`, R `renv.lock`, Julia `Manifest.toml`, Haskell Stack `stack.yaml.lock`, Perl Carton `cpanfile.snapshot`, LuaRocks `luarocks.lock`, Dart/Flutter `pubspec.lock`, SwiftPM `Package.resolved`, Carthage `Cartfile.resolved`, CocoaPods `Podfile.lock`, Elixir Mix `mix.lock`, Erlang Rebar3 `rebar.lock`, Ruby Bundler `Gemfile.lock`, PHP Composer `composer.lock`, CycloneDX JSON/XML, SPDX JSON/RDF, SPDX tag-value `.spdx`, and Yarn classic/Berry `yarn.lock` project discovery
+- Bun `bun.lock`, npm `package-lock.json`, npm `npm-shrinkwrap.json`, pnpm `pnpm-lock.yaml`, Deno `deno.lock`, Rust `Cargo.lock`, Go `go.work`, Go `go.mod`, Python `pyproject.toml`, Python `pylock.toml`, named Python `pylock.<name>.toml`, Python `uv.lock`, Python Pipenv `Pipfile.lock`, Python PDM `pdm.lock`, Python `poetry.lock`, Python `requirements.txt`, Java Gradle `gradle.lockfile`, Java Gradle `gradle/dependency-locks` directories and `gradle/dependency-locks/*.lockfile`, Java Gradle `gradle/libs.versions.toml`, Java Maven `pom.xml`, Bazel `MODULE.bazel`, .NET NuGet `packages.lock.json`, .NET restored `obj/project.assets.json`, .NET NuGet `packages.config`, .NET `*.csproj`, Conan `conan.lock`, Conda `environment.yml`, Conda `environment.yaml`, Conda `conda-lock.yml`, Conda `conda-lock.yaml`, vcpkg `vcpkg.json`, Terraform `.terraform.lock.hcl`, Helm `Chart.lock`, Helm `Chart.yaml`, Nix `flake.lock`, Unity Package Manager `Packages/packages-lock.json`, R `renv.lock`, Julia `Manifest.toml`, Haskell Stack `stack.yaml.lock`, Perl Carton `cpanfile.snapshot`, LuaRocks `luarocks.lock`, Dart/Flutter `pubspec.lock`, SwiftPM `Package.resolved`, Carthage `Cartfile.resolved`, CocoaPods `Podfile.lock`, Elixir Mix `mix.lock`, Erlang Rebar3 `rebar.lock`, Ruby Bundler `Gemfile.lock`, PHP Composer `composer.lock`, CycloneDX JSON/XML, SPDX JSON/RDF, SPDX tag-value `.spdx`, and Yarn classic/Berry `yarn.lock` project discovery
 - Node-compatible packaged CLI entrypoint for npm, pnpm, Yarn, npx, pnpm dlx, and yarn dlx users
 - explicit dependency input selection with `--lockfile <path>` for projects that contain more than one supported input file
 - direct and transitive dependency graph extraction when the dependency input records parent/child relationships
@@ -85,6 +85,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - Rust `Cargo.lock` projects are scanned for crates, using adjacent `Cargo.toml` root dependencies plus literal and segment `*`/`?` Cargo workspace member manifests such as `crates/*`, `crates/app-*`, `tools/?li`, and `crates/*/plugins/*` when available, honoring workspace `exclude` entries, `crate.workspace = true` dependency keys, workspace dependency package aliases, and table-form dependency sections such as `[dependencies.foo]`
 - Go `go.work` projects are scanned across workspace modules and apply workspace `replace` directives before module-level replacements; Go `go.mod` projects are scanned for required modules, Go `replace` directives, and adjacent `go.sum` module versions when available
 - Python `pylock.toml` and named `pylock.<name>.toml` projects are scanned for versioned PyPI package records; unversioned source-tree package records are not scanned yet
+- Python `pyproject.toml` projects without a companion lockfile are scanned for exact PEP 621 `name==version` direct dependency pins
 - Python `uv.lock`, PDM `pdm.lock`, and `poetry.lock` projects are scanned for PyPI package dependencies recorded in the lockfile
 - Python Pipenv `Pipfile.lock` projects are scanned for exact `==version` PyPI package entries and project-root-contained local `path` or editable source entries in the `default` and `develop` sections
 - Python PDM `pdm.lock` projects use adjacent `pyproject.toml` root dependencies when available, infer roots from lockfile dependency references otherwise, and scan project-root-contained local `path` or relative `file:` source records
@@ -188,7 +189,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - explicit waiver mode in CycloneDX SBOM metadata
 
 Central approval workflows, GitHub App checks, Go `go.work` use paths outside the project root, Go local `replace` paths outside the project root, full Go module parent graph
-reconstruction, Pipenv and PDM remote VCS entries, Pipenv and PDM local source paths outside the project root, remote VCS `requirements.txt` entries, unpinned requirements ranges without exact constraint pins,
+reconstruction, unpinned or direct-reference `pyproject.toml` dependencies, Pipenv and PDM remote VCS entries, Pipenv and PDM local source paths outside the project root, remote VCS `requirements.txt` entries, unpinned requirements ranges without exact constraint pins,
 remote Maven parent/BOM fetching, Maven transitive graph
 resolution, external Maven repository resolution beyond local `.m2/repository`, Gradle graph reconstruction, Gradle version catalog rich versions, bundle aliases, plugin aliases, and usage-site configuration reconstruction, Bazel `MODULE.bazel` `include()` expansion, Bazel overrides, module extensions, `MODULE.bazel.lock` graph reconstruction, remote Bazel registry metadata fetching, Conan 1 graph lock support, Conan binary package ID and remote ConanCenter
 artifact fetching, unpinned or ranged Conda `environment.yml` specs, Conda environment transitive dependency reconstruction, explicit per-platform `conda-<platform>.lock` exports, remote Conda channel artifact fetching,
@@ -248,6 +249,7 @@ Supported dependency input files:
 - `go.work` workspace modules, workspace `replace` directives, module `go.mod` requirements, module `replace` directives, and adjacent `go.sum` module versions when available, using local Go module cache, `vendor/<module>`, and project-root-contained local replacement path evidence
 - `go.mod` module requirements, Go `replace` directives, and adjacent `go.sum` module versions when available, using local Go module cache, `vendor/<module>`, and project-root-contained local replacement path evidence
 - `pylock.toml` and `pylock.<name>.toml` versioned package entries from the PyPA lockfile specification, using dependency references for audit paths and installed `.venv`/`venv` dist-info metadata for local evidence
+- `pyproject.toml` exact PEP 621 direct dependency pins such as `name==version`, using installed `.venv`/`venv` dist-info metadata for local evidence
 - `uv.lock` package entries from Python uv projects, using installed `.venv`/`venv` dist-info metadata for local evidence
 - `Pipfile.lock` exact `==version` entries and project-root-contained local `path` or editable source entries from Python Pipenv projects, using installed `.venv`/`venv` dist-info metadata or local source metadata and license files for local evidence
 - `pdm.lock` package entries and project-root-contained local `path` or relative `file:` source records from Python PDM projects, using adjacent `pyproject.toml` root dependencies when available and installed `.venv`/`venv` dist-info metadata or local source metadata and license files for local evidence
@@ -292,6 +294,7 @@ ohrisk scan --lockfile Cargo.lock
 ohrisk scan --lockfile go.work
 ohrisk scan --lockfile go.mod
 ohrisk scan --lockfile pylock.toml
+ohrisk scan --lockfile pyproject.toml
 ohrisk scan --lockfile uv.lock
 ohrisk scan --lockfile Pipfile.lock
 ohrisk scan --lockfile pdm.lock

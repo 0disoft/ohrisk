@@ -249,6 +249,36 @@ describe("discoverProject", () => {
     }
   });
 
+  test("finds a standalone Python pyproject.toml project", () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-pyproject-discovery-"));
+
+    try {
+      writeFileSync(
+        path.join(projectDir, "pyproject.toml"),
+        [
+          "[project]",
+          "name = \"fixture-pyproject\"",
+          "version = \"0.1.0\"",
+          "dependencies = [\"risk-pkg==1.0.0\"]"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = discoverProject({ cwd: projectDir });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value.rootDir).toBe(projectDir);
+      expect(result.value.lockfile.kind).toBe("pyproject-toml");
+      expect(path.basename(result.value.lockfile.path)).toBe("pyproject.toml");
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
   test("finds a Python pylock.toml project", () => {
     const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-pylock-discovery-"));
 

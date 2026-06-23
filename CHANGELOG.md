@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.149.0 - 2026-06-23
+
+### Added
+
+- Python `pyproject.toml` inputs are now discovered and scanned when no
+  companion Python lockfile is present, covering exact PEP 621
+  `name==version` direct dependencies and optional dependency groups while
+  failing closed on ranges and direct references without resolved versions.
+
 ## 0.148.0 - 2026-06-21
 
 ### Added

@@ -69,6 +69,7 @@ import {
 import { parsePdmLockfile, parsePdmLockText } from "../graph/python-pdm-lock";
 import { parsePipfileLockfile, parsePipfileLockText } from "../graph/python-pipfile-lock";
 import { parsePylockFile, parsePylockText } from "../graph/python-pylock";
+import { parsePyprojectFile, parsePyprojectText } from "../graph/python-pyproject";
 import { parsePoetryLockfile, parsePoetryLockText } from "../graph/python-poetry-lock";
 import {
   parseRequirementsFile,
@@ -701,6 +702,8 @@ function parseProjectLockfile(project: ProjectInput): Result<DependencyGraph, Oh
       return parsePdmLockfile(project.lockfile.path);
     case "poetry-lock":
       return parsePoetryLockfile(project.lockfile.path);
+    case "pyproject-toml":
+      return parsePyprojectFile(project.lockfile.path);
     case "requirements-txt":
       return parseRequirementsFile(project.lockfile.path);
     case "uv-lock":
@@ -901,6 +904,8 @@ function parseLockfileTextForKind(input: {
       return parsePoetryLockText(input.text, input.lockfilePath, {
         pyprojectText: input.pyprojectText
       });
+    case "pyproject-toml":
+      return parsePyprojectText(input.text, input.lockfilePath);
     case "requirements-txt":
       return parseRequirementsText(input.text, input.lockfilePath, {
         rootName: input.requirementsRootName,
