@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { main, type CliIO } from "../src/cli/main";
 import { createError } from "../src/shared/errors";
@@ -143,7 +143,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.149.2"]);
+    expect(stdout).toEqual(["ohrisk 0.150.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -1520,7 +1520,57 @@ describe("main", () => {
       expect(output).toContain("- [unknown] rules_cc@0.0.9");
       expect(output).toContain("dependency: production direct");
       expect(output).toContain("path: fixture_bazel -> rules_cc@0.0.9");
-      expect(output).toContain("Bazel module license evidence was not found locally.");
+      expect(output).toContain("Bazel module license evidence was not found in local Bazel registry local_path sources.");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("prints local registry evidence for a Bazel MODULE.bazel project", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-bazel-module-project-"));
+    const registryRoot = path.join(projectRoot, "local-registry");
+    const moduleVersionDir = path.join(registryRoot, "modules", "rules_cc", "0.0.9");
+    const sourceDir = path.join(registryRoot, "sources", "rules_cc");
+
+    try {
+      mkdirSync(moduleVersionDir, { recursive: true });
+      mkdirSync(sourceDir, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, ".bazelrc"),
+        `common --registry=${pathToFileURL(registryRoot).href}`,
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectRoot, "MODULE.bazel"),
+        [
+          "module(name = \"fixture_bazel\", version = \"0.1.0\")",
+          "bazel_dep(name = \"rules_cc\", version = \"0.0.9\")"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(moduleVersionDir, "source.json"),
+        JSON.stringify({
+          type: "local_path",
+          path: "sources/rules_cc"
+        }),
+        "utf8"
+      );
+      writeFileSync(path.join(sourceDir, "LICENSE"), "MIT", "utf8");
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Lockfile: MODULE.bazel (bazel-module)");
+      expect(output).toContain("Evidence: 1 files, 0 warnings");
+      expect(output).toContain("Risks: 0 high, 0 review, 1 unknown, 0 low");
+      expect(output).toContain("- [unknown] rules_cc@0.0.9");
+      expect(output).toContain("source: local");
+      expect(output).toContain("file: LICENSE (license)");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
@@ -1947,7 +1997,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.149.2");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.150.0");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",

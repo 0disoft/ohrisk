@@ -125,7 +125,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - local Go module cache, `vendor/<module>`, and project-root-contained local `replace` path evidence before unavailable fallback for `go.work` and `go.mod` scans
 - Python `.venv` and `venv` `*.dist-info/METADATA` package evidence, plus project-root-contained local source metadata and license files for `requirements.txt`, `Pipfile.lock`, and `pdm.lock` local source entries, before unavailable fallback
 - local Maven `.m2/repository` POMs for Maven parent/BOM version management and package license evidence before unavailable fallback for Gradle lockfile and Maven `pom.xml` coordinates
-- Bazel module license evidence falls back to unavailable until local Bazel registry metadata or remote Bazel registry fetching is supported
+- Bazel module license evidence uses local Bazel registry `local_path` sources from file-based registries when present; remote Bazel registry metadata fetching is not scanned yet
 - local NuGet package cache `.nuspec` evidence before unavailable fallback for `packages.lock.json`, `obj/project.assets.json`, `packages.config`, and `*.csproj` packages
 - local Conan cache `conanfile.py` metadata and package source license evidence before unavailable fallback for `conan.lock` recipes
 - local Conda package cache `info/index.json` metadata and license files before unavailable fallback for `environment.yml`, `environment.yaml`, `conda-lock.yml`, and `conda-lock.yaml` Conda packages
@@ -258,7 +258,7 @@ Supported dependency input files:
 - `gradle.lockfile`, legacy `gradle/dependency-locks` directories, and explicit `gradle/dependency-locks/*.lockfile` Maven coordinates from Java Gradle dependency locking, using local `.m2/repository` POM metadata for evidence
 - `gradle/libs.versions.toml` Maven library aliases with exact versions or `version.ref` values from the same catalog, using local `.m2/repository` POM metadata for evidence
 - Maven `pom.xml` direct dependencies with explicit versions or versions resolved from local `<properties>`, same-file `dependencyManagement`, or local `.m2/repository` parent/imported-BOM `dependencyManagement`, using local `.m2/repository` POM metadata for evidence
-- Bazel `MODULE.bazel` direct `bazel_dep` entries with literal exact versions, failing closed on graph-expanding constructs and using unavailable evidence fallback until Bazel registry evidence is supported
+- Bazel `MODULE.bazel` direct `bazel_dep` entries with literal exact versions, failing closed on graph-expanding constructs and using local Bazel registry `local_path` source evidence when present
 - .NET NuGet `packages.lock.json` package entries, restored `obj/project.assets.json` package graph entries, `packages.config` package entries, and direct `*.csproj` `PackageReference` entries, resolving central versions from the nearest `Directory.Packages.props` when present and using local NuGet cache `.nuspec` metadata for evidence
 - Conan 2 `conan.lock` recipe references from `requires`, `build_requires`, and `python_requires`, using local Conan cache `conanfile.py` metadata and license files for evidence
 - Conda `environment.yml` and `environment.yaml` exact package pins plus Conda `conda-lock.yml` and `conda-lock.yaml` package entries, using local Conda package cache `info/index.json` metadata and license files for Conda package evidence

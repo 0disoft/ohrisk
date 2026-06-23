@@ -106,8 +106,9 @@ Maven `pom.xml`은 직접 의존성 중 버전이 명시되어 있거나 같은 
 Maven 전이 그래프 해석, Gradle 그래프 복원, Gradle version
 catalog rich version, bundle alias, plugin alias, usage-site configuration 복원은 아직 지원하지 않는다.
 Bazel은 `MODULE.bazel`의 직접 `bazel_dep` 중 literal exact `version`이 있는 entry를
-스캔한다. `dev_dependency = True`는 개발 의존성으로 분류한다. evidence는 아직
-로컬/원격 Bazel registry metadata를 읽지 않으므로 unavailable로 표시된다.
+스캔한다. `dev_dependency = True`는 개발 의존성으로 분류한다. file 기반 로컬
+Bazel registry의 `local_path` source가 있으면 license evidence를 읽고, 원격 Bazel
+registry metadata fetching은 아직 지원하지 않는다.
 `include()`로 나뉜 module fragment, override, module extension, `repo_name = None`
 nodep entry, `MODULE.bazel.lock` 기반 resolved graph 복원은 아직 지원하지 않는다.
 이런 graph 확장 문법이 보이면 부분 스캔으로 넘어가지 않고 실패 처리한다.

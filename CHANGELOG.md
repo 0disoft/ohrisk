@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.150.0 - 2026-06-23
+
+### Added
+
+- Bazel `MODULE.bazel` scans now read license files from local Bazel registry
+  `local_path` sources configured through file-based registries, while remote
+  Bazel registry metadata fetching remains unsupported.
+
 ## 0.149.2 - 2026-06-23
 
 ### Fixed

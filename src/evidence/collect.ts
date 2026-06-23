@@ -245,7 +245,10 @@ async function collectNodeEvidence(input: {
 
   if (input.node.ecosystem === "bazel") {
     return collectBazelModuleEvidence({
-      packageId: input.node.id
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      projectRoot: input.projectRoot
     });
   }
 
