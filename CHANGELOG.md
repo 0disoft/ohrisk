@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.149.0 - 2026-06-23
+## 0.149.1 - 2026-06-23
 
 ### Added
 
@@ -8,6 +8,11 @@
   companion Python lockfile is present, covering exact PEP 621
   `name==version` direct dependencies and optional dependency groups while
   failing closed on ranges and direct references without resolved versions.
+
+### Fixed
+
+- Local artifact error details now redact credential-like URL text even when a
+  malformed `file:` specifier is embedded into a filesystem path on Linux.
 
 ## 0.148.0 - 2026-06-21
 

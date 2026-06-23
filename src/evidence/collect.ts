@@ -1900,6 +1900,10 @@ function redactUrlCredentialsInText(value: string): string {
       "$1redacted$3"
     )
     .replace(
+      /([a-z][a-z0-9+.-]*:\/)([^@/?#\s\\]*)(@)/gi,
+      "$1redacted$3"
+    )
+    .replace(
       /([a-z][a-z0-9+.-]{1,}:\\+)([^@/?#\s\\]*)(@)/gi,
       "$1redacted$3"
     );
