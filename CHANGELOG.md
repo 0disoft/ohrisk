@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.158.11 - 2026-06-25
+
+### Fixed
+
+- SPDX JSON SBOMs with non-array `relationships` values now report structured
+  unsupported relationship details instead of silently dropping dependency edges.
+
 ## 0.158.10 - 2026-06-25
 
 ### Fixed

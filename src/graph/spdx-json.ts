@@ -19,7 +19,7 @@ type SpdxPackageRecord = {
   licenseExpression?: string;
 };
 
-type UnsupportedSpdxDependencyField = "spdxElementId" | "relatedSpdxElement";
+type UnsupportedSpdxDependencyField = "relationships" | "spdxElementId" | "relatedSpdxElement";
 
 export function parseSpdxJsonFile(
   lockfilePath: string,
@@ -224,8 +224,14 @@ function readSpdxDependencyMap(
 }> {
   const packageIds = new Set(packages.map((pkg) => pkg.spdxId));
   const dependencyMap = new Map<string, string[]>();
-  if (!Array.isArray(value)) {
+  if (value === undefined) {
     return ok(dependencyMap);
+  }
+  if (!Array.isArray(value)) {
+    return err({
+      relationshipIndexes: [],
+      unsupportedRelationshipFields: ["relationships"]
+    });
   }
 
   const addEdge = (parent: string, child: string): void => {
@@ -441,7 +447,7 @@ function unsupportedSpdxDependencyError(
     createError({
       code: "SPDX_PARSE_FAILED",
       category: "unsupported_input",
-      message: "Failed to parse SPDX dependency relationships. Ohrisk supports string SPDX dependency references.",
+      message: "Failed to parse SPDX dependency relationships. Ohrisk supports array relationships with string SPDX dependency references.",
       details: {
         lockfilePath,
         reason: "unsupported_spdx_dependency_relationships",
