@@ -197,4 +197,40 @@ describe("parseSpdxRdfText", () => {
       unsupportedRelationshipFields: ["relatedSpdxElement"]
     });
   });
+
+  test("reports malformed DESCRIBES relationships as unsupported input", () => {
+    const result = parseSpdxRdfText(`<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF
+  xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  xmlns:spdx="http://spdx.org/rdf/terms#">
+  <spdx:SpdxDocument rdf:about="#SPDXRef-DOCUMENT">
+    <spdx:name>fixture-spdx-rdf-malformed-describes</spdx:name>
+  </spdx:SpdxDocument>
+  <spdx:Package rdf:about="#SPDXRef-Package-parent">
+    <spdx:externalRef>
+      <spdx:referenceCategory>PACKAGE-MANAGER</spdx:referenceCategory>
+      <spdx:referenceType>purl</spdx:referenceType>
+      <spdx:referenceLocator>pkg:npm/parent@1.0.0</spdx:referenceLocator>
+    </spdx:externalRef>
+  </spdx:Package>
+  <spdx:Relationship>
+    <spdx:spdxElement rdf:resource="#SPDXRef-DOCUMENT" />
+    <spdx:relationshipType>DESCRIBES</spdx:relationshipType>
+  </spdx:Relationship>
+</rdf:RDF>`, "spdx.rdf");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected unsupported SPDX RDF DESCRIBES relationship to fail.");
+    }
+
+    expect(result.error.code).toBe("SPDX_PARSE_FAILED");
+    expect(result.error.category).toBe("unsupported_input");
+    expect(result.error.details).toEqual({
+      lockfilePath: "spdx.rdf",
+      reason: "unsupported_spdx_describes_relationships",
+      relationshipIndexes: [0],
+      unsupportedRelationshipFields: ["relatedSpdxElement"]
+    });
+  });
 });

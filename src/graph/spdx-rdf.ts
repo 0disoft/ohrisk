@@ -39,6 +39,9 @@ type SpdxRdfRelationship = {
 };
 
 type UnsupportedSpdxRdfRelationshipField = "spdxElementId" | "relatedSpdxElement";
+type UnsupportedSpdxRdfRelationshipReason =
+  | "unsupported_spdx_dependency_relationships"
+  | "unsupported_spdx_describes_relationships";
 
 export function parseSpdxRdfFile(
   lockfilePath: string,
@@ -192,6 +195,22 @@ function readSpdxRdfRelationship(input: {
     if (unsupportedRelationshipFields.length > 0) {
       return unsupportedSpdxRdfRelationshipError({
         lockfilePath: input.lockfilePath,
+        reason: "unsupported_spdx_dependency_relationships",
+        relationshipIndex: input.relationshipIndex,
+        unsupportedRelationshipFields
+      });
+    }
+  }
+
+  if (relationshipType === "DESCRIBES") {
+    const unsupportedRelationshipFields: UnsupportedSpdxRdfRelationshipField[] = [
+      ...(!spdxElementId ? ["spdxElementId" as const] : []),
+      ...(!relatedSpdxElement ? ["relatedSpdxElement" as const] : [])
+    ];
+    if (unsupportedRelationshipFields.length > 0) {
+      return unsupportedSpdxRdfRelationshipError({
+        lockfilePath: input.lockfilePath,
+        reason: "unsupported_spdx_describes_relationships",
         relationshipIndex: input.relationshipIndex,
         unsupportedRelationshipFields
       });
@@ -355,17 +374,22 @@ function spdxRdfParseError(
 
 function unsupportedSpdxRdfRelationshipError(input: {
   lockfilePath: string;
+  reason: UnsupportedSpdxRdfRelationshipReason;
   relationshipIndex: number;
   unsupportedRelationshipFields: UnsupportedSpdxRdfRelationshipField[];
 }): Result<never, OhriskError> {
+  const relationshipLabel = input.reason === "unsupported_spdx_describes_relationships"
+    ? "DESCRIBES relationships"
+    : "dependency relationships";
+
   return err(
     createError({
       code: "SPDX_PARSE_FAILED",
       category: "unsupported_input",
-      message: "Failed to parse SPDX RDF dependency relationships. Ohrisk supports complete SPDX dependency relationship references.",
+      message: `Failed to parse SPDX RDF ${relationshipLabel}. Ohrisk supports complete SPDX relationship references.`,
       details: {
         lockfilePath: input.lockfilePath,
-        reason: "unsupported_spdx_dependency_relationships",
+        reason: input.reason,
         relationshipIndexes: [input.relationshipIndex],
         unsupportedRelationshipFields: input.unsupportedRelationshipFields
       }
