@@ -99,6 +99,49 @@ Relationship: SPDXRef-Package-described-child DEPENDENCY_OF SPDXRef-Package-desc
       });
   });
 
+  test("merges duplicate dependency relationships without dropping child edges", () => {
+    const result = parseSpdxTagValueText(`
+SPDXVersion: SPDX-2.3
+SPDXID: SPDXRef-DOCUMENT
+DocumentName: fixture-spdx-tag-value-duplicate-relationships
+DocumentDescribes: SPDXRef-Package-parent
+
+PackageName: parent
+SPDXID: SPDXRef-Package-parent
+PackageLicenseDeclared: MIT
+ExternalRef: PACKAGE-MANAGER purl pkg:npm/parent@1.0.0
+
+PackageName: child-a
+SPDXID: SPDXRef-Package-child-a
+PackageLicenseDeclared: MIT
+ExternalRef: PACKAGE-MANAGER purl pkg:npm/child-a@2.0.0
+
+PackageName: child-b
+SPDXID: SPDXRef-Package-child-b
+PackageLicenseDeclared: MIT
+ExternalRef: PACKAGE-MANAGER purl pkg:npm/child-b@3.0.0
+
+Relationship: SPDXRef-Package-parent DEPENDS_ON SPDXRef-Package-child-a
+Relationship: SPDXRef-Package-parent DEPENDS_ON SPDXRef-Package-child-b
+`, "sbom.spdx");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "child-a@2.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [["fixture-spdx-tag-value-duplicate-relationships", "parent@1.0.0", "child-a@2.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "child-b@3.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [["fixture-spdx-tag-value-duplicate-relationships", "parent@1.0.0", "child-b@3.0.0"]]
+      });
+  });
+
   test("reports documents without package PURLs as typed SPDX errors", () => {
     const result = parseSpdxTagValueText(`
 SPDXVersion: SPDX-2.3
