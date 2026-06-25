@@ -188,6 +188,58 @@ describe("parseSpdxRdfText", () => {
       });
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const result = parseSpdxRdfText(`<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF
+  xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  xmlns:spdx="http://spdx.org/rdf/terms#">
+  <spdx:SpdxDocument rdf:about="">
+    <spdx:name>fixture-spdx-rdf-cycle</spdx:name>
+    <spdx:describesPackage rdf:resource="#SPDXRef-Package-parent" />
+  </spdx:SpdxDocument>
+  <spdx:Package rdf:about="#SPDXRef-Package-parent">
+    <spdx:externalRef>
+      <spdx:referenceCategory>PACKAGE-MANAGER</spdx:referenceCategory>
+      <spdx:referenceType>purl</spdx:referenceType>
+      <spdx:referenceLocator>pkg:npm/parent@1.0.0</spdx:referenceLocator>
+    </spdx:externalRef>
+  </spdx:Package>
+  <spdx:Package rdf:about="#SPDXRef-Package-child">
+    <spdx:externalRef>
+      <spdx:referenceCategory>PACKAGE-MANAGER</spdx:referenceCategory>
+      <spdx:referenceType>purl</spdx:referenceType>
+      <spdx:referenceLocator>pkg:npm/child@2.0.0</spdx:referenceLocator>
+    </spdx:externalRef>
+  </spdx:Package>
+  <spdx:Relationship>
+    <spdx:spdxElement rdf:resource="#SPDXRef-Package-parent" />
+    <spdx:relationshipType>DEPENDS_ON</spdx:relationshipType>
+    <spdx:relatedSpdxElement rdf:resource="#SPDXRef-Package-child" />
+  </spdx:Relationship>
+  <spdx:Relationship>
+    <spdx:spdxElement rdf:resource="#SPDXRef-Package-child" />
+    <spdx:relationshipType>DEPENDS_ON</spdx:relationshipType>
+    <spdx:relatedSpdxElement rdf:resource="#SPDXRef-Package-parent" />
+  </spdx:Relationship>
+</rdf:RDF>`, "spdx.rdf");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "parent@1.0.0"))
+      .toMatchObject({
+        direct: true,
+        paths: [["fixture-spdx-rdf-cycle", "parent@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "child@2.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [["fixture-spdx-rdf-cycle", "parent@1.0.0", "child@2.0.0"]]
+      });
+  });
+
   test("reports RDF documents without package PURLs as typed SPDX errors", () => {
     const result = parseSpdxRdfText(`<?xml version="1.0" encoding="UTF-8"?>
 <rdf:RDF
