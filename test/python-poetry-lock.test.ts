@@ -81,6 +81,63 @@ describe("parsePoetryLockText", () => {
       });
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const poetryLock = [
+      "[[package]]",
+      "name = \"requests\"",
+      "version = \"2.32.3\"",
+      "optional = false",
+      "python-versions = \">=3.8\"",
+      "groups = [\"main\"]",
+      "",
+      "[package.dependencies]",
+      "urllib3 = \">=2.0.0\"",
+      "",
+      "[[package]]",
+      "name = \"urllib3\"",
+      "version = \"2.5.0\"",
+      "optional = false",
+      "python-versions = \">=3.8\"",
+      "groups = [\"main\"]",
+      "",
+      "[package.dependencies]",
+      "requests = \">=2.32.3\""
+    ].join("\n");
+    const pyproject = [
+      "[tool.poetry]",
+      "name = \"fixture-poetry-cycle\"",
+      "version = \"0.1.0\"",
+      "",
+      "[tool.poetry.dependencies]",
+      "python = \"^3.12\"",
+      "requests = \"^2.32.3\""
+    ].join("\n");
+
+    const result = parsePoetryLockText(poetryLock, "fixture-poetry-cycle/poetry.lock", {
+      pyprojectText: pyproject
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "requests@2.32.3"))
+      .toMatchObject({
+        ecosystem: "pypi",
+        dependencyType: "production",
+        direct: true,
+        paths: [["fixture-poetry-cycle", "requests@2.32.3"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "urllib3@2.5.0"))
+      .toMatchObject({
+        ecosystem: "pypi",
+        dependencyType: "production",
+        direct: false,
+        paths: [["fixture-poetry-cycle", "requests@2.32.3", "urllib3@2.5.0"]]
+      });
+  });
+
   test("falls back to inferred roots when pyproject.toml is unavailable", () => {
     const result = parsePoetryLockText(
       [
