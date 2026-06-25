@@ -59,6 +59,54 @@ describe("parseNugetLockText", () => {
       });
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const result = parseNugetLockText(
+      JSON.stringify({
+        version: 1,
+        dependencies: {
+          ".NETCoreApp,Version=v8.0": {
+            "Risk.Package": {
+              type: "Direct",
+              requested: "[1.0.0, )",
+              resolved: "1.0.0",
+              dependencies: {
+                "Cycle.Child": "2.0.0"
+              }
+            },
+            "Cycle.Child": {
+              type: "Transitive",
+              resolved: "2.0.0",
+              dependencies: {
+                "Risk.Package": "1.0.0"
+              }
+            }
+          }
+        }
+      }),
+      "fixture-dotnet-cycle/packages.lock.json"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "Risk.Package@1.0.0"))
+      .toMatchObject({
+        ecosystem: "nuget",
+        dependencyType: "production",
+        direct: true,
+        paths: [["fixture-dotnet-cycle", "Risk.Package@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "Cycle.Child@2.0.0"))
+      .toMatchObject({
+        ecosystem: "nuget",
+        dependencyType: "production",
+        direct: false,
+        paths: [["fixture-dotnet-cycle", "Risk.Package@1.0.0", "Cycle.Child@2.0.0"]]
+      });
+  });
+
   test("reports malformed packages.lock.json entries as typed errors", () => {
     const result = parseNugetLockText(
       JSON.stringify({
