@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { parseRebarLockText } from "../src/graph/erlang-rebar-lock";
 
 describe("parseRebarLockText", () => {
-  test("parses Hex package pins from rebar.lock", () => {
+  test("parses Hex package pins from rebar.lock with root dependency classification", () => {
     const result = parseRebarLockText([
       '{"1.2.3",',
       "[",
@@ -34,7 +34,7 @@ describe("parseRebarLockText", () => {
         name: "risk_hex",
         version: "1.0.0",
         ecosystem: "hex",
-        dependencyType: "unknown",
+        dependencyType: "production",
         direct: true,
         paths: [[".", "risk_hex@1.0.0"]]
       }

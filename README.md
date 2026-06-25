@@ -111,7 +111,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - Carthage `Cartfile.resolved` projects are scanned for resolved GitHub, git, and binary pins; Cartfile.resolved does not expose parent dependency graphs, so packages are reported as root-level pins with unknown dependency type
 - CocoaPods `Podfile.lock` projects are scanned for resolved pods; subspecs are collapsed to their root pod identity and dependency type is reported as unknown because Podfile.lock does not encode production/development groups
 - Elixir Mix `mix.lock` projects are scanned for resolved Hex package pins; adjacent root `mix.exs` literal `only:` dependency options are used for production/development root classification when available, while mix.lock dependency graph reconstruction and remote Hex.pm artifact fetch are not scanned yet
-- Erlang Rebar3 `rebar.lock` projects are scanned for Hex `pkg` pins; git/path deps, plugin locks, profile-specific test deps, and Rebar dependency tree reconstruction are not scanned yet
+- Erlang Rebar3 `rebar.lock` projects are scanned for Hex `pkg` pins; depth-0 Hex pins are classified as production roots, while git/path deps, plugin locks, profile-specific test deps, and Rebar dependency tree reconstruction are not scanned yet
 - Ruby Bundler `Gemfile.lock` projects are scanned for direct and transitive gem dependencies
 - PHP Composer `composer.lock` projects are scanned for production and development package dependencies, using adjacent `composer.json` root dependencies when available
 - CycloneDX JSON/XML, SPDX JSON/RDF, and SPDX tag-value SBOM files are scanned for Package URL-backed package identities, dependency relationships, and embedded license evidence
@@ -276,7 +276,7 @@ Supported dependency input files:
 - SwiftPM `Package.resolved` package pins, using local `.build/checkouts` or `SourcePackages/checkouts` package source for evidence
 - Carthage `Cartfile.resolved` package pins, using local `Carthage/Checkouts` package source for evidence
 - CocoaPods `Podfile.lock` pod entries, using local `Pods/` source and `Pods/Local Podspecs` metadata for evidence
-- Elixir Mix `mix.lock` Hex package pins, using adjacent root `mix.exs` literal `only:` options for production/development classification and local `deps/` package source and `mix.exs` metadata for evidence; Erlang Rebar3 `rebar.lock` Hex package pins, using local `deps/` package source and `rebar.config` metadata for evidence
+- Elixir Mix `mix.lock` Hex package pins, using adjacent root `mix.exs` literal `only:` options for production/development classification and local `deps/` package source and `mix.exs` metadata for evidence; Erlang Rebar3 `rebar.lock` Hex package pins, using depth-0 production root classification and local `deps/` package source and `rebar.config` metadata for evidence
 - Ruby Bundler `Gemfile.lock` gem entries, using literal companion `Gemfile` group blocks and inline `group:` options for development classification and local Bundler/RubyGems gemspec metadata for evidence
 - PHP Composer `composer.lock` package entries, using adjacent `composer.json` root dependencies when available and local `vendor/` package metadata for evidence
 - CycloneDX JSON/XML SBOM package entries with Package URL identities, dependency relationships, and embedded license evidence

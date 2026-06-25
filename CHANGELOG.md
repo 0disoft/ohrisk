@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.156.0 - 2026-06-25
+
+### Added
+
+- Erlang Rebar3 `rebar.lock` scans now classify depth-0 Hex package pins
+  as production root dependencies.
+
 ## 0.155.0 - 2026-06-25
 
 ### Added

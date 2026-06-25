@@ -73,7 +73,9 @@ export function parseRebarLockText(
         name: record.name,
         version: record.version,
         ecosystem: "hex",
-        dependencyType: "unknown",
+        dependencyType: record.depth === undefined || record.depth === 0
+          ? "production"
+          : "unknown",
         direct: record.depth === undefined || record.depth === 0,
         paths: [[rootName, record.id]]
       }))
