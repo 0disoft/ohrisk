@@ -72,6 +72,57 @@ describe("parseComposerLockText", () => {
       });
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const composerLock = JSON.stringify({
+      packages: [
+        {
+          name: "vendor/app-lib",
+          version: "1.0.0",
+          require: {
+            "vendor/cycle-lib": "^2.0"
+          }
+        },
+        {
+          name: "vendor/cycle-lib",
+          version: "2.0.0",
+          require: {
+            "vendor/app-lib": "^1.0"
+          }
+        }
+      ]
+    });
+    const composerJson = JSON.stringify({
+      name: "vendor/root",
+      require: {
+        "vendor/app-lib": "^1.0"
+      }
+    });
+
+    const result = parseComposerLockText(composerLock, "fixture-php-cycle/composer.lock", {
+      composerJsonText: composerJson
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "vendor/app-lib@1.0.0"))
+      .toMatchObject({
+        ecosystem: "composer",
+        dependencyType: "production",
+        direct: true,
+        paths: [["vendor/root", "vendor/app-lib@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "vendor/cycle-lib@2.0.0"))
+      .toMatchObject({
+        ecosystem: "composer",
+        dependencyType: "production",
+        direct: false,
+        paths: [["vendor/root", "vendor/app-lib@1.0.0", "vendor/cycle-lib@2.0.0"]]
+      });
+  });
+
   test("reports malformed composer.lock package entries as typed errors", () => {
     const result = parseComposerLockText(
       JSON.stringify({
