@@ -21,6 +21,8 @@ type CycloneDxComponentRecord = {
   licenseExpressions: string[];
 };
 
+type UnsupportedCycloneDxDependencyValueKind = "array" | "boolean" | "null" | "number" | "object";
+
 export function parseCycloneDxJsonFile(
   lockfilePath: string,
   options: { maxBytes?: number } = {}
@@ -76,12 +78,16 @@ export function parseCycloneDxDocument(
 
   const aliases = buildComponentAliasMap(components);
   const dependencyMap = readCycloneDxDependencyMap(bom.dependencies, aliases);
+  if (!dependencyMap.ok) {
+    return unsupportedCycloneDxDependencyError(lockfilePath, dependencyMap.error);
+  }
+
   const rootName = readCycloneDxRootName(bom) ?? "<cyclonedx-project>";
   const rootRefs = readCycloneDxRootRefs({
     bom,
     components,
     aliases,
-    dependencyMap
+    dependencyMap: dependencyMap.value
   });
   const nodeMap = new Map<string, DependencyNode>();
 
@@ -97,7 +103,7 @@ export function parseCycloneDxDocument(
       direct: true,
       path: [rootName],
       components,
-      dependencyMap,
+      dependencyMap: dependencyMap.value,
       nodeMap,
       seen: new Set()
     });
@@ -328,15 +334,27 @@ function buildComponentAliasMap(records: CycloneDxComponentRecord[]): Map<string
 function readCycloneDxDependencyMap(
   value: unknown,
   aliases: Map<string, string>
-): Map<string, string[]> {
+): Result<Map<string, string[]>, {
+  dependencyEntryIndexes: number[];
+  unsupportedDependencyValueKinds: UnsupportedCycloneDxDependencyValueKind[];
+}> {
   const dependencyMap = new Map<string, string[]>();
   if (!Array.isArray(value)) {
-    return dependencyMap;
+    return ok(dependencyMap);
   }
 
-  for (const entry of value) {
+  const unsupportedEntryIndexes = new Set<number>();
+  const unsupportedValueKinds = new Set<UnsupportedCycloneDxDependencyValueKind>();
+  for (const [index, entry] of value.entries()) {
     if (!isRecord(entry) || typeof entry.ref !== "string" || !Array.isArray(entry.dependsOn)) {
       continue;
+    }
+
+    for (const child of entry.dependsOn) {
+      if (typeof child !== "string") {
+        unsupportedEntryIndexes.add(index);
+        unsupportedValueKinds.add(cycloneDxDependencyValueKind(child));
+      }
     }
 
     const parentRef = aliases.get(entry.ref) ?? entry.ref;
@@ -347,7 +365,14 @@ function readCycloneDxDependencyMap(
     dependencyMap.set(parentRef, childRefs);
   }
 
-  return dependencyMap;
+  if (unsupportedEntryIndexes.size > 0) {
+    return err({
+      dependencyEntryIndexes: [...unsupportedEntryIndexes].sort((left, right) => left - right),
+      unsupportedDependencyValueKinds: [...unsupportedValueKinds].sort()
+    });
+  }
+
+  return ok(dependencyMap);
 }
 
 function readCycloneDxRootRefs(input: {
@@ -537,6 +562,46 @@ function cycloneDxShapeError(lockfilePath: string): Result<never, OhriskError> {
       }
     })
   );
+}
+
+function unsupportedCycloneDxDependencyError(
+  lockfilePath: string,
+  details: {
+    dependencyEntryIndexes: number[];
+    unsupportedDependencyValueKinds: UnsupportedCycloneDxDependencyValueKind[];
+  }
+): Result<never, OhriskError> {
+  return err(
+    createError({
+      code: "CYCLONEDX_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse CycloneDX dependency entries. Ohrisk supports string dependsOn references.",
+      details: {
+        lockfilePath,
+        reason: "unsupported_cyclonedx_dependency_entries",
+        ...details
+      }
+    })
+  );
+}
+
+function cycloneDxDependencyValueKind(value: unknown): UnsupportedCycloneDxDependencyValueKind {
+  if (value === null) {
+    return "null";
+  }
+
+  if (Array.isArray(value)) {
+    return "array";
+  }
+
+  switch (typeof value) {
+    case "boolean":
+      return "boolean";
+    case "number":
+      return "number";
+    default:
+      return "object";
+  }
 }
 
 function dependencyTypeForChildEdge(

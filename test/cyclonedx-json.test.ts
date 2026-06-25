@@ -139,4 +139,42 @@ describe("parseCycloneDxJsonText", () => {
 
     expect(result.error.code).toBe("CYCLONEDX_PARSE_FAILED");
   });
+
+  test("reports non-string dependency references as unsupported input", () => {
+    const result = parseCycloneDxJsonText(JSON.stringify({
+      bomFormat: "CycloneDX",
+      specVersion: "1.5",
+      components: [
+        {
+          type: "library",
+          "bom-ref": "parent",
+          purl: "pkg:npm/parent@1.0.0"
+        },
+        {
+          type: "library",
+          "bom-ref": "child",
+          purl: "pkg:npm/child@2.0.0"
+        }
+      ],
+      dependencies: [
+        {
+          ref: "parent",
+          dependsOn: ["child", true, { ref: "hidden-child" }]
+        }
+      ]
+    }), "cyclonedx.json");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected unsupported CycloneDX dependency entries to fail.");
+    }
+
+    expect(result.error.code).toBe("CYCLONEDX_PARSE_FAILED");
+    expect(result.error.details).toEqual({
+      lockfilePath: "cyclonedx.json",
+      reason: "unsupported_cyclonedx_dependency_entries",
+      dependencyEntryIndexes: [0],
+      unsupportedDependencyValueKinds: ["boolean", "object"]
+    });
+  });
 });
