@@ -78,6 +78,54 @@ describe("parseCargoLockText", () => {
       });
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const cargoLock = [
+      "[[package]]",
+      "name = \"child\"",
+      "version = \"2.0.0\"",
+      "dependencies = [",
+      " \"parent 1.0.0\",",
+      "]",
+      "",
+      "[[package]]",
+      "name = \"parent\"",
+      "version = \"1.0.0\"",
+      "dependencies = [",
+      " \"child 2.0.0\",",
+      "]"
+    ].join("\n");
+    const cargoToml = [
+      "[package]",
+      "name = \"fixture-rust-cycle\"",
+      "version = \"0.1.0\"",
+      "",
+      "[dependencies]",
+      "parent = \"1\""
+    ].join("\n");
+
+    const result = parseCargoLockText(cargoLock, "fixture-rust-cycle/Cargo.lock", {
+      manifestText: cargoToml
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "parent@1.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: true,
+        paths: [["fixture-rust-cycle", "parent@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "child@2.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: false,
+        paths: [["fixture-rust-cycle", "parent@1.0.0", "child@2.0.0"]]
+      });
+  });
+
   test("uses Cargo workspace member manifests as dependency roots", () => {
     const cargoLock = [
       "[[package]]",
