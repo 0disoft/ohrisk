@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.158.2 - 2026-06-25
+
+### Fixed
+
+- Haskell Stack `stack.yaml.lock` files that contain only unsupported git or
+  path package entries now report structured unsupported dependency details.
+
 ## 0.158.1 - 2026-06-25
 
 ### Fixed

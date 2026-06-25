@@ -17,6 +17,11 @@ type StackLockRecord = {
   version: string;
 };
 
+type UnsupportedStackDependency = {
+  index: number;
+  type: "git" | "path";
+};
+
 export function parseStackLockfile(
   lockfilePath: string,
   options: { maxBytes?: number } = {}
@@ -98,6 +103,7 @@ function readStackLockRecords(
   }
 
   const records = new Map<string, StackLockRecord>();
+  const unsupportedDependencies: UnsupportedStackDependency[] = [];
   for (const [index, entry] of parsed.packages.entries()) {
     if (!isRecord(entry) || !isRecord(entry.completed)) {
       return stackLockShapeError(lockfilePath, "package_completed_not_object", index);
@@ -107,6 +113,10 @@ function readStackLockRecords(
       ? entry.completed.hackage
       : undefined;
     if (!hackage) {
+      const unsupportedDependency = readUnsupportedStackDependency(entry.completed, index);
+      if (unsupportedDependency) {
+        unsupportedDependencies.push(unsupportedDependency);
+      }
       continue;
     }
 
@@ -119,10 +129,29 @@ function readStackLockRecords(
   }
 
   if (records.size === 0) {
+    if (unsupportedDependencies.length > 0) {
+      return unsupportedStackDependencyError(lockfilePath, unsupportedDependencies);
+    }
+
     return stackLockShapeError(lockfilePath, "no_hackage_packages");
   }
 
   return ok([...records.values()]);
+}
+
+function readUnsupportedStackDependency(
+  completed: Record<string, unknown>,
+  index: number
+): UnsupportedStackDependency | undefined {
+  if (typeof completed.git === "string") {
+    return { index, type: "git" };
+  }
+
+  if (typeof completed.path === "string") {
+    return { index, type: "path" };
+  }
+
+  return undefined;
 }
 
 function parseHackagePackage(input: string): StackLockRecord | undefined {
@@ -160,6 +189,33 @@ function stackLockShapeError(
   );
 }
 
+function unsupportedStackDependencyError(
+  lockfilePath: string,
+  dependencies: UnsupportedStackDependency[]
+): Result<never, OhriskError> {
+  return err(
+    createError({
+      code: "STACK_LOCK_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse stack.yaml.lock. Ohrisk does not support Stack git or path package entries yet.",
+      details: {
+        lockfilePath,
+        reason: "unsupported_stack_dependency_entries",
+        unsupportedDependencyTypes: uniqueSorted(dependencies.map((dependency) => dependency.type)),
+        unsupportedDependencyIndexes: uniqueSortedNumbers(dependencies.map((dependency) => dependency.index))
+      }
+    })
+  );
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values)].sort();
+}
+
+function uniqueSortedNumbers(values: number[]): number[] {
+  return [...new Set(values)].sort((left, right) => left - right);
 }

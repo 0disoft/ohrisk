@@ -63,7 +63,11 @@ describe("parseStackLockText", () => {
       "- completed:",
       "    git: https://example.invalid/acme/private.git",
       "  original:",
-      "    git: https://example.invalid/acme/private.git"
+      "    git: https://example.invalid/acme/private.git",
+      "- completed:",
+      "    path: ../local-package",
+      "  original:",
+      "    path: ../local-package"
     ].join("\n"));
 
     expect(result.ok).toBe(false);
@@ -72,5 +76,11 @@ describe("parseStackLockText", () => {
     }
 
     expect(result.error.code).toBe("STACK_LOCK_PARSE_FAILED");
+    expect(result.error.details).toEqual({
+      lockfilePath: "stack.yaml.lock",
+      reason: "unsupported_stack_dependency_entries",
+      unsupportedDependencyTypes: ["git", "path"],
+      unsupportedDependencyIndexes: [0, 1]
+    });
   });
 });
