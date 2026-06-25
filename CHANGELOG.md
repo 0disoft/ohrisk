@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.158.8 - 2026-06-25
+
+### Fixed
+
+- SPDX RDF SBOMs with malformed dependency relationships now report structured
+  unsupported relationship details instead of silently dropping edges.
+
 ## 0.158.7 - 2026-06-25
 
 ### Fixed

@@ -157,4 +157,44 @@ describe("parseSpdxRdfText", () => {
 
     expect(result.error.code).toBe("SPDX_PARSE_FAILED");
   });
+
+  test("reports malformed dependency relationships as unsupported input", () => {
+    const result = parseSpdxRdfText(`<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF
+  xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  xmlns:spdx="http://spdx.org/rdf/terms#">
+  <spdx:Package rdf:about="#SPDXRef-Package-parent">
+    <spdx:externalRef>
+      <spdx:referenceCategory>PACKAGE-MANAGER</spdx:referenceCategory>
+      <spdx:referenceType>purl</spdx:referenceType>
+      <spdx:referenceLocator>pkg:npm/parent@1.0.0</spdx:referenceLocator>
+    </spdx:externalRef>
+  </spdx:Package>
+  <spdx:Package rdf:about="#SPDXRef-Package-child">
+    <spdx:externalRef>
+      <spdx:referenceCategory>PACKAGE-MANAGER</spdx:referenceCategory>
+      <spdx:referenceType>purl</spdx:referenceType>
+      <spdx:referenceLocator>pkg:npm/child@2.0.0</spdx:referenceLocator>
+    </spdx:externalRef>
+  </spdx:Package>
+  <spdx:Relationship>
+    <spdx:spdxElement rdf:resource="#SPDXRef-Package-parent" />
+    <spdx:relationshipType rdf:resource="http://spdx.org/rdf/terms#relationshipType_dependsOn" />
+  </spdx:Relationship>
+</rdf:RDF>`, "spdx.rdf");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected unsupported SPDX RDF dependency relationship to fail.");
+    }
+
+    expect(result.error.code).toBe("SPDX_PARSE_FAILED");
+    expect(result.error.category).toBe("unsupported_input");
+    expect(result.error.details).toEqual({
+      lockfilePath: "spdx.rdf",
+      reason: "unsupported_spdx_dependency_relationships",
+      relationshipIndexes: [0],
+      unsupportedRelationshipFields: ["relatedSpdxElement"]
+    });
+  });
 });

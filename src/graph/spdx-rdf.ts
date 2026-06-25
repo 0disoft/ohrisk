@@ -38,6 +38,8 @@ type SpdxRdfRelationship = {
   relatedSpdxElement: string;
 };
 
+type UnsupportedSpdxRdfRelationshipField = "spdxElementId" | "relatedSpdxElement";
+
 export function parseSpdxRdfFile(
   lockfilePath: string,
   options: { maxBytes?: number } = {}
@@ -98,10 +100,22 @@ function spdxRdfXmlToDocument(
     packages: nodesByName(root, "Package")
       .map(readSpdxRdfPackage)
       .filter((pkg) => pkg.SPDXID !== undefined),
-    relationships: nodesByName(root, "Relationship")
-      .map(readSpdxRdfRelationship)
-      .filter((relationship): relationship is SpdxRdfRelationship => relationship !== undefined)
+    relationships: []
   };
+  for (const [index, relationshipNode] of nodesByName(root, "Relationship").entries()) {
+    const relationship = readSpdxRdfRelationship({
+      node: relationshipNode,
+      lockfilePath,
+      relationshipIndex: index
+    });
+    if (!relationship.ok) {
+      return relationship;
+    }
+
+    if (relationship.value) {
+      document.relationships.push(relationship.value);
+    }
+  }
 
   const documentName = documentNode
     ? childText(documentNode, "name") ?? childText(documentNode, "documentName")
@@ -159,22 +173,40 @@ function readSpdxRdfExternalRefs(node: XmlNode): SpdxRdfExternalRef[] {
     .filter((externalRef): externalRef is SpdxRdfExternalRef => externalRef !== undefined);
 }
 
-function readSpdxRdfRelationship(node: XmlNode): SpdxRdfRelationship | undefined {
-  const spdxElementId = readSpdxRef(readResourceOrText(firstChild(node, "spdxElement")))
-    ?? readSpdxRef(readResourceOrText(firstChild(node, "spdxElementId")))
-    ?? readSpdxRef(node.attributes.about);
-  const relationshipType = normalizeRelationshipType(readResourceOrText(firstChild(node, "relationshipType")));
-  const relatedSpdxElement = readSpdxRef(readResourceOrText(firstChild(node, "relatedSpdxElement")));
+function readSpdxRdfRelationship(input: {
+  node: XmlNode;
+  lockfilePath: string;
+  relationshipIndex: number;
+}): Result<SpdxRdfRelationship | undefined, OhriskError> {
+  const spdxElementId = readSpdxRef(readResourceOrText(firstChild(input.node, "spdxElement")))
+    ?? readSpdxRef(readResourceOrText(firstChild(input.node, "spdxElementId")))
+    ?? readSpdxRef(input.node.attributes.about);
+  const relationshipType = normalizeRelationshipType(readResourceOrText(firstChild(input.node, "relationshipType")));
+  const relatedSpdxElement = readSpdxRef(readResourceOrText(firstChild(input.node, "relatedSpdxElement")));
 
-  if (!spdxElementId || !relationshipType || !relatedSpdxElement) {
-    return undefined;
+  if (isSpdxDependencyRelationshipType(relationshipType)) {
+    const unsupportedRelationshipFields: UnsupportedSpdxRdfRelationshipField[] = [
+      ...(!spdxElementId ? ["spdxElementId" as const] : []),
+      ...(!relatedSpdxElement ? ["relatedSpdxElement" as const] : [])
+    ];
+    if (unsupportedRelationshipFields.length > 0) {
+      return unsupportedSpdxRdfRelationshipError({
+        lockfilePath: input.lockfilePath,
+        relationshipIndex: input.relationshipIndex,
+        unsupportedRelationshipFields
+      });
+    }
   }
 
-  return {
+  if (!spdxElementId || !relationshipType || !relatedSpdxElement) {
+    return ok(undefined);
+  }
+
+  return ok({
     spdxElementId,
     relationshipType,
     relatedSpdxElement
-  };
+  });
 }
 
 function readDocumentDescribes(node: XmlNode): string[] {
@@ -258,6 +290,10 @@ function normalizeRelationshipType(value: string | undefined): string | undefine
     : undefined;
 }
 
+function isSpdxDependencyRelationshipType(value: string | undefined): value is "DEPENDS_ON" | "DEPENDENCY_OF" {
+  return value === "DEPENDS_ON" || value === "DEPENDENCY_OF";
+}
+
 function normalizeExternalRefCategory(value: string | undefined): string | undefined {
   if (!value) {
     return undefined;
@@ -312,6 +348,26 @@ function spdxRdfParseError(
       details: {
         lockfilePath,
         cause
+      }
+    })
+  );
+}
+
+function unsupportedSpdxRdfRelationshipError(input: {
+  lockfilePath: string;
+  relationshipIndex: number;
+  unsupportedRelationshipFields: UnsupportedSpdxRdfRelationshipField[];
+}): Result<never, OhriskError> {
+  return err(
+    createError({
+      code: "SPDX_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse SPDX RDF dependency relationships. Ohrisk supports complete SPDX dependency relationship references.",
+      details: {
+        lockfilePath: input.lockfilePath,
+        reason: "unsupported_spdx_dependency_relationships",
+        relationshipIndexes: [input.relationshipIndex],
+        unsupportedRelationshipFields: input.unsupportedRelationshipFields
       }
     })
   );
