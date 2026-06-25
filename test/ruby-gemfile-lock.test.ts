@@ -51,6 +51,50 @@ describe("parseGemfileLockText", () => {
       });
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const result = parseGemfileLockText(
+      [
+        "GEM",
+        "  remote: https://rubygems.org/",
+        "  specs:",
+        "    child-gem (2.0.0)",
+        "      parent-gem (>= 1.0.0)",
+        "    parent-gem (1.0.0)",
+        "      child-gem (>= 2.0.0)",
+        "",
+        "PLATFORMS",
+        "  ruby",
+        "",
+        "DEPENDENCIES",
+        "  parent-gem",
+        "",
+        "BUNDLED WITH",
+        "   2.5.0"
+      ].join("\n"),
+      "fixture-ruby-cycle/Gemfile.lock"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "parent-gem@1.0.0"))
+      .toMatchObject({
+        ecosystem: "gem",
+        dependencyType: "production",
+        direct: true,
+        paths: [["fixture-ruby-cycle", "parent-gem@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "child-gem@2.0.0"))
+      .toMatchObject({
+        ecosystem: "gem",
+        dependencyType: "production",
+        direct: false,
+        paths: [["fixture-ruby-cycle", "parent-gem@1.0.0", "child-gem@2.0.0"]]
+      });
+  });
+
   test("reports lockfiles without gem specs as typed errors", () => {
     const result = parseGemfileLockText("DEPENDENCIES\n  rails\n", "Gemfile.lock");
 
