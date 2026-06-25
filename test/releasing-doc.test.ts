@@ -13,7 +13,7 @@ describe("release documentation", () => {
     expect(releasing).toContain("when a `v*` tag is pushed");
     expect(releasing).toContain("NPM_TOKEN");
     expect(releasing).toContain("bun run verify:release");
-    expect(releasing).toContain("git tag v0.158.12");
+    expect(releasing).toContain("git tag v0.158.13");
     expect(releasing).toContain("package.json");
     expect(releasing).toContain("npm view ohrisk version");
     expect(releasing).toContain("CHANGELOG.md");

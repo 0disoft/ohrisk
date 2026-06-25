@@ -20,6 +20,10 @@ type SpdxPackageRecord = {
 };
 
 type UnsupportedSpdxDependencyField = "relationships" | "spdxElementId" | "relatedSpdxElement";
+type UnsupportedSpdxRelationshipReason =
+  | "unsupported_spdx_dependency_relationships"
+  | "unsupported_spdx_describes_relationships"
+  | "unsupported_spdx_relationships";
 
 export function parseSpdxJsonFile(
   lockfilePath: string,
@@ -219,6 +223,7 @@ function readSpdxDependencyMap(
   value: unknown,
   packages: SpdxPackageRecord[]
 ): Result<Map<string, string[]>, {
+  reason?: UnsupportedSpdxRelationshipReason;
   relationshipIndexes: number[];
   unsupportedRelationshipFields: UnsupportedSpdxDependencyField[];
 }> {
@@ -246,6 +251,7 @@ function readSpdxDependencyMap(
 
   const unsupportedIndexes = new Set<number>();
   const unsupportedFields = new Set<UnsupportedSpdxDependencyField>();
+  const unsupportedReasons = new Set<UnsupportedSpdxRelationshipReason>();
   for (const [index, relationship] of value.entries()) {
     if (
       isRecord(relationship)
@@ -260,6 +266,26 @@ function readSpdxDependencyMap(
       if (typeof relationship.relatedSpdxElement !== "string") {
         unsupportedIndexes.add(index);
         unsupportedFields.add("relatedSpdxElement");
+      }
+
+      if (unsupportedIndexes.has(index)) {
+        unsupportedReasons.add("unsupported_spdx_dependency_relationships");
+      }
+    }
+
+    if (isRecord(relationship) && relationship.relationshipType === "DESCRIBES") {
+      if (typeof relationship.spdxElementId !== "string") {
+        unsupportedIndexes.add(index);
+        unsupportedFields.add("spdxElementId");
+      }
+
+      if (typeof relationship.relatedSpdxElement !== "string") {
+        unsupportedIndexes.add(index);
+        unsupportedFields.add("relatedSpdxElement");
+      }
+
+      if (unsupportedIndexes.has(index)) {
+        unsupportedReasons.add("unsupported_spdx_describes_relationships");
       }
     }
 
@@ -283,6 +309,9 @@ function readSpdxDependencyMap(
 
   if (unsupportedIndexes.size > 0) {
     return err({
+      reason: unsupportedReasons.size === 1
+        ? [...unsupportedReasons][0]
+        : "unsupported_spdx_relationships",
       relationshipIndexes: [...unsupportedIndexes].sort((left, right) => left - right),
       unsupportedRelationshipFields: [...unsupportedFields].sort()
     });
@@ -439,19 +468,25 @@ function spdxShapeError(lockfilePath: string): Result<never, OhriskError> {
 function unsupportedSpdxDependencyError(
   lockfilePath: string,
   details: {
+    reason?: UnsupportedSpdxRelationshipReason;
     relationshipIndexes: number[];
     unsupportedRelationshipFields: UnsupportedSpdxDependencyField[];
   }
 ): Result<never, OhriskError> {
+  const {
+    reason = "unsupported_spdx_dependency_relationships",
+    ...structuredDetails
+  } = details;
+
   return err(
     createError({
       code: "SPDX_PARSE_FAILED",
       category: "unsupported_input",
-      message: "Failed to parse SPDX dependency relationships. Ohrisk supports array relationships with string SPDX dependency references.",
+      message: "Failed to parse SPDX relationships. Ohrisk supports array relationships with complete string SPDX references.",
       details: {
         lockfilePath,
-        reason: "unsupported_spdx_dependency_relationships",
-        ...details
+        reason,
+        ...structuredDetails
       }
     })
   );

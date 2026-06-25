@@ -229,4 +229,45 @@ describe("parseSpdxJsonText", () => {
       unsupportedRelationshipFields: ["relationships"]
     });
   });
+
+  test("reports malformed DESCRIBES relationships as unsupported input", () => {
+    const result = parseSpdxJsonText(JSON.stringify({
+      spdxVersion: "SPDX-2.3",
+      name: "fixture-spdx-malformed-describes",
+      packages: [
+        {
+          SPDXID: "SPDXRef-Package-parent",
+          name: "parent",
+          externalRefs: [
+            {
+              referenceCategory: "PACKAGE-MANAGER",
+              referenceType: "purl",
+              referenceLocator: "pkg:npm/parent@1.0.0"
+            }
+          ]
+        }
+      ],
+      relationships: [
+        {
+          spdxElementId: "SPDXRef-DOCUMENT",
+          relationshipType: "DESCRIBES",
+          relatedSpdxElement: { id: "SPDXRef-Package-parent" }
+        }
+      ]
+    }), "spdx.json");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected unsupported SPDX DESCRIBES relationship to fail.");
+    }
+
+    expect(result.error.code).toBe("SPDX_PARSE_FAILED");
+    expect(result.error.category).toBe("unsupported_input");
+    expect(result.error.details).toEqual({
+      lockfilePath: "spdx.json",
+      reason: "unsupported_spdx_describes_relationships",
+      relationshipIndexes: [0],
+      unsupportedRelationshipFields: ["relatedSpdxElement"]
+    });
+  });
 });
