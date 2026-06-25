@@ -200,6 +200,52 @@ describe("parseCycloneDxXmlText", () => {
       });
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const result = parseCycloneDxXmlText(`<?xml version="1.0" encoding="UTF-8"?>
+<bom xmlns="http://cyclonedx.org/schema/bom/1.5" version="1">
+  <metadata>
+    <component type="application" bom-ref="root-app">
+      <name>fixture-cyclonedx-xml-cycle</name>
+    </component>
+  </metadata>
+  <components>
+    <component type="library" bom-ref="parent">
+      <purl>pkg:npm/parent@1.0.0</purl>
+    </component>
+    <component type="library" bom-ref="child">
+      <purl>pkg:npm/child@2.0.0</purl>
+    </component>
+  </components>
+  <dependencies>
+    <dependency ref="root-app">
+      <dependency ref="parent" />
+    </dependency>
+    <dependency ref="parent">
+      <dependency ref="child" />
+    </dependency>
+    <dependency ref="child">
+      <dependency ref="parent" />
+    </dependency>
+  </dependencies>
+</bom>`, "cyclonedx.xml");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "parent@1.0.0"))
+      .toMatchObject({
+        direct: true,
+        paths: [["fixture-cyclonedx-xml-cycle", "parent@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "child@2.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [["fixture-cyclonedx-xml-cycle", "parent@1.0.0", "child@2.0.0"]]
+      });
+  });
+
   test("reports malformed XML as typed CycloneDX errors", () => {
     const result = parseCycloneDxXmlText("<bom><components></bom>", "cyclonedx.xml");
 
