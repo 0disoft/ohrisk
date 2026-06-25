@@ -60,6 +60,49 @@ describe("parsePnpmLockfile", () => {
     expect(result.error.code).toBe("PNPM_LOCK_PARSE_FAILED");
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const result = parsePnpmLockText(
+      [
+        "lockfileVersion: '9.0'",
+        "importers:",
+        "  .:",
+        "    dependencies:",
+        "      parent:",
+        "        specifier: 1.0.0",
+        "        version: 1.0.0",
+        "packages:",
+        "  /parent@1.0.0: {}",
+        "  /child@2.0.0: {}",
+        "snapshots:",
+        "  /parent@1.0.0:",
+        "    dependencies:",
+        "      child: 2.0.0",
+        "  /child@2.0.0:",
+        "    dependencies:",
+        "      parent: 1.0.0"
+      ].join("\n"),
+      "cycle-pnpm-lock.yaml"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "parent@1.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: true,
+        paths: [["<root>", "parent@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "child@2.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: false,
+        paths: [["<root>", "parent@1.0.0", "child@2.0.0"]]
+      });
+  });
+
   test("rejects oversized pnpm lockfiles before parsing", () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-pnpm-lock-size-"));
     const lockfilePath = path.join(projectRoot, "pnpm-lock.yaml");
