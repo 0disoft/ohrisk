@@ -206,7 +206,8 @@ git/path dependency, plugin lock, profile-specific test dependency, Rebar depend
 복원, 원격 Hex.pm artifact fetch는 아직 지원하지 않는다.
 Ruby는 Bundler `Gemfile.lock`의 gem dependency를 스캔하고, 로컬 Bundler/RubyGems
 install path의 gemspec license metadata와 license 파일을 evidence로 읽는다.
-아직 Gemfile group 기반 개발/프로덕션 구분은 지원하지 않는다.
+옆의 `Gemfile`에 literal `group ... do` block이 있으면 개발 의존성 구분에 사용한다.
+아직 Gemfile inline `group:` option은 지원하지 않는다.
 PHP는 Composer `composer.lock`의 production/development package dependency를
 스캔하고, 옆의 `composer.json`이 있으면 root dependency 구분에 사용한다.
 evidence는 로컬 `vendor/<vendor>/<package>/composer.json`과 license 파일에서

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
@@ -17,9 +18,18 @@ type GemRecord = {
   dependencies: string[];
 };
 
+type GemRootDependency = {
+  name: string;
+  type: DependencyType;
+};
+
+type GemfileBlockFrame = {
+  dependencyType?: DependencyType;
+};
+
 export function parseGemfileLockfile(
   lockfilePath: string,
-  options: { maxBytes?: number } = {}
+  options: { maxBytes?: number; gemfileMaxBytes?: number } = {}
 ): Result<DependencyGraph, OhriskError> {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -42,12 +52,23 @@ export function parseGemfileLockfile(
     );
   }
 
-  return parseGemfileLockText(lockfileText.value, lockfilePath);
+  const gemfileText = readOptionalGemfile({
+    lockfilePath,
+    maxBytes: options.gemfileMaxBytes ?? LOCKFILE_MAX_BYTES
+  });
+  if (!gemfileText.ok) {
+    return gemfileText;
+  }
+
+  return parseGemfileLockText(lockfileText.value, lockfilePath, {
+    gemfileText: gemfileText.value
+  });
 }
 
 export function parseGemfileLockText(
   input: string,
-  lockfilePath = "Gemfile.lock"
+  lockfilePath = "Gemfile.lock",
+  options: { gemfileText?: string } = {}
 ): Result<DependencyGraph, OhriskError> {
   try {
     const parsed = parseGemfileLockRecords(input);
@@ -65,20 +86,22 @@ export function parseGemfileLockText(
     }
 
     const rootName = path.basename(path.dirname(lockfilePath)) || "<ruby-project>";
-    const roots = parsed.dependencies.length > 0
-      ? parsed.dependencies
-      : inferGemRootNames(parsed.records);
+    const roots = readGemRootDependencies({
+      gemfileText: options.gemfileText,
+      lockfileDependencies: parsed.dependencies,
+      records: parsed.records
+    });
     const nodeMap = new Map<string, DependencyNode>();
 
     for (const root of roots) {
-      const record = resolveGemRecord(parsed.records, root);
+      const record = resolveGemRecord(parsed.records, root.name);
       if (!record) {
         continue;
       }
 
       walkGemDependency({
         record,
-        dependencyType: "production",
+        dependencyType: root.type,
         direct: true,
         path: [rootName],
         records: parsed.records,
@@ -105,6 +128,38 @@ export function parseGemfileLockText(
       })
     );
   }
+}
+
+function readOptionalGemfile(input: {
+  lockfilePath: string;
+  maxBytes: number;
+}): Result<string | undefined, OhriskError> {
+  const gemfilePath = path.join(path.dirname(input.lockfilePath), "Gemfile");
+  if (!existsSync(gemfilePath)) {
+    return ok(undefined);
+  }
+
+  const gemfileText = readInputTextFile({
+    filePath: gemfilePath,
+    maxBytes: input.maxBytes
+  });
+  if (!gemfileText.ok) {
+    return err(
+      createError({
+        code: "GEMFILE_LOCK_READ_FAILED",
+        category: inputFileReadErrorCategory(gemfileText.error),
+        message: gemfileText.error.kind === "too_large"
+          ? "Gemfile exceeded the maximum supported size."
+          : "Failed to read Gemfile.",
+        details: {
+          gemfilePath,
+          ...inputFileReadErrorDetails(gemfileText.error)
+        }
+      })
+    );
+  }
+
+  return ok(gemfileText.value);
 }
 
 function parseGemfileLockRecords(input: string): {
@@ -162,6 +217,129 @@ function parseGemfileLockRecords(input: string): {
   };
 }
 
+function readGemRootDependencies(input: {
+  gemfileText?: string;
+  lockfileDependencies: string[];
+  records: GemRecord[];
+}): GemRootDependency[] {
+  const fallbackNames = input.lockfileDependencies.length > 0
+    ? input.lockfileDependencies
+    : inferGemRootNames(input.records);
+  const fallbackRoots = fallbackNames.map((name) => ({
+    name,
+    type: "production" as const
+  }));
+  if (!input.gemfileText) {
+    return fallbackRoots;
+  }
+
+  const lockfileDependencyNames = new Set(fallbackNames);
+  const byName = new Map<string, GemRootDependency>();
+  for (const dependency of readGemfileDependencies(input.gemfileText)) {
+    if (!lockfileDependencyNames.has(dependency.name)) {
+      continue;
+    }
+
+    const existing = byName.get(dependency.name);
+    byName.set(dependency.name, {
+      name: dependency.name,
+      type: existing
+        ? mergeDependencyType(existing.type, dependency.type)
+        : dependency.type
+    });
+  }
+
+  return byName.size > 0
+    ? [...byName.values()].sort((left, right) => left.name.localeCompare(right.name))
+    : fallbackRoots;
+}
+
+function readGemfileDependencies(gemfileText: string): GemRootDependency[] {
+  const dependencies: GemRootDependency[] = [];
+  const blockStack: GemfileBlockFrame[] = [];
+
+  for (const rawLine of gemfileText.split(/\r?\n/)) {
+    const line = stripRubyComment(rawLine).trim();
+    if (line === "") {
+      continue;
+    }
+
+    const groupType = readGemfileGroupType(line);
+    if (groupType) {
+      blockStack.push({ dependencyType: groupType });
+      continue;
+    }
+
+    if (line === "end" && blockStack.length > 0) {
+      blockStack.pop();
+      continue;
+    }
+
+    const name = readGemfileGemName(line);
+    if (name) {
+      dependencies.push({
+        name,
+        type: blockStack.some((block) => block.dependencyType === "development")
+          ? "development"
+          : "production"
+      });
+    }
+
+    if (blockStack.length > 0 && isRubyBlockStart(line)) {
+      blockStack.push({});
+    }
+  }
+
+  return dependencies;
+}
+
+function readGemfileGroupType(line: string): DependencyType | undefined {
+  const match = /^group\s+(.+)\s+do$/.exec(line);
+  if (!match?.[1]) {
+    return undefined;
+  }
+
+  return /:(?:development|test)\b/.test(match[1]) ? "development" : "production";
+}
+
+function readGemfileGemName(line: string): string | undefined {
+  const match = /^gem\s+["']([^"']+)["']/.exec(line);
+  return match?.[1];
+}
+
+function isRubyBlockStart(line: string): boolean {
+  return /\bdo(?:\s*\|[^|]*\|)?\s*$/.test(line);
+}
+
+function stripRubyComment(line: string): string {
+  let quote: "\"" | "'" | undefined;
+  let escaped = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\" && quote) {
+      escaped = true;
+      continue;
+    }
+
+    if ((char === "\"" || char === "'") && (!quote || quote === char)) {
+      quote = quote ? undefined : char;
+      continue;
+    }
+
+    if (char === "#" && !quote) {
+      return line.slice(0, index);
+    }
+  }
+
+  return line;
+}
+
 function deduplicateGemRecords(records: GemRecord[]): GemRecord[] {
   const seen = new Map<string, GemRecord>();
   for (const record of records) {
@@ -211,6 +389,7 @@ function walkGemDependency(input: {
 
   if (existing) {
     existing.direct = existing.direct || input.direct;
+    existing.dependencyType = mergeDependencyType(existing.dependencyType, input.dependencyType);
     existing.paths.push(nextPath);
   } else {
     input.nodeMap.set(input.record.id, {
@@ -245,4 +424,16 @@ function walkGemDependency(input: {
 function resolveGemRecord(records: GemRecord[], name: string): GemRecord | undefined {
   const matches = records.filter((record) => record.name === name);
   return matches.length === 1 ? matches[0] : undefined;
+}
+
+function mergeDependencyType(left: DependencyType, right: DependencyType): DependencyType {
+  if (left === "production" || right === "production") {
+    return "production";
+  }
+
+  if (left === "development" || right === "development") {
+    return "development";
+  }
+
+  return left;
 }

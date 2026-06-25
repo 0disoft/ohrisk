@@ -200,7 +200,7 @@ vcpkg feature/platform selection reconstruction, remote vcpkg registry metadata 
 Carthage parent graph reconstruction, remote Swift package checkout fetching,
 Carthage remote checkout or binary framework license fetching, CocoaPods remote podspec or source
 fetching, Mix and Rebar3 dependency graph reconstruction, Rebar3 git/path deps, Rebar3 plugin locks, remote Hex.pm artifact fetching, Ruby
-Gemfile group classification, Composer plugin/platform repository resolution, remote
+Gemfile inline group options, Composer plugin/platform repository resolution, remote
 crates.io, Go proxy, PyPI, Maven, NuGet, pub.dev, RubyGems, or Packagist artifact
 fetching are not part of this slice yet.
 
@@ -277,7 +277,7 @@ Supported dependency input files:
 - Carthage `Cartfile.resolved` package pins, using local `Carthage/Checkouts` package source for evidence
 - CocoaPods `Podfile.lock` pod entries, using local `Pods/` source and `Pods/Local Podspecs` metadata for evidence
 - Elixir Mix `mix.lock` and Erlang Rebar3 `rebar.lock` Hex package pins, using local `deps/` package source and `mix.exs` or `rebar.config` metadata for evidence
-- Ruby Bundler `Gemfile.lock` gem entries, using local Bundler/RubyGems gemspec metadata for evidence
+- Ruby Bundler `Gemfile.lock` gem entries, using literal companion `Gemfile` group blocks for development classification and local Bundler/RubyGems gemspec metadata for evidence
 - PHP Composer `composer.lock` package entries, using adjacent `composer.json` root dependencies when available and local `vendor/` package metadata for evidence
 - CycloneDX JSON/XML SBOM package entries with Package URL identities, dependency relationships, and embedded license evidence
 - SPDX JSON/RDF and tag-value SBOM package entries with Package URL external refs, dependency relationships, and embedded license evidence
