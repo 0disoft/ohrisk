@@ -42,7 +42,13 @@ describe("parseRebarLockText", () => {
   });
 
   test("reports lockfiles without Hex pkg entries as typed errors", () => {
-    const result = parseRebarLockText('{"1.2.3",[{<<"git_dep">>,{git,"https://example.invalid/git_dep.git",{ref,"abc"}},0}]}.');
+    const result = parseRebarLockText([
+      '{"1.2.3",',
+      "[",
+      ' {<<"git_dep">>,{git,"https://example.invalid/git_dep.git",{ref,"abc"}},0},',
+      ' {path_dep,{path,"../path_dep"},0}',
+      "]}.",
+    ].join("\n"));
 
     expect(result.ok).toBe(false);
     if (result.ok) {
@@ -51,7 +57,10 @@ describe("parseRebarLockText", () => {
 
     expect(result.error.code).toBe("REBAR_LOCK_PARSE_FAILED");
     expect(result.error.details).toEqual({
-      lockfilePath: "rebar.lock"
+      lockfilePath: "rebar.lock",
+      reason: "unsupported_rebar_dependency_entries",
+      unsupportedDependencyTypes: ["git", "path"],
+      unsupportedDependencyNames: ["git_dep", "path_dep"]
     });
   });
 });

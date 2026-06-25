@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.158.1 - 2026-06-25
+
+### Fixed
+
+- Erlang Rebar3 `rebar.lock` files that contain only unsupported git or path
+  dependency entries now report structured unsupported dependency details.
+
 ## 0.158.0 - 2026-06-25
 
 ### Added

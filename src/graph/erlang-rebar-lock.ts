@@ -17,6 +17,11 @@ type RebarHexRecord = {
   depth: number | undefined;
 };
 
+type UnsupportedRebarDependency = {
+  name: string;
+  type: "git" | "path";
+};
+
 export function parseRebarLockfile(
   lockfilePath: string,
   options: { maxBytes?: number } = {}
@@ -51,13 +56,27 @@ export function parseRebarLockText(
 ): Result<DependencyGraph, OhriskError> {
   const records = readRebarHexRecords(input);
   if (records.length === 0) {
+    const unsupportedDependencies = readUnsupportedRebarDependencies(input);
     return err(
       createError({
         code: "REBAR_LOCK_PARSE_FAILED",
         category: "unsupported_input",
-        message: "Failed to parse rebar.lock. Ohrisk expected at least one Hex pkg entry.",
+        message: unsupportedDependencies.length > 0
+          ? "Failed to parse rebar.lock. Ohrisk does not support Rebar3 git or path dependency entries yet."
+          : "Failed to parse rebar.lock. Ohrisk expected at least one Hex pkg entry.",
         details: {
-          lockfilePath
+          lockfilePath,
+          ...(unsupportedDependencies.length > 0
+            ? {
+                reason: "unsupported_rebar_dependency_entries",
+                unsupportedDependencyTypes: uniqueSorted(
+                  unsupportedDependencies.map((dependency) => dependency.type)
+                ),
+                unsupportedDependencyNames: uniqueSorted(
+                  unsupportedDependencies.map((dependency) => dependency.name)
+                )
+              }
+            : {})
         }
       })
     );
@@ -117,6 +136,30 @@ function readRebarHexRecords(input: string): RebarHexRecord[] {
   return [...records.values()];
 }
 
+function readUnsupportedRebarDependencies(input: string): UnsupportedRebarDependency[] {
+  const dependencies = new Map<string, UnsupportedRebarDependency>();
+  const entryPattern = new RegExp([
+    "\\{\\s*",
+    erlangNamePattern(),
+    "\\s*,\\s*\\{\\s*",
+    "(git|path)\\b"
+  ].join(""), "g");
+
+  for (const match of input.matchAll(entryPattern)) {
+    const name = firstDefined(match[1], match[2], match[3]);
+    const type = match[4];
+    if (!name || (type !== "git" && type !== "path")) {
+      continue;
+    }
+
+    dependencies.set(`${type}:${name}`, { name, type });
+  }
+
+  return [...dependencies.values()].sort((left, right) =>
+    left.type.localeCompare(right.type) || left.name.localeCompare(right.name)
+  );
+}
+
 function erlangNamePattern(): string {
   return `(?:${[
     "<<\"([^\"]+)\">>",
@@ -144,4 +187,8 @@ function parseDepth(value: string | undefined): number | undefined {
 
 function firstDefined(...values: Array<string | undefined>): string | undefined {
   return values.find((value) => value !== undefined && value.trim() !== "")?.trim();
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values)].sort();
 }
