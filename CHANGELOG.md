@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.158.9 - 2026-06-25
+
+### Fixed
+
+- CycloneDX XML SBOMs with missing dependency `ref` values now report
+  structured unsupported dependency details instead of silently dropping edges.
+
 ## 0.158.8 - 2026-06-25
 
 ### Fixed

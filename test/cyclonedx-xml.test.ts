@@ -175,4 +175,37 @@ describe("parseCycloneDxXmlText", () => {
 
     expect(result.error.code).toBe("CYCLONEDX_PARSE_FAILED");
   });
+
+  test("reports dependency entries with missing refs as unsupported input", () => {
+    const result = parseCycloneDxXmlText(`<?xml version="1.0" encoding="UTF-8"?>
+<bom xmlns="http://cyclonedx.org/schema/bom/1.5" version="1">
+  <components>
+    <component type="library" bom-ref="parent">
+      <purl>pkg:npm/parent@1.0.0</purl>
+    </component>
+    <component type="library" bom-ref="child">
+      <purl>pkg:npm/child@2.0.0</purl>
+    </component>
+  </components>
+  <dependencies>
+    <dependency ref="parent">
+      <dependency />
+    </dependency>
+  </dependencies>
+</bom>`, "cyclonedx.xml");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected unsupported CycloneDX XML dependency entry to fail.");
+    }
+
+    expect(result.error.code).toBe("CYCLONEDX_PARSE_FAILED");
+    expect(result.error.category).toBe("unsupported_input");
+    expect(result.error.details).toEqual({
+      lockfilePath: "cyclonedx.xml",
+      reason: "unsupported_cyclonedx_xml_dependency_refs",
+      dependencyEntryIndexes: [0],
+      unsupportedDependencyFields: ["dependsOn.ref"]
+    });
+  });
 });

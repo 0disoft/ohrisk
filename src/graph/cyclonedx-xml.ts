@@ -10,6 +10,8 @@ import {
 import type { DependencyGraph } from "./types";
 import { childNodes, childText, firstChild, parseXmlDocument, type XmlNode } from "./xml";
 
+type UnsupportedCycloneDxXmlDependencyField = "ref" | "dependsOn.ref";
+
 export function parseCycloneDxXmlFile(
   lockfilePath: string,
   options: { maxBytes?: number } = {}
@@ -63,10 +65,15 @@ function cycloneDxXmlToDocument(
     return cycloneDxXmlParseError(lockfilePath, "CycloneDX XML input must use a <bom> root element.");
   }
 
+  const dependencies = readCycloneDxXmlDependencies(firstChild(root, "dependencies"), lockfilePath);
+  if (!dependencies.ok) {
+    return dependencies;
+  }
+
   const document: Record<string, unknown> = {
     bomFormat: "CycloneDX",
     components: readCycloneDxXmlComponents(firstChild(root, "components")),
-    dependencies: readCycloneDxXmlDependencies(firstChild(root, "dependencies"))
+    dependencies: dependencies.value
   };
   const metadata = readCycloneDxXmlMetadata(firstChild(root, "metadata"));
   if (metadata) {
@@ -164,15 +171,44 @@ function readCycloneDxXmlProperties(node: XmlNode | undefined): Record<string, s
     .filter((property) => property.name !== "" && property.value !== "");
 }
 
-function readCycloneDxXmlDependencies(node: XmlNode | undefined): Record<string, unknown>[] {
-  return childNodes(node, "dependency")
-    .map((dependency) => ({
-      ref: dependency.attributes.ref ?? "",
-      dependsOn: childNodes(dependency, "dependency")
-        .map((child) => child.attributes.ref ?? childText(child, "ref") ?? child.text.trim())
-        .filter((ref) => ref !== "")
-    }))
-    .filter((dependency) => dependency.ref !== "");
+function readCycloneDxXmlDependencies(
+  node: XmlNode | undefined,
+  lockfilePath: string
+): Result<Record<string, unknown>[], OhriskError> {
+  const dependencies: Record<string, unknown>[] = [];
+  const unsupportedEntryIndexes = new Set<number>();
+  const unsupportedFields = new Set<UnsupportedCycloneDxXmlDependencyField>();
+
+  for (const [index, dependency] of childNodes(node, "dependency").entries()) {
+    const ref = dependency.attributes.ref ?? "";
+    const dependsOn: string[] = [];
+    if (ref === "") {
+      unsupportedEntryIndexes.add(index);
+      unsupportedFields.add("ref");
+    }
+
+    for (const child of childNodes(dependency, "dependency")) {
+      const childRef = child.attributes.ref ?? childText(child, "ref") ?? child.text.trim();
+      if (childRef === "") {
+        unsupportedEntryIndexes.add(index);
+        unsupportedFields.add("dependsOn.ref");
+        continue;
+      }
+
+      dependsOn.push(childRef);
+    }
+
+    dependencies.push({ ref, dependsOn });
+  }
+
+  if (unsupportedEntryIndexes.size > 0) {
+    return unsupportedCycloneDxXmlDependencyError(lockfilePath, {
+      dependencyEntryIndexes: [...unsupportedEntryIndexes].sort((left, right) => left - right),
+      unsupportedDependencyFields: [...unsupportedFields].sort()
+    });
+  }
+
+  return ok(dependencies);
 }
 
 function copyStringAttribute(
@@ -209,6 +245,27 @@ function cycloneDxXmlParseError(
       details: {
         lockfilePath,
         cause
+      }
+    })
+  );
+}
+
+function unsupportedCycloneDxXmlDependencyError(
+  lockfilePath: string,
+  details: {
+    dependencyEntryIndexes: number[];
+    unsupportedDependencyFields: UnsupportedCycloneDxXmlDependencyField[];
+  }
+): Result<never, OhriskError> {
+  return err(
+    createError({
+      code: "CYCLONEDX_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse CycloneDX XML dependency entries. Ohrisk supports non-empty dependency ref attributes.",
+      details: {
+        lockfilePath,
+        reason: "unsupported_cyclonedx_xml_dependency_refs",
+        ...details
       }
     })
   );
