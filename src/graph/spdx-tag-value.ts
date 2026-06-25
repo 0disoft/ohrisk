@@ -38,6 +38,10 @@ type SpdxTagValueRelationship = {
 };
 
 type UnsupportedSpdxTagValueRelationshipField = "spdxElementId" | "relatedSpdxElement";
+type UnsupportedSpdxTagValueRelationshipType = "DEPENDS_ON" | "DEPENDENCY_OF" | "DESCRIBES";
+type UnsupportedSpdxTagValueRelationshipReason =
+  | "unsupported_spdx_dependency_relationships"
+  | "unsupported_spdx_describes_relationships";
 
 export function parseSpdxTagValueFile(
   lockfilePath: string,
@@ -221,11 +225,14 @@ function readRelationship(input: {
 }): Result<SpdxTagValueRelationship | undefined, OhriskError> {
   const parts = input.value.split(/\s+/).filter((part) => part !== "");
   const relationshipType = parts[1];
-  if (isSpdxDependencyRelationshipType(relationshipType) && parts.length < 3) {
+  if (isSupportedSpdxRelationshipType(relationshipType) && parts.length < 3) {
     return unsupportedSpdxTagValueRelationshipError({
       lockfilePath: input.lockfilePath,
       line: input.line,
       relationshipType,
+      reason: relationshipType === "DESCRIBES"
+        ? "unsupported_spdx_describes_relationships"
+        : "unsupported_spdx_dependency_relationships",
       unsupportedRelationshipFields: ["relatedSpdxElement"]
     });
   }
@@ -264,21 +271,32 @@ function isSpdxDependencyRelationshipType(
   return value === "DEPENDS_ON" || value === "DEPENDENCY_OF";
 }
 
+function isSupportedSpdxRelationshipType(
+  value: string | undefined
+): value is UnsupportedSpdxTagValueRelationshipType {
+  return isSpdxDependencyRelationshipType(value) || value === "DESCRIBES";
+}
+
 function unsupportedSpdxTagValueRelationshipError(input: {
   lockfilePath: string;
   line: number;
-  relationshipType: "DEPENDS_ON" | "DEPENDENCY_OF";
+  relationshipType: UnsupportedSpdxTagValueRelationshipType;
+  reason: UnsupportedSpdxTagValueRelationshipReason;
   unsupportedRelationshipFields: UnsupportedSpdxTagValueRelationshipField[];
 }): Result<never, OhriskError> {
+  const relationshipLabel = input.reason === "unsupported_spdx_describes_relationships"
+    ? "DESCRIBES relationship"
+    : "dependency relationship";
+
   return err(
     createError({
       code: "SPDX_PARSE_FAILED",
       category: "unsupported_input",
-      message: "Failed to parse SPDX tag-value dependency relationship. Ohrisk supports complete SPDX dependency relationship references.",
+      message: `Failed to parse SPDX tag-value ${relationshipLabel}. Ohrisk supports complete SPDX relationship references.`,
       details: {
         lockfilePath: input.lockfilePath,
         line: input.line,
-        reason: "unsupported_spdx_dependency_relationships",
+        reason: input.reason,
         relationshipType: input.relationshipType,
         unsupportedRelationshipFields: input.unsupportedRelationshipFields
       }

@@ -161,4 +161,33 @@ Relationship: SPDXRef-Package-parent DEPENDS_ON
       unsupportedRelationshipFields: ["relatedSpdxElement"]
     });
   });
+
+  test("reports malformed DESCRIBES relationships as unsupported input", () => {
+    const result = parseSpdxTagValueText(`
+SPDXVersion: SPDX-2.3
+DocumentName: fixture-malformed-describes
+
+PackageName: parent
+SPDXID: SPDXRef-Package-parent
+PackageLicenseDeclared: MIT
+ExternalRef: PACKAGE-MANAGER purl pkg:npm/parent@1.0.0
+
+Relationship: SPDXRef-DOCUMENT DESCRIBES
+`, "sbom.spdx");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected unsupported SPDX tag-value DESCRIBES relationship to fail.");
+    }
+
+    expect(result.error.code).toBe("SPDX_PARSE_FAILED");
+    expect(result.error.category).toBe("unsupported_input");
+    expect(result.error.details).toEqual({
+      lockfilePath: "sbom.spdx",
+      line: 10,
+      reason: "unsupported_spdx_describes_relationships",
+      relationshipType: "DESCRIBES",
+      unsupportedRelationshipFields: ["relatedSpdxElement"]
+    });
+  });
 });

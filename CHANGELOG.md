@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.158.15 - 2026-06-25
+
+### Fixed
+
+- SPDX tag-value SBOMs with malformed `DESCRIBES` relationships now report
+  structured unsupported relationship details instead of silently changing root
+  inference.
+
 ## 0.158.14 - 2026-06-25
 
 ### Fixed
