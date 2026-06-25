@@ -186,6 +186,61 @@ describe("parseCycloneDxJsonText", () => {
       });
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const result = parseCycloneDxJsonText(JSON.stringify({
+      bomFormat: "CycloneDX",
+      specVersion: "1.5",
+      metadata: {
+        component: {
+          name: "fixture-cyclonedx-cycle",
+          "bom-ref": "root-app"
+        }
+      },
+      components: [
+        {
+          type: "library",
+          "bom-ref": "parent",
+          purl: "pkg:npm/parent@1.0.0"
+        },
+        {
+          type: "library",
+          "bom-ref": "child",
+          purl: "pkg:npm/child@2.0.0"
+        }
+      ],
+      dependencies: [
+        {
+          ref: "root-app",
+          dependsOn: ["parent"]
+        },
+        {
+          ref: "parent",
+          dependsOn: ["child"]
+        },
+        {
+          ref: "child",
+          dependsOn: ["parent"]
+        }
+      ]
+    }), "cyclonedx.json");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "parent@1.0.0"))
+      .toMatchObject({
+        direct: true,
+        paths: [["fixture-cyclonedx-cycle", "parent@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "child@2.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [["fixture-cyclonedx-cycle", "parent@1.0.0", "child@2.0.0"]]
+      });
+  });
+
   test("reports malformed documents as typed CycloneDX errors", () => {
     const result = parseCycloneDxJsonText(JSON.stringify({
       bomFormat: "CycloneDX",
