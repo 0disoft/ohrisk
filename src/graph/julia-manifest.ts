@@ -19,6 +19,8 @@ type JuliaManifestRecord = {
   resolved?: string;
 };
 
+type UnsupportedJuliaDependencyValueKind = "boolean" | "number" | "table" | "array" | "expression";
+
 export function parseJuliaManifestFile(
   lockfilePath: string,
   options: { maxBytes?: number; projectMaxBytes?: number } = {}
@@ -177,7 +179,12 @@ function readJuliaManifestRecords(
     if (key === "version") {
       current.version = parseTomlString(value);
     } else if (key === "deps") {
-      current.dependencies = parseTomlStringArray(value);
+      const dependencies = parseTomlStringArrayStrict(value);
+      if (!dependencies.ok) {
+        return unsupportedJuliaDependencyError(lockfilePath, current.name, dependencies.error);
+      }
+
+      current.dependencies = dependencies.value;
     } else if (key === "git-tree-sha1" || key === "repo-rev") {
       current.resolved = parseTomlString(value);
     }
@@ -367,14 +374,50 @@ function parseTomlString(value: string): string | undefined {
 }
 
 function parseTomlStringArray(value: string): string[] {
+  const parsed = parseTomlStringArrayStrict(value);
+  return parsed.ok ? parsed.value : [];
+}
+
+function parseTomlStringArrayStrict(
+  value: string
+): Result<string[], UnsupportedJuliaDependencyValueKind[]> {
   const trimmed = value.trim();
   if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
-    return [];
+    return ok([]);
   }
 
-  return [...trimmed.matchAll(/"((?:\\"|[^"])*)"/g)]
-    .map((match) => match[1]?.replace(/\\"/g, "\""))
-    .filter((item): item is string => item !== undefined && item.trim() !== "");
+  const stringPattern = /"((?:\\"|[^"])*)"/g;
+  const unsupportedKinds = readUnsupportedTomlArrayKinds(
+    trimmed.slice(1, -1).replace(stringPattern, "")
+  );
+  if (unsupportedKinds.length > 0) {
+    return err(unsupportedKinds);
+  }
+
+  return ok(
+    [...trimmed.matchAll(stringPattern)]
+      .map((match) => match[1]?.replace(/\\"/g, "\""))
+      .filter((item): item is string => item !== undefined && item.trim() !== "")
+  );
+}
+
+function readUnsupportedTomlArrayKinds(input: string): UnsupportedJuliaDependencyValueKind[] {
+  const kinds = new Set<UnsupportedJuliaDependencyValueKind>();
+  for (const token of input.split(",").map((item) => item.trim()).filter((item) => item !== "")) {
+    if (token.startsWith("{")) {
+      kinds.add("table");
+    } else if (token.startsWith("[")) {
+      kinds.add("array");
+    } else if (token === "true" || token === "false") {
+      kinds.add("boolean");
+    } else if (/^[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?$/.test(token)) {
+      kinds.add("number");
+    } else {
+      kinds.add("expression");
+    }
+  }
+
+  return [...kinds].sort();
 }
 
 function stripTomlComment(line: string): string {
@@ -415,4 +458,24 @@ function mergeDependencyType(left: DependencyType, right: DependencyType): Depen
   }
 
   return left;
+}
+
+function unsupportedJuliaDependencyError(
+  lockfilePath: string,
+  packageName: string,
+  valueKinds: UnsupportedJuliaDependencyValueKind[]
+): Result<never, OhriskError> {
+  return err(
+    createError({
+      code: "JULIA_MANIFEST_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse Manifest.toml. Ohrisk supports literal string dependency names.",
+      details: {
+        lockfilePath,
+        packageName,
+        reason: "unsupported_julia_dependency_entries",
+        unsupportedDependencyValueKinds: valueKinds
+      }
+    })
+  );
 }

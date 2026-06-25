@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.158.4 - 2026-06-25
+
+### Fixed
+
+- Julia `Manifest.toml` files with non-string dependency entries now report
+  structured unsupported dependency details instead of silently dropping edges.
+
 ## 0.158.3 - 2026-06-25
 
 ### Fixed

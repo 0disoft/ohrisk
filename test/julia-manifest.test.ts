@@ -67,6 +67,33 @@ describe("parseJuliaManifestText", () => {
     expect(result.error.code).toBe("JULIA_MANIFEST_PARSE_FAILED");
   });
 
+  test("reports non-string dependency entries as unsupported input", () => {
+    const result = parseJuliaManifestText([
+      "[[deps.RiskJulia]]",
+      "deps = [\"TransitiveJulia\", true, { name = \"HiddenJulia\" }]",
+      "uuid = \"11111111-1111-1111-1111-111111111111\"",
+      "version = \"1.2.3\"",
+      "",
+      "[[deps.TransitiveJulia]]",
+      "deps = []",
+      "uuid = \"22222222-2222-2222-2222-222222222222\"",
+      "version = \"0.2.0\""
+    ].join("\n"));
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected parse failure");
+    }
+
+    expect(result.error.code).toBe("JULIA_MANIFEST_PARSE_FAILED");
+    expect(result.error.details).toEqual({
+      lockfilePath: "Manifest.toml",
+      packageName: "RiskJulia",
+      reason: "unsupported_julia_dependency_entries",
+      unsupportedDependencyValueKinds: ["boolean", "table"]
+    });
+  });
+
   test("uses Project.toml deps and test extras for dependency classification", () => {
     const result = parseJuliaManifestText([
       "julia_version = \"1.10.4\"",
