@@ -135,6 +135,49 @@ describe("parseDenoLockfile", () => {
     });
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const result = parseDenoLockText(
+      JSON.stringify({
+        version: "4",
+        specifiers: {
+          "npm:parent@1.0.0": "1.0.0"
+        },
+        npm: {
+          "parent@1.0.0": {
+            dependencies: {
+              child: "2.0.0"
+            }
+          },
+          "child@2.0.0": {
+            dependencies: {
+              parent: "1.0.0"
+            }
+          }
+        },
+        workspace: {
+          dependencies: ["npm:parent@1.0.0"]
+        }
+      }),
+      path.join("fixtures", "deno-cycle-project", "deno.lock")
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "parent@1.0.0")).toMatchObject({
+      dependencyType: "production",
+      direct: true,
+      paths: [["deno-cycle-project", "parent@1.0.0"]]
+    });
+    expect(result.value.nodes.find((node) => node.id === "child@2.0.0")).toMatchObject({
+      dependencyType: "production",
+      direct: false,
+      paths: [["deno-cycle-project", "parent@1.0.0", "child@2.0.0"]]
+    });
+  });
+
   test("does not guess when a Deno object-form dependency range has multiple matching records", () => {
     const result = parseDenoLockText(
       JSON.stringify({
