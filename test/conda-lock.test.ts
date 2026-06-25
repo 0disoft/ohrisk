@@ -78,6 +78,71 @@ describe("parseCondaLockText", () => {
     ]);
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const result = parseCondaLockText([
+      "version: 1",
+      "metadata:",
+      "  sources:",
+      "    - environment.yml",
+      "package:",
+      "  - name: root-conda",
+      "    version: '1.0.0'",
+      "    manager: conda",
+      "    platform: linux-64",
+      "    dependencies:",
+      "      parent-conda: '>=2.0.0'",
+      "    category: main",
+      "  - name: parent-conda",
+      "    version: '2.0.0'",
+      "    manager: conda",
+      "    platform: linux-64",
+      "    dependencies:",
+      "      child-conda: '>=3.0.0'",
+      "    category: main",
+      "  - name: child-conda",
+      "    version: '3.0.0'",
+      "    manager: conda",
+      "    platform: linux-64",
+      "    dependencies:",
+      "      parent-conda: '>=2.0.0'",
+      "    category: main"
+    ].join("\n"), "fixtures/conda-lock-cycle.yml");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "conda:root-conda@1.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: true,
+        paths: [["environment:linux-64", "conda:root-conda@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "conda:parent-conda@2.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: false
+      });
+    expect(result.value.nodes.find((node) => node.id === "conda:parent-conda@2.0.0")?.paths)
+      .toContainEqual([
+        "environment:linux-64",
+        "conda:root-conda@1.0.0",
+        "conda:parent-conda@2.0.0"
+      ]);
+    expect(result.value.nodes.find((node) => node.id === "conda:child-conda@3.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: false,
+        paths: [[
+          "environment:linux-64",
+          "conda:root-conda@1.0.0",
+          "conda:parent-conda@2.0.0",
+          "conda:child-conda@3.0.0"
+        ]]
+      });
+  });
+
   test("reports malformed package records as typed errors", () => {
     const result = parseCondaLockText([
       "version: 1",
