@@ -114,6 +114,77 @@ describe("parseSpdxJsonText", () => {
     expect(evidence).not.toHaveProperty("metadataLicense");
   });
 
+  test("merges duplicate dependency relationships without dropping child edges", () => {
+    const result = parseSpdxJsonText(JSON.stringify({
+      spdxVersion: "SPDX-2.3",
+      name: "fixture-spdx-duplicate-relationships",
+      documentDescribes: ["SPDXRef-Package-parent"],
+      packages: [
+        {
+          SPDXID: "SPDXRef-Package-parent",
+          name: "parent",
+          externalRefs: [
+            {
+              referenceCategory: "PACKAGE-MANAGER",
+              referenceType: "purl",
+              referenceLocator: "pkg:npm/parent@1.0.0"
+            }
+          ]
+        },
+        {
+          SPDXID: "SPDXRef-Package-child-a",
+          name: "child-a",
+          externalRefs: [
+            {
+              referenceCategory: "PACKAGE-MANAGER",
+              referenceType: "purl",
+              referenceLocator: "pkg:npm/child-a@2.0.0"
+            }
+          ]
+        },
+        {
+          SPDXID: "SPDXRef-Package-child-b",
+          name: "child-b",
+          externalRefs: [
+            {
+              referenceCategory: "PACKAGE-MANAGER",
+              referenceType: "purl",
+              referenceLocator: "pkg:npm/child-b@3.0.0"
+            }
+          ]
+        }
+      ],
+      relationships: [
+        {
+          spdxElementId: "SPDXRef-Package-parent",
+          relationshipType: "DEPENDS_ON",
+          relatedSpdxElement: "SPDXRef-Package-child-a"
+        },
+        {
+          spdxElementId: "SPDXRef-Package-parent",
+          relationshipType: "DEPENDS_ON",
+          relatedSpdxElement: "SPDXRef-Package-child-b"
+        }
+      ]
+    }), "spdx.json");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "child-a@2.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [["fixture-spdx-duplicate-relationships", "parent@1.0.0", "child-a@2.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "child-b@3.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [["fixture-spdx-duplicate-relationships", "parent@1.0.0", "child-b@3.0.0"]]
+      });
+  });
+
   test("reports documents without package PURLs as typed SPDX errors", () => {
     const result = parseSpdxJsonText(JSON.stringify({
       spdxVersion: "SPDX-2.3",
