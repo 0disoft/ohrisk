@@ -185,6 +185,66 @@ describe("parseSpdxJsonText", () => {
       });
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const result = parseSpdxJsonText(JSON.stringify({
+      spdxVersion: "SPDX-2.3",
+      name: "fixture-spdx-cycle",
+      documentDescribes: ["SPDXRef-Package-parent"],
+      packages: [
+        {
+          SPDXID: "SPDXRef-Package-parent",
+          name: "parent",
+          externalRefs: [
+            {
+              referenceCategory: "PACKAGE-MANAGER",
+              referenceType: "purl",
+              referenceLocator: "pkg:npm/parent@1.0.0"
+            }
+          ]
+        },
+        {
+          SPDXID: "SPDXRef-Package-child",
+          name: "child",
+          externalRefs: [
+            {
+              referenceCategory: "PACKAGE-MANAGER",
+              referenceType: "purl",
+              referenceLocator: "pkg:npm/child@2.0.0"
+            }
+          ]
+        }
+      ],
+      relationships: [
+        {
+          spdxElementId: "SPDXRef-Package-parent",
+          relationshipType: "DEPENDS_ON",
+          relatedSpdxElement: "SPDXRef-Package-child"
+        },
+        {
+          spdxElementId: "SPDXRef-Package-child",
+          relationshipType: "DEPENDS_ON",
+          relatedSpdxElement: "SPDXRef-Package-parent"
+        }
+      ]
+    }), "spdx.json");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "parent@1.0.0"))
+      .toMatchObject({
+        direct: true,
+        paths: [["fixture-spdx-cycle", "parent@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "child@2.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [["fixture-spdx-cycle", "parent@1.0.0", "child@2.0.0"]]
+      });
+  });
+
   test("reports documents without package PURLs as typed SPDX errors", () => {
     const result = parseSpdxJsonText(JSON.stringify({
       spdxVersion: "SPDX-2.3",
