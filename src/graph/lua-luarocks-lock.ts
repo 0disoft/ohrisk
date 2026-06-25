@@ -16,6 +16,11 @@ type LuarocksRecord = {
   version: string;
 };
 
+type UnsupportedLuarocksDependency = {
+  name: string;
+  valueKind: "table" | "boolean" | "number" | "expression";
+};
+
 export function parseLuarocksLockfile(
   lockfilePath: string,
   options: { maxBytes?: number } = {}
@@ -51,6 +56,11 @@ export function parseLuarocksLockText(
   const dependencyTable = extractDependencyTable(input);
   if (dependencyTable === undefined) {
     return luarocksLockShapeError(lockfilePath, "missing_dependencies_table");
+  }
+
+  const unsupportedDependencies = readUnsupportedLuarocksDependencies(dependencyTable);
+  if (unsupportedDependencies.length > 0) {
+    return unsupportedLuarocksDependencyError(lockfilePath, unsupportedDependencies);
   }
 
   const records = readLuarocksRecords(dependencyTable);
@@ -140,6 +150,52 @@ function readLuarocksRecords(input: string): LuarocksRecord[] {
   return [...records.values()];
 }
 
+function readUnsupportedLuarocksDependencies(input: string): UnsupportedLuarocksDependency[] {
+  const dependencies = new Map<string, UnsupportedLuarocksDependency>();
+  const entryPattern = new RegExp([
+    "(?:\\[\\s*([\"'])((?:\\\\.|(?!\\1).)+)\\1\\s*\\]|([A-Za-z_][A-Za-z0-9_]*))",
+    "\\s*=\\s*",
+    "([^\\s,}]+)"
+  ].join(""), "g");
+
+  for (const match of input.matchAll(entryPattern)) {
+    const name = unescapeLuaString(match[2] ?? match[3] ?? "");
+    const valueStart = match[4]?.trim() ?? "";
+    if (
+      !isLuarocksPackageName(name)
+      || valueStart === ""
+      || valueStart.startsWith("\"")
+      || valueStart.startsWith("'")
+    ) {
+      continue;
+    }
+
+    dependencies.set(name, {
+      name,
+      valueKind: classifyUnsupportedLuarocksValue(valueStart)
+    });
+  }
+
+  return [...dependencies.values()]
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function classifyUnsupportedLuarocksValue(
+  valueStart: string
+): UnsupportedLuarocksDependency["valueKind"] {
+  if (valueStart.startsWith("{")) {
+    return "table";
+  }
+
+  if (valueStart === "true" || valueStart === "false") {
+    return "boolean";
+  }
+
+  return /^-?\d+(?:\.\d+)?$/.test(valueStart)
+    ? "number"
+    : "expression";
+}
+
 function unescapeLuaString(input: string): string {
   return input.replace(/\\(["'\\])/g, "$1");
 }
@@ -163,4 +219,29 @@ function luarocksLockShapeError(
       }
     })
   );
+}
+
+function unsupportedLuarocksDependencyError(
+  lockfilePath: string,
+  dependencies: UnsupportedLuarocksDependency[]
+): Result<never, OhriskError> {
+  return err(
+    createError({
+      code: "LUAROCKS_LOCK_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse luarocks.lock. Ohrisk supports literal string dependency pins.",
+      details: {
+        lockfilePath,
+        reason: "unsupported_luarocks_dependency_entries",
+        unsupportedDependencyNames: dependencies.map((dependency) => dependency.name),
+        unsupportedDependencyValueKinds: uniqueSorted(
+          dependencies.map((dependency) => dependency.valueKind)
+        )
+      }
+    })
+  );
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values)].sort();
 }

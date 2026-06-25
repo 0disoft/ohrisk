@@ -55,4 +55,28 @@ describe("parseLuarocksLockText", () => {
       reason: "no_dependencies"
     });
   });
+
+  test("reports non-string dependency entries as unsupported input", () => {
+    const result = parseLuarocksLockText([
+      "return {",
+      "  dependencies = {",
+      "    typed_dep = { version = \"1.0.0-1\" },",
+      "    optional_dep = true",
+      "  }",
+      "}"
+    ].join("\n"));
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected parse failure");
+    }
+
+    expect(result.error.code).toBe("LUAROCKS_LOCK_PARSE_FAILED");
+    expect(result.error.details).toEqual({
+      lockfilePath: "luarocks.lock",
+      reason: "unsupported_luarocks_dependency_entries",
+      unsupportedDependencyNames: ["optional_dep", "typed_dep"],
+      unsupportedDependencyValueKinds: ["boolean", "table"]
+    });
+  });
 });

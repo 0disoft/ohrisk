@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.158.3 - 2026-06-25
+
+### Fixed
+
+- LuaRocks `luarocks.lock` files with only non-string dependency entries now
+  report structured unsupported dependency details.
+
 ## 0.158.2 - 2026-06-25
 
 ### Fixed
