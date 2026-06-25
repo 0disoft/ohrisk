@@ -49,6 +49,56 @@ describe("parsePackageLockfile", () => {
     expect(devRisk?.dependencyType).toBe("development");
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const result = parsePackageLockText(
+      JSON.stringify({
+        name: "fixture-package-lock-cycle",
+        lockfileVersion: 3,
+        packages: {
+          "": {
+            name: "fixture-package-lock-cycle",
+            dependencies: {
+              parent: "1.0.0"
+            }
+          },
+          "node_modules/child": {
+            name: "child",
+            version: "2.0.0",
+            dependencies: {
+              parent: "1.0.0"
+            }
+          },
+          "node_modules/parent": {
+            name: "parent",
+            version: "1.0.0",
+            dependencies: {
+              child: "2.0.0"
+            }
+          }
+        }
+      }),
+      "package-lock-cycle.json"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "parent@1.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: true,
+        paths: [["fixture-package-lock-cycle", "parent@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "child@2.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: false,
+        paths: [["fixture-package-lock-cycle", "parent@1.0.0", "child@2.0.0"]]
+      });
+  });
+
   test("reports malformed package-lock files as typed errors", () => {
     const result = parsePackageLockText("{ this is not json", "broken-package-lock.json");
 
