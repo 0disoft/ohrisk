@@ -253,6 +253,50 @@ describe("parsePackageLockfile", () => {
       });
   });
 
+  test("stops walking package-lock v1 dependency cycles without dropping reachable paths", () => {
+    const result = parsePackageLockText(
+      JSON.stringify({
+        name: "fixture-package-lock-v1-cycle",
+        lockfileVersion: 1,
+        dependencies: {
+          parent: {
+            version: "1.0.0",
+            requires: {
+              child: "2.0.0"
+            },
+            dependencies: {
+              child: {
+                version: "2.0.0",
+                requires: {
+                  parent: "1.0.0"
+                }
+              }
+            }
+          }
+        }
+      }),
+      "package-lock-v1-cycle.json"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "parent@1.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: true,
+        paths: [["fixture-package-lock-v1-cycle", "parent@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "child@2.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: false,
+        paths: [["fixture-package-lock-v1-cycle", "parent@1.0.0", "child@2.0.0"]]
+      });
+  });
+
   test("links hoisted package-lock v1 dependencies through requiring parents", () => {
     const result = parsePackageLockText(
       JSON.stringify({
