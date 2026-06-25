@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.153.0 - 2026-06-25
+
+### Added
+
+- Julia `Manifest.toml` scans now read adjacent `Project.toml` `[deps]`
+  entries and test target `[extras]` to classify production and development
+  dependency roots.
+
 ## 0.152.0 - 2026-06-25
 
 ### Added

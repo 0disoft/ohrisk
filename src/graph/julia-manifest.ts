@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
@@ -8,7 +9,7 @@ import {
   LOCKFILE_MAX_BYTES,
   readInputTextFile
 } from "./read-input-file";
-import type { DependencyGraph, DependencyNode } from "./types";
+import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
 
 type JuliaManifestRecord = {
   name: string;
@@ -20,7 +21,7 @@ type JuliaManifestRecord = {
 
 export function parseJuliaManifestFile(
   lockfilePath: string,
-  options: { maxBytes?: number } = {}
+  options: { maxBytes?: number; projectMaxBytes?: number } = {}
 ): Result<DependencyGraph, OhriskError> {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -43,12 +44,23 @@ export function parseJuliaManifestFile(
     );
   }
 
-  return parseJuliaManifestText(lockfileText.value, lockfilePath);
+  const projectText = readOptionalJuliaProject({
+    lockfilePath,
+    maxBytes: options.projectMaxBytes ?? LOCKFILE_MAX_BYTES
+  });
+  if (!projectText.ok) {
+    return projectText;
+  }
+
+  return parseJuliaManifestText(lockfileText.value, lockfilePath, {
+    projectText: projectText.value
+  });
 }
 
 export function parseJuliaManifestText(
   input: string,
-  lockfilePath = "Manifest.toml"
+  lockfilePath = "Manifest.toml",
+  options: { projectText?: string } = {}
 ): Result<DependencyGraph, OhriskError> {
   const records = readJuliaManifestRecords(input, lockfilePath);
   if (!records.ok) {
@@ -57,6 +69,12 @@ export function parseJuliaManifestText(
 
   const rootName = path.basename(path.dirname(lockfilePath)) || "<julia-project>";
   const referencedNames = new Set(records.value.flatMap((record) => record.dependencies));
+  const projectRootTypes = options.projectText
+    ? readJuliaProjectRootTypes(options.projectText, records.value)
+    : new Map<string, DependencyType>();
+  const projectRootNames = projectRootTypes.size > 0
+    ? new Set(projectRootTypes.keys())
+    : undefined;
 
   return ok({
     rootName,
@@ -68,16 +86,53 @@ export function parseJuliaManifestText(
         version: record.version,
         ecosystem: "julia",
         ...(record.resolved ? { resolved: record.resolved } : {}),
-        dependencyType: "unknown",
-        direct: !referencedNames.has(record.name),
+        dependencyType: projectRootTypes.size > 0
+          ? juliaDependencyType({ record, records: records.value, rootTypes: projectRootTypes })
+          : "unknown",
+        direct: projectRootTypes.size > 0
+          ? projectRootTypes.has(record.name)
+          : !referencedNames.has(record.name),
         paths: juliaPackagePaths({
           record,
           records: records.value,
-          rootName
+          rootName,
+          rootNames: projectRootNames
         })
       }))
       .sort((left, right) => left.id.localeCompare(right.id))
   });
+}
+
+function readOptionalJuliaProject(input: {
+  lockfilePath: string;
+  maxBytes: number;
+}): Result<string | undefined, OhriskError> {
+  const projectTomlPath = path.join(path.dirname(input.lockfilePath), "Project.toml");
+  if (!existsSync(projectTomlPath)) {
+    return ok(undefined);
+  }
+
+  const projectText = readInputTextFile({
+    filePath: projectTomlPath,
+    maxBytes: input.maxBytes
+  });
+  if (!projectText.ok) {
+    return err(
+      createError({
+        code: "JULIA_MANIFEST_READ_FAILED",
+        category: inputFileReadErrorCategory(projectText.error),
+        message: projectText.error.kind === "too_large"
+          ? "Project.toml exceeded the maximum supported size."
+          : "Failed to read Project.toml.",
+        details: {
+          projectTomlPath,
+          ...inputFileReadErrorDetails(projectText.error)
+        }
+      })
+    );
+  }
+
+  return ok(projectText.value);
 }
 
 function readJuliaManifestRecords(
@@ -162,37 +217,132 @@ function readJuliaManifestRecords(
   return ok(parsedRecords);
 }
 
+function readJuliaProjectRootTypes(
+  input: string,
+  records: JuliaManifestRecord[]
+): Map<string, DependencyType> {
+  const manifestNames = new Set(records.map((record) => record.name));
+  const dependencies = new Set<string>();
+  const extras = new Set<string>();
+  const testTargets = new Set<string>();
+  let section = "";
+
+  for (const rawLine of input.split(/\r?\n/)) {
+    const line = stripTomlComment(rawLine).trim();
+    if (line === "") {
+      continue;
+    }
+
+    const sectionMatch = /^\[([A-Za-z0-9_.-]+)\]$/.exec(line);
+    if (sectionMatch?.[1]) {
+      section = sectionMatch[1];
+      continue;
+    }
+
+    const keyValue = /^([A-Za-z0-9_.-]+)\s*=\s*(.+)$/.exec(line);
+    if (!keyValue?.[1] || keyValue[2] === undefined) {
+      continue;
+    }
+
+    if (section === "deps") {
+      dependencies.add(keyValue[1]);
+    } else if (section === "extras") {
+      extras.add(keyValue[1]);
+    } else if (section === "targets" && keyValue[1] === "test") {
+      for (const dependencyName of parseTomlStringArray(keyValue[2])) {
+        testTargets.add(dependencyName);
+      }
+    }
+  }
+
+  const roots = new Map<string, DependencyType>();
+  for (const dependencyName of [...dependencies].sort()) {
+    if (manifestNames.has(dependencyName)) {
+      roots.set(dependencyName, "production");
+    }
+  }
+
+  for (const dependencyName of [...testTargets].sort()) {
+    if (extras.has(dependencyName) && manifestNames.has(dependencyName) && !roots.has(dependencyName)) {
+      roots.set(dependencyName, "development");
+    }
+  }
+
+  return roots;
+}
+
+function juliaDependencyType(input: {
+  record: JuliaManifestRecord;
+  records: JuliaManifestRecord[];
+  rootTypes: Map<string, DependencyType>;
+  visiting?: Set<string>;
+}): DependencyType {
+  const rootType = input.rootTypes.get(input.record.name);
+  let dependencyType: DependencyType = rootType ?? "unknown";
+  const visiting = input.visiting ?? new Set<string>();
+  if (visiting.has(input.record.id)) {
+    return dependencyType;
+  }
+
+  const nextVisiting = new Set(visiting);
+  nextVisiting.add(input.record.id);
+  for (const parent of input.records.filter((candidate) =>
+    candidate.dependencies.includes(input.record.name)
+  )) {
+    dependencyType = mergeDependencyType(
+      dependencyType,
+      juliaDependencyType({
+        record: parent,
+        records: input.records,
+        rootTypes: input.rootTypes,
+        visiting: nextVisiting
+      })
+    );
+  }
+
+  return dependencyType;
+}
+
 function juliaPackagePaths(input: {
   record: JuliaManifestRecord;
   records: JuliaManifestRecord[];
   rootName: string;
+  rootNames?: Set<string>;
   visiting?: Set<string>;
 }): string[][] {
   const parentRecords = input.records.filter((candidate) =>
     candidate.dependencies.includes(input.record.name)
   );
-  if (parentRecords.length === 0) {
+  if (!input.rootNames && parentRecords.length === 0) {
     return [[input.rootName, input.record.id]];
   }
 
   const visiting = input.visiting ?? new Set<string>();
   if (visiting.has(input.record.id)) {
-    return [[input.rootName, input.record.id]];
+    return input.rootNames?.has(input.record.name)
+      ? [[input.rootName, input.record.id]]
+      : [];
   }
 
   const nextVisiting = new Set(visiting);
   nextVisiting.add(input.record.id);
+  const paths = input.rootNames?.has(input.record.name)
+    ? [[input.rootName, input.record.id]]
+    : [];
 
-  return deduplicatePaths(
-    parentRecords.flatMap((parent) =>
+  paths.push(
+    ...parentRecords.flatMap((parent) =>
       juliaPackagePaths({
         record: parent,
         records: input.records,
         rootName: input.rootName,
+        rootNames: input.rootNames,
         visiting: nextVisiting
       }).map((parentPath) => [...parentPath, input.record.id])
     )
   );
+
+  return deduplicatePaths(paths.length > 0 ? paths : [[input.rootName, input.record.id]]);
 }
 
 function deduplicatePaths(paths: string[][]): string[][] {
@@ -253,4 +403,16 @@ function stripTomlComment(line: string): string {
   }
 
   return line;
+}
+
+function mergeDependencyType(left: DependencyType, right: DependencyType): DependencyType {
+  if (left === "production" || right === "production") {
+    return "production";
+  }
+
+  if (left === "development" || right === "development") {
+    return "development";
+  }
+
+  return left;
 }

@@ -143,7 +143,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.152.0"]);
+    expect(stdout).toEqual(["ohrisk 0.153.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -2133,7 +2133,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.152.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.153.0");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
@@ -5703,6 +5703,17 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         "utf8"
       );
       writeFileSync(
+        path.join(projectRoot, "Project.toml"),
+        [
+          "name = \"FixtureJulia\"",
+          "uuid = \"00000000-0000-0000-0000-000000000000\"",
+          "",
+          "[deps]",
+          "RiskJulia = \"11111111-1111-1111-1111-111111111111\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
         path.join(packageDir, "Project.toml"),
         [
           "name = \"RiskJulia\"",
@@ -5724,7 +5735,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       expect(output).toContain("Ohrisk scan");
       expect(output).toContain("Manifest.toml (julia-manifest)");
       expect(output).toContain("- [high] RiskJulia@1.0.0");
-      expect(output).toContain("dependency: unknown direct");
+      expect(output).toContain("dependency: production direct");
       expect(output).toContain("Project.toml license: AGPL-3.0-only");
       expect(output).toContain("file: LICENSE (license)");
     } finally {
