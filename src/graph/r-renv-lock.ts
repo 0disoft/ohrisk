@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
@@ -8,7 +9,7 @@ import {
   LOCKFILE_MAX_BYTES,
   readInputTextFile
 } from "./read-input-file";
-import type { DependencyGraph, DependencyNode } from "./types";
+import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
 
 type RPackageRecord = {
   name: string;
@@ -19,7 +20,7 @@ type RPackageRecord = {
 
 export function parseRenvLockfile(
   lockfilePath: string,
-  options: { maxBytes?: number } = {}
+  options: { maxBytes?: number; descriptionMaxBytes?: number } = {}
 ): Result<DependencyGraph, OhriskError> {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -42,12 +43,23 @@ export function parseRenvLockfile(
     );
   }
 
-  return parseRenvLockText(lockfileText.value, lockfilePath);
+  const descriptionText = readOptionalDescription({
+    lockfilePath,
+    maxBytes: options.descriptionMaxBytes ?? LOCKFILE_MAX_BYTES
+  });
+  if (!descriptionText.ok) {
+    return descriptionText;
+  }
+
+  return parseRenvLockText(lockfileText.value, lockfilePath, {
+    descriptionText: descriptionText.value
+  });
 }
 
 export function parseRenvLockText(
   input: string,
-  lockfilePath = "renv.lock"
+  lockfilePath = "renv.lock",
+  options: { descriptionText?: string } = {}
 ): Result<DependencyGraph, OhriskError> {
   let parsed: unknown;
   try {
@@ -72,6 +84,9 @@ export function parseRenvLockText(
   }
 
   const rootName = path.basename(path.dirname(lockfilePath)) || "<r-project>";
+  const rootTypes = options.descriptionText
+    ? readDescriptionRootTypes(options.descriptionText, records.value)
+    : new Map<string, DependencyType>();
   return ok({
     rootName,
     lockfilePath,
@@ -82,12 +97,44 @@ export function parseRenvLockText(
         version: record.version,
         ecosystem: "cran",
         ...(record.resolved ? { resolved: record.resolved } : {}),
-        dependencyType: "unknown",
+        dependencyType: rootTypes.get(record.name) ?? "unknown",
         direct: true,
         paths: [[rootName, record.id]]
       }))
       .sort((left, right) => left.id.localeCompare(right.id))
   });
+}
+
+function readOptionalDescription(input: {
+  lockfilePath: string;
+  maxBytes: number;
+}): Result<string | undefined, OhriskError> {
+  const descriptionPath = path.join(path.dirname(input.lockfilePath), "DESCRIPTION");
+  if (!existsSync(descriptionPath)) {
+    return ok(undefined);
+  }
+
+  const descriptionText = readInputTextFile({
+    filePath: descriptionPath,
+    maxBytes: input.maxBytes
+  });
+  if (!descriptionText.ok) {
+    return err(
+      createError({
+        code: "RENV_LOCK_READ_FAILED",
+        category: inputFileReadErrorCategory(descriptionText.error),
+        message: descriptionText.error.kind === "too_large"
+          ? "DESCRIPTION exceeded the maximum supported size."
+          : "Failed to read DESCRIPTION.",
+        details: {
+          descriptionPath,
+          ...inputFileReadErrorDetails(descriptionText.error)
+        }
+      })
+    );
+  }
+
+  return ok(descriptionText.value);
 }
 
 function readRPackageRecords(
@@ -141,6 +188,64 @@ function readRPackageRecords(
   }
 
   return ok([...records.values()]);
+}
+
+function readDescriptionRootTypes(
+  input: string,
+  records: RPackageRecord[]
+): Map<string, DependencyType> {
+  const recordNames = new Set(records.map((record) => record.name));
+  const fields = readDescriptionFields(input);
+  const roots = new Map<string, DependencyType>();
+
+  for (const field of ["Suggests", "Enhances"]) {
+    for (const dependencyName of readRDependencyNames(fields.get(field) ?? "")) {
+      if (recordNames.has(dependencyName)) {
+        roots.set(dependencyName, "development");
+      }
+    }
+  }
+
+  for (const field of ["Depends", "Imports", "LinkingTo"]) {
+    for (const dependencyName of readRDependencyNames(fields.get(field) ?? "")) {
+      if (recordNames.has(dependencyName)) {
+        roots.set(dependencyName, "production");
+      }
+    }
+  }
+
+  return roots;
+}
+
+function readDescriptionFields(input: string): Map<string, string> {
+  const fields = new Map<string, string>();
+  let currentKey: string | undefined;
+
+  for (const rawLine of input.split(/\r?\n/)) {
+    if (/^\s/.test(rawLine) && currentKey) {
+      fields.set(currentKey, `${fields.get(currentKey) ?? ""} ${rawLine.trim()}`.trim());
+      continue;
+    }
+
+    const match = /^([A-Za-z][A-Za-z0-9.-]*):\s*(.*)$/.exec(rawLine);
+    if (!match?.[1] || match[2] === undefined) {
+      currentKey = undefined;
+      continue;
+    }
+
+    currentKey = match[1];
+    fields.set(currentKey, match[2].trim());
+  }
+
+  return fields;
+}
+
+function readRDependencyNames(input: string): string[] {
+  return input
+    .split(",")
+    .map((item) => /^([A-Za-z][A-Za-z0-9.]*)/.exec(item.trim())?.[1])
+    .filter((item): item is string => item !== undefined && item !== "R")
+    .sort();
 }
 
 function renvResolvedSource(record: Record<string, unknown>): { resolved?: string } {

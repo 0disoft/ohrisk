@@ -75,4 +75,66 @@ describe("parseRenvLockText", () => {
       reason: "missing_package_or_version"
     });
   });
+
+  test("uses DESCRIPTION dependency fields for root dependency classification", () => {
+    const result = parseRenvLockText(JSON.stringify({
+      R: {
+        Version: "4.4.1"
+      },
+      Packages: {
+        RiskR: {
+          Package: "RiskR",
+          Version: "1.2.3",
+          Source: "Repository",
+          Repository: "CRAN"
+        },
+        DevRiskR: {
+          Package: "DevRiskR",
+          Version: "2.0.0",
+          Source: "Repository",
+          Repository: "CRAN"
+        },
+        UnknownR: {
+          Package: "UnknownR",
+          Version: "0.1.0",
+          Source: "Repository",
+          Repository: "CRAN"
+        }
+      }
+    }), path.join("analysis", "renv.lock"), {
+      descriptionText: [
+        "Package: FixtureR",
+        "Version: 0.0.0",
+        "Depends: R (>= 4.4)",
+        "Imports: RiskR (>= 1.0.0),",
+        "    MissingR",
+        "Suggests: DevRiskR",
+        "Enhances: RiskR"
+      ].join("\n")
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "RiskR@1.2.3"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: true,
+        paths: [["analysis", "RiskR@1.2.3"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "DevRiskR@2.0.0"))
+      .toMatchObject({
+        dependencyType: "development",
+        direct: true,
+        paths: [["analysis", "DevRiskR@2.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "UnknownR@0.1.0"))
+      .toMatchObject({
+        dependencyType: "unknown",
+        direct: true,
+        paths: [["analysis", "UnknownR@0.1.0"]]
+      });
+  });
 });

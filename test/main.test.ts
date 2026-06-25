@@ -143,7 +143,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.153.0"]);
+    expect(stdout).toEqual(["ohrisk 0.154.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -2133,7 +2133,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.153.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.154.0");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
@@ -5654,6 +5654,15 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         "utf8"
       );
       writeFileSync(
+        path.join(projectRoot, "DESCRIPTION"),
+        [
+          "Package: FixtureR",
+          "Version: 0.0.0",
+          "Imports: RiskR"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
         path.join(packageDir, "DESCRIPTION"),
         [
           "Package: RiskR",
@@ -5674,7 +5683,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       expect(output).toContain("Ohrisk scan");
       expect(output).toContain("renv.lock (renv-lock)");
       expect(output).toContain("- [high] RiskR@1.0.0");
-      expect(output).toContain("dependency: unknown direct");
+      expect(output).toContain("dependency: production direct");
       expect(output).toContain("DESCRIPTION license: AGPL-3.0-only");
       expect(output).toContain("file: LICENSE (license)");
     } finally {

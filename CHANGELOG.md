@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.154.0 - 2026-06-25
+
+### Added
+
+- R `renv.lock` scans now read adjacent root `DESCRIPTION` dependency
+  fields to classify production and development dependency roots.
+
 ## 0.153.0 - 2026-06-25
 
 ### Added

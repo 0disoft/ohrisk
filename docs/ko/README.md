@@ -156,11 +156,12 @@ entry를 스캔한다. Unity built-in module은 제외하고, evidence는 로컬
 `Library/PackageCache`의 package source에서 읽는다. `Packages/manifest.json`만 있는
 프로젝트, Asset Store `.unitypackage`, Addressables catalog, 원격 UPM registry metadata
 fetch는 아직 지원하지 않는다.
-R은 `renv.lock`의 package record를 스캔하고, 로컬 `renv/library`의 package source에서
-DESCRIPTION license metadata와 license 파일을 evidence로 읽는다. renv lockfile은
-dependency parent graph를 직접 담지 않으므로 direct/transitive 관계와 dev/prod group은
-복원하지 않는다. Packrat lockfile, 원격 CRAN/GitHub/Bioconductor artifact fetch는 아직
-지원하지 않는다.
+R은 `renv.lock`의 package record를 스캔하고, 옆의 root `DESCRIPTION`에 있는
+`Depends`, `Imports`, `LinkingTo`, `Suggests`, `Enhances` field를 production/development
+root classification에 사용한다. 로컬 `renv/library`의 package source에서 DESCRIPTION
+license metadata와 license 파일을 evidence로 읽는다. renv lockfile은 dependency parent
+graph를 직접 담지 않으므로 direct/transitive 관계는 복원하지 않는다. Packrat lockfile,
+원격 CRAN/GitHub/Bioconductor artifact fetch는 아직 지원하지 않는다.
 Julia는 `Manifest.toml`의 versioned `[[deps.Name]]` package record를 스캔한다.
 version이 없는 standard library record는 제외하고, `deps = [...]`가 있으면 parent path를
 복원한다. 로컬 Julia depot의 package source와 `Project.toml` license metadata를 evidence로
