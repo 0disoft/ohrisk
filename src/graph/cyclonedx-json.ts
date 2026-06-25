@@ -21,6 +21,7 @@ type CycloneDxComponentRecord = {
   licenseExpressions: string[];
 };
 
+type UnsupportedCycloneDxDependencyField = "dependsOn" | "entry" | "ref";
 type UnsupportedCycloneDxDependencyValueKind = "array" | "boolean" | "null" | "number" | "object";
 
 export function parseCycloneDxJsonFile(
@@ -336,7 +337,8 @@ function readCycloneDxDependencyMap(
   aliases: Map<string, string>
 ): Result<Map<string, string[]>, {
   dependencyEntryIndexes: number[];
-  unsupportedDependencyValueKinds: UnsupportedCycloneDxDependencyValueKind[];
+  unsupportedDependencyFields?: UnsupportedCycloneDxDependencyField[];
+  unsupportedDependencyValueKinds?: UnsupportedCycloneDxDependencyValueKind[];
 }> {
   const dependencyMap = new Map<string, string[]>();
   if (!Array.isArray(value)) {
@@ -344,9 +346,25 @@ function readCycloneDxDependencyMap(
   }
 
   const unsupportedEntryIndexes = new Set<number>();
+  const unsupportedFields = new Set<UnsupportedCycloneDxDependencyField>();
   const unsupportedValueKinds = new Set<UnsupportedCycloneDxDependencyValueKind>();
   for (const [index, entry] of value.entries()) {
-    if (!isRecord(entry) || typeof entry.ref !== "string" || !Array.isArray(entry.dependsOn)) {
+    if (!isRecord(entry)) {
+      unsupportedEntryIndexes.add(index);
+      unsupportedFields.add("entry");
+      continue;
+    }
+
+    const hasUnsupportedShape = typeof entry.ref !== "string" || !Array.isArray(entry.dependsOn);
+    if (typeof entry.ref !== "string") {
+      unsupportedEntryIndexes.add(index);
+      unsupportedFields.add("ref");
+    }
+    if (!Array.isArray(entry.dependsOn)) {
+      unsupportedEntryIndexes.add(index);
+      unsupportedFields.add("dependsOn");
+    }
+    if (hasUnsupportedShape) {
       continue;
     }
 
@@ -366,10 +384,22 @@ function readCycloneDxDependencyMap(
   }
 
   if (unsupportedEntryIndexes.size > 0) {
-    return err({
-      dependencyEntryIndexes: [...unsupportedEntryIndexes].sort((left, right) => left - right),
-      unsupportedDependencyValueKinds: [...unsupportedValueKinds].sort()
-    });
+    const errorDetails: {
+      dependencyEntryIndexes: number[];
+      unsupportedDependencyFields?: UnsupportedCycloneDxDependencyField[];
+      unsupportedDependencyValueKinds?: UnsupportedCycloneDxDependencyValueKind[];
+    } = {
+      dependencyEntryIndexes: [...unsupportedEntryIndexes].sort((left, right) => left - right)
+    };
+
+    if (unsupportedFields.size > 0) {
+      errorDetails.unsupportedDependencyFields = [...unsupportedFields].sort();
+    }
+    if (unsupportedValueKinds.size > 0) {
+      errorDetails.unsupportedDependencyValueKinds = [...unsupportedValueKinds].sort();
+    }
+
+    return err(errorDetails);
   }
 
   return ok(dependencyMap);
@@ -568,14 +598,15 @@ function unsupportedCycloneDxDependencyError(
   lockfilePath: string,
   details: {
     dependencyEntryIndexes: number[];
-    unsupportedDependencyValueKinds: UnsupportedCycloneDxDependencyValueKind[];
+    unsupportedDependencyFields?: UnsupportedCycloneDxDependencyField[];
+    unsupportedDependencyValueKinds?: UnsupportedCycloneDxDependencyValueKind[];
   }
 ): Result<never, OhriskError> {
   return err(
     createError({
       code: "CYCLONEDX_PARSE_FAILED",
       category: "unsupported_input",
-      message: "Failed to parse CycloneDX dependency entries. Ohrisk supports string dependsOn references.",
+      message: "Failed to parse CycloneDX dependency entries. Ohrisk supports object entries with string refs and string dependsOn references.",
       details: {
         lockfilePath,
         reason: "unsupported_cyclonedx_dependency_entries",
