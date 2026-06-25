@@ -80,6 +80,92 @@ describe("parseUvLockText", () => {
       });
   });
 
+  test("parses local source package records with embedded license evidence", () => {
+    const files = new Map([
+      [
+        "./local-risk/pyproject.toml",
+        [
+          "[project]",
+          "name = \"local-risk\"",
+          "version = \"1.0.0\"",
+          "license = \"AGPL-3.0-only\""
+        ].join("\n")
+      ],
+      [
+        "./local-risk/LICENSE",
+        "GNU AFFERO GENERAL PUBLIC LICENSE Version 3\n"
+      ]
+    ]);
+
+    const result = parseUvLockText(
+      [
+        "version = 1",
+        "revision = 3",
+        "",
+        "[[package]]",
+        "name = \"fixture-python\"",
+        "version = \"0.1.0\"",
+        "source = { virtual = \".\" }",
+        "dependencies = [",
+        "    { name = \"local-risk\" },",
+        "]",
+        "",
+        "[[package]]",
+        "name = \"local-risk\"",
+        "version = \"1.0.0\"",
+        "source = { directory = \"./local-risk\" }"
+      ].join("\n"),
+      "uv.lock",
+      {
+        readLocalSourceFile: ({ sourcePath, relativeFilePath }) => {
+          const text = files.get(`${sourcePath}/${relativeFilePath}`);
+          return {
+            ok: true as const,
+            value: text === undefined
+              ? undefined
+              : {
+                  path: `${sourcePath}/${relativeFilePath}`,
+                  text
+                }
+          };
+        }
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes).toEqual([
+      expect.objectContaining({
+        id: "local-risk@1.0.0",
+        name: "local-risk",
+        version: "1.0.0",
+        ecosystem: "pypi",
+        dependencyType: "production",
+        direct: true,
+        paths: [["fixture-python", "local-risk@1.0.0"]]
+      })
+    ]);
+    expect(result.value.embeddedEvidence).toEqual([
+      {
+        packageId: "local-risk@1.0.0",
+        metadataLicense: "AGPL-3.0-only",
+        metadataSource: "pyproject.toml",
+        files: [
+          {
+            path: "local-risk/LICENSE",
+            kind: "license",
+            text: "GNU AFFERO GENERAL PUBLIC LICENSE Version 3\n"
+          }
+        ],
+        source: "local",
+        warnings: []
+      }
+    ]);
+  });
+
   test("reports malformed package records as typed errors", () => {
     const result = parseUvLockText(
       [

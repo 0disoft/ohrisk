@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.158.0 - 2026-06-25
+
+### Added
+
+- Python `uv.lock` scans now read project-root-contained `directory` and
+  `editable` package source records with local Python source metadata and
+  license evidence.
+
 ## 0.157.0 - 2026-06-25
 
 ### Added

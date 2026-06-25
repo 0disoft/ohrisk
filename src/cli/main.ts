@@ -913,7 +913,9 @@ function parseLockfileTextForKind(input: {
         readLocalSourceFile: input.pythonLocalSourceFileReader
       });
     case "uv-lock":
-      return parseUvLockText(input.text, input.lockfilePath);
+      return parseUvLockText(input.text, input.lockfilePath, {
+        readLocalSourceFile: input.pythonLocalSourceFileReader
+      });
     case "pylock":
       return parsePylockText(input.text, input.lockfilePath, {
         readLocalSourceFile: input.pythonLocalSourceFileReader
@@ -1311,6 +1313,11 @@ function baselinePythonLocalSourceErrorsForKind(
       return {
         parseCode: "PDM_LOCK_PARSE_FAILED",
         displayName: "pdm.lock"
+      };
+    case "uv-lock":
+      return {
+        parseCode: "UV_LOCK_PARSE_FAILED",
+        displayName: "uv.lock"
       };
     case "pylock":
       return {

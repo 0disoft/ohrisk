@@ -80,7 +80,8 @@ root 밖 `go.work use` path, 프로젝트 root 밖 local `replace` path, 전체 
 fetch는 아직 지원하지 않는다.
 Python은 standalone `pyproject.toml`의 정확한 PEP 621 `name==version` 직접 의존성, PyPA `pylock.toml`/`pylock.<name>.toml`, `uv.lock`, Pipenv `Pipfile.lock`, PDM `pdm.lock`, `poetry.lock`에 기록된 PyPI 패키지를
 스캔하고, 로컬 `.venv`/`venv`의 `*.dist-info/METADATA`와 license 파일을
-evidence로 읽는다. `Pipfile.lock`은 `default`와 `develop` 섹션의 정확한
+evidence로 읽는다. `uv.lock`은 프로젝트 root 안 `directory`/`editable`
+package source record를 지원한다. `Pipfile.lock`은 `default`와 `develop` 섹션의 정확한
 `==version` package entry와 프로젝트 root 안의 local `path`/editable source
 entry를 지원한다. PDM `pdm.lock`은 프로젝트 root 안의 local `path` 또는 상대
 `file:` source record를 지원하고, PDM `pdm.lock`과 `poetry.lock`은 옆의
@@ -94,7 +95,7 @@ license 파일을 evidence로 읽는다.
 같은 editable local source entry, `-r base.txt` 같은 include, `-c constraints.txt`의
 정확한 constraint pin을 지원한다. 로컬 source package는 `pyproject.toml`,
 `setup.cfg`, `PKG-INFO`의 name/version/license metadata와 root license 파일을
-evidence로 읽는다. Pipenv/PDM 원격 VCS entry, 프로젝트 root 밖 Pipenv/PDM local
+evidence로 읽는다. uv/Pipenv/PDM 원격 VCS entry, 프로젝트 root 밖 uv/Pipenv/PDM local
 source path, 원격 VCS `requirements.txt` entry, 정확한 constraint pin이 없는 unpinned range, 원격 PyPI artifact fetch는 아직
 지원하지 않는다. `pyproject.toml`의 range, direct reference, VCS/path dependency처럼 resolved version을 알 수 없는 entry도 아직 지원하지 않는다.
 Java는 Gradle dependency locking의 `gradle.lockfile`, legacy

@@ -143,7 +143,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.157.0"]);
+    expect(stdout).toEqual(["ohrisk 0.158.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -908,25 +908,19 @@ describe("main", () => {
     }
   });
 
-  test("prints actionable findings for a Python uv.lock project with local dist-info evidence", async () => {
+  test("prints actionable findings for a Python uv.lock project with local source evidence", async () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-uv-project-"));
-    const distInfoDir = path.join(
-      projectRoot,
-      ".venv",
-      "Lib",
-      "site-packages",
-      "risk_pkg-1.0.0.dist-info"
-    );
+    const localSourceDir = path.join(projectRoot, "local-risk");
 
     try {
-      mkdirSync(distInfoDir, { recursive: true });
+      mkdirSync(localSourceDir, { recursive: true });
       writeFileSync(
         path.join(projectRoot, "pyproject.toml"),
         [
           "[project]",
           "name = \"fixture-python\"",
           "version = \"0.1.0\"",
-          "dependencies = [\"risk-pkg==1.0.0\"]"
+          "dependencies = [\"local-risk==1.0.0\"]"
         ].join("\n"),
         "utf8"
       );
@@ -940,25 +934,29 @@ describe("main", () => {
           "version = \"0.1.0\"",
           "source = { virtual = \".\" }",
           "dependencies = [",
-          "    { name = \"risk-pkg\" },",
+          "    { name = \"local-risk\" },",
           "]",
           "",
           "[[package]]",
-          "name = \"risk-pkg\"",
+          "name = \"local-risk\"",
           "version = \"1.0.0\"",
-          "source = { registry = \"https://pypi.org/simple\" }"
+          "source = { directory = \"./local-risk\" }"
         ].join("\n"),
         "utf8"
       );
       writeFileSync(
-        path.join(distInfoDir, "METADATA"),
+        path.join(localSourceDir, "pyproject.toml"),
         [
-          "Metadata-Version: 2.4",
-          "Name: risk-pkg",
-          "Version: 1.0.0",
-          "License-Expression: AGPL-3.0-only",
-          ""
+          "[project]",
+          "name = \"local-risk\"",
+          "version = \"1.0.0\"",
+          "license = \"AGPL-3.0-only\""
         ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(localSourceDir, "LICENSE"),
+        "GNU AFFERO GENERAL PUBLIC LICENSE Version 3\n",
         "utf8"
       );
 
@@ -972,9 +970,9 @@ describe("main", () => {
       expect(output).toContain("Lockfile: uv.lock (uv-lock)");
       expect(output).toContain("Dependencies: 1 total, 1 direct, 0 transitive");
       expect(output).toContain("Risks: 1 high, 0 review, 0 unknown, 0 low");
-      expect(output).toContain("- [high] risk-pkg@1.0.0");
-      expect(output).toContain("path: fixture-python -> risk-pkg@1.0.0");
-      expect(output).toContain("source: local; METADATA license: AGPL-3.0-only");
+      expect(output).toContain("- [high] local-risk@1.0.0");
+      expect(output).toContain("path: fixture-python -> local-risk@1.0.0");
+      expect(output).toContain("source: local; pyproject.toml license: AGPL-3.0-only");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
@@ -2132,7 +2130,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.157.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.158.0");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
@@ -4097,6 +4095,89 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       expect(exitCode).toBe(0);
       expect(stderr).toEqual([]);
       expect(requestedBaselinePaths).toEqual(["pdm.lock", "pyproject.toml"]);
+
+      const payload = JSON.parse(stdout.join("\n")) as {
+        currentFindingCount: number;
+        baselineFindingCount: number;
+        newFindingCount: number;
+      };
+      expect(payload.currentFindingCount).toBe(1);
+      expect(payload.baselineFindingCount).toBe(1);
+      expect(payload.newFindingCount).toBe(0);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("diff reads baseline uv.lock local source metadata", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-uv-local-source-diff-"));
+    const localSourceDir = path.join(projectRoot, "local-risk");
+    const lockfile = [
+      "version = 1",
+      "revision = 3",
+      "",
+      "[[package]]",
+      "name = \"fixture-python\"",
+      "version = \"0.1.0\"",
+      "source = { virtual = \".\" }",
+      "dependencies = [",
+      "    { name = \"local-risk\" },",
+      "]",
+      "",
+      "[[package]]",
+      "name = \"local-risk\"",
+      "version = \"1.0.0\"",
+      "source = { directory = \"./local-risk\" }"
+    ].join("\n");
+    const pyproject = [
+      "[project]",
+      "name = \"local-risk\"",
+      "version = \"1.0.0\"",
+      "license = \"AGPL-3.0-only\""
+    ].join("\n");
+    const license = "GNU AFFERO GENERAL PUBLIC LICENSE Version 3\n";
+
+    try {
+      mkdirSync(localSourceDir, { recursive: true });
+      writeFileSync(path.join(projectRoot, "uv.lock"), lockfile, "utf8");
+      writeFileSync(path.join(localSourceDir, "pyproject.toml"), pyproject, "utf8");
+      writeFileSync(path.join(localSourceDir, "LICENSE"), license, "utf8");
+
+      const requestedBaselinePaths: string[] = [];
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      io.readRefFile = ({ relativePath }) => {
+        requestedBaselinePaths.push(relativePath);
+        if (relativePath === "uv.lock") {
+          return { ok: true as const, value: lockfile };
+        }
+
+        if (relativePath === "local-risk/pyproject.toml") {
+          return { ok: true as const, value: pyproject };
+        }
+
+        if (relativePath === "local-risk/LICENSE") {
+          return { ok: true as const, value: license };
+        }
+
+        return err(
+          createError({
+            code: "GIT_REF_FILE_NOT_FOUND",
+            category: "invalid_input",
+            message: "The requested baseline file does not exist in the git ref.",
+            details: {
+              relativePath
+            }
+          })
+        );
+      };
+
+      const exitCode = await main(["diff", "main", "--json", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+      expect(requestedBaselinePaths).toContain("uv.lock");
+      expect(requestedBaselinePaths).toContain("local-risk/pyproject.toml");
+      expect(requestedBaselinePaths).toContain("local-risk/LICENSE");
 
       const payload = JSON.parse(stdout.join("\n")) as {
         currentFindingCount: number;

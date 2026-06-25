@@ -86,7 +86,8 @@ The current implementation is the first local dependency-risk vertical slice:
 - Go `go.work` projects are scanned across workspace modules and apply workspace `replace` directives before module-level replacements; Go `go.mod` projects are scanned for required modules, Go `replace` directives, and adjacent `go.sum` module versions when available
 - Python `pylock.toml` and named `pylock.<name>.toml` projects are scanned for versioned PyPI package records and project-root-contained source-tree package records with local source metadata
 - Python `pyproject.toml` projects without a companion lockfile are scanned for exact PEP 621 `name==version` direct dependency pins
-- Python `uv.lock`, PDM `pdm.lock`, and `poetry.lock` projects are scanned for PyPI package dependencies recorded in the lockfile
+- Python `uv.lock` projects are scanned for PyPI package dependencies recorded in the lockfile and project-root-contained `directory` or `editable` package source records
+- Python PDM `pdm.lock` and `poetry.lock` projects are scanned for PyPI package dependencies recorded in the lockfile
 - Python Pipenv `Pipfile.lock` projects are scanned for exact `==version` PyPI package entries and project-root-contained local `path` or editable source entries in the `default` and `develop` sections
 - Python PDM `pdm.lock` projects use adjacent `pyproject.toml` root dependencies when available, infer roots from lockfile dependency references otherwise, and scan project-root-contained local `path` or relative `file:` source records
 - Python `requirements.txt` files are scanned for pinned direct PyPI package dependencies, project-root-contained local source entries, editable local source entries, nested `-r` requirement files, and exact `-c` constraint pins
@@ -123,7 +124,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - Yarn Berry `.yarn/cache` package zip evidence before registry fallback for PnP installs without `node_modules`
 - local Cargo registry source and `vendor/<crate>` package evidence before unavailable fallback
 - local Go module cache, `vendor/<module>`, and project-root-contained local `replace` path evidence before unavailable fallback for `go.work` and `go.mod` scans
-- Python `.venv` and `venv` `*.dist-info/METADATA` package evidence, plus project-root-contained local source metadata and license files for `pylock.toml`, `requirements.txt`, `Pipfile.lock`, and `pdm.lock` local source entries, before unavailable fallback
+- Python `.venv` and `venv` `*.dist-info/METADATA` package evidence, plus project-root-contained local source metadata and license files for `uv.lock`, `pylock.toml`, `requirements.txt`, `Pipfile.lock`, and `pdm.lock` local source entries, before unavailable fallback
 - local Maven `.m2/repository` POMs for Maven parent/BOM version management and package license evidence before unavailable fallback for Gradle lockfile and Maven `pom.xml` coordinates
 - Bazel module license evidence uses local Bazel registry `local_path` sources from file-based registries when present; remote Bazel registry metadata fetching is not scanned yet
 - local NuGet package cache `.nuspec` evidence before unavailable fallback for `packages.lock.json`, `obj/project.assets.json`, `packages.config`, and `*.csproj` packages
@@ -189,7 +190,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - explicit waiver mode in CycloneDX SBOM metadata
 
 Central approval workflows, GitHub App checks, Go `go.work` use paths outside the project root, Go local `replace` paths outside the project root, full Go module parent graph
-reconstruction, unpinned or direct-reference `pyproject.toml` dependencies, Pipenv and PDM remote VCS entries, Pipenv and PDM local source paths outside the project root, remote VCS `requirements.txt` entries, unpinned requirements ranges without exact constraint pins,
+reconstruction, unpinned or direct-reference `pyproject.toml` dependencies, uv, Pipenv, and PDM remote VCS entries, uv, Pipenv, and PDM local source paths outside the project root, remote VCS `requirements.txt` entries, unpinned requirements ranges without exact constraint pins,
 remote Maven parent/BOM fetching, Maven transitive graph
 resolution, external Maven repository resolution beyond local `.m2/repository`, Gradle graph reconstruction, Gradle version catalog rich versions, bundle aliases, plugin aliases, and usage-site configuration reconstruction, Bazel `MODULE.bazel` `include()` expansion, Bazel overrides, module extensions, `MODULE.bazel.lock` graph reconstruction, remote Bazel registry metadata fetching, Conan 1 graph lock support, Conan binary package ID and remote ConanCenter
 artifact fetching, unpinned or ranged Conda `environment.yml` specs, Conda environment transitive dependency reconstruction, explicit per-platform `conda-<platform>.lock` exports, remote Conda channel artifact fetching,
@@ -250,7 +251,7 @@ Supported dependency input files:
 - `go.mod` module requirements, Go `replace` directives, and adjacent `go.sum` module versions when available, using local Go module cache, `vendor/<module>`, and project-root-contained local replacement path evidence
 - `pylock.toml` and `pylock.<name>.toml` versioned package entries and project-root-contained source-tree records from the PyPA lockfile specification, using dependency references for audit paths and installed `.venv`/`venv` dist-info metadata or local source metadata and license files for local evidence
 - `pyproject.toml` exact PEP 621 direct dependency pins such as `name==version`, using installed `.venv`/`venv` dist-info metadata for local evidence
-- `uv.lock` package entries from Python uv projects, using installed `.venv`/`venv` dist-info metadata for local evidence
+- `uv.lock` package entries from Python uv projects plus project-root-contained `directory` and `editable` package source records, using installed `.venv`/`venv` dist-info metadata or local source metadata and license files for local evidence
 - `Pipfile.lock` exact `==version` entries and project-root-contained local `path` or editable source entries from Python Pipenv projects, using installed `.venv`/`venv` dist-info metadata or local source metadata and license files for local evidence
 - `pdm.lock` package entries and project-root-contained local `path` or relative `file:` source records from Python PDM projects, using adjacent `pyproject.toml` root dependencies when available and installed `.venv`/`venv` dist-info metadata or local source metadata and license files for local evidence
 - `poetry.lock` package entries from Python Poetry projects, using adjacent `pyproject.toml` root dependencies when available and installed `.venv`/`venv` dist-info metadata for local evidence

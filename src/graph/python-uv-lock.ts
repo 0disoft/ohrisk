@@ -1,5 +1,14 @@
+import path from "node:path";
+
+import type { LicenseEvidence } from "../evidence/types";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
+import {
+  createDiskPythonLocalSourceFileReader,
+  normalizePythonLocalSourcePathSpec,
+  readPythonLocalSourcePackage,
+  type PythonLocalSourceFileReader
+} from "./python-local-source";
 import {
   inputFileReadErrorCategory,
   inputFileReadErrorDetails,
@@ -14,6 +23,7 @@ type UvPackageRecord = {
   id: string;
   virtual: boolean;
   dependencies: UvDependencyEdge[];
+  evidence?: LicenseEvidence;
 };
 
 type UvDependencyEdge = {
@@ -24,9 +34,21 @@ type UvDependencyEdge = {
 type PartialUvPackageRecord = {
   name?: string;
   version?: string;
+  sourcePath?: string;
+  unsupportedSource?: string;
   virtual: boolean;
   dependencies: UvDependencyEdge[];
 };
+
+type UvLockParseOptions = {
+  readLocalSourceFile?: PythonLocalSourceFileReader;
+};
+
+const UV_LOCK_LOCAL_SOURCE_ERRORS = {
+  parseCode: "UV_LOCK_PARSE_FAILED",
+  readCode: "UV_LOCK_READ_FAILED",
+  displayName: "uv.lock"
+} as const;
 
 export function parseUvLockfile(
   lockfilePath: string,
@@ -53,15 +75,30 @@ export function parseUvLockfile(
     );
   }
 
-  return parseUvLockText(lockfileText.value, lockfilePath);
+  return parseUvLockText(lockfileText.value, lockfilePath, {
+    readLocalSourceFile: createDiskPythonLocalSourceFileReader({
+      rootDir: path.dirname(lockfilePath),
+      maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES,
+      errors: UV_LOCK_LOCAL_SOURCE_ERRORS
+    })
+  });
 }
 
 export function parseUvLockText(
   input: string,
-  lockfilePath = "uv.lock"
+  lockfilePath = "uv.lock",
+  options: UvLockParseOptions = {}
 ): Result<DependencyGraph, OhriskError> {
   try {
-    const records = parseUvPackageRecords(input);
+    const parsedRecords = parseUvPackageRecords(input, {
+      lockfilePath,
+      readLocalSourceFile: options.readLocalSourceFile
+    });
+    if (!parsedRecords.ok) {
+      return parsedRecords;
+    }
+
+    const records = parsedRecords.value;
     if (records.length === 0) {
       return err(
         createError({
@@ -114,7 +151,8 @@ export function parseUvLockText(
     return ok({
       rootName: roots[0]?.name,
       lockfilePath,
-      nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id))
+      nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+      ...embeddedEvidenceFromUvRecords(records)
     });
   } catch (cause) {
     return err(
@@ -131,7 +169,10 @@ export function parseUvLockText(
   }
 }
 
-function parseUvPackageRecords(input: string): UvPackageRecord[] {
+function parseUvPackageRecords(input: string, options: {
+  lockfilePath: string;
+  readLocalSourceFile?: PythonLocalSourceFileReader;
+}): Result<UvPackageRecord[], OhriskError> {
   const records: UvPackageRecord[] = [];
   let current: PartialUvPackageRecord | undefined;
   let currentTable: "package" | "dev-dependencies" | "optional-dependencies" | "other" = "other";
@@ -157,14 +198,54 @@ function parseUvPackageRecords(input: string): UvPackageRecord[] {
     activeArray = undefined;
   };
 
-  const flushCurrent = (): void => {
+  const flushCurrent = (): Result<void, OhriskError> => {
     flushActiveArray();
     if (!current) {
-      return;
+      return ok(undefined);
     }
 
     if (!current.name || !current.version) {
       throw new Error("Encountered a [[package]] record without a string name and version.");
+    }
+
+    if (current.unsupportedSource) {
+      return err(
+        createError({
+          code: "UV_LOCK_PARSE_FAILED",
+          category: "unsupported_input",
+          message: "Failed to parse uv.lock. Ohrisk supports project-root-contained local uv source paths but not remote or absolute source entries.",
+          details: {
+            lockfilePath: options.lockfilePath,
+            packageName: current.name,
+            source: current.unsupportedSource
+          }
+        })
+      );
+    }
+
+    if (current.sourcePath && !current.virtual) {
+      const localSource = readPythonLocalSourcePackage({
+        source: {
+          sourcePath: current.sourcePath,
+          expectedName: current.name
+        },
+        fromFilePath: options.lockfilePath,
+        readLocalSourceFile: options.readLocalSourceFile,
+        errors: UV_LOCK_LOCAL_SOURCE_ERRORS
+      });
+      if (!localSource.ok) {
+        return localSource;
+      }
+
+      records.push({
+        name: localSource.value.name,
+        version: localSource.value.version,
+        id: localSource.value.id,
+        virtual: current.virtual,
+        dependencies: current.dependencies,
+        evidence: localSource.value.evidence
+      });
+      return ok(undefined);
     }
 
     records.push({
@@ -174,96 +255,132 @@ function parseUvPackageRecords(input: string): UvPackageRecord[] {
       virtual: current.virtual,
       dependencies: current.dependencies
     });
+
+    return ok(undefined);
   };
 
-  for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment(rawLine).trim();
-    if (line === "") {
-      continue;
-    }
-
-    if (activeArray) {
-      activeArray.lines.push(line);
-      if (line === "]" || line.endsWith("]")) {
-        flushActiveArray();
-      }
-      continue;
-    }
-
-    if (line === "[[package]]") {
-      flushCurrent();
-      current = {
-        virtual: false,
-        dependencies: []
-      };
-      currentTable = "package";
-      continue;
-    }
-
-    if (!current) {
-      continue;
-    }
-
-    if (line === "[package.dev-dependencies]") {
-      currentTable = "dev-dependencies";
-      continue;
-    }
-
-    if (line === "[package.optional-dependencies]") {
-      currentTable = "optional-dependencies";
-      continue;
-    }
-
-    if (line.startsWith("[") && line.endsWith("]")) {
-      currentTable = "other";
-      continue;
-    }
-
-    if (currentTable === "package") {
-      const name = readStringAssignment(line, "name");
-      if (name !== undefined) {
-        current.name = name;
+  try {
+    for (const rawLine of input.split(/\r?\n/)) {
+      const line = stripTomlComment(rawLine).trim();
+      if (line === "") {
         continue;
       }
 
-      const version = readStringAssignment(line, "version");
-      if (version !== undefined) {
-        current.version = version;
-        continue;
-      }
-
-      if (/^source\s*=\s*\{[^}]*\bvirtual\s*=\s*"\."/.test(line)) {
-        current.virtual = true;
-        continue;
-      }
-    }
-
-    const arrayDependencyType = dependencyTypeForArray(currentTable, line);
-    if (arrayDependencyType) {
-      const key = line.slice(0, line.indexOf("=")).trim();
-      const value = line.slice(line.indexOf("=") + 1).trim();
-
-      if (value.includes("[") && value.includes("]")) {
-        for (const dependencyName of readDependencyNamesFromArray(value)) {
-          current.dependencies.push({
-            name: dependencyName,
-            type: arrayDependencyType
-          });
+      if (activeArray) {
+        activeArray.lines.push(line);
+        if (line === "]" || line.endsWith("]")) {
+          flushActiveArray();
         }
         continue;
       }
 
-      activeArray = {
-        key,
-        type: arrayDependencyType,
-        lines: [value]
-      };
+      if (line === "[[package]]") {
+        const flushed = flushCurrent();
+        if (!flushed.ok) {
+          return flushed;
+        }
+
+        current = {
+          virtual: false,
+          dependencies: []
+        };
+        currentTable = "package";
+        continue;
+      }
+
+      if (!current) {
+        continue;
+      }
+
+      if (line === "[package.dev-dependencies]") {
+        currentTable = "dev-dependencies";
+        continue;
+      }
+
+      if (line === "[package.optional-dependencies]") {
+        currentTable = "optional-dependencies";
+        continue;
+      }
+
+      if (line.startsWith("[") && line.endsWith("]")) {
+        currentTable = "other";
+        continue;
+      }
+
+      if (currentTable === "package") {
+        const name = readStringAssignment(line, "name");
+        if (name !== undefined) {
+          current.name = name;
+          continue;
+        }
+
+        const version = readStringAssignment(line, "version");
+        if (version !== undefined) {
+          current.version = version;
+          continue;
+        }
+
+        if (/^source\s*=\s*\{[^}]*\bvirtual\s*=\s*"\."/.test(line)) {
+          current.virtual = true;
+          continue;
+        }
+
+        const sourcePath = readUvLocalSourceAssignment(line);
+        if (sourcePath !== undefined) {
+          if (sourcePath === "") {
+            current.unsupportedSource = readUvLocalSourceAssignmentValue(line) ?? "";
+          } else {
+            current.sourcePath = sourcePath;
+            if (sourcePath === ".") {
+              current.virtual = true;
+            }
+          }
+          continue;
+        }
+      }
+
+      const arrayDependencyType = dependencyTypeForArray(currentTable, line);
+      if (arrayDependencyType) {
+        const key = line.slice(0, line.indexOf("=")).trim();
+        const value = line.slice(line.indexOf("=") + 1).trim();
+
+        if (value.includes("[") && value.includes("]")) {
+          for (const dependencyName of readDependencyNamesFromArray(value)) {
+            current.dependencies.push({
+              name: dependencyName,
+              type: arrayDependencyType
+            });
+          }
+          continue;
+        }
+
+        activeArray = {
+          key,
+          type: arrayDependencyType,
+          lines: [value]
+        };
+      }
     }
+
+    const flushed = flushCurrent();
+    if (!flushed.ok) {
+      return flushed;
+    }
+
+    return ok(records);
+  } catch (cause) {
+    return err(
+      createError({
+        code: "UV_LOCK_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Failed to parse uv.lock.",
+        details: {
+          lockfilePath: options.lockfilePath,
+          cause: cause instanceof Error ? cause.message : String(cause)
+        }
+      })
+    );
   }
-
-  flushCurrent();
-
-  return records;
 }
 
 function dependencyTypeForArray(
@@ -305,6 +422,29 @@ function readDependencyNamesFromArray(value: string): string[] {
 
 function readStringAssignment(line: string, key: "name" | "version"): string | undefined {
   const match = new RegExp(`^${key}\\s*=\\s*"([^"]*)"`).exec(line);
+  return match?.[1];
+}
+
+function readUvLocalSourceAssignment(line: string): string | undefined {
+  const rawSource = readUvLocalSourceAssignmentValue(line);
+  if (rawSource === undefined) {
+    return undefined;
+  }
+
+  return normalizePythonLocalSourcePathSpec(rawSource) ?? "";
+}
+
+function readUvLocalSourceAssignmentValue(line: string): string | undefined {
+  if (!/^source\s*=/.test(line)) {
+    return undefined;
+  }
+
+  return readInlineTableStringValue(line, "editable")
+    ?? readInlineTableStringValue(line, "directory");
+}
+
+function readInlineTableStringValue(line: string, key: "editable" | "directory"): string | undefined {
+  const match = new RegExp(`\\b${key}\\s*=\\s*"([^"]*)"`).exec(line);
   return match?.[1];
 }
 
@@ -396,6 +536,15 @@ function resolveUvPackageRecord(records: UvPackageRecord[], name: string): UvPac
   );
 
   return matches.length === 1 ? matches[0] : undefined;
+}
+
+function embeddedEvidenceFromUvRecords(records: UvPackageRecord[]): Pick<DependencyGraph, "embeddedEvidence"> {
+  const embeddedEvidence = records
+    .map((record) => record.evidence)
+    .filter((evidence): evidence is LicenseEvidence => evidence !== undefined)
+    .sort((left, right) => left.packageId.localeCompare(right.packageId));
+
+  return embeddedEvidence.length > 0 ? { embeddedEvidence } : {};
 }
 
 function normalizePythonPackageName(name: string): string {
