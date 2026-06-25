@@ -151,6 +151,55 @@ describe("parseCycloneDxXmlText", () => {
     }));
   });
 
+  test("merges duplicate dependency entries without dropping child edges", () => {
+    const result = parseCycloneDxXmlText(`<?xml version="1.0" encoding="UTF-8"?>
+<bom xmlns="http://cyclonedx.org/schema/bom/1.5" version="1">
+  <metadata>
+    <component type="application" bom-ref="root-app">
+      <name>fixture-cyclonedx-xml-duplicate-deps</name>
+    </component>
+  </metadata>
+  <components>
+    <component type="library" bom-ref="parent">
+      <purl>pkg:npm/parent@1.0.0</purl>
+    </component>
+    <component type="library" bom-ref="child-a">
+      <purl>pkg:npm/child-a@2.0.0</purl>
+    </component>
+    <component type="library" bom-ref="child-b">
+      <purl>pkg:npm/child-b@3.0.0</purl>
+    </component>
+  </components>
+  <dependencies>
+    <dependency ref="root-app">
+      <dependency ref="parent" />
+    </dependency>
+    <dependency ref="parent">
+      <dependency ref="child-a" />
+    </dependency>
+    <dependency ref="parent">
+      <dependency ref="child-b" />
+    </dependency>
+  </dependencies>
+</bom>`, "cyclonedx.xml");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "child-a@2.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [["fixture-cyclonedx-xml-duplicate-deps", "parent@1.0.0", "child-a@2.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "child-b@3.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [["fixture-cyclonedx-xml-duplicate-deps", "parent@1.0.0", "child-b@3.0.0"]]
+      });
+  });
+
   test("reports malformed XML as typed CycloneDX errors", () => {
     const result = parseCycloneDxXmlText("<bom><components></bom>", "cyclonedx.xml");
 
