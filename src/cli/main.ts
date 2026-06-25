@@ -915,7 +915,9 @@ function parseLockfileTextForKind(input: {
     case "uv-lock":
       return parseUvLockText(input.text, input.lockfilePath);
     case "pylock":
-      return parsePylockText(input.text, input.lockfilePath);
+      return parsePylockText(input.text, input.lockfilePath, {
+        readLocalSourceFile: input.pythonLocalSourceFileReader
+      });
     case "gradle-lock":
       return parseGradleLockText(input.text, input.lockfilePath);
     case "gradle-version-catalog":
@@ -1309,6 +1311,11 @@ function baselinePythonLocalSourceErrorsForKind(
       return {
         parseCode: "PDM_LOCK_PARSE_FAILED",
         displayName: "pdm.lock"
+      };
+    case "pylock":
+      return {
+        parseCode: "PYLOCK_PARSE_FAILED",
+        displayName: "pylock.toml"
       };
     default:
       return undefined;

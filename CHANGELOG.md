@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.157.0 - 2026-06-25
+
+### Added
+
+- Python `pylock.toml` and named `pylock.<name>.toml` scans now read
+  project-root-contained source-tree package records with local Python
+  source metadata and license evidence.
+
 ## 0.156.0 - 2026-06-25
 
 ### Added

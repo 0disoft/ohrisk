@@ -85,8 +85,10 @@ evidence로 읽는다. `Pipfile.lock`은 `default`와 `develop` 섹션의 정확
 entry를 지원한다. PDM `pdm.lock`은 프로젝트 root 안의 local `path` 또는 상대
 `file:` source record를 지원하고, PDM `pdm.lock`과 `poetry.lock`은 옆의
 `pyproject.toml`이 있으면 직접/개발 의존성 구분에 사용한다. `pylock.toml`은
-version이 있는 package record를 스캔하고, lockfile 안의 dependency reference로
-감사용 경로를 복원한다. version이 없는 source-tree record는 아직 스캔하지 않는다.
+version이 있는 package record와 프로젝트 root 안 source-tree record를 스캔하고,
+lockfile 안의 dependency reference로 감사용 경로를 복원한다. local source package는
+`pyproject.toml`, `setup.cfg`, `PKG-INFO`의 name/version/license metadata와 root
+license 파일을 evidence로 읽는다.
 `requirements.txt`는 `name==version`처럼
 버전이 고정된 직접 의존성, 프로젝트 root 안의 local source entry, `-e ./local-package`
 같은 editable local source entry, `-r base.txt` 같은 include, `-c constraints.txt`의

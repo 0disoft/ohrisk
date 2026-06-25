@@ -96,7 +96,7 @@ describe("parsePylockText", () => {
       });
   });
 
-  test("skips source tree records that do not carry a stable version", () => {
+  test("rejects source tree records when local source file access is unavailable", () => {
     const result = parsePylockText(
       [
         "lock-version = '1.0'",
@@ -112,7 +112,7 @@ describe("parsePylockText", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) {
-      throw new Error("Expected unversioned pylock records to be skipped and fail as empty.");
+      throw new Error("Expected source tree pylock records to require local source file access.");
     }
 
     expect(result.error.code).toBe("PYLOCK_PARSE_FAILED");
@@ -122,6 +122,84 @@ describe("parsePylockText", () => {
       unsupportedSourceTreePackages: ["local-source"],
       unsupportedSourceTreePaths: ["./packages/local-source"]
     });
+  });
+
+  test("parses source tree records with embedded license evidence when file access is available", () => {
+    const files = new Map([
+      [
+        "./packages/local-source/pyproject.toml",
+        [
+          "[project]",
+          "name = 'local-source'",
+          "version = '1.2.3'",
+          "license = 'AGPL-3.0-only'"
+        ].join("\n")
+      ],
+      [
+        "./packages/local-source/LICENSE",
+        "GNU AFFERO GENERAL PUBLIC LICENSE Version 3\n"
+      ]
+    ]);
+
+    const result = parsePylockText(
+      [
+        "lock-version = '1.0'",
+        "created-by = 'fixture-locker'",
+        "",
+        "[[packages]]",
+        "name = 'local-source'",
+        "[packages.directory]",
+        "path = './packages/local-source'"
+      ].join("\n"),
+      "pylock.toml",
+      {
+        readLocalSourceFile: ({ sourcePath, relativeFilePath }) => {
+          const text = files.get(`${sourcePath}/${relativeFilePath}`);
+          return {
+            ok: true as const,
+            value: text === undefined
+              ? undefined
+              : {
+                  path: `${sourcePath}/${relativeFilePath}`,
+                  text
+                }
+          };
+        }
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes).toEqual([
+      expect.objectContaining({
+        id: "local-source@1.2.3",
+        name: "local-source",
+        version: "1.2.3",
+        ecosystem: "pypi",
+        dependencyType: "unknown",
+        direct: true,
+        paths: [["<root>", "local-source@1.2.3"]]
+      })
+    ]);
+    expect(result.value.embeddedEvidence).toEqual([
+      {
+        packageId: "local-source@1.2.3",
+        metadataLicense: "AGPL-3.0-only",
+        metadataSource: "pyproject.toml",
+        files: [
+          {
+            path: "packages/local-source/LICENSE",
+            kind: "license",
+            text: "GNU AFFERO GENERAL PUBLIC LICENSE Version 3\n"
+          }
+        ],
+        source: "local",
+        warnings: []
+      }
+    ]);
   });
 
   test("keeps versioned records when unversioned source tree records are present", () => {
