@@ -21,7 +21,7 @@ type CycloneDxComponentRecord = {
   licenseExpressions: string[];
 };
 
-type UnsupportedCycloneDxDependencyField = "dependsOn" | "entry" | "ref";
+type UnsupportedCycloneDxDependencyField = "dependencies" | "dependsOn" | "entry" | "ref";
 type UnsupportedCycloneDxDependencyValueKind = "array" | "boolean" | "null" | "number" | "object";
 
 export function parseCycloneDxJsonFile(
@@ -341,8 +341,14 @@ function readCycloneDxDependencyMap(
   unsupportedDependencyValueKinds?: UnsupportedCycloneDxDependencyValueKind[];
 }> {
   const dependencyMap = new Map<string, string[]>();
-  if (!Array.isArray(value)) {
+  if (value === undefined) {
     return ok(dependencyMap);
+  }
+  if (!Array.isArray(value)) {
+    return err({
+      dependencyEntryIndexes: [],
+      unsupportedDependencyFields: ["dependencies"]
+    });
   }
 
   const unsupportedEntryIndexes = new Set<number>();
@@ -606,7 +612,7 @@ function unsupportedCycloneDxDependencyError(
     createError({
       code: "CYCLONEDX_PARSE_FAILED",
       category: "unsupported_input",
-      message: "Failed to parse CycloneDX dependency entries. Ohrisk supports object entries with string refs and string dependsOn references.",
+      message: "Failed to parse CycloneDX dependency entries. Ohrisk supports array dependencies with object entries, string refs, and string dependsOn references.",
       details: {
         lockfilePath,
         reason: "unsupported_cyclonedx_dependency_entries",

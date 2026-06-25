@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.158.12 - 2026-06-25
+
+### Fixed
+
+- CycloneDX JSON SBOMs with non-array `dependencies` values now report
+  structured unsupported dependency details instead of silently dropping edges.
+
 ## 0.158.11 - 2026-06-25
 
 ### Fixed
