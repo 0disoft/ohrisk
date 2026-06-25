@@ -127,4 +127,55 @@ describe("parseSpdxJsonText", () => {
 
     expect(result.error.code).toBe("SPDX_PARSE_FAILED");
   });
+
+  test("reports malformed dependency relationships as unsupported input", () => {
+    const result = parseSpdxJsonText(JSON.stringify({
+      spdxVersion: "SPDX-2.3",
+      name: "fixture-spdx-malformed-relationship",
+      packages: [
+        {
+          SPDXID: "SPDXRef-Package-parent",
+          name: "parent",
+          externalRefs: [
+            {
+              referenceCategory: "PACKAGE-MANAGER",
+              referenceType: "purl",
+              referenceLocator: "pkg:npm/parent@1.0.0"
+            }
+          ]
+        },
+        {
+          SPDXID: "SPDXRef-Package-child",
+          name: "child",
+          externalRefs: [
+            {
+              referenceCategory: "PACKAGE-MANAGER",
+              referenceType: "purl",
+              referenceLocator: "pkg:npm/child@2.0.0"
+            }
+          ]
+        }
+      ],
+      relationships: [
+        {
+          spdxElementId: "SPDXRef-Package-parent",
+          relationshipType: "DEPENDS_ON",
+          relatedSpdxElement: { id: "SPDXRef-Package-child" }
+        }
+      ]
+    }), "spdx.json");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected unsupported SPDX dependency relationship to fail.");
+    }
+
+    expect(result.error.code).toBe("SPDX_PARSE_FAILED");
+    expect(result.error.details).toEqual({
+      lockfilePath: "spdx.json",
+      reason: "unsupported_spdx_dependency_relationships",
+      relationshipIndexes: [0],
+      unsupportedRelationshipFields: ["relatedSpdxElement"]
+    });
+  });
 });

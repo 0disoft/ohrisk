@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.158.6 - 2026-06-25
+
+### Fixed
+
+- SPDX JSON SBOMs with malformed dependency relationships now report structured
+  unsupported relationship details instead of silently dropping edges.
+
 ## 0.158.5 - 2026-06-25
 
 ### Fixed

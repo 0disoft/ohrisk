@@ -19,6 +19,8 @@ type SpdxPackageRecord = {
   licenseExpression?: string;
 };
 
+type UnsupportedSpdxDependencyField = "spdxElementId" | "relatedSpdxElement";
+
 export function parseSpdxJsonFile(
   lockfilePath: string,
   options: { maxBytes?: number } = {}
@@ -73,13 +75,17 @@ export function parseSpdxDocument(
   }
 
   const dependencyMap = readSpdxDependencyMap(document.relationships, packages);
+  if (!dependencyMap.ok) {
+    return unsupportedSpdxDependencyError(lockfilePath, dependencyMap.error);
+  }
+
   const rootName = typeof document.name === "string" && document.name !== ""
     ? document.name
     : "<spdx-project>";
   const rootRefs = readSpdxRootRefs({
     document,
     packages,
-    dependencyMap
+    dependencyMap: dependencyMap.value
   });
   const nodeMap = new Map<string, DependencyNode>();
 
@@ -95,7 +101,7 @@ export function parseSpdxDocument(
       direct: true,
       path: [rootName],
       packages,
-      dependencyMap,
+      dependencyMap: dependencyMap.value,
       nodeMap,
       seen: new Set()
     });
@@ -212,11 +218,14 @@ function readMeaningfulSpdxLicenseValue(value: unknown): string | undefined {
 function readSpdxDependencyMap(
   value: unknown,
   packages: SpdxPackageRecord[]
-): Map<string, string[]> {
+): Result<Map<string, string[]>, {
+  relationshipIndexes: number[];
+  unsupportedRelationshipFields: UnsupportedSpdxDependencyField[];
+}> {
   const packageIds = new Set(packages.map((pkg) => pkg.spdxId));
   const dependencyMap = new Map<string, string[]>();
   if (!Array.isArray(value)) {
-    return dependencyMap;
+    return ok(dependencyMap);
   }
 
   const addEdge = (parent: string, child: string): void => {
@@ -229,7 +238,25 @@ function readSpdxDependencyMap(
     ]);
   };
 
-  for (const relationship of value) {
+  const unsupportedIndexes = new Set<number>();
+  const unsupportedFields = new Set<UnsupportedSpdxDependencyField>();
+  for (const [index, relationship] of value.entries()) {
+    if (
+      isRecord(relationship)
+      && (relationship.relationshipType === "DEPENDS_ON"
+        || relationship.relationshipType === "DEPENDENCY_OF")
+    ) {
+      if (typeof relationship.spdxElementId !== "string") {
+        unsupportedIndexes.add(index);
+        unsupportedFields.add("spdxElementId");
+      }
+
+      if (typeof relationship.relatedSpdxElement !== "string") {
+        unsupportedIndexes.add(index);
+        unsupportedFields.add("relatedSpdxElement");
+      }
+    }
+
     if (
       !isRecord(relationship)
       || typeof relationship.spdxElementId !== "string"
@@ -248,7 +275,14 @@ function readSpdxDependencyMap(
     }
   }
 
-  return dependencyMap;
+  if (unsupportedIndexes.size > 0) {
+    return err({
+      relationshipIndexes: [...unsupportedIndexes].sort((left, right) => left - right),
+      unsupportedRelationshipFields: [...unsupportedFields].sort()
+    });
+  }
+
+  return ok(dependencyMap);
 }
 
 function readSpdxRootRefs(input: {
@@ -391,6 +425,27 @@ function spdxShapeError(lockfilePath: string): Result<never, OhriskError> {
       message: "Failed to parse SPDX input. Ohrisk expected an SPDX document with package entries and Package URL external refs.",
       details: {
         lockfilePath
+      }
+    })
+  );
+}
+
+function unsupportedSpdxDependencyError(
+  lockfilePath: string,
+  details: {
+    relationshipIndexes: number[];
+    unsupportedRelationshipFields: UnsupportedSpdxDependencyField[];
+  }
+): Result<never, OhriskError> {
+  return err(
+    createError({
+      code: "SPDX_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse SPDX dependency relationships. Ohrisk supports string SPDX dependency references.",
+      details: {
+        lockfilePath,
+        reason: "unsupported_spdx_dependency_relationships",
+        ...details
       }
     })
   );
