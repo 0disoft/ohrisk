@@ -198,10 +198,11 @@ identity로 접는다. dependency type은 `Podfile.lock`만으로 production/dev
 group을 알 수 없어서 unknown으로 표시한다. evidence는 로컬 `Pods/<pod>` source와
 `Pods/Local Podspecs/<pod>.podspec.json`에서 읽는다. 원격 podspec/source fetch는
 아직 지원하지 않는다.
-Elixir Mix는 `mix.lock`에 기록된 Hex package pin을 스캔하고, 로컬 `deps/<package>`
-source와 `mix.exs`의 license metadata를 evidence로 읽는다. `mix.lock` dependency
-graph와 environment 분류는 아직 복원하지 않아서 dependency type은 unknown으로
-표시한다. 원격 Hex.pm artifact fetch는 아직 지원하지 않는다.
+Elixir Mix는 `mix.lock`에 기록된 Hex package pin을 스캔하고, root `mix.exs`의
+literal `only:` dependency option을 production/development root classification에
+사용한다. 로컬 `deps/<package>` source와 `mix.exs`의 license metadata를 evidence로
+읽는다. `mix.lock` dependency graph 복원과 원격 Hex.pm artifact fetch는 아직
+지원하지 않는다.
 Erlang Rebar3는 `rebar.lock`에 기록된 Hex `pkg` pin을 스캔하고, 로컬
 `deps/<package>` source와 `rebar.config` license metadata를 evidence로 읽는다.
 git/path dependency, plugin lock, profile-specific test dependency, Rebar dependency tree

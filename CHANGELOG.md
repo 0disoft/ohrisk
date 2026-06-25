@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.155.0 - 2026-06-25
+
+### Added
+
+- Elixir Mix `mix.lock` scans now read adjacent root `mix.exs` literal
+  `only:` dependency options to classify production and development
+  dependency roots.
+
 ## 0.154.0 - 2026-06-25
 
 ### Added

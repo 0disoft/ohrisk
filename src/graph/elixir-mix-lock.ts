@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
@@ -8,7 +9,7 @@ import {
   LOCKFILE_MAX_BYTES,
   readInputTextFile
 } from "./read-input-file";
-import type { DependencyGraph, DependencyNode } from "./types";
+import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
 
 type HexRecord = {
   name: string;
@@ -18,7 +19,7 @@ type HexRecord = {
 
 export function parseMixLockfile(
   lockfilePath: string,
-  options: { maxBytes?: number } = {}
+  options: { maxBytes?: number; mixExsMaxBytes?: number } = {}
 ): Result<DependencyGraph, OhriskError> {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -41,12 +42,23 @@ export function parseMixLockfile(
     );
   }
 
-  return parseMixLockText(lockfileText.value, lockfilePath);
+  const mixExsText = readOptionalMixExs({
+    lockfilePath,
+    maxBytes: options.mixExsMaxBytes ?? LOCKFILE_MAX_BYTES
+  });
+  if (!mixExsText.ok) {
+    return mixExsText;
+  }
+
+  return parseMixLockText(lockfileText.value, lockfilePath, {
+    mixExsText: mixExsText.value
+  });
 }
 
 export function parseMixLockText(
   input: string,
-  lockfilePath = "mix.lock"
+  lockfilePath = "mix.lock",
+  options: { mixExsText?: string } = {}
 ): Result<DependencyGraph, OhriskError> {
   const records = readHexRecords(input);
   if (records.length === 0) {
@@ -63,6 +75,9 @@ export function parseMixLockText(
   }
 
   const rootName = path.basename(path.dirname(lockfilePath)) || "<elixir-project>";
+  const rootTypes = options.mixExsText
+    ? readMixRootTypes(options.mixExsText, records)
+    : new Map<string, DependencyType>();
   return ok({
     rootName,
     lockfilePath,
@@ -72,12 +87,44 @@ export function parseMixLockText(
         name: record.name,
         version: record.version,
         ecosystem: "hex",
-        dependencyType: "unknown",
+        dependencyType: rootTypes.get(record.name) ?? "unknown",
         direct: true,
         paths: [[rootName, record.id]]
       }))
       .sort((left, right) => left.id.localeCompare(right.id))
   });
+}
+
+function readOptionalMixExs(input: {
+  lockfilePath: string;
+  maxBytes: number;
+}): Result<string | undefined, OhriskError> {
+  const mixExsPath = path.join(path.dirname(input.lockfilePath), "mix.exs");
+  if (!existsSync(mixExsPath)) {
+    return ok(undefined);
+  }
+
+  const mixExsText = readInputTextFile({
+    filePath: mixExsPath,
+    maxBytes: input.maxBytes
+  });
+  if (!mixExsText.ok) {
+    return err(
+      createError({
+        code: "MIX_LOCK_READ_FAILED",
+        category: inputFileReadErrorCategory(mixExsText.error),
+        message: mixExsText.error.kind === "too_large"
+          ? "mix.exs exceeded the maximum supported size."
+          : "Failed to read mix.exs.",
+        details: {
+          mixExsPath,
+          ...inputFileReadErrorDetails(mixExsText.error)
+        }
+      })
+    );
+  }
+
+  return ok(mixExsText.value);
 }
 
 function readHexRecords(input: string): HexRecord[] {
@@ -102,4 +149,103 @@ function readHexRecords(input: string): HexRecord[] {
   }
 
   return [...records.values()];
+}
+
+function readMixRootTypes(input: string, records: HexRecord[]): Map<string, DependencyType> {
+  const recordNames = new Set(records.map((record) => record.name));
+  const roots = new Map<string, DependencyType>();
+
+  for (const dependency of readMixRootDependencies(input)) {
+    if (!recordNames.has(dependency.name)) {
+      continue;
+    }
+
+    const existing = roots.get(dependency.name);
+    roots.set(
+      dependency.name,
+      existing ? mergeDependencyType(existing, dependency.type) : dependency.type
+    );
+  }
+
+  return roots;
+}
+
+function readMixRootDependencies(input: string): Array<{ name: string; type: DependencyType }> {
+  const dependencies: Array<{ name: string; type: DependencyType }> = [];
+
+  for (const rawLine of input.split(/\r?\n/)) {
+    const line = stripElixirComment(rawLine).trim();
+    if (line === "") {
+      continue;
+    }
+
+    const match = /\{(?:\s*:([A-Za-z0-9_.-]+)|\s*:"([^"]+)")\s*,/.exec(line);
+    const name = (match?.[1] ?? match?.[2])?.trim();
+    if (!name) {
+      continue;
+    }
+
+    dependencies.push({
+      name,
+      type: readMixOnlyType(line)
+    });
+  }
+
+  return dependencies;
+}
+
+function readMixOnlyType(line: string): DependencyType {
+  const match = /(?:^|[\s,])only:\s*(\[[^\]]+\]|:[A-Za-z_][A-Za-z0-9_]*|["'][^"']+["'])/.exec(line);
+  if (!match?.[1]) {
+    return "production";
+  }
+
+  const onlyValue = match[1];
+  const environments = [...onlyValue.matchAll(/(?::|["'])([A-Za-z_][A-Za-z0-9_]*)/g)]
+    .map((environment) => environment[1])
+    .filter((environment): environment is string => environment !== undefined);
+  return environments.length > 0 && !environments.includes("prod")
+    ? "development"
+    : "production";
+}
+
+function stripElixirComment(line: string): string {
+  let quote: "\"" | "'" | undefined;
+  let escaped = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\" && quote) {
+      escaped = true;
+      continue;
+    }
+
+    if ((char === "\"" || char === "'") && (!quote || quote === char)) {
+      quote = quote ? undefined : char;
+      continue;
+    }
+
+    if (char === "#" && !quote) {
+      return line.slice(0, index);
+    }
+  }
+
+  return line;
+}
+
+function mergeDependencyType(left: DependencyType, right: DependencyType): DependencyType {
+  if (left === "production" || right === "production") {
+    return "production";
+  }
+
+  if (left === "development" || right === "development") {
+    return "development";
+  }
+
+  return left;
 }
