@@ -126,6 +126,66 @@ describe("parseCycloneDxJsonText", () => {
     }));
   });
 
+  test("merges duplicate dependency entries without dropping child edges", () => {
+    const result = parseCycloneDxJsonText(JSON.stringify({
+      bomFormat: "CycloneDX",
+      specVersion: "1.5",
+      metadata: {
+        component: {
+          name: "fixture-cyclonedx-duplicate-deps",
+          "bom-ref": "root-app"
+        }
+      },
+      components: [
+        {
+          type: "library",
+          "bom-ref": "parent",
+          purl: "pkg:npm/parent@1.0.0"
+        },
+        {
+          type: "library",
+          "bom-ref": "child-a",
+          purl: "pkg:npm/child-a@2.0.0"
+        },
+        {
+          type: "library",
+          "bom-ref": "child-b",
+          purl: "pkg:npm/child-b@3.0.0"
+        }
+      ],
+      dependencies: [
+        {
+          ref: "root-app",
+          dependsOn: ["parent"]
+        },
+        {
+          ref: "parent",
+          dependsOn: ["child-a"]
+        },
+        {
+          ref: "parent",
+          dependsOn: ["child-b"]
+        }
+      ]
+    }), "cyclonedx.json");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "child-a@2.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [["fixture-cyclonedx-duplicate-deps", "parent@1.0.0", "child-a@2.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "child-b@3.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [["fixture-cyclonedx-duplicate-deps", "parent@1.0.0", "child-b@3.0.0"]]
+      });
+  });
+
   test("reports malformed documents as typed CycloneDX errors", () => {
     const result = parseCycloneDxJsonText(JSON.stringify({
       bomFormat: "CycloneDX",

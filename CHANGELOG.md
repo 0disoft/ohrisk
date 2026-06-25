@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.158.16 - 2026-06-25
+
+### Fixed
+
+- CycloneDX JSON SBOMs with duplicate dependency entries for the same `ref`
+  now merge child edges instead of letting the later entry drop earlier
+  dependency paths.
+
 ## 0.158.15 - 2026-06-25
 
 ### Fixed

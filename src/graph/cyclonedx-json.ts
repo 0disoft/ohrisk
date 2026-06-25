@@ -386,7 +386,9 @@ function readCycloneDxDependencyMap(
       .filter((child): child is string => typeof child === "string")
       .map((child) => aliases.get(child) ?? child)
       .filter((child, index, all) => child !== parentRef && all.indexOf(child) === index);
-    dependencyMap.set(parentRef, childRefs);
+    dependencyMap.set(parentRef, [
+      ...new Set([...(dependencyMap.get(parentRef) ?? []), ...childRefs])
+    ]);
   }
 
   if (unsupportedEntryIndexes.size > 0) {
