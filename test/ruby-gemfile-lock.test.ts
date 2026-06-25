@@ -162,4 +162,65 @@ describe("parseGemfileLockText", () => {
     expect(result.value.nodes.find((node) => node.id === "debug-after-block@1.0.0"))
       .toMatchObject({ dependencyType: "development" });
   });
+
+  test("uses literal Gemfile inline group options for development dependency classification", () => {
+    const result = parseGemfileLockText(
+      [
+        "GEM",
+        "  remote: https://rubygems.org/",
+        "  specs:",
+        "    debug-inline (1.0.0)",
+        "      rack (>= 3.0.0)",
+        "    debug-string-group (1.0.0)",
+        "    rack (3.0.8)",
+        "    rails (7.1.0)",
+        "",
+        "PLATFORMS",
+        "  ruby",
+        "",
+        "DEPENDENCIES",
+        "  debug-inline",
+        "  debug-string-group",
+        "  rails",
+        "",
+        "BUNDLED WITH",
+        "   2.5.0"
+      ].join("\n"),
+      "fixture-ruby/Gemfile.lock",
+      {
+        gemfileText: [
+          "gem 'rails'",
+          "gem 'debug-inline', group: [:development, :test]",
+          "gem 'debug-string-group', groups: 'test'"
+        ].join("\n")
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "rails@7.1.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: true
+      });
+    expect(result.value.nodes.find((node) => node.id === "debug-inline@1.0.0"))
+      .toMatchObject({
+        dependencyType: "development",
+        direct: true
+      });
+    expect(result.value.nodes.find((node) => node.id === "debug-string-group@1.0.0"))
+      .toMatchObject({
+        dependencyType: "development",
+        direct: true
+      });
+    expect(result.value.nodes.find((node) => node.id === "rack@3.0.8"))
+      .toMatchObject({
+        dependencyType: "development",
+        direct: false,
+        paths: [["fixture-ruby", "debug-inline@1.0.0", "rack@3.0.8"]]
+      });
+  });
 });

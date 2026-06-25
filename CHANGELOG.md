@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.152.0 - 2026-06-25
+
+### Added
+
+- Ruby Bundler scans now read literal sibling `Gemfile` inline `group:` and
+  `groups:` options to classify development dependencies.
+
 ## 0.151.0 - 2026-06-25
 
 ### Added

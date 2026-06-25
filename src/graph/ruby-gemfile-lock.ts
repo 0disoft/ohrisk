@@ -277,11 +277,16 @@ function readGemfileDependencies(gemfileText: string): GemRootDependency[] {
 
     const name = readGemfileGemName(line);
     if (name) {
+      const hasGroupFrame = blockStack.some((block) => block.dependencyType !== undefined);
+      const blockType = blockStack.some((block) => block.dependencyType === "development")
+        ? "development"
+        : "production";
+      const inlineGroupType = readGemfileInlineGroupType(line);
       dependencies.push({
         name,
-        type: blockStack.some((block) => block.dependencyType === "development")
-          ? "development"
-          : "production"
+        type: inlineGroupType && hasGroupFrame
+          ? mergeDependencyType(blockType, inlineGroupType)
+          : inlineGroupType ?? blockType
       });
     }
 
@@ -305,6 +310,15 @@ function readGemfileGroupType(line: string): DependencyType | undefined {
 function readGemfileGemName(line: string): string | undefined {
   const match = /^gem\s+["']([^"']+)["']/.exec(line);
   return match?.[1];
+}
+
+function readGemfileInlineGroupType(line: string): DependencyType | undefined {
+  const match = /(?:^|[\s,])groups?:\s*(\[[^\]]+\]|:[A-Za-z_][A-Za-z0-9_]*|["'][^"']+["'])/.exec(line);
+  if (!match?.[1]) {
+    return undefined;
+  }
+
+  return /(?::|["'])(?:development|test)\b/.test(match[1]) ? "development" : "production";
 }
 
 function isRubyBlockStart(line: string): boolean {
