@@ -142,6 +142,44 @@ Relationship: SPDXRef-Package-parent DEPENDS_ON SPDXRef-Package-child-b
       });
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const result = parseSpdxTagValueText(`
+SPDXVersion: SPDX-2.3
+SPDXID: SPDXRef-DOCUMENT
+DocumentName: fixture-spdx-tag-value-cycle
+DocumentDescribes: SPDXRef-Package-parent
+
+PackageName: parent
+SPDXID: SPDXRef-Package-parent
+PackageLicenseDeclared: MIT
+ExternalRef: PACKAGE-MANAGER purl pkg:npm/parent@1.0.0
+
+PackageName: child
+SPDXID: SPDXRef-Package-child
+PackageLicenseDeclared: MIT
+ExternalRef: PACKAGE-MANAGER purl pkg:npm/child@2.0.0
+
+Relationship: SPDXRef-Package-parent DEPENDS_ON SPDXRef-Package-child
+Relationship: SPDXRef-Package-child DEPENDS_ON SPDXRef-Package-parent
+`, "sbom.spdx");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "parent@1.0.0"))
+      .toMatchObject({
+        direct: true,
+        paths: [["fixture-spdx-tag-value-cycle", "parent@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "child@2.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [["fixture-spdx-tag-value-cycle", "parent@1.0.0", "child@2.0.0"]]
+      });
+  });
+
   test("reports documents without package PURLs as typed SPDX errors", () => {
     const result = parseSpdxTagValueText(`
 SPDXVersion: SPDX-2.3
