@@ -37,6 +37,8 @@ type SpdxTagValueRelationship = {
   relatedSpdxElement: string;
 };
 
+type UnsupportedSpdxTagValueRelationshipField = "spdxElementId" | "relatedSpdxElement";
+
 export function parseSpdxTagValueFile(
   lockfilePath: string,
   options: { maxBytes?: number } = {}
@@ -167,9 +169,17 @@ function readSpdxTagValueDocument(
         }
         break;
       case "Relationship": {
-        const relationship = readRelationship(value);
-        if (relationship) {
-          document.relationships.push(relationship);
+        const relationship = readRelationship({
+          value,
+          lockfilePath,
+          line: index + 1
+        });
+        if (!relationship.ok) {
+          return relationship;
+        }
+
+        if (relationship.value) {
+          document.relationships.push(relationship.value);
         }
         break;
       }
@@ -204,22 +214,37 @@ function readExternalRef(value: string): SpdxTagValueExternalRef | undefined {
   };
 }
 
-function readRelationship(value: string): SpdxTagValueRelationship | undefined {
-  const parts = value.split(/\s+/).filter((part) => part !== "");
+function readRelationship(input: {
+  value: string;
+  lockfilePath: string;
+  line: number;
+}): Result<SpdxTagValueRelationship | undefined, OhriskError> {
+  const parts = input.value.split(/\s+/).filter((part) => part !== "");
+  const relationshipType = parts[1];
+  if (isSpdxDependencyRelationshipType(relationshipType) && parts.length < 3) {
+    return unsupportedSpdxTagValueRelationshipError({
+      lockfilePath: input.lockfilePath,
+      line: input.line,
+      relationshipType,
+      unsupportedRelationshipFields: ["relatedSpdxElement"]
+    });
+  }
+
   if (parts.length < 3) {
-    return undefined;
+    return ok(undefined);
   }
 
-  const [spdxElementId, relationshipType, relatedSpdxElement] = parts;
+  const spdxElementId = parts[0];
+  const relatedSpdxElement = parts[2];
   if (!spdxElementId || !relationshipType || !relatedSpdxElement) {
-    return undefined;
+    return ok(undefined);
   }
 
-  return {
+  return ok({
     spdxElementId,
     relationshipType,
     relatedSpdxElement
-  };
+  });
 }
 
 function readSpdxRefList(value: string): string[] {
@@ -231,6 +256,34 @@ function readSpdxRefList(value: string): string[] {
 
 function startsUnclosedTextBlock(value: string): boolean {
   return value.includes("<text>") && !value.includes("</text>");
+}
+
+function isSpdxDependencyRelationshipType(
+  value: string | undefined
+): value is "DEPENDS_ON" | "DEPENDENCY_OF" {
+  return value === "DEPENDS_ON" || value === "DEPENDENCY_OF";
+}
+
+function unsupportedSpdxTagValueRelationshipError(input: {
+  lockfilePath: string;
+  line: number;
+  relationshipType: "DEPENDS_ON" | "DEPENDENCY_OF";
+  unsupportedRelationshipFields: UnsupportedSpdxTagValueRelationshipField[];
+}): Result<never, OhriskError> {
+  return err(
+    createError({
+      code: "SPDX_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse SPDX tag-value dependency relationship. Ohrisk supports complete SPDX dependency relationship references.",
+      details: {
+        lockfilePath: input.lockfilePath,
+        line: input.line,
+        reason: "unsupported_spdx_dependency_relationships",
+        relationshipType: input.relationshipType,
+        unsupportedRelationshipFields: input.unsupportedRelationshipFields
+      }
+    })
+  );
 }
 
 function spdxTagValueParseError(input: {

@@ -127,4 +127,38 @@ PackageLicenseDeclared: MIT
 
     expect(result.error.code).toBe("SPDX_PARSE_FAILED");
   });
+
+  test("reports malformed dependency relationships as unsupported input", () => {
+    const result = parseSpdxTagValueText(`
+SPDXVersion: SPDX-2.3
+DocumentName: fixture-malformed-relationship
+
+PackageName: parent
+SPDXID: SPDXRef-Package-parent
+PackageLicenseDeclared: MIT
+ExternalRef: PACKAGE-MANAGER purl pkg:npm/parent@1.0.0
+
+PackageName: child
+SPDXID: SPDXRef-Package-child
+PackageLicenseDeclared: MIT
+ExternalRef: PACKAGE-MANAGER purl pkg:npm/child@2.0.0
+
+Relationship: SPDXRef-Package-parent DEPENDS_ON
+`, "sbom.spdx");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected unsupported SPDX tag-value dependency relationship to fail.");
+    }
+
+    expect(result.error.code).toBe("SPDX_PARSE_FAILED");
+    expect(result.error.category).toBe("unsupported_input");
+    expect(result.error.details).toEqual({
+      lockfilePath: "sbom.spdx",
+      line: 15,
+      reason: "unsupported_spdx_dependency_relationships",
+      relationshipType: "DEPENDS_ON",
+      unsupportedRelationshipFields: ["relatedSpdxElement"]
+    });
+  });
 });
