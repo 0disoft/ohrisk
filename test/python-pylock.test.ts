@@ -116,5 +116,37 @@ describe("parsePylockText", () => {
     }
 
     expect(result.error.code).toBe("PYLOCK_PARSE_FAILED");
+    expect(result.error.details).toEqual({
+      lockfilePath: "pylock.toml",
+      reason: "unsupported_unversioned_source_tree_record",
+      unsupportedSourceTreePackages: ["local-source"],
+      unsupportedSourceTreePaths: ["./packages/local-source"]
+    });
+  });
+
+  test("keeps versioned records when unversioned source tree records are present", () => {
+    const result = parsePylockText(
+      [
+        "lock-version = '1.0'",
+        "created-by = 'fixture-locker'",
+        "",
+        "[[packages]]",
+        "name = 'attrs'",
+        "version = '25.1.0'",
+        "",
+        "[[packages]]",
+        "name = 'local-source'",
+        "[packages.directory]",
+        "path = './packages/local-source'"
+      ].join("\n"),
+      "pylock.toml"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual(["attrs@25.1.0"]);
   });
 });

@@ -15,6 +15,16 @@ type PylockPackageRecord = {
   dependencies: PylockDependencyRef[];
 };
 
+type PylockParseRecordsResult = {
+  records: PylockPackageRecord[];
+  unsupportedSourceTreeRecords: UnsupportedPylockSourceTreeRecord[];
+};
+
+type UnsupportedPylockSourceTreeRecord = {
+  name?: string;
+  path?: string;
+};
+
 type PylockDependencyRef = {
   name: string;
   version?: string;
@@ -28,6 +38,7 @@ type PartialPylockDependencyRef = {
 type PartialPylockPackageRecord = {
   name?: string;
   version?: string;
+  directoryPath?: string;
   dependencies: PylockDependencyRef[];
 };
 
@@ -64,8 +75,29 @@ export function parsePylockText(
   lockfilePath = "pylock.toml"
 ): Result<DependencyGraph, OhriskError> {
   try {
-    const records = parsePylockPackageRecords(input);
+    const parsed = parsePylockPackageRecords(input);
+    const { records } = parsed;
     if (records.length === 0) {
+      if (parsed.unsupportedSourceTreeRecords.length > 0) {
+        return err(
+          createError({
+            code: "PYLOCK_PARSE_FAILED",
+            category: "unsupported_input",
+            message: "Failed to parse pylock.toml. Ohrisk does not scan unversioned source-tree package records yet.",
+            details: {
+              lockfilePath,
+              reason: "unsupported_unversioned_source_tree_record",
+              unsupportedSourceTreePackages: parsed.unsupportedSourceTreeRecords
+                .map((record) => record.name)
+                .filter((name): name is string => name !== undefined),
+              unsupportedSourceTreePaths: parsed.unsupportedSourceTreeRecords
+                .map((record) => record.path)
+                .filter((path): path is string => path !== undefined)
+            }
+          })
+        );
+      }
+
       return err(
         createError({
           code: "PYLOCK_PARSE_FAILED",
@@ -126,11 +158,12 @@ export function parsePylockText(
   }
 }
 
-function parsePylockPackageRecords(input: string): PylockPackageRecord[] {
+function parsePylockPackageRecords(input: string): PylockParseRecordsResult {
   const records: PylockPackageRecord[] = [];
+  const unsupportedSourceTreeRecords: UnsupportedPylockSourceTreeRecord[] = [];
   let current: PartialPylockPackageRecord | undefined;
   let currentDependency: PartialPylockDependencyRef | undefined;
-  let currentTable: "packages" | "packages.dependencies" | "other" = "other";
+  let currentTable: "packages" | "packages.dependencies" | "packages.directory" | "other" = "other";
   let activeDependencyArray: string[] | undefined;
 
   const flushDependencyArray = (): void => {
@@ -175,6 +208,11 @@ function parsePylockPackageRecords(input: string): PylockPackageRecord[] {
         id: `${current.name}@${current.version}`,
         dependencies: current.dependencies
       });
+    } else if (current.directoryPath) {
+      unsupportedSourceTreeRecords.push({
+        name: current.name,
+        path: current.directoryPath
+      });
     }
   };
 
@@ -208,6 +246,15 @@ function parsePylockPackageRecords(input: string): PylockPackageRecord[] {
       flushCurrentDependency();
       currentDependency = {};
       currentTable = "packages.dependencies";
+      continue;
+    }
+
+    if (line === "[packages.directory]") {
+      if (!current) {
+        throw new Error("Encountered [packages.directory] before [[packages]].");
+      }
+      flushCurrentDependency();
+      currentTable = "packages.directory";
       continue;
     }
 
@@ -262,11 +309,21 @@ function parsePylockPackageRecords(input: string): PylockPackageRecord[] {
         };
       }
     }
+
+    if (currentTable === "packages.directory") {
+      const path = readStringAssignment(line, "path");
+      if (path !== undefined) {
+        current.directoryPath = path;
+      }
+    }
   }
 
   flushCurrent();
 
-  return records;
+  return {
+    records,
+    unsupportedSourceTreeRecords
+  };
 }
 
 function readDependencyRefsFromInlineTableArray(value: string): PylockDependencyRef[] {
