@@ -21,7 +21,11 @@ describe("collectRPackageEvidence", () => {
         ].join("\n"),
         "utf8"
       );
-      writeFileSync(path.join(packageDir, "LICENSE"), "GNU Affero General Public License version 3", "utf8");
+      writeFileSync(
+        path.join(packageDir, "LICENSE"),
+        "GNU Affero General Public License version 3",
+        "utf8"
+      );
 
       const result = collectRPackageEvidence({
         packageId: "RiskR@1.2.3",
@@ -42,6 +46,63 @@ describe("collectRPackageEvidence", () => {
         metadataSource: "DESCRIPTION"
       });
       expect(result.value.files.map((file) => file.path)).toEqual(["LICENSE"]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("stops searching local R package libraries at the configured depth limit", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-r-evidence-depth-"));
+    const packageDir = path.join(
+      projectRoot,
+      "renv",
+      "library",
+      "d0",
+      "d1",
+      "d2",
+      "d3",
+      "d4",
+      "d5",
+      "RiskR"
+    );
+
+    try {
+      mkdirSync(packageDir, { recursive: true });
+      writeFileSync(
+        path.join(packageDir, "DESCRIPTION"),
+        [
+          "Package: RiskR",
+          "Version: 1.2.3",
+          "License: AGPL-3.0-only"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(packageDir, "LICENSE"),
+        "GNU Affero General Public License version 3",
+        "utf8"
+      );
+
+      const result = collectRPackageEvidence({
+        packageId: "RiskR@1.2.3",
+        packageName: "RiskR",
+        version: "1.2.3",
+        projectRoot
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value).toMatchObject({
+        packageId: "RiskR@1.2.3",
+        source: "unavailable",
+        files: []
+      });
+      expect(result.value.warnings).toContain(
+        "R package source was not found in local renv/library or project library paths."
+      );
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
