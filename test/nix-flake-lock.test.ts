@@ -83,6 +83,110 @@ describe("parseNixFlakeLockText", () => {
     ]);
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const result = parseNixFlakeLockText(JSON.stringify({
+      version: 7,
+      root: "root",
+      nodes: {
+        root: {
+          inputs: {
+            risk: "risk"
+          }
+        },
+        risk: {
+          inputs: {
+            "cycle-a": "cycle-a"
+          },
+          locked: {
+            type: "github",
+            owner: "acme",
+            repo: "risk",
+            rev: "1111111111111111",
+            narHash: "sha256-risk"
+          }
+        },
+        "cycle-a": {
+          inputs: {
+            "cycle-b": "cycle-b"
+          },
+          locked: {
+            type: "github",
+            owner: "acme",
+            repo: "cycle-a",
+            rev: "2222222222222222",
+            narHash: "sha256-cycle-a"
+          }
+        },
+        "cycle-b": {
+          inputs: {
+            "cycle-a": "cycle-a",
+            leaf: "leaf"
+          },
+          locked: {
+            type: "github",
+            owner: "acme",
+            repo: "cycle-b",
+            rev: "3333333333333333",
+            narHash: "sha256-cycle-b"
+          }
+        },
+        leaf: {
+          locked: {
+            type: "github",
+            owner: "acme",
+            repo: "leaf",
+            rev: "4444444444444444",
+            narHash: "sha256-leaf"
+          }
+        }
+      }
+    }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes).toEqual([
+      {
+        id: "github:acme/cycle-a@2222222222222222",
+        name: "github:acme/cycle-a",
+        version: "2222222222222222",
+        ecosystem: "nix",
+        dependencyType: "unknown",
+        direct: false,
+        paths: [[".", "risk", "cycle-a"]]
+      },
+      {
+        id: "github:acme/cycle-b@3333333333333333",
+        name: "github:acme/cycle-b",
+        version: "3333333333333333",
+        ecosystem: "nix",
+        dependencyType: "unknown",
+        direct: false,
+        paths: [[".", "risk", "cycle-a", "cycle-b"]]
+      },
+      {
+        id: "github:acme/leaf@4444444444444444",
+        name: "github:acme/leaf",
+        version: "4444444444444444",
+        ecosystem: "nix",
+        dependencyType: "unknown",
+        direct: false,
+        paths: [[".", "risk", "cycle-a", "cycle-b", "leaf"]]
+      },
+      {
+        id: "github:acme/risk@1111111111111111",
+        name: "github:acme/risk",
+        version: "1111111111111111",
+        ecosystem: "nix",
+        dependencyType: "unknown",
+        direct: true,
+        paths: [[".", "risk"]]
+      }
+    ]);
+  });
+
   test("reports missing nodes as typed errors", () => {
     const result = parseNixFlakeLockText(
       JSON.stringify({
