@@ -44,4 +44,35 @@ describe("collectCarthagePackageEvidence", () => {
       ]
     });
   });
+
+  test("stops collecting Carthage package evidence files at the configured limit", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-carthage-evidence-limit-"));
+    tempRoots.push(projectRoot);
+
+    const checkoutDir = path.join(projectRoot, "Carthage", "Checkouts", "RiskKit");
+    mkdirSync(checkoutDir, { recursive: true });
+    for (let index = 0; index < 51; index += 1) {
+      const suffix = index.toString().padStart(2, "0");
+      writeFileSync(path.join(checkoutDir, `LICENSE-${suffix}.txt`), `license ${suffix}`, "utf8");
+    }
+
+    const evidence = collectCarthagePackageEvidence({
+      packageId: "Acme/RiskKit@1.2.3",
+      packageName: "Acme/RiskKit",
+      projectRoot
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+
+    expect(evidence.value.files).toHaveLength(50);
+    expect(evidence.value.warnings).toContain(
+      "Carthage package evidence file limit reached at 50 files."
+    );
+    expect(evidence.value.warnings).not.toContain(
+      "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Carthage checkout."
+    );
+  });
 });
