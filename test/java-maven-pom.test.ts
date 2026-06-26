@@ -263,6 +263,79 @@ describe("parseMavenPomText", () => {
     }
   });
 
+  test("reports external Maven parent POM cycles as typed errors", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-maven-cycle-repo-"));
+
+    try {
+      writeMavenPom(
+        repositoryRoot,
+        "com.acme",
+        "parent-a",
+        "1.0.0",
+        [
+          "<project>",
+          "  <modelVersion>4.0.0</modelVersion>",
+          "  <parent>",
+          "    <groupId>com.acme</groupId>",
+          "    <artifactId>parent-b</artifactId>",
+          "    <version>1.0.0</version>",
+          "  </parent>",
+          "  <artifactId>parent-a</artifactId>",
+          "</project>"
+        ].join("\n")
+      );
+
+      writeMavenPom(
+        repositoryRoot,
+        "com.acme",
+        "parent-b",
+        "1.0.0",
+        [
+          "<project>",
+          "  <modelVersion>4.0.0</modelVersion>",
+          "  <parent>",
+          "    <groupId>com.acme</groupId>",
+          "    <artifactId>parent-a</artifactId>",
+          "    <version>1.0.0</version>",
+          "  </parent>",
+          "  <artifactId>parent-b</artifactId>",
+          "</project>"
+        ].join("\n")
+      );
+
+      const result = parseMavenPomText(
+        [
+          "<project>",
+          "  <modelVersion>4.0.0</modelVersion>",
+          "  <parent>",
+          "    <groupId>com.acme</groupId>",
+          "    <artifactId>parent-a</artifactId>",
+          "    <version>1.0.0</version>",
+          "  </parent>",
+          "  <artifactId>fixture-maven</artifactId>",
+          "</project>"
+        ].join("\n"),
+        "pom.xml",
+        {
+          mavenRepositoryRoots: [repositoryRoot],
+          projectRoot: path.dirname(repositoryRoot)
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected Maven parent cycle to fail.");
+      }
+
+      expect(result.error.code).toBe("MAVEN_POM_PARSE_FAILED");
+      expect(result.error.details).toMatchObject({
+        dependency: "com.acme:parent-a@1.0.0"
+      });
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
+    }
+  });
+
   test("rejects dependencies whose version comes only from missing external Maven management", () => {
     const result = parseMavenPomText(
       [
