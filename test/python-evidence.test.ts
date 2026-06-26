@@ -115,4 +115,54 @@ describe("collectPythonPackageEvidence", () => {
       rmSync(projectRoot, { recursive: true, force: true });
     }
   });
+
+  test("stops collecting Python package evidence files at the configured limit", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-python-evidence-limit-"));
+    const distInfoDir = path.join(
+      projectRoot,
+      ".venv",
+      "Lib",
+      "site-packages",
+      "requests-2.32.3.dist-info"
+    );
+    const licensesDir = path.join(distInfoDir, "licenses");
+
+    try {
+      mkdirSync(licensesDir, { recursive: true });
+      writeFileSync(
+        path.join(distInfoDir, "METADATA"),
+        [
+          "Metadata-Version: 2.4",
+          "Name: requests",
+          "Version: 2.32.3",
+          "License-Expression: Apache-2.0",
+          ""
+        ].join("\n"),
+        "utf8"
+      );
+      for (let index = 0; index < 51; index += 1) {
+        const suffix = index.toString().padStart(2, "0");
+        writeFileSync(path.join(licensesDir, `LICENSE-${suffix}.txt`), `license ${suffix}`, "utf8");
+      }
+
+      const evidence = collectPythonPackageEvidence({
+        packageId: "requests@2.32.3",
+        packageName: "requests",
+        version: "2.32.3",
+        projectRoot
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+
+      expect(evidence.value.files.length).toBeLessThan(51);
+      expect(evidence.value.warnings).not.toContain(
+        "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Python dist-info metadata."
+      );
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
 });

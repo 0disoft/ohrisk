@@ -197,4 +197,43 @@ describe("collectGoModuleEvidence", () => {
       rmSync(parentDir, { recursive: true, force: true });
     }
   });
+
+  test("stops collecting Go module evidence files at the configured limit", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-go-evidence-limit-"));
+    const moduleDir = path.join(
+      projectRoot,
+      "pkg",
+      "mod",
+      "github.com",
+      "acme",
+      "risk@v1.0.0"
+    );
+
+    try {
+      mkdirSync(moduleDir, { recursive: true });
+      for (let index = 0; index < 51; index += 1) {
+        const suffix = index.toString().padStart(2, "0");
+        writeFileSync(path.join(moduleDir, `LICENSE-${suffix}.txt`), `license ${suffix}`, "utf8");
+      }
+
+      const evidence = collectGoModuleEvidence({
+        packageId: "github.com/acme/risk@v1.0.0",
+        modulePath: "github.com/acme/risk",
+        version: "v1.0.0",
+        projectRoot
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+
+      expect(evidence.value.files).toHaveLength(50);
+      expect(evidence.value.warnings).not.toContain(
+        "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Go module source."
+      );
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
 });
