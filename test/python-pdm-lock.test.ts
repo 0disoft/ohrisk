@@ -93,6 +93,62 @@ describe("parsePdmLockText", () => {
       });
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const pdmLock = [
+      "[[package]]",
+      "name = \"requests\"",
+      "version = \"2.32.3\"",
+      "groups = [\"default\"]",
+      "dependencies = [",
+      "    \"urllib3>=2.5.0\",",
+      "]",
+      "",
+      "[[package]]",
+      "name = \"urllib3\"",
+      "version = \"2.5.0\"",
+      "groups = [\"default\"]",
+      "dependencies = [",
+      "    \"requests>=2.32.3\",",
+      "]"
+    ].join("\n");
+    const pyproject = [
+      "[project]",
+      "name = \"fixture-pdm-cycle\"",
+      "version = \"0.1.0\"",
+      "dependencies = [",
+      "    \"requests>=2.32.3\",",
+      "]"
+    ].join("\n");
+
+    const result = parsePdmLockText(pdmLock, "fixture-pdm-cycle/pdm.lock", {
+      pyprojectText: pyproject
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "requests@2.32.3",
+      "urllib3@2.5.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "requests@2.32.3"))
+      .toMatchObject({
+        ecosystem: "pypi",
+        dependencyType: "production",
+        direct: true,
+        paths: [["fixture-pdm-cycle", "requests@2.32.3"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "urllib3@2.5.0"))
+      .toMatchObject({
+        ecosystem: "pypi",
+        dependencyType: "production",
+        direct: false,
+        paths: [["fixture-pdm-cycle", "requests@2.32.3", "urllib3@2.5.0"]]
+      });
+  });
+
   test("parses local path package records with embedded license evidence", () => {
     const pdmLock = [
       "[[package]]",
