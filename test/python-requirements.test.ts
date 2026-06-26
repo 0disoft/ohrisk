@@ -119,6 +119,51 @@ describe("parseRequirementsText", () => {
     ]);
   });
 
+  test("reports nested requirement include cycles as typed errors", () => {
+    const files = new Map([
+      [
+        "fixture-python/requirements.txt",
+        "-r base.txt"
+      ],
+      [
+        "fixture-python/base.txt",
+        "-r requirements.txt"
+      ]
+    ]);
+    const result = parseRequirementsText(
+      "-r base.txt",
+      "fixture-python/requirements.txt",
+      {
+        readIncludedFile: ({ includePath }) => {
+          const includedPath = `fixture-python/${includePath}`;
+          const text = files.get(includedPath);
+          if (!text) {
+            throw new Error(`Unexpected include: ${includePath}`);
+          }
+
+          return {
+            ok: true as const,
+            value: {
+              path: includedPath,
+              text
+            }
+          };
+        }
+      }
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected nested requirements.txt include cycle to fail.");
+    }
+
+    expect(result.error.code).toBe("REQUIREMENTS_PARSE_FAILED");
+    expect(result.error.message).toContain("include cycle");
+    expect(result.error.details).toMatchObject({
+      lockfilePath: "fixture-python/requirements.txt"
+    });
+  });
+
   test("parses editable local source requirements with embedded license evidence", () => {
     const files = new Map([
       [
