@@ -49,6 +49,53 @@ describe("parseYarnLockfile", () => {
     expect(devRisk?.dependencyType).toBe("development");
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const result = parseYarnLockText({
+      packageJsonText: JSON.stringify({
+        name: "fixture-yarn-cycle",
+        dependencies: {
+          parent: "1.0.0"
+        }
+      }),
+      lockfileText: [
+        "parent@1.0.0:",
+        "  version \"1.0.0\"",
+        "  dependencies:",
+        "    child \"2.0.0\"",
+        "",
+        "child@2.0.0:",
+        "  version \"2.0.0\"",
+        "  dependencies:",
+        "    parent \"1.0.0\""
+      ].join("\n"),
+      lockfilePath: "cycle-yarn.lock"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "child@2.0.0",
+      "parent@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "parent@1.0.0"))
+      .toMatchObject({
+        ecosystem: "npm",
+        dependencyType: "production",
+        direct: true,
+        paths: [["fixture-yarn-cycle", "parent@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "child@2.0.0"))
+      .toMatchObject({
+        ecosystem: "npm",
+        dependencyType: "production",
+        direct: false,
+        paths: [["fixture-yarn-cycle", "parent@1.0.0", "child@2.0.0"]]
+      });
+  });
+
   test("reports malformed yarn lockfiles as typed errors", () => {
     const result = parseYarnLockText({
       lockfileText: "<<<<<<< HEAD\nleft-pad@^1.0.0:\n=======\nright-pad@^1.0.0:\n>>>>>>> branch\n",
