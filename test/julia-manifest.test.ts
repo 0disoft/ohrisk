@@ -53,6 +53,68 @@ describe("parseJuliaManifestText", () => {
     ]);
   });
 
+  test("stops walking Julia dependency cycles without dropping reachable paths", () => {
+    const result = parseJuliaManifestText([
+      "julia_version = \"1.10.4\"",
+      "manifest_format = \"2.0\"",
+      "",
+      "[[deps.RiskJulia]]",
+      "deps = [\"CycleAJulia\"]",
+      "uuid = \"11111111-1111-1111-1111-111111111111\"",
+      "version = \"1.0.0\"",
+      "",
+      "[[deps.CycleAJulia]]",
+      "deps = [\"CycleBJulia\"]",
+      "uuid = \"22222222-2222-2222-2222-222222222222\"",
+      "version = \"1.0.0\"",
+      "",
+      "[[deps.CycleBJulia]]",
+      "deps = [\"CycleAJulia\", \"LeafJulia\"]",
+      "uuid = \"33333333-3333-3333-3333-333333333333\"",
+      "version = \"1.0.0\"",
+      "",
+      "[[deps.LeafJulia]]",
+      "deps = []",
+      "uuid = \"44444444-4444-4444-4444-444444444444\"",
+      "version = \"1.0.0\""
+    ].join("\n"), path.join("analysis", "Manifest.toml"), {
+      projectText: [
+        "[deps]",
+        "RiskJulia = \"11111111-1111-1111-1111-111111111111\""
+      ].join("\n")
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "CycleAJulia@1.0.0",
+      "CycleBJulia@1.0.0",
+      "LeafJulia@1.0.0",
+      "RiskJulia@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "CycleBJulia@1.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: false,
+        paths: [["analysis", "RiskJulia@1.0.0", "CycleAJulia@1.0.0", "CycleBJulia@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "LeafJulia@1.0.0"))
+      .toMatchObject({
+        dependencyType: "production",
+        direct: false,
+        paths: [[
+          "analysis",
+          "RiskJulia@1.0.0",
+          "CycleAJulia@1.0.0",
+          "CycleBJulia@1.0.0",
+          "LeafJulia@1.0.0"
+        ]]
+      });
+  });
+
   test("reports manifests without versioned packages as typed errors", () => {
     const result = parseJuliaManifestText([
       "[[deps.LinearAlgebra]]",
