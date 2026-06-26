@@ -116,4 +116,57 @@ describe("collectConanPackageEvidence", () => {
       metadataSource: "conanfile.py"
     });
   });
+
+  test("stops collecting Conan package evidence files at the configured limit", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-conan-evidence-limit-"));
+    tempRoots.push(projectRoot);
+
+    const exportDir = path.join(
+      projectRoot,
+      ".conan",
+      "data",
+      "risklib",
+      "1.0.0",
+      "_",
+      "_",
+      "export"
+    );
+    mkdirSync(exportDir, { recursive: true });
+    writeFileSync(
+      path.join(exportDir, "conanfile.py"),
+      [
+        "from conan import ConanFile",
+        "",
+        "class RiskLibConan(ConanFile):",
+        "    name = \"risklib\"",
+        "    version = \"1.0.0\"",
+        "    license = \"MIT\""
+      ].join("\n"),
+      "utf8"
+    );
+    for (let index = 0; index < 51; index += 1) {
+      const suffix = index.toString().padStart(2, "0");
+      writeFileSync(path.join(exportDir, `LICENSE-${suffix}.txt`), `license ${suffix}`, "utf8");
+    }
+
+    const evidence = collectConanPackageEvidence({
+      packageId: "risklib@1.0.0",
+      packageName: "risklib",
+      version: "1.0.0",
+      projectRoot
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+
+    expect(evidence.value.files).toHaveLength(50);
+    expect(evidence.value.warnings).toContain(
+      "Conan package evidence file limit reached at 50 files."
+    );
+    expect(evidence.value.warnings).not.toContain(
+      "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Conan package source."
+    );
+  });
 });
