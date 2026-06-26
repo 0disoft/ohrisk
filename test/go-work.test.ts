@@ -70,6 +70,49 @@ describe("parseGoWorkFile", () => {
     }
   });
 
+  test("deduplicates repeated go.work use paths for the same module", () => {
+    const projectRoot = mkdtempSync("ohrisk-go-work-duplicate-use-");
+
+    try {
+      writeGoWorkspace(projectRoot, {
+        goWork: [
+          "go 1.22",
+          "",
+          "use (",
+          "  ./app",
+          "  ./app",
+          ")"
+        ].join("\n"),
+        modules: {
+          app: {
+            goMod: [
+              "module example.com/app",
+              "",
+              "go 1.22",
+              "",
+              "require github.com/acme/risk v1.0.0"
+            ].join("\n")
+          }
+        }
+      });
+
+      const result = parseGoWorkFile(path.join(projectRoot, "go.work"));
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value.nodes).toHaveLength(1);
+      expect(result.value.nodes[0]).toMatchObject({
+        id: "github.com/acme/risk@v1.0.0",
+        paths: [[path.basename(projectRoot), "example.com/app", "github.com/acme/risk@v1.0.0"]]
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("lets go.work wildcard replace override module-specific go.mod replace directives", () => {
     const projectRoot = mkdtempSync("ohrisk-go-work-replace-");
 

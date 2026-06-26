@@ -62,6 +62,33 @@ describe("parseGradleLockText", () => {
     ]);
   });
 
+  test("merges duplicate Gradle coordinates and keeps production dependency type", () => {
+    const result = parseGradleLockText(
+      [
+        "org.example:risk:1.2.3=testRuntimeClasspath",
+        "org.example:risk:1.2.3=runtimeClasspath"
+      ].join("\n"),
+      "fixture-java/gradle.lockfile"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes).toEqual([
+      expect.objectContaining({
+        id: "org.example:risk@1.2.3",
+        name: "org.example:risk",
+        version: "1.2.3",
+        ecosystem: "maven",
+        dependencyType: "production",
+        direct: true,
+        paths: [["fixture-java", "org.example:risk@1.2.3"]]
+      })
+    ]);
+  });
+
   test("merges legacy Gradle dependency-locks directory files", () => {
     const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-gradle-lock-dir-"));
     const lockDir = path.join(projectDir, "gradle", "dependency-locks");

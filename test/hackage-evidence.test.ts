@@ -90,4 +90,58 @@ describe("collectHackagePackageEvidence", () => {
       rmSync(projectRoot, { recursive: true, force: true });
     }
   });
+
+  test("stops searching local Stack package databases at the configured depth limit", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-hackage-depth-"));
+    const packageDbDir = path.join(
+      projectRoot,
+      ".stack-work",
+      "install",
+      "one",
+      "two",
+      "three",
+      "four",
+      "five",
+      "six",
+      "seven",
+      "eight",
+      "pkgdb"
+    );
+
+    try {
+      mkdirSync(packageDbDir, { recursive: true });
+      writeFileSync(
+        path.join(packageDbDir, "risk-haskell-1.2.3-abc.conf"),
+        [
+          "name: risk-haskell",
+          "version: 1.2.3",
+          "license: MIT"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = collectHackagePackageEvidence({
+        packageId: "risk-haskell@1.2.3",
+        packageName: "risk-haskell",
+        version: "1.2.3",
+        projectRoot
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value).toMatchObject({
+        packageId: "risk-haskell@1.2.3",
+        source: "unavailable",
+        files: []
+      });
+      expect(result.value.warnings).toContain(
+        "Hackage package metadata was not found in the local Stack package database."
+      );
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
 });
