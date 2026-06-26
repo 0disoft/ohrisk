@@ -53,6 +53,66 @@ describe("parseBunLockfile", () => {
     expect(gplPackage?.paths).toEqual([["fixture-bun-project", "gpl-package@5.0.0"]]);
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const result = parseBunLockText(
+      JSON.stringify({
+        workspaces: {
+          "": {
+            name: "fixture-bun-cycle",
+            dependencies: {
+              "parent": "1.0.0"
+            }
+          }
+        },
+        packages: {
+          "parent": [
+            "parent@1.0.0",
+            "",
+            {
+              dependencies: {
+                "child": "2.0.0"
+              }
+            }
+          ],
+          "child": [
+            "child@2.0.0",
+            "",
+            {
+              dependencies: {
+                "parent": "1.0.0"
+              }
+            }
+          ]
+        }
+      }),
+      "cycle-bun.lock"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "child@2.0.0",
+      "parent@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "parent@1.0.0"))
+      .toMatchObject({
+        ecosystem: "npm",
+        dependencyType: "production",
+        direct: true,
+        paths: [["fixture-bun-cycle", "parent@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "child@2.0.0"))
+      .toMatchObject({
+        ecosystem: "npm",
+        dependencyType: "production",
+        direct: false,
+        paths: [["fixture-bun-cycle", "parent@1.0.0", "child@2.0.0"]]
+      });
+  });
+
   test("reports malformed Bun lockfiles as typed errors", () => {
     const result = parseBunLockText("{ this is not json", "broken-bun.lock");
 
