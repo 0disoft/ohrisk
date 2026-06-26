@@ -47,4 +47,50 @@ describe("collectTerraformProviderEvidence", () => {
       rmSync(projectRoot, { recursive: true, force: true });
     }
   });
+
+  test("stops collecting Terraform provider evidence files at the configured limit", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-terraform-evidence-limit-"));
+    const providerRoot = path.join(
+      projectRoot,
+      ".terraform",
+      "providers",
+      "registry.terraform.io",
+      "hashicorp",
+      "aws",
+      "5.31.0",
+      "windows_amd64"
+    );
+
+    try {
+      mkdirSync(providerRoot, { recursive: true });
+      for (let index = 0; index < 51; index += 1) {
+        const suffix = index.toString().padStart(2, "0");
+        writeFileSync(
+          path.join(providerRoot, `LICENSE-${suffix}.txt`),
+          `license ${suffix}`,
+          "utf8"
+        );
+      }
+
+      const result = collectTerraformProviderEvidence({
+        packageId: "registry.terraform.io/hashicorp/aws@5.31.0",
+        sourceAddress: "registry.terraform.io/hashicorp/aws",
+        version: "5.31.0",
+        projectRoot
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value.files).toHaveLength(50);
+      expect(result.value.warnings).toContain("Terraform provider evidence file limit reached at 50 files.");
+      expect(result.value.warnings).not.toContain(
+        "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Terraform provider cache."
+      );
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
 });
