@@ -80,4 +80,39 @@ describe("collectVcpkgPackageEvidence", () => {
       "vcpkg package copyright file was not found in local vcpkg_installed directories."
     );
   });
+
+  test("stops collecting vcpkg evidence files at the configured limit", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-vcpkg-evidence-limit-"));
+    tempRoots.push(projectRoot);
+
+    for (let index = 0; index < 21; index += 1) {
+      const triplet = `x64-test-${index.toString().padStart(2, "0")}`;
+      const shareDir = path.join(
+        projectRoot,
+        "vcpkg_installed",
+        triplet,
+        "share",
+        "risklib"
+      );
+      mkdirSync(shareDir, { recursive: true });
+      writeFileSync(path.join(shareDir, "copyright"), `license ${triplet}`, "utf8");
+    }
+
+    const evidence = collectVcpkgPackageEvidence({
+      packageId: "risklib@1.0.0",
+      packageName: "risklib",
+      projectRoot
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+
+    expect(evidence.value.files).toHaveLength(20);
+    expect(evidence.value.warnings).toContain("vcpkg evidence file limit reached at 20 files.");
+    expect(evidence.value.warnings).not.toContain(
+      "vcpkg package copyright file was not found in local vcpkg_installed directories."
+    );
+  });
 });
