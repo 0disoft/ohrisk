@@ -78,6 +78,75 @@ describe("parseVcpkgJsonText", () => {
     ]);
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const result = parseVcpkgJsonText(
+      JSON.stringify({
+        name: "fixture-vcpkg-cycle",
+        dependencies: ["cycle-a"]
+      }),
+      "vcpkg.json",
+      {
+        statusText: [
+          "Package: cycle-a",
+          "Version: 1.0.0",
+          "Depends: cycle-b",
+          "Architecture: x64-windows",
+          "Status: install ok installed",
+          "",
+          "Package: cycle-b",
+          "Version: 1.0.0",
+          "Depends: cycle-a, leaf",
+          "Architecture: x64-windows",
+          "Status: install ok installed",
+          "",
+          "Package: leaf",
+          "Version: 2.0.0",
+          "Architecture: x64-windows",
+          "Status: install ok installed"
+        ].join("\n"),
+        statusPath: "vcpkg_installed/vcpkg/status"
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes).toEqual([
+      {
+        id: "cycle-a@1.0.0",
+        name: "cycle-a",
+        version: "1.0.0",
+        ecosystem: "vcpkg",
+        dependencyType: "production",
+        direct: true,
+        paths: [
+          ["fixture-vcpkg-cycle", "cycle-a@1.0.0"],
+          ["fixture-vcpkg-cycle", "cycle-a@1.0.0", "cycle-b@1.0.0", "cycle-a@1.0.0"]
+        ]
+      },
+      {
+        id: "cycle-b@1.0.0",
+        name: "cycle-b",
+        version: "1.0.0",
+        ecosystem: "vcpkg",
+        dependencyType: "production",
+        direct: false,
+        paths: [["fixture-vcpkg-cycle", "cycle-a@1.0.0", "cycle-b@1.0.0"]]
+      },
+      {
+        id: "leaf@2.0.0",
+        name: "leaf",
+        version: "2.0.0",
+        ecosystem: "vcpkg",
+        dependencyType: "production",
+        direct: false,
+        paths: [["fixture-vcpkg-cycle", "cycle-a@1.0.0", "cycle-b@1.0.0", "leaf@2.0.0"]]
+      }
+    ]);
+  });
+
   test("uses exact overrides only when installed status is unavailable", () => {
     const result = parseVcpkgJsonText(JSON.stringify({
       name: "fixture-cpp",
