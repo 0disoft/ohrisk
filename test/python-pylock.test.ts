@@ -53,6 +53,58 @@ describe("parsePylockText", () => {
       });
   });
 
+  test("stops walking pylock dependency cycles", () => {
+    const result = parsePylockText(
+      [
+        "lock-version = '1.0'",
+        "created-by = 'fixture-locker'",
+        "",
+        "[[packages]]",
+        "name = 'fixture-root'",
+        "version = '1.0.0'",
+        "dependencies = [",
+        "  { name = 'cycle-a', version = '1.0.0' },",
+        "]",
+        "",
+        "[[packages]]",
+        "name = 'cycle-a'",
+        "version = '1.0.0'",
+        "dependencies = [",
+        "  { name = 'cycle-b', version = '1.0.0' },",
+        "]",
+        "",
+        "[[packages]]",
+        "name = 'cycle-b'",
+        "version = '1.0.0'",
+        "dependencies = [",
+        "  { name = 'cycle-a', version = '1.0.0' },",
+        "]"
+      ].join("\n"),
+      "pylock.toml"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "cycle-a@1.0.0",
+      "cycle-b@1.0.0",
+      "fixture-root@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "cycle-a@1.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [["<root>", "fixture-root@1.0.0", "cycle-a@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "cycle-b@1.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [["<root>", "fixture-root@1.0.0", "cycle-a@1.0.0", "cycle-b@1.0.0"]]
+      });
+  });
+
   test("parses named pylock root names and nested dependency tables", () => {
     const result = parsePylockText(
       [
