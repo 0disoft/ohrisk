@@ -48,6 +48,53 @@ describe("parsePodfileLockText", () => {
       });
   });
 
+  test("stops walking CocoaPods dependency cycles without dropping reachable paths", () => {
+    const result = parsePodfileLockText(
+      [
+        "PODS:",
+        "  - CycleA (1.0.0):",
+        "    - CycleB (~> 1.0)",
+        "  - CycleB (1.0.0):",
+        "    - CycleA (~> 1.0)",
+        "    - LeafPod (~> 1.0)",
+        "  - LeafPod (1.0.0)",
+        "  - RiskPod (1.0.0):",
+        "    - CycleA (~> 1.0)",
+        "",
+        "DEPENDENCIES:",
+        "  - RiskPod (~> 1.0)",
+        "",
+        "SPEC CHECKSUMS:",
+        "  RiskPod: abc123",
+        "",
+        "COCOAPODS: 1.16.2"
+      ].join("\n"),
+      "fixture-ios/Podfile.lock"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "CycleA@1.0.0",
+      "CycleB@1.0.0",
+      "LeafPod@1.0.0",
+      "RiskPod@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "CycleB@1.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [["fixture-ios", "RiskPod@1.0.0", "CycleA@1.0.0", "CycleB@1.0.0"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "LeafPod@1.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [["fixture-ios", "RiskPod@1.0.0", "CycleA@1.0.0", "CycleB@1.0.0", "LeafPod@1.0.0"]]
+      });
+  });
+
   test("collapses CocoaPods subspecs to their root pod identity", () => {
     const result = parsePodfileLockText(
       [
