@@ -80,6 +80,64 @@ describe("parseUvLockText", () => {
       });
   });
 
+  test("stops walking dependency cycles without dropping reachable paths", () => {
+    const result = parseUvLockText(
+      [
+        "version = 1",
+        "revision = 3",
+        "",
+        "[[package]]",
+        "name = \"fixture-uv-cycle\"",
+        "version = \"0.1.0\"",
+        "source = { virtual = \".\" }",
+        "dependencies = [",
+        "    { name = \"requests\" },",
+        "]",
+        "",
+        "[[package]]",
+        "name = \"requests\"",
+        "version = \"2.32.3\"",
+        "source = { registry = \"https://pypi.org/simple\" }",
+        "dependencies = [",
+        "    { name = \"urllib3\" },",
+        "]",
+        "",
+        "[[package]]",
+        "name = \"urllib3\"",
+        "version = \"2.5.0\"",
+        "source = { registry = \"https://pypi.org/simple\" }",
+        "dependencies = [",
+        "    { name = \"requests\" },",
+        "]"
+      ].join("\n"),
+      "uv.lock"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "requests@2.32.3",
+      "urllib3@2.5.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "requests@2.32.3"))
+      .toMatchObject({
+        ecosystem: "pypi",
+        dependencyType: "production",
+        direct: true,
+        paths: [["fixture-uv-cycle", "requests@2.32.3"]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "urllib3@2.5.0"))
+      .toMatchObject({
+        ecosystem: "pypi",
+        dependencyType: "production",
+        direct: false,
+        paths: [["fixture-uv-cycle", "requests@2.32.3", "urllib3@2.5.0"]]
+      });
+  });
+
   test("parses local source package records with embedded license evidence", () => {
     const files = new Map([
       [
