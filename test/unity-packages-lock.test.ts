@@ -60,6 +60,71 @@ describe("parseUnityPackagesLockText", () => {
     ]);
   });
 
+  test("stops walking Unity package dependency cycles without dropping reachable paths", () => {
+    const result = parseUnityPackagesLockText(JSON.stringify({
+      dependencies: {
+        "com.acme.cycle-a": {
+          version: "1.0.0",
+          depth: 1,
+          source: "registry",
+          dependencies: {
+            "com.acme.cycle-b": "1.0.0"
+          }
+        },
+        "com.acme.cycle-b": {
+          version: "1.0.0",
+          depth: 2,
+          source: "registry",
+          dependencies: {
+            "com.acme.cycle-a": "1.0.0",
+            "com.acme.leaf": "1.0.0"
+          }
+        },
+        "com.acme.leaf": {
+          version: "1.0.0",
+          depth: 3,
+          source: "registry",
+          dependencies: {}
+        },
+        "com.acme.risk": {
+          version: "1.0.0",
+          depth: 0,
+          source: "registry",
+          dependencies: {
+            "com.acme.cycle-a": "1.0.0"
+          }
+        }
+      }
+    }), path.join("Game", "Packages", "packages-lock.json"));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => node.id)).toEqual([
+      "com.acme.cycle-a@1.0.0",
+      "com.acme.cycle-b@1.0.0",
+      "com.acme.leaf@1.0.0",
+      "com.acme.risk@1.0.0"
+    ]);
+    expect(result.value.nodes.find((node) => node.id === "com.acme.cycle-b@1.0.0")?.paths)
+      .toContainEqual([
+        "Game",
+        "com.acme.risk@1.0.0",
+        "com.acme.cycle-a@1.0.0",
+        "com.acme.cycle-b@1.0.0"
+      ]);
+    expect(result.value.nodes.find((node) => node.id === "com.acme.leaf@1.0.0")?.paths)
+      .toContainEqual([
+        "Game",
+        "com.acme.risk@1.0.0",
+        "com.acme.cycle-a@1.0.0",
+        "com.acme.cycle-b@1.0.0",
+        "com.acme.leaf@1.0.0"
+      ]);
+  });
+
   test("reports malformed package entries as typed errors", () => {
     const result = parseUnityPackagesLockText(JSON.stringify({
       dependencies: {
