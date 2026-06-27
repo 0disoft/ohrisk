@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.159.1 - 2026-06-27
+
+### Fixed
+
+- `--output` now prints the resolved report path after a successful file write,
+  so users can find generated JSON, Markdown, HTML, SARIF, or CycloneDX reports.
+
 ## 0.159.0 - 2026-06-27
 
 ### Added

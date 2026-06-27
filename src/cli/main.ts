@@ -1696,6 +1696,7 @@ function emitReport(input: {
     return written;
   }
 
+  input.io.stderr(`Wrote report to ${written.value}`);
   return ok(undefined);
 }
 

@@ -146,7 +146,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.159.0"]);
+    expect(stdout).toEqual(["ohrisk 0.159.1"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -2027,7 +2027,7 @@ describe("main", () => {
 
       expect(exitCode).toBe(0);
       expect(stdout).toEqual([]);
-      expect(stderr).toEqual([]);
+      expect(stderr).toEqual([`Wrote report to ${path.join(outputRoot, "reports", "scan.json")}`]);
 
       const payload = JSON.parse(
         readFileSync(path.join(outputRoot, "reports", "scan.json"), "utf8")
@@ -2133,7 +2133,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.159.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.159.1");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
@@ -3653,7 +3653,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
 
       expect(exitCode).toBe(1);
       expect(stdout).toEqual([]);
-      expect(stderr).toEqual([]);
+      expect(stderr).toEqual([`Wrote report to ${outputPath}`]);
       expect(readFileSync(outputPath, "utf8")).toContain("# Ohrisk scan");
       expect(readFileSync(outputPath, "utf8")).toContain(
         "- Threshold: failed on high (2 findings at or above threshold)"
