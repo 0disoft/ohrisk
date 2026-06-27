@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.159.2 - 2026-06-27
+
+### Added
+
+- `scan` and `ci` now print a stage-based progress bar to stderr when
+  `--output` is used, so long-running report generation shows visible progress
+  without mixing status text into the report file.
+
 ## 0.159.1 - 2026-06-27
 
 ### Fixed

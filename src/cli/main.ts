@@ -123,6 +123,10 @@ export type CliIO = {
   writeReport?: ReportWriter;
 };
 
+type ScanProgressReporter = (step: number, message: string) => void;
+
+const SCAN_PROGRESS_TOTAL_STEPS = 7;
+
 export async function main(
   argv: string[] = process.argv.slice(2),
   io: CliIO = defaultIO()
@@ -495,12 +499,16 @@ async function runScan(
   command: Extract<CliCommand, { kind: "scan" | "ci" }>,
   io: CliIO
 ): Promise<number> {
+  const reportProgress = command.outputPath ? createScanProgressReporter(io) : undefined;
+  reportProgress?.(0, command.kind === "ci" ? "Starting CI scan..." : "Starting scan...");
+
   const scanned = await scanProject({
     cwd: io.cwd,
     lockfilePath: command.lockfilePath,
     profile: command.profile,
     prodOnly: command.prodOnly,
-    applyWaivers: !command.noWaivers
+    applyWaivers: !command.noWaivers,
+    ...(reportProgress ? { progress: reportProgress } : {})
   });
 
   if (isErr(scanned)) {
@@ -527,20 +535,28 @@ async function runScan(
     unmatchedWaivers: scanned.value.unmatchedWaivers
   };
 
+  reportProgress?.(5, `Rendering ${reportFormatLabel(command)} report...`);
   const output = command.cyclonedx
     ? renderCycloneDxReport(reportInput)
     : command.sarif
       ? renderSarifReport(reportInput)
       : renderScanReport(reportInput);
+  reportProgress?.(6, "Writing report file...");
   const emitted = emitReport({
     contents: output,
     outputPath: command.outputPath,
-    io
+    io,
+    suppressSuccessMessage: Boolean(reportProgress)
   });
 
   if (isErr(emitted)) {
     io.stderr(formatError(emitted.error));
     return exitCodeForError(emitted.error);
+  }
+
+  reportProgress?.(7, "Report ready.");
+  if (reportProgress && emitted.value) {
+    io.stderr(`Wrote report to ${emitted.value}`);
   }
 
   if (command.kind === "ci" && hasFindingAtOrAbove(scanned.value.riskFindings, command.failOn)) {
@@ -567,11 +583,13 @@ async function scanProject(input: {
   profile: Extract<CliCommand, { kind: "scan" | "ci" | "diff" }>["profile"];
   prodOnly: boolean;
   applyWaivers: boolean;
+  progress?: ScanProgressReporter;
 }) {
   const loaded = loadProjectGraph({
     cwd: input.cwd,
     lockfilePath: input.lockfilePath,
-    prodOnly: input.prodOnly
+    prodOnly: input.prodOnly,
+    ...(input.progress ? { progress: input.progress } : {})
   });
 
   if (isErr(loaded)) {
@@ -581,7 +599,8 @@ async function scanProject(input: {
   return evaluateProjectScan({
     ...loaded.value,
     profile: input.profile,
-    applyWaivers: input.applyWaivers
+    applyWaivers: input.applyWaivers,
+    ...(input.progress ? { progress: input.progress } : {})
   });
 }
 
@@ -589,10 +608,12 @@ function loadProjectGraph(input: {
   cwd: string;
   lockfilePath?: string;
   prodOnly: boolean;
+  progress?: ScanProgressReporter;
 }): Result<{
   project: ProjectInput;
   scanGraph: DependencyGraph;
 }, OhriskError> {
+  input.progress?.(1, "Discovering project...");
   const discovered = discoverProject({
     cwd: input.cwd,
     ...(input.lockfilePath ? { lockfilePath: input.lockfilePath } : {})
@@ -602,6 +623,7 @@ function loadProjectGraph(input: {
     return discovered;
   }
 
+  input.progress?.(2, `Reading ${path.basename(discovered.value.lockfile.path)}...`);
   const graph = parseProjectLockfile(discovered.value);
 
   if (isErr(graph)) {
@@ -621,7 +643,9 @@ async function evaluateProjectScan(input: {
   scanGraph: DependencyGraph;
   profile: Extract<CliCommand, { kind: "scan" | "ci" | "diff" }>["profile"];
   applyWaivers: boolean;
+  progress?: ScanProgressReporter;
 }) {
+  input.progress?.(3, `Collecting license evidence for ${input.scanGraph.nodes.length} packages...`);
   const evidence = await collectEvidenceForGraph({
     graph: input.scanGraph,
     projectRoot: input.project.rootDir
@@ -631,6 +655,7 @@ async function evaluateProjectScan(input: {
     return evidence;
   }
 
+  input.progress?.(4, "Evaluating license risk...");
   const normalizedLicenses = normalizeAllLicenseEvidence(evidence.value);
   const riskFindings = evaluateLicenseRisks({
     licenses: normalizedLicenses,
@@ -1679,7 +1704,8 @@ function emitReport(input: {
   contents: string;
   outputPath: string | undefined;
   io: CliIO;
-}): Result<void, OhriskError> {
+  suppressSuccessMessage?: boolean;
+}): Result<string | undefined, OhriskError> {
   if (!input.outputPath) {
     input.io.stdout(input.contents);
     return ok(undefined);
@@ -1696,8 +1722,38 @@ function emitReport(input: {
     return written;
   }
 
-  input.io.stderr(`Wrote report to ${written.value}`);
-  return ok(undefined);
+  if (!input.suppressSuccessMessage) {
+    input.io.stderr(`Wrote report to ${written.value}`);
+  }
+  return ok(written.value);
+}
+
+function createScanProgressReporter(io: CliIO): ScanProgressReporter {
+  return (step, message) => {
+    const percent = Math.round((step / SCAN_PROGRESS_TOTAL_STEPS) * 100);
+    const filled = Math.round((percent / 100) * 20);
+    const bar = `${"#".repeat(filled)}${"-".repeat(20 - filled)}`;
+    io.stderr(`[${bar}] ${percent.toString().padStart(3, " ")}% ${message}`);
+  };
+}
+
+function reportFormatLabel(command: Extract<CliCommand, { kind: "scan" | "ci" }>): string {
+  if (command.json) {
+    return "JSON";
+  }
+  if (command.sarif) {
+    return "SARIF";
+  }
+  if (command.markdown) {
+    return "Markdown";
+  }
+  if (command.html) {
+    return "HTML";
+  }
+  if (command.cyclonedx) {
+    return "CycloneDX";
+  }
+  return "terminal";
 }
 
 
