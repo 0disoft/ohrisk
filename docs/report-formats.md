@@ -1,6 +1,6 @@
 # Report Formats Guide
 
-Ohrisk supports five output formats. Each serves a different audience and
+Ohrisk supports six output formats. Each serves a different audience and
 includes different levels of waiver detail.
 
 ## Format comparison
@@ -10,6 +10,7 @@ includes different levels of waiver detail.
 | Terminal | (default) | Quick local check | Full detail | Full detail | Full detail | No |
 | JSON | `--json` | Scripting, CI gates | Full array | Full array | Full arrays | Yes |
 | Markdown | `--markdown` | PR comments, release notes | Table | Table | Tables | Yes |
+| HTML | `--html` | Local browser review | Table | Table | Tables | Yes |
 | SARIF | `--sarif` | GitHub code scanning | Full results | Suppressed results | Count properties only | Yes |
 | CycloneDX | `--cyclonedx` | SBOM, supply chain tools | Component properties | Not listed | Not listed | Yes |
 
@@ -24,7 +25,7 @@ Default output when no format flag is passed. Designed for quick local checks.
 - **Waiver mode**: shown as `Waiver mode: local (.ohrisk-waivers.json)` or `ignored (--no-waivers)`
 - **Strict waiver drift**: shown as `Waiver drift: passed/failed (N expired or unmatched waivers)` when `--strict-waivers` is set
 
-Not suitable as a CI artifact. Use `--json`, `--markdown`, `--sarif`, or `--cyclonedx` with `--output` instead.
+Not suitable as a CI artifact. Use `--json`, `--markdown`, `--html`, `--sarif`, or `--cyclonedx` with `--output` instead.
 
 ## JSON
 
@@ -49,6 +50,18 @@ Formatted for PR comments, release notes, or documentation.
 - **Waiver mode**: shown as inline code in the summary
 - **Strict waiver drift**: shown as inline code in the summary when `--strict-waivers` is set
 - **Local paths**: the project summary uses the package/project name, not the absolute project root, so PR-facing artifacts do not expose local or CI workspace paths
+
+## HTML
+
+Formatted as a standalone browser-friendly HTML document for local review.
+
+- **Active findings**: table with columns Severity, Package, Dependency, Reason, Action, Path, Evidence, Fingerprint
+- **Waived findings**: table with columns Severity, Package, Matched by, Reason, Action, Fingerprint
+- **Expired waivers**: table with columns Target, Expires on, Reason
+- **Unmatched waivers**: table with columns Target, Reason
+- **Waiver mode**: shown in the summary cards
+- **Strict waiver drift**: shown in the summary cards when `--strict-waivers` is set
+- **Local paths**: the project summary uses the package/project name, not the absolute project root, so local browser artifacts are safer to share than terminal output
 
 ## SARIF
 
@@ -87,5 +100,6 @@ Every format includes a waiver mode indicator so you can distinguish a raw audit
 | Terminal | `Waiver mode:` line | `local (.ohrisk-waivers.json)` / `ignored (--no-waivers)` |
 | JSON | `waiverMode` | `"local"` / `"ignored"` |
 | Markdown | `Waiver mode:` line | `local (.ohrisk-waivers.json)` / `ignored (--no-waivers)` |
+| HTML | summary card | `local (.ohrisk-waivers.json)` / `ignored (--no-waivers)` |
 | SARIF | `ohriskWaiverMode` | `"local"` / `"ignored"` |
 | CycloneDX | `ohrisk:waiverMode` | `"local"` / `"ignored"` |

@@ -24,6 +24,7 @@ export type ScanReportInput = {
   prodOnly: boolean;
   json: boolean;
   markdown: boolean;
+  html: boolean;
   waiverMode: "local" | "ignored";
   failOn?: RiskSeverity;
   strictWaivers?: boolean;
@@ -72,6 +73,10 @@ export function renderScanReport(input: ScanReportInput): string {
     return renderMarkdownReport(input, summary);
   }
 
+  if (input.html) {
+    return renderHtmlReport(input, summary);
+  }
+
   return [
     "Ohrisk scan",
     `Project: ${input.project.rootDir}`,
@@ -99,6 +104,295 @@ export function renderScanReport(input: ScanReportInput): string {
     "",
     `Next: ${nextAction}`
   ].join("\n");
+}
+
+function renderHtmlReport(
+  input: ScanReportInput,
+  summary: ReturnType<typeof buildScanSummary>
+): string {
+  const nextAction = nextActionFor(input.riskFindings);
+  const thresholdSummary = buildThresholdSummary(input.riskFindings, input.failOn);
+  const waiverDriftSummary = buildWaiverDriftSummary(input);
+  const thresholdLine = formatThresholdSummary(thresholdSummary);
+  const waiverDriftLine = formatWaiverDriftSummary(waiverDriftSummary);
+  const title = "Ohrisk scan";
+
+  return [
+    "<!doctype html>",
+    '<html lang="en">',
+    "<head>",
+    '  <meta charset="utf-8">',
+    '  <meta name="viewport" content="width=device-width, initial-scale=1">',
+    `  <title>${escapeHtml(title)}</title>`,
+    "  <style>",
+    ...renderHtmlStyles().map((line) => `    ${line}`),
+    "  </style>",
+    "</head>",
+    "<body>",
+    '  <main class="page">',
+    "    <header>",
+    `      <p class="eyebrow">${escapeHtml(input.project.lockfile.kind)}</p>`,
+    `      <h1>${escapeHtml(title)}</h1>`,
+    `      <p class="lead">${escapeHtml(nextAction)}</p>`,
+    "    </header>",
+    '    <section aria-labelledby="summary-heading">',
+    '      <h2 id="summary-heading">Summary</h2>',
+    '      <dl class="summary-grid">',
+    ...renderSummaryCards([
+      ["Project", markdownProjectLabel(input)],
+      ["Lockfile", `${displayLockfilePath(input.project)} (${input.project.lockfile.kind})`],
+      ["Profile", input.profile],
+      ["Production only", input.prodOnly ? "yes" : "no"],
+      [
+        "Dependencies",
+        `${summary.dependencyGraph.total} total, ${summary.dependencyGraph.direct} direct, ${summary.dependencyGraph.transitive} transitive`
+      ],
+      ["Evidence", `${summary.evidence.files} files, ${summary.evidence.warnings} warnings`],
+      [
+        "Licenses",
+        `${summary.licenses.highConfidence} high, ${summary.licenses.mediumConfidence} medium, ${summary.licenses.lowConfidence} low confidence`
+      ],
+      ["License issues", `${summary.licenses.missing} missing, ${summary.licenses.malformed} malformed`],
+      [
+        "Risks",
+        `${summary.risks.high} high, ${summary.risks.review} review, ${summary.risks.unknown} unknown, ${summary.risks.low} low`
+      ],
+      ["Waiver mode", formatWaiverMode(input.waiverMode)],
+      [
+        "Waived",
+        `${summary.waivers.applied} applied, ${summary.waivers.expired} expired, ${summary.waivers.unmatched} unmatched`
+      ],
+      ...(thresholdLine ? [["Threshold", thresholdLine] as const] : []),
+      ...(waiverDriftLine ? [["Waiver drift", waiverDriftLine] as const] : [])
+    ]),
+    "      </dl>",
+    "    </section>",
+    ...renderHtmlFindingsSection(input.riskFindings),
+    ...renderHtmlWaivedFindingsSection(input.waivedFindings),
+    ...renderHtmlExpiredWaiversSection(input.expiredWaivers),
+    ...renderHtmlUnmatchedWaiversSection(input.unmatchedWaivers),
+    '    <section aria-labelledby="next-heading">',
+    '      <h2 id="next-heading">Next</h2>',
+    `      <p>${escapeHtml(nextAction)}</p>`,
+    "    </section>",
+    "  </main>",
+    "</body>",
+    "</html>"
+  ].join("\n");
+}
+
+function renderHtmlStyles(): string[] {
+  return [
+    ":root {",
+    "  color-scheme: light;",
+    "  --bg: #f6f8fb;",
+    "  --surface: #ffffff;",
+    "  --text: #16202a;",
+    "  --muted: #5a6675;",
+    "  --border: #d8dee8;",
+    "  --accent: #2563eb;",
+    "  --high: #b42318;",
+    "  --review: #9a5b00;",
+    "  --unknown: #475467;",
+    "  --low: #067647;",
+    "}",
+    "* { box-sizing: border-box; }",
+    "body {",
+    "  margin: 0;",
+    "  background: var(--bg);",
+    "  color: var(--text);",
+    "  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif;",
+    "  line-height: 1.5;",
+    "}",
+    ".page { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 32px 0 48px; }",
+    "header { margin-block-end: 28px; }",
+    ".eyebrow { margin: 0 0 8px; color: var(--accent); font-weight: 700; text-transform: uppercase; }",
+    "h1 { margin: 0; font-size: 2rem; line-height: 1.2; }",
+    "h2 { margin: 0 0 14px; font-size: 1.15rem; }",
+    ".lead { max-width: 760px; margin: 12px 0 0; color: var(--muted); }",
+    "section { margin-block: 18px; }",
+    ".summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 0; }",
+    ".summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; min-width: 0; }",
+    ".summary-card dt { color: var(--muted); font-size: 0.82rem; }",
+    ".summary-card dd { margin: 6px 0 0; font-weight: 700; overflow-wrap: anywhere; }",
+    ".table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }",
+    "table { width: 100%; border-collapse: collapse; min-width: 860px; }",
+    "caption { text-align: left; padding: 12px 14px; color: var(--muted); font-weight: 700; }",
+    "th, td { padding: 10px 12px; border-top: 1px solid var(--border); text-align: left; vertical-align: top; }",
+    "th { color: var(--muted); font-size: 0.82rem; }",
+    "code { font-family: ui-monospace, SFMono-Regular, Consolas, \"Liberation Mono\", monospace; font-size: 0.92em; overflow-wrap: anywhere; }",
+    ".empty { margin: 0; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--muted); }",
+    ".severity { display: inline-block; font-weight: 700; }",
+    ".severity-high { color: var(--high); }",
+    ".severity-review { color: var(--review); }",
+    ".severity-unknown { color: var(--unknown); }",
+    ".severity-low { color: var(--low); }",
+    "@media (max-width: 640px) { .page { width: min(100% - 20px, 1180px); padding-block-start: 20px; } h1 { font-size: 1.6rem; } }"
+  ];
+}
+
+function renderSummaryCards(items: ReadonlyArray<readonly [string, string]>): string[] {
+  return items.flatMap(([label, value]) => [
+    '        <div class="summary-card">',
+    `          <dt>${escapeHtml(label)}</dt>`,
+    `          <dd>${escapeHtml(value)}</dd>`,
+    "        </div>"
+  ]);
+}
+
+function renderHtmlFindingsSection(findings: RiskFinding[]): string[] {
+  if (findings.length === 0) {
+    return [
+      '    <section aria-labelledby="findings-heading">',
+      '      <h2 id="findings-heading">Findings</h2>',
+      '      <p class="empty">No active findings.</p>',
+      "    </section>"
+    ];
+  }
+
+  return [
+    '    <section aria-labelledby="findings-heading">',
+    '      <h2 id="findings-heading">Findings</h2>',
+    '      <div class="table-wrap">',
+    '        <table>',
+    "          <caption>Active license-risk findings</caption>",
+    "          <thead>",
+    "            <tr><th scope=\"col\">Severity</th><th scope=\"col\">Package</th><th scope=\"col\">Dependency</th><th scope=\"col\">Reason</th><th scope=\"col\">Action</th><th scope=\"col\">Path</th><th scope=\"col\">Evidence</th><th scope=\"col\">Fingerprint</th></tr>",
+    "          </thead>",
+    "          <tbody>",
+    ...findings.map((finding) => [
+      "            <tr>",
+      `              <td>${renderSeverity(finding.severity)}</td>`,
+      `              <td><code>${escapeHtml(finding.packageId)}</code></td>`,
+      `              <td>${escapeHtml(formatDependencyContext(finding))}</td>`,
+      `              <td>${escapeHtml(finding.reason)}</td>`,
+      `              <td>${escapeHtml(finding.action)}</td>`,
+      `              <td><code>${escapeHtml(formatPath(finding.paths[0]))}</code></td>`,
+      `              <td>${escapeHtml(finding.evidence.join("; "))}</td>`,
+      `              <td><code>${escapeHtml(finding.fingerprint)}</code></td>`,
+      "            </tr>"
+    ].join("\n")),
+    "          </tbody>",
+    "        </table>",
+    "      </div>",
+    "    </section>"
+  ];
+}
+
+function renderHtmlWaivedFindingsSection(waivedFindings: WaivedRiskFinding[]): string[] {
+  if (waivedFindings.length === 0) {
+    return [
+      '    <section aria-labelledby="waived-heading">',
+      '      <h2 id="waived-heading">Waived findings</h2>',
+      '      <p class="empty">No waived findings.</p>',
+      "    </section>"
+    ];
+  }
+
+  return [
+    '    <section aria-labelledby="waived-heading">',
+    '      <h2 id="waived-heading">Waived findings</h2>',
+    '      <div class="table-wrap">',
+    '        <table>',
+    "          <caption>Findings suppressed by local waivers</caption>",
+    "          <thead>",
+    "            <tr><th scope=\"col\">Severity</th><th scope=\"col\">Package</th><th scope=\"col\">Matched by</th><th scope=\"col\">Reason</th><th scope=\"col\">Action</th><th scope=\"col\">Fingerprint</th></tr>",
+    "          </thead>",
+    "          <tbody>",
+    ...waivedFindings.map((waived) => [
+      "            <tr>",
+      `              <td>${renderSeverity(waived.finding.severity)}</td>`,
+      `              <td><code>${escapeHtml(waived.finding.packageId)}</code></td>`,
+      `              <td>${escapeHtml(waived.matchedBy)}</td>`,
+      `              <td>${escapeHtml(waived.waiver.reason)}</td>`,
+      `              <td>${escapeHtml(waived.finding.action)}</td>`,
+      `              <td><code>${escapeHtml(waived.finding.fingerprint)}</code></td>`,
+      "            </tr>"
+    ].join("\n")),
+    "          </tbody>",
+    "        </table>",
+    "      </div>",
+    "    </section>"
+  ];
+}
+
+function renderHtmlExpiredWaiversSection(expiredWaivers: RiskWaiver[]): string[] {
+  if (expiredWaivers.length === 0) {
+    return [
+      '    <section aria-labelledby="expired-waivers-heading">',
+      '      <h2 id="expired-waivers-heading">Expired waivers</h2>',
+      '      <p class="empty">No expired waivers.</p>',
+      "    </section>"
+    ];
+  }
+
+  return [
+    '    <section aria-labelledby="expired-waivers-heading">',
+    '      <h2 id="expired-waivers-heading">Expired waivers</h2>',
+    '      <div class="table-wrap">',
+    '        <table>',
+    "          <caption>Expired local waiver entries</caption>",
+    "          <thead>",
+    "            <tr><th scope=\"col\">Target</th><th scope=\"col\">Expires on</th><th scope=\"col\">Reason</th></tr>",
+    "          </thead>",
+    "          <tbody>",
+    ...expiredWaivers.map((waiver) => [
+      "            <tr>",
+      `              <td><code>${escapeHtml(formatWaiverTarget(waiver))}</code></td>`,
+      `              <td>${escapeHtml(waiver.expiresOn ?? "unknown")}</td>`,
+      `              <td>${escapeHtml(waiver.reason)}</td>`,
+      "            </tr>"
+    ].join("\n")),
+    "          </tbody>",
+    "        </table>",
+    "      </div>",
+    "    </section>"
+  ];
+}
+
+function renderHtmlUnmatchedWaiversSection(unmatchedWaivers: RiskWaiver[]): string[] {
+  if (unmatchedWaivers.length === 0) {
+    return [
+      '    <section aria-labelledby="unmatched-waivers-heading">',
+      '      <h2 id="unmatched-waivers-heading">Unmatched waivers</h2>',
+      '      <p class="empty">No unmatched waivers.</p>',
+      "    </section>"
+    ];
+  }
+
+  return [
+    '    <section aria-labelledby="unmatched-waivers-heading">',
+    '      <h2 id="unmatched-waivers-heading">Unmatched waivers</h2>',
+    '      <div class="table-wrap">',
+    '        <table>',
+    "          <caption>Active waiver entries that did not match current findings</caption>",
+    "          <thead>",
+    "            <tr><th scope=\"col\">Target</th><th scope=\"col\">Reason</th></tr>",
+    "          </thead>",
+    "          <tbody>",
+    ...unmatchedWaivers.map((waiver) => [
+      "            <tr>",
+      `              <td><code>${escapeHtml(formatWaiverTarget(waiver))}</code></td>`,
+      `              <td>${escapeHtml(waiver.reason)}</td>`,
+      "            </tr>"
+    ].join("\n")),
+    "          </tbody>",
+    "        </table>",
+    "      </div>",
+    "    </section>"
+  ];
+}
+
+function renderSeverity(severity: RiskSeverity): string {
+  return `<span class="severity severity-${severity}">${escapeHtml(severity)}</span>`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function renderMarkdownReport(

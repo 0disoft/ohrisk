@@ -167,10 +167,11 @@ The current implementation is the first local dependency-risk vertical slice:
 - high-risk classification for common source-available restriction licenses
 - explicit commercial restriction text detection in license evidence and package metadata
 - profile-aware risk evaluation for `saas` and `distributed-app`
-- terminal and JSON reports
+- terminal, JSON, and HTML reports
 - SARIF 2.1.0 reports for code scanning upload
 - waived findings in SARIF output as externally suppressed results
 - Markdown reports for PR comments and release notes
+- browser-friendly HTML reports for local review
 - CycloneDX 1.5 JSON SBOM reports with dependency relationships and Ohrisk risk decision properties
 - stable finding IDs for PR comments and local waiver workflows
 - local `.ohrisk-waivers.json` waivers by finding ID or fingerprint
@@ -186,7 +187,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - terminal and Markdown threshold outcomes for `ci --fail-on` and `diff --fail-on`
 - strict CI waiver drift checks for expired or unmatched local waivers
 - raw scan and CI mode with `--no-waivers` when waiver files should be ignored
-- explicit waiver mode in JSON, terminal, Markdown, and SARIF reports
+- explicit waiver mode in JSON, terminal, Markdown, HTML, and SARIF reports
 - explicit waiver mode in CycloneDX SBOM metadata
 
 Central approval workflows, GitHub App checks, Go `go.work` use paths outside the project root, Go local `replace` paths outside the project root, full Go module parent graph
@@ -376,6 +377,12 @@ Print a Markdown report:
 ohrisk scan --markdown --prod
 ```
 
+Print a browser-friendly HTML report:
+
+```bash
+ohrisk scan --html --output reports/ohrisk.html
+```
+
 Print a CycloneDX SBOM:
 
 ```bash
@@ -386,6 +393,7 @@ Write a report to a file:
 
 ```bash
 ohrisk scan --sarif --output reports/ohrisk.sarif
+ohrisk scan --html --output reports/ohrisk.html
 ohrisk scan --cyclonedx --output reports/ohrisk.cdx.json
 ohrisk diff main --prod --markdown --output reports/ohrisk-pr.md
 ```
@@ -424,13 +432,13 @@ Waive a finding locally by ID or fingerprint in `.ohrisk-waivers.json`:
 ```
 
 Waived findings are excluded from `ci --fail-on` threshold failures, but scan
-and CI JSON, terminal, Markdown, and SARIF reports still show them. Terminal
-and Markdown reports include finding fingerprints so waiver files can target
+and CI JSON, terminal, Markdown, HTML, and SARIF reports still show them. Terminal,
+Markdown, and HTML reports include finding fingerprints so waiver files can target
 either `id` or `fingerprint`. Expired waivers and unmatched active waivers are
-reported separately in JSON, terminal, and Markdown reports and are not applied.
+reported separately in JSON, terminal, Markdown, and HTML reports and are not applied.
 `ci --strict-waivers` exits non-zero when either expired or unmatched waivers
 are present, even if active findings stay below the `--fail-on` threshold. JSON,
-terminal, Markdown, and SARIF outputs include the strict waiver drift result
+terminal, Markdown, HTML, and SARIF outputs include the strict waiver drift result
 when that option is enabled. `scan --no-waivers` and `ci --no-waivers` do not
 read or apply local waiver files; `ci --no-waivers` cannot be combined with
 `--strict-waivers`. Reports include a waiver mode field or summary line so raw
@@ -468,6 +476,7 @@ ohrisk scan --no-waivers
 ohrisk ci --no-waivers --fail-on high
 ohrisk scan --sarif
 ohrisk scan --markdown --prod
+ohrisk scan --html --output reports/ohrisk.html
 ohrisk scan --cyclonedx --prod
 ohrisk scan --sarif --output reports/ohrisk.sarif
 ohrisk explain AGPL-3.0-only --profile saas

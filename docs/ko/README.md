@@ -313,8 +313,9 @@ Findings:
   path: fixture-bun-project -> permissive-parent@1.0.0 -> agpl-child@0.1.0
 ```
 
-기계 판독 출력이 필요하면 `--json`, PR 코멘트용은 `--markdown`, 코드 스캐닝
-연동은 `--sarif`, SBOM은 `--cyclonedx`를 쓴다.
+기계 판독 출력이 필요하면 `--json`, PR 코멘트용은 `--markdown`, 브라우저에서
+보기 좋은 로컬 리포트는 `--html`, 코드 스캐닝 연동은 `--sarif`, SBOM은
+`--cyclonedx`를 쓴다.
 
 ## 배포형 앱 기준으로 스캔하기
 

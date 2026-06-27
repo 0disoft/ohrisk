@@ -4,7 +4,7 @@ import type { RiskSeverity } from "../policy/types";
 import { err, isErr, ok, type Result } from "../shared/result";
 
 const FAIL_ON_SEVERITIES: RiskSeverity[] = ["high", "unknown", "review", "low"];
-const SCAN_OUTPUT_FORMAT_OPTIONS = ["--json", "--sarif", "--markdown", "--cyclonedx"];
+const SCAN_OUTPUT_FORMAT_OPTIONS = ["--json", "--sarif", "--markdown", "--html", "--cyclonedx"];
 const DIFF_OUTPUT_FORMAT_OPTIONS = ["--json", "--markdown"];
 const SUPPORTED_COMMANDS = ["scan", "ci", "diff", "explain", "help", "version"] as const;
 export type HelpTarget = typeof SUPPORTED_COMMANDS[number];
@@ -19,6 +19,7 @@ export type CliCommand =
       json: boolean;
       sarif: boolean;
       markdown: boolean;
+      html: boolean;
       cyclonedx: boolean;
       noWaivers: boolean;
       lockfilePath?: string;
@@ -31,6 +32,7 @@ export type CliCommand =
       json: boolean;
       sarif: boolean;
       markdown: boolean;
+      html: boolean;
       cyclonedx: boolean;
       noWaivers: boolean;
       lockfilePath?: string;
@@ -176,6 +178,7 @@ function parseScanLikeArgs(
   let json = false;
   let sarif = false;
   let markdown = false;
+  let html = false;
   let cyclonedx = false;
   let noWaivers = false;
   let lockfilePath: string | undefined;
@@ -233,28 +236,35 @@ function parseScanLikeArgs(
         break;
       }
       case "--json":
-        if (sarif || markdown || cyclonedx) {
+        if (sarif || markdown || html || cyclonedx) {
           return outputFormatConflict("--json", SCAN_OUTPUT_FORMAT_OPTIONS);
         }
 
         json = true;
         break;
       case "--sarif":
-        if (json || markdown || cyclonedx) {
+        if (json || markdown || html || cyclonedx) {
           return outputFormatConflict("--sarif", SCAN_OUTPUT_FORMAT_OPTIONS);
         }
 
         sarif = true;
         break;
       case "--markdown":
-        if (json || sarif || cyclonedx) {
+        if (json || sarif || html || cyclonedx) {
           return outputFormatConflict("--markdown", SCAN_OUTPUT_FORMAT_OPTIONS);
         }
 
         markdown = true;
         break;
+      case "--html":
+        if (json || sarif || markdown || cyclonedx) {
+          return outputFormatConflict("--html", SCAN_OUTPUT_FORMAT_OPTIONS);
+        }
+
+        html = true;
+        break;
       case "--cyclonedx":
-        if (json || sarif || markdown) {
+        if (json || sarif || markdown || html) {
           return outputFormatConflict("--cyclonedx", SCAN_OUTPUT_FORMAT_OPTIONS);
         }
 
@@ -363,6 +373,7 @@ function parseScanLikeArgs(
       json,
       sarif,
       markdown,
+      html,
       cyclonedx,
       noWaivers,
       ...(lockfilePath ? { lockfilePath } : {}),
@@ -379,6 +390,7 @@ function parseScanLikeArgs(
     json,
     sarif,
     markdown,
+    html,
     cyclonedx,
     noWaivers,
     ...(lockfilePath ? { lockfilePath } : {}),
@@ -401,6 +413,7 @@ function supportedOptionsFor(kind: "scan" | "ci"): string[] {
     "--json",
     "--sarif",
     "--markdown",
+    "--html",
     "--cyclonedx",
     "--no-waivers",
     "--lockfile",

@@ -102,6 +102,7 @@ describe("parseArgs", () => {
       json: false,
       sarif: false,
       markdown: false,
+      html: false,
       cyclonedx: false,
       noWaivers: false
     });
@@ -130,6 +131,7 @@ describe("parseArgs", () => {
       json: true,
       sarif: false,
       markdown: false,
+      html: false,
       cyclonedx: false,
       noWaivers: false,
       lockfilePath: "package-lock.json"
@@ -151,6 +153,7 @@ describe("parseArgs", () => {
       json: false,
       sarif: true,
       markdown: false,
+      html: false,
       cyclonedx: false,
       noWaivers: false
     });
@@ -171,6 +174,28 @@ describe("parseArgs", () => {
       json: false,
       sarif: false,
       markdown: true,
+      html: false,
+      cyclonedx: false,
+      noWaivers: false
+    });
+  });
+
+  test("parses scan HTML output", () => {
+    const parsed = parseArgs(["scan", "--html"]);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+
+    expect(parsed.value).toEqual({
+      kind: "scan",
+      profile: "saas",
+      prodOnly: false,
+      json: false,
+      sarif: false,
+      markdown: false,
+      html: true,
       cyclonedx: false,
       noWaivers: false
     });
@@ -191,6 +216,7 @@ describe("parseArgs", () => {
       json: false,
       sarif: false,
       markdown: false,
+      html: false,
       cyclonedx: true,
       noWaivers: false
     });
@@ -211,6 +237,7 @@ describe("parseArgs", () => {
       json: true,
       sarif: false,
       markdown: false,
+      html: false,
       cyclonedx: false,
       noWaivers: false,
       outputPath: "reports/ohrisk.json"
@@ -232,6 +259,7 @@ describe("parseArgs", () => {
       json: false,
       sarif: false,
       markdown: false,
+      html: false,
       cyclonedx: false,
       noWaivers: true
     });
@@ -252,6 +280,7 @@ describe("parseArgs", () => {
       json: false,
       sarif: false,
       markdown: false,
+      html: false,
       cyclonedx: false,
       noWaivers: false,
       failOn: "high",
@@ -285,6 +314,7 @@ describe("parseArgs", () => {
       json: true,
       sarif: false,
       markdown: false,
+      html: false,
       cyclonedx: false,
       noWaivers: false,
       lockfilePath: "pnpm-lock.yaml",
@@ -308,6 +338,7 @@ describe("parseArgs", () => {
       json: false,
       sarif: false,
       markdown: false,
+      html: false,
       cyclonedx: false,
       noWaivers: true,
       failOn: "high",
@@ -328,6 +359,7 @@ describe("parseArgs", () => {
       "--json",
       "--sarif",
       "--markdown",
+      "--html",
       "--cyclonedx"
     ]);
   });
@@ -345,6 +377,7 @@ describe("parseArgs", () => {
       "--json",
       "--sarif",
       "--markdown",
+      "--html",
       "--cyclonedx"
     ]);
   });

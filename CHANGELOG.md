@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.159.0 - 2026-06-27
+
+### Added
+
+- `ohrisk scan` and `ohrisk ci` now support `--html` for browser-friendly
+  local reports with the same findings, waiver summaries, and next-action
+  guidance as the human-readable scan output.
+
 ## 0.158.16 - 2026-06-25
 
 ### Fixed

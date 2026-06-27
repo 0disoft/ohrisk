@@ -9,7 +9,7 @@ describe("README report contract", () => {
   test("documents waiver mode and fingerprint-bearing report shapes", () => {
     const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
 
-    expect(readme).toContain("explicit waiver mode in JSON, terminal, Markdown, and SARIF reports");
+    expect(readme).toContain("explicit waiver mode in JSON, terminal, Markdown, HTML, and SARIF reports");
     expect(readme).toContain("CycloneDX 1.5 JSON SBOM reports with dependency relationships and Ohrisk risk decision properties");
     expect(readme).toContain("explicit waiver mode in CycloneDX SBOM metadata");
     expect(readme).toContain("Reports include a waiver mode field or summary line");

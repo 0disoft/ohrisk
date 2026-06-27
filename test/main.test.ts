@@ -59,6 +59,7 @@ describe("main", () => {
     expect(output).toContain("ohrisk version");
     expect(output).toContain("--lockfile <path>");
     expect(output).toContain("--help, -h");
+    expect(output).toContain("--html");
     expect(output).toContain("--cyclonedx");
   });
 
@@ -72,6 +73,7 @@ describe("main", () => {
     expect(scanOutput).toContain("Ohrisk scan");
     expect(scanOutput).toContain("ohrisk scan [--lockfile <path>]");
     expect(scanOutput).toContain("--lockfile <path>");
+    expect(scanOutput).toContain("--html");
     expect(scanOutput).toContain("--cyclonedx");
     expect(scanOutput).toContain("--help, -h");
     expect(scanOutput).not.toContain("--fail-on");
@@ -85,6 +87,7 @@ describe("main", () => {
     expect(ciOutput).toContain("Ohrisk ci");
     expect(ciOutput).toContain("--fail-on <severity>");
     expect(ciOutput).toContain("--strict-waivers");
+    expect(ciOutput).toContain("--html");
     expect(ciOutput).toContain("--help, -h");
 
     const diff = createTestIO(fixturesDir);
@@ -143,7 +146,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.158.16"]);
+    expect(stdout).toEqual(["ohrisk 0.159.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -2130,7 +2133,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.158.16");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.159.0");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
