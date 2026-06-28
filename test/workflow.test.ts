@@ -120,7 +120,8 @@ describe("Ohrisk GitHub Action", () => {
     const docs = readFileSync(path.join(repoRoot, "docs", "ci.md"), "utf8");
 
     expect(docs).toContain("## Dedicated action");
-    expect(docs).toContain("uses: 0disoft/ohrisk@v0.160.13");
+    expect(docs).toContain("uses: 0disoft/ohrisk@main");
+    expect(docs).toContain("track the latest action wiring and latest npm package");
     expect(docs).toContain("format: html");
     expect(docs).toContain("path: reports/ohrisk.html");
     expect(docs).toContain("must be repository-relative paths");

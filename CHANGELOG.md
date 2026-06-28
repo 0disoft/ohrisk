@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.160.14 - 2026-06-28
+
+- Updated GitHub Action documentation to show `0disoft/ohrisk@main` for
+  latest-tracking CI setups while keeping version tags as the reproducible
+  alternative.
+
 ## 0.160.13 - 2026-06-28
 
 - Added a dedicated composite GitHub Action for running Ohrisk in CI with

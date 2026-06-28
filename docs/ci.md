@@ -7,20 +7,21 @@ Examples for running Ohrisk in GitHub Actions.
 Use the dedicated action when you want the shortest PR gate:
 
 ```yaml
-- uses: 0disoft/ohrisk@v0.160.13
+- uses: 0disoft/ohrisk@main
   with:
     prod: "true"
     fail-on: high
 ```
 
 The action installs the published npm package, runs `ohrisk ci` by default, and
-fails the step when findings meet the configured threshold. Pin the action tag
-for reproducible CI.
+fails the step when findings meet the configured threshold. Use `@main` when
+you want to track the latest action wiring and latest npm package; pin a
+version tag instead when reproducible CI matters more than automatic updates.
 
 Generate an HTML report artifact:
 
 ```yaml
-- uses: 0disoft/ohrisk@v0.160.13
+- uses: 0disoft/ohrisk@main
   with:
     command: scan
     format: html
