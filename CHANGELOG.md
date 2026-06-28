@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.160.5 - 2026-06-28
+
+### Fixed
+
+- `requirements.txt` scans now report unsupported remote VCS requirements with
+  actionable guidance to use exact pins, exact constraint pins, or
+  project-contained local source paths.
+
 ## 0.160.4 - 2026-06-28
 
 ### Added

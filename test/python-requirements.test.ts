@@ -255,7 +255,7 @@ describe("parseRequirementsText", () => {
     }
   });
 
-  test("continues to reject remote editable VCS requirements", () => {
+  test("reports remote editable VCS requirements with an actionable error", () => {
     const result = parseRequirementsText(
       "-e git+https://example.com/acme/risk-pkg.git#egg=risk-pkg",
       "requirements.txt"
@@ -267,6 +267,41 @@ describe("parseRequirementsText", () => {
     }
 
     expect(result.error.code).toBe("REQUIREMENTS_PARSE_FAILED");
+    expect(result.error.message).toContain("Remote VCS requirements are not supported yet");
+    expect(result.error.message).toContain("name==version pins");
+    expect(result.error.message).toContain("project-root-contained local source path");
+    expect(result.error.details).toMatchObject({
+      lockfilePath: "requirements.txt",
+      line: 1,
+      entry: "-e git+https://example.com/acme/risk-pkg.git#egg=risk-pkg",
+      reason: "unsupported_remote_editable_vcs_requirement",
+      supportedRequirementForms: [
+        "name==version",
+        "name with an exact constraint pin",
+        "project-root-contained local source path"
+      ]
+    });
+  });
+
+  test("reports remote VCS direct references with an actionable error", () => {
+    const result = parseRequirementsText(
+      "risk-pkg @ git+https://example.com/acme/risk-pkg.git@v1.2.3",
+      "requirements.txt"
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected remote VCS direct reference to fail.");
+    }
+
+    expect(result.error.code).toBe("REQUIREMENTS_PARSE_FAILED");
+    expect(result.error.message).toContain("Remote VCS requirements are not supported yet");
+    expect(result.error.details).toMatchObject({
+      lockfilePath: "requirements.txt",
+      line: 1,
+      entry: "risk-pkg @ git+https://example.com/acme/risk-pkg.git@v1.2.3",
+      reason: "unsupported_remote_vcs_direct_reference"
+    });
   });
 
   test("rejects unpinned requirements instead of pretending coverage is complete", () => {

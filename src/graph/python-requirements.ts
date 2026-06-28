@@ -219,6 +219,28 @@ function parseRequirementsDocument(input: {
       continue;
     }
 
+    const unsupportedRemoteVcs = classifyUnsupportedRemoteVcsRequirement(line);
+    if (unsupportedRemoteVcs) {
+      return err(
+        createError({
+          code: "REQUIREMENTS_PARSE_FAILED",
+          category: "unsupported_input",
+          message: "Failed to parse requirements.txt dependency entry. Remote VCS requirements are not supported yet; use name==version pins, an exact constraint pin, or a project-root-contained local source path.",
+          details: {
+            lockfilePath: input.lockfilePath,
+            line: index + 1,
+            entry: line,
+            reason: unsupportedRemoteVcs.reason,
+            supportedRequirementForms: [
+              "name==version",
+              "name with an exact constraint pin",
+              "project-root-contained local source path"
+            ]
+          }
+        })
+      );
+    }
+
     if (isUnsupportedRequirementDirective(line)) {
       return err(
         createError({
@@ -472,6 +494,28 @@ function parseLocalSourceRequirement(line: string): RequirementsLocalSource | un
 
   const sourcePath = normalizePythonLocalSourcePathSpec(requirement);
   return sourcePath ? { sourcePath } : undefined;
+}
+
+function classifyUnsupportedRemoteVcsRequirement(line: string): { reason: string } | undefined {
+  const requirement = line.split(";", 1)[0]?.trim() ?? "";
+  const editableTarget = editableRequirementTarget(requirement);
+  if (editableTarget && isRemoteVcsRequirementTarget(editableTarget)) {
+    return { reason: "unsupported_remote_editable_vcs_requirement" };
+  }
+
+  const directReferenceMatch =
+    /^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?\s*@\s*(.+)$/.exec(requirement);
+  if (directReferenceMatch?.[2] && isRemoteVcsRequirementTarget(directReferenceMatch[2])) {
+    return { reason: "unsupported_remote_vcs_direct_reference" };
+  }
+
+  return isRemoteVcsRequirementTarget(requirement)
+    ? { reason: "unsupported_remote_vcs_requirement" }
+    : undefined;
+}
+
+function isRemoteVcsRequirementTarget(value: string): boolean {
+  return /^(?:git|hg|svn|bzr)\+(?:https?|ssh|git):\/\//i.test(value.trim());
 }
 
 function editableRequirementTarget(line: string): string | undefined {
