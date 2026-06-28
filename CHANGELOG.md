@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.160.9 - 2026-06-28
+
+- Added a first-screen README Quickstart for installing Ohrisk, running an
+  initial scan, opening an HTML report, and moving from local review to CI.
+- Reduced duplicated README usage examples so the Usage section acts more like
+  a detailed command reference after the Quickstart.
+
 ## 0.160.8 - 2026-06-28
 
 - Added a remote fetching boundary guide that documents the current npm
