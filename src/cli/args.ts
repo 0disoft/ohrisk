@@ -24,6 +24,7 @@ export type CliCommand =
       noWaivers: boolean;
       lockfilePath?: string;
       outputPath?: string;
+      openReport?: boolean;
     }
   | {
       kind: "ci";
@@ -37,6 +38,7 @@ export type CliCommand =
       noWaivers: boolean;
       lockfilePath?: string;
       outputPath?: string;
+      openReport?: boolean;
       failOn: RiskSeverity;
       strictWaivers: boolean;
     }
@@ -183,6 +185,7 @@ function parseScanLikeArgs(
   let noWaivers = false;
   let lockfilePath: string | undefined;
   let outputPath: string | undefined;
+  let openReport = false;
   let failOn: RiskSeverity = "high";
   let strictWaivers = false;
 
@@ -280,6 +283,9 @@ function parseScanLikeArgs(
         index += 1;
         break;
       }
+      case "--open":
+        openReport = true;
+        break;
       case "--fail-on": {
         if (kind !== "ci") {
           return err(
@@ -365,6 +371,19 @@ function parseScanLikeArgs(
     );
   }
 
+  if (openReport && (!html || !outputPath)) {
+    return err(
+      createError({
+        code: "INVALID_ARGUMENT",
+        category: "invalid_input",
+        message: "--open requires --html and --output.",
+        details: {
+          supportedOptions: supportedOptionsFor(kind)
+        }
+      })
+    );
+  }
+
   if (kind === "ci") {
     return ok({
       kind,
@@ -378,6 +397,7 @@ function parseScanLikeArgs(
       noWaivers,
       ...(lockfilePath ? { lockfilePath } : {}),
       ...(outputPath ? { outputPath } : {}),
+      ...(openReport ? { openReport } : {}),
       failOn,
       strictWaivers
     });
@@ -394,7 +414,8 @@ function parseScanLikeArgs(
     cyclonedx,
     noWaivers,
     ...(lockfilePath ? { lockfilePath } : {}),
-    ...(outputPath ? { outputPath } : {})
+    ...(outputPath ? { outputPath } : {}),
+    ...(openReport ? { openReport } : {})
   });
 }
 
@@ -418,6 +439,7 @@ function supportedOptionsFor(kind: "scan" | "ci"): string[] {
     "--no-waivers",
     "--lockfile",
     "--output",
+    "--open",
     "--help",
     "-h"
   ];

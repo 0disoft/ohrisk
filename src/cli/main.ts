@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs, type CliCommand, type HelpTarget } from "./args";
 import { OHRISK_VERSION } from "./version";
 import { diffRiskFindings } from "../diff/compare";
-import { collectGraphEvidence } from "../evidence/collect";
+import { collectGraphEvidence, type EvidenceCollectionProgress } from "../evidence/collect";
 import type { LicenseEvidence } from "../evidence/types";
 import { readGitRefFile, type GitRefFileReader } from "../git/ref-file";
 import { parseBazelModuleFile, parseBazelModuleText } from "../graph/bazel-module";
@@ -110,6 +110,7 @@ import { renderDiffReport } from "../report/diff-report";
 import { renderExplainReport } from "../report/explain-report";
 import { renderSarifReport } from "../report/sarif-report";
 import { renderScanReport } from "../report/scan-report";
+import { openReportFile, type ReportOpener } from "../report/open-report";
 import { writeReportFile, type ReportWriter } from "../report/write-output";
 import { discoverProject, type ProjectInput } from "../project/discover";
 import { exitCodeForError, formatError, type OhriskError } from "../shared/errors";
@@ -119,13 +120,24 @@ export type CliIO = {
   cwd: string;
   stdout: (text: string) => void;
   stderr: (text: string) => void;
+  now?: () => number;
   readRefFile?: GitRefFileReader;
   writeReport?: ReportWriter;
+  openReport?: ReportOpener;
 };
 
-type ScanProgressReporter = (step: number, message: string) => void;
+type ScanClock = () => number;
+type ScanProgressReporter = (percent: number, message: string) => void;
 
-const SCAN_PROGRESS_TOTAL_STEPS = 7;
+const SCAN_PROGRESS_DISCOVER_PERCENT = 5;
+const SCAN_PROGRESS_READ_LOCKFILE_PERCENT = 10;
+const SCAN_PROGRESS_EVIDENCE_START_PERCENT = 10;
+const SCAN_PROGRESS_EVIDENCE_END_PERCENT = 95;
+const SCAN_PROGRESS_EVALUATE_PERCENT = 96;
+const SCAN_PROGRESS_RENDER_PERCENT = 98;
+const SCAN_PROGRESS_WRITE_PERCENT = 99;
+const SCAN_PROGRESS_READY_PERCENT = 100;
+const SCAN_PROGRESS_BAR_WIDTH = 20;
 
 export async function main(
   argv: string[] = process.argv.slice(2),
@@ -499,6 +511,7 @@ async function runScan(
   command: Extract<CliCommand, { kind: "scan" | "ci" }>,
   io: CliIO
 ): Promise<number> {
+  const now = io.now ?? Date.now;
   const reportProgress = command.outputPath ? createScanProgressReporter(io) : undefined;
   reportProgress?.(0, command.kind === "ci" ? "Starting CI scan..." : "Starting scan...");
 
@@ -508,6 +521,7 @@ async function runScan(
     profile: command.profile,
     prodOnly: command.prodOnly,
     applyWaivers: !command.noWaivers,
+    now,
     ...(reportProgress ? { progress: reportProgress } : {})
   });
 
@@ -535,13 +549,13 @@ async function runScan(
     unmatchedWaivers: scanned.value.unmatchedWaivers
   };
 
-  reportProgress?.(5, `Rendering ${reportFormatLabel(command)} report...`);
+  reportProgress?.(SCAN_PROGRESS_RENDER_PERCENT, `Rendering ${reportFormatLabel(command)} report...`);
   const output = command.cyclonedx
     ? renderCycloneDxReport(reportInput)
     : command.sarif
       ? renderSarifReport(reportInput)
       : renderScanReport(reportInput);
-  reportProgress?.(6, "Writing report file...");
+  reportProgress?.(SCAN_PROGRESS_WRITE_PERCENT, "Writing report file...");
   const emitted = emitReport({
     contents: output,
     outputPath: command.outputPath,
@@ -554,9 +568,19 @@ async function runScan(
     return exitCodeForError(emitted.error);
   }
 
-  reportProgress?.(7, "Report ready.");
+  reportProgress?.(SCAN_PROGRESS_READY_PERCENT, "Report ready.");
   if (reportProgress && emitted.value) {
     io.stderr(`Wrote report to ${emitted.value}`);
+  }
+
+  if (command.openReport && emitted.value) {
+    const opener = io.openReport ?? openReportFile;
+    const opened = await opener({ reportPath: emitted.value });
+    if (isErr(opened)) {
+      io.stderr(formatReportOpenWarning(opened.error));
+    } else {
+      io.stderr(`Opened report: ${opened.value.target}`);
+    }
   }
 
   if (command.kind === "ci" && hasFindingAtOrAbove(scanned.value.riskFindings, command.failOn)) {
@@ -583,6 +607,7 @@ async function scanProject(input: {
   profile: Extract<CliCommand, { kind: "scan" | "ci" | "diff" }>["profile"];
   prodOnly: boolean;
   applyWaivers: boolean;
+  now: ScanClock;
   progress?: ScanProgressReporter;
 }) {
   const loaded = loadProjectGraph({
@@ -600,6 +625,7 @@ async function scanProject(input: {
     ...loaded.value,
     profile: input.profile,
     applyWaivers: input.applyWaivers,
+    now: input.now,
     ...(input.progress ? { progress: input.progress } : {})
   });
 }
@@ -613,7 +639,7 @@ function loadProjectGraph(input: {
   project: ProjectInput;
   scanGraph: DependencyGraph;
 }, OhriskError> {
-  input.progress?.(1, "Discovering project...");
+  input.progress?.(SCAN_PROGRESS_DISCOVER_PERCENT, "Discovering project...");
   const discovered = discoverProject({
     cwd: input.cwd,
     ...(input.lockfilePath ? { lockfilePath: input.lockfilePath } : {})
@@ -623,7 +649,7 @@ function loadProjectGraph(input: {
     return discovered;
   }
 
-  input.progress?.(2, `Reading ${path.basename(discovered.value.lockfile.path)}...`);
+  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, `Reading ${path.basename(discovered.value.lockfile.path)}...`);
   const graph = parseProjectLockfile(discovered.value);
 
   if (isErr(graph)) {
@@ -643,19 +669,31 @@ async function evaluateProjectScan(input: {
   scanGraph: DependencyGraph;
   profile: Extract<CliCommand, { kind: "scan" | "ci" | "diff" }>["profile"];
   applyWaivers: boolean;
+  now: ScanClock;
   progress?: ScanProgressReporter;
 }) {
-  input.progress?.(3, `Collecting license evidence for ${input.scanGraph.nodes.length} packages...`);
+  const evidenceProgress = input.progress
+    ? createEvidenceProgressReporter({
+        progress: input.progress,
+        now: input.now
+      })
+    : undefined;
+
+  input.progress?.(
+    SCAN_PROGRESS_EVIDENCE_START_PERCENT,
+    `Collecting license evidence for ${input.scanGraph.nodes.length} packages...`
+  );
   const evidence = await collectEvidenceForGraph({
     graph: input.scanGraph,
-    projectRoot: input.project.rootDir
+    projectRoot: input.project.rootDir,
+    ...(evidenceProgress ? { progress: evidenceProgress } : {})
   });
 
   if (isErr(evidence)) {
     return evidence;
   }
 
-  input.progress?.(4, "Evaluating license risk...");
+  input.progress?.(SCAN_PROGRESS_EVALUATE_PERCENT, "Evaluating license risk...");
   const normalizedLicenses = normalizeAllLicenseEvidence(evidence.value);
   const riskFindings = evaluateLicenseRisks({
     licenses: normalizedLicenses,
@@ -830,6 +868,7 @@ function filterGraphForProdOnly(graph: DependencyGraph, prodOnly: boolean): Depe
 async function collectEvidenceForGraph(input: {
   graph: DependencyGraph;
   projectRoot: string;
+  progress?: (progress: EvidenceCollectionProgress) => void;
 }): Promise<Result<LicenseEvidence[], OhriskError>> {
   const embeddedEvidence = input.graph.embeddedEvidence ?? [];
   const embeddedEvidenceIds = new Set(embeddedEvidence.map((evidence) => evidence.packageId));
@@ -837,6 +876,8 @@ async function collectEvidenceForGraph(input: {
   const relevantEmbeddedEvidence = embeddedEvidence.filter((evidence) =>
     graphNodeIds.has(evidence.packageId)
   );
+  const totalEvidenceCount = input.graph.nodes.length;
+  let completedEvidenceCount = 0;
   const collectionGraph = embeddedEvidenceIds.size === 0
     ? input.graph
     : {
@@ -845,9 +886,29 @@ async function collectEvidenceForGraph(input: {
         embeddedEvidence: []
       };
 
+  for (const evidence of relevantEmbeddedEvidence) {
+    completedEvidenceCount += 1;
+    input.progress?.({
+      completed: completedEvidenceCount,
+      total: totalEvidenceCount,
+      packageId: evidence.packageId
+    });
+  }
+
   const collected = await collectGraphEvidence({
     graph: collectionGraph,
-    projectRoot: input.projectRoot
+    projectRoot: input.projectRoot,
+    ...(input.progress
+      ? {
+          progress: (progress) => {
+            input.progress?.({
+              completed: completedEvidenceCount + progress.completed,
+              total: totalEvidenceCount,
+              packageId: progress.packageId
+            });
+          }
+        }
+      : {})
   });
 
   if (isErr(collected)) {
@@ -855,6 +916,66 @@ async function collectEvidenceForGraph(input: {
   }
 
   return ok([...relevantEmbeddedEvidence, ...collected.value]);
+}
+
+function createEvidenceProgressReporter(input: {
+  progress: ScanProgressReporter;
+  now: ScanClock;
+}): (progress: EvidenceCollectionProgress) => void {
+  const startedAtMs = input.now();
+
+  return (progress) => {
+    const completed = clampCount(progress.completed, progress.total);
+    const total = Math.max(0, progress.total);
+    const elapsedMs = Math.max(0, input.now() - startedAtMs);
+    const averageMs = completed > 0 ? elapsedMs / completed : 0;
+    const etaMs = averageMs * Math.max(0, total - completed);
+
+    input.progress(
+      evidenceCollectionPercent({
+        completed,
+        total,
+        packageId: progress.packageId
+      }),
+      [
+        `Collecting license evidence ${completed}/${total}: ${formatProgressPackageId(progress.packageId)}`,
+        `(elapsed ${formatDuration(elapsedMs)}, eta ${formatDuration(etaMs)}, avg ${formatDuration(averageMs)}/pkg)`
+      ].join(" ")
+    );
+  };
+}
+
+function evidenceCollectionPercent(progress: EvidenceCollectionProgress): number {
+  const fraction = progress.total <= 0
+    ? 1
+    : Math.min(1, Math.max(0, progress.completed / progress.total));
+
+  return SCAN_PROGRESS_EVIDENCE_START_PERCENT
+    + ((SCAN_PROGRESS_EVIDENCE_END_PERCENT - SCAN_PROGRESS_EVIDENCE_START_PERCENT) * fraction);
+}
+
+function clampCount(value: number, total: number): number {
+  return Math.min(Math.max(0, total), Math.max(0, value));
+}
+
+function formatProgressPackageId(packageId: string): string {
+  return packageId.replace(/[\r\n]+/g, " ").trim() || "(unknown package)";
+}
+
+function formatDuration(milliseconds: number): string {
+  const safeMilliseconds = Math.max(0, Math.round(milliseconds));
+  if (safeMilliseconds < 1_000) {
+    return `${safeMilliseconds}ms`;
+  }
+
+  const seconds = Math.round(safeMilliseconds / 1_000);
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return remainingSeconds === 0 ? `${minutes}m` : `${minutes}m ${remainingSeconds}s`;
 }
 
 function isProductionRelevantDependency(node: DependencyNode): boolean {
@@ -1553,8 +1674,8 @@ function renderTopLevelHelp(): string {
     "Ohrisk",
     "",
     "Usage:",
-    "  ohrisk scan [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--output <file>]",
-    "  ohrisk ci [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>]",
+    "  ohrisk scan [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--output <file>] [--open]",
+    "  ohrisk ci [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
     "  ohrisk diff <baseline-ref> [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
     "  ohrisk help [command]",
@@ -1579,6 +1700,7 @@ function renderTopLevelHelp(): string {
     "  --html                 Print a browser-friendly HTML report.",
     "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
     "  --output <file>        Write report output to a file instead of stdout.",
+    "  --open                 Open the written HTML report after scan completion.",
     "  --fail-on <severity>   CI threshold. Defaults to high for ci.",
     "  --strict-waivers       Fail CI when local waivers are expired or unmatched.",
     "  --help, -h             Print this help text.",
@@ -1591,7 +1713,7 @@ function renderScanHelp(): string {
     "Ohrisk scan",
     "",
     "Usage:",
-    "  ohrisk scan [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--output <file>]",
+    "  ohrisk scan [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--output <file>] [--open]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
@@ -1604,6 +1726,7 @@ function renderScanHelp(): string {
     "  --html                 Print a browser-friendly HTML report.",
     "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
     "  --output <file>        Write report output to a file instead of stdout.",
+    "  --open                 Open the written HTML report after scan completion.",
     "  --help, -h             Print this help text."
   ].join("\n");
 }
@@ -1613,7 +1736,7 @@ function renderCiHelp(): string {
     "Ohrisk ci",
     "",
     "Usage:",
-    "  ohrisk ci [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>]",
+    "  ohrisk ci [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
@@ -1628,6 +1751,7 @@ function renderCiHelp(): string {
     "  --fail-on <severity>   CI threshold. Defaults to high.",
     "  --strict-waivers       Fail CI when local waivers are expired or unmatched.",
     "  --output <file>        Write report output to a file instead of stdout.",
+    "  --open                 Open the written HTML report after scan completion.",
     "  --help, -h             Print this help text."
   ].join("\n");
 }
@@ -1728,11 +1852,23 @@ function emitReport(input: {
   return ok(written.value);
 }
 
+function formatReportOpenWarning(error: OhriskError): string {
+  const opener =
+    typeof error.details?.opener === "string" && error.details.opener.trim() !== ""
+      ? ` with ${error.details.opener}`
+      : "";
+  const cause =
+    typeof error.details?.cause === "string" && error.details.cause.trim() !== ""
+      ? ` Cause: ${error.details.cause}`
+      : "";
+  return `Could not open report${opener}: ${error.message}${cause}`;
+}
+
 function createScanProgressReporter(io: CliIO): ScanProgressReporter {
-  return (step, message) => {
-    const percent = Math.round((step / SCAN_PROGRESS_TOTAL_STEPS) * 100);
-    const filled = Math.round((percent / 100) * 20);
-    const bar = `${"#".repeat(filled)}${"-".repeat(20 - filled)}`;
+  return (rawPercent, message) => {
+    const percent = Math.round(Math.min(100, Math.max(0, rawPercent)));
+    const filled = Math.round((percent / 100) * SCAN_PROGRESS_BAR_WIDTH);
+    const bar = `${"#".repeat(filled)}${"-".repeat(SCAN_PROGRESS_BAR_WIDTH - filled)}`;
     io.stderr(`[${bar}] ${percent.toString().padStart(3, " ")}% ${message}`);
   };
 }

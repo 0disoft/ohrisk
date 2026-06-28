@@ -244,6 +244,29 @@ describe("parseArgs", () => {
     });
   });
 
+  test("parses scan HTML output with open request", () => {
+    const parsed = parseArgs(["scan", "--html", "--output", "reports/ohrisk.html", "--open"]);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+
+    expect(parsed.value).toEqual({
+      kind: "scan",
+      profile: "saas",
+      prodOnly: false,
+      json: false,
+      sarif: false,
+      markdown: false,
+      html: true,
+      cyclonedx: false,
+      noWaivers: false,
+      outputPath: "reports/ohrisk.html",
+      openReport: true
+    });
+  });
+
   test("parses scan without local waivers", () => {
     const parsed = parseArgs(["scan", "--no-waivers"]);
 
@@ -478,6 +501,27 @@ describe("parseArgs", () => {
     }
 
     expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+  });
+
+  test("rejects open without HTML file output", () => {
+    const cases = [
+      ["scan", "--open"],
+      ["scan", "--html", "--open"],
+      ["scan", "--json", "--output", "reports/ohrisk.json", "--open"],
+      ["ci", "--html", "--open"]
+    ];
+
+    for (const argv of cases) {
+      const parsed = parseArgs(argv);
+
+      expect(parsed.ok).toBe(false);
+      if (parsed.ok) {
+        throw new Error(`Expected ${argv.join(" ")} to fail.`);
+      }
+
+      expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+      expect(parsed.error.message).toBe("--open requires --html and --output.");
+    }
   });
 
   test("rejects option-looking tokens as missing option values", () => {

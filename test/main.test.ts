@@ -5,8 +5,9 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { main, type CliIO } from "../src/cli/main";
+import { createReportOpener } from "../src/report/open-report";
 import { createError } from "../src/shared/errors";
-import { err } from "../src/shared/result";
+import { err, ok } from "../src/shared/result";
 import { createTarGz } from "./helpers/tar";
 import { createZip } from "./helpers/zip";
 
@@ -25,6 +26,20 @@ function createTestIO(cwd: string): { io: CliIO; stdout: string[]; stderr: strin
     stdout,
     stderr
   };
+}
+
+function expectEvidenceProgress(stderr: string[]): void {
+  const evidenceProgressLines = stderr.filter((line) =>
+    /Collecting license evidence \d+\/\d+: .+ \(elapsed .+, eta .+, avg .+\/pkg\)/.test(line)
+  );
+  const lastProgress = evidenceProgressLines.at(-1);
+  const finalCount = lastProgress?.match(/Collecting license evidence (\d+)\/(\d+): /);
+
+  expect(evidenceProgressLines.length).toBeGreaterThan(1);
+  expect(evidenceProgressLines[0]).toContain("Collecting license evidence 1/");
+  expect(evidenceProgressLines[0]).toContain("eta ");
+  expect(evidenceProgressLines[0]).toContain("avg ");
+  expect(finalCount?.[1]).toBe(finalCount?.[2]);
 }
 
 function writeLocalPackage(
@@ -60,6 +75,7 @@ describe("main", () => {
     expect(output).toContain("--lockfile <path>");
     expect(output).toContain("--help, -h");
     expect(output).toContain("--html");
+    expect(output).toContain("--open");
     expect(output).toContain("--cyclonedx");
   });
 
@@ -74,6 +90,7 @@ describe("main", () => {
     expect(scanOutput).toContain("ohrisk scan [--lockfile <path>]");
     expect(scanOutput).toContain("--lockfile <path>");
     expect(scanOutput).toContain("--html");
+    expect(scanOutput).toContain("--open");
     expect(scanOutput).toContain("--cyclonedx");
     expect(scanOutput).toContain("--help, -h");
     expect(scanOutput).not.toContain("--fail-on");
@@ -88,6 +105,7 @@ describe("main", () => {
     expect(ciOutput).toContain("--fail-on <severity>");
     expect(ciOutput).toContain("--strict-waivers");
     expect(ciOutput).toContain("--html");
+    expect(ciOutput).toContain("--open");
     expect(ciOutput).toContain("--help, -h");
 
     const diff = createTestIO(fixturesDir);
@@ -146,7 +164,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.159.2"]);
+    expect(stdout).toEqual(["ohrisk 0.160.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -2028,12 +2046,13 @@ describe("main", () => {
       expect(exitCode).toBe(0);
       expect(stdout).toEqual([]);
       expect(stderr).toContain("[--------------------]   0% Starting scan...");
-      expect(stderr).toContain("[###-----------------]  14% Discovering project...");
-      expect(stderr).toContain("[######--------------]  29% Reading bun.lock...");
+      expect(stderr).toContain("[#-------------------]   5% Discovering project...");
+      expect(stderr).toContain("[##------------------]  10% Reading bun.lock...");
       expect(stderr.some((line) => line.includes("Collecting license evidence for"))).toBe(true);
-      expect(stderr).toContain("[###########---------]  57% Evaluating license risk...");
-      expect(stderr).toContain("[##############------]  71% Rendering JSON report...");
-      expect(stderr).toContain("[#################---]  86% Writing report file...");
+      expectEvidenceProgress(stderr);
+      expect(stderr).toContain("[###################-]  96% Evaluating license risk...");
+      expect(stderr).toContain("[####################]  98% Rendering JSON report...");
+      expect(stderr).toContain("[####################]  99% Writing report file...");
       expect(stderr).toContain(`Wrote report to ${path.join(outputRoot, "reports", "scan.json")}`);
       expect(stderr).toContain("[####################] 100% Report ready.");
 
@@ -2046,6 +2065,119 @@ describe("main", () => {
 
       expect(payload.status).toBe("profile_risk_evaluated");
       expect(payload.prodOnly).toBe(true);
+    } finally {
+      rmSync(outputRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("opens written HTML report when requested", async () => {
+    const outputRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-html-open-"));
+    const openedReports: string[] = [];
+    const openedTarget = "http://127.0.0.1:45231/";
+
+    try {
+      const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
+      const outputPath = path.join(outputRoot, "reports", "scan.html");
+      io.openReport = (input) => {
+        openedReports.push(input.reportPath);
+        return ok({ target: openedTarget });
+      };
+
+      const exitCode = await main(
+        ["scan", "--html", "--prod", "--output", outputPath, "--open"],
+        io
+      );
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toEqual([]);
+      expect(openedReports).toEqual([outputPath]);
+      expect(stderr).toContain(`Wrote report to ${outputPath}`);
+      expect(stderr).toContain(`Opened report: ${openedTarget}`);
+      expect(readFileSync(outputPath, "utf8")).toContain("<!doctype html>");
+    } finally {
+      rmSync(outputRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("opens HTML reports through a temporary loopback URL", async () => {
+    const outputRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-html-loopback-"));
+    const outputPath = path.join(outputRoot, "scan.html");
+    writeFileSync(outputPath, "<!doctype html><title>fixture report</title>", "utf8");
+    let openedTarget = "";
+    let fetchedText = "";
+    let badTokenStatus = 0;
+    let headStatus = 0;
+    let framePolicy = "";
+    let contentSecurityPolicy = "";
+    let fetchedTextPromise: Promise<void> | undefined;
+
+    try {
+      const opener = createReportOpener({
+        closeDelayMs: 0,
+        serverTimeoutMs: 1000,
+        openCommandRunner: (_command, args) => {
+          openedTarget = args[0] ?? "";
+          fetchedTextPromise = (async () => {
+            const badTokenResponse = await fetch(openedTarget.replace(/token=[^&]+/, "token=bad"));
+            badTokenStatus = badTokenResponse.status;
+
+            const headResponse = await fetch(openedTarget, { method: "HEAD" });
+            headStatus = headResponse.status;
+            framePolicy = headResponse.headers.get("x-frame-options") ?? "";
+            contentSecurityPolicy = headResponse.headers.get("content-security-policy") ?? "";
+
+            const response = await fetch(openedTarget);
+            fetchedText = await response.text();
+          })();
+          return { status: 0 };
+        }
+      });
+
+      const opened = await opener({ reportPath: outputPath });
+      await fetchedTextPromise;
+
+      expect(opened.ok).toBe(true);
+      expect(openedTarget).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/report\.html\?token=[a-f0-9]{32}$/);
+      expect(opened.ok ? opened.value.target : "").toBe(openedTarget);
+      expect(badTokenStatus).toBe(403);
+      expect(headStatus).toBe(200);
+      expect(framePolicy).toBe("DENY");
+      expect(contentSecurityPolicy).toContain("frame-ancestors 'none'");
+      expect(fetchedText).toContain("fixture report");
+    } finally {
+      rmSync(outputRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps scan successful when opening a written HTML report fails", async () => {
+    const outputRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-html-open-failed-"));
+
+    try {
+      const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
+      const outputPath = path.join(outputRoot, "reports", "scan.html");
+      io.openReport = (input) => err(createError({
+        code: "REPORT_OPEN_FAILED",
+        category: "filesystem",
+        message: "Failed to open the requested report file.",
+        details: {
+          reportPath: input.reportPath,
+          opener: "fixture-open",
+          cause: "fixture opener failure"
+        }
+      }));
+
+      const exitCode = await main(
+        ["scan", "--html", "--prod", "--output", outputPath, "--open"],
+        io
+      );
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toEqual([]);
+      expect(stderr).toContain(`Wrote report to ${outputPath}`);
+      expect(stderr).toContain(
+        "Could not open report with fixture-open: Failed to open the requested report file. Cause: fixture opener failure"
+      );
+      expect(readFileSync(outputPath, "utf8")).toContain("<!doctype html>");
     } finally {
       rmSync(outputRoot, { recursive: true, force: true });
     }
@@ -2072,7 +2204,7 @@ describe("main", () => {
     expect(exitCode).toBe(1);
     expect(stdout).toEqual([]);
     expect(stderr).toContain("[--------------------]   0% Starting scan...");
-    expect(stderr).toContain("[#################---]  86% Writing report file...");
+    expect(stderr).toContain("[####################]  99% Writing report file...");
     const errorOutput = stderr.at(-1) ?? "";
     expect(errorOutput).toContain("REPORT_WRITE_FAILED: Failed to write the requested report file.");
     expect(errorOutput).toContain("outputPath: reports/scan.json");
@@ -2143,7 +2275,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.159.2");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.160.0");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
@@ -3664,12 +3796,13 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       expect(exitCode).toBe(1);
       expect(stdout).toEqual([]);
       expect(stderr).toContain("[--------------------]   0% Starting CI scan...");
-      expect(stderr).toContain("[###-----------------]  14% Discovering project...");
-      expect(stderr).toContain("[######--------------]  29% Reading bun.lock...");
+      expect(stderr).toContain("[#-------------------]   5% Discovering project...");
+      expect(stderr).toContain("[##------------------]  10% Reading bun.lock...");
       expect(stderr.some((line) => line.includes("Collecting license evidence for"))).toBe(true);
-      expect(stderr).toContain("[###########---------]  57% Evaluating license risk...");
-      expect(stderr).toContain("[##############------]  71% Rendering Markdown report...");
-      expect(stderr).toContain("[#################---]  86% Writing report file...");
+      expectEvidenceProgress(stderr);
+      expect(stderr).toContain("[###################-]  96% Evaluating license risk...");
+      expect(stderr).toContain("[####################]  98% Rendering Markdown report...");
+      expect(stderr).toContain("[####################]  99% Writing report file...");
       expect(stderr).toContain(`Wrote report to ${outputPath}`);
       expect(stderr).toContain("[####################] 100% Report ready.");
       expect(readFileSync(outputPath, "utf8")).toContain("# Ohrisk scan");
