@@ -1,0 +1,202 @@
+name: Ohrisk
+description: Catch open-source license risk in GitHub Actions.
+
+inputs:
+  version:
+    description: npm package version to install.
+    required: false
+    default: latest
+  node-version:
+    description: Node.js version used by the packaged Ohrisk CLI.
+    required: false
+    default: "24"
+  setup-node:
+    description: Run actions/setup-node before installing Ohrisk.
+    required: false
+    default: "true"
+  command:
+    description: Ohrisk command to run.
+    required: false
+    default: ci
+  profile:
+    description: Risk profile.
+    required: false
+    default: saas
+  prod:
+    description: Exclude development-only dependencies.
+    required: false
+    default: "true"
+  fail-on:
+    description: CI severity threshold for ohrisk ci.
+    required: false
+    default: high
+  lockfile:
+    description: Supported lockfile path to scan.
+    required: false
+    default: ""
+  format:
+    description: Report format.
+    required: false
+    default: text
+  output:
+    description: Repository-relative report output path.
+    required: false
+    default: ""
+  no-waivers:
+    description: Ignore local .ohrisk-waivers.json files.
+    required: false
+    default: "false"
+  strict-waivers:
+    description: Fail when local waivers are expired or unmatched.
+    required: false
+    default: "false"
+
+outputs:
+  report-path:
+    description: Report output path when the output input is set.
+    value: ${{ steps.run.outputs.report-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node
+      if: ${{ inputs.setup-node == 'true' }}
+      uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Install Ohrisk
+      shell: bash
+      env:
+        OHRISK_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+
+        if [ -z "$OHRISK_VERSION" ]; then
+          echo "::error::version must not be empty."
+          exit 1
+        fi
+
+        npm install -g "ohrisk@${OHRISK_VERSION}"
+
+    - name: Run Ohrisk
+      id: run
+      shell: bash
+      env:
+        OHRISK_COMMAND: ${{ inputs.command }}
+        OHRISK_PROFILE: ${{ inputs.profile }}
+        OHRISK_PROD: ${{ inputs.prod }}
+        OHRISK_FAIL_ON: ${{ inputs.fail-on }}
+        OHRISK_LOCKFILE: ${{ inputs.lockfile }}
+        OHRISK_FORMAT: ${{ inputs.format }}
+        OHRISK_OUTPUT: ${{ inputs.output }}
+        OHRISK_NO_WAIVERS: ${{ inputs.no-waivers }}
+        OHRISK_STRICT_WAIVERS: ${{ inputs.strict-waivers }}
+      run: |
+        set -euo pipefail
+
+        require_bool() {
+          local name="$1"
+          local value="$2"
+          case "$value" in
+            true|false) ;;
+            *)
+              echo "::error::${name} must be true or false."
+              exit 1
+              ;;
+          esac
+        }
+
+        require_relative_workspace_path() {
+          local name="$1"
+          local value="$2"
+          local normalized="${value//\\//}"
+
+          if [ -z "$value" ]; then
+            echo "::error::${name} must not be empty."
+            exit 1
+          fi
+
+          if [[ "$normalized" == /* || "$normalized" =~ ^[A-Za-z]: ]]; then
+            echo "::error::${name} must be a repository-relative path."
+            exit 1
+          fi
+
+          IFS="/" read -r -a path_segments <<< "$normalized"
+          for segment in "${path_segments[@]}"; do
+            if [ "$segment" = ".." ]; then
+              echo "::error::${name} must not contain .. path segments."
+              exit 1
+            fi
+          done
+        }
+
+        require_bool "prod" "$OHRISK_PROD"
+        require_bool "no-waivers" "$OHRISK_NO_WAIVERS"
+        require_bool "strict-waivers" "$OHRISK_STRICT_WAIVERS"
+
+        args=()
+        case "$OHRISK_COMMAND" in
+          scan|ci) args+=("$OHRISK_COMMAND") ;;
+          *)
+            echo "::error::command must be scan or ci."
+            exit 1
+            ;;
+        esac
+
+        case "$OHRISK_PROFILE" in
+          saas|distributed-app) args+=("--profile" "$OHRISK_PROFILE") ;;
+          *)
+            echo "::error::profile must be saas or distributed-app."
+            exit 1
+            ;;
+        esac
+
+        if [ "$OHRISK_PROD" = "true" ]; then
+          args+=("--prod")
+        fi
+
+        if [ -n "$OHRISK_LOCKFILE" ]; then
+          require_relative_workspace_path "lockfile" "$OHRISK_LOCKFILE"
+          args+=("--lockfile" "$OHRISK_LOCKFILE")
+        fi
+
+        case "$OHRISK_FORMAT" in
+          text) ;;
+          json|sarif|markdown|html|cyclonedx) args+=("--${OHRISK_FORMAT}") ;;
+          *)
+            echo "::error::format must be text, json, sarif, markdown, html, or cyclonedx."
+            exit 1
+            ;;
+        esac
+
+        if [ -n "$OHRISK_OUTPUT" ]; then
+          require_relative_workspace_path "output" "$OHRISK_OUTPUT"
+          mkdir -p "$(dirname -- "$OHRISK_OUTPUT")"
+          args+=("--output" "$OHRISK_OUTPUT")
+          echo "report-path=$OHRISK_OUTPUT" >> "$GITHUB_OUTPUT"
+        fi
+
+        if [ "$OHRISK_NO_WAIVERS" = "true" ]; then
+          args+=("--no-waivers")
+        fi
+
+        if [ "$OHRISK_STRICT_WAIVERS" = "true" ]; then
+          args+=("--strict-waivers")
+        fi
+
+        if [ -n "$OHRISK_FAIL_ON" ]; then
+          if [ "$OHRISK_COMMAND" != "ci" ]; then
+            echo "::error::fail-on can only be used with command=ci."
+            exit 1
+          fi
+          case "$OHRISK_FAIL_ON" in
+            high|unknown|review|low) args+=("--fail-on" "$OHRISK_FAIL_ON") ;;
+            *)
+              echo "::error::fail-on must be high, unknown, review, or low."
+              exit 1
+              ;;
+          esac
+        fi
+
+        ohrisk "${args[@]}"

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.160.13 - 2026-06-28
+
+- Added a dedicated composite GitHub Action for running Ohrisk in CI with
+  bounded inputs, repository-relative report paths, and documentation examples.
+
 ## 0.160.12 - 2026-06-28
 
 - Added a packaged HTML report CSP contract, runtime coverage for report filters

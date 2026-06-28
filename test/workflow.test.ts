@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse as parseYaml } from "yaml";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -62,5 +63,67 @@ describe("npm publish workflow", () => {
     expect(workflow).toContain("CHANGELOG.md does not contain");
     expect(workflow).toContain("gh release create \"$GITHUB_REF_NAME\"");
     expect(workflow).not.toContain("release:");
+  });
+});
+
+describe("Ohrisk GitHub Action", () => {
+  test("provides a bounded composite action contract", () => {
+    const actionSource = readFileSync(path.join(repoRoot, "action.yml"), "utf8");
+    const action = parseYaml(actionSource) as {
+      inputs?: Record<string, { default?: string; required?: boolean }>;
+      name?: string;
+      outputs?: Record<string, { value?: string }>;
+      runs?: {
+        steps?: Array<{
+          id?: string;
+          name?: string;
+          shell?: string;
+          uses?: string;
+          with?: Record<string, string>;
+        }>;
+        using?: string;
+      };
+    };
+
+    expect(action.name).toBe("Ohrisk");
+    expect(action.runs?.using).toBe("composite");
+    expect(action.inputs?.version?.default).toBe("latest");
+    expect(action.inputs?.["node-version"]?.default).toBe("24");
+    expect(action.inputs?.["setup-node"]?.default).toBe("true");
+    expect(action.inputs?.command?.default).toBe("ci");
+    expect(action.inputs?.profile?.default).toBe("saas");
+    expect(action.inputs?.prod?.default).toBe("true");
+    expect(action.inputs?.["fail-on"]?.default).toBe("high");
+    expect(action.inputs?.format?.default).toBe("text");
+    expect(action.outputs?.["report-path"]?.value).toBe("${{ steps.run.outputs.report-path }}");
+
+    expect(action.runs?.steps?.some((step) => step.uses === "actions/setup-node@v6")).toBe(true);
+    expect(action.runs?.steps?.some((step) => step.id === "run" && step.shell === "bash")).toBe(true);
+    expect(actionSource).toContain('npm install -g "ohrisk@${OHRISK_VERSION}"');
+    expect(actionSource).toContain("args=()");
+    expect(actionSource).toContain('ohrisk "${args[@]}"');
+    expect(actionSource).not.toContain("extra-args");
+  });
+
+  test("validates action report paths before writing outputs", () => {
+    const actionSource = readFileSync(path.join(repoRoot, "action.yml"), "utf8");
+
+    expect(actionSource).toContain("require_relative_workspace_path");
+    expect(actionSource).toContain('[[ "$normalized" == /* || "$normalized" =~ ^[A-Za-z]: ]]');
+    expect(actionSource).toContain('if [ "$segment" = ".." ]; then');
+    expect(actionSource).toContain('require_relative_workspace_path "lockfile" "$OHRISK_LOCKFILE"');
+    expect(actionSource).toContain('require_relative_workspace_path "output" "$OHRISK_OUTPUT"');
+    expect(actionSource).toContain('mkdir -p "$(dirname -- "$OHRISK_OUTPUT")"');
+  });
+
+  test("documents the dedicated action examples", () => {
+    const docs = readFileSync(path.join(repoRoot, "docs", "ci.md"), "utf8");
+
+    expect(docs).toContain("## Dedicated action");
+    expect(docs).toContain("uses: 0disoft/ohrisk@v0.160.13");
+    expect(docs).toContain("format: html");
+    expect(docs).toContain("path: reports/ohrisk.html");
+    expect(docs).toContain("must be repository-relative paths");
+    expect(docs).not.toContain("does not provide a dedicated GitHub Action");
   });
 });

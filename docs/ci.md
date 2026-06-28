@@ -1,10 +1,47 @@
 # CI Usage Guide
 
-Examples for running Ohrisk in GitHub Actions. These examples assume ohrisk is
-published to npm and Node.js `>=20.0.0` is available on the runner.
+Examples for running Ohrisk in GitHub Actions.
 
-Ohrisk does not provide a dedicated GitHub Action. These examples call the
-installed CLI directly in workflow steps.
+## Dedicated action
+
+Use the dedicated action when you want the shortest PR gate:
+
+```yaml
+- uses: 0disoft/ohrisk@v0.160.13
+  with:
+    prod: "true"
+    fail-on: high
+```
+
+The action installs the published npm package, runs `ohrisk ci` by default, and
+fails the step when findings meet the configured threshold. Pin the action tag
+for reproducible CI.
+
+Generate an HTML report artifact:
+
+```yaml
+- uses: 0disoft/ohrisk@v0.160.13
+  with:
+    command: scan
+    format: html
+    output: reports/ohrisk.html
+    prod: "true"
+    fail-on: ""
+
+- uses: actions/upload-artifact@v4
+  with:
+    name: ohrisk-html
+    path: reports/ohrisk.html
+```
+
+The `output` and `lockfile` inputs must be repository-relative paths. Absolute
+paths, Windows drive paths, UNC paths, and `..` segments are rejected before
+the CLI runs.
+
+## Direct CLI steps
+
+The examples below call the installed CLI directly. Use them when you need more
+control than the composite action exposes.
 
 ## Prerequisites
 
