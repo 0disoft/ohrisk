@@ -13,18 +13,18 @@ const finding: RiskFinding = {
   fingerprint: "risk<script>@1.0.0::high::replace::unsafe & risky",
   packageId: "risk<script>@1.0.0",
   severity: "high",
-  reason: "License text contains <script>alert(1)</script> & quotes.",
+  reason: "License text contains <script>alert(1)</script> & 'quotes'.",
   action: "Replace this package before shipping.",
   dependencyType: "production",
   dependencyScope: "direct",
-  evidence: ["package.json license: Custom <unsafe>"],
+  evidence: ["package.json license: Custom <unsafe> and 'quoted'"],
   paths: [["fixture-app", "risk<script>@1.0.0"]],
   recommendation: "replace"
 };
 
 const waiver: RiskWaiver = {
   fingerprint: finding.fingerprint,
-  reason: "Temporary review waiver <not trusted>.",
+  reason: "Temporary review waiver <not trusted> with 'quote'.",
   expiresOn: "2026-12-31"
 };
 
@@ -105,12 +105,49 @@ describe("HTML scan report", () => {
     expect(output).toStartWith("<!doctype html>");
     expect(output).toContain('<main class="page">');
     expect(output).toContain("<h1>Ohrisk scan</h1>");
-    expect(output).toContain("<caption>Active license-risk findings</caption>");
+    expect(output).toContain('<fieldset class="finding-filters">');
+    expect(output).toContain('data-finding-filter');
+    expect(output).toContain('data-finding-search');
+    expect(output).toContain('data-finding-dependency-filter');
+    expect(output).toContain('data-finding-action-filter');
+    expect(output).toContain('value="low" data-finding-filter>');
+    expect(output).toContain('<option value="direct">direct (1)</option>');
+    expect(output).toContain('<option value="replace">replace (1)</option>');
+    expect(output).toContain('<article class="finding-card" data-finding-card data-severity="high" data-dependency-scope="direct" data-recommendation="replace"');
+    expect(output).toContain('data-search-text="risk&lt;script&gt;@1.0.0::production::direct::fixture&gt;risk&lt;script&gt;@1.0.0');
+    expect(output).toContain("<dt>Severity</dt>");
+    expect(output).toContain("<dt>Package</dt>");
+    expect(output).toContain("<dt>Dependency</dt>");
+    expect(output).toContain("<dt>Reason</dt>");
+    expect(output).toContain("<dt>Action</dt>");
+    expect(output).toContain("<dt>Path</dt>");
+    expect(output).toContain("<dt>Evidence</dt>");
+    expect(output).toContain("<dt>Fingerprint</dt>");
+    expect(output).toContain('class="finding-detail-value" data-collapsible');
+    expect(output).toContain('class="collapsible-content is-collapsed" data-collapsible-content');
+    expect(output).toContain('data-collapsible-toggle');
+    expect(output).toContain('aria-expanded="false">...</button>');
+    expect(output).toContain("max-height: calc(1.5em * 3)");
+    expect(output).toContain("const clone = content.cloneNode(true)");
+    expect(output).toContain("clone.classList.remove('is-collapsed')");
+    expect(output).toContain("return null;");
+    expect(output).toContain("refreshVisibleCollapsibles();");
+    expect(output).toContain("if (card && !card.hidden)");
+    expect(output).not.toContain("if (!card || !card.hidden)");
+    expect(output).toContain("toggle.hidden = !overflowed;");
+    expect(output).not.toContain("textContent || '').trim().length");
+    expect(output).not.toContain("const overflowed = content.scrollHeight > content.clientHeight + 1");
+    expect(output).not.toContain("content.classList.remove('is-collapsed')");
+    expect(output).not.toContain("toggle.hidden = !overflowed && !expanded");
+    expect(output).not.toContain("<caption>Active license-risk findings</caption>");
+    expect(output).not.toContain('<th scope="col">Severity</th><th scope="col">Package</th><th scope="col">Dependency</th><th scope="col">Reason</th><th scope="col">Action</th><th scope="col">Path</th><th scope="col">Evidence</th><th scope="col">Fingerprint</th>');
     expect(output).toContain("fixture-app");
     expect(output).toContain("risk&lt;script&gt;@1.0.0");
-    expect(output).toContain("&lt;script&gt;alert(1)&lt;/script&gt; &amp; quotes.");
-    expect(output).toContain("Temporary review waiver &lt;not trusted&gt;.");
+    expect(output).toContain("&lt;script&gt;alert(1)&lt;/script&gt; &amp; &#x27;quotes&#x27;.");
+    expect(output).toContain("package.json license: Custom &lt;unsafe&gt; and &#x27;quoted&#x27;");
+    expect(output).toContain("Temporary review waiver &lt;not trusted&gt; with &#x27;quote&#x27;.");
     expect(output).not.toContain("<script>alert(1)</script>");
+    expect(output).not.toContain("'quotes'");
   });
 
   test("renders empty states when no findings or waivers exist", () => {

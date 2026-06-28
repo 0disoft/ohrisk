@@ -4,7 +4,12 @@ import type { LicenseEvidence } from "../evidence/types";
 import type { DependencyGraph } from "../graph/types";
 import type { NormalizedLicense } from "../license/types";
 import { NOTICE_ACTION } from "../policy/evaluate";
-import type { RiskFinding, RiskSeverity } from "../policy/types";
+import type {
+  RiskDependencyScope,
+  RiskFinding,
+  RiskRecommendation,
+  RiskSeverity
+} from "../policy/types";
 import type { RiskWaiver, WaivedRiskFinding } from "../policy/waivers";
 import type { ProjectInput } from "../project/discover";
 import {
@@ -176,6 +181,9 @@ function renderHtmlReport(
     `      <p>${escapeHtml(nextAction)}</p>`,
     "    </section>",
     "  </main>",
+    "  <script>",
+    ...renderHtmlFilterScript().map((line) => `    ${line}`),
+    "  </script>",
     "</body>",
     "</html>"
   ].join("\n");
@@ -215,6 +223,38 @@ function renderHtmlStyles(): string[] {
     ".summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; min-width: 0; }",
     ".summary-card dt { color: var(--muted); font-size: 0.82rem; }",
     ".summary-card dd { margin: 6px 0 0; font-weight: 700; overflow-wrap: anywhere; }",
+    ".section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-block-end: 14px; }",
+    ".section-head h2 { margin: 0; }",
+    ".filter-status { margin: 0; color: var(--muted); font-size: 0.9rem; }",
+    ".finding-filter-panel { display: grid; gap: 12px; margin-block-end: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }",
+    ".finding-filters { margin: 0; padding: 0; border: 0; min-width: 0; }",
+    ".finding-filters legend { padding: 0; color: var(--muted); font-weight: 700; }",
+    ".filter-options { display: flex; flex-wrap: wrap; gap: 8px; margin-block-start: 10px; }",
+    ".filter-option { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: #f9fafb; color: var(--text); }",
+    ".filter-option input { margin: 0; }",
+    ".filter-fields { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(160px, 220px)); gap: 10px; align-items: end; }",
+    ".filter-field { display: grid; gap: 6px; min-width: 0; color: var(--muted); font-weight: 700; font-size: 0.86rem; }",
+    ".filter-field input, .filter-field select { width: 100%; min-width: 0; min-height: 38px; border: 1px solid var(--border); border-radius: 8px; background: #ffffff; color: var(--text); font: inherit; font-weight: 500; padding: 7px 10px; }",
+    ".finding-list { display: grid; gap: 12px; }",
+    ".finding-card { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }",
+    ".finding-card[hidden] { display: none; }",
+    ".finding-card-header { display: flex; align-items: start; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px; }",
+    ".finding-title { margin: 0; min-width: 0; font-size: 1rem; line-height: 1.35; }",
+    ".finding-title code { font-weight: 700; }",
+    ".finding-context { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; }",
+    ".finding-details { display: grid; grid-template-columns: minmax(120px, 180px) minmax(0, 1fr); margin: 0; border-top: 1px solid var(--border); }",
+    ".finding-details dt, .finding-details dd { min-width: 0; padding: 10px 14px; border-top: 1px solid var(--border); }",
+    ".finding-details dt:first-of-type, .finding-details dd:first-of-type { border-top: 0; }",
+    ".finding-details dt { color: var(--muted); font-weight: 700; background: #f9fafb; }",
+    ".finding-details dd { margin: 0; overflow-wrap: anywhere; }",
+    ".wrap-value { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }",
+    ".finding-detail-value { display: grid; gap: 8px; }",
+    ".collapsible-content { min-width: 0; overflow-wrap: anywhere; line-height: 1.5; }",
+    ".collapsible-content.is-collapsed { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; max-height: calc(1.5em * 3); overflow: hidden; }",
+    ".collapsible-toggle { width: 100%; min-height: 28px; border: 1px solid var(--border); border-radius: 8px; background: #f9fafb; color: var(--muted); cursor: pointer; font: inherit; font-weight: 700; line-height: 1; }",
+    ".collapsible-toggle:hover { color: var(--text); border-color: #b8c2d2; }",
+    ".collapsible-toggle:focus-visible { outline: 3px solid rgba(37, 99, 235, 0.28); outline-offset: 2px; }",
+    ".collapsible-toggle[hidden] { display: none; }",
     ".table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }",
     "table { width: 100%; border-collapse: collapse; min-width: 860px; }",
     "caption { text-align: left; padding: 12px 14px; color: var(--muted); font-weight: 700; }",
@@ -227,7 +267,14 @@ function renderHtmlStyles(): string[] {
     ".severity-review { color: var(--review); }",
     ".severity-unknown { color: var(--unknown); }",
     ".severity-low { color: var(--low); }",
-    "@media (max-width: 640px) { .page { width: min(100% - 20px, 1180px); padding-block-start: 20px; } h1 { font-size: 1.6rem; } }"
+    "@media (max-width: 640px) {",
+    "  .page { width: min(100% - 20px, 1180px); padding-block-start: 20px; }",
+    "  h1 { font-size: 1.6rem; }",
+    "  .filter-fields { grid-template-columns: 1fr; }",
+    "  .finding-details { grid-template-columns: 1fr; }",
+    "  .finding-details dt { padding-block-end: 4px; }",
+    "  .finding-details dd { padding-block-start: 0; }",
+    "}"
   ];
 }
 
@@ -250,32 +297,261 @@ function renderHtmlFindingsSection(findings: RiskFinding[]): string[] {
     ];
   }
 
+  const counts = summarizeRiskFindings(findings);
+  const filterCounts = summarizeFindingFilters(findings);
+
   return [
     '    <section aria-labelledby="findings-heading">',
-    '      <h2 id="findings-heading">Findings</h2>',
-    '      <div class="table-wrap">',
-    '        <table>',
-    "          <caption>Active license-risk findings</caption>",
-    "          <thead>",
-    "            <tr><th scope=\"col\">Severity</th><th scope=\"col\">Package</th><th scope=\"col\">Dependency</th><th scope=\"col\">Reason</th><th scope=\"col\">Action</th><th scope=\"col\">Path</th><th scope=\"col\">Evidence</th><th scope=\"col\">Fingerprint</th></tr>",
-    "          </thead>",
-    "          <tbody>",
-    ...findings.map((finding) => [
-      "            <tr>",
-      `              <td>${renderSeverity(finding.severity)}</td>`,
-      `              <td><code>${escapeHtml(finding.packageId)}</code></td>`,
-      `              <td>${escapeHtml(formatDependencyContext(finding))}</td>`,
-      `              <td>${escapeHtml(finding.reason)}</td>`,
-      `              <td>${escapeHtml(finding.action)}</td>`,
-      `              <td><code>${escapeHtml(formatPath(finding.paths[0]))}</code></td>`,
-      `              <td>${escapeHtml(finding.evidence.join("; "))}</td>`,
-      `              <td><code>${escapeHtml(finding.fingerprint)}</code></td>`,
-      "            </tr>"
-    ].join("\n")),
-    "          </tbody>",
-    "        </table>",
+    '      <div class="section-head">',
+    '        <h2 id="findings-heading">Findings</h2>',
+    '        <p class="filter-status" data-finding-filter-status></p>',
+    "      </div>",
+    '      <div class="finding-filter-panel">',
+    '      <fieldset class="finding-filters">',
+    "        <legend>Severity</legend>",
+    '        <div class="filter-options">',
+    ...renderSeverityFilterControls(counts),
+    "      </div>",
+    "      </fieldset>",
+    '        <div class="filter-fields">',
+    '          <label class="filter-field" for="finding-search">Search<input id="finding-search" type="search" data-finding-search placeholder="Package, reason, evidence"></label>',
+    '          <label class="filter-field" for="finding-dependency-filter">Dependency<select id="finding-dependency-filter" data-finding-dependency-filter>',
+    '            <option value="all">All dependencies</option>',
+    ...renderDependencyFilterOptions(filterCounts.dependencyScopes),
+    "          </select></label>",
+    '          <label class="filter-field" for="finding-action-filter">Action<select id="finding-action-filter" data-finding-action-filter>',
+    '            <option value="all">All actions</option>',
+    ...renderRecommendationFilterOptions(filterCounts.recommendations),
+    "          </select></label>",
+    "        </div>",
+    "      </div>",
+    '      <p class="empty" data-finding-filter-empty hidden>No findings match the selected filters.</p>',
+    '      <div class="finding-list">',
+    ...findings.flatMap((finding, index) => renderHtmlFindingCard(finding, index)),
     "      </div>",
     "    </section>"
+  ];
+}
+
+function renderSeverityFilterControls(counts: Record<RiskSeverity, number>): string[] {
+  const severities: RiskSeverity[] = ["high", "review", "unknown", "low"];
+
+  return severities.map((severity) => {
+    const checked = severity === "low" ? "" : " checked";
+    const label = `${severity} (${counts[severity]})`;
+    return `          <label class="filter-option"><input type="checkbox" value="${severity}" data-finding-filter${checked}> ${escapeHtml(label)}</label>`;
+  });
+}
+
+function renderDependencyFilterOptions(counts: Record<RiskDependencyScope, number>): string[] {
+  const scopes: RiskDependencyScope[] = ["direct", "transitive"];
+  return scopes
+    .filter((scope) => counts[scope] > 0)
+    .map(
+      (scope) =>
+        `            <option value="${scope}">${escapeHtml(`${scope} (${counts[scope]})`)}</option>`
+    );
+}
+
+function renderRecommendationFilterOptions(counts: Record<RiskRecommendation, number>): string[] {
+  const recommendations: RiskRecommendation[] = [
+    "replace",
+    "review",
+    "collect-evidence",
+    "exclude-dev-only",
+    "allow"
+  ];
+  return recommendations
+    .filter((recommendation) => counts[recommendation] > 0)
+    .map(
+      (recommendation) =>
+        `            <option value="${recommendation}">${escapeHtml(`${recommendation} (${counts[recommendation]})`)}</option>`
+    );
+}
+
+function renderHtmlFindingCard(finding: RiskFinding, index: number): string[] {
+  const titleId = `finding-${index + 1}-title`;
+  const searchText = normalizeFindingSearchText(finding);
+
+  return [
+    `        <article class="finding-card" data-finding-card data-severity="${escapeHtml(finding.severity)}" data-dependency-scope="${escapeHtml(finding.dependencyScope)}" data-recommendation="${escapeHtml(finding.recommendation)}" data-search-text="${escapeHtml(searchText)}" aria-labelledby="${titleId}">`,
+    '          <div class="finding-card-header">',
+    "            <div>",
+    `              <h3 class="finding-title" id="${titleId}"><code>${escapeHtml(finding.packageId)}</code></h3>`,
+    `              <p class="finding-context">${escapeHtml(formatDependencyContext(finding))}</p>`,
+    "            </div>",
+    `            ${renderSeverity(finding.severity)}`,
+    "          </div>",
+    '          <dl class="finding-details">',
+    ...renderFindingDetail("Severity", renderSeverity(finding.severity)),
+    ...renderFindingDetail("Package", `<code class="wrap-value">${escapeHtml(finding.packageId)}</code>`),
+    ...renderFindingDetail("Dependency", escapeHtml(formatDependencyContext(finding))),
+    ...renderFindingDetail("Reason", escapeHtml(finding.reason), true),
+    ...renderFindingDetail("Action", escapeHtml(finding.action), true),
+    ...renderFindingDetail("Path", `<code class="wrap-value">${escapeHtml(formatPath(finding.paths[0]))}</code>`, true),
+    ...renderFindingDetail("Evidence", escapeHtml(finding.evidence.join("; ")), true),
+    ...renderFindingDetail("Fingerprint", `<code class="wrap-value">${escapeHtml(finding.fingerprint)}</code>`, true),
+    "          </dl>",
+    "        </article>"
+  ];
+}
+
+function renderFindingDetail(label: string, valueHtml: string, collapsible = false): string[] {
+  if (collapsible) {
+    const expandLabel = `Show full ${label}`;
+    const collapseLabel = `Collapse ${label}`;
+    return [
+      `            <dt>${escapeHtml(label)}</dt>`,
+      '            <dd class="finding-detail-value" data-collapsible>',
+      `              <div class="collapsible-content is-collapsed" data-collapsible-content>${valueHtml}</div>`,
+      `              <button type="button" class="collapsible-toggle" data-collapsible-toggle data-expand-label="${escapeHtml(expandLabel)}" data-collapse-label="${escapeHtml(collapseLabel)}" aria-label="${escapeHtml(expandLabel)}" aria-expanded="false">...</button>`,
+      "            </dd>"
+    ];
+  }
+
+  return [
+    `            <dt>${escapeHtml(label)}</dt>`,
+    `            <dd>${valueHtml}</dd>`
+  ];
+}
+
+function renderHtmlFilterScript(): string[] {
+  return [
+    "(() => {",
+    "  const severityFilters = Array.from(document.querySelectorAll('[data-finding-filter]'));",
+    "  const cards = Array.from(document.querySelectorAll('[data-finding-card]'));",
+    "  const searchInput = document.querySelector('[data-finding-search]');",
+    "  const dependencyFilter = document.querySelector('[data-finding-dependency-filter]');",
+    "  const actionFilter = document.querySelector('[data-finding-action-filter]');",
+    "  const status = document.querySelector('[data-finding-filter-status]');",
+    "  const empty = document.querySelector('[data-finding-filter-empty]');",
+    "",
+    "  const updateFindings = () => {",
+    "    const selectedSeverities = new Set(severityFilters.filter((filter) => filter.checked).map((filter) => filter.value));",
+    "    const searchText = (searchInput?.value || '').trim().toLowerCase();",
+    "    const dependencyScope = dependencyFilter?.value || 'all';",
+    "    const recommendation = actionFilter?.value || 'all';",
+    "    let visibleCount = 0;",
+    "",
+    "    for (const card of cards) {",
+    "      const severityMatches = selectedSeverities.has(card.dataset.severity || '');",
+    "      const dependencyMatches = dependencyScope === 'all' || card.dataset.dependencyScope === dependencyScope;",
+    "      const recommendationMatches = recommendation === 'all' || card.dataset.recommendation === recommendation;",
+    "      const searchMatches = searchText === '' || (card.dataset.searchText || '').includes(searchText);",
+    "      const visible = severityMatches && dependencyMatches && recommendationMatches && searchMatches;",
+    "      card.hidden = !visible;",
+    "      if (visible) {",
+    "        visibleCount += 1;",
+    "      }",
+    "    }",
+    "",
+    "    if (status) {",
+    "      status.textContent = `${visibleCount} of ${cards.length} findings shown`;",
+    "    }",
+    "",
+    "    if (empty) {",
+    "      empty.hidden = visibleCount !== 0;",
+    "    }",
+    "",
+    "    refreshVisibleCollapsibles();",
+    "  };",
+    "",
+    "  for (const filter of severityFilters) {",
+    "    filter.addEventListener('change', updateFindings);",
+    "  }",
+    "  searchInput?.addEventListener('input', updateFindings);",
+    "  dependencyFilter?.addEventListener('change', updateFindings);",
+    "  actionFilter?.addEventListener('change', updateFindings);",
+    "",
+    "  const getCollapsedHeight = (content) => {",
+    "    const styles = window.getComputedStyle(content);",
+    "    const lineHeight = Number.parseFloat(styles.lineHeight);",
+    "    return Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight * 3 : 0;",
+    "  };",
+    "",
+    "  const isCollapsibleOverflowing = (content) => {",
+    "    const width = content.getBoundingClientRect().width;",
+    "    const collapsedHeight = getCollapsedHeight(content);",
+    "    if (width <= 0 || collapsedHeight <= 0 || !content.parentElement) {",
+    "      return null;",
+    "    }",
+    "    if (content.scrollHeight > content.clientHeight + 1) {",
+    "      return true;",
+    "    }",
+    "",
+    "    const clone = content.cloneNode(true);",
+    "    clone.classList.remove('is-collapsed');",
+    "    clone.removeAttribute('data-collapsible-content');",
+    "    clone.setAttribute('aria-hidden', 'true');",
+    "    clone.style.position = 'absolute';",
+    "    clone.style.visibility = 'hidden';",
+    "    clone.style.pointerEvents = 'none';",
+    "    clone.style.width = `${width}px`;",
+    "    clone.style.maxHeight = 'none';",
+    "    clone.style.display = 'block';",
+    "    clone.style.overflow = 'visible';",
+    "    clone.style.webkitLineClamp = 'unset';",
+    "    clone.style.webkitBoxOrient = 'unset';",
+    "    content.parentElement.appendChild(clone);",
+    "    const expandedHeight = clone.scrollHeight;",
+    "    clone.remove();",
+    "    return expandedHeight > collapsedHeight + 1;",
+    "  };",
+    "",
+    "  const refreshCollapsible = (container) => {",
+    "    const content = container.querySelector('[data-collapsible-content]');",
+    "    const toggle = container.querySelector('[data-collapsible-toggle]');",
+    "    if (!content || !toggle) {",
+    "      return;",
+    "    }",
+    "    const overflowed = isCollapsibleOverflowing(content);",
+    "    if (overflowed === null) {",
+    "      return;",
+    "    }",
+    "    toggle.hidden = !overflowed;",
+    "    if (!overflowed) {",
+    "      toggle.setAttribute('aria-expanded', 'false');",
+    "      toggle.setAttribute('aria-label', toggle.dataset.expandLabel || 'Show full value');",
+    "      toggle.textContent = '...';",
+    "      content.classList.add('is-collapsed');",
+    "    }",
+    "  };",
+    "",
+    "  const refreshVisibleCollapsibles = () => {",
+    "    requestAnimationFrame(() => {",
+    "      for (const container of collapsibles) {",
+    "        const card = container.closest('[data-finding-card]');",
+    "        if (card && !card.hidden) {",
+    "          refreshCollapsible(container);",
+    "        }",
+    "      }",
+    "    });",
+    "  };",
+    "",
+    "  const collapsibles = Array.from(document.querySelectorAll('[data-collapsible]'));",
+    "  for (const container of collapsibles) {",
+    "    const content = container.querySelector('[data-collapsible-content]');",
+    "    const toggle = container.querySelector('[data-collapsible-toggle]');",
+    "    if (!content || !toggle) {",
+    "      continue;",
+    "    }",
+    "    toggle.addEventListener('click', () => {",
+    "      const expanded = toggle.getAttribute('aria-expanded') === 'true';",
+    "      const nextExpanded = !expanded;",
+    "      toggle.setAttribute('aria-expanded', String(nextExpanded));",
+    "      toggle.setAttribute('aria-label', nextExpanded ? toggle.dataset.collapseLabel || 'Collapse' : toggle.dataset.expandLabel || 'Show full value');",
+    "      toggle.textContent = nextExpanded ? 'Less' : '...';",
+    "      content.classList.toggle('is-collapsed', !nextExpanded);",
+    "    });",
+    "  }",
+    "",
+    "  refreshVisibleCollapsibles();",
+    "  window.addEventListener('resize', () => {",
+    "    refreshVisibleCollapsibles();",
+    "  });",
+    "",
+    "  updateFindings();",
+    "})();"
   ];
 }
 
@@ -392,7 +668,8 @@ function escapeHtml(value: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
 }
 
 function renderMarkdownReport(
@@ -700,6 +977,51 @@ function summarizeRiskFindings(riskFindings: RiskFinding[]): Record<RiskSeverity
       low: 0
     }
   );
+}
+
+function summarizeFindingFilters(riskFindings: RiskFinding[]): {
+  dependencyScopes: Record<RiskDependencyScope, number>;
+  recommendations: Record<RiskRecommendation, number>;
+} {
+  return riskFindings.reduce(
+    (summary, finding) => {
+      summary.dependencyScopes[finding.dependencyScope] += 1;
+      summary.recommendations[finding.recommendation] += 1;
+      return summary;
+    },
+    {
+      dependencyScopes: {
+        direct: 0,
+        transitive: 0
+      },
+      recommendations: {
+        allow: 0,
+        review: 0,
+        replace: 0,
+        "exclude-dev-only": 0,
+        "collect-evidence": 0
+      }
+    }
+  );
+}
+
+function normalizeFindingSearchText(finding: RiskFinding): string {
+  return [
+    finding.id,
+    finding.fingerprint,
+    finding.packageId,
+    finding.severity,
+    finding.reason,
+    finding.action,
+    finding.dependencyType,
+    finding.dependencyScope,
+    finding.recommendation,
+    finding.evidence.join(" "),
+    formatPath(finding.paths[0])
+  ]
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
 }
 
 function renderThresholdLines(thresholdSummary: ReturnType<typeof buildThresholdSummary>): string[] {
