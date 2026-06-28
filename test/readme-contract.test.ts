@@ -32,6 +32,15 @@ describe("README report contract", () => {
     expect(readme).toContain("npx ohrisk scan");
   });
 
+  test("keeps Usage as a detailed reference without the duplicate command-shape block", () => {
+    const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
+
+    expect(readme).toContain("Install with another package manager if you do not want npm");
+    expect(readme).toContain("Run once with a package-manager exec command");
+    expect(readme).toContain("Write browser, SARIF, SBOM, or PR reports to files");
+    expect(readme).not.toContain("Once installed as a package, the intended command shape is");
+  });
+
   test("documents waiver mode and fingerprint-bearing report shapes", () => {
     const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
 

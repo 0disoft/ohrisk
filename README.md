@@ -246,19 +246,17 @@ fetching are not part of this slice yet.
 
 ## Usage
 
-Install globally after the package is published:
+Install with another package manager if you do not want npm:
 
 ```bash
-npm install -g ohrisk
 pnpm add -g ohrisk
 yarn global add ohrisk
 bun add -g ohrisk
 ```
 
-Run once without a global install:
+Run once with a package-manager exec command:
 
 ```bash
-npx ohrisk scan
 pnpm dlx ohrisk scan
 yarn dlx ohrisk scan
 bunx ohrisk scan
@@ -431,25 +429,17 @@ Print a Markdown report:
 ohrisk scan --markdown --prod
 ```
 
-Print a browser-friendly HTML report:
-
-```bash
-ohrisk scan --html --output reports/ohrisk.html
-ohrisk scan --html --output reports/ohrisk.html --open
-```
-
 Print a CycloneDX SBOM:
 
 ```bash
 ohrisk scan --cyclonedx --prod
 ```
 
-Write a report to a file:
+Write browser, SARIF, SBOM, or PR reports to files:
 
 ```bash
-ohrisk scan --sarif --output reports/ohrisk.sarif
-ohrisk scan --html --output reports/ohrisk.html
 ohrisk scan --html --output reports/ohrisk.html --open
+ohrisk scan --sarif --output reports/ohrisk.sarif
 ohrisk scan --cyclonedx --output reports/ohrisk.cdx.json
 ohrisk diff main --prod --markdown --output reports/ohrisk-pr.md
 ```
@@ -517,27 +507,6 @@ ohrisk diff main --prod --markdown
 Print the package version:
 
 ```bash
-ohrisk --version
-```
-
-Once installed as a package, the intended command shape is:
-
-```bash
-ohrisk scan --profile saas --prod
-ohrisk scan --lockfile package-lock.json
-ohrisk scan --lockfile npm-shrinkwrap.json
-ohrisk ci --fail-on high
-ohrisk ci --strict-waivers
-ohrisk scan --no-waivers
-ohrisk ci --no-waivers --fail-on high
-ohrisk scan --sarif
-ohrisk scan --markdown --prod
-ohrisk scan --html --output reports/ohrisk.html
-ohrisk scan --html --output reports/ohrisk.html --open
-ohrisk scan --cyclonedx --prod
-ohrisk scan --sarif --output reports/ohrisk.sarif
-ohrisk explain AGPL-3.0-only --profile saas
-ohrisk diff main --prod --fail-on unknown
 ohrisk --version
 ```
 
