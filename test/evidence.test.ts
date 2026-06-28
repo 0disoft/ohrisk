@@ -631,6 +631,66 @@ describe("collectGraphEvidence", () => {
     expect(missingLicense).not.toHaveProperty("packageJsonLicense");
   });
 
+  test("collects graph evidence with bounded concurrency while preserving graph order", async () => {
+    let activeFetches = 0;
+    let maxActiveFetches = 0;
+    const completedPackageIds: string[] = [];
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: ["a", "b", "c", "d"].map((name) => ({
+          id: `parallel-${name}@1.0.0`,
+          name: `parallel-${name}`,
+          version: "1.0.0",
+          ecosystem: "npm",
+          resolved: `https://registry.example.test/parallel-${name}/-/parallel-${name}-1.0.0.tgz`,
+          dependencyType: "production",
+          direct: name === "a",
+          paths: [["root", `parallel-${name}@1.0.0`]]
+        }))
+      },
+      projectRoot: bunProjectDir,
+      evidenceConcurrency: 2,
+      progress: (progress) => {
+        completedPackageIds.push(progress.packageId);
+      },
+      fetchArtifact: async (url) => {
+        activeFetches += 1;
+        maxActiveFetches = Math.max(maxActiveFetches, activeFetches);
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          const match = url.match(/parallel-([a-d])/);
+          const name = match?.[1] ?? "unknown";
+          return okArtifactResponseFromBuffer(createTarGz({
+            "package/package.json": JSON.stringify({
+              name: `parallel-${name}`,
+              version: "1.0.0",
+              license: "MIT"
+            }),
+            "package/LICENSE": `MIT License for parallel-${name}.`
+          }));
+        } finally {
+          activeFetches -= 1;
+        }
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+
+    expect(maxActiveFetches).toBe(2);
+    expect(evidence.value.map((item) => item.packageId)).toEqual([
+      "parallel-a@1.0.0",
+      "parallel-b@1.0.0",
+      "parallel-c@1.0.0",
+      "parallel-d@1.0.0"
+    ]);
+    expect(completedPackageIds).toHaveLength(4);
+  });
+
   test("fetches remote tarball evidence from HTTP resolved artifacts", async () => {
     const tarball = createTarGz({
       "package/package.json": JSON.stringify({

@@ -101,12 +101,19 @@ type RemoteArtifactFetchPolicy = {
   resolveArtifactHost: ArtifactHostResolver | undefined;
 };
 
+export type EvidenceCollectionProgress = {
+  completed: number;
+  total: number;
+  packageId: string;
+};
+
 const ARTIFACT_FETCH_TIMEOUT_MS = 30_000;
 const REGISTRY_METADATA_MAX_BYTES = 10 * 1024 * 1024;
 const PACKAGE_TARBALL_MAX_BYTES = 100 * 1024 * 1024;
 const INSTALLED_PACKAGE_JSON_MAX_BYTES = 1024 * 1024;
 const LOCAL_ARTIFACT_READ_CHUNK_BYTES = 64 * 1024;
 const MAX_ARTIFACT_REDIRECTS = 5;
+const DEFAULT_EVIDENCE_CONCURRENCY = 4;
 
 const SUPPORTED_INTEGRITY_DIGEST_BYTES = {
   sha1: 20,
@@ -126,8 +133,19 @@ export async function collectGraphEvidence(input: {
   tarballMaxBytes?: number;
   installedPackageJsonMaxBytes?: number;
   resolveArtifactHost?: ArtifactHostResolver;
+  evidenceConcurrency?: number;
+  progress?: (progress: EvidenceCollectionProgress) => void;
 }): Promise<Result<LicenseEvidence[], OhriskError>> {
-  const evidence: LicenseEvidence[] = [];
+  const evidence = new Array<LicenseEvidence>(input.graph.nodes.length);
+  const total = input.graph.nodes.length;
+  if (total === 0) {
+    return ok([]);
+  }
+
+  let completed = 0;
+  let nextIndex = 0;
+  let failure: { index: number; error: OhriskError } | undefined;
+  const workerCount = normalizeEvidenceConcurrency(input.evidenceConcurrency, total);
   const fetchArtifact = input.fetchArtifact ?? defaultArtifactFetcher;
   const resolveArtifactHost =
     input.resolveArtifactHost ??
@@ -138,26 +156,70 @@ export async function collectGraphEvidence(input: {
   const installedPackageJsonMaxBytes =
     input.installedPackageJsonMaxBytes ?? INSTALLED_PACKAGE_JSON_MAX_BYTES;
 
-  for (const node of input.graph.nodes) {
-    const collected = await collectNodeEvidence({
-      node,
-      projectRoot: input.projectRoot,
-      fetchArtifact,
-      resolveArtifactHost,
-      fetchTimeoutMs,
-      registryMetadataMaxBytes,
-      tarballMaxBytes,
-      installedPackageJsonMaxBytes
-    });
+  const collectNext = async (): Promise<void> => {
+    while (!failure) {
+      const index = nextIndex;
+      nextIndex += 1;
 
-    if (!collected.ok) {
-      return collected;
+      if (index >= total) {
+        return;
+      }
+
+      const node = input.graph.nodes[index];
+      if (!node) {
+        return;
+      }
+
+      const collected = await collectNodeEvidence({
+        node,
+        projectRoot: input.projectRoot,
+        fetchArtifact,
+        resolveArtifactHost,
+        fetchTimeoutMs,
+        registryMetadataMaxBytes,
+        tarballMaxBytes,
+        installedPackageJsonMaxBytes
+      });
+
+      if (!collected.ok) {
+        if (!failure || index < failure.index) {
+          failure = {
+            index,
+            error: collected.error
+          };
+        }
+        return;
+      }
+
+      evidence[index] = collected.value;
+      completed += 1;
+      input.progress?.({
+        completed,
+        total,
+        packageId: node.id
+      });
     }
+  };
 
-    evidence.push(collected.value);
+  await Promise.all(Array.from({ length: workerCount }, () => collectNext()));
+
+  if (failure) {
+    return err(failure.error);
   }
 
   return ok(evidence);
+}
+
+function normalizeEvidenceConcurrency(value: number | undefined, total: number): number {
+  if (value === undefined) {
+    return Math.min(DEFAULT_EVIDENCE_CONCURRENCY, total);
+  }
+
+  if (!Number.isFinite(value)) {
+    return 1;
+  }
+
+  return Math.min(Math.max(1, Math.trunc(value)), total);
 }
 
 async function collectNodeEvidence(input: {
