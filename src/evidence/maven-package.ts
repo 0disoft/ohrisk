@@ -41,7 +41,7 @@ export function collectMavenPackageEvidence(input: {
       files: [],
       source: "unavailable",
       warnings: [
-        "Maven POM metadata was not found in a local .m2/repository cache."
+        `Maven POM metadata for ${input.coordinates}@${input.version} was not found in local .m2/repository caches; run Maven/Gradle dependency resolution first or provide a project .m2/repository cache.`
       ]
     });
   }

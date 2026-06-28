@@ -336,28 +336,63 @@ describe("parseMavenPomText", () => {
     }
   });
 
-  test("rejects dependencies whose version comes only from missing external Maven management", () => {
-    const result = parseMavenPomText(
-      [
-        "<project>",
-        "  <artifactId>fixture-maven</artifactId>",
-        "  <dependencies>",
-        "    <dependency>",
-        "      <groupId>org.example</groupId>",
-        "      <artifactId>managed-version</artifactId>",
-        "    </dependency>",
-        "  </dependencies>",
-        "</project>"
-      ].join("\n"),
-      "pom.xml"
-    );
+  test("reports missing local Maven parent metadata when it cannot resolve managed versions", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-maven-missing-parent-repo-"));
 
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      throw new Error("Expected dependency without version to fail.");
+    try {
+      const result = parseMavenPomText(
+        [
+          "<project>",
+          "  <parent>",
+          "    <groupId>com.acme</groupId>",
+          "    <artifactId>missing-parent</artifactId>",
+          "    <version>1.0.0</version>",
+          "  </parent>",
+          "  <artifactId>fixture-maven</artifactId>",
+          "  <dependencies>",
+          "    <dependency>",
+          "      <groupId>org.example</groupId>",
+          "      <artifactId>managed-version</artifactId>",
+          "    </dependency>",
+          "  </dependencies>",
+          "</project>"
+        ].join("\n"),
+        "pom.xml",
+        {
+          mavenRepositoryRoots: [repositoryRoot],
+          projectRoot: path.dirname(repositoryRoot)
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected dependency without version to fail.");
+      }
+
+      expect(result.error.code).toBe("MAVEN_POM_PARSE_FAILED");
+      expect(result.error.message).toContain("local Maven parent/BOM metadata did not provide one");
+      expect(result.error.details).toMatchObject({
+        lockfilePath: "pom.xml",
+        dependency: "org.example:managed-version",
+        reason: "missing_dependency_version",
+        supportedVersionSources: [
+          "explicit dependency <version>",
+          "pom.xml properties",
+          "same-file dependencyManagement",
+          "local .m2 parent POM",
+          "local .m2 imported BOM POM"
+        ],
+        missingExternalPoms: [
+          {
+            usage: "parent",
+            dependency: "com.acme:missing-parent@1.0.0"
+          }
+        ]
+      });
+      expect(result.error.details?.searchedRepositoryRoots).toEqual(expect.arrayContaining([repositoryRoot]));
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
     }
-
-    expect(result.error.code).toBe("MAVEN_POM_PARSE_FAILED");
   });
 
   test("does not treat imported BOM entries as same-file dependencyManagement versions", () => {
@@ -393,6 +428,15 @@ describe("parseMavenPomText", () => {
     }
 
     expect(result.error.code).toBe("MAVEN_POM_PARSE_FAILED");
+    expect(result.error.details).toMatchObject({
+      reason: "missing_dependency_version",
+      missingExternalPoms: [
+        {
+          usage: "imported_bom",
+          dependency: "org.example:example-bom@1.0.0"
+        }
+      ]
+    });
   });
 
   test("rejects unresolved property versions", () => {
@@ -418,6 +462,11 @@ describe("parseMavenPomText", () => {
     }
 
     expect(result.error.code).toBe("MAVEN_POM_PARSE_FAILED");
+    expect(result.error.details).toMatchObject({
+      dependency: "org.example:unresolved",
+      version: "${external.version}",
+      reason: "unresolved_maven_version"
+    });
   });
 });
 

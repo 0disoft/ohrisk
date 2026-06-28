@@ -42,12 +42,18 @@ type MavenPomParseContext = {
   maxBytes: number;
   maxExternalPomDepth: number;
   visitedExternalPoms: Set<string>;
+  missingExternalPoms: MissingExternalMavenPom[];
 };
 
 type MavenPomCoordinates = {
   groupId: string;
   artifactId: string;
   version: string;
+};
+
+type MissingExternalMavenPom = {
+  usage: "parent" | "imported_bom";
+  dependency: string;
 };
 
 export function parseMavenPomFile(
@@ -92,7 +98,8 @@ export function parseMavenPomText(
       repositoryRoots: mavenRepositoryRoots(projectRoot, options.mavenRepositoryRoots),
       maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES,
       maxExternalPomDepth: options.maxExternalPomDepth ?? 8,
-      visitedExternalPoms: new Set()
+      visitedExternalPoms: new Set(),
+      missingExternalPoms: []
     };
     const scannedProject = stripUnsupportedMavenSections(input);
     const model = readMavenPomModel(scannedProject, pomPath, context, 0);
@@ -102,7 +109,7 @@ export function parseMavenPomText(
     }
 
     const rootName = model.value.rootName ?? "<maven-project>";
-    const dependencies = readMavenPomDependencies(scannedProject, model.value, pomPath);
+    const dependencies = readMavenPomDependencies(scannedProject, model.value, pomPath, context);
 
     if (!dependencies.ok) {
       return dependencies;
@@ -207,7 +214,8 @@ function readExternalMavenPomModel(
   coordinates: MavenPomCoordinates,
   pomPath: string,
   context: MavenPomParseContext,
-  depth: number
+  depth: number,
+  usage: MissingExternalMavenPom["usage"] = "parent"
 ): Result<MavenPomModel | undefined, OhriskError> {
   const externalPomPath = findMavenPomInRepository({
     repositoryRoots: context.repositoryRoots,
@@ -217,10 +225,14 @@ function readExternalMavenPomModel(
   });
 
   if (!externalPomPath) {
+    recordMissingExternalMavenPom(context, {
+      usage,
+      dependency: mavenDependencyId(coordinates)
+    });
     return ok(undefined);
   }
 
-  const visitedKey = `${coordinates.groupId}:${coordinates.artifactId}@${coordinates.version}`;
+  const visitedKey = mavenDependencyId(coordinates);
   if (context.visitedExternalPoms.has(visitedKey)) {
     return err(
       createError({
@@ -315,7 +327,8 @@ function readMavenPomProject(text: string, parent: MavenPomModel | undefined): M
 function readMavenPomDependencies(
   text: string,
   model: MavenPomModel,
-  pomPath: string
+  pomPath: string,
+  context: MavenPomParseContext
 ): Result<MavenPomDependency[], OhriskError> {
   const dependencies: MavenPomDependency[] = [];
   const scannedText = stripXmlSections(text, [
@@ -358,10 +371,19 @@ function readMavenPomDependencies(
           createError({
             code: "MAVEN_POM_PARSE_FAILED",
             category: "unsupported_input",
-            message: "Failed to parse pom.xml dependency entry. Ohrisk v0 requires dependency versions to be explicit, resolvable from pom.xml properties, same-file dependencyManagement, or local .m2 parent/BOM POMs.",
+            message: "Failed to parse pom.xml dependency entry. Dependency version was not explicit and local Maven parent/BOM metadata did not provide one.",
             details: {
               lockfilePath: pomPath,
-              dependency: `${groupId}:${artifactId}`
+              dependency: `${groupId}:${artifactId}`,
+              reason: "missing_dependency_version",
+              supportedVersionSources: [
+                "explicit dependency <version>",
+                "pom.xml properties",
+                "same-file dependencyManagement",
+                "local .m2 parent POM",
+                "local .m2 imported BOM POM"
+              ],
+              ...mavenResolutionDetails(context)
             }
           })
         );
@@ -373,11 +395,13 @@ function readMavenPomDependencies(
           createError({
             code: "MAVEN_POM_PARSE_FAILED",
             category: "unsupported_input",
-            message: "Failed to parse pom.xml dependency version. Ohrisk v0 does not resolve remote Maven parent, remote BOM, or unresolved dependencyManagement versions.",
+            message: "Failed to parse pom.xml dependency version. Ohrisk could not resolve the version from pom.xml properties or local Maven parent/BOM metadata.",
             details: {
               lockfilePath: pomPath,
               dependency: `${groupId}:${artifactId}`,
-              version: rawResolvedVersion
+              version: rawResolvedVersion,
+              reason: "unresolved_maven_version",
+              ...mavenResolutionDetails(context)
             }
           })
         );
@@ -432,7 +456,8 @@ function readMavenDependencyManagementVersions(
           { groupId, artifactId, version },
           pomPath,
           context,
-          depth + 1
+          depth + 1,
+          "imported_bom"
         );
         if (!bomModel.ok) {
           return bomModel;
@@ -545,6 +570,32 @@ function mavenProjectRootFromPomPath(pomPath: string): string {
 
 function mavenCoordinateKey(groupId: string, artifactId: string): string {
   return `${groupId}:${artifactId}`;
+}
+
+function mavenDependencyId(coordinates: MavenPomCoordinates): string {
+  return `${coordinates.groupId}:${coordinates.artifactId}@${coordinates.version}`;
+}
+
+function recordMissingExternalMavenPom(
+  context: MavenPomParseContext,
+  missing: MissingExternalMavenPom
+): void {
+  if (context.missingExternalPoms.some((entry) =>
+    entry.usage === missing.usage && entry.dependency === missing.dependency
+  )) {
+    return;
+  }
+
+  context.missingExternalPoms.push(missing);
+}
+
+function mavenResolutionDetails(context: MavenPomParseContext): Record<string, unknown> {
+  return {
+    searchedRepositoryRoots: context.repositoryRoots,
+    ...(context.missingExternalPoms.length > 0
+      ? { missingExternalPoms: context.missingExternalPoms }
+      : {})
+  };
 }
 
 function dependencyTypeForMavenDependency(dependency: MavenPomDependency): DependencyType {

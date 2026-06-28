@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.160.7 - 2026-06-28
+
+- Maven `pom.xml` scans now report which local parent or imported BOM POM was
+  missing when dependency versions cannot be resolved from the local `.m2`
+  repository.
+- Maven and Gradle package evidence warnings now name the missing Maven
+  coordinate and tell users to run dependency resolution or provide a project
+  `.m2/repository` cache.
+
 ## 0.160.6 - 2026-06-28
 
 - Python `uv.lock`, `pdm.lock`, and `Pipfile.lock` scans now fail closed on

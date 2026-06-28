@@ -67,4 +67,33 @@ describe("collectMavenPackageEvidence", () => {
       rmSync(projectRoot, { recursive: true, force: true });
     }
   });
+
+  test("reports missing local Maven POM metadata with a recovery hint", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-maven-missing-evidence-"));
+
+    try {
+      const evidence = collectMavenPackageEvidence({
+        packageId: "org.example:missing@1.2.3",
+        coordinates: "org.example:missing",
+        version: "1.2.3",
+        projectRoot
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+
+      expect(evidence.value).toMatchObject({
+        packageId: "org.example:missing@1.2.3",
+        files: [],
+        source: "unavailable",
+        warnings: [
+          "Maven POM metadata for org.example:missing@1.2.3 was not found in local .m2/repository caches; run Maven/Gradle dependency resolution first or provide a project .m2/repository cache."
+        ]
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
 });
