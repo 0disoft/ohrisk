@@ -224,6 +224,41 @@ describe("parseUvLockText", () => {
     ]);
   });
 
+  test("reports remote VCS package sources with an actionable error", () => {
+    const result = parseUvLockText(
+      [
+        "version = 1",
+        "revision = 3",
+        "",
+        "[[package]]",
+        "name = \"remote-risk\"",
+        "version = \"1.0.0\"",
+        "source = { git = \"https://example.com/acme/remote-risk.git\", rev = \"abc123\" }"
+      ].join("\n"),
+      "uv.lock"
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected remote VCS uv.lock source to fail.");
+    }
+
+    expect(result.error.code).toBe("UV_LOCK_PARSE_FAILED");
+    expect(result.error.message).toContain("Remote VCS package sources are not supported yet");
+    expect(result.error.message).toContain("locked PyPI package records");
+    expect(result.error.message).toContain("project-root-contained local source paths");
+    expect(result.error.details).toMatchObject({
+      lockfilePath: "uv.lock",
+      packageName: "remote-risk",
+      reason: "unsupported_remote_vcs_source",
+      source: "https://example.com/acme/remote-risk.git",
+      supportedSourceForms: [
+        "locked PyPI package record",
+        "project-root-contained local source path"
+      ]
+    });
+  });
+
   test("reports malformed package records as typed errors", () => {
     const result = parseUvLockText(
       [

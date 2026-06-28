@@ -31,9 +31,14 @@ type PartialPdmPackageRecord = {
   name?: string;
   version?: string;
   sourcePath?: string;
-  unsupportedSource?: string;
+  unsupportedSource?: UnsupportedPdmSource;
   groups: string[];
   dependencies: string[];
+};
+
+type UnsupportedPdmSource = {
+  value: string;
+  reason: string;
 };
 
 type PdmRootDependency = {
@@ -247,11 +252,16 @@ function parsePdmPackageRecords(input: string, options: {
         createError({
           code: "PDM_LOCK_PARSE_FAILED",
           category: "unsupported_input",
-          message: "Failed to parse pdm.lock. Ohrisk supports project-root-contained local PDM source paths but not remote or absolute source entries.",
+          message: "Failed to parse pdm.lock package source. Remote VCS package sources are not supported yet; use locked PyPI package records or project-root-contained local source paths.",
           details: {
             lockfilePath: options.lockfilePath,
             packageName: current.name,
-            source: current.unsupportedSource
+            reason: current.unsupportedSource.reason,
+            source: current.unsupportedSource.value,
+            supportedSourceForms: [
+              "locked PyPI package record",
+              "project-root-contained local source path"
+            ]
           }
         })
       );
@@ -351,12 +361,12 @@ function parsePdmPackageRecords(input: string, options: {
         continue;
       }
 
-      const sourcePath = readPdmLocalSourceAssignment(line);
-      if (sourcePath !== undefined) {
-        if (sourcePath === "") {
-          current.unsupportedSource = readPdmSourceAssignmentValue(line) ?? "";
-        } else {
-          current.sourcePath = sourcePath;
+      const source = readPdmSourceAssignment(line);
+      if (source !== undefined) {
+        if (source.unsupportedSource) {
+          current.unsupportedSource = source.unsupportedSource;
+        } else if (source.sourcePath) {
+          current.sourcePath = source.sourcePath;
         }
         continue;
       }
@@ -633,17 +643,34 @@ function readStringAssignment(line: string, key: string): string | undefined {
   return match?.[1];
 }
 
-function readPdmLocalSourceAssignment(line: string): string | undefined {
-  const rawSource = readPdmSourceAssignmentValue(line);
-  if (rawSource === undefined) {
+function readPdmSourceAssignment(line: string): {
+  sourcePath?: string;
+  unsupportedSource?: UnsupportedPdmSource;
+} | undefined {
+  const pathSource = readStringAssignment(line, "path");
+  if (pathSource !== undefined) {
+    const sourcePath = normalizePythonLocalSourcePathSpec(pathSource);
+    return sourcePath
+      ? { sourcePath }
+      : {
+          unsupportedSource: {
+            value: pathSource,
+            reason: classifyUnsupportedPythonSource(pathSource, "path")
+          }
+        };
+  }
+
+  const remoteSource = readStringAssignment(line, "git") ?? readStringAssignment(line, "url");
+  if (remoteSource === undefined) {
     return undefined;
   }
 
-  return normalizePythonLocalSourcePathSpec(rawSource) ?? "";
-}
-
-function readPdmSourceAssignmentValue(line: string): string | undefined {
-  return readStringAssignment(line, "path") ?? readStringAssignment(line, "url");
+  return {
+    unsupportedSource: {
+      value: remoteSource,
+      reason: classifyUnsupportedPythonSource(remoteSource, line.startsWith("git") ? "git" : "url")
+    }
+  };
 }
 
 function readInlineStringArrayAssignment(line: string, key: string): string[] | undefined {
@@ -760,4 +787,21 @@ function dependencyTypeRank(type: DependencyType): number {
 
 function escapeRegExp(input: string): string {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function classifyUnsupportedPythonSource(value: string, sourceKey: "path" | "git" | "url"): string {
+  const source = value.trim();
+  if (sourceKey === "git" || /^(?:git|hg|svn|bzr)\+(?:https?|ssh|git):\/\//i.test(source)) {
+    return "unsupported_remote_vcs_source";
+  }
+
+  if (path.isAbsolute(source) || source.startsWith("file://")) {
+    return "unsupported_absolute_source_path";
+  }
+
+  if (/^(?:https?|ssh|git):\/\//i.test(source)) {
+    return "unsupported_remote_source";
+  }
+
+  return "unsupported_source_entry";
 }

@@ -35,9 +35,14 @@ type PartialUvPackageRecord = {
   name?: string;
   version?: string;
   sourcePath?: string;
-  unsupportedSource?: string;
+  unsupportedSource?: UnsupportedUvSource;
   virtual: boolean;
   dependencies: UvDependencyEdge[];
+};
+
+type UnsupportedUvSource = {
+  value: string;
+  reason: string;
 };
 
 type UvLockParseOptions = {
@@ -213,11 +218,16 @@ function parseUvPackageRecords(input: string, options: {
         createError({
           code: "UV_LOCK_PARSE_FAILED",
           category: "unsupported_input",
-          message: "Failed to parse uv.lock. Ohrisk supports project-root-contained local uv source paths but not remote or absolute source entries.",
+          message: "Failed to parse uv.lock package source. Remote VCS package sources are not supported yet; use locked PyPI package records or project-root-contained local source paths.",
           details: {
             lockfilePath: options.lockfilePath,
             packageName: current.name,
-            source: current.unsupportedSource
+            reason: current.unsupportedSource.reason,
+            source: current.unsupportedSource.value,
+            supportedSourceForms: [
+              "locked PyPI package record",
+              "project-root-contained local source path"
+            ]
           }
         })
       );
@@ -325,13 +335,13 @@ function parseUvPackageRecords(input: string, options: {
           continue;
         }
 
-        const sourcePath = readUvLocalSourceAssignment(line);
-        if (sourcePath !== undefined) {
-          if (sourcePath === "") {
-            current.unsupportedSource = readUvLocalSourceAssignmentValue(line) ?? "";
-          } else {
-            current.sourcePath = sourcePath;
-            if (sourcePath === ".") {
+        const source = readUvSourceAssignment(line);
+        if (source !== undefined) {
+          if (source.unsupportedSource) {
+            current.unsupportedSource = source.unsupportedSource;
+          } else if (source.sourcePath) {
+            current.sourcePath = source.sourcePath;
+            if (source.sourcePath === ".") {
               current.virtual = true;
             }
           }
@@ -425,13 +435,34 @@ function readStringAssignment(line: string, key: "name" | "version"): string | u
   return match?.[1];
 }
 
-function readUvLocalSourceAssignment(line: string): string | undefined {
+function readUvSourceAssignment(line: string): {
+  sourcePath?: string;
+  unsupportedSource?: UnsupportedUvSource;
+} | undefined {
   const rawSource = readUvLocalSourceAssignmentValue(line);
-  if (rawSource === undefined) {
+  if (rawSource !== undefined) {
+    const sourcePath = normalizePythonLocalSourcePathSpec(rawSource);
+    return sourcePath
+      ? { sourcePath }
+      : {
+          unsupportedSource: {
+            value: rawSource,
+            reason: classifyUnsupportedPythonSource(rawSource)
+          }
+        };
+  }
+
+  const remoteSource = readUvRemoteSourceAssignment(line);
+  if (remoteSource === undefined) {
     return undefined;
   }
 
-  return normalizePythonLocalSourcePathSpec(rawSource) ?? "";
+  return {
+    unsupportedSource: {
+      value: remoteSource.value,
+      reason: classifyUnsupportedPythonSource(remoteSource.value, remoteSource.sourceKey)
+    }
+  };
 }
 
 function readUvLocalSourceAssignmentValue(line: string): string | undefined {
@@ -443,9 +474,40 @@ function readUvLocalSourceAssignmentValue(line: string): string | undefined {
     ?? readInlineTableStringValue(line, "directory");
 }
 
-function readInlineTableStringValue(line: string, key: "editable" | "directory"): string | undefined {
+function readUvRemoteSourceAssignment(line: string): { value: string; sourceKey: "git" | "url" } | undefined {
+  if (!/^source\s*=/.test(line)) {
+    return undefined;
+  }
+
+  const git = readInlineTableStringValue(line, "git");
+  if (git !== undefined) {
+    return { value: git, sourceKey: "git" };
+  }
+
+  const url = readInlineTableStringValue(line, "url");
+  return url === undefined ? undefined : { value: url, sourceKey: "url" };
+}
+
+function readInlineTableStringValue(line: string, key: "editable" | "directory" | "git" | "url"): string | undefined {
   const match = new RegExp(`\\b${key}\\s*=\\s*"([^"]*)"`).exec(line);
   return match?.[1];
+}
+
+function classifyUnsupportedPythonSource(value: string, sourceKey?: "git" | "url"): string {
+  const source = value.trim();
+  if (sourceKey === "git" || /^(?:git|hg|svn|bzr)\+(?:https?|ssh|git):\/\//i.test(source)) {
+    return "unsupported_remote_vcs_source";
+  }
+
+  if (path.isAbsolute(source) || source.startsWith("file://")) {
+    return "unsupported_absolute_source_path";
+  }
+
+  if (/^(?:https?|ssh|git):\/\//i.test(source)) {
+    return "unsupported_remote_source";
+  }
+
+  return "unsupported_source_entry";
 }
 
 function stripTomlComment(line: string): string {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.160.6 - 2026-06-28
+
+- Python `uv.lock`, `pdm.lock`, and `Pipfile.lock` scans now fail closed on
+  remote VCS package source records with actionable guidance to use locked PyPI
+  package records or project-contained local source paths.
+
 ## 0.160.5 - 2026-06-28
 
 ### Fixed

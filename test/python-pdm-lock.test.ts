@@ -226,6 +226,37 @@ describe("parsePdmLockText", () => {
     ]);
   });
 
+  test("reports remote VCS package sources with an actionable error", () => {
+    const pdmLock = [
+      "[[package]]",
+      "name = \"remote-risk\"",
+      "git = \"https://example.com/acme/remote-risk.git\"",
+      "ref = \"abc123\""
+    ].join("\n");
+
+    const result = parsePdmLockText(pdmLock, "pdm.lock");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected remote VCS pdm.lock source to fail.");
+    }
+
+    expect(result.error.code).toBe("PDM_LOCK_PARSE_FAILED");
+    expect(result.error.message).toContain("Remote VCS package sources are not supported yet");
+    expect(result.error.message).toContain("locked PyPI package records");
+    expect(result.error.message).toContain("project-root-contained local source paths");
+    expect(result.error.details).toMatchObject({
+      lockfilePath: "pdm.lock",
+      packageName: "remote-risk",
+      reason: "unsupported_remote_vcs_source",
+      source: "https://example.com/acme/remote-risk.git",
+      supportedSourceForms: [
+        "locked PyPI package record",
+        "project-root-contained local source path"
+      ]
+    });
+  });
+
   test("falls back to inferred roots when pyproject.toml is unavailable", () => {
     const result = parsePdmLockText(
       [

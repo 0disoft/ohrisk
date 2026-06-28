@@ -138,4 +138,36 @@ describe("parsePipfileLockText", () => {
 
     expect(result.error.code).toBe("PIPFILE_LOCK_PARSE_FAILED");
   });
+
+  test("reports remote VCS package sources with an actionable error", () => {
+    const result = parsePipfileLockText(JSON.stringify({
+      default: {
+        "remote-risk": {
+          git: "https://example.com/acme/remote-risk.git",
+          ref: "abc123"
+        }
+      }
+    }), "Pipfile.lock");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected remote VCS Pipfile.lock source to fail.");
+    }
+
+    expect(result.error.code).toBe("PIPFILE_LOCK_PARSE_FAILED");
+    expect(result.error.message).toContain("Remote VCS package sources are not supported yet");
+    expect(result.error.message).toContain("exact ==version pins");
+    expect(result.error.message).toContain("project-root-contained local source paths");
+    expect(result.error.details).toMatchObject({
+      lockfilePath: "Pipfile.lock",
+      sectionName: "default",
+      packageName: "remote-risk",
+      reason: "unsupported_remote_vcs_source",
+      source: "https://example.com/acme/remote-risk.git",
+      supportedPackageForms: [
+        "exact ==version pin",
+        "project-root-contained local source path"
+      ]
+    });
+  });
 });

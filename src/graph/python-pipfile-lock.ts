@@ -25,6 +25,11 @@ type PipfileLockRecord = {
   evidence?: LicenseEvidence;
 };
 
+type UnsupportedPipfileSource = {
+  value: string;
+  reason: string;
+};
+
 type PipfileLockParseOptions = {
   readLocalSourceFile?: PythonLocalSourceFileReader;
   rootName?: string;
@@ -220,6 +225,15 @@ function readPipfileLockSection(input: {
       continue;
     }
 
+    const unsupportedSource = readPipfileLockUnsupportedSource(rawEntry);
+    if (unsupportedSource) {
+      return pipfileLockUnsupportedSourceError({
+        ...input,
+        packageName: rawName,
+        unsupportedSource
+      });
+    }
+
     const version = readExactPipfileLockVersion(rawEntry.version);
     if (!version) {
       return pipfileLockEntryError({
@@ -246,6 +260,26 @@ function readPipfileLockLocalSourcePath(entry: Record<string, unknown>): string 
   }
 
   return normalizePythonLocalSourcePathSpec(rawPath);
+}
+
+function readPipfileLockUnsupportedSource(entry: Record<string, unknown>): UnsupportedPipfileSource | undefined {
+  const rawGit = entry.git;
+  if (typeof rawGit === "string") {
+    return {
+      value: rawGit,
+      reason: "unsupported_remote_vcs_source"
+    };
+  }
+
+  const rawPath = entry.path;
+  if (typeof rawPath === "string" && normalizePythonLocalSourcePathSpec(rawPath) === undefined) {
+    return {
+      value: rawPath,
+      reason: classifyUnsupportedPipfileSource(rawPath)
+    };
+  }
+
+  return undefined;
 }
 
 function readPipfileLockLocalSourceRecord(input: {
@@ -338,6 +372,32 @@ function pipfileLockEntryError(input: {
   );
 }
 
+function pipfileLockUnsupportedSourceError(input: {
+  lockfilePath: string;
+  sectionName: string;
+  packageName: string;
+  unsupportedSource: UnsupportedPipfileSource;
+}): Result<never, OhriskError> {
+  return err(
+    createError({
+      code: "PIPFILE_LOCK_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse Pipfile.lock package source. Remote VCS package sources are not supported yet; use exact ==version pins or project-root-contained local source paths.",
+      details: {
+        lockfilePath: input.lockfilePath,
+        sectionName: input.sectionName,
+        packageName: input.packageName,
+        reason: input.unsupportedSource.reason,
+        source: input.unsupportedSource.value,
+        supportedPackageForms: [
+          "exact ==version pin",
+          "project-root-contained local source path"
+        ]
+      }
+    })
+  );
+}
+
 function mergeDependencyType(left: DependencyType, right: DependencyType): DependencyType {
   return dependencyTypeRank(left) >= dependencyTypeRank(right) ? left : right;
 }
@@ -359,4 +419,21 @@ function dependencyTypeRank(type: DependencyType): number {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function classifyUnsupportedPipfileSource(value: string): string {
+  const source = value.trim();
+  if (/^(?:git|hg|svn|bzr)\+(?:https?|ssh|git):\/\//i.test(source)) {
+    return "unsupported_remote_vcs_source";
+  }
+
+  if (path.isAbsolute(source) || source.startsWith("file://")) {
+    return "unsupported_absolute_source_path";
+  }
+
+  if (/^(?:https?|ssh|git):\/\//i.test(source)) {
+    return "unsupported_remote_source";
+  }
+
+  return "unsupported_source_entry";
 }
