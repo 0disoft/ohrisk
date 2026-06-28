@@ -20,9 +20,16 @@ type OpenCommandRunner = (
   args: string[]
 ) => { error?: Error; status: number | null };
 
+type OpenCommand = {
+  command: string;
+  args: string[];
+  allowNonZeroStatus?: boolean;
+};
+
 type ReportOpenerOptions = {
   closeDelayMs?: number;
   openCommandRunner?: OpenCommandRunner;
+  platform?: NodeJS.Platform;
   serverTimeoutMs?: number;
 };
 
@@ -40,6 +47,7 @@ const TEXT_RESPONSE_HEADERS = {
 
 export function createReportOpener(options: ReportOpenerOptions = {}): ReportOpener {
   const openCommandRunner = options.openCommandRunner ?? defaultOpenCommandRunner;
+  const platform = options.platform ?? process.platform;
   const serverTimeoutMs = options.serverTimeoutMs ?? REPORT_SERVER_TIMEOUT_MS;
   const closeDelayMs = options.closeDelayMs ?? REPORT_SERVER_CLOSE_DELAY_MS;
 
@@ -60,6 +68,7 @@ export function createReportOpener(options: ReportOpenerOptions = {}): ReportOpe
       reportPath: input.reportPath,
       report,
       openCommandRunner,
+      platform,
       serverTimeoutMs,
       closeDelayMs
     });
@@ -72,6 +81,7 @@ function openReportBuffer(input: {
   reportPath: string;
   report: Buffer;
   openCommandRunner: OpenCommandRunner;
+  platform: NodeJS.Platform;
   serverTimeoutMs: number;
   closeDelayMs: number;
 }): Promise<Result<OpenedReport, OhriskError>> {
@@ -165,10 +175,10 @@ function openReportBuffer(input: {
 
     server.listen(0, LOOPBACK_HOST, () => {
       const target = localReportUrl(server, token);
-      const command = openCommandFor(process.platform, target);
+      const command = openCommandFor(input.platform, target);
       const result = input.openCommandRunner(command.command, command.args);
 
-      if (result.error || result.status !== 0) {
+      if (result.error || (result.status !== 0 && !command.allowNonZeroStatus)) {
         finish(err(
           createReportOpenError({
             reportPath: input.reportPath,
@@ -248,10 +258,10 @@ function localReportUrl(
 function openCommandFor(
   platform: NodeJS.Platform,
   target: string
-): { command: string; args: string[] } {
+): OpenCommand {
   switch (platform) {
     case "win32":
-      return { command: "explorer.exe", args: [target] };
+      return { command: "explorer.exe", args: [target], allowNonZeroStatus: true };
     case "darwin":
       return { command: "open", args: [target] };
     default:

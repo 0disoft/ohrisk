@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.160.1 - 2026-06-28
+
+### Fixed
+
+- `--open` on Windows now waits for the browser request instead of treating an
+  `explorer.exe` non-zero exit status alone as a report-open failure.
+
 ## 0.160.0 - 2026-06-27
 
 ### Added
