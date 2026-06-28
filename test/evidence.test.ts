@@ -694,6 +694,50 @@ describe("collectGraphEvidence", () => {
     expect(progressConcurrencyValues).toEqual([2, 2, 2, 2]);
   });
 
+  test("reports the lowest graph index failure from concurrent evidence collection", async () => {
+    const fetchFailures: string[] = [];
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: ["lower-index", "first-failure"].map((name) => ({
+          id: `parallel-${name}@1.0.0`,
+          name: `parallel-${name}`,
+          version: "1.0.0",
+          ecosystem: "npm",
+          resolved: `https://registry.example.test/parallel-${name}/-/parallel-${name}-1.0.0.tgz`,
+          dependencyType: "production",
+          direct: name === "lower-index",
+          paths: [["root", `parallel-${name}@1.0.0`]]
+        }))
+      },
+      projectRoot: bunProjectDir,
+      evidenceConcurrency: 2,
+      fetchArtifact: async (url) => {
+        const match = url.match(/parallel-(lower-index|first-failure)/);
+        const name = match?.[1] ?? "unknown";
+        if (name === "lower-index") {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+
+        fetchFailures.push(name);
+        throw new Error(`fixture fetch failed for ${name}`);
+      }
+    });
+
+    expect(fetchFailures).toEqual(["first-failure", "lower-index"]);
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected concurrent evidence collection to fail.");
+    }
+
+    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
+    expect(evidence.error.details).toMatchObject({
+      packageId: "parallel-lower-index@1.0.0",
+      cause: "fixture fetch failed for lower-index"
+    });
+  });
+
   test("fetches remote tarball evidence from HTTP resolved artifacts", async () => {
     const tarball = createTarGz({
       "package/package.json": JSON.stringify({
