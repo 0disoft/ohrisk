@@ -10,7 +10,7 @@ includes different levels of waiver detail.
 | Terminal | (default) | Quick local check | Full detail | Full detail | Full detail | No |
 | JSON | `--json` | Scripting, CI gates | Full array | Full array | Full arrays | Yes |
 | Markdown | `--markdown` | PR comments, release notes | Table | Table | Tables | Yes |
-| HTML | `--html` | Local browser review | Table | Table | Tables | Yes |
+| HTML | `--html` | Local browser review | Filterable detail cards | Table | Tables | Yes |
 | SARIF | `--sarif` | GitHub code scanning | Full results | Suppressed results | Count properties only | Yes |
 | CycloneDX | `--cyclonedx` | SBOM, supply chain tools | Component properties | Not listed | Not listed | Yes |
 
@@ -55,13 +55,14 @@ Formatted for PR comments, release notes, or documentation.
 
 Formatted as a standalone browser-friendly HTML document for local review.
 
-- **Active findings**: table with columns Severity, Package, Dependency, Reason, Action, Path, Evidence, Fingerprint
+- **Active findings**: filterable severity, search, dependency, and action controls with detail cards for Severity, Package, Dependency, Reason, Action, Path, Evidence, and Fingerprint. Long detail values are collapsed by default and can be expanded in the browser.
 - **Waived findings**: table with columns Severity, Package, Matched by, Reason, Action, Fingerprint
 - **Expired waivers**: table with columns Target, Expires on, Reason
 - **Unmatched waivers**: table with columns Target, Reason
 - **Waiver mode**: shown in the summary cards
 - **Strict waiver drift**: shown in the summary cards when `--strict-waivers` is set
 - **Local paths**: the project summary uses the package/project name, not the absolute project root, so local browser artifacts are safer to share than terminal output
+- **Open after write**: `--open` can be combined with `--html --output <file>` to open the written report through a temporary `127.0.0.1` URL after scan completion
 
 ## SARIF
 

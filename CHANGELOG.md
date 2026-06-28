@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.160.0 - 2026-06-27
+
+### Added
+
+- `scan` and `ci` now accept `--open` with `--html --output <file>` to open
+  the generated browser report after the report file is written. Reports open
+  through a temporary `127.0.0.1` URL so browser extension file URL permissions
+  are not required.
+
+## 0.159.3 - 2026-06-27
+
+### Fixed
+
+- HTML reports now render active findings as filterable detail cards instead
+  of a wide table, keeping long paths and fingerprints readable in narrow
+  browser windows.
+
 ## 0.159.2 - 2026-06-27
 
 ### Added

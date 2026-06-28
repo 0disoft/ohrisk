@@ -180,6 +180,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - finding fingerprints in terminal and Markdown reports for waiver and audit workflows
 - structured dependency type and direct/transitive scope in findings
 - report file output with `--output <file>`
+- optional browser opening for written HTML reports with `--open` through a temporary `127.0.0.1` URL
 - command-specific help with `ohrisk help <command>` and `ohrisk <command> --help`
 - standalone license expression explanation
 - git ref diff reports that show only new or meaningfully changed findings
@@ -381,6 +382,7 @@ Print a browser-friendly HTML report:
 
 ```bash
 ohrisk scan --html --output reports/ohrisk.html
+ohrisk scan --html --output reports/ohrisk.html --open
 ```
 
 Print a CycloneDX SBOM:
@@ -394,6 +396,7 @@ Write a report to a file:
 ```bash
 ohrisk scan --sarif --output reports/ohrisk.sarif
 ohrisk scan --html --output reports/ohrisk.html
+ohrisk scan --html --output reports/ohrisk.html --open
 ohrisk scan --cyclonedx --output reports/ohrisk.cdx.json
 ohrisk diff main --prod --markdown --output reports/ohrisk-pr.md
 ```
@@ -477,6 +480,7 @@ ohrisk ci --no-waivers --fail-on high
 ohrisk scan --sarif
 ohrisk scan --markdown --prod
 ohrisk scan --html --output reports/ohrisk.html
+ohrisk scan --html --output reports/ohrisk.html --open
 ohrisk scan --cyclonedx --prod
 ohrisk scan --sarif --output reports/ohrisk.sarif
 ohrisk explain AGPL-3.0-only --profile saas

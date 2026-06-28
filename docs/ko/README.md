@@ -315,7 +315,9 @@ Findings:
 
 기계 판독 출력이 필요하면 `--json`, PR 코멘트용은 `--markdown`, 브라우저에서
 보기 좋은 로컬 리포트는 `--html`, 코드 스캐닝 연동은 `--sarif`, SBOM은
-`--cyclonedx`를 쓴다.
+`--cyclonedx`를 쓴다. HTML 리포트를 파일로 쓴 뒤 바로 열려면
+`--html --output <file> --open`을 쓴다. 이때 브라우저는 임시 `127.0.0.1`
+URL로 열리므로 파일 URL 권한이 없어도 된다.
 
 ## 배포형 앱 기준으로 스캔하기
 
