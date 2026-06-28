@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.160.15 - 2026-06-28
+
+- Updated GitHub Actions artifact upload examples to `actions/upload-artifact@v7`
+  after smoke testing the dedicated action without the Node.js 20 deprecation
+  warning.
+
 ## 0.160.14 - 2026-06-28
 
 - Updated GitHub Action documentation to show `0disoft/ohrisk@main` for

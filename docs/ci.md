@@ -29,7 +29,7 @@ Generate an HTML report artifact:
     prod: "true"
     fail-on: ""
 
-- uses: actions/upload-artifact@v4
+- uses: actions/upload-artifact@v7
   with:
     name: ohrisk-html
     path: reports/ohrisk.html
@@ -85,7 +85,7 @@ Generate a Markdown report for PR comments or release notes:
 
 ```yaml
 - run: ohrisk scan --markdown --prod --output reports/ohrisk.md
-- uses: actions/upload-artifact@v4
+- uses: actions/upload-artifact@v7
   with:
     name: ohrisk-markdown
     path: reports/ohrisk.md
@@ -97,7 +97,7 @@ Generate a SARIF 2.1.0 file:
 
 ```yaml
 - run: ohrisk scan --sarif --output reports/ohrisk.sarif
-- uses: actions/upload-artifact@v4
+- uses: actions/upload-artifact@v7
   with:
     name: ohrisk-sarif
     path: reports/ohrisk.sarif
@@ -113,7 +113,7 @@ Generate a CycloneDX 1.5 JSON SBOM:
 
 ```yaml
 - run: ohrisk scan --cyclonedx --prod --output reports/ohrisk.cdx.json
-- uses: actions/upload-artifact@v4
+- uses: actions/upload-artifact@v7
   with:
     name: ohrisk-sbom
     path: reports/ohrisk.cdx.json
