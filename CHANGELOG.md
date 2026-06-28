@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.160.8 - 2026-06-28
+
+- Added a remote fetching boundary guide that documents the current npm
+  registry/tarball evidence scope, SSRF and credential URL protections,
+  redirect validation, resource limits, local-cache precedence, and the checklist
+  required before adding new remote registry adapters.
+
 ## 0.160.7 - 2026-06-28
 
 - Maven `pom.xml` scans now report which local parent or imported BOM POM was
