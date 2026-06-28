@@ -32,7 +32,7 @@ describe("package metadata", () => {
     };
 
     expect(packageJson.name).toBe("ohrisk");
-    expect(packageJson.version).toBe("0.160.3");
+    expect(packageJson.version).toBe("0.160.4");
     expect(packageJson.private).toBeUndefined();
     expect(packageJson.license).toBe("MIT");
     expect(packageJson.packageManager).toBe("bun@1.3.14");
@@ -61,7 +61,7 @@ describe("package metadata", () => {
 
     expect(mainEntrypoint.startsWith("#!/usr/bin/env node")).toBe(true);
     expect(mainEntrypoint).toContain("isCliEntrypoint(import.meta.url, process.argv[1])");
-    expect(versionSource).toContain('OHRISK_VERSION = "0.160.3"');
+    expect(versionSource).toContain('OHRISK_VERSION = "0.160.4"');
     expect(buildScript).toContain("assertVersionContract()");
     expect(buildScript).toContain("Version mismatch: package.json declares");
     expect(buildScript).toContain('packages: "bundle"');

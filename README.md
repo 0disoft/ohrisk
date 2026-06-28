@@ -233,6 +233,22 @@ Run a local scan from a supported project:
 ohrisk scan
 ```
 
+Beginner HTML report flow on Windows PowerShell:
+
+```powershell
+bun add -g ohrisk@latest
+ohrisk version
+cd C:\path\to\your\project
+ohrisk scan --html --output "$env:TEMP\ohrisk-report.html" --open
+```
+
+The scan prints a progress bar while it reads the project, collects license
+evidence, evaluates risk, and writes the report. When the scan succeeds, the
+terminal prints `Wrote report to ...` so you can see the exact saved file path.
+With `--open`, Ohrisk opens the report through a temporary `127.0.0.1` browser
+URL after the HTML file is written. If the browser does not open, the scan can
+still succeed; open the printed HTML file path manually.
+
 Print command help or the installed package version:
 
 ```bash

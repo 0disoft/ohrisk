@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.160.4 - 2026-06-28
+
+### Added
+
+- README usage now includes a beginner Windows PowerShell flow for updating the
+  global CLI, checking the installed version, writing an HTML report, seeing the
+  saved file path, and opening the report with `--open`.
+
 ## 0.160.3 - 2026-06-28
 
 ### Fixed

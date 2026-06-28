@@ -6,6 +6,17 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("README report contract", () => {
+  test("documents the beginner HTML report flow", () => {
+    const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
+
+    expect(readme).toContain("Beginner HTML report flow on Windows PowerShell");
+    expect(readme).toContain("bun add -g ohrisk@latest");
+    expect(readme).toContain('ohrisk scan --html --output "$env:TEMP\\ohrisk-report.html" --open');
+    expect(readme).toContain("The scan prints a progress bar");
+    expect(readme).toContain("Wrote report to ...");
+    expect(readme).toContain("temporary `127.0.0.1` browser");
+  });
+
   test("documents waiver mode and fingerprint-bearing report shapes", () => {
     const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
 
