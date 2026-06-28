@@ -55,6 +55,7 @@ Formatted for PR comments, release notes, or documentation.
 
 Formatted as a standalone browser-friendly HTML document for local review.
 
+- **Review summary**: first-screen status, active finding counts, scan scope, waiver drift status, and review focus derived from the same finding data as the detailed sections
 - **Active findings**: filterable severity, search, dependency, and action controls with detail cards for Severity, Package, Dependency, Reason, Action, Path, Evidence, and Fingerprint. Long detail values are collapsed by default and can be expanded in the browser.
 - **Waived findings**: table with columns Severity, Package, Matched by, Reason, Action, Fingerprint
 - **Expired waivers**: table with columns Target, Expires on, Reason

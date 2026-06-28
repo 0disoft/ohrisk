@@ -105,6 +105,15 @@ describe("HTML scan report", () => {
     expect(output).toStartWith("<!doctype html>");
     expect(output).toContain('<main class="page">');
     expect(output).toContain("<h1>Ohrisk scan</h1>");
+    expect(output).toContain('<h2 id="review-summary-heading">Review summary</h2>');
+    expect(output).toContain("<dt>Status</dt>");
+    expect(output).toContain("<dd>High risk review needed</dd>");
+    expect(output).toContain("<dt>Active findings</dt>");
+    expect(output).toContain("<dd>1 active (1 high, 0 review, 0 unknown, 0 low)</dd>");
+    expect(output).toContain("<dt>Scope</dt>");
+    expect(output).toContain("<dd>saas profile, all dependencies</dd>");
+    expect(output).toContain("<dt>Review focus</dt>");
+    expect(output).toContain("<dd>Replace or escalate high-risk dependencies before shipping.</dd>");
     expect(output).toContain('<fieldset class="finding-filters">');
     expect(output).toContain('data-finding-filter');
     expect(output).toContain('data-finding-search');
@@ -159,6 +168,8 @@ describe("HTML scan report", () => {
     }));
 
     expect(output).toContain("No active findings.");
+    expect(output).toContain("<dd>No active findings</dd>");
+    expect(output).toContain("<dd>0 active (0 high, 0 review, 0 unknown, 0 low)</dd>");
     expect(output).toContain("No waived findings.");
     expect(output).toContain("No expired waivers.");
     expect(output).toContain("No unmatched waivers.");

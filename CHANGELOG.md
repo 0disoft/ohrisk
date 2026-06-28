@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.160.2 - 2026-06-28
+
+### Added
+
+- HTML reports now include a first-screen review summary with derived status,
+  active finding counts, scan scope, waiver drift status, and review focus.
+
 ## 0.160.1 - 2026-06-28
 
 ### Fixed

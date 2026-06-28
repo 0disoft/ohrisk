@@ -140,6 +140,12 @@ function renderHtmlReport(
     `      <h1>${escapeHtml(title)}</h1>`,
     `      <p class="lead">${escapeHtml(nextAction)}</p>`,
     "    </header>",
+    '    <section aria-labelledby="review-summary-heading">',
+    '      <h2 id="review-summary-heading">Review summary</h2>',
+    '      <dl class="summary-grid review-summary-grid">',
+    ...renderSummaryCards(buildReviewSummaryCards(input, summary, nextAction, waiverDriftLine)),
+    "      </dl>",
+    "    </section>",
     '    <section aria-labelledby="summary-heading">',
     '      <h2 id="summary-heading">Summary</h2>',
     '      <dl class="summary-grid">',
@@ -220,6 +226,7 @@ function renderHtmlStyles(): string[] {
     ".lead { max-width: 760px; margin: 12px 0 0; color: var(--muted); }",
     "section { margin-block: 18px; }",
     ".summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 0; }",
+    ".review-summary-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }",
     ".summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; min-width: 0; }",
     ".summary-card dt { color: var(--muted); font-size: 0.82rem; }",
     ".summary-card dd { margin: 6px 0 0; font-weight: 700; overflow-wrap: anywhere; }",
@@ -285,6 +292,26 @@ function renderSummaryCards(items: ReadonlyArray<readonly [string, string]>): st
     `          <dd>${escapeHtml(value)}</dd>`,
     "        </div>"
   ]);
+}
+
+function buildReviewSummaryCards(
+  input: ScanReportInput,
+  summary: ReturnType<typeof buildScanSummary>,
+  nextAction: string,
+  waiverDriftLine: string | undefined
+): ReadonlyArray<readonly [string, string]> {
+  return [
+    ["Status", reviewStatusFor(summary.risks)],
+    ["Active findings", formatRiskCounts(summary.risks)],
+    ["Scope", `${input.profile} profile, ${input.prodOnly ? "production only" : "all dependencies"}`],
+    ["Waivers", `${summary.waivers.applied} applied, ${summary.waivers.expired + summary.waivers.unmatched} drift entries`],
+    ["Review focus", nextAction],
+    ["Waiver drift", formatReviewWaiverDrift(waiverDriftLine)]
+  ];
+}
+
+function formatReviewWaiverDrift(waiverDriftLine: string | undefined): string {
+  return waiverDriftLine?.replace(/^Waiver drift: /, "") ?? "Not checked (--strict-waivers not set)";
 }
 
 function renderHtmlFindingsSection(findings: RiskFinding[]): string[] {
@@ -977,6 +1004,31 @@ function summarizeRiskFindings(riskFindings: RiskFinding[]): Record<RiskSeverity
       low: 0
     }
   );
+}
+
+function reviewStatusFor(risks: Record<RiskSeverity, number>): string {
+  if (risks.high > 0) {
+    return "High risk review needed";
+  }
+
+  if (risks.unknown > 0) {
+    return "Evidence review needed";
+  }
+
+  if (risks.review > 0) {
+    return "Policy review needed";
+  }
+
+  if (risks.low > 0) {
+    return "Low risk findings only";
+  }
+
+  return "No active findings";
+}
+
+function formatRiskCounts(risks: Record<RiskSeverity, number>): string {
+  const total = risks.high + risks.review + risks.unknown + risks.low;
+  return `${total} active (${risks.high} high, ${risks.review} review, ${risks.unknown} unknown, ${risks.low} low)`;
 }
 
 function summarizeFindingFilters(riskFindings: RiskFinding[]): {
