@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.160.12 - 2026-06-28
+
+- Added a packaged HTML report CSP contract, runtime coverage for report filters
+  and collapsible controls, and resize scheduling coalescing for large reports.
+
 ## 0.160.11 - 2026-06-28
 
 - Delayed evidence-collection ETA output on larger scans until enough packages

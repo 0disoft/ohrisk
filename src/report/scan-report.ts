@@ -17,6 +17,7 @@ import {
   formatMarkdownTableCell,
   formatMarkdownTableCode
 } from "./markdown";
+import { HTML_REPORT_CONTENT_SECURITY_POLICY } from "./html-security";
 import { buildThresholdSummary, formatThresholdSummary } from "./threshold-summary";
 
 export type ScanReportInput = {
@@ -128,6 +129,7 @@ function renderHtmlReport(
     "<head>",
     '  <meta charset="utf-8">',
     '  <meta name="viewport" content="width=device-width, initial-scale=1">',
+    `  <meta http-equiv="Content-Security-Policy" content="${escapeHtml(HTML_REPORT_CONTENT_SECURITY_POLICY)}">`,
     `  <title>${escapeHtml(title)}</title>`,
     "  <style>",
     ...renderHtmlStyles().map((line) => `    ${line}`),
@@ -544,8 +546,14 @@ function renderHtmlFilterScript(): string[] {
     "    }",
     "  };",
     "",
+    "  let visibleCollapsibleRefreshScheduled = false;",
     "  const refreshVisibleCollapsibles = () => {",
+    "    if (visibleCollapsibleRefreshScheduled) {",
+    "      return;",
+    "    }",
+    "    visibleCollapsibleRefreshScheduled = true;",
     "    requestAnimationFrame(() => {",
+    "      visibleCollapsibleRefreshScheduled = false;",
     "      for (const container of collapsibles) {",
     "        const card = container.closest('[data-finding-card]');",
     "        if (card && !card.hidden) {",

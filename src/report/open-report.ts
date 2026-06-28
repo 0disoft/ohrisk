@@ -6,6 +6,7 @@ import type { AddressInfo } from "node:net";
 
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
+import { HTML_REPORT_CONTENT_SECURITY_POLICY } from "./html-security";
 
 export type OpenedReport = {
   target: string;
@@ -125,16 +126,7 @@ function openReportBuffer(input: {
       response.writeHead(200, {
         "cache-control": "no-store",
         "content-length": input.report.byteLength,
-        "content-security-policy": [
-          "default-src 'none'",
-          "base-uri 'none'",
-          "connect-src 'none'",
-          "form-action 'none'",
-          "frame-ancestors 'none'",
-          "img-src 'self' data:",
-          "script-src 'unsafe-inline'",
-          "style-src 'unsafe-inline'"
-        ].join("; "),
+        "content-security-policy": HTML_REPORT_CONTENT_SECURITY_POLICY,
         "content-type": "text/html; charset=utf-8",
         "referrer-policy": "no-referrer",
         "x-frame-options": "DENY",
