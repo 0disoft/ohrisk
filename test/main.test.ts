@@ -172,7 +172,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.160.10"]);
+    expect(stdout).toEqual(["ohrisk 0.160.11"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -2087,6 +2087,81 @@ describe("main", () => {
     }
   });
 
+  test("waits for a stable evidence sample before printing ETA for larger scans", async () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-progress-eta-"));
+    const dependencies = Object.fromEntries(
+      Array.from({ length: 10 }, (_, index) => [`eta-package-${index}`, "1.0.0"])
+    );
+
+    try {
+      writeFileSync(
+        path.join(projectDir, "package.json"),
+        JSON.stringify({
+          name: "fixture-progress-eta-project",
+          version: "0.0.0",
+          dependencies
+        }),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectDir, "package-lock.json"),
+        JSON.stringify({
+          name: "fixture-progress-eta-project",
+          version: "0.0.0",
+          lockfileVersion: 3,
+          requires: true,
+          packages: {
+            "": {
+              name: "fixture-progress-eta-project",
+              version: "0.0.0",
+              dependencies
+            },
+            ...Object.fromEntries(
+              Object.keys(dependencies).map((name) => [
+                `node_modules/${name}`,
+                {
+                  name,
+                  version: "1.0.0"
+                }
+              ])
+            )
+          }
+        }),
+        "utf8"
+      );
+
+      for (const name of Object.keys(dependencies)) {
+        writeLocalPackage(projectDir, name, "1.0.0", "MIT", "LICENSE", "MIT License");
+      }
+
+      const { io, stdout, stderr } = createTestIO(projectDir);
+      let nowMs = 0;
+      io.now = () => {
+        nowMs += 1_000;
+        return nowMs;
+      };
+
+      const exitCode = await main(
+        ["scan", "--json", "--output", path.join(projectDir, "scan.json")],
+        io
+      );
+
+      const evidenceProgressLines = stderr.filter((line) =>
+        line.includes("Collecting license evidence ") && /\d+\/\d+/.test(line)
+      );
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toEqual([]);
+      expect(evidenceProgressLines[0]).toContain("Collecting license evidence 1/10");
+      expect(evidenceProgressLines[0]).toContain("eta calculating");
+      expect(evidenceProgressLines.some((line) =>
+        line.includes("Collecting license evidence 5/10") && !line.includes("eta calculating")
+      )).toBe(true);
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
   test("opens written HTML report when requested", async () => {
     const outputRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-html-open-"));
     const openedReports: string[] = [];
@@ -2333,7 +2408,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.160.10");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.160.11");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",

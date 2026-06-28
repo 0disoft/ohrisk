@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.160.11 - 2026-06-28
+
+- Delayed evidence-collection ETA output on larger scans until enough packages
+  have completed for a steadier estimate, while keeping elapsed time and package
+  progress visible from the first package.
+
 ## 0.160.10 - 2026-06-28
 
 - Added a risky demo guide that shows how to run the bundled fixture and inspect

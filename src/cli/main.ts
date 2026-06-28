@@ -138,6 +138,7 @@ const SCAN_PROGRESS_RENDER_PERCENT = 98;
 const SCAN_PROGRESS_WRITE_PERCENT = 99;
 const SCAN_PROGRESS_READY_PERCENT = 100;
 const SCAN_PROGRESS_BAR_WIDTH = 20;
+const SCAN_PROGRESS_ETA_MIN_COMPLETED_SAMPLE = 5;
 
 export async function main(
   argv: string[] = process.argv.slice(2),
@@ -933,6 +934,11 @@ function createEvidenceProgressReporter(input: {
     const averageMs = completed > 0 ? elapsedMs / completed : 0;
     const concurrency = Math.max(1, Math.trunc(progress.concurrency));
     const etaMs = (averageMs * Math.max(0, total - completed)) / concurrency;
+    const eta = formatEvidenceProgressEta({
+      completed,
+      total,
+      etaMs
+    });
 
     input.progress(
       evidenceCollectionPercent({
@@ -942,7 +948,7 @@ function createEvidenceProgressReporter(input: {
       }),
       [
         `Collecting license evidence ${completed}/${total}: ${formatProgressPackageId(progress.packageId)}`,
-        `(elapsed ${formatDuration(elapsedMs)}, eta ${formatDuration(etaMs)}, avg ${formatDuration(averageMs)}/pkg)`
+        `(elapsed ${formatDuration(elapsedMs)}, eta ${eta}, avg ${formatDuration(averageMs)}/pkg)`
       ].join(" ")
     );
   };
@@ -963,6 +969,20 @@ function clampCount(value: number, total: number): number {
 
 function formatProgressPackageId(packageId: string): string {
   return packageId.replace(/[\r\n]+/g, " ").trim() || "(unknown package)";
+}
+
+function formatEvidenceProgressEta(input: {
+  completed: number;
+  total: number;
+  etaMs: number;
+}): string {
+  if (input.completed >= input.total || input.total <= SCAN_PROGRESS_ETA_MIN_COMPLETED_SAMPLE) {
+    return formatDuration(input.etaMs);
+  }
+
+  return input.completed >= SCAN_PROGRESS_ETA_MIN_COMPLETED_SAMPLE
+    ? formatDuration(input.etaMs)
+    : "calculating";
 }
 
 function formatDuration(milliseconds: number): string {
