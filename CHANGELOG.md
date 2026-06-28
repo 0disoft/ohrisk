@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.160.3 - 2026-06-28
+
+### Fixed
+
+- `--open` on Windows now launches HTML report URLs through the default URL
+  handler instead of relying on `explorer.exe` URL handling.
+
 ## 0.160.2 - 2026-06-28
 
 ### Added

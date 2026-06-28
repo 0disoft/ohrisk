@@ -261,7 +261,7 @@ function openCommandFor(
 ): OpenCommand {
   switch (platform) {
     case "win32":
-      return { command: "explorer.exe", args: [target], allowNonZeroStatus: true };
+      return { command: "cmd.exe", args: ["/c", "start", "", target] };
     case "darwin":
       return { command: "open", args: [target] };
     default:

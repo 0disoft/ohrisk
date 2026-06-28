@@ -172,7 +172,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.160.2"]);
+    expect(stdout).toEqual(["ohrisk 0.160.3"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -2133,7 +2133,7 @@ describe("main", () => {
         closeDelayMs: 0,
         serverTimeoutMs: 1000,
         openCommandRunner: (_command, args) => {
-          openedTarget = args[0] ?? "";
+          openedTarget = args.at(-1) ?? "";
           fetchedTextPromise = (async () => {
             const badTokenResponse = await fetch(openedTarget.replace(/token=[^&]+/, "token=bad"));
             badTokenStatus = badTokenResponse.status;
@@ -2166,11 +2166,12 @@ describe("main", () => {
     }
   });
 
-  test("keeps Windows HTML report opening alive after explorer returns a non-zero status", async () => {
+  test("opens Windows HTML reports with the default URL handler", async () => {
     const outputRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-html-windows-open-"));
     const outputPath = path.join(outputRoot, "scan.html");
     writeFileSync(outputPath, "<!doctype html><title>windows fixture report</title>", "utf8");
     let openCommand = "";
+    let openArgs: string[] = [];
     let openedTarget = "";
     let fetchedText = "";
     let fetchedTextPromise: Promise<void> | undefined;
@@ -2182,19 +2183,22 @@ describe("main", () => {
         serverTimeoutMs: 1000,
         openCommandRunner: (command, args) => {
           openCommand = command;
-          openedTarget = args[0] ?? "";
+          openArgs = args;
+          openedTarget = args[3] ?? "";
           fetchedTextPromise = (async () => {
             const response = await fetch(openedTarget);
             fetchedText = await response.text();
           })();
-          return { status: 1 };
+          return { status: 0 };
         }
       });
 
       const opened = await opener({ reportPath: outputPath });
       await fetchedTextPromise;
 
-      expect(openCommand).toBe("explorer.exe");
+      expect(openCommand).toBe("cmd.exe");
+      expect(openArgs.slice(0, 3)).toEqual(["/c", "start", ""]);
+      expect(openedTarget).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/report\.html\?token=[a-f0-9]{32}$/);
       expect(opened.ok).toBe(true);
       expect(opened.ok ? opened.value.target : "").toBe(openedTarget);
       expect(fetchedText).toContain("windows fixture report");
@@ -2329,7 +2333,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.160.2");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.160.3");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
