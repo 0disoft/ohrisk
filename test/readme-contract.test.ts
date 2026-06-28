@@ -10,11 +10,26 @@ describe("README report contract", () => {
     const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
 
     expect(readme).toContain("Beginner HTML report flow on Windows PowerShell");
-    expect(readme).toContain("bun add -g ohrisk@latest");
+    expect(readme).toContain("npm install -g ohrisk@latest");
     expect(readme).toContain('ohrisk scan --html --output "$env:TEMP\\ohrisk-report.html" --open');
     expect(readme).toContain("The scan prints a progress bar");
     expect(readme).toContain("Wrote report to ...");
     expect(readme).toContain("temporary `127.0.0.1` browser");
+  });
+
+  test("documents a Quickstart section before When to use it", () => {
+    const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
+
+    const quickstartIdx = readme.indexOf("## Quickstart");
+    const whenIdx = readme.indexOf("## When to use it");
+    expect(quickstartIdx).toBeGreaterThan(-1);
+    expect(whenIdx).toBeGreaterThan(-1);
+    expect(quickstartIdx).toBeLessThan(whenIdx);
+
+    expect(readme).toContain("npm install -g ohrisk");
+    expect(readme).toContain("ohrisk scan --profile saas --prod");
+    expect(readme).toContain("ohrisk scan --html --output ohrisk-report.html --open");
+    expect(readme).toContain("npx ohrisk scan");
   });
 
   test("documents waiver mode and fingerprint-bearing report shapes", () => {

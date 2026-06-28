@@ -12,6 +12,43 @@ It is a local CLI for developers who need a quick answer to questions like:
 Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 `high`, and `unknown` findings for the selected usage profile.
 
+## Quickstart
+
+Install and run your first scan in under a minute:
+
+```bash
+npm install -g ohrisk@latest
+cd your-project
+ohrisk scan
+```
+
+The terminal report shows findings sorted by severity:
+
+```text
+Risks: 1 high, 1 review, 1 unknown, 2 low
+```
+
+- `high` — replace or escalate before shipping
+- `review` — check before shipping under the selected profile
+- `unknown` — license evidence is missing or unrecognized
+- `low` — known low-risk license expression
+
+Gate a production SaaS build by narrowing to production dependencies and the SaaS usage profile:
+
+```bash
+ohrisk scan --profile saas --prod
+```
+
+Open a browser-friendly HTML report:
+
+```bash
+ohrisk scan --html --output ohrisk-report.html --open
+```
+
+Prefer not to install globally? Use `npx ohrisk scan` instead.
+
+Ready to gate PRs? Run `ohrisk ci --fail-on high` locally, or see the [GitHub Actions guide](https://github.com/0disoft/ohrisk/blob/main/docs/github-actions.md) to wire it into CI.
+
 ## When to use it
 
 Run Ohrisk when you are about to add or upgrade a dependency and want a fast,
@@ -236,7 +273,7 @@ ohrisk scan
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-bun add -g ohrisk@latest
+npm install -g ohrisk@latest
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output "$env:TEMP\ohrisk-report.html" --open
