@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.160.10 - 2026-06-28
+
+- Added a risky demo guide that shows how to run the bundled fixture and inspect
+  high, review, unknown, and low findings in terminal or HTML reports.
+
 ## 0.160.9 - 2026-06-28
 
 - Added a first-screen README Quickstart for installing Ohrisk, running an

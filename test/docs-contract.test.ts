@@ -131,4 +131,17 @@ describe("documentation contract", () => {
     expect(doc).toContain("ohrisk ci --prod --strict-waivers");
     expect(doc).toContain("Ohrisk is a risk decision aid, not legal advice.");
   });
+
+  test("docs/risky-demo.md preserves fixture demo commands and package boundary", () => {
+    const doc = readFileSync(
+      path.join(repoRoot, "docs", "risky-demo.md"),
+      "utf8"
+    );
+
+    expect(doc).toContain("The published npm");
+    expect(doc).toContain("package ships the CLI, not the test fixtures.");
+    expect(doc).toContain("ohrisk scan --lockfile test/fixtures/bun-project/bun.lock --profile saas --prod");
+    expect(doc).toContain("Risks: 1 high, 1 review, 1 unknown, 2 low");
+    expect(doc).toContain("ohrisk scan --lockfile test/fixtures/bun-project/bun.lock --profile distributed-app --prod");
+  });
 });
