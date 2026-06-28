@@ -105,6 +105,7 @@ export type EvidenceCollectionProgress = {
   completed: number;
   total: number;
   packageId: string;
+  concurrency: number;
 };
 
 const ARTIFACT_FETCH_TIMEOUT_MS = 30_000;
@@ -196,7 +197,8 @@ export async function collectGraphEvidence(input: {
       input.progress?.({
         completed,
         total,
-        packageId: node.id
+        packageId: node.id,
+        concurrency: workerCount
       });
     }
   };

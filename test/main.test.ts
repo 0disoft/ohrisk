@@ -28,7 +28,10 @@ function createTestIO(cwd: string): { io: CliIO; stdout: string[]; stderr: strin
   };
 }
 
-function expectEvidenceProgress(stderr: string[]): void {
+function expectEvidenceProgress(
+  stderr: string[],
+  expectedFirstTiming?: { elapsed: string; eta: string; average: string }
+): void {
   const evidenceProgressLines = stderr.filter((line) =>
     /Collecting license evidence \d+\/\d+: .+ \(elapsed .+, eta .+, avg .+\/pkg\)/.test(line)
   );
@@ -39,6 +42,11 @@ function expectEvidenceProgress(stderr: string[]): void {
   expect(evidenceProgressLines[0]).toContain("Collecting license evidence 1/");
   expect(evidenceProgressLines[0]).toContain("eta ");
   expect(evidenceProgressLines[0]).toContain("avg ");
+  if (expectedFirstTiming) {
+    expect(evidenceProgressLines[0]).toContain(
+      `(elapsed ${expectedFirstTiming.elapsed}, eta ${expectedFirstTiming.eta}, avg ${expectedFirstTiming.average}/pkg)`
+    );
+  }
   expect(finalCount?.[1]).toBe(finalCount?.[2]);
 }
 
@@ -2037,6 +2045,11 @@ describe("main", () => {
     try {
       const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
       io.cwd = path.join(fixturesDir, "bun-project");
+      let nowMs = 0;
+      io.now = () => {
+        nowMs += 4_000;
+        return nowMs;
+      };
 
       const exitCode = await main(
         ["scan", "--json", "--prod", "--output", path.join(outputRoot, "reports", "scan.json")],
@@ -2049,7 +2062,11 @@ describe("main", () => {
       expect(stderr).toContain("[#-------------------]   5% Discovering project...");
       expect(stderr).toContain("[##------------------]  10% Reading bun.lock...");
       expect(stderr.some((line) => line.includes("Collecting license evidence for"))).toBe(true);
-      expectEvidenceProgress(stderr);
+      expectEvidenceProgress(stderr, {
+        elapsed: "4s",
+        eta: "4s",
+        average: "4s"
+      });
       expect(stderr).toContain("[###################-]  96% Evaluating license risk...");
       expect(stderr).toContain("[####################]  98% Rendering JSON report...");
       expect(stderr).toContain("[####################]  99% Writing report file...");

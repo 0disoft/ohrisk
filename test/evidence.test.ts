@@ -635,6 +635,7 @@ describe("collectGraphEvidence", () => {
     let activeFetches = 0;
     let maxActiveFetches = 0;
     const completedPackageIds: string[] = [];
+    const progressConcurrencyValues: number[] = [];
 
     const evidence = await collectGraphEvidence({
       graph: {
@@ -654,6 +655,7 @@ describe("collectGraphEvidence", () => {
       evidenceConcurrency: 2,
       progress: (progress) => {
         completedPackageIds.push(progress.packageId);
+        progressConcurrencyValues.push(progress.concurrency);
       },
       fetchArtifact: async (url) => {
         activeFetches += 1;
@@ -689,6 +691,7 @@ describe("collectGraphEvidence", () => {
       "parallel-d@1.0.0"
     ]);
     expect(completedPackageIds).toHaveLength(4);
+    expect(progressConcurrencyValues).toEqual([2, 2, 2, 2]);
   });
 
   test("fetches remote tarball evidence from HTTP resolved artifacts", async () => {

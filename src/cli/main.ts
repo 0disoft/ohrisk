@@ -891,7 +891,8 @@ async function collectEvidenceForGraph(input: {
     input.progress?.({
       completed: completedEvidenceCount,
       total: totalEvidenceCount,
-      packageId: evidence.packageId
+      packageId: evidence.packageId,
+      concurrency: 1
     });
   }
 
@@ -904,7 +905,8 @@ async function collectEvidenceForGraph(input: {
             input.progress?.({
               completed: completedEvidenceCount + progress.completed,
               total: totalEvidenceCount,
-              packageId: progress.packageId
+              packageId: progress.packageId,
+              concurrency: progress.concurrency
             });
           }
         }
@@ -929,7 +931,8 @@ function createEvidenceProgressReporter(input: {
     const total = Math.max(0, progress.total);
     const elapsedMs = Math.max(0, input.now() - startedAtMs);
     const averageMs = completed > 0 ? elapsedMs / completed : 0;
-    const etaMs = averageMs * Math.max(0, total - completed);
+    const concurrency = Math.max(1, Math.trunc(progress.concurrency));
+    const etaMs = (averageMs * Math.max(0, total - completed)) / concurrency;
 
     input.progress(
       evidenceCollectionPercent({
