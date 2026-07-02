@@ -172,7 +172,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.160.15"]);
+    expect(stdout).toEqual(["ohrisk 0.160.16"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -258,6 +258,98 @@ describe("main", () => {
     expect(output).toContain("- [unknown] missing-license@4.0.0");
     expect(output).toContain("- [review] gpl-package@5.0.0");
     expect(output).not.toContain("- [high] dev-risk@3.0.0");
+  });
+
+  test("removes dev-only dependency paths from shared transitive packages in production scans", async () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-prod-shared-paths-"));
+
+    try {
+      writeFileSync(
+        path.join(projectDir, "package.json"),
+        JSON.stringify({
+          name: "fixture-shared-paths",
+          version: "0.0.0",
+          dependencies: {
+            "prod-parent": "1.0.0"
+          },
+          devDependencies: {
+            "dev-parent": "1.0.0"
+          }
+        }),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectDir, "package-lock.json"),
+        JSON.stringify({
+          name: "fixture-shared-paths",
+          lockfileVersion: 3,
+          packages: {
+            "": {
+              name: "fixture-shared-paths",
+              version: "0.0.0",
+              dependencies: {
+                "prod-parent": "1.0.0"
+              },
+              devDependencies: {
+                "dev-parent": "1.0.0"
+              }
+            },
+            "node_modules/prod-parent": {
+              name: "prod-parent",
+              version: "1.0.0",
+              dependencies: {
+                "shared-risk": "1.0.0"
+              }
+            },
+            "node_modules/dev-parent": {
+              name: "dev-parent",
+              version: "1.0.0",
+              dependencies: {
+                "shared-risk": "1.0.0"
+              }
+            },
+            "node_modules/shared-risk": {
+              name: "shared-risk",
+              version: "1.0.0"
+            }
+          }
+        }),
+        "utf8"
+      );
+      writeLocalPackage(projectDir, "prod-parent", "1.0.0", "MIT", "LICENSE", "MIT License");
+      writeLocalPackage(projectDir, "dev-parent", "1.0.0", "MIT", "LICENSE", "MIT License");
+      writeLocalPackage(
+        projectDir,
+        "shared-risk",
+        "1.0.0",
+        "AGPL-3.0-only",
+        "COPYING",
+        "GNU Affero General Public License"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectDir);
+      const exitCode = await main(["scan", "--json", "--prod"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const payload = JSON.parse(stdout.join("\n")) as {
+        findings: Array<{
+          packageId: string;
+          dependencyScope: string;
+          paths: string[][];
+        }>;
+      };
+      const sharedFinding = payload.findings.find((finding) => finding.packageId === "shared-risk@1.0.0");
+
+      expect(sharedFinding).toMatchObject({
+        dependencyScope: "transitive",
+        paths: [["fixture-shared-paths", "prod-parent@1.0.0", "shared-risk@1.0.0"]]
+      });
+      expect(JSON.stringify(sharedFinding?.paths)).not.toContain("dev-parent");
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
   });
 
   test("prints actionable findings for an npm-shrinkwrap project", async () => {
@@ -2040,11 +2132,13 @@ describe("main", () => {
   });
 
   test("writes report output to a file instead of stdout", async () => {
-    const outputRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-output-"));
+    const tempRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-output-"));
+    const projectRoot = path.join(tempRoot, "project");
 
     try {
-      const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
-      io.cwd = path.join(fixturesDir, "bun-project");
+      cpSync(path.join(fixturesDir, "bun-project"), projectRoot, { recursive: true });
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      io.cwd = projectRoot;
       let nowMs = 0;
       io.now = () => {
         nowMs += 4_000;
@@ -2052,7 +2146,7 @@ describe("main", () => {
       };
 
       const exitCode = await main(
-        ["scan", "--json", "--prod", "--output", path.join(outputRoot, "reports", "scan.json")],
+        ["scan", "--json", "--prod", "--output", "reports/scan.json"],
         io
       );
 
@@ -2070,11 +2164,11 @@ describe("main", () => {
       expect(stderr).toContain("[###################-]  96% Evaluating license risk...");
       expect(stderr).toContain("[####################]  98% Rendering JSON report...");
       expect(stderr).toContain("[####################]  99% Writing report file...");
-      expect(stderr).toContain(`Wrote report to ${path.join(outputRoot, "reports", "scan.json")}`);
+      expect(stderr).toContain(`Wrote report to ${path.join(projectRoot, "reports", "scan.json")}`);
       expect(stderr).toContain("[####################] 100% Report ready.");
 
       const payload = JSON.parse(
-        readFileSync(path.join(outputRoot, "reports", "scan.json"), "utf8")
+        readFileSync(path.join(projectRoot, "reports", "scan.json"), "utf8")
       ) as {
         status: string;
         prodOnly: boolean;
@@ -2083,7 +2177,7 @@ describe("main", () => {
       expect(payload.status).toBe("profile_risk_evaluated");
       expect(payload.prodOnly).toBe(true);
     } finally {
-      rmSync(outputRoot, { recursive: true, force: true });
+      rmSync(tempRoot, { recursive: true, force: true });
     }
   });
 
@@ -2142,7 +2236,7 @@ describe("main", () => {
       };
 
       const exitCode = await main(
-        ["scan", "--json", "--output", path.join(projectDir, "scan.json")],
+        ["scan", "--json", "--output", "scan.json"],
         io
       );
 
@@ -2163,20 +2257,21 @@ describe("main", () => {
   });
 
   test("opens written HTML report when requested", async () => {
-    const outputRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-html-open-"));
     const openedReports: string[] = [];
     const openedTarget = "http://127.0.0.1:45231/";
+    const cwd = path.join(fixturesDir, "bun-project");
+    const outputPath = path.join(cwd, "reports", "scan.html");
 
     try {
-      const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
-      const outputPath = path.join(outputRoot, "reports", "scan.html");
+      rmSync(outputPath, { force: true });
+      const { io, stdout, stderr } = createTestIO(cwd);
       io.openReport = (input) => {
         openedReports.push(input.reportPath);
         return ok({ target: openedTarget });
       };
 
       const exitCode = await main(
-        ["scan", "--html", "--prod", "--output", outputPath, "--open"],
+        ["scan", "--html", "--prod", "--output", "reports/scan.html", "--open"],
         io
       );
 
@@ -2187,7 +2282,7 @@ describe("main", () => {
       expect(stderr).toContain(`Opened report: ${openedTarget}`);
       expect(readFileSync(outputPath, "utf8")).toContain("<!doctype html>");
     } finally {
-      rmSync(outputRoot, { recursive: true, force: true });
+      rmSync(outputPath, { force: true });
     }
   });
 
@@ -2283,11 +2378,12 @@ describe("main", () => {
   });
 
   test("keeps scan successful when opening a written HTML report fails", async () => {
-    const outputRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-html-open-failed-"));
+    const cwd = path.join(fixturesDir, "bun-project");
+    const outputPath = path.join(cwd, "reports", "scan-open-failed.html");
 
     try {
-      const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
-      const outputPath = path.join(outputRoot, "reports", "scan.html");
+      rmSync(outputPath, { force: true });
+      const { io, stdout, stderr } = createTestIO(cwd);
       io.openReport = (input) => err(createError({
         code: "REPORT_OPEN_FAILED",
         category: "filesystem",
@@ -2300,7 +2396,7 @@ describe("main", () => {
       }));
 
       const exitCode = await main(
-        ["scan", "--html", "--prod", "--output", outputPath, "--open"],
+        ["scan", "--html", "--prod", "--output", "reports/scan-open-failed.html", "--open"],
         io
       );
 
@@ -2312,8 +2408,26 @@ describe("main", () => {
       );
       expect(readFileSync(outputPath, "utf8")).toContain("<!doctype html>");
     } finally {
-      rmSync(outputRoot, { recursive: true, force: true });
+      rmSync(outputPath, { force: true });
     }
+  });
+
+  test("rejects report output paths outside the current project", async () => {
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
+    const outputPath = path.join(tmpdir(), "ohrisk-outside-report.json");
+
+    const exitCode = await main(
+      ["scan", "--json", "--prod", "--output", outputPath],
+      io
+    );
+
+    expect(exitCode).toBe(2);
+    expect(stdout).toEqual([]);
+    const errorOutput = stderr.at(-1) ?? "";
+    expect(errorOutput).toContain(
+      "REPORT_OUTPUT_PATH_OUTSIDE_PROJECT: Report output paths must be relative paths inside the current project."
+    );
+    expect(errorOutput).toContain(`outputPath: ${outputPath}`);
   });
 
   test("returns a filesystem failure when writing report output fails", async () => {
@@ -2408,7 +2522,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.160.15");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.160.16");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
@@ -3915,14 +4029,15 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
   });
 
   test("writes ci output before returning a failing threshold exit code", async () => {
-    const outputRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-ci-output-"));
+    const cwd = path.join(fixturesDir, "bun-project");
+    const outputPath = path.join(cwd, "reports", "ci.md");
 
     try {
-      const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
-      const outputPath = path.join(outputRoot, "ci.md");
+      rmSync(outputPath, { force: true });
+      const { io, stdout, stderr } = createTestIO(cwd);
 
       const exitCode = await main(
-        ["ci", "--markdown", "--fail-on", "high", "--output", outputPath],
+        ["ci", "--markdown", "--fail-on", "high", "--output", "reports/ci.md"],
         io
       );
 
@@ -3943,7 +4058,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         "- Threshold: failed on high (2 findings at or above threshold)"
       );
     } finally {
-      rmSync(outputRoot, { recursive: true, force: true });
+      rmSync(outputPath, { force: true });
     }
   });
 

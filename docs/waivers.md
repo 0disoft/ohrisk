@@ -38,6 +38,10 @@ scope, and dependency paths:
 packageId::dependencyType::dependencyScope::path1>path2|path3>path4
 ```
 
+If package IDs or path segments contain finding delimiters such as `::`, `>`,
+`|`, or `%`, Ohrisk percent-escapes those characters in the generated `id` so
+different dependency paths cannot collapse into the same waiver key.
+
 Waiving by `id` matches any finding for the same package in the same dependency
 path, regardless of severity or reason text. Use this when you accept a
 package's risk broadly and the finding's severity or evidence may change
@@ -59,6 +63,10 @@ reason, and evidence:
 ```
 id::severity::recommendation::reason::evidence
 ```
+
+The `id` prefix remains readable for ordinary package names. Fingerprint suffix
+components such as reason and evidence are percent-escaped when they contain
+finding delimiters, so exact fingerprint waivers do not collide.
 
 Waiving by `fingerprint` matches only when the finding is exactly the same. If
 the finding's severity, reason, or evidence changes — for example, because

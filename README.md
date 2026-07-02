@@ -183,8 +183,8 @@ The current implementation is the first local dependency-risk vertical slice:
 - local Elixir/Erlang `deps/<package>` source and `mix.exs` or `rebar.config` license metadata before unavailable fallback for Hex packages
 - local Bundler/RubyGems install path gemspec evidence before unavailable fallback for `Gemfile.lock` gems
 - local Composer `vendor/<vendor>/<package>/composer.json` evidence before unavailable fallback for `composer.lock` packages
-- remote HTTP(S) package tarball evidence when the lockfile points to a tarball, with credential-bearing URLs, obvious local, private, special-purpose, and DNS-resolved internal hosts blocked before fetch, DNS answers rechecked at the default connection boundary, and redirects followed only after each target is validated
-- lockfile integrity verification for local and remote package tarballs
+- remote HTTPS package tarball evidence when the lockfile points to a tarball with supported integrity metadata, with plaintext HTTP, credential-bearing URLs, obvious local, private, special-purpose, and DNS-resolved internal hosts blocked before fetch, connected socket addresses rechecked by the default fetcher, redirects followed only after each target is validated, and transient network failures recorded as unavailable package evidence so other packages can still be scanned
+- lockfile integrity verification for local and remote package tarballs; remote tarballs without integrity are reported as unavailable instead of being trusted as license evidence
 - npm registry metadata lookup when the lockfile does not include a direct tarball URL
 - gzipped package tarball evidence
 - `package.json` license fields
@@ -212,11 +212,11 @@ The current implementation is the first local dependency-risk vertical slice:
 - CycloneDX 1.5 JSON SBOM reports with dependency relationships and Ohrisk risk decision properties
 - stable finding IDs for PR comments and local waiver workflows
 - local `.ohrisk-waivers.json` waivers by finding ID or fingerprint
-- stable diff matching that ignores reason and evidence prose churn while surfacing severity, recommendation, and action changes
+- stable diff matching that uses finding fingerprints so severity, recommendation, reason, or evidence changes surface without being triggered by action prose churn
 - exact finding fingerprints for SARIF partial fingerprints and audit trails
 - finding fingerprints in terminal and Markdown reports for waiver and audit workflows
 - structured dependency type and direct/transitive scope in findings
-- report file output with `--output <file>`
+- report file output with project-relative `--output <file>` paths
 - optional browser opening for written HTML reports with `--open` through a temporary `127.0.0.1` URL
 - command-specific help with `ohrisk help <command>` and `ohrisk <command> --help`
 - standalone license expression explanation
@@ -274,7 +274,7 @@ Beginner HTML report flow on Windows PowerShell:
 npm install -g ohrisk@latest
 ohrisk version
 cd C:\path\to\your\project
-ohrisk scan --html --output "$env:TEMP\ohrisk-report.html" --open
+ohrisk scan --html --output reports\ohrisk-report.html --open
 ```
 
 The scan prints a progress bar while it reads the project, collects license
@@ -444,6 +444,9 @@ ohrisk scan --cyclonedx --output reports/ohrisk.cdx.json
 ohrisk diff main --prod --markdown --output reports/ohrisk-pr.md
 ```
 
+`--output` accepts project-relative file paths only. Absolute paths,
+drive-relative paths, UNC paths, and `.` or `..` path segments are rejected.
+
 Fail a local CI step when findings meet a threshold:
 
 ```bash
@@ -489,6 +492,9 @@ when that option is enabled. `scan --no-waivers` and `ci --no-waivers` do not
 read or apply local waiver files; `ci --no-waivers` cannot be combined with
 `--strict-waivers`. Reports include a waiver mode field or summary line so raw
 audits can distinguish ignored waiver files from projects with no waivers.
+If package names, versions, paths, reasons, or evidence text contain finding
+delimiters such as `::`, `>`, or `|`, Ohrisk percent-escapes those characters in
+the generated IDs and fingerprints to keep waiver matching unambiguous.
 
 Explain a license expression without scanning a project:
 
@@ -503,6 +509,10 @@ ohrisk diff main --prod
 ohrisk diff main --prod --fail-on unknown
 ohrisk diff main --prod --markdown
 ```
+
+Baseline refs must be branch, tag, or commit-like names such as `main`,
+`origin/main`, `release/v1.2.3`, or a commit hash. Git rev syntax such as
+`HEAD@{1}`, `HEAD~1`, and `main:path` is rejected.
 
 Print the package version:
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.160.16 - 2026-07-02
+
+- Hardened report output writes so `--output` accepts only project-relative
+  paths inside the current project.
+- Hardened diff baseline handling by rejecting git rev syntax outside
+  branch, tag, and commit-like baseline ref names.
+- Hardened remote tarball evidence collection by requiring HTTPS and supported
+  lockfile integrity before trusting downloaded package artifacts.
+- Remote evidence collection now rechecks connected socket addresses in the
+  default HTTPS fetcher and records transient remote network failures as
+  unavailable package evidence instead of aborting the whole graph scan.
+- Hardened finding IDs and fingerprints by escaping delimiter characters in
+  user-controlled package, path, reason, and evidence components.
+- Recomputed production-only dependency paths after `--prod` filtering so shared
+  transitive findings no longer retain development-only paths.
+- Added pull request and `main` branch push triggers plus frozen dependency
+  installation to the release check workflow, and enabled npm provenance for
+  package publishing.
+
 ## 0.160.15 - 2026-06-28
 
 - Updated GitHub Actions artifact upload examples to `actions/upload-artifact@v7`

@@ -11,7 +11,7 @@ describe("README report contract", () => {
 
     expect(readme).toContain("Beginner HTML report flow on Windows PowerShell");
     expect(readme).toContain("npm install -g ohrisk@latest");
-    expect(readme).toContain('ohrisk scan --html --output "$env:TEMP\\ohrisk-report.html" --open');
+    expect(readme).toContain("ohrisk scan --html --output reports\\ohrisk-report.html --open");
     expect(readme).toContain("The scan prints a progress bar");
     expect(readme).toContain("Wrote report to ...");
     expect(readme).toContain("temporary `127.0.0.1` browser");
@@ -52,6 +52,7 @@ describe("README report contract", () => {
     expect(readme).toContain('"waiverMode": "local"');
     expect(readme).toContain("| ID | Fingerprint | Severity | Package | Dependency | Reason | Recommendation | Action | Path |");
     expect(readme).toContain("fingerprint: agpl-child@0.1.0::production::transitive");
+    expect(readme).toContain("stable diff matching that uses finding fingerprints");
     expect(readme).toContain("ci --no-waivers");
   });
 });

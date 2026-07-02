@@ -475,6 +475,39 @@ describe("parseArgs", () => {
     });
   });
 
+  test("parses branch, tag, and commit-like diff baseline refs", () => {
+    for (const baselineRef of ["main", "origin/main", "release/v1.2.3", "v0.160.16", "abc123def456"]) {
+      const parsed = parseArgs(["diff", baselineRef, "--json"]);
+
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) {
+        throw new Error(parsed.error.message);
+      }
+
+      expect(parsed.value).toMatchObject({
+        kind: "diff",
+        baselineRef
+      });
+    }
+  });
+
+  test("rejects diff baseline refs with git rev syntax or unsafe separators", () => {
+    const rejectedRefs = ["HEAD@{1}", "main:path", "HEAD~1", "feature branch", "../main", "main.lock"];
+
+    for (const baselineRef of rejectedRefs) {
+      const parsed = parseArgs(["diff", baselineRef, "--json"]);
+
+      expect(parsed.ok).toBe(false);
+      if (parsed.ok) {
+        throw new Error(`Expected ${baselineRef} to fail.`);
+      }
+
+      expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+      expect(parsed.error.message).toContain("diff baseline refs must be branch, tag, or commit-like names");
+      expect(parsed.error.details?.baselineRef).toBe(baselineRef);
+    }
+  });
+
   test("parses explain output path", () => {
     const parsed = parseArgs(["explain", "MIT", "--output", "reports/explain.txt"]);
 

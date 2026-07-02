@@ -122,6 +122,13 @@ runs:
             exit 1
           fi
 
+          case "$normalized" in
+            "."|./*|*/.|*/./*|*//*|*/)
+              echo "::error::${name} must not contain empty or . path segments."
+              exit 1
+              ;;
+          esac
+
           IFS="/" read -r -a path_segments <<< "$normalized"
           for segment in "${path_segments[@]}"; do
             if [ "$segment" = ".." ]; then

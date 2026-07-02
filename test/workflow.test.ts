@@ -24,14 +24,18 @@ describe("release check workflow", () => {
     expect(packageJson.packageManager).toBe("bun@1.3.14");
     expect(packageJson.engines?.node).toBe(">=20.0.0");
     expect(workflow).toContain("name: Release Check");
+    expect(workflow).toContain("pull_request:");
+    expect(workflow).toContain("push:");
+    expect(workflow).toContain("branches:");
+    expect(workflow).toContain("- main");
     expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).not.toContain("pull_request:");
     expect(workflow).toContain("uses: actions/checkout@v7");
     expect(workflow).toContain("uses: oven-sh/setup-bun@v2");
     expect(workflow).toContain("bun-version: 1.3.14");
     expect(workflow).toContain("uses: actions/setup-node@v6");
     expect(workflow).toContain("node-version: 24");
     expect(workflow).toContain("node --version");
+    expect(workflow).toContain("bun install --frozen-lockfile");
     expect(workflow).toContain("run: bun run verify:release");
   });
 });
@@ -57,7 +61,7 @@ describe("npm publish workflow", () => {
     expect(workflow).toContain("Release tag ${GITHUB_REF_NAME} does not match");
     expect(workflow).toContain("run: bun run verify:release");
     expect(workflow).toContain("already_published=true");
-    expect(workflow).toContain("npm publish --access public");
+    expect(workflow).toContain("npm publish --access public --provenance");
     expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
     expect(workflow).toContain("npm view \"${package_name}\" dist.tarball");
     expect(workflow).toContain("CHANGELOG.md does not contain");
@@ -110,6 +114,8 @@ describe("Ohrisk GitHub Action", () => {
 
     expect(actionSource).toContain("require_relative_workspace_path");
     expect(actionSource).toContain('[[ "$normalized" == /* || "$normalized" =~ ^[A-Za-z]: ]]');
+    expect(actionSource).toContain('"."|./*|*/.|*/./*|*//*|*/)');
+    expect(actionSource).toContain("must not contain empty or . path segments");
     expect(actionSource).toContain('if [ "$segment" = ".." ]; then');
     expect(actionSource).toContain('require_relative_workspace_path "lockfile" "$OHRISK_LOCKFILE"');
     expect(actionSource).toContain('require_relative_workspace_path "output" "$OHRISK_OUTPUT"');
@@ -125,6 +131,8 @@ describe("Ohrisk GitHub Action", () => {
     expect(docs).toContain("format: html");
     expect(docs).toContain("path: reports/ohrisk.html");
     expect(docs).toContain("must be repository-relative paths");
+    expect(docs).toContain("empty path segments");
+    expect(docs).toContain("`.` segments");
     expect(docs).not.toContain("does not provide a dedicated GitHub Action");
   });
 });

@@ -102,9 +102,16 @@ import { parseUnityPackagesLockfile, parseUnityPackagesLockText } from "../graph
 import type { DependencyGraph, DependencyNode } from "../graph/types";
 import { parseVcpkgJsonFile, parseVcpkgJsonText } from "../graph/vcpkg-json";
 import { normalizeAllLicenseEvidence, normalizeLicenseEvidence } from "../license/normalize";
+import type { NormalizedLicense } from "../license/types";
 import { evaluateLicenseRisk, evaluateLicenseRisks } from "../policy/evaluate";
 import { hasFindingAtOrAbove } from "../policy/severity";
-import { applyRiskWaivers, readRiskWaivers } from "../policy/waivers";
+import type { RiskFinding } from "../policy/types";
+import {
+  applyRiskWaivers,
+  readRiskWaivers,
+  type RiskWaiver,
+  type WaivedRiskFinding
+} from "../policy/waivers";
 import { renderCycloneDxReport } from "../report/cyclonedx-report";
 import { renderDiffReport } from "../report/diff-report";
 import { renderExplainReport } from "../report/explain-report";
@@ -128,6 +135,16 @@ export type CliIO = {
 
 type ScanClock = () => number;
 type ScanProgressReporter = (percent: number, message: string) => void;
+type ScanResult = {
+  project: ProjectInput;
+  graph: DependencyGraph;
+  evidence: LicenseEvidence[];
+  normalizedLicenses: NormalizedLicense[];
+  riskFindings: RiskFinding[];
+  waivedFindings: WaivedRiskFinding[];
+  expiredWaivers: RiskWaiver[];
+  unmatchedWaivers: RiskWaiver[];
+};
 
 const SCAN_PROGRESS_DISCOVER_PERCENT = 5;
 const SCAN_PROGRESS_READ_LOCKFILE_PERCENT = 10;
@@ -610,7 +627,7 @@ async function scanProject(input: {
   applyWaivers: boolean;
   now: ScanClock;
   progress?: ScanProgressReporter;
-}) {
+}): Promise<Result<ScanResult, OhriskError>> {
   const loaded = loadProjectGraph({
     cwd: input.cwd,
     lockfilePath: input.lockfilePath,
@@ -672,7 +689,7 @@ async function evaluateProjectScan(input: {
   applyWaivers: boolean;
   now: ScanClock;
   progress?: ScanProgressReporter;
-}) {
+}): Promise<Result<ScanResult, OhriskError>> {
   const evidenceProgress = input.progress
     ? createEvidenceProgressReporter({
         progress: input.progress,
@@ -702,19 +719,16 @@ async function evaluateProjectScan(input: {
     profile: input.profile
   });
   if (!input.applyWaivers) {
-    return {
-      ok: true as const,
-      value: {
-        project: input.project,
-        graph: input.scanGraph,
-        evidence: evidence.value,
-        normalizedLicenses,
-        riskFindings,
-        waivedFindings: [],
-        expiredWaivers: [],
-        unmatchedWaivers: []
-      }
-    };
+    return ok({
+      project: input.project,
+      graph: input.scanGraph,
+      evidence: evidence.value,
+      normalizedLicenses,
+      riskFindings,
+      waivedFindings: [],
+      expiredWaivers: [],
+      unmatchedWaivers: []
+    });
   }
 
   const waivers = readRiskWaivers(input.project.rootDir);
@@ -728,19 +742,16 @@ async function evaluateProjectScan(input: {
     waivers: waivers.value
   });
 
-  return {
-    ok: true as const,
-    value: {
-      project: input.project,
-      graph: input.scanGraph,
-      evidence: evidence.value,
-      normalizedLicenses,
-      riskFindings: appliedWaivers.activeFindings,
-      waivedFindings: appliedWaivers.waivedFindings,
-      expiredWaivers: appliedWaivers.expiredWaivers,
-      unmatchedWaivers: appliedWaivers.unmatchedWaivers
-    }
-  };
+  return ok({
+    project: input.project,
+    graph: input.scanGraph,
+    evidence: evidence.value,
+    normalizedLicenses,
+    riskFindings: appliedWaivers.activeFindings,
+    waivedFindings: appliedWaivers.waivedFindings,
+    expiredWaivers: appliedWaivers.expiredWaivers,
+    unmatchedWaivers: appliedWaivers.unmatchedWaivers
+  });
 }
 
 function parseProjectLockfile(project: ProjectInput): Result<DependencyGraph, OhriskError> {
@@ -856,7 +867,28 @@ function filterGraphForProdOnly(graph: DependencyGraph, prodOnly: boolean): Depe
     return graph;
   }
 
-  const nodes = graph.nodes.filter(isProductionRelevantDependency);
+  const productionNodeIds = new Set(
+    graph.nodes
+      .filter(isProductionRelevantDependency)
+      .map((node) => node.id)
+  );
+  const dependencyPathSegments = dependencyPathSegmentSets(graph.nodes, productionNodeIds);
+  const nodes = graph.nodes
+    .filter((node) => productionNodeIds.has(node.id))
+    .map((node) => {
+      const paths = node.paths.filter((dependencyPath) =>
+        isProductionRelevantPath(dependencyPath, dependencyPathSegments)
+      );
+
+      return {
+        ...node,
+        direct: paths.some((dependencyPath) =>
+          isDirectDependencyPath(dependencyPath, dependencyPathSegments.all)
+        ),
+        paths
+      };
+    })
+    .filter((node) => node.paths.length > 0);
   const nodeIds = new Set(nodes.map((node) => node.id));
 
   return {
@@ -1003,6 +1035,47 @@ function formatDuration(milliseconds: number): string {
 
 function isProductionRelevantDependency(node: DependencyNode): boolean {
   return node.dependencyType !== "development";
+}
+
+function dependencyPathSegmentSets(
+  nodes: DependencyNode[],
+  productionNodeIds: Set<string>
+): {
+  all: Set<string>;
+  production: Set<string>;
+} {
+  const all = new Set<string>();
+  const production = new Set<string>();
+
+  for (const node of nodes) {
+    all.add(node.id);
+    if (productionNodeIds.has(node.id)) {
+      production.add(node.id);
+    }
+    for (const installName of node.installNames ?? []) {
+      const segment = `${installName} -> ${node.id}`;
+      all.add(segment);
+      if (productionNodeIds.has(node.id)) {
+        production.add(segment);
+      }
+    }
+  }
+
+  return { all, production };
+}
+
+function isProductionRelevantPath(
+  pathSegments: string[],
+  dependencyPathSegments: { all: Set<string>; production: Set<string> }
+): boolean {
+  return pathSegments.slice(1).every((segment) =>
+    !dependencyPathSegments.all.has(segment)
+    || dependencyPathSegments.production.has(segment)
+  );
+}
+
+function isDirectDependencyPath(pathSegments: string[], dependencyPathSegments: Set<string>): boolean {
+  return pathSegments.slice(1).filter((segment) => dependencyPathSegments.has(segment)).length <= 1;
 }
 
 function parseLockfileTextForKind(input: {
@@ -1722,7 +1795,7 @@ function renderTopLevelHelp(): string {
     "  --markdown             Print a Markdown report for PRs or release notes.",
     "  --html                 Print a browser-friendly HTML report.",
     "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
-    "  --output <file>        Write report output to a file instead of stdout.",
+    "  --output <file>        Write report output to a project-relative file instead of stdout.",
     "  --open                 Open the written HTML report after scan completion.",
     "  --fail-on <severity>   CI threshold. Defaults to high for ci.",
     "  --strict-waivers       Fail CI when local waivers are expired or unmatched.",
@@ -1748,7 +1821,7 @@ function renderScanHelp(): string {
     "  --markdown             Print a Markdown report for PRs or release notes.",
     "  --html                 Print a browser-friendly HTML report.",
     "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
-    "  --output <file>        Write report output to a file instead of stdout.",
+    "  --output <file>        Write report output to a project-relative file instead of stdout.",
     "  --open                 Open the written HTML report after scan completion.",
     "  --help, -h             Print this help text."
   ].join("\n");
@@ -1773,7 +1846,7 @@ function renderCiHelp(): string {
     "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
     "  --fail-on <severity>   CI threshold. Defaults to high.",
     "  --strict-waivers       Fail CI when local waivers are expired or unmatched.",
-    "  --output <file>        Write report output to a file instead of stdout.",
+    "  --output <file>        Write report output to a project-relative file instead of stdout.",
     "  --open                 Open the written HTML report after scan completion.",
     "  --help, -h             Print this help text."
   ].join("\n");
@@ -1793,7 +1866,7 @@ function renderDiffHelp(): string {
     "  --json                 Print machine-readable output.",
     "  --markdown             Print a Markdown report for PRs or release notes.",
     "  --fail-on <severity>   Optional diff threshold.",
-    "  --output <file>        Write report output to a file instead of stdout.",
+    "  --output <file>        Write report output to a project-relative file instead of stdout.",
     "  --help, -h             Print this help text."
   ].join("\n");
 }
@@ -1808,7 +1881,7 @@ function renderExplainHelp(): string {
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --json                 Print machine-readable output.",
-    "  --output <file>        Write report output to a file instead of stdout.",
+    "  --output <file>        Write report output to a project-relative file instead of stdout.",
     "  --help, -h             Print this help text."
   ].join("\n");
 }

@@ -36,8 +36,8 @@ Generate an HTML report artifact:
 ```
 
 The `output` and `lockfile` inputs must be repository-relative paths. Absolute
-paths, Windows drive paths, UNC paths, and `..` segments are rejected before
-the CLI runs.
+paths, Windows drive paths, UNC paths, empty path segments, `.` segments, and
+`..` segments are rejected before the CLI runs.
 
 ## Direct CLI steps
 

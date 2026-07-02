@@ -35,8 +35,8 @@ file's example tag when needed, push `main`, then push a version tag matching
 `package.json`:
 
 ```bash
-git tag v0.160.15
-git push origin v0.160.15
+git tag v0.160.16
+git push origin v0.160.16
 ```
 
 The publish workflow verifies that the tag version matches `package.json`, runs
@@ -51,7 +51,7 @@ locally after confirming npm authentication:
 
 ```bash
 npm whoami
-npm publish --access public
+npm publish --access public --provenance
 npm view ohrisk version
 npm view ohrisk dist.tarball
 ```

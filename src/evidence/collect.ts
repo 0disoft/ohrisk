@@ -10,7 +10,7 @@ import {
   statSync,
   type Stats
 } from "node:fs";
-import { request as httpRequest, type IncomingHttpHeaders } from "node:http";
+import type { IncomingHttpHeaders } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import path from "node:path";
@@ -183,6 +183,21 @@ export async function collectGraphEvidence(input: {
       });
 
       if (!collected.ok) {
+        if (isRecoverableRemoteEvidenceError(collected.error)) {
+          evidence[index] = unavailableRemoteEvidence({
+            packageId: node.id,
+            error: collected.error
+          });
+          completed += 1;
+          input.progress?.({
+            completed,
+            total,
+            packageId: node.id,
+            concurrency: workerCount
+          });
+          continue;
+        }
+
         if (!failure || index < failure.index) {
           failure = {
             index,
@@ -210,6 +225,30 @@ export async function collectGraphEvidence(input: {
   }
 
   return ok(evidence);
+}
+
+function isRecoverableRemoteEvidenceError(error: OhriskError): boolean {
+  return (
+    error.category === "network"
+    && (
+      error.code === "REGISTRY_METADATA_FETCH_FAILED"
+      || error.code === "TARBALL_FETCH_FAILED"
+    )
+  );
+}
+
+function unavailableRemoteEvidence(input: {
+  packageId: string;
+  error: OhriskError;
+}): LicenseEvidence {
+  return {
+    packageId: input.packageId,
+    files: [],
+    source: "unavailable",
+    warnings: [
+      `Package evidence could not be fetched (${input.error.code}): ${input.error.message}`
+    ]
+  };
 }
 
 function normalizeEvidenceConcurrency(value: number | undefined, total: number): number {
@@ -882,15 +921,15 @@ async function collectRegistryTarballEvidence(input: {
     });
   } catch (cause) {
     return err(
-      createError({
+      createRemoteArtifactExceptionError({
         code: "REGISTRY_METADATA_FETCH_FAILED",
-        category: "network",
         message: "Failed to read npm registry metadata.",
+        blockedMessage: "npm registry metadata URL targets an unsupported or blocked host.",
         details: {
           packageId: input.node.id,
-          registryUrl: metadataUrl,
-          cause: safeErrorCauseForDetails(cause)
-        }
+          registryUrl: metadataUrl
+        },
+        cause
       })
     );
   }
@@ -1228,6 +1267,10 @@ async function collectRemoteTarballEvidence(input: {
     });
   }
 
+  if (!input.integrity) {
+    return ok(unavailableUnverifiedRemoteTarballEvidence(input.packageId));
+  }
+
   try {
     const tarball = await readArtifactWithTimeout({
       fetchArtifact: input.fetchArtifact,
@@ -1324,15 +1367,16 @@ async function collectRemoteTarballEvidence(input: {
     }));
   } catch (cause) {
     return err(
-      createError({
-        code: "TARBALL_FETCH_FAILED",
-        category: "network",
+      createRemoteArtifactExceptionError({
+        code: urlError.code,
         message: "Failed to fetch package tarball.",
+        blockedMessage: urlError.message,
         details: {
           packageId: input.packageId,
           resolved: safeUrlForErrorDetails(input.resolved),
-          cause: safeErrorCauseForDetails(cause)
-        }
+          ...urlError.details
+        },
+        cause
       })
     );
   }
@@ -1457,6 +1501,17 @@ function addIntegrityWarningWhenUnverified(input: {
     warnings: [
       ...input.evidence.warnings,
       "Package artifact integrity was not available in the lockfile; tarball contents were not verified."
+    ]
+  };
+}
+
+function unavailableUnverifiedRemoteTarballEvidence(packageId: string): LicenseEvidence {
+  return {
+    packageId,
+    files: [],
+    source: "unavailable",
+    warnings: [
+      "Remote package artifact integrity was not available in the lockfile; tarball contents were not trusted."
     ]
   };
 }
@@ -1787,6 +1842,22 @@ function validateRemoteArtifactUrl(input: {
     );
   }
 
+  if (url.protocol !== "https:") {
+    return err(
+      createError({
+        code: input.code,
+        category: "unsupported_input",
+        message: input.message,
+        details: {
+          packageId: input.packageId,
+          ...redactUrlCredentialsInDetails(input.details),
+          artifactHost: normalizeUrlHostname(url.hostname),
+          reason: "insecure_http_not_supported"
+        }
+      })
+    );
+  }
+
   const blockedHostReason = blockedRemoteArtifactHostReason(url.hostname);
   if (blockedHostReason) {
     return err(
@@ -1938,6 +2009,58 @@ function safeOptionalUrlForErrorDetails(value: string | undefined): string | und
 
 function safeErrorCauseForDetails(cause: unknown): string {
   return safeUrlForErrorDetails(cause instanceof Error ? cause.message : String(cause));
+}
+
+class BlockedArtifactRemoteAddressError extends Error {
+  readonly hostname: string;
+  readonly remoteAddress: string;
+  readonly reason: string;
+
+  constructor(input: {
+    hostname: string;
+    remoteAddress: string;
+    reason: string;
+  }) {
+    super(
+      `Blocked artifact socket remote address for ${input.hostname}: ${input.remoteAddress} (${input.reason}).`
+    );
+    this.name = "BlockedArtifactRemoteAddressError";
+    this.hostname = input.hostname;
+    this.remoteAddress = input.remoteAddress;
+    this.reason = input.reason;
+  }
+}
+
+function createRemoteArtifactExceptionError(input: {
+  code: "REGISTRY_METADATA_FETCH_FAILED" | "TARBALL_FETCH_FAILED";
+  message: string;
+  blockedMessage: string;
+  details: Record<string, unknown>;
+  cause: unknown;
+}): OhriskError {
+  if (input.cause instanceof BlockedArtifactRemoteAddressError) {
+    return createError({
+      code: input.code,
+      category: "unsupported_input",
+      message: input.blockedMessage,
+      details: {
+        ...redactUrlCredentialsInDetails(input.details),
+        artifactHost: input.cause.hostname,
+        resolvedAddress: normalizeUrlHostname(input.cause.remoteAddress),
+        reason: input.cause.reason
+      }
+    });
+  }
+
+  return createError({
+    code: input.code,
+    category: "network",
+    message: input.message,
+    details: {
+      ...redactUrlCredentialsInDetails(input.details),
+      cause: safeErrorCauseForDetails(input.cause)
+    }
+  });
 }
 
 function safeUrlForErrorDetails(value: string): string {
@@ -2340,18 +2463,26 @@ function defaultArtifactFetcher(
   options?: ArtifactFetchOptions
 ): Promise<ArtifactFetchResponse> {
   const parsedUrl = parseHttpUrl(url);
-  if (!parsedUrl) {
+  if (!parsedUrl || parsedUrl.protocol !== "https:") {
     return Promise.reject(new Error(`Unsupported artifact URL: ${safeUrlForErrorDetails(url)}`));
   }
 
-  const request = parsedUrl.protocol === "https:" ? httpsRequest : httpRequest;
-
   return new Promise((resolve, reject) => {
-    const req = request(parsedUrl, {
+    const req = httpsRequest(parsedUrl, {
       method: "GET",
       signal: options?.signal,
       lookup: secureArtifactLookup
     }, (response) => {
+      const socketAddress = validateArtifactSocketRemoteAddress(
+        parsedUrl.hostname,
+        response.socket.remoteAddress
+      );
+      if (!socketAddress.ok) {
+        response.destroy(socketAddress.error);
+        reject(socketAddress.error);
+        return;
+      }
+
       resolve({
         ok: (response.statusCode ?? 0) >= 200 && (response.statusCode ?? 0) < 300,
         status: response.statusCode ?? 0,
@@ -2372,6 +2503,35 @@ function defaultArtifactFetcher(
     req.on("error", reject);
     req.end();
   });
+}
+
+export function validateArtifactSocketRemoteAddress(
+  hostname: string,
+  remoteAddress: string | undefined
+): Result<void, Error> {
+  if (!remoteAddress) {
+    return err(
+      new BlockedArtifactRemoteAddressError({
+        hostname: normalizeUrlHostname(hostname),
+        remoteAddress: "<missing>",
+        reason: "missing_remote_address"
+      })
+    );
+  }
+
+  const normalizedRemoteAddress = normalizeUrlHostname(remoteAddress);
+  const blockedReason = blockedRemoteArtifactHostReason(normalizedRemoteAddress);
+  if (!blockedReason) {
+    return ok(undefined);
+  }
+
+  return err(
+    new BlockedArtifactRemoteAddressError({
+      hostname: normalizeUrlHostname(hostname),
+      remoteAddress: normalizedRemoteAddress,
+      reason: blockedReason
+    })
+  );
 }
 
 async function defaultArtifactHostResolver(hostname: string): Promise<ArtifactHostResolution[]> {

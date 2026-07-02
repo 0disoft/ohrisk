@@ -63,7 +63,7 @@ Formatted as a standalone browser-friendly HTML document for local review.
 - **Waiver mode**: shown in the summary cards
 - **Strict waiver drift**: shown in the summary cards when `--strict-waivers` is set
 - **Local paths**: the project summary uses the package/project name, not the absolute project root, so local browser artifacts are safer to share than terminal output
-- **Open after write**: `--open` can be combined with `--html --output <file>` to open the written report through a temporary `127.0.0.1` URL after scan completion
+- **Open after write**: `--open` can be combined with `--html --output <file>` to open a project-relative report path through a temporary `127.0.0.1` URL after scan completion
 
 ## SARIF
 

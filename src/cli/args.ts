@@ -6,6 +6,7 @@ import { err, isErr, ok, type Result } from "../shared/result";
 const FAIL_ON_SEVERITIES: RiskSeverity[] = ["high", "unknown", "review", "low"];
 const SCAN_OUTPUT_FORMAT_OPTIONS = ["--json", "--sarif", "--markdown", "--html", "--cyclonedx"];
 const DIFF_OUTPUT_FORMAT_OPTIONS = ["--json", "--markdown"];
+const BASELINE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 const SUPPORTED_COMMANDS = ["scan", "ci", "diff", "explain", "help", "version"] as const;
 export type HelpTarget = typeof SUPPORTED_COMMANDS[number];
 
@@ -751,6 +752,11 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
     );
   }
 
+  const validBaselineRef = validateBaselineRef(baselineRef);
+  if (isErr(validBaselineRef)) {
+    return validBaselineRef;
+  }
+
   return ok({
     kind: "diff",
     baselineRef,
@@ -762,4 +768,31 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
     ...(outputPath ? { outputPath } : {}),
     ...(failOn ? { failOn } : {})
   });
+}
+
+function validateBaselineRef(ref: string): Result<string, OhriskError> {
+  const parts = ref.split("/");
+  const hasInvalidRefShape =
+    !BASELINE_REF_PATTERN.test(ref) ||
+    ref.includes("..") ||
+    ref.endsWith("/") ||
+    ref.endsWith(".") ||
+    parts.some((part) => part === "" || part.startsWith(".") || part.endsWith(".lock"));
+
+  if (!hasInvalidRefShape) {
+    return ok(ref);
+  }
+
+  return err(
+    createError({
+      code: "INVALID_ARGUMENT",
+      category: "invalid_input",
+      message: "diff baseline refs must be branch, tag, or commit-like names without git rev syntax.",
+      details: {
+        baselineRef: ref,
+        allowedPattern: BASELINE_REF_PATTERN.source,
+        rejectedExamples: ["HEAD@{1}", "main:path", "HEAD~1", "feature branch"]
+      }
+    })
+  );
 }

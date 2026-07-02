@@ -8,7 +8,8 @@ import { gzipSync } from "node:zlib";
 
 import {
   collectGraphEvidence,
-  selectSecureArtifactLookupResponse
+  selectSecureArtifactLookupResponse,
+  validateArtifactSocketRemoteAddress
 } from "../src/evidence/collect";
 import { classifyEvidenceFile } from "../src/evidence/license-files";
 import { collectLocalPackageEvidence } from "../src/evidence/local-package";
@@ -595,6 +596,32 @@ describe("collectGraphEvidence", () => {
     expect(selection.error.message).toContain("loopback");
   });
 
+  test("rejects blocked socket remote addresses after HTTPS connection", () => {
+    const validation = validateArtifactSocketRemoteAddress("registry.example.test", "127.0.0.1");
+
+    expect(validation.ok).toBe(false);
+    if (validation.ok) {
+      throw new Error("Expected loopback socket address to be rejected.");
+    }
+
+    expect(validation.error.message).toContain("Blocked artifact socket remote address");
+    expect(validation.error.message).toContain("127.0.0.1");
+    expect(validation.error.message).toContain("loopback_ipv4");
+  });
+
+  test("rejects missing socket remote addresses after HTTPS connection", () => {
+    const validation = validateArtifactSocketRemoteAddress("registry.example.test", undefined);
+
+    expect(validation.ok).toBe(false);
+    if (validation.ok) {
+      throw new Error("Expected missing socket remote address to be rejected.");
+    }
+
+    expect(validation.error.message).toContain("Blocked artifact socket remote address");
+    expect(validation.error.message).toContain("<missing>");
+    expect(validation.error.message).toContain("missing_remote_address");
+  });
+
   test("collects evidence for every package in a parsed graph", async () => {
     const graph = parseBunLockfile(path.join(bunProjectDir, "bun.lock"));
 
@@ -640,16 +667,28 @@ describe("collectGraphEvidence", () => {
     const evidence = await collectGraphEvidence({
       graph: {
         lockfilePath: "bun.lock",
-        nodes: ["a", "b", "c", "d"].map((name) => ({
-          id: `parallel-${name}@1.0.0`,
-          name: `parallel-${name}`,
-          version: "1.0.0",
-          ecosystem: "npm",
-          resolved: `https://registry.example.test/parallel-${name}/-/parallel-${name}-1.0.0.tgz`,
-          dependencyType: "production",
-          direct: name === "a",
-          paths: [["root", `parallel-${name}@1.0.0`]]
-        }))
+        nodes: ["a", "b", "c", "d"].map((name) => {
+          const tarball = createTarGz({
+            "package/package.json": JSON.stringify({
+              name: `parallel-${name}`,
+              version: "1.0.0",
+              license: "MIT"
+            }),
+            "package/LICENSE": `MIT License for parallel-${name}.`
+          });
+
+          return {
+            id: `parallel-${name}@1.0.0`,
+            name: `parallel-${name}`,
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved: `https://registry.example.test/parallel-${name}/-/parallel-${name}-1.0.0.tgz`,
+            integrity: integrityFor(tarball),
+            dependencyType: "production",
+            direct: name === "a",
+            paths: [["root", `parallel-${name}@1.0.0`]]
+          };
+        })
       },
       projectRoot: bunProjectDir,
       evidenceConcurrency: 2,
@@ -706,6 +745,7 @@ describe("collectGraphEvidence", () => {
           version: "1.0.0",
           ecosystem: "npm",
           resolved: `https://registry.example.test/parallel-${name}/-/parallel-${name}-1.0.0.tgz`,
+          integrity: integrityFor(Buffer.from(`parallel-${name}`)),
           dependencyType: "production",
           direct: name === "lower-index",
           paths: [["root", `parallel-${name}@1.0.0`]]
@@ -721,7 +761,7 @@ describe("collectGraphEvidence", () => {
         }
 
         fetchFailures.push(name);
-        throw new Error(`fixture fetch failed for ${name}`);
+        return okArtifactResponseFromBuffer(Buffer.from(`fixture fetch failed for ${name}`));
       }
     });
 
@@ -731,14 +771,13 @@ describe("collectGraphEvidence", () => {
       throw new Error("Expected concurrent evidence collection to fail.");
     }
 
-    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
+    expect(evidence.error.code).toBe("PACKAGE_INTEGRITY_CHECK_FAILED");
     expect(evidence.error.details).toMatchObject({
-      packageId: "parallel-lower-index@1.0.0",
-      cause: "fixture fetch failed for lower-index"
+      packageId: "parallel-lower-index@1.0.0"
     });
   });
 
-  test("fetches remote tarball evidence from HTTP resolved artifacts", async () => {
+  test("fetches remote tarball evidence from HTTPS resolved artifacts", async () => {
     const tarball = createTarGz({
       "package/package.json": JSON.stringify({
         name: "remote-fixture",
@@ -802,7 +841,7 @@ describe("collectGraphEvidence", () => {
     expect(fetchRedirectMode).toBe("manual");
   });
 
-  test("warns when remote tarball evidence cannot be verified against lockfile integrity", async () => {
+  test("does not trust remote tarball evidence without lockfile integrity", async () => {
     const tarball = createTarGz({
       "package/package.json": JSON.stringify({
         name: "remote-missing-integrity",
@@ -811,6 +850,8 @@ describe("collectGraphEvidence", () => {
       }),
       "package/LICENSE": "ISC License fixture text."
     });
+
+    let fetchCalled = false;
 
     const evidence = await collectGraphEvidence({
       graph: {
@@ -829,9 +870,13 @@ describe("collectGraphEvidence", () => {
         ]
       },
       projectRoot: bunProjectDir,
-      fetchArtifact: async () => okArtifactResponseFromBuffer(tarball)
+      fetchArtifact: async () => {
+        fetchCalled = true;
+        return okArtifactResponseFromBuffer(tarball);
+      }
     });
 
+    expect(fetchCalled).toBe(false);
     expect(evidence.ok).toBe(true);
     if (!evidence.ok) {
       throw new Error(evidence.error.message);
@@ -839,10 +884,10 @@ describe("collectGraphEvidence", () => {
 
     expect(evidence.value[0]).toMatchObject({
       packageId: "remote-missing-integrity@1.2.3",
-      packageJsonLicense: "ISC",
-      source: "tarball",
+      files: [],
+      source: "unavailable",
       warnings: [
-        "Package artifact integrity was not available in the lockfile; tarball contents were not verified."
+        "Remote package artifact integrity was not available in the lockfile; tarball contents were not trusted."
       ]
     });
   });
@@ -1381,6 +1426,7 @@ describe("collectGraphEvidence", () => {
             name: "registry-fixture",
             version: "1.0.0",
             ecosystem: "npm",
+            integrity: integrityFor(tarball),
             dependencyType: "production",
             direct: true,
             paths: [["root", "registry-fixture@1.0.0"]]
@@ -1445,6 +1491,7 @@ describe("collectGraphEvidence", () => {
             name: "@scope/registry-fixture",
             version: "1.0.0",
             ecosystem: "npm",
+            integrity: integrityFor(tarball),
             dependencyType: "production",
             direct: true,
             paths: [["root", "@scope/registry-fixture@1.0.0"]]
@@ -1700,6 +1747,7 @@ describe("collectGraphEvidence", () => {
               name: "stale-cache-fixture",
               version: "1.0.0",
               ecosystem: "npm",
+              integrity: integrityFor(tarball),
               dependencyType: "production",
               direct: true,
               paths: [["root", "stale-cache-fixture@1.0.0"]]
@@ -2135,7 +2183,7 @@ describe("collectGraphEvidence", () => {
     expect(evidence.error.category).toBe("unsupported_input");
   });
 
-  test("cancels failed registry metadata response bodies without waiting for cleanup", async () => {
+  test("reports unavailable evidence for failed registry metadata responses", async () => {
     let bodyRead = false;
     let bodyCancelled = false;
 
@@ -2172,24 +2220,103 @@ describe("collectGraphEvidence", () => {
           }
         })
       }),
-      message: "Expected failed registry metadata to fail without waiting for body cancellation."
+      message: "Expected failed registry metadata to resolve without waiting for body cancellation."
     });
 
     expect(bodyRead).toBe(false);
     expect(bodyCancelled).toBe(true);
-    expect(evidence.ok).toBe(false);
-    if (evidence.ok) {
-      throw new Error("Expected failed registry metadata to fail.");
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
     }
 
-    expect(evidence.error.code).toBe("REGISTRY_METADATA_FETCH_FAILED");
-    expect(evidence.error.category).toBe("network");
-    expect(evidence.error.message).toBe("Failed to fetch npm registry metadata.");
-    expect(evidence.error.details).toMatchObject({
-      packageId: "failed-metadata@1.0.0",
-      status: 503,
-      statusText: "Service Unavailable"
+    expect(evidence.value).toEqual([
+      expect.objectContaining({
+        packageId: "failed-metadata@1.0.0",
+        files: [],
+        source: "unavailable",
+        warnings: [
+          "Package evidence could not be fetched (REGISTRY_METADATA_FETCH_FAILED): Failed to fetch npm registry metadata."
+        ]
+      })
+    ]);
+  });
+
+  test("continues collecting graph evidence after a transient remote fetch failure", async () => {
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "available-remote",
+        version: "1.0.0",
+        license: "MIT"
+      }),
+      "package/LICENSE": "MIT License fixture text."
     });
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "failed-remote@1.0.0",
+            name: "failed-remote",
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved: "https://registry.example.test/failed-remote/-/failed-remote-1.0.0.tgz",
+            integrity: integrityFor(Buffer.from("unavailable remote")),
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "failed-remote@1.0.0"]]
+          },
+          {
+            id: "available-remote@1.0.0",
+            name: "available-remote",
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved: "https://registry.example.test/available-remote/-/available-remote-1.0.0.tgz",
+            integrity: integrityFor(tarball),
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "available-remote@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async (url) => {
+        if (url.includes("/failed-remote/")) {
+          throw new Error("temporary registry outage");
+        }
+
+        return okArtifactResponseFromBuffer(tarball);
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+
+    expect(evidence.value).toEqual([
+      {
+        packageId: "failed-remote@1.0.0",
+        files: [],
+        source: "unavailable",
+        warnings: [
+          "Package evidence could not be fetched (TARBALL_FETCH_FAILED): Failed to fetch package tarball."
+        ]
+      },
+      expect.objectContaining({
+        packageId: "available-remote@1.0.0",
+        packageJsonLicense: "MIT",
+        source: "tarball",
+        files: [
+          {
+            path: "LICENSE",
+            kind: "license",
+            text: "MIT License fixture text."
+          }
+        ]
+      })
+    ]);
   });
 
   test("reports unsupported registry tarball URLs instead of treating evidence as unavailable", async () => {
@@ -2236,7 +2363,7 @@ describe("collectGraphEvidence", () => {
     });
   });
 
-  test("rejects registry tarball URLs that target local network hosts before fetching tarballs", async () => {
+  test("rejects plaintext registry tarball URLs before fetching tarballs", async () => {
     const tarballUrl = "http://169.254.169.254/latest/meta-data/metadata-local-tarball.tgz";
     const fetchedUrls: string[] = [];
 
@@ -2277,7 +2404,7 @@ describe("collectGraphEvidence", () => {
     expect(fetchedUrls).toEqual(["https://registry.npmjs.org/metadata-local-tarball/1.0.0"]);
     expect(evidence.ok).toBe(false);
     if (evidence.ok) {
-      throw new Error("Expected local-network registry tarball URL to fail.");
+      throw new Error("Expected plaintext registry tarball URL to fail.");
     }
 
     expect(evidence.error.code).toBe("REGISTRY_METADATA_FETCH_FAILED");
@@ -2289,7 +2416,7 @@ describe("collectGraphEvidence", () => {
       version: "1.0.0",
       tarballUrl,
       artifactHost: "169.254.169.254",
-      reason: "link_local_ipv4"
+      reason: "insecure_http_not_supported"
     });
   });
 
@@ -2533,7 +2660,7 @@ describe("collectGraphEvidence", () => {
     expect(warnings.join("\n")).not.toContain("fixture-secret");
   });
 
-  test("reports remote tarball fetch failures", async () => {
+  test("reports unavailable evidence for remote tarball fetch failures", async () => {
     let bodyRead = false;
     let bodyCancelled = false;
 
@@ -2548,6 +2675,7 @@ describe("collectGraphEvidence", () => {
               version: "9.9.9",
               ecosystem: "npm",
               resolved: "https://registry.example.test/missing-remote/-/missing-remote-9.9.9.tgz",
+              integrity: integrityFor(Buffer.from("missing remote")),
               dependencyType: "production",
               direct: true,
               paths: [["root", "missing-remote@9.9.9"]]
@@ -2571,18 +2699,26 @@ describe("collectGraphEvidence", () => {
           }
         })
       }),
-      message: "Expected failed remote tarball fetch to fail without waiting for body cancellation."
+      message: "Expected failed remote tarball fetch to resolve without waiting for body cancellation."
     });
 
     expect(bodyRead).toBe(false);
     expect(bodyCancelled).toBe(true);
-    expect(evidence.ok).toBe(false);
-    if (evidence.ok) {
-      throw new Error("Expected remote tarball fetch to fail.");
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
     }
 
-    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
-    expect(evidence.error.category).toBe("network");
+    expect(evidence.value).toEqual([
+      {
+        packageId: "missing-remote@9.9.9",
+        files: [],
+        source: "unavailable",
+        warnings: [
+          "Package evidence could not be fetched (TARBALL_FETCH_FAILED): Failed to fetch package tarball."
+        ]
+      }
+    ]);
   });
 
   test("redacts credential-like URL text from remote fetch failure causes", async () => {
@@ -2596,6 +2732,7 @@ describe("collectGraphEvidence", () => {
             version: "1.0.0",
             ecosystem: "npm",
             resolved: "https://registry.example.test/cause-redaction-remote/-/cause-redaction-remote-1.0.0.tgz",
+            integrity: integrityFor(Buffer.from("cause redaction remote")),
             dependencyType: "production",
             direct: true,
             paths: [["root", "cause-redaction-remote@1.0.0"]]
@@ -2610,21 +2747,23 @@ describe("collectGraphEvidence", () => {
       }
     });
 
-    expect(evidence.ok).toBe(false);
-    if (evidence.ok) {
-      throw new Error("Expected remote tarball fetch cause to fail.");
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
     }
 
-    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
-    expect(evidence.error.category).toBe("network");
-    expect(evidence.error.details).toMatchObject({
+    expect(evidence.value[0]).toMatchObject({
       packageId: "cause-redaction-remote@1.0.0",
-      cause: "upstream diagnostic mentioned https://redacted@debug.example.test/tarball.tgz"
+      files: [],
+      source: "unavailable",
+      warnings: [
+        "Package evidence could not be fetched (TARBALL_FETCH_FAILED): Failed to fetch package tarball."
+      ]
     });
 
-    const formatted = formatError(evidence.error);
-    expect(formatted).not.toContain("fixture-token");
-    expect(formatted).not.toContain("fixture-secret");
+    const warnings = evidence.value.flatMap((item) => item.warnings ?? []).join("\n");
+    expect(warnings).not.toContain("fixture-token");
+    expect(warnings).not.toContain("fixture-secret");
   });
 
   test("follows safe remote tarball redirects after validating each target", async () => {
@@ -2718,6 +2857,7 @@ describe("collectGraphEvidence", () => {
             version: "1.0.0",
             ecosystem: "npm",
             resolved: "https://registry.example.test/redirect-local-remote/-/redirect-local-remote-1.0.0.tgz",
+            integrity: integrityFor(Buffer.from("redirect local remote")),
             dependencyType: "production",
             direct: true,
             paths: [["root", "redirect-local-remote@1.0.0"]]
@@ -2756,89 +2896,133 @@ describe("collectGraphEvidence", () => {
       redirectFrom: "https://registry.example.test/redirect-local-remote/-/redirect-local-remote-1.0.0.tgz",
       redirectUrl: "http://127.0.0.1:4873/redirect-local-remote/-/redirect-local-remote-1.0.0.tgz",
       artifactHost: "127.0.0.1",
-      reason: "loopback_ipv4"
+      reason: "insecure_http_not_supported"
     });
   });
 
-  test("rejects remote tarball URLs that target local or private hosts before fetch", async () => {
+  test("rejects plaintext remote tarball URLs before fetch", async () => {
+    let fetchCalled = false;
+    const resolved = "http://registry.example.test/plain-remote/-/plain-remote-1.0.0.tgz";
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "plain-remote@1.0.0",
+            name: "plain-remote",
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved,
+            integrity: "sha512-fixture",
+            dependencyType: "production",
+            direct: true,
+            paths: [["root", "plain-remote@1.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async () => {
+        fetchCalled = true;
+        return okArtifactResponseFromBuffer(Uint8Array.of(1, 2, 3));
+      }
+    });
+
+    expect(fetchCalled).toBe(false);
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) {
+      throw new Error("Expected plaintext remote tarball URL to fail.");
+    }
+
+    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
+    expect(evidence.error.category).toBe("unsupported_input");
+    expect(evidence.error.details).toMatchObject({
+      packageId: "plain-remote@1.0.0",
+      resolved,
+      artifactHost: "registry.example.test",
+      reason: "insecure_http_not_supported"
+    });
+  });
+
+  test("rejects HTTPS remote tarball URLs that target local or private hosts before fetch", async () => {
     const blockedUrls = [
       {
-        resolved: "http://localhost:4873/local-remote/-/local-remote-1.0.0.tgz",
+        resolved: "https://localhost:4873/local-remote/-/local-remote-1.0.0.tgz",
         artifactHost: "localhost",
         reason: "localhost"
       },
       {
-        resolved: "http://127.0.0.1:4873/local-remote/-/local-remote-1.0.0.tgz",
+        resolved: "https://127.0.0.1:4873/local-remote/-/local-remote-1.0.0.tgz",
         artifactHost: "127.0.0.1",
         reason: "loopback_ipv4"
       },
       {
-        resolved: "http://10.0.0.5/private-remote/-/private-remote-1.0.0.tgz",
+        resolved: "https://10.0.0.5/private-remote/-/private-remote-1.0.0.tgz",
         artifactHost: "10.0.0.5",
         reason: "private_ipv4"
       },
       {
-        resolved: "http://[::1]/local-remote/-/local-remote-1.0.0.tgz",
+        resolved: "https://[::1]/local-remote/-/local-remote-1.0.0.tgz",
         artifactHost: "::1",
         reason: "loopback_ipv6"
       },
       {
-        resolved: "http://[::ffff:127.0.0.1]/mapped-local-remote/-/mapped-local-remote-1.0.0.tgz",
+        resolved: "https://[::ffff:127.0.0.1]/mapped-local-remote/-/mapped-local-remote-1.0.0.tgz",
         artifactHost: "::ffff:7f00:1",
         reason: "loopback_ipv4"
       },
       {
-        resolved: "http://[::ffff:0a00:0005]/mapped-private-remote/-/mapped-private-remote-1.0.0.tgz",
+        resolved: "https://[::ffff:0a00:0005]/mapped-private-remote/-/mapped-private-remote-1.0.0.tgz",
         artifactHost: "::ffff:a00:5",
         reason: "private_ipv4"
       },
       {
-        resolved: "http://[64:ff9b::7f00:1]/nat64-local-remote/-/nat64-local-remote-1.0.0.tgz",
+        resolved: "https://[64:ff9b::7f00:1]/nat64-local-remote/-/nat64-local-remote-1.0.0.tgz",
         artifactHost: "64:ff9b::7f00:1",
         reason: "loopback_ipv4"
       },
       {
-        resolved: "http://[64:ff9b::0a00:5]/nat64-private-remote/-/nat64-private-remote-1.0.0.tgz",
+        resolved: "https://[64:ff9b::0a00:5]/nat64-private-remote/-/nat64-private-remote-1.0.0.tgz",
         artifactHost: "64:ff9b::a00:5",
         reason: "private_ipv4"
       },
       {
-        resolved: "http://[2002:7f00:0001::]/six-to-four-local-remote/-/six-to-four-local-remote-1.0.0.tgz",
+        resolved: "https://[2002:7f00:0001::]/six-to-four-local-remote/-/six-to-four-local-remote-1.0.0.tgz",
         artifactHost: "2002:7f00:1::",
         reason: "loopback_ipv4"
       },
       {
-        resolved: "http://[::127.0.0.1]/compatible-local-remote/-/compatible-local-remote-1.0.0.tgz",
+        resolved: "https://[::127.0.0.1]/compatible-local-remote/-/compatible-local-remote-1.0.0.tgz",
         artifactHost: "::7f00:1",
         reason: "loopback_ipv4"
       },
       {
-        resolved: "http://[64:ff9b:1::1]/local-nat64-remote/-/local-nat64-remote-1.0.0.tgz",
+        resolved: "https://[64:ff9b:1::1]/local-nat64-remote/-/local-nat64-remote-1.0.0.tgz",
         artifactHost: "64:ff9b:1::1",
         reason: "local_nat64_ipv6"
       },
       {
-        resolved: "http://[100::1]/discard-remote/-/discard-remote-1.0.0.tgz",
+        resolved: "https://[100::1]/discard-remote/-/discard-remote-1.0.0.tgz",
         artifactHost: "100::1",
         reason: "discard_ipv6"
       },
       {
-        resolved: "http://[2001::1]/teredo-remote/-/teredo-remote-1.0.0.tgz",
+        resolved: "https://[2001::1]/teredo-remote/-/teredo-remote-1.0.0.tgz",
         artifactHost: "2001::1",
         reason: "teredo_ipv6"
       },
       {
-        resolved: "http://[2001:2::1]/benchmarking-remote/-/benchmarking-remote-1.0.0.tgz",
+        resolved: "https://[2001:2::1]/benchmarking-remote/-/benchmarking-remote-1.0.0.tgz",
         artifactHost: "2001:2::1",
         reason: "benchmarking_ipv6"
       },
       {
-        resolved: "http://[2001:10::1]/orchid-remote/-/orchid-remote-1.0.0.tgz",
+        resolved: "https://[2001:10::1]/orchid-remote/-/orchid-remote-1.0.0.tgz",
         artifactHost: "2001:10::1",
         reason: "orchid_ipv6"
       },
       {
-        resolved: "http://[2001:20::1]/orchidv2-remote/-/orchidv2-remote-1.0.0.tgz",
+        resolved: "https://[2001:20::1]/orchidv2-remote/-/orchidv2-remote-1.0.0.tgz",
         artifactHost: "2001:20::1",
         reason: "orchid_ipv6"
       }
@@ -2857,6 +3041,7 @@ describe("collectGraphEvidence", () => {
               version: "1.0.0",
               ecosystem: "npm",
               resolved,
+              integrity: "sha512-fixture",
               dependencyType: "production",
               direct: true,
               paths: [["root", "blocked-remote@1.0.0"]]
@@ -3045,7 +3230,7 @@ describe("collectGraphEvidence", () => {
     });
   });
 
-  test("reports DNS resolution failures before remote tarball fetch", async () => {
+  test("reports unavailable evidence for DNS resolution failures before remote tarball fetch", async () => {
     let fetchCalled = false;
 
     const evidence = await collectGraphEvidence({
@@ -3075,20 +3260,21 @@ describe("collectGraphEvidence", () => {
     });
 
     expect(fetchCalled).toBe(false);
-    expect(evidence.ok).toBe(false);
-    if (evidence.ok) {
-      throw new Error("Expected DNS resolution failure to fail before fetch.");
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
     }
 
-    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
-    expect(evidence.error.category).toBe("network");
-    expect(evidence.error.message).toBe("Failed to resolve package tarball host.");
-    expect(evidence.error.details).toMatchObject({
-      packageId: "dns-failure-remote@1.0.0",
-      resolved: "https://tarballs.example.test/dns-failure-remote-1.0.0.tgz",
-      artifactHost: "tarballs.example.test",
-      cause: "DNS unavailable"
-    });
+    expect(evidence.value).toEqual([
+      {
+        packageId: "dns-failure-remote@1.0.0",
+        files: [],
+        source: "unavailable",
+        warnings: [
+          "Package evidence could not be fetched (TARBALL_FETCH_FAILED): Failed to resolve package tarball host."
+        ]
+      }
+    ]);
   });
 
   test("rejects registry metadata responses without readable body streams", async () => {
@@ -3151,6 +3337,7 @@ describe("collectGraphEvidence", () => {
             version: "1.0.0",
             ecosystem: "npm",
             resolved: "https://registry.example.test/bodyless-remote/-/bodyless-remote-1.0.0.tgz",
+            integrity: integrityFor(Buffer.from("bodyless remote")),
             dependencyType: "production",
             direct: true,
             paths: [["root", "bodyless-remote@1.0.0"]]
@@ -3199,6 +3386,7 @@ describe("collectGraphEvidence", () => {
             version: "1.0.0",
             ecosystem: "npm",
             resolved: "https://registry.example.test/stalled-remote/-/stalled-remote-1.0.0.tgz",
+            integrity: integrityFor(Buffer.from("stalled remote")),
             dependencyType: "production",
             direct: true,
             paths: [["root", "stalled-remote@1.0.0"]]
@@ -3213,19 +3401,22 @@ describe("collectGraphEvidence", () => {
       }
     });
 
-    expect(evidence.ok).toBe(false);
-    if (evidence.ok) {
-      throw new Error("Expected stalled remote tarball fetch to fail.");
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
     }
 
     expect(fetchSignal?.aborted).toBe(true);
-    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
-    expect(evidence.error.category).toBe("network");
-    expect(evidence.error.details).toMatchObject({
-      packageId: "stalled-remote@1.0.0",
-      resolved: "https://registry.example.test/stalled-remote/-/stalled-remote-1.0.0.tgz",
-      cause: "Artifact fetch timed out after 1ms."
-    });
+    expect(evidence.value).toEqual([
+      {
+        packageId: "stalled-remote@1.0.0",
+        files: [],
+        source: "unavailable",
+        warnings: [
+          "Package evidence could not be fetched (TARBALL_FETCH_FAILED): Failed to fetch package tarball."
+        ]
+      }
+    ]);
   });
 
   test("times out stalled remote tarball body reads", async () => {
@@ -3242,6 +3433,7 @@ describe("collectGraphEvidence", () => {
             version: "1.0.0",
             ecosystem: "npm",
             resolved: "https://registry.example.test/stalled-body/-/stalled-body-1.0.0.tgz",
+            integrity: integrityFor(Buffer.from("stalled body")),
             dependencyType: "production",
             direct: true,
             paths: [["root", "stalled-body@1.0.0"]]
@@ -3269,20 +3461,23 @@ describe("collectGraphEvidence", () => {
       }
     });
 
-    expect(evidence.ok).toBe(false);
-    if (evidence.ok) {
-      throw new Error("Expected stalled remote tarball body read to fail.");
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
     }
 
     expect(fetchSignal?.aborted).toBe(true);
     expect(bodyCancelled).toBe(true);
-    expect(evidence.error.code).toBe("TARBALL_FETCH_FAILED");
-    expect(evidence.error.category).toBe("network");
-    expect(evidence.error.details).toMatchObject({
-      packageId: "stalled-body@1.0.0",
-      resolved: "https://registry.example.test/stalled-body/-/stalled-body-1.0.0.tgz",
-      cause: "Artifact fetch timed out after 1ms."
-    });
+    expect(evidence.value).toEqual([
+      {
+        packageId: "stalled-body@1.0.0",
+        files: [],
+        source: "unavailable",
+        warnings: [
+          "Package evidence could not be fetched (TARBALL_FETCH_FAILED): Failed to fetch package tarball."
+        ]
+      }
+    ]);
   });
 
   test("rejects oversized registry metadata before reading the response body", async () => {
@@ -3379,6 +3574,7 @@ describe("collectGraphEvidence", () => {
               version: "1.0.0",
               ecosystem: "npm",
               resolved: "https://registry.example.test/oversized-remote/-/oversized-remote-1.0.0.tgz",
+              integrity: integrityFor(Buffer.from("oversized remote")),
               dependencyType: "production",
               direct: true,
               paths: [["root", "oversized-remote@1.0.0"]]
@@ -3433,6 +3629,7 @@ describe("collectGraphEvidence", () => {
               version: "1.0.0",
               ecosystem: "npm",
               resolved: "https://registry.example.test/oversized-remote-length/-/oversized-remote-length-1.0.0.tgz",
+              integrity: integrityFor(Buffer.from("oversized remote length")),
               dependencyType: "production",
               direct: true,
               paths: [["root", "oversized-remote-length@1.0.0"]]
@@ -3511,6 +3708,7 @@ describe("collectGraphEvidence", () => {
               version: "1.0.0",
               ecosystem: "npm",
               resolved: "https://registry.example.test/invalid-content-length-remote/-/invalid-content-length-remote-1.0.0.tgz",
+              integrity: integrityFor(Buffer.from("invalid content length remote")),
               dependencyType: "production",
               direct: true,
               paths: [["root", "invalid-content-length-remote@1.0.0"]]

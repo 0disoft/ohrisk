@@ -25,7 +25,7 @@ function finding(overrides: Partial<RiskFinding> = {}): RiskFinding {
 }
 
 describe("diffRiskFindings", () => {
-  test("does not report an existing finding as new when only prose evidence changes", () => {
+  test("reports an existing finding as changed when evidence fingerprint changes", () => {
     const baseline = finding();
     const current = finding({
       fingerprint: "package@1.0.0::high::replace::new reason::new evidence",
@@ -38,11 +38,12 @@ describe("diffRiskFindings", () => {
       currentFindings: [current]
     });
 
-    expect(diff.newFindings).toEqual([]);
+    expect(diff.newFindings).toEqual([current]);
   });
 
   test("reports an existing package path as new when severity changes", () => {
     const baseline = finding({
+      fingerprint: "package@1.0.0::review::review::old reason::old evidence",
       severity: "review",
       recommendation: "review",
       action: "Review this package before shipping."
@@ -61,7 +62,7 @@ describe("diffRiskFindings", () => {
     expect(diff.newFindings).toEqual([current]);
   });
 
-  test("reports an existing package path as new when action changes", () => {
+  test("does not report an existing finding as changed when only action prose changes", () => {
     const baseline = finding({
       severity: "low",
       recommendation: "allow",
@@ -78,6 +79,6 @@ describe("diffRiskFindings", () => {
       currentFindings: [current]
     });
 
-    expect(diff.newFindings).toEqual([current]);
+    expect(diff.newFindings).toEqual([]);
   });
 });
