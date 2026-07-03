@@ -81,6 +81,7 @@ describe("main", () => {
     expect(output).toContain("ohrisk help [command]");
     expect(output).toContain("ohrisk version");
     expect(output).toContain("--lockfile <path>");
+    expect(output).toContain("--workspace-root <path>");
     expect(output).toContain("--help, -h");
     expect(output).toContain("--html");
     expect(output).toContain("--open");
@@ -97,6 +98,7 @@ describe("main", () => {
     expect(scanOutput).toContain("Ohrisk scan");
     expect(scanOutput).toContain("ohrisk scan [--lockfile <path>]");
     expect(scanOutput).toContain("--lockfile <path>");
+    expect(scanOutput).toContain("--workspace-root <path>");
     expect(scanOutput).toContain("--html");
     expect(scanOutput).toContain("--open");
     expect(scanOutput).toContain("--cyclonedx");
@@ -110,6 +112,7 @@ describe("main", () => {
     expect(ciExitCode).toBe(0);
     expect(ci.stderr).toEqual([]);
     expect(ciOutput).toContain("Ohrisk ci");
+    expect(ciOutput).toContain("--workspace-root <path>");
     expect(ciOutput).toContain("--fail-on <severity>");
     expect(ciOutput).toContain("--strict-waivers");
     expect(ciOutput).toContain("--html");
@@ -124,6 +127,7 @@ describe("main", () => {
     expect(diff.stderr).toEqual([]);
     expect(diffOutput).toContain("Ohrisk diff");
     expect(diffOutput).toContain("ohrisk diff <baseline-ref>");
+    expect(diffOutput).toContain("--workspace-root <path>");
     expect(diffOutput).toContain("--markdown");
     expect(diffOutput).toContain("--help, -h");
     expect(diffOutput).not.toContain("--sarif");
@@ -172,7 +176,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.160.17"]);
+    expect(stdout).toEqual(["ohrisk 0.160.19"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -2522,7 +2526,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.160.17");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.160.19");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
@@ -7402,5 +7406,129 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
     } finally {
       rmSync(projectDir, { recursive: true, force: true });
     }
+  });
+
+  test("trusts sibling file dependencies only inside an explicit workspace root", async () => {
+    const workspaceRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cli-workspace-root-"));
+    const projectDir = path.join(workspaceRoot, "apps", "web");
+    const packageDir = path.join(workspaceRoot, "packages", "local-package");
+
+    try {
+      mkdirSync(projectDir, { recursive: true });
+      mkdirSync(packageDir, { recursive: true });
+      writeFileSync(
+        path.join(packageDir, "package.json"),
+        JSON.stringify({
+          name: "local-package",
+          version: "1.0.0",
+          private: true
+        }),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectDir, "package.json"),
+        JSON.stringify({
+          name: "fixture-workspace-root",
+          version: "0.0.0",
+          dependencies: {
+            "local-package": "file:../../packages/local-package"
+          }
+        }),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectDir, "package-lock.json"),
+        JSON.stringify({
+          name: "fixture-workspace-root",
+          version: "0.0.0",
+          lockfileVersion: 3,
+          requires: true,
+          packages: {
+            "": {
+              name: "fixture-workspace-root",
+              version: "0.0.0",
+              dependencies: {
+                "local-package": "file:../../packages/local-package"
+              }
+            },
+            "node_modules/local-package": {
+              name: "local-package",
+              version: "1.0.0",
+              resolved: "file:../../packages/local-package"
+            }
+          }
+        }),
+        "utf8"
+      );
+
+      const rejected = createTestIO(projectDir);
+      const rejectedExitCode = await main(["scan", "--json"], rejected.io);
+
+      expect(rejectedExitCode).toBe(2);
+      expect(rejected.stdout).toEqual([]);
+      expect(rejected.stderr.join("\n")).toContain("PACKAGE_EVIDENCE_READ_FAILED");
+      expect(rejected.stderr.join("\n")).toContain("explicit workspace root");
+
+      const accepted = createTestIO(projectDir);
+      const acceptedExitCode = await main(
+        ["scan", "--json", "--workspace-root", workspaceRoot],
+        accepted.io
+      );
+
+      expect(acceptedExitCode).toBe(0);
+      expect(accepted.stderr).toEqual([]);
+      const payload = JSON.parse(accepted.stdout.join("\n")) as {
+        dependencyGraph: {
+          total: number;
+        };
+        licenses: {
+          missing: number;
+        };
+        risks: {
+          unknown: number;
+          low: number;
+        };
+        findings: Array<{
+          packageId: string;
+          severity: string;
+          reason: string;
+          recommendation: string;
+          evidence: string[];
+        }>;
+      };
+      expect(payload.dependencyGraph.total).toBe(1);
+      expect(payload.licenses.missing).toBe(0);
+      expect(payload.risks.unknown).toBe(0);
+      expect(payload.risks.low).toBe(1);
+      expect(payload.findings).toEqual([
+        expect.objectContaining({
+          packageId: "local-package@1.0.0",
+          severity: "low",
+          recommendation: "allow",
+          reason: "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.",
+          evidence: expect.arrayContaining([
+            "license: private package",
+            "package.json private: true",
+            "signals: internal-private"
+          ])
+        })
+      ]);
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects workspace roots that are not existing directories", async () => {
+    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
+    const missingRoot = path.join(io.cwd, "missing-workspace-root");
+
+    const exitCode = await main(["scan", "--workspace-root", missingRoot], io);
+
+    expect(exitCode).toBe(2);
+    expect(stdout).toEqual([]);
+    expect(stderr.join("\n")).toContain("INVALID_ARGUMENT");
+    expect(stderr.join("\n")).toContain("--workspace-root must point to an existing directory.");
+    expect(stderr.join("\n")).toContain("workspaceRootPath:");
+    expect(stderr.join("\n")).toContain("missing-workspace-root");
   });
 });

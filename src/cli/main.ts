@@ -124,7 +124,7 @@ import { renderScanReport } from "../report/scan-report";
 import { openReportFile, type ReportOpener } from "../report/open-report";
 import { writeReportFile, type ReportWriter } from "../report/write-output";
 import { discoverProject, type ProjectInput } from "../project/discover";
-import { exitCodeForError, formatError, type OhriskError } from "../shared/errors";
+import { createError, exitCodeForError, formatError, type OhriskError } from "../shared/errors";
 import { err, isErr, ok, type Result } from "../shared/result";
 
 export type CliIO = {
@@ -196,6 +196,15 @@ async function runDiff(
   command: Extract<CliCommand, { kind: "diff" }>,
   io: CliIO
 ): Promise<number> {
+  const workspaceRoot = resolveWorkspaceRootPath({
+    cwd: io.cwd,
+    workspaceRootPath: command.workspaceRootPath
+  });
+  if (isErr(workspaceRoot)) {
+    io.stderr(formatError(workspaceRoot.error));
+    return exitCodeForError(workspaceRoot.error);
+  }
+
   const currentProject = loadProjectGraph({
     cwd: io.cwd,
     lockfilePath: command.lockfilePath,
@@ -426,7 +435,8 @@ async function runDiff(
   const baselineScanGraph = filterGraphForProdOnly(baselineGraph.value, command.prodOnly);
   const baselineEvidence = await collectEvidenceForGraph({
     graph: baselineScanGraph,
-    projectRoot: currentProject.value.project.rootDir
+    projectRoot: currentProject.value.project.rootDir,
+    ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {})
   });
 
   if (isErr(baselineEvidence)) {
@@ -443,7 +453,8 @@ async function runDiff(
   const current = await evaluateProjectScan({
     ...currentProject.value,
     profile: command.profile,
-    applyWaivers: false
+    applyWaivers: false,
+    ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {})
   });
 
   if (isErr(current)) {
@@ -534,6 +545,15 @@ async function runScan(
   io: CliIO
 ): Promise<number> {
   const now = io.now ?? Date.now;
+  const workspaceRoot = resolveWorkspaceRootPath({
+    cwd: io.cwd,
+    workspaceRootPath: command.workspaceRootPath
+  });
+  if (isErr(workspaceRoot)) {
+    io.stderr(formatError(workspaceRoot.error));
+    return exitCodeForError(workspaceRoot.error);
+  }
+
   const reportProgress = command.outputPath ? createScanProgressReporter(io) : undefined;
   reportProgress?.(0, command.kind === "ci" ? "Starting CI scan..." : "Starting scan...");
 
@@ -544,6 +564,7 @@ async function runScan(
     prodOnly: command.prodOnly,
     applyWaivers: !command.noWaivers,
     now,
+    ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}),
     ...(reportProgress ? { progress: reportProgress } : {})
   });
 
@@ -630,6 +651,7 @@ async function scanProject(input: {
   prodOnly: boolean;
   applyWaivers: boolean;
   now: ScanClock;
+  workspaceRoot?: string;
   progress?: ScanProgressReporter;
 }): Promise<Result<ScanResult, OhriskError>> {
   const loaded = loadProjectGraph({
@@ -648,6 +670,7 @@ async function scanProject(input: {
     profile: input.profile,
     applyWaivers: input.applyWaivers,
     now: input.now,
+    ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
     ...(input.progress ? { progress: input.progress } : {})
   });
 }
@@ -692,6 +715,7 @@ async function evaluateProjectScan(input: {
   profile: Extract<CliCommand, { kind: "scan" | "ci" | "diff" }>["profile"];
   applyWaivers: boolean;
   now: ScanClock;
+  workspaceRoot?: string;
   progress?: ScanProgressReporter;
 }): Promise<Result<ScanResult, OhriskError>> {
   const evidenceProgress = input.progress
@@ -708,6 +732,7 @@ async function evaluateProjectScan(input: {
   const evidence = await collectEvidenceForGraph({
     graph: input.scanGraph,
     projectRoot: input.project.rootDir,
+    ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
     ...(evidenceProgress ? { progress: evidenceProgress } : {})
   });
 
@@ -907,6 +932,7 @@ function filterGraphForProdOnly(graph: DependencyGraph, prodOnly: boolean): Depe
 async function collectEvidenceForGraph(input: {
   graph: DependencyGraph;
   projectRoot: string;
+  workspaceRoot?: string;
   progress?: (progress: EvidenceCollectionProgress) => void;
 }): Promise<Result<LicenseEvidence[], OhriskError>> {
   const embeddedEvidence = input.graph.embeddedEvidence ?? [];
@@ -938,6 +964,7 @@ async function collectEvidenceForGraph(input: {
   const collected = await collectGraphEvidence({
     graph: collectionGraph,
     projectRoot: input.projectRoot,
+    ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
     ...(input.progress
       ? {
           progress: (progress) => {
@@ -1778,9 +1805,9 @@ function renderTopLevelHelp(): string {
     "Ohrisk",
     "",
     "Usage:",
-    "  ohrisk scan [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--output <file>] [--open]",
-    "  ohrisk ci [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
-    "  ohrisk diff <baseline-ref> [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
+    "  ohrisk scan [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--output <file>] [--open]",
+    "  ohrisk ci [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
+    "  ohrisk diff <baseline-ref> [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
     "  ohrisk help [command]",
     "  ohrisk version",
@@ -1796,6 +1823,7 @@ function renderTopLevelHelp(): string {
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
+    "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
     "  --prod                 Exclude development-only dependencies.",
     "  --no-waivers           Ignore local .ohrisk-waivers.json files.",
     "  --json                 Print machine-readable output.",
@@ -1817,11 +1845,12 @@ function renderScanHelp(): string {
     "Ohrisk scan",
     "",
     "Usage:",
-    "  ohrisk scan [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--output <file>] [--open]",
+    "  ohrisk scan [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--output <file>] [--open]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
+    "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
     "  --prod                 Exclude development-only dependencies.",
     "  --no-waivers           Ignore local .ohrisk-waivers.json files.",
     "  --json                 Print machine-readable output.",
@@ -1840,11 +1869,12 @@ function renderCiHelp(): string {
     "Ohrisk ci",
     "",
     "Usage:",
-    "  ohrisk ci [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
+    "  ohrisk ci [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
+    "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
     "  --prod                 Exclude development-only dependencies.",
     "  --no-waivers           Ignore local .ohrisk-waivers.json files.",
     "  --json                 Print machine-readable output.",
@@ -1865,11 +1895,12 @@ function renderDiffHelp(): string {
     "Ohrisk diff",
     "",
     "Usage:",
-    "  ohrisk diff <baseline-ref> [--lockfile <path>] [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
+    "  ohrisk diff <baseline-ref> [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
+    "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
     "  --prod                 Exclude development-only dependencies.",
     "  --json                 Print machine-readable output.",
     "  --markdown             Print a Markdown report for PRs or release notes.",
@@ -1999,6 +2030,39 @@ function reportFormatLabel(command: Extract<CliCommand, { kind: "scan" | "ci" }>
 
 function renderVersion(): string {
   return `ohrisk ${OHRISK_VERSION}`;
+}
+
+function resolveWorkspaceRootPath(input: {
+  cwd: string;
+  workspaceRootPath: string | undefined;
+}): Result<string | undefined, OhriskError> {
+  if (!input.workspaceRootPath) {
+    return ok(undefined);
+  }
+
+  const resolvedPath = path.resolve(input.cwd, input.workspaceRootPath);
+  try {
+    const realPath = realpathSync(resolvedPath);
+    if (!statSync(realPath).isDirectory()) {
+      return err(workspaceRootInvalidError(input.workspaceRootPath, resolvedPath));
+    }
+
+    return ok(realPath);
+  } catch {
+    return err(workspaceRootInvalidError(input.workspaceRootPath, resolvedPath));
+  }
+}
+
+function workspaceRootInvalidError(workspaceRootPath: string, resolvedPath: string): OhriskError {
+  return createError({
+    code: "INVALID_ARGUMENT",
+    category: "invalid_input",
+    message: "--workspace-root must point to an existing directory.",
+    details: {
+      workspaceRootPath,
+      resolvedPath
+    }
+  });
 }
 
 function isCliEntrypoint(metaUrl: string, argvPath: string | undefined): boolean {

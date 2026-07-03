@@ -275,6 +275,46 @@ describe("parseBunLockfile", () => {
       });
   });
 
+  test("preserves path-like workspace package references as local artifact references", () => {
+    const result = parseBunLockText(
+      JSON.stringify({
+        workspaces: {
+          "": {
+            name: "fixture-bun-workspace-local",
+            dependencies: {
+              "workspace-local": "workspace:packages/local"
+            }
+          }
+        },
+        packages: {
+          "workspace-local": [
+            "workspace-local@workspace:packages/local",
+            {
+              dependencies: {}
+            }
+          ]
+        }
+      }),
+      "workspace-local-bun.lock"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes).toEqual([
+      expect.objectContaining({
+        id: "workspace-local@workspace:packages/local",
+        name: "workspace-local",
+        version: "workspace:packages/local",
+        resolved: "workspace:packages/local",
+        dependencyType: "production",
+        direct: true
+      })
+    ]);
+  });
+
   test("preserves nested optional and peer dependency edge types", () => {
     const result = parseBunLockText(
       JSON.stringify({

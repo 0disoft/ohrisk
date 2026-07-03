@@ -284,6 +284,23 @@ With `--open`, Ohrisk opens the report through a temporary `127.0.0.1` browser
 URL after the HTML file is written. If the browser does not open, the scan can
 still succeed; open the printed HTML file path manually.
 
+If a lockfile contains local `file:` package dependencies that point to sibling
+packages outside the current project repository, keep the default fail-closed
+boundary and declare the monorepo/workspace root explicitly:
+
+```bash
+ohrisk scan --workspace-root .. --html --output reports/ohrisk-report.html
+ohrisk ci --workspace-root C:\path\to\workspace --fail-on high
+ohrisk diff main --workspace-root .. --prod
+```
+
+`--workspace-root` must point to an existing directory. Local package evidence
+is then trusted only when the resolved artifact stays inside the project,
+repository root, or that explicit workspace root. Local packages marked
+`"private": true` in `package.json` are treated as internal package evidence
+when they omit public license metadata, so they do not appear as `unknown`
+external OSS findings solely because they have no license field.
+
 Print command help or the installed package version:
 
 ```bash

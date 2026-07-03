@@ -24,6 +24,7 @@ export type CliCommand =
       cyclonedx: boolean;
       noWaivers: boolean;
       lockfilePath?: string;
+      workspaceRootPath?: string;
       outputPath?: string;
       openReport?: boolean;
     }
@@ -38,6 +39,7 @@ export type CliCommand =
       cyclonedx: boolean;
       noWaivers: boolean;
       lockfilePath?: string;
+      workspaceRootPath?: string;
       outputPath?: string;
       openReport?: boolean;
       failOn: RiskSeverity;
@@ -51,6 +53,7 @@ export type CliCommand =
       json: boolean;
       markdown: boolean;
       lockfilePath?: string;
+      workspaceRootPath?: string;
       outputPath?: string;
       failOn?: RiskSeverity;
     }
@@ -185,6 +188,7 @@ function parseScanLikeArgs(
   let cyclonedx = false;
   let noWaivers = false;
   let lockfilePath: string | undefined;
+  let workspaceRootPath: string | undefined;
   let outputPath: string | undefined;
   let openReport = false;
   let failOn: RiskSeverity = "high";
@@ -236,6 +240,16 @@ function parseScanLikeArgs(
         }
 
         lockfilePath = value.value;
+        index += 1;
+        break;
+      }
+      case "--workspace-root": {
+        const value = readRequiredOptionValue(argv, index, "--workspace-root");
+        if (isErr(value)) {
+          return value;
+        }
+
+        workspaceRootPath = value.value;
         index += 1;
         break;
       }
@@ -397,6 +411,7 @@ function parseScanLikeArgs(
       cyclonedx,
       noWaivers,
       ...(lockfilePath ? { lockfilePath } : {}),
+      ...(workspaceRootPath ? { workspaceRootPath } : {}),
       ...(outputPath ? { outputPath } : {}),
       ...(openReport ? { openReport } : {}),
       failOn,
@@ -415,6 +430,7 @@ function parseScanLikeArgs(
     cyclonedx,
     noWaivers,
     ...(lockfilePath ? { lockfilePath } : {}),
+    ...(workspaceRootPath ? { workspaceRootPath } : {}),
     ...(outputPath ? { outputPath } : {}),
     ...(openReport ? { openReport } : {})
   });
@@ -439,6 +455,7 @@ function supportedOptionsFor(kind: "scan" | "ci"): string[] {
     "--cyclonedx",
     "--no-waivers",
     "--lockfile",
+    "--workspace-root",
     "--output",
     "--open",
     "--help",
@@ -594,6 +611,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
   let json = false;
   let markdown = false;
   let lockfilePath: string | undefined;
+  let workspaceRootPath: string | undefined;
   let outputPath: string | undefined;
   let failOn: RiskSeverity | undefined;
   let baselineRef: string | undefined;
@@ -641,6 +659,16 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
         }
 
         lockfilePath = value.value;
+        index += 1;
+        break;
+      }
+      case "--workspace-root": {
+        const value = readRequiredOptionValue(argv, index, "--workspace-root");
+        if (isErr(value)) {
+          return value;
+        }
+
+        workspaceRootPath = value.value;
         index += 1;
         break;
       }
@@ -708,6 +736,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
                   "--profile",
                   "--prod",
                   "--lockfile",
+                  "--workspace-root",
                   "--json",
                   "--markdown",
                   "--output",
@@ -765,6 +794,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
     json,
     markdown,
     ...(lockfilePath ? { lockfilePath } : {}),
+    ...(workspaceRootPath ? { workspaceRootPath } : {}),
     ...(outputPath ? { outputPath } : {}),
     ...(failOn ? { failOn } : {})
   });

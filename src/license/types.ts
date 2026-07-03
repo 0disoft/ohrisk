@@ -3,7 +3,8 @@ export type NormalizedLicenseSignal =
   | "malformed"
   | "custom-text"
   | "commercial-restriction"
-  | "notice-required";
+  | "notice-required"
+  | "internal-private";
 
 export type NormalizedLicenseConfidence =
   | "high"

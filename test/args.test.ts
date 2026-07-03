@@ -113,6 +113,8 @@ describe("parseArgs", () => {
       "scan",
       "--lockfile",
       "package-lock.json",
+      "--workspace-root",
+      "..",
       "--profile",
       "distributed-app",
       "--prod",
@@ -134,7 +136,8 @@ describe("parseArgs", () => {
       html: false,
       cyclonedx: false,
       noWaivers: false,
-      lockfilePath: "package-lock.json"
+      lockfilePath: "package-lock.json",
+      workspaceRootPath: ".."
     });
   });
 
@@ -316,6 +319,8 @@ describe("parseArgs", () => {
       "ci",
       "--lockfile",
       "pnpm-lock.yaml",
+      "--workspace-root",
+      "../..",
       "--profile",
       "distributed-app",
       "--prod",
@@ -341,6 +346,7 @@ describe("parseArgs", () => {
       cyclonedx: false,
       noWaivers: false,
       lockfilePath: "pnpm-lock.yaml",
+      workspaceRootPath: "../..",
       failOn: "review",
       strictWaivers: true
     });
@@ -447,6 +453,8 @@ describe("parseArgs", () => {
       "main",
       "--lockfile",
       "bun.lock",
+      "--workspace-root",
+      "..",
       "--profile",
       "distributed-app",
       "--prod",
@@ -470,6 +478,7 @@ describe("parseArgs", () => {
       json: true,
       markdown: false,
       lockfilePath: "bun.lock",
+      workspaceRootPath: "..",
       outputPath: "reports/diff.json",
       failOn: "unknown"
     });
@@ -568,6 +577,10 @@ describe("parseArgs", () => {
         message: "--lockfile requires a value."
       },
       {
+        argv: ["scan", "--workspace-root", "--prod"],
+        message: "--workspace-root requires a value."
+      },
+      {
         argv: ["scan", "--profile", "--json"],
         message: "--profile requires a value."
       },
@@ -578,6 +591,10 @@ describe("parseArgs", () => {
       {
         argv: ["diff", "main", "--output", "--markdown"],
         message: "--output requires a value."
+      },
+      {
+        argv: ["diff", "main", "--workspace-root", "--markdown"],
+        message: "--workspace-root requires a value."
       },
       {
         argv: ["explain", "MIT", "--output", "--json"],
@@ -682,6 +699,7 @@ describe("parseArgs", () => {
     expect(parsed.error.code).toBe("INVALID_ARGUMENT");
     expect(parsed.error.details?.supportedOptions).toContain("--help");
     expect(parsed.error.details?.supportedOptions).toContain("-h");
+    expect(parsed.error.details?.supportedOptions).toContain("--workspace-root");
   });
 
   test("rejects scan strict waiver checks", () => {

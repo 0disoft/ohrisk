@@ -18,6 +18,7 @@ export type LicenseEvidenceSource =
 
 export type LicenseEvidence = {
   packageId: string;
+  packageJsonPrivate?: boolean;
   packageJsonLicense?: string;
   packageJsonLicenses?: unknown;
   metadataLicense?: string;

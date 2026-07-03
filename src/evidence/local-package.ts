@@ -62,6 +62,7 @@ export function collectLocalPackageEvidence(input: {
 
     return ok({
       packageId: input.packageId,
+      ...readPackagePrivateField(packageJson.value),
       ...readLicenseFields(packageJson.value),
       files: evidenceFiles.files,
       source: "local",
@@ -145,6 +146,12 @@ function readPackageJson(input: {
       })
     );
   }
+}
+
+function readPackagePrivateField(packageJson: Record<string, unknown>): {
+  packageJsonPrivate?: boolean;
+} {
+  return packageJson.private === true ? { packageJsonPrivate: true } : {};
 }
 
 function readLicenseFields(packageJson: Record<string, unknown>): {

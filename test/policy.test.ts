@@ -375,6 +375,30 @@ describe("evaluateLicenseRisk", () => {
     );
   });
 
+  test("allows local private package evidence without license metadata", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "package@1.0.0",
+        choices: [],
+        joiner: "single",
+        signals: ["internal-private"],
+        evidenceSources: ["source: local", "package.json private: true"],
+        confidence: "high"
+      },
+      dependency: baseDependency,
+      profile: "saas"
+    });
+
+    expect(finding.severity).toBe("low");
+    expect(finding.reason).toBe(
+      "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence."
+    );
+    expect(finding.recommendation).toBe("allow");
+    expect(finding.action).toBe("No action needed for this profile.");
+    expect(finding.evidence).toContain("license: private package");
+    expect(finding.evidence).toContain("signals: internal-private");
+  });
+
   test("explains malformed license metadata as a specific unknown risk", () => {
     const finding = evaluateLicenseRisk({
       license: {

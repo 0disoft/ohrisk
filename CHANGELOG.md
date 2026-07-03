@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.160.19 - 2026-07-03
+
+- Local packages marked `"private": true` in `package.json` no longer become
+  `unknown` findings solely because they omit public license metadata; Ohrisk
+  now records them as internal private package evidence and reports them as
+  low-risk local findings unless other license evidence is explicitly risky.
+
+## 0.160.18 - 2026-07-03
+
+- Added `--workspace-root <path>` for `scan`, `ci`, and `diff` so local
+  `file:` package evidence in sibling monorepo packages can be trusted when it
+  stays inside an explicitly declared workspace root.
+- Kept the default local artifact boundary fail-closed: unresolved local package
+  directories outside the project or repository root still fail unless they are
+  inside the explicit workspace root.
+
 ## 0.160.17 - 2026-07-03
 
 - Allowed dependency-free `package.json` manifest projects to scan as empty

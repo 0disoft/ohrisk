@@ -35,6 +35,21 @@ bunx ohrisk scan
 ohrisk scan
 ```
 
+lockfile의 local `file:` package dependency가 현재 project repository 밖의 sibling
+package를 가리키는 monorepo 구조라면 workspace root를 명시한다:
+
+```bash
+ohrisk scan --workspace-root .. --html --output reports/ohrisk-report.html
+ohrisk ci --workspace-root C:\path\to\workspace --fail-on high
+ohrisk diff main --workspace-root .. --prod
+```
+
+`--workspace-root`는 존재하는 디렉터리여야 한다. Local package evidence는
+resolved artifact가 project, repository root, 또는 명시한 workspace root 안에 있을 때만
+읽는다. 로컬 package의 `package.json`에 `"private": true`가 있고 public license metadata가
+없으면 내부 package evidence로 보고, license field가 없다는 이유만으로 `unknown`
+외부 OSS finding으로 올리지 않는다.
+
 지원 입력 파일: 의존성 없는 `package.json` manifest, `bun.lock`, `package-lock.json`, `npm-shrinkwrap.json`,
 `pnpm-lock.yaml`, `deno.lock`, Rust `Cargo.lock`, Go `go.work`, Go `go.mod`, Python
 `pyproject.toml`, Python `pylock.toml`, Python `pylock.<name>.toml`, Python

@@ -55,6 +55,41 @@ describe("collectLocalPackageEvidence", () => {
     expect(result.value.warnings).toEqual([]);
   });
 
+  test("preserves local package.json private markers", () => {
+    const packageDir = mkdtempSync(path.join(tmpdir(), "ohrisk-private-local-package-"));
+
+    try {
+      writeFileSync(
+        path.join(packageDir, "package.json"),
+        JSON.stringify({
+          name: "private-local-package",
+          version: "1.0.0",
+          private: true
+        }),
+        "utf8"
+      );
+
+      const result = collectLocalPackageEvidence({
+        packageId: "private-local-package@1.0.0",
+        packageDir
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value.packageJsonPrivate).toBe(true);
+      expect(result.value.packageJsonLicense).toBeUndefined();
+      expect(result.value.files).toEqual([]);
+      expect(result.value.warnings).toEqual([
+        "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found."
+      ]);
+    } finally {
+      rmSync(packageDir, { recursive: true, force: true });
+    }
+  });
+
   test("reads local license evidence filename variants", () => {
     const packageDir = mkdtempSync(path.join(tmpdir(), "ohrisk-license-variant-"));
 
@@ -1037,7 +1072,9 @@ describe("collectGraphEvidence", () => {
 
       expect(evidence.error.code).toBe("PACKAGE_EVIDENCE_READ_FAILED");
       expect(evidence.error.category).toBe("unsupported_input");
-      expect(evidence.error.message).toBe("Resolved package artifact must stay inside the project or repository root.");
+      expect(evidence.error.message).toBe(
+        "Resolved package artifact must stay inside the project, repository root, or explicit workspace root."
+      );
       expect(evidence.error.details).toMatchObject({
         packageId: "outside-package@1.0.0",
         resolved: "file:../outside-package",
@@ -1045,6 +1082,65 @@ describe("collectGraphEvidence", () => {
       });
     } finally {
       rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("allows file dependency artifact paths inside an explicit workspace root", async () => {
+    const workspaceRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-local-artifact-workspace-"));
+    const projectRoot = path.join(workspaceRoot, "apps", "project");
+    const workspacePackageDir = path.join(workspaceRoot, "packages", "workspace-package");
+    mkdirSync(projectRoot, { recursive: true });
+    mkdirSync(workspacePackageDir, { recursive: true });
+    writeFileSync(
+      path.join(workspacePackageDir, "package.json"),
+      JSON.stringify({
+        name: "workspace-package",
+        version: "1.0.0",
+        license: "MIT"
+      }),
+      "utf8"
+    );
+    writeFileSync(
+      path.join(workspacePackageDir, "LICENSE"),
+      "MIT License workspace fixture.",
+      "utf8"
+    );
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "bun.lock",
+          nodes: [
+            {
+              id: "workspace-package@1.0.0",
+              name: "workspace-package",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved: "file:../../packages/workspace-package",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "workspace-package@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot,
+        workspaceRoot
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+
+      expect(evidence.value[0]).toMatchObject({
+        packageId: "workspace-package@1.0.0",
+        packageJsonLicense: "MIT",
+        source: "local",
+        warnings: []
+      });
+      expect(evidence.value[0]?.files[0]?.text).toContain("MIT License workspace fixture.");
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
     }
   });
 
@@ -1147,7 +1243,9 @@ describe("collectGraphEvidence", () => {
 
       expect(evidence.error.code).toBe("PACKAGE_EVIDENCE_READ_FAILED");
       expect(evidence.error.category).toBe("unsupported_input");
-      expect(evidence.error.message).toBe("Resolved package artifact must stay inside the project or repository root.");
+      expect(evidence.error.message).toBe(
+        "Resolved package artifact must stay inside the project, repository root, or explicit workspace root."
+      );
     } finally {
       rmSync(tempRoot, { recursive: true, force: true });
     }

@@ -128,6 +128,7 @@ type SupportedIntegrityAlgorithm = keyof typeof SUPPORTED_INTEGRITY_DIGEST_BYTES
 export async function collectGraphEvidence(input: {
   graph: DependencyGraph;
   projectRoot: string;
+  workspaceRoot?: string;
   fetchArtifact?: ArtifactFetcher;
   fetchTimeoutMs?: number;
   registryMetadataMaxBytes?: number;
@@ -141,6 +142,13 @@ export async function collectGraphEvidence(input: {
   const total = input.graph.nodes.length;
   if (total === 0) {
     return ok([]);
+  }
+
+  const workspaceRoot = input.workspaceRoot
+    ? resolveTrustedWorkspaceRoot(input.workspaceRoot)
+    : ok(undefined);
+  if (!workspaceRoot.ok) {
+    return err(workspaceRoot.error);
   }
 
   let completed = 0;
@@ -174,6 +182,7 @@ export async function collectGraphEvidence(input: {
       const collected = await collectNodeEvidence({
         node,
         projectRoot: input.projectRoot,
+        ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}),
         fetchArtifact,
         resolveArtifactHost,
         fetchTimeoutMs,
@@ -266,6 +275,7 @@ function normalizeEvidenceConcurrency(value: number | undefined, total: number):
 async function collectNodeEvidence(input: {
   node: DependencyNode;
   projectRoot: string;
+  workspaceRoot?: string;
   fetchArtifact: ArtifactFetcher;
   resolveArtifactHost: ArtifactHostResolver | undefined;
   fetchTimeoutMs: number;
@@ -499,7 +509,8 @@ async function collectNodeEvidence(input: {
       packageId: input.node.id,
       resolved: input.node.resolved,
       integrity: input.node.integrity,
-      projectRoot: input.projectRoot
+      projectRoot: input.projectRoot,
+      workspaceRoot: input.workspaceRoot
     })
     : ok(undefined);
 
@@ -511,6 +522,7 @@ async function collectNodeEvidence(input: {
     return collectLocalPathEvidence({
       node: input.node,
       projectRoot: input.projectRoot,
+      workspaceRoot: input.workspaceRoot,
       localPath: explicitLocalPath.value,
       tarballMaxBytes: input.tarballMaxBytes
     });
@@ -575,6 +587,7 @@ async function collectNodeEvidence(input: {
 function collectLocalPathEvidence(input: {
   node: DependencyNode;
   projectRoot: string;
+  workspaceRoot: string | undefined;
   localPath: string;
   tarballMaxBytes: number;
 }): Result<LicenseEvidence, OhriskError> {
@@ -598,6 +611,7 @@ function collectLocalPathEvidence(input: {
     resolved: input.node.resolved,
     integrity: input.node.integrity,
     projectRoot: input.projectRoot,
+    workspaceRoot: input.workspaceRoot,
     artifactPath: input.localPath
   });
 
@@ -963,6 +977,7 @@ function resolveLocalArtifact(input: {
   resolved: string;
   integrity: string | undefined;
   projectRoot: string;
+  workspaceRoot: string | undefined;
 }): Result<string | undefined, OhriskError> {
   let localPath: string | undefined;
 
@@ -978,6 +993,13 @@ function resolveLocalArtifact(input: {
     localPath = path.resolve(input.projectRoot, specifier);
   }
 
+  if (!localPath && input.resolved.startsWith("workspace:")) {
+    const specifier = decodeFilePathSpecifier(input.resolved.slice("workspace:".length));
+    if (isWorkspaceLocalPathSpecifier(specifier)) {
+      localPath = path.resolve(input.projectRoot, specifier);
+    }
+  }
+
   if (!localPath && (input.resolved.startsWith(".") || path.isAbsolute(input.resolved))) {
     localPath = path.resolve(input.projectRoot, input.resolved);
   }
@@ -986,11 +1008,14 @@ function resolveLocalArtifact(input: {
     return ok(undefined);
   }
 
-  const allowedRoot = resolveLocalArtifactRoot(input.projectRoot);
+  const allowedRoots = resolveLocalArtifactRoots({
+    projectRoot: input.projectRoot,
+    workspaceRoot: input.workspaceRoot
+  });
   const artifactPath = path.resolve(localPath);
 
   if (
-    !isPathInsideOrEqual(artifactPath, allowedRoot)
+    !isPathInsideAnyRoot(artifactPath, allowedRoots)
     && !isVerifiableExternalLocalTarball({
       artifactPath,
       integrity: input.integrity
@@ -1020,6 +1045,13 @@ function decodeFilePathSpecifier(value: string): string {
   } catch {
     return value;
   }
+}
+
+function isWorkspaceLocalPathSpecifier(value: string): boolean {
+  return value.startsWith(".")
+    || value.startsWith("/")
+    || value.includes("/")
+    || value.includes("\\");
 }
 
 function findNodeModulesPackage(input: {
@@ -1409,13 +1441,21 @@ function resolveExistingLocalArtifactPath(input: {
   resolved: string | undefined;
   integrity: string | undefined;
   projectRoot: string;
+  workspaceRoot: string | undefined;
   artifactPath: string;
 }): Result<string, OhriskError> {
-  const allowedRoot = realpathSync(resolveLocalArtifactRoot(input.projectRoot));
+  const allowedRoots = realpathLocalArtifactRoots({
+    projectRoot: input.projectRoot,
+    workspaceRoot: input.workspaceRoot
+  });
+  if (!allowedRoots.ok) {
+    return err(allowedRoots.error);
+  }
+
   const artifactPath = realpathSync(input.artifactPath);
 
   if (
-    !isPathInsideOrEqual(artifactPath, allowedRoot)
+    !isPathInsideAnyRoot(artifactPath, allowedRoots.value)
     && !isVerifiableExternalLocalTarball({
       artifactPath,
       integrity: input.integrity
@@ -1439,7 +1479,7 @@ function localArtifactOutsideProjectError(input: {
   return createError({
     code: "PACKAGE_EVIDENCE_READ_FAILED",
     category: "unsupported_input",
-    message: "Resolved package artifact must stay inside the project or repository root.",
+    message: "Resolved package artifact must stay inside the project, repository root, or explicit workspace root.",
     details: {
       packageId: input.packageId,
       resolved: safeOptionalUrlForErrorDetails(input.resolved),
@@ -1460,6 +1500,59 @@ function isVerifiableExternalLocalTarball(input: {
 function isSupportedLocalTarballPath(artifactPath: string): boolean {
   const normalizedPath = artifactPath.replace(/\\/g, "/").toLowerCase();
   return normalizedPath.endsWith(".tgz") || normalizedPath.endsWith(".tar.gz");
+}
+
+function resolveTrustedWorkspaceRoot(workspaceRoot: string): Result<string, OhriskError> {
+  const resolvedPath = path.resolve(workspaceRoot);
+  try {
+    const realPath = realpathSync(resolvedPath);
+    if (!statSync(realPath).isDirectory()) {
+      return err(workspaceRootInvalidError(workspaceRoot, resolvedPath));
+    }
+
+    return ok(realPath);
+  } catch {
+    return err(workspaceRootInvalidError(workspaceRoot, resolvedPath));
+  }
+}
+
+function workspaceRootInvalidError(workspaceRoot: string, resolvedPath: string): OhriskError {
+  return createError({
+    code: "INVALID_ARGUMENT",
+    category: "invalid_input",
+    message: "--workspace-root must point to an existing directory.",
+    details: {
+      workspaceRoot,
+      resolvedPath
+    }
+  });
+}
+
+function resolveLocalArtifactRoots(input: {
+  projectRoot: string;
+  workspaceRoot: string | undefined;
+}): string[] {
+  return [
+    resolveLocalArtifactRoot(input.projectRoot),
+    ...(input.workspaceRoot ? [input.workspaceRoot] : [])
+  ];
+}
+
+function realpathLocalArtifactRoots(input: {
+  projectRoot: string;
+  workspaceRoot: string | undefined;
+}): Result<string[], OhriskError> {
+  const workspaceRoot = input.workspaceRoot
+    ? resolveTrustedWorkspaceRoot(input.workspaceRoot)
+    : ok(undefined);
+  if (!workspaceRoot.ok) {
+    return err(workspaceRoot.error);
+  }
+
+  return ok([
+    realpathSync(resolveLocalArtifactRoot(input.projectRoot)),
+    ...(workspaceRoot.value ? [workspaceRoot.value] : [])
+  ]);
 }
 
 function resolveLocalArtifactRoot(projectRoot: string): string {
@@ -1486,6 +1579,10 @@ function findNearestGitRoot(startPath: string): string | undefined {
 function isPathInsideOrEqual(childPath: string, parentPath: string): boolean {
   const relativePath = path.relative(parentPath, childPath);
   return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
+}
+
+function isPathInsideAnyRoot(childPath: string, parentPaths: string[]): boolean {
+  return parentPaths.some((parentPath) => isPathInsideOrEqual(childPath, parentPath));
 }
 
 function addIntegrityWarningWhenUnverified(input: {

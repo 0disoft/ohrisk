@@ -127,6 +127,10 @@ function classifySeverity(license: NormalizedLicense, profile: UsageProfile): Ri
     return "high";
   }
 
+  if (license.signals.includes("internal-private") && !license.signals.includes("malformed")) {
+    return "low";
+  }
+
   if (license.signals.includes("missing") || license.signals.includes("malformed")) {
     return "unknown";
   }
@@ -179,6 +183,10 @@ function explainSeverity(
 ): string {
   switch (severity) {
     case "low":
+      if (license.signals.includes("internal-private") && license.choices.length === 0) {
+        return "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.";
+      }
+
       return `License expression is low risk for ${profile}.`;
     case "review":
       return `License expression should be reviewed before shipping under ${profile}.`;
@@ -211,7 +219,11 @@ function explainSeverity(
 
 function buildEvidence(license: NormalizedLicense, dependency: DependencyNode): string[] {
   const evidence = [
-    license.original ? `license: ${license.original}` : "license: missing",
+    license.original
+      ? `license: ${license.original}`
+      : license.signals.includes("internal-private")
+        ? "license: private package"
+        : "license: missing",
     `dependency: ${dependency.dependencyType}`,
     dependency.direct ? "direct dependency" : "transitive dependency",
     ...license.evidenceSources

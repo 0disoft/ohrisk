@@ -20,9 +20,28 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     signals.push("commercial-restriction");
   }
 
+  if (evidence.packageJsonPrivate && evidence.source === "local") {
+    signals.push("internal-private");
+  }
+
   let licenseExpression = readLicenseExpressionEvidence(evidence);
 
   if (!licenseExpression) {
+    if (signals.includes("internal-private")) {
+      if (evidence.files.length > 0) {
+        signals.push("custom-text");
+      }
+
+      return {
+        packageId: evidence.packageId,
+        choices: [],
+        joiner: "single",
+        signals,
+        evidenceSources,
+        confidence: "high"
+      };
+    }
+
     signals.push("missing");
 
     if (evidence.files.length > 0) {
@@ -384,6 +403,10 @@ function describeEvidenceSources(evidence: LicenseEvidence): string[] {
 
   if (evidence.packageJsonLicense) {
     sources.push(`package.json license: ${evidence.packageJsonLicense}`);
+  }
+
+  if (evidence.packageJsonPrivate) {
+    sources.push("package.json private: true");
   }
 
   if (evidence.packageJsonLicenses !== undefined) {

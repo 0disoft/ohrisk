@@ -257,9 +257,22 @@ function parsePackageIdentity(input: string): { name: string; version: string } 
 
 function isLocalArtifactReference(value: string): boolean {
   return value.startsWith("file:")
+    || isWorkspaceLocalArtifactReference(value)
     || value.startsWith(".")
     || path.isAbsolute(value)
     || /^[A-Za-z]:[\\/]/.test(value);
+}
+
+function isWorkspaceLocalArtifactReference(value: string): boolean {
+  if (!value.startsWith("workspace:")) {
+    return false;
+  }
+
+  const specifier = value.slice("workspace:".length);
+  return specifier.startsWith(".")
+    || specifier.startsWith("/")
+    || specifier.includes("/")
+    || specifier.includes("\\");
 }
 
 function indexPackagesByName(records: BunLockPackageRecord[]): Map<string, BunLockPackageRecord[]> {
