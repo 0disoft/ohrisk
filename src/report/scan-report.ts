@@ -162,8 +162,8 @@ function renderHtmlReport(
       ],
       ["Evidence", `${summary.evidence.files} files, ${summary.evidence.warnings} warnings`],
       [
-        "Licenses",
-        `${summary.licenses.highConfidence} high, ${summary.licenses.mediumConfidence} medium, ${summary.licenses.lowConfidence} low confidence`
+        "License confidence",
+        `${summary.licenses.highConfidence} high-confidence, ${summary.licenses.mediumConfidence} medium-confidence, ${summary.licenses.lowConfidence} low-confidence`
       ],
       ["License issues", `${summary.licenses.missing} missing, ${summary.licenses.malformed} malformed`],
       [

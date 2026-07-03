@@ -412,6 +412,9 @@ describe("HTML scan report", () => {
     expect(output).toContain("<dd>High risk review needed</dd>");
     expect(output).toContain("<dt>Active findings</dt>");
     expect(output).toContain("<dd>1 active (1 high, 0 review, 0 unknown, 0 low)</dd>");
+    expect(output).toContain("<dt>License confidence</dt>");
+    expect(output).toContain("<dd>0 high-confidence, 0 medium-confidence, 1 low-confidence</dd>");
+    expect(output).not.toContain("<dd>0 high, 0 medium, 1 low confidence</dd>");
     expect(output).toContain("<dt>Scope</dt>");
     expect(output).toContain("<dd>saas profile, all dependencies</dd>");
     expect(output).toContain("<dt>Review focus</dt>");

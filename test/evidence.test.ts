@@ -657,6 +657,14 @@ describe("collectGraphEvidence", () => {
     expect(validation.error.message).toContain("missing_remote_address");
   });
 
+  test("allows missing socket remote addresses after guarded HTTPS lookup", () => {
+    const validation = validateArtifactSocketRemoteAddress("registry.example.test", undefined, {
+      allowMissingWhenLookupGuarded: true
+    });
+
+    expect(validation.ok).toBe(true);
+  });
+
   test("collects evidence for every package in a parsed graph", async () => {
     const graph = parseBunLockfile(path.join(bunProjectDir, "bun.lock"));
 
@@ -766,6 +774,74 @@ describe("collectGraphEvidence", () => {
     ]);
     expect(completedPackageIds).toHaveLength(4);
     expect(progressConcurrencyValues).toEqual([2, 2, 2, 2]);
+  });
+
+  test("defaults graph evidence collection to eight concurrent workers", async () => {
+    let activeFetches = 0;
+    let maxActiveFetches = 0;
+    const progressConcurrencyValues: number[] = [];
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: Array.from({ length: 10 }, (_, index) => {
+          const name = `default-parallel-${index}`;
+          const tarball = createTarGz({
+            "package/package.json": JSON.stringify({
+              name,
+              version: "1.0.0",
+              license: "MIT"
+            }),
+            "package/LICENSE": `MIT License for ${name}.`
+          });
+
+          return {
+            id: `${name}@1.0.0`,
+            name,
+            version: "1.0.0",
+            ecosystem: "npm",
+            resolved: `https://registry.example.test/${name}/-/${name}-1.0.0.tgz`,
+            integrity: integrityFor(tarball),
+            dependencyType: "production",
+            direct: index === 0,
+            paths: [["root", `${name}@1.0.0`]]
+          };
+        })
+      },
+      projectRoot: bunProjectDir,
+      progress: (progress) => {
+        progressConcurrencyValues.push(progress.concurrency);
+      },
+      fetchArtifact: async (url) => {
+        activeFetches += 1;
+        maxActiveFetches = Math.max(maxActiveFetches, activeFetches);
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          const name = url.match(/default-parallel-\d+/)?.[0] ?? "default-parallel-unknown";
+          return okArtifactResponseFromBuffer(createTarGz({
+            "package/package.json": JSON.stringify({
+              name,
+              version: "1.0.0",
+              license: "MIT"
+            }),
+            "package/LICENSE": `MIT License for ${name}.`
+          }));
+        } finally {
+          activeFetches -= 1;
+        }
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+
+    expect(maxActiveFetches).toBe(8);
+    expect(evidence.value.map((item) => item.packageId)).toEqual(
+      Array.from({ length: 10 }, (_, index) => `default-parallel-${index}@1.0.0`)
+    );
+    expect(progressConcurrencyValues).toEqual(Array.from({ length: 10 }, () => 8));
   });
 
   test("reports the lowest graph index failure from concurrent evidence collection", async () => {

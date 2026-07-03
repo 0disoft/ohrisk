@@ -114,7 +114,7 @@ const PACKAGE_TARBALL_MAX_BYTES = 100 * 1024 * 1024;
 const INSTALLED_PACKAGE_JSON_MAX_BYTES = 1024 * 1024;
 const LOCAL_ARTIFACT_READ_CHUNK_BYTES = 64 * 1024;
 const MAX_ARTIFACT_REDIRECTS = 5;
-const DEFAULT_EVIDENCE_CONCURRENCY = 4;
+const DEFAULT_EVIDENCE_CONCURRENCY = 8;
 
 const SUPPORTED_INTEGRITY_DIGEST_BYTES = {
   sha1: 20,
@@ -2572,7 +2572,8 @@ function defaultArtifactFetcher(
     }, (response) => {
       const socketAddress = validateArtifactSocketRemoteAddress(
         parsedUrl.hostname,
-        response.socket.remoteAddress
+        response.socket.remoteAddress,
+        { allowMissingWhenLookupGuarded: true }
       );
       if (!socketAddress.ok) {
         response.destroy(socketAddress.error);
@@ -2604,9 +2605,14 @@ function defaultArtifactFetcher(
 
 export function validateArtifactSocketRemoteAddress(
   hostname: string,
-  remoteAddress: string | undefined
+  remoteAddress: string | undefined,
+  options?: { allowMissingWhenLookupGuarded?: boolean }
 ): Result<void, Error> {
   if (!remoteAddress) {
+    if (options?.allowMissingWhenLookupGuarded) {
+      return ok(undefined);
+    }
+
     return err(
       new BlockedArtifactRemoteAddressError({
         hostname: normalizeUrlHostname(hostname),

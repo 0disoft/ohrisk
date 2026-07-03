@@ -5,7 +5,7 @@
     "": {
       "name": "ohrisk",
       "dependencies": {
-        "@0disoft/laqu": "1.0.1",
+        "@0disoft/laqu": "latest",
       },
       "devDependencies": {
         "@yarnpkg/lockfile": "1.1.0",
@@ -14,7 +14,7 @@
     },
   },
   "packages": {
-    "@0disoft/laqu": ["@0disoft/laqu@1.0.1", "", {}, "sha512-RLWf2RG3J5tGmmmF8V2N6TLxA/NjiMmrnBHDrmLOGNOhzMTjBtFlf7b6rA3EDX+OCidZQsd8HNby8iUrDVyiFg=="],
+    "@0disoft/laqu": ["@0disoft/laqu@1.0.4", "", {}, "sha512-8CFDatlEMnHYxM4zApmNUPV0g2wosgIkMC3DdD/2K9OYmByqXyYwGi+AzaoS1rMurrJN6937FzOB7Dst/uw+xg=="],
 
     "@yarnpkg/lockfile": ["@yarnpkg/lockfile@1.1.0", "", {}, "sha512-GpSwvyXOcOOlV70vbnzjj4fW5xW/FdUF6nQEt1ENy7m4ZCczi1+/buVUPAqmGfqznsORNFzUMjctTIp8a9tuCQ=="],
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.1 - 2026-07-03
+
+- Updated `@0disoft/laqu` to the `latest` npm tag so packaged Ohrisk installs
+  pick up fixed MIT license metadata instead of reporting Laqu as an
+  unknown-license dependency.
+- Fixed guarded npm registry and tarball fetches on runtimes that omit the
+  connected socket remote address after Ohrisk has already validated DNS
+  resolution.
+- Increased the default license-evidence collection concurrency from 4 to 8
+  workers to reduce scan time on projects with many remote npm artifacts.
+- Clarified the HTML summary card for license evidence confidence so
+  high-confidence license evidence is not confused with high-severity risk
+  findings.
+
 ## 1.0.0 - 2026-07-03
 
 - Raised the packaged CLI runtime requirement from Node.js `>=20.0.0` to

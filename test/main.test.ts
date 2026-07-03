@@ -176,7 +176,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 1.0.0"]);
+    expect(stdout).toEqual(["ohrisk 1.0.1"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -2162,7 +2162,7 @@ describe("main", () => {
       expect(stderr.some((line) => line.includes("Collecting license evidence for"))).toBe(true);
       expectEvidenceProgress(stderr, {
         elapsed: "4s",
-        eta: "4s",
+        eta: "3s",
         average: "4s"
       });
       expect(stderr).toContain("[###################-]  96% Evaluating license risk...");
@@ -2526,7 +2526,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("1.0.0");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("1.0.1");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
