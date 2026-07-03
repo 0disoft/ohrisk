@@ -1,6 +1,7 @@
 import { closeSync, existsSync, openSync, readSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
+import { parsePackageJsonManifestFile } from "../graph/npm-package-json";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 
@@ -55,7 +56,8 @@ export type SupportedLockfileKind =
   | "spdx-json"
   | "spdx-rdf"
   | "spdx-tag-value"
-  | "yarn-lock";
+  | "yarn-lock"
+  | "package-json";
 
 export type ProjectLockfile = {
   kind: SupportedLockfileKind;
@@ -257,7 +259,7 @@ const KNOWN_PROJECT_MANIFESTS = [
   "bom.spdx"
 ] as const;
 
-const SUPPORTED_LOCKFILE_MESSAGE = "Ohrisk currently supports bun.lock, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml, deno.lock, Cargo.lock, go.work, go.mod, Pipfile.lock, pdm.lock, poetry.lock, pyproject.toml, requirements.txt, uv.lock, pylock.toml, pylock.<name>.toml, gradle.lockfile, gradle/dependency-locks, gradle/dependency-locks/*.lockfile, gradle/libs.versions.toml, MODULE.bazel, pom.xml, packages.lock.json, obj/project.assets.json, packages.config, *.csproj, conan.lock, environment.yml, environment.yaml, conda-lock.yml, conda-lock.yaml, vcpkg.json, .terraform.lock.hcl, Chart.lock, Chart.yaml, flake.lock, Packages/packages-lock.json, renv.lock, Manifest.toml, stack.yaml.lock, cpanfile.snapshot, luarocks.lock, pubspec.lock, Package.resolved, Cartfile.resolved, Podfile.lock, mix.lock, rebar.lock, Gemfile.lock, composer.lock, CycloneDX JSON/XML, SPDX JSON/RDF, SPDX tag-value .spdx, and Yarn classic/Berry yarn.lock.";
+const SUPPORTED_LOCKFILE_MESSAGE = "Ohrisk currently supports dependency-free package.json manifests, bun.lock, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml, deno.lock, Cargo.lock, go.work, go.mod, Pipfile.lock, pdm.lock, poetry.lock, pyproject.toml, requirements.txt, uv.lock, pylock.toml, pylock.<name>.toml, gradle.lockfile, gradle/dependency-locks, gradle/dependency-locks/*.lockfile, gradle/libs.versions.toml, MODULE.bazel, pom.xml, packages.lock.json, obj/project.assets.json, packages.config, *.csproj, conan.lock, environment.yml, environment.yaml, conda-lock.yml, conda-lock.yaml, vcpkg.json, .terraform.lock.hcl, Chart.lock, Chart.yaml, flake.lock, Packages/packages-lock.json, renv.lock, Manifest.toml, stack.yaml.lock, cpanfile.snapshot, luarocks.lock, pubspec.lock, Package.resolved, Cartfile.resolved, Podfile.lock, mix.lock, rebar.lock, Gemfile.lock, composer.lock, CycloneDX JSON/XML, SPDX JSON/RDF, SPDX tag-value .spdx, and Yarn classic/Berry yarn.lock.";
 
 export function discoverProject(
   options: DiscoverProjectOptions = {}
@@ -275,8 +277,22 @@ export function discoverProject(
     for (const dir of ancestorsFrom(startDir)) {
       const lockfiles = findKnownLockfiles(dir);
       const hasProjectManifest = hasKnownProjectManifest(dir);
+      const hasKnownLockfileDirectory = hasKnownLockfileDirectoryPath(dir);
 
       if (lockfiles.length === 0) {
+        const packageJsonManifest = hasKnownLockfileDirectory
+          ? undefined
+          : findDependencyFreePackageJsonManifest(dir);
+        if (packageJsonManifest) {
+          return ok({
+            rootDir: dir,
+            lockfile: {
+              kind: "package-json",
+              path: path.join(dir, packageJsonManifest)
+            }
+          });
+        }
+
         if (hasProjectManifest) {
           return err(
             createError({
@@ -611,6 +627,10 @@ function xcodePackageResolvedCandidates(entry: string): string[] {
 
 function supportedKindForLockfilePath(lockfilePath: string): SupportedLockfileKind | undefined {
   const lockfileName = path.basename(lockfilePath);
+  if (lockfileName === "package.json") {
+    return "package-json";
+  }
+
   if (lockfileName.toLowerCase().endsWith(".csproj")) {
     return "dotnet-project";
   }
@@ -678,7 +698,24 @@ function rootDirForLockfilePath(
 }
 
 function supportedLockfileNames(): string[] {
-  return [...Object.keys(SUPPORTED_LOCKFILES), "pylock.<name>.toml", ...KNOWN_NESTED_LOCKFILES, GRADLE_DEPENDENCY_LOCKS_DIR, path.join(GRADLE_DEPENDENCY_LOCKS_DIR, "*.lockfile"), "*.csproj", "*.cdx.json", "*.spdx.json", "*.spdx", "*.spdx.rdf", "*.spdx.rdf.xml", "*.cdx.xml"];
+  return ["package.json (dependency-free)", ...Object.keys(SUPPORTED_LOCKFILES), "pylock.<name>.toml", ...KNOWN_NESTED_LOCKFILES, GRADLE_DEPENDENCY_LOCKS_DIR, path.join(GRADLE_DEPENDENCY_LOCKS_DIR, "*.lockfile"), "*.csproj", "*.cdx.json", "*.spdx.json", "*.spdx", "*.spdx.rdf", "*.spdx.rdf.xml", "*.cdx.xml"];
+}
+
+function findDependencyFreePackageJsonManifest(dir: string): string | undefined {
+  const packageJsonPath = path.join(dir, "package.json");
+  if (!isFile(packageJsonPath)) {
+    return undefined;
+  }
+
+  const parsed = parsePackageJsonManifestFile(packageJsonPath);
+  return parsed.ok ? "package.json" : undefined;
+}
+
+function hasKnownLockfileDirectoryPath(dir: string): boolean {
+  return KNOWN_LOCKFILES.some((lockfile) => {
+    const lockfilePath = path.join(dir, lockfile);
+    return existsSync(lockfilePath) && isDirectory(lockfilePath);
+  });
 }
 
 function swiftProjectRootForPackageResolved(lockfilePath: string): string {

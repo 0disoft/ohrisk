@@ -35,7 +35,7 @@ bunx ohrisk scan
 ohrisk scan
 ```
 
-지원 입력 파일: `bun.lock`, `package-lock.json`, `npm-shrinkwrap.json`,
+지원 입력 파일: 의존성 없는 `package.json` manifest, `bun.lock`, `package-lock.json`, `npm-shrinkwrap.json`,
 `pnpm-lock.yaml`, `deno.lock`, Rust `Cargo.lock`, Go `go.work`, Go `go.mod`, Python
 `pyproject.toml`, Python `pylock.toml`, Python `pylock.<name>.toml`, Python
 `uv.lock`, Python Pipenv `Pipfile.lock`, Python PDM `pdm.lock`, Python `poetry.lock`, Python

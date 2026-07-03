@@ -99,7 +99,7 @@ Ohrisk is distributed as an npm package, and the packaged CLI runs on Node.js
 `>=20.0.0`. Bun is used for Ohrisk development, tests, and packaging, but users
 do not need Bun installed to run the published CLI.
 
-Ohrisk scans Bun, npm package-lock/shrinkwrap, pnpm, Deno npm, Yarn, Rust Cargo,
+Ohrisk scans dependency-free `package.json` manifests, Bun, npm package-lock/shrinkwrap, pnpm, Deno npm, Yarn, Rust Cargo,
 Go modules and workspaces, Python pyproject/pylock/uv/Pipenv/PDM/Poetry/requirements.txt, Java Gradle lockfiles and version catalogs,
 Maven `pom.xml`, Bazel `MODULE.bazel`, .NET NuGet lockfiles, Conan locks, Conda environment specs and locks, vcpkg manifests, Haskell Stack locks, Perl Carton snapshots, LuaRocks locks, Dart/Flutter Pub locks,
 Terraform provider locks, Helm chart dependency metadata, Nix flake locks,
@@ -112,7 +112,7 @@ package manager you use to install the CLI.
 
 The current implementation is the first local dependency-risk vertical slice:
 
-- Bun `bun.lock`, npm `package-lock.json`, npm `npm-shrinkwrap.json`, pnpm `pnpm-lock.yaml`, Deno `deno.lock`, Rust `Cargo.lock`, Go `go.work`, Go `go.mod`, Python `pyproject.toml`, Python `pylock.toml`, named Python `pylock.<name>.toml`, Python `uv.lock`, Python Pipenv `Pipfile.lock`, Python PDM `pdm.lock`, Python `poetry.lock`, Python `requirements.txt`, Java Gradle `gradle.lockfile`, Java Gradle `gradle/dependency-locks` directories and `gradle/dependency-locks/*.lockfile`, Java Gradle `gradle/libs.versions.toml`, Java Maven `pom.xml`, Bazel `MODULE.bazel`, .NET NuGet `packages.lock.json`, .NET restored `obj/project.assets.json`, .NET NuGet `packages.config`, .NET `*.csproj`, Conan `conan.lock`, Conda `environment.yml`, Conda `environment.yaml`, Conda `conda-lock.yml`, Conda `conda-lock.yaml`, vcpkg `vcpkg.json`, Terraform `.terraform.lock.hcl`, Helm `Chart.lock`, Helm `Chart.yaml`, Nix `flake.lock`, Unity Package Manager `Packages/packages-lock.json`, R `renv.lock`, Julia `Manifest.toml`, Haskell Stack `stack.yaml.lock`, Perl Carton `cpanfile.snapshot`, LuaRocks `luarocks.lock`, Dart/Flutter `pubspec.lock`, SwiftPM `Package.resolved`, Carthage `Cartfile.resolved`, CocoaPods `Podfile.lock`, Elixir Mix `mix.lock`, Erlang Rebar3 `rebar.lock`, Ruby Bundler `Gemfile.lock`, PHP Composer `composer.lock`, CycloneDX JSON/XML, SPDX JSON/RDF, SPDX tag-value `.spdx`, and Yarn classic/Berry `yarn.lock` project discovery
+- dependency-free `package.json` manifests, Bun `bun.lock`, npm `package-lock.json`, npm `npm-shrinkwrap.json`, pnpm `pnpm-lock.yaml`, Deno `deno.lock`, Rust `Cargo.lock`, Go `go.work`, Go `go.mod`, Python `pyproject.toml`, Python `pylock.toml`, named Python `pylock.<name>.toml`, Python `uv.lock`, Python Pipenv `Pipfile.lock`, Python PDM `pdm.lock`, Python `poetry.lock`, Python `requirements.txt`, Java Gradle `gradle.lockfile`, Java Gradle `gradle/dependency-locks` directories and `gradle/dependency-locks/*.lockfile`, Java Gradle `gradle/libs.versions.toml`, Java Maven `pom.xml`, Bazel `MODULE.bazel`, .NET NuGet `packages.lock.json`, .NET restored `obj/project.assets.json`, .NET NuGet `packages.config`, .NET `*.csproj`, Conan `conan.lock`, Conda `environment.yml`, Conda `environment.yaml`, Conda `conda-lock.yml`, Conda `conda-lock.yaml`, vcpkg `vcpkg.json`, Terraform `.terraform.lock.hcl`, Helm `Chart.lock`, Helm `Chart.yaml`, Nix `flake.lock`, Unity Package Manager `Packages/packages-lock.json`, R `renv.lock`, Julia `Manifest.toml`, Haskell Stack `stack.yaml.lock`, Perl Carton `cpanfile.snapshot`, LuaRocks `luarocks.lock`, Dart/Flutter `pubspec.lock`, SwiftPM `Package.resolved`, Carthage `Cartfile.resolved`, CocoaPods `Podfile.lock`, Elixir Mix `mix.lock`, Erlang Rebar3 `rebar.lock`, Ruby Bundler `Gemfile.lock`, PHP Composer `composer.lock`, CycloneDX JSON/XML, SPDX JSON/RDF, SPDX tag-value `.spdx`, and Yarn classic/Berry `yarn.lock` project discovery
 - Node-compatible packaged CLI entrypoint for npm, pnpm, Yarn, npx, pnpm dlx, and yarn dlx users
 - explicit dependency input selection with `--lockfile <path>` for projects that contain more than one supported input file
 - direct and transitive dependency graph extraction when the dependency input records parent/child relationships
@@ -294,6 +294,7 @@ ohrisk version
 
 Supported dependency input files:
 
+- dependency-free `package.json` manifests, reported as an empty dependency graph
 - `bun.lock`
 - `package-lock.json` with either a modern `packages` section or an npm v1 dependency tree
 - `npm-shrinkwrap.json` with the same package-lock parser support

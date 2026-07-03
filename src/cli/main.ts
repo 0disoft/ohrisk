@@ -58,6 +58,10 @@ import { parseStackLockfile, parseStackLockText } from "../graph/haskell-stack-l
 import { parseLuarocksLockfile, parseLuarocksLockText } from "../graph/lua-luarocks-lock";
 import { parseNixFlakeLockfile, parseNixFlakeLockText } from "../graph/nix-flake-lock";
 import { parseBunLockfile, parseBunLockText } from "../graph/npm-bun-lock";
+import {
+  parsePackageJsonManifestFile,
+  parsePackageJsonManifestText
+} from "../graph/npm-package-json";
 import { parsePackageLockfile, parsePackageLockText } from "../graph/npm-package-lock";
 import { parsePnpmLockfile, parsePnpmLockText } from "../graph/npm-pnpm-lock";
 import {
@@ -859,6 +863,8 @@ function parseProjectLockfile(project: ProjectInput): Result<DependencyGraph, Oh
       return parseSpdxTagValueFile(project.lockfile.path);
     case "yarn-lock":
       return parseYarnLockfile(project.lockfile.path);
+    case "package-json":
+      return parsePackageJsonManifestFile(project.lockfile.path);
   }
 }
 
@@ -1261,6 +1267,8 @@ function parseLockfileTextForKind(input: {
         packageJsonPath: input.packageJsonPath,
         workspacePackageJsonTexts: input.workspacePackageJsonTexts
       });
+    case "package-json":
+      return parsePackageJsonManifestText(input.text, input.lockfilePath);
   }
 }
 

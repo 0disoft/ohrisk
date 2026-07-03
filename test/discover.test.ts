@@ -2229,15 +2229,45 @@ describe("discoverProject", () => {
     expect(result.value.rootDir).toBe(path.join(fixturesDir, "bun-project"));
   });
 
-  test("rejects projects without a supported lockfile", () => {
+  test("finds a dependency-free package.json manifest project", () => {
     const result = discoverProject({ cwd: path.join(fixturesDir, "no-lockfile") });
 
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      throw new Error("Expected discovery to fail.");
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
     }
 
-    expect(result.error.code).toBe("NO_SUPPORTED_LOCKFILE");
+    expect(result.value.rootDir).toBe(path.join(fixturesDir, "no-lockfile"));
+    expect(result.value.lockfile.kind).toBe("package-json");
+    expect(path.basename(result.value.lockfile.path)).toBe("package.json");
+  });
+
+  test("rejects package.json dependency projects without a supported lockfile", () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-package-json-needs-lockfile-"));
+
+    try {
+      writeFileSync(
+        path.join(projectDir, "package.json"),
+        JSON.stringify({
+          name: "fixture-needs-lockfile",
+          dependencies: {
+            "risk-package": "1.0.0"
+          }
+        }),
+        "utf8"
+      );
+
+      const result = discoverProject({ cwd: projectDir });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected discovery to fail.");
+      }
+
+      expect(result.error.code).toBe("NO_SUPPORTED_LOCKFILE");
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
   });
 
   test("rejects projects with multiple lockfiles", () => {

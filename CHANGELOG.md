@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.160.17 - 2026-07-03
+
+- Allowed dependency-free `package.json` manifest projects to scan as empty
+  dependency graphs, so placeholder and boundary repositories can still produce
+  JSON, Markdown, HTML, SARIF, or CycloneDX reports.
+- Kept lockfile enforcement for `package.json` manifests that declare
+  dependencies, dev dependencies, peer dependencies, bundled dependencies, or
+  workspaces.
+
 ## 0.160.16 - 2026-07-02
 
 - Hardened report output writes so `--output` accepts only project-relative

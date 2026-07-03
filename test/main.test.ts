@@ -172,7 +172,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.160.16"]);
+    expect(stdout).toEqual(["ohrisk 0.160.17"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -2522,7 +2522,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.160.16");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.160.17");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
@@ -7336,12 +7336,71 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
     expect(payload.finding.recommendation).toBe("allow");
   });
 
-  test("returns user-input failure for unsupported projects", async () => {
+  test("scans dependency-free package.json manifest projects", async () => {
     const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "no-lockfile"));
     const exitCode = await main(["scan"], io);
 
-    expect(exitCode).toBe(2);
-    expect(stdout).toEqual([]);
-    expect(stderr.join("\n")).toContain("NO_SUPPORTED_LOCKFILE");
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+
+    const output = stdout.join("\n");
+    expect(output).toContain("Ohrisk scan");
+    expect(output).toContain("Lockfile: package.json (package-json)");
+    expect(output).toContain("Dependencies: 0 total, 0 direct, 0 transitive");
+    expect(output).toContain("Risks: 0 high, 0 review, 0 unknown, 0 low");
+    expect(output).toContain("Next: No action needed for this profile.");
+  });
+
+  test("writes HTML reports for dependency-free package.json manifest projects", async () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-empty-package-json-html-"));
+    const reportPath = path.join(projectDir, "reports", "ohrisk.html");
+
+    try {
+      writeFileSync(
+        path.join(projectDir, "package.json"),
+        JSON.stringify({
+          name: "fixture-empty-package-json"
+        }),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectDir);
+      const exitCode = await main(["scan", "--html", "--output", "reports/ohrisk.html"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toEqual([]);
+      expect(stderr).toContain(`Wrote report to ${reportPath}`);
+      expect(readFileSync(reportPath, "utf8")).toContain("<!doctype html>");
+      expect(readFileSync(reportPath, "utf8")).toContain("0 total, 0 direct, 0 transitive");
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("returns user-input failure for package.json dependency projects without a supported lockfile", async () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-no-lockfile-dependencies-"));
+
+    try {
+      writeFileSync(
+        path.join(projectDir, "package.json"),
+        JSON.stringify({
+          name: "fixture-no-lockfile-dependencies",
+          dependencies: {
+            "risk-package": "1.0.0"
+          }
+        }),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectDir);
+      const exitCode = await main(["scan"], io);
+
+      expect(exitCode).toBe(2);
+      expect(stdout).toEqual([]);
+      expect(stderr.join("\n")).toContain("NO_SUPPORTED_LOCKFILE");
+      expect(stderr.join("\n")).toContain("Project manifest found, but no supported lockfile exists.");
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
   });
 });
