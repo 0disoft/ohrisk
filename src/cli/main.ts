@@ -1,4 +1,10 @@
 #!/usr/bin/env node
+import {
+  createProgressRuntime,
+  type ProgressRuntime,
+  type StreamTarget,
+  type TaskHandle
+} from "@0disoft/laqu";
 import { readdirSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -131,6 +137,8 @@ export type CliIO = {
   cwd: string;
   stdout: (text: string) => void;
   stderr: (text: string) => void;
+  stderrStream?: StreamTarget;
+  env?: Record<string, string | undefined>;
   now?: () => number;
   readRefFile?: GitRefFileReader;
   writeReport?: ReportWriter;
@@ -138,7 +146,10 @@ export type CliIO = {
 };
 
 type ScanClock = () => number;
-type ScanProgressReporter = (percent: number, message: string) => void;
+type ScanProgressCloseStatus = "success" | "failure";
+type ScanProgressReporter = ((percent: number, message: string) => void) & {
+  close?: (status?: ScanProgressCloseStatus) => Promise<void>;
+};
 type ScanResult = {
   project: ProjectInput;
   graph: DependencyGraph;
@@ -569,6 +580,7 @@ async function runScan(
   });
 
   if (isErr(scanned)) {
+    await closeScanProgressReporter(reportProgress, "failure");
     io.stderr(formatError(scanned.error));
     return exitCodeForError(scanned.error);
   }
@@ -607,11 +619,13 @@ async function runScan(
   });
 
   if (isErr(emitted)) {
+    await closeScanProgressReporter(reportProgress, "failure");
     io.stderr(formatError(emitted.error));
     return exitCodeForError(emitted.error);
   }
 
   reportProgress?.(SCAN_PROGRESS_READY_PERCENT, "Report ready.");
+  await closeScanProgressReporter(reportProgress, "success");
   if (reportProgress && emitted.value) {
     io.stderr(`Wrote report to ${emitted.value}`);
   }
@@ -2000,12 +2014,71 @@ function formatReportOpenWarning(error: OhriskError): string {
 }
 
 function createScanProgressReporter(io: CliIO): ScanProgressReporter {
+  if (!io.stderrStream?.isTTY) {
+    return createLegacyScanProgressReporter(io);
+  }
+
+  const runtime = createProgressRuntime({
+    stderr: io.stderrStream,
+    format: "human",
+    progressPolicy: "auto",
+    env: io.env ?? process.env,
+    maxRows: 1,
+    manageProcessLifecycle: false,
+    theme: {
+      runningSymbol: ">",
+      successSymbol: "ok",
+      progressComplete: "#",
+      progressIncomplete: "-",
+      overflowMarker: "..."
+    }
+  });
+  const task = runtime.createTask("Ohrisk scan", { total: 100 });
+
+  const reporter = ((rawPercent, message) => {
+    updateLaquScanTask(task, rawPercent, message);
+  }) as ScanProgressReporter;
+  reporter.close = (status) => closeLaquScanProgress(runtime, task, status);
+  return reporter;
+}
+
+function createLegacyScanProgressReporter(io: CliIO): ScanProgressReporter {
   return (rawPercent, message) => {
-    const percent = Math.round(Math.min(100, Math.max(0, rawPercent)));
+    const percent = normalizeScanProgressPercent(rawPercent);
     const filled = Math.round((percent / 100) * SCAN_PROGRESS_BAR_WIDTH);
     const bar = `${"#".repeat(filled)}${"-".repeat(SCAN_PROGRESS_BAR_WIDTH - filled)}`;
     io.stderr(`[${bar}] ${percent.toString().padStart(3, " ")}% ${message}`);
   };
+}
+
+function updateLaquScanTask(task: TaskHandle, rawPercent: number, message: string): void {
+  const percent = normalizeScanProgressPercent(rawPercent);
+  task.setCompleted(percent);
+  task.setMessage(`${percent.toString().padStart(3, " ")}% ${message}`);
+}
+
+async function closeLaquScanProgress(
+  runtime: ProgressRuntime,
+  task: TaskHandle,
+  status: ScanProgressCloseStatus = "success"
+): Promise<void> {
+  if (status === "success") {
+    task.succeed("Report ready.");
+  } else {
+    task.fail("Scan failed.");
+  }
+  await runtime.close();
+}
+
+async function closeScanProgressReporter(
+  reporter: ScanProgressReporter | undefined,
+  status: ScanProgressCloseStatus = "success"
+): Promise<void> {
+  await reporter?.close?.(status);
+}
+
+function normalizeScanProgressPercent(rawPercent: number): number {
+  return Math.round(Math.min(100, Math.max(0, rawPercent)));
 }
 
 function reportFormatLabel(command: Extract<CliCommand, { kind: "scan" | "ci" }>): string {
@@ -2097,7 +2170,9 @@ function defaultIO(): CliIO {
   return {
     cwd: process.cwd(),
     stdout: (text) => process.stdout.write(`${text}\n`),
-    stderr: (text) => process.stderr.write(`${text}\n`)
+    stderr: (text) => process.stderr.write(`${text}\n`),
+    stderrStream: process.stderr,
+    env: process.env
   };
 }
 

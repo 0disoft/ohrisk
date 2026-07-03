@@ -12,7 +12,8 @@ describe("README report contract", () => {
     expect(readme).toContain("Beginner HTML report flow on Windows PowerShell");
     expect(readme).toContain("npm install -g ohrisk@latest");
     expect(readme).toContain("ohrisk scan --html --output reports\\ohrisk-report.html --open");
-    expect(readme).toContain("The scan prints a progress bar");
+    expect(readme).toContain("The scan prints live terminal progress");
+    expect(readme).toContain("plain append-only progress lines");
     expect(readme).toContain("Wrote report to ...");
     expect(readme).toContain("temporary `127.0.0.1` browser");
   });

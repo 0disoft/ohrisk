@@ -32,18 +32,18 @@ describe("package metadata", () => {
     };
 
     expect(packageJson.name).toBe("ohrisk");
-    expect(packageJson.version).toBe("0.160.19");
+    expect(packageJson.version).toBe("1.0.0");
     expect(packageJson.private).toBeUndefined();
     expect(packageJson.license).toBe("MIT");
     expect(packageJson.packageManager).toBe("bun@1.3.14");
-    expect(packageJson.engines?.node).toBe(">=20.0.0");
+    expect(packageJson.engines?.node).toBe(">=24.0.0");
     expect(packageJson.bin).toEqual({
       ohrisk: "dist/cli.js"
     });
     expect(packageJson.files).toEqual(["CHANGELOG.md", "dist"]);
     expect(packageJson.publishConfig?.access).toBe("public");
     expect(packageJson.repository?.url).toBe("git+https://github.com/0disoft/ohrisk.git");
-    expect(packageJson.dependencies).toBeUndefined();
+    expect(packageJson.dependencies?.["@0disoft/laqu"]).toBe("1.0.1");
     expect(packageJson.devDependencies?.["@yarnpkg/lockfile"]).toBe("1.1.0");
     expect(packageJson.devDependencies?.yaml).toBe("2.9.0");
     expect(packageJson.scripts?.build).toBe("bun scripts/build.ts");
@@ -61,7 +61,7 @@ describe("package metadata", () => {
 
     expect(mainEntrypoint.startsWith("#!/usr/bin/env node")).toBe(true);
     expect(mainEntrypoint).toContain("isCliEntrypoint(import.meta.url, process.argv[1])");
-    expect(versionSource).toContain('OHRISK_VERSION = "0.160.19"');
+    expect(versionSource).toContain('OHRISK_VERSION = "1.0.0"');
     expect(buildScript).toContain("assertVersionContract()");
     expect(buildScript).toContain("Version mismatch: package.json declares");
     expect(buildScript).toContain('packages: "bundle"');

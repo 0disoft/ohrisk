@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0 - 2026-07-03
+
+- Raised the packaged CLI runtime requirement from Node.js `>=20.0.0` to
+  Node.js `>=24.0.0`.
+- `scan` and `ci` output-file progress now uses `@0disoft/laqu` for live TTY
+  rendering while keeping plain append-only progress lines for CI and
+  redirected stderr.
+
 ## 0.160.19 - 2026-07-03
 
 - Local packages marked `"private": true` in `package.json` no longer become

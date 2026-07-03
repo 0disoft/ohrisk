@@ -176,7 +176,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 0.160.19"]);
+    expect(stdout).toEqual(["ohrisk 1.0.0"]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -2526,7 +2526,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("0.160.19");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("1.0.0");
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",
@@ -7376,6 +7376,43 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       expect(stderr).toContain(`Wrote report to ${reportPath}`);
       expect(readFileSync(reportPath, "utf8")).toContain("<!doctype html>");
       expect(readFileSync(reportPath, "utf8")).toContain("0 total, 0 direct, 0 transitive");
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("uses live stderr stream progress when output scans run in a TTY", async () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-empty-package-json-tty-"));
+    const reportPath = path.join(projectDir, "reports", "ohrisk.html");
+    const progressChunks: string[] = [];
+
+    try {
+      writeFileSync(
+        path.join(projectDir, "package.json"),
+        JSON.stringify({
+          name: "fixture-empty-package-json"
+        }),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectDir);
+      io.stderrStream = {
+        isTTY: true,
+        columns: 100,
+        write: (chunk) => {
+          progressChunks.push(chunk);
+          return true;
+        }
+      };
+
+      const exitCode = await main(["scan", "--html", "--output", "reports/ohrisk.html"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toEqual([]);
+      expect(stderr).toEqual([`Wrote report to ${reportPath}`]);
+      expect(progressChunks.join("")).toContain("Ohrisk scan");
+      expect(progressChunks.join("")).toContain("Report ready.");
+      expect(readFileSync(reportPath, "utf8")).toContain("<!doctype html>");
     } finally {
       rmSync(projectDir, { recursive: true, force: true });
     }

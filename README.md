@@ -96,7 +96,7 @@ ohrisk scan --profile distributed-app
 ## Runtime
 
 Ohrisk is distributed as an npm package, and the packaged CLI runs on Node.js
-`>=20.0.0`. Bun is used for Ohrisk development, tests, and packaging, but users
+`>=24.0.0`. Bun is used for Ohrisk development, tests, and packaging, but users
 do not need Bun installed to run the published CLI.
 
 Ohrisk scans dependency-free `package.json` manifests, Bun, npm package-lock/shrinkwrap, pnpm, Deno npm, Yarn, Rust Cargo,
@@ -277,12 +277,14 @@ cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
 ```
 
-The scan prints a progress bar while it reads the project, collects license
-evidence, evaluates risk, and writes the report. When the scan succeeds, the
-terminal prints `Wrote report to ...` so you can see the exact saved file path.
-With `--open`, Ohrisk opens the report through a temporary `127.0.0.1` browser
-URL after the HTML file is written. If the browser does not open, the scan can
-still succeed; open the printed HTML file path manually.
+The scan prints live terminal progress while it reads the project, collects
+license evidence, evaluates risk, and writes the report. In CI or redirected
+stderr, Ohrisk keeps the plain append-only progress lines so logs stay readable.
+When the scan succeeds, the terminal prints `Wrote report to ...` so you can see
+the exact saved file path. With `--open`, Ohrisk opens the report through a
+temporary `127.0.0.1` browser URL after the HTML file is written. If the browser
+does not open, the scan can still succeed; open the printed HTML file path
+manually.
 
 If a lockfile contains local `file:` package dependencies that point to sibling
 packages outside the current project repository, keep the default fail-closed

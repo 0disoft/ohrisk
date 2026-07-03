@@ -1,12 +1,12 @@
 {
   "name": "ohrisk",
-  "version": "0.160.19",
+  "version": "1.0.0",
   "description": "Catch open-source license risk before your PR ships.",
   "license": "MIT",
   "type": "module",
   "packageManager": "bun@1.3.14",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.0.0"
   },
   "bin": {
     "ohrisk": "dist/cli.js"
@@ -118,5 +118,8 @@
   "devDependencies": {
     "@yarnpkg/lockfile": "1.1.0",
     "yaml": "2.9.0"
+  },
+  "dependencies": {
+    "@0disoft/laqu": "1.0.1"
   }
 }

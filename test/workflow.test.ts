@@ -22,7 +22,7 @@ describe("release check workflow", () => {
     };
 
     expect(packageJson.packageManager).toBe("bun@1.3.14");
-    expect(packageJson.engines?.node).toBe(">=20.0.0");
+    expect(packageJson.engines?.node).toBe(">=24.0.0");
     expect(workflow).toContain("name: Release Check");
     expect(workflow).toContain("pull_request:");
     expect(workflow).toContain("push:");

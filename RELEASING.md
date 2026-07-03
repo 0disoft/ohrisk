@@ -9,7 +9,7 @@ settings.
 
 - `main` is clean and pushed.
 - Bun is available locally for development, tests, and packaging. The published
-  CLI runs on Node.js `>=20.0.0`.
+  CLI runs on Node.js `>=24.0.0`.
 - GitHub Actions has access to an `NPM_TOKEN` secret that can publish the
   `ohrisk` package.
 - The npm registry does not already contain the release version.
@@ -35,8 +35,8 @@ file's example tag when needed, push `main`, then push a version tag matching
 `package.json`:
 
 ```bash
-git tag v0.160.19
-git push origin v0.160.19
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 The publish workflow verifies that the tag version matches `package.json`, runs
