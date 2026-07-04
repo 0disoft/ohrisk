@@ -15,8 +15,18 @@ Use the dedicated action when you want the shortest PR gate:
 
 The action installs the published npm package, runs `ohrisk ci` by default, and
 fails the step when findings meet the configured threshold. Use `@main` when
-you want to track the latest action wiring and latest npm package; pin a
-version tag instead when reproducible CI matters more than automatic updates.
+you want to track the latest action wiring and latest npm package. Pin a
+version tag when reproducible CI matters; `0disoft/ohrisk@v1.0.2` installs
+`ohrisk@1.0.2` by default.
+
+Set the `version` input when you intentionally want the action wrapper and npm
+CLI package to differ:
+
+```yaml
+- uses: 0disoft/ohrisk@main
+  with:
+    version: latest
+```
 
 Generate an HTML report artifact:
 

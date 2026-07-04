@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const packageVersion = readPackageVersion();
 
 describe("release check workflow", () => {
   test("runs the release-relevant local gates", () => {
@@ -91,7 +92,7 @@ describe("Ohrisk GitHub Action", () => {
 
     expect(action.name).toBe("Ohrisk");
     expect(action.runs?.using).toBe("composite");
-    expect(action.inputs?.version?.default).toBe("latest");
+    expect(action.inputs?.version?.default).toBe("");
     expect(action.inputs?.["node-version"]?.default).toBe("24");
     expect(action.inputs?.["setup-node"]?.default).toBe("true");
     expect(action.inputs?.command?.default).toBe("ci");
@@ -103,7 +104,11 @@ describe("Ohrisk GitHub Action", () => {
 
     expect(action.runs?.steps?.some((step) => step.uses === "actions/setup-node@v6")).toBe(true);
     expect(action.runs?.steps?.some((step) => step.id === "run" && step.shell === "bash")).toBe(true);
-    expect(actionSource).toContain('npm install -g "ohrisk@${OHRISK_VERSION}"');
+    expect(actionSource).toContain("OHRISK_ACTION_REF: ${{ github.action_ref }}");
+    expect(actionSource).toContain('case "$OHRISK_ACTION_REF" in');
+    expect(actionSource).toContain('version="${OHRISK_ACTION_REF#v}"');
+    expect(actionSource).toContain('*) version="latest" ;;');
+    expect(actionSource).toContain('npm install -g "ohrisk@${version}"');
     expect(actionSource).toContain("args=()");
     expect(actionSource).toContain('ohrisk "${args[@]}"');
     expect(actionSource).not.toContain("extra-args");
@@ -128,6 +133,9 @@ describe("Ohrisk GitHub Action", () => {
     expect(docs).toContain("## Dedicated action");
     expect(docs).toContain("uses: 0disoft/ohrisk@main");
     expect(docs).toContain("track the latest action wiring and latest npm package");
+    expect(docs).toContain(`0disoft/ohrisk@v${packageVersion}`);
+    expect(docs).toContain(`\`ohrisk@${packageVersion}\` by default`);
+    expect(docs).toContain("version: latest");
     expect(docs).toContain("format: html");
     expect(docs).toContain("path: reports/ohrisk.html");
     expect(docs).toContain("must be repository-relative paths");
@@ -136,3 +144,15 @@ describe("Ohrisk GitHub Action", () => {
     expect(docs).not.toContain("does not provide a dedicated GitHub Action");
   });
 });
+
+function readPackageVersion(): string {
+  const packageJson = JSON.parse(
+    readFileSync(path.join(repoRoot, "package.json"), "utf8")
+  ) as { version?: unknown };
+
+  if (typeof packageJson.version !== "string") {
+    throw new Error("package.json must contain a string version.");
+  }
+
+  return packageJson.version;
+}

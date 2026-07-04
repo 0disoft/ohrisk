@@ -141,7 +141,7 @@ function parseLockfileJson(
       createError({
         code: "BUN_LOCK_PARSE_FAILED",
         category: "unsupported_input",
-        message: "Failed to parse bun.lock. Ohrisk v0 expects Bun's text lockfile shape.",
+        message: "Failed to parse bun.lock. Ohrisk expects Bun's text lockfile shape.",
         details: {
           lockfilePath,
           cause: cause instanceof Error ? cause.message : String(cause)

@@ -100,7 +100,7 @@ function readPyprojectDependencies(
         return err(createError({
           code: "PYPROJECT_PARSE_FAILED",
           category: "unsupported_input",
-          message: "Failed to parse pyproject.toml dependency entry. Ohrisk v0 requires exact name==version PEP 621 dependency pins.",
+          message: "Failed to parse pyproject.toml dependency entry. Ohrisk requires exact name==version PEP 621 dependency pins.",
           details: {
             lockfilePath,
             entry

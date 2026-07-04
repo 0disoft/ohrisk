@@ -362,7 +362,7 @@ function pipfileLockEntryError(input: {
     createError({
       code: "PIPFILE_LOCK_PARSE_FAILED",
       category: "unsupported_input",
-      message: "Failed to parse Pipfile.lock package entry. Ohrisk v0 requires package entries with exact ==version pins.",
+      message: "Failed to parse Pipfile.lock package entry. Ohrisk requires package entries with exact ==version pins.",
       details: {
         lockfilePath: input.lockfilePath,
         sectionName: input.sectionName,

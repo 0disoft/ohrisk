@@ -106,7 +106,7 @@ export function parseDenoLockText(
       createError({
         code: "DENO_LOCK_UNSUPPORTED_ROOT_SPECIFIER",
         category: "unsupported_input",
-        message: "Failed to parse deno.lock. Ohrisk v0 supports root npm: specifiers but not root JSR or remote URL specifiers.",
+        message: "Failed to parse deno.lock. Ohrisk supports root npm: specifiers but not root JSR or remote URL specifiers.",
         details: {
           lockfilePath,
           ...unsupportedRootSpecifiers

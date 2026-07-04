@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const packageVersion = readPackageVersion();
 
 describe("package metadata", () => {
   test("is publishable as the ohrisk CLI package", () => {
@@ -32,7 +33,8 @@ describe("package metadata", () => {
     };
 
     expect(packageJson.name).toBe("ohrisk");
-    expect(packageJson.version).toBe("1.0.1");
+    expect(packageJson.version).toBe(packageVersion);
+    expect(packageJson.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(packageJson.private).toBeUndefined();
     expect(packageJson.license).toBe("MIT");
     expect(packageJson.packageManager).toBe("bun@1.3.14");
@@ -43,7 +45,8 @@ describe("package metadata", () => {
     expect(packageJson.files).toEqual(["CHANGELOG.md", "dist"]);
     expect(packageJson.publishConfig?.access).toBe("public");
     expect(packageJson.repository?.url).toBe("git+https://github.com/0disoft/ohrisk.git");
-    expect(packageJson.dependencies?.["@0disoft/laqu"]).toBe("latest");
+    expect(packageJson.dependencies?.["@0disoft/laqu"]).toBeUndefined();
+    expect(packageJson.devDependencies?.["@0disoft/laqu"]).toBe("latest");
     expect(packageJson.devDependencies?.["@yarnpkg/lockfile"]).toBe("1.1.0");
     expect(packageJson.devDependencies?.yaml).toBe("2.9.0");
     expect(packageJson.scripts?.build).toBe("bun scripts/build.ts");
@@ -61,9 +64,12 @@ describe("package metadata", () => {
 
     expect(mainEntrypoint.startsWith("#!/usr/bin/env node")).toBe(true);
     expect(mainEntrypoint).toContain("isCliEntrypoint(import.meta.url, process.argv[1])");
-    expect(versionSource).toContain('OHRISK_VERSION = "1.0.1"');
+    expect(versionSource).toContain(`OHRISK_VERSION = "${packageVersion}"`);
     expect(buildScript).toContain("assertVersionContract()");
+    expect(buildScript).toContain("rmSync(\"dist\"");
+    expect(buildScript).toContain("assertBuiltCliVersion(packageVersion)");
     expect(buildScript).toContain("Version mismatch: package.json declares");
+    expect(buildScript).toContain("Built CLI version mismatch");
     expect(buildScript).toContain('packages: "bundle"');
     expect(buildScript).toContain("chmodSync");
     expect(readme).toContain("the packaged CLI runs on Node.js");
@@ -71,3 +77,15 @@ describe("package metadata", () => {
     expect(readme).toContain("pnpm dlx ohrisk scan");
   });
 });
+
+function readPackageVersion(): string {
+  const packageJson = JSON.parse(
+    readFileSync(path.join(repoRoot, "package.json"), "utf8")
+  ) as { version?: unknown };
+
+  if (typeof packageJson.version !== "string") {
+    throw new Error("package.json must contain a string version.");
+  }
+
+  return packageJson.version;
+}

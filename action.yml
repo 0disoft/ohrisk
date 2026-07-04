@@ -3,9 +3,9 @@ description: Catch open-source license risk in GitHub Actions.
 
 inputs:
   version:
-    description: npm package version to install.
+    description: npm package version to install. Defaults to the matching action tag version for v* tags, otherwise latest.
     required: false
-    default: latest
+    default: ""
   node-version:
     description: Node.js version used by the packaged Ohrisk CLI.
     required: false
@@ -69,15 +69,19 @@ runs:
       shell: bash
       env:
         OHRISK_VERSION: ${{ inputs.version }}
+        OHRISK_ACTION_REF: ${{ github.action_ref }}
       run: |
         set -euo pipefail
 
-        if [ -z "$OHRISK_VERSION" ]; then
-          echo "::error::version must not be empty."
-          exit 1
+        version="$OHRISK_VERSION"
+        if [ -z "$version" ]; then
+          case "$OHRISK_ACTION_REF" in
+            v*) version="${OHRISK_ACTION_REF#v}" ;;
+            *) version="latest" ;;
+          esac
         fi
 
-        npm install -g "ohrisk@${OHRISK_VERSION}"
+        npm install -g "ohrisk@${version}"
 
     - name: Run Ohrisk
       id: run

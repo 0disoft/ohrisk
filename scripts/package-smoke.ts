@@ -49,7 +49,7 @@ try {
   const smokeOutput = runWithPath("ohrisk", ["version"], consumerDir, consumerBinDir).trim();
   const expectedOutput = `ohrisk ${expectedVersion}`;
 
-  if (!smokeOutput.includes(expectedOutput)) {
+  if (smokeOutput !== expectedOutput) {
     throw new Error(
       `Packaged CLI smoke test expected "${expectedOutput}" but received "${smokeOutput}".`
     );

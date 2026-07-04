@@ -11,7 +11,21 @@ import { err, ok } from "../src/shared/result";
 import { createTarGz } from "./helpers/tar";
 import { createZip } from "./helpers/zip";
 
+const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
+const packageVersion = readPackageVersion();
+
+function readPackageVersion(): string {
+  const packageJson = JSON.parse(
+    readFileSync(path.join(repoRoot, "package.json"), "utf8")
+  ) as { version?: unknown };
+
+  if (typeof packageJson.version !== "string") {
+    throw new Error("package.json must contain a string version.");
+  }
+
+  return packageJson.version;
+}
 
 function createTestIO(cwd: string): { io: CliIO; stdout: string[]; stderr: string[] } {
   const stdout: string[] = [];
@@ -176,7 +190,7 @@ describe("main", () => {
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
-    expect(stdout).toEqual(["ohrisk 1.0.1"]);
+    expect(stdout).toEqual([`ohrisk ${packageVersion}`]);
   });
 
   test("returns invalid input for extra version arguments", async () => {
@@ -2526,7 +2540,7 @@ describe("main", () => {
     expect(payload.$schema).toBe("https://json.schemastore.org/sarif-2.1.0.json");
     expect(payload.version).toBe("2.1.0");
     expect(payload.runs[0]?.tool.driver.name).toBe("Ohrisk");
-    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe("1.0.1");
+    expect(payload.runs[0]?.tool.driver.semanticVersion).toBe(packageVersion);
     expect(payload.runs[0]?.properties.ohriskWaiverMode).toBe("local");
     expect(payload.runs[0]?.tool.driver.rules.map((rule) => rule.id)).toEqual([
       "ohrisk/license-high",

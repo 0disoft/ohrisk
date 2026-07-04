@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.2 - 2026-07-04
+
+- Hardened release packaging by clearing stale `dist` output before bundling
+  and verifying the built CLI reports the package version exactly.
+- Moved bundled `@0disoft/laqu` from runtime dependencies to development
+  dependencies while keeping the `latest` specifier used for bundle refreshes.
+- Made tagged GitHub Action releases install the matching npm package version
+  by default, while `@main` continues to track `latest`.
+- Fixed project discovery so nested workspace package manifests continue
+  walking upward to a parent lockfile before reporting a missing lockfile.
+- Removed stale `Ohrisk v0` wording from user-facing parser diagnostics.
+
 ## 1.0.1 - 2026-07-03
 
 - Updated `@0disoft/laqu` to the `latest` npm tag so packaged Ohrisk installs

@@ -274,6 +274,8 @@ export function discoverProject(
       });
     }
 
+    let nearestManifestWithoutParentLockfile: string | undefined;
+
     for (const dir of ancestorsFrom(startDir)) {
       const lockfiles = findKnownLockfiles(dir);
       const hasProjectManifest = hasKnownProjectManifest(dir);
@@ -293,18 +295,8 @@ export function discoverProject(
           });
         }
 
-        if (hasProjectManifest) {
-          return err(
-            createError({
-              code: "NO_SUPPORTED_LOCKFILE",
-              category: "unsupported_input",
-              message: `Project manifest found, but no supported lockfile exists. ${SUPPORTED_LOCKFILE_MESSAGE}`,
-              details: {
-                rootDir: dir,
-                supportedLockfiles: supportedLockfileNames()
-              }
-            })
-          );
+        if (!nearestManifestWithoutParentLockfile && hasProjectManifest) {
+          nearestManifestWithoutParentLockfile = dir;
         }
 
         continue;
@@ -315,7 +307,7 @@ export function discoverProject(
           createError({
             code: "MULTIPLE_LOCKFILES",
             category: "unsupported_input",
-            message: "Multiple lockfiles found in the same project root. Ohrisk v0 needs exactly one lockfile.",
+            message: "Multiple lockfiles found in the same project root. Select one with --lockfile.",
             details: {
               rootDir: dir,
               lockfiles
@@ -354,6 +346,20 @@ export function discoverProject(
           path: path.join(dir, lockfileName)
         }
       });
+    }
+
+    if (nearestManifestWithoutParentLockfile) {
+      return err(
+        createError({
+          code: "NO_SUPPORTED_LOCKFILE",
+          category: "unsupported_input",
+          message: `Project manifest found, but no supported lockfile exists. ${SUPPORTED_LOCKFILE_MESSAGE}`,
+          details: {
+            rootDir: nearestManifestWithoutParentLockfile,
+            supportedLockfiles: supportedLockfileNames()
+          }
+        })
+      );
     }
   } catch (cause) {
     return err(

@@ -1,6 +1,9 @@
-import { chmodSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, readFileSync, rmSync } from "node:fs";
 
-assertVersionContract();
+const packageVersion = assertVersionContract();
+
+rmSync("dist", { force: true, recursive: true });
 
 const result = await Bun.build({
   entrypoints: ["src/cli/main.ts"],
@@ -18,14 +21,47 @@ if (!result.success) {
 }
 
 chmodSync("dist/cli.js", 0o755);
+assertBuiltCliVersion(packageVersion);
 
-function assertVersionContract(): void {
+function assertVersionContract(): string {
   const packageVersion = readPackageVersion();
   const sourceVersion = readSourceVersion();
 
   if (sourceVersion !== packageVersion) {
     console.error(
       `Version mismatch: package.json declares ${packageVersion}, but src/cli/version.ts declares ${sourceVersion}.`
+    );
+    process.exit(1);
+  }
+
+  return packageVersion;
+}
+
+function assertBuiltCliVersion(packageVersion: string): void {
+  const result = spawnSync(process.execPath, ["dist/cli.js", "version"], {
+    encoding: "utf8"
+  });
+
+  if (result.status !== 0) {
+    console.error(
+      [
+        "Built CLI version check failed.",
+        `exit: ${result.status}`,
+        result.stdout ? `stdout:\n${result.stdout}` : undefined,
+        result.stderr ? `stderr:\n${result.stderr}` : undefined
+      ]
+        .filter(Boolean)
+        .join("\n")
+    );
+    process.exit(1);
+  }
+
+  const expectedOutput = `ohrisk ${packageVersion}`;
+  const actualOutput = (result.stdout ?? "").trim();
+
+  if (actualOutput !== expectedOutput) {
+    console.error(
+      `Built CLI version mismatch: expected "${expectedOutput}", but received "${actualOutput}".`
     );
     process.exit(1);
   }

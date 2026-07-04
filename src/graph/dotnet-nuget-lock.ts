@@ -526,7 +526,7 @@ function parseDotnetProjectXml(
           category: "unsupported_input",
           message: unresolvedCentralVersion
             ? "Failed to parse centrally managed .NET PackageReference. Ohrisk requires a single literal PackageVersion in Directory.Packages.props."
-            : "Failed to parse .NET project PackageReference. Ohrisk v0 requires a literal resolved Version or a matching literal PackageVersion in Directory.Packages.props; use obj/project.assets.json for restored versions.",
+            : "Failed to parse .NET project PackageReference. Ohrisk requires a literal resolved Version or a matching literal PackageVersion in Directory.Packages.props; use obj/project.assets.json for restored versions.",
           details: {
             lockfilePath: projectFilePath,
             packageName: name,

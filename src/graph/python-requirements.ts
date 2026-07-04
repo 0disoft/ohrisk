@@ -246,7 +246,7 @@ function parseRequirementsDocument(input: {
         createError({
           code: "REQUIREMENTS_PARSE_FAILED",
           category: "unsupported_input",
-          message: "Failed to parse requirements.txt. Ohrisk v0 only supports package registry requirements, nested requirement files, and nested constraint files.",
+          message: "Failed to parse requirements.txt. Ohrisk only supports package registry requirements, nested requirement files, and nested constraint files.",
           details: {
             lockfilePath: input.lockfilePath,
             line: index + 1,
@@ -381,7 +381,7 @@ function parseRequirementsDocument(input: {
         createError({
           code: "REQUIREMENTS_PARSE_FAILED",
           category: "unsupported_input",
-          message: "Failed to parse requirements.txt dependency entry. Ohrisk v0 requires name==version pins or a matching exact constraint pin.",
+          message: "Failed to parse requirements.txt dependency entry. Ohrisk requires name==version pins or a matching exact constraint pin.",
           details: {
             lockfilePath: input.lockfilePath,
             line: entry.line,

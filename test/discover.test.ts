@@ -2229,6 +2229,68 @@ describe("discoverProject", () => {
     expect(result.value.rootDir).toBe(path.join(fixturesDir, "bun-project"));
   });
 
+  test("walks past a nested package manifest to find a parent lockfile", () => {
+    const workspaceDir = mkdtempSync(path.join(tmpdir(), "ohrisk-nested-package-parent-lockfile-"));
+    const appDir = path.join(workspaceDir, "packages", "app");
+
+    try {
+      mkdirSync(appDir, { recursive: true });
+      writeFileSync(
+        path.join(workspaceDir, "package.json"),
+        JSON.stringify({
+          name: "fixture-workspace",
+          workspaces: ["packages/*"]
+        }),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(workspaceDir, "package-lock.json"),
+        JSON.stringify({
+          name: "fixture-workspace",
+          lockfileVersion: 3,
+          packages: {
+            "": {
+              name: "fixture-workspace",
+              workspaces: ["packages/*"]
+            },
+            "packages/app": {
+              name: "fixture-app",
+              version: "0.0.0",
+              dependencies: {
+                "risk-package": "1.0.0"
+              }
+            }
+          }
+        }),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(appDir, "package.json"),
+        JSON.stringify({
+          name: "fixture-app",
+          version: "0.0.0",
+          dependencies: {
+            "risk-package": "1.0.0"
+          }
+        }),
+        "utf8"
+      );
+
+      const result = discoverProject({ cwd: appDir });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value.rootDir).toBe(workspaceDir);
+      expect(result.value.lockfile.kind).toBe("package-lock");
+      expect(path.basename(result.value.lockfile.path)).toBe("package-lock.json");
+    } finally {
+      rmSync(workspaceDir, { recursive: true, force: true });
+    }
+  });
+
   test("finds a dependency-free package.json manifest project", () => {
     const result = discoverProject({ cwd: path.join(fixturesDir, "no-lockfile") });
 
@@ -2265,8 +2327,54 @@ describe("discoverProject", () => {
       }
 
       expect(result.error.code).toBe("NO_SUPPORTED_LOCKFILE");
+      expect(result.error.details).toMatchObject({
+        rootDir: projectDir
+      });
     } finally {
       rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("reports the nearest manifest when no parent lockfile exists", () => {
+    const workspaceDir = mkdtempSync(path.join(tmpdir(), "ohrisk-nearest-manifest-no-lockfile-"));
+    const appDir = path.join(workspaceDir, "packages", "app");
+
+    try {
+      mkdirSync(appDir, { recursive: true });
+      writeFileSync(
+        path.join(workspaceDir, "package.json"),
+        JSON.stringify({
+          name: "fixture-workspace",
+          dependencies: {
+            "workspace-risk-package": "1.0.0"
+          }
+        }),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(appDir, "package.json"),
+        JSON.stringify({
+          name: "fixture-app",
+          dependencies: {
+            "risk-package": "1.0.0"
+          }
+        }),
+        "utf8"
+      );
+
+      const result = discoverProject({ cwd: appDir });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected discovery to fail.");
+      }
+
+      expect(result.error.code).toBe("NO_SUPPORTED_LOCKFILE");
+      expect(result.error.details).toMatchObject({
+        rootDir: appDir
+      });
+    } finally {
+      rmSync(workspaceDir, { recursive: true, force: true });
     }
   });
 
