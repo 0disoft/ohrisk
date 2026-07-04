@@ -1,6 +1,6 @@
 {
   "name": "ohrisk",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Catch open-source license risk before your PR ships.",
   "license": "MIT",
   "type": "module",
@@ -109,7 +109,8 @@
     "prepack": "bun scripts/build.ts",
     "scan": "bun run src/cli/main.ts scan",
     "test": "bun test",
-    "verify:release": "bun test && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts"
+    "typecheck": "tsc -p tsconfig.release.json",
+    "verify:release": "bun run typecheck && bun test && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts"
   },
   "files": [
     "CHANGELOG.md",
@@ -117,7 +118,10 @@
   ],
   "devDependencies": {
     "@0disoft/laqu": "latest",
+    "@types/bun": "1.3.14",
+    "@types/node": "24.13.2",
     "@yarnpkg/lockfile": "1.1.0",
+    "typescript": "6.0.3",
     "yaml": "2.9.0"
   }
 }

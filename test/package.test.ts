@@ -31,6 +31,12 @@ describe("package metadata", () => {
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
     };
+    const releaseTsconfig = JSON.parse(
+      readFileSync(path.join(repoRoot, "tsconfig.release.json"), "utf8")
+    ) as {
+      extends?: string;
+      files?: string[];
+    };
 
     expect(packageJson.name).toBe("ohrisk");
     expect(packageJson.version).toBe(packageVersion);
@@ -47,13 +53,24 @@ describe("package metadata", () => {
     expect(packageJson.repository?.url).toBe("git+https://github.com/0disoft/ohrisk.git");
     expect(packageJson.dependencies?.["@0disoft/laqu"]).toBeUndefined();
     expect(packageJson.devDependencies?.["@0disoft/laqu"]).toBe("latest");
+    expect(packageJson.devDependencies?.["@types/bun"]).toBe("1.3.14");
+    expect(packageJson.devDependencies?.["@types/node"]).toBe("24.13.2");
     expect(packageJson.devDependencies?.["@yarnpkg/lockfile"]).toBe("1.1.0");
+    expect(packageJson.devDependencies?.typescript).toBe("6.0.3");
     expect(packageJson.devDependencies?.yaml).toBe("2.9.0");
     expect(packageJson.scripts?.build).toBe("bun scripts/build.ts");
     expect(packageJson.scripts?.prepack).toBe("bun scripts/build.ts");
+    expect(packageJson.scripts?.typecheck).toBe("tsc -p tsconfig.release.json");
     expect(packageJson.scripts?.["verify:release"]).toBe(
-      "bun test && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts"
+      "bun run typecheck && bun test && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts"
     );
+    expect(releaseTsconfig.extends).toBeUndefined();
+    expect(releaseTsconfig.files).toEqual([
+      "scripts/build.ts",
+      "scripts/package-smoke.ts",
+      "src/cli/version.ts",
+      "src/report/write-output.ts"
+    ]);
   });
 
   test("uses Node as the packaged CLI runtime", () => {

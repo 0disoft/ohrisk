@@ -14,8 +14,10 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": [
-    "src/**/*.ts",
-    "test/**/*.ts"
+  "files": [
+    "scripts/build.ts",
+    "scripts/package-smoke.ts",
+    "src/cli/version.ts",
+    "src/report/write-output.ts"
   ]
 }

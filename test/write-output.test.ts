@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -23,6 +32,58 @@ describe("writeReportFile", () => {
 
       expect(written.value).toBe(path.join(projectRoot, "reports", "scan.json"));
       expect(readFileSync(written.value, "utf8")).toBe("{\"ok\":true}\n");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("replaces existing regular report files", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-write-report-replace-"));
+    const reportsDir = path.join(projectRoot, "reports");
+    const reportPath = path.join(reportsDir, "scan.json");
+
+    try {
+      mkdirSync(reportsDir, { recursive: true });
+      writeFileSync(reportPath, "{\"old\":true}\n", "utf8");
+
+      const written = writeReportFile({
+        cwd: projectRoot,
+        outputPath: "reports/scan.json",
+        contents: "{\"ok\":true}"
+      });
+
+      expect(written.ok).toBe(true);
+      if (!written.ok) {
+        throw new Error(written.error.message);
+      }
+
+      expect(readFileSync(reportPath, "utf8")).toBe("{\"ok\":true}\n");
+      expect(listReportTempFiles(reportsDir)).toEqual([]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("cleans temporary report files when final replacement fails", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-write-report-cleanup-"));
+    const reportsDir = path.join(projectRoot, "reports");
+
+    try {
+      mkdirSync(path.join(reportsDir, "scan.json"), { recursive: true });
+
+      const written = writeReportFile({
+        cwd: projectRoot,
+        outputPath: "reports/scan.json",
+        contents: "{\"ok\":false}"
+      });
+
+      expect(written.ok).toBe(false);
+      if (written.ok) {
+        throw new Error("Expected directory output path replacement to fail.");
+      }
+
+      expect(written.error.code).toBe("REPORT_WRITE_FAILED");
+      expect(listReportTempFiles(reportsDir)).toEqual([]);
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
@@ -125,3 +186,7 @@ describe("writeReportFile", () => {
     }
   });
 });
+
+function listReportTempFiles(directoryPath: string): string[] {
+  return readdirSync(directoryPath).filter((entry) => entry.startsWith(".ohrisk-report-"));
+}

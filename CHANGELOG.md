@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.3 - 2026-07-04
+
+- Hardened report output writes by replacing direct file writes with a
+  same-directory temporary file, exclusive temp creation, file flush, final path
+  revalidation, and guarded replacement.
+- Added a scoped TypeScript typecheck for release packaging scripts and the
+  report output writer before tests, package dry-run verification, and
+  packaged CLI smoke checks run.
+
 ## 1.0.2 - 2026-07-04
 
 - Hardened release packaging by clearing stale `dist` output before bundling

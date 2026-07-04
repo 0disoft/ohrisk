@@ -23,10 +23,11 @@ Run the release-ready local gate before tagging:
 bun run verify:release
 ```
 
-This runs the full Bun test suite, builds the Node-compatible CLI bundle,
-verifies the npm package contents with a dry-run pack, then installs the packed
-tarball into a temporary npm consumer project and runs the packaged `ohrisk`
-bin through Node.js.
+This runs the scoped TypeScript typecheck for release packaging scripts and
+report output writing, the full Bun test suite, builds the Node-compatible CLI
+bundle, verifies the npm package contents with a dry-run pack, then installs the
+packed tarball into a temporary npm consumer project and runs the packaged
+`ohrisk` bin through Node.js.
 
 ## Automated Publish
 
@@ -35,8 +36,8 @@ file's example tag when needed, push `main`, then push a version tag matching
 `package.json`:
 
 ```bash
-git tag v1.0.2
-git push origin v1.0.2
+git tag v1.0.3
+git push origin v1.0.3
 ```
 
 The publish workflow verifies that the tag version matches `package.json`, runs
