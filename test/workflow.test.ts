@@ -30,6 +30,11 @@ describe("release check workflow", () => {
     expect(workflow).toContain("branches:");
     expect(workflow).toContain("- main");
     expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("name: Test and pack (${{ matrix.os }})");
+    expect(workflow).toContain("runs-on: ${{ matrix.os }}");
+    expect(workflow).toContain("fail-fast: false");
+    expect(workflow).toContain("- ubuntu-latest");
+    expect(workflow).toContain("- windows-latest");
     expect(workflow).toContain("uses: actions/checkout@v7");
     expect(workflow).toContain("uses: oven-sh/setup-bun@v2");
     expect(workflow).toContain("bun-version: 1.3.14");
@@ -105,9 +110,14 @@ describe("Ohrisk GitHub Action", () => {
     expect(action.runs?.steps?.some((step) => step.uses === "actions/setup-node@v6")).toBe(true);
     expect(action.runs?.steps?.some((step) => step.id === "run" && step.shell === "bash")).toBe(true);
     expect(actionSource).toContain("OHRISK_ACTION_REF: ${{ github.action_ref }}");
+    expect(actionSource).toContain("require_ohrisk_version");
+    expect(actionSource).toContain("version must be latest or a semantic version");
+    expect(actionSource).toContain('[[ "$value" =~ ^v?[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]');
     expect(actionSource).toContain('case "$OHRISK_ACTION_REF" in');
     expect(actionSource).toContain('version="${OHRISK_ACTION_REF#v}"');
     expect(actionSource).toContain('*) version="latest" ;;');
+    expect(actionSource).toContain('require_ohrisk_version "$version"');
+    expect(actionSource).toContain('v*) version="${version#v}" ;;');
     expect(actionSource).toContain('npm install -g "ohrisk@${version}"');
     expect(actionSource).toContain("args=()");
     expect(actionSource).toContain('ohrisk "${args[@]}"');
@@ -135,6 +145,7 @@ describe("Ohrisk GitHub Action", () => {
     expect(docs).toContain("track the latest action wiring and latest npm package");
     expect(docs).toContain(`0disoft/ohrisk@v${packageVersion}`);
     expect(docs).toContain(`\`ohrisk@${packageVersion}\` by default`);
+    expect(docs).toContain("Only `latest` and semantic versions such as");
     expect(docs).toContain("version: latest");
     expect(docs).toContain("format: html");
     expect(docs).toContain("path: reports/ohrisk.html");

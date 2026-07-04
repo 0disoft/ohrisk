@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.4 - 2026-07-04
+
+- Hardened local Maven parent and BOM POM lookup so malformed coordinates
+  cannot escape configured Maven repository roots.
+- Validated the GitHub Action `version` input so installs only accept `latest`
+  or semantic Ohrisk package versions instead of arbitrary npm package specs.
+- Added Windows runner coverage to the release check workflow.
+
 ## 1.0.3 - 2026-07-04
 
 - Hardened report output writes by replacing direct file writes with a

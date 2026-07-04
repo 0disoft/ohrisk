@@ -395,6 +395,81 @@ describe("parseMavenPomText", () => {
     }
   });
 
+  test("does not resolve Maven parent POMs outside the repository root", () => {
+    const tempRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-maven-traversal-"));
+    const repositoryRoot = path.join(tempRoot, "repository");
+
+    try {
+      mkdirSync(repositoryRoot, { recursive: true });
+      const escapedPomDir = path.join(tempRoot, "escaped-parent", "1.0.0");
+      mkdirSync(escapedPomDir, { recursive: true });
+      writeFileSync(
+        path.join(escapedPomDir, "escaped-parent-1.0.0.pom"),
+        [
+          "<project>",
+          "  <modelVersion>4.0.0</modelVersion>",
+          "  <groupId>..</groupId>",
+          "  <artifactId>escaped-parent</artifactId>",
+          "  <version>1.0.0</version>",
+          "  <dependencyManagement>",
+          "    <dependencies>",
+          "      <dependency>",
+          "        <groupId>org.example</groupId>",
+          "        <artifactId>managed-version</artifactId>",
+          "        <version>9.9.9</version>",
+          "      </dependency>",
+          "    </dependencies>",
+          "  </dependencyManagement>",
+          "</project>"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = parseMavenPomText(
+        [
+          "<project>",
+          "  <parent>",
+          "    <groupId>..</groupId>",
+          "    <artifactId>escaped-parent</artifactId>",
+          "    <version>1.0.0</version>",
+          "  </parent>",
+          "  <artifactId>fixture-maven</artifactId>",
+          "  <dependencies>",
+          "    <dependency>",
+          "      <groupId>org.example</groupId>",
+          "      <artifactId>managed-version</artifactId>",
+          "    </dependency>",
+          "  </dependencies>",
+          "</project>"
+        ].join("\n"),
+        "pom.xml",
+        {
+          mavenRepositoryRoots: [repositoryRoot],
+          projectRoot: tempRoot
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected escaped Maven parent lookup to fail.");
+      }
+
+      expect(result.error.code).toBe("MAVEN_POM_PARSE_FAILED");
+      expect(result.error.details).toMatchObject({
+        dependency: "org.example:managed-version",
+        reason: "missing_dependency_version",
+        missingExternalPoms: [
+          {
+            usage: "parent",
+            dependency: "..:escaped-parent@1.0.0"
+          }
+        ]
+      });
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   test("does not treat imported BOM entries as same-file dependencyManagement versions", () => {
     const result = parseMavenPomText(
       [

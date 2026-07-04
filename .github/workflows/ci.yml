@@ -12,9 +12,15 @@ permissions:
 
 jobs:
   test:
-    name: Test and pack
-    runs-on: ubuntu-latest
+    name: Test and pack (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
 
     steps:
       - name: Checkout

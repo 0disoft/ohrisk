@@ -73,6 +73,20 @@ runs:
       run: |
         set -euo pipefail
 
+        require_ohrisk_version() {
+          local value="$1"
+          case "$value" in
+            latest) return 0 ;;
+          esac
+
+          if [[ "$value" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            return 0
+          fi
+
+          echo "::error::version must be latest or a semantic version such as 1.0.4 or v1.0.4."
+          exit 1
+        }
+
         version="$OHRISK_VERSION"
         if [ -z "$version" ]; then
           case "$OHRISK_ACTION_REF" in
@@ -80,6 +94,11 @@ runs:
             *) version="latest" ;;
           esac
         fi
+
+        require_ohrisk_version "$version"
+        case "$version" in
+          v*) version="${version#v}" ;;
+        esac
 
         npm install -g "ohrisk@${version}"
 
