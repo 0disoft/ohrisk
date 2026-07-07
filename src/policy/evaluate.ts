@@ -12,6 +12,7 @@ import type {
 const PERMISSIVE_LICENSES = new Set([
   "0BSD",
   "MIT",
+  "MIT-CMU",
   "ISC",
   "BSD-2-Clause",
   "BSD-3-Clause",

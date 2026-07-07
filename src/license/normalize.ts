@@ -170,18 +170,33 @@ function collectPackageLicenseTexts(evidence: LicenseEvidence): string[] {
   return texts;
 }
 
+const COMMERCIAL_RESTRICTION_LICENSE_NAME_PATTERNS = [
+  /\bCommons Clause\b/i,
+  /\bBusiness Source License\b/i,
+  /\bBUSL\b/i,
+  /\bServer Side Public License\b/i,
+  /\bSSPL\b/i,
+  /\bElastic License\b/i,
+  /\bPolyForm\b/i,
+  /\bCreative Commons\b[^\r\n]*(?:NonCommercial|Non-Commercial|\bNC\b)/i,
+  /\bCC-BY-NC(?:-[0-9.]+)?\b/i,
+  /\bNon-Commercial\b(?=\s+(?:License|Software|Use|Only)\b)/i,
+  /\bnoncommercial\b(?=\s+(?:License|Software|Use|Only)\b)/i
+];
+
+const COMMERCIAL_USE_DENIAL_PATTERNS = [
+  /\bnot for commercial use\b/i,
+  /\bno commercial use\b/i,
+  /\bcommercial use\s+(?:is\s+)?(?:prohibited|restricted|not permitted|forbidden|disallowed)\b/i,
+  /\bmay not be used for commercial purposes\b/i,
+  /\bmust not be used for commercial purposes\b/i,
+  /\bshall not be used for commercial purposes\b/i,
+  /\bcannot be used for commercial purposes\b/i
+];
+
 function hasCommercialRestrictionText(text: string): boolean {
-  return /\bCommons Clause\b/i.test(text)
-    || /\bBusiness Source License\b/i.test(text)
-    || /\bBUSL\b/i.test(text)
-    || /\bServer Side Public License\b/i.test(text)
-    || /\bSSPL\b/i.test(text)
-    || /\bElastic License\b/i.test(text)
-    || /\bPolyForm\b/i.test(text)
-    || /\bNon-Commercial\b/i.test(text)
-    || /\bnoncommercial\b/i.test(text)
-    || /\bnot for commercial use\b/i.test(text)
-    || /\bcommercial use\s+(?:is\s+)?(?:prohibited|restricted|not permitted)\b/i.test(text);
+  return COMMERCIAL_RESTRICTION_LICENSE_NAME_PATTERNS.some((pattern) => pattern.test(text))
+    || COMMERCIAL_USE_DENIAL_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 function readLicenseExpressionEvidence(evidence: LicenseEvidence): LicenseExpressionEvidence | undefined {
@@ -290,6 +305,22 @@ function recognizeStandardLicenseText(text: string): string | undefined {
     return spdxIdentifier;
   }
 
+  if (/\bMozilla Public License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
+    return "MPL-2.0";
+  }
+
+  if (/\bEclipse Public License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
+    return "EPL-2.0";
+  }
+
+  if (/\bApache License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
+    return "Apache-2.0";
+  }
+
+  if (/\bCreative Commons Legal Code\b[\s\S]*\bCC0 1\.0 Universal\b/i.test(text)) {
+    return "CC0-1.0";
+  }
+
   if (/\bGNU AFFERO GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 3\b/i.test(text)) {
     return "AGPL-3.0-only";
   }
@@ -312,22 +343,6 @@ function recognizeStandardLicenseText(text: string): string | undefined {
 
   if (/\bGNU GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 2\b/i.test(text)) {
     return "GPL-2.0-only";
-  }
-
-  if (/\bMozilla Public License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
-    return "MPL-2.0";
-  }
-
-  if (/\bEclipse Public License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
-    return "EPL-2.0";
-  }
-
-  if (/\bApache License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
-    return "Apache-2.0";
-  }
-
-  if (/\bCreative Commons Legal Code\b[\s\S]*\bCC0 1\.0 Universal\b/i.test(text)) {
-    return "CC0-1.0";
   }
 
   if (/\bfree and unencumbered software released into the public domain\b/i.test(text)) {

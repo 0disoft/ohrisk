@@ -60,6 +60,38 @@ describe("evaluateLicenseRisk", () => {
     }
   });
 
+  test("treats MIT-CMU as a permissive low-risk license", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "pillow@12.2.0",
+        original: "MIT-CMU",
+        expression: "MIT-CMU",
+        choices: ["MIT-CMU"],
+        joiner: "single",
+        signals: [],
+        evidenceSources: [
+          "source: local",
+          "METADATA license: MIT-CMU",
+          "file: licenses/LICENSE (license)"
+        ],
+        confidence: "high"
+      },
+      dependency: {
+        ...baseDependency,
+        id: "pillow@12.2.0",
+        name: "pillow",
+        version: "12.2.0",
+        ecosystem: "pypi",
+        paths: [["hermes-agent", "pillow@12.2.0"]]
+      },
+      profile: "saas"
+    });
+
+    expect(finding.severity).toBe("low");
+    expect(finding.recommendation).toBe("allow");
+    expect(finding.action).toBe("No action needed for this profile.");
+  });
+
   test("treats Zlib as a permissive low-risk license", () => {
     const finding = evaluateLicenseRisk({
       license: {

@@ -610,6 +610,145 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
+  test("does not treat Unlicense commercial and non-commercial permission as a ban", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "git.sr.ht/~jackmordaunt/go-toast/v2@v2.0.3",
+      files: [
+        {
+          path: "LICENSE",
+          kind: "license",
+          text: [
+            "SPDX-License-Identifier: Unlicense OR MIT",
+            "",
+            "The UNLICENSE",
+            "",
+            "This is free and unencumbered software released into the public domain.",
+            "",
+            "Anyone is free to copy, modify, publish, use, compile, sell, or",
+            "distribute this software, either in source code form or as a compiled",
+            "binary, for any purpose, commercial or non-commercial, and by any",
+            "means."
+          ].join("\n")
+        }
+      ],
+      source: "local",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      packageId: "git.sr.ht/~jackmordaunt/go-toast/v2@v2.0.3",
+      original: "Unlicense OR MIT",
+      expression: "Unlicense OR MIT",
+      choices: ["Unlicense", "MIT"],
+      signals: [],
+      confidence: "medium"
+    });
+    expect(normalized.evidenceSources).toContain("file license match: Unlicense OR MIT from LICENSE");
+  });
+
+  test("recognizes MPL text before secondary-license compatibility references", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "github.com/hashicorp/golang-lru/v2@v2.0.7",
+      files: [
+        {
+          path: "LICENSE",
+          kind: "license",
+          text: [
+            "Copyright (c) 2014 HashiCorp, Inc.",
+            "",
+            "Mozilla Public License, version 2.0",
+            "",
+            "1.12. \"Secondary License\"",
+            "",
+            "means either the GNU General Public License, Version 2.0, the GNU Lesser",
+            "General Public License, Version 2.1, the GNU Affero General Public",
+            "License, Version 3.0, or any later versions of those licenses.",
+            "",
+            "Exhibit B - \"Incompatible With Secondary Licenses\" Notice",
+            "",
+            "This Source Code Form is \"Incompatible With Secondary Licenses\", as defined by",
+            "the Mozilla Public License, v. 2.0."
+          ].join("\n")
+        }
+      ],
+      source: "local",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      packageId: "github.com/hashicorp/golang-lru/v2@v2.0.7",
+      original: "MPL-2.0",
+      expression: "MPL-2.0",
+      choices: ["MPL-2.0"],
+      signals: [],
+      confidence: "medium"
+    });
+    expect(normalized.evidenceSources).toContain("file license match: MPL-2.0 from LICENSE");
+  });
+
+  test("does not mark MIT-CMU name and advertising restrictions as commercial-use restrictions", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "pillow@12.2.0",
+      metadataLicense: "MIT-CMU",
+      metadataSource: "METADATA",
+      files: [
+        {
+          path: "licenses/LICENSE",
+          kind: "license",
+          text: [
+            "Like PIL, Pillow is licensed under the open source MIT-CMU License:",
+            "",
+            "Permission to use, copy, modify and distribute this software and its",
+            "documentation for any purpose and without fee is hereby granted,",
+            "provided that the above copyright notice appears in all copies, and that",
+            "both that copyright notice and this permission notice appear in supporting",
+            "documentation, and that the name of Secret Labs AB or the author not be",
+            "used in advertising or publicity pertaining to distribution of the software",
+            "without specific, written prior permission."
+          ].join("\n")
+        }
+      ],
+      source: "local",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      packageId: "pillow@12.2.0",
+      original: "MIT-CMU",
+      expression: "MIT-CMU",
+      choices: ["MIT-CMU"],
+      signals: [],
+      confidence: "high"
+    });
+    expect(normalized.evidenceSources).toContain("METADATA license: MIT-CMU");
+    expect(normalized.evidenceSources).toContain("file: licenses/LICENSE (license)");
+  });
+
+  test("does not treat FreeType commercial-product permission and name-use rules as a ban", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "freetype-bundled@2.14.3",
+      packageJsonLicense: "FTL",
+      files: [
+        {
+          path: "licenses/LICENSE",
+          kind: "license",
+          text: [
+            "We specifically permit and encourage the inclusion of this",
+            "software, with or without modifications, in commercial products.",
+            "",
+            "Neither the FreeType authors and contributors nor you shall use",
+            "the name of the other for commercial, advertising, or promotional",
+            "purposes without specific prior written permission."
+          ].join("\n")
+        }
+      ],
+      source: "local",
+      warnings: []
+    });
+
+    expect(normalized.signals).not.toContain("commercial-restriction");
+  });
+
   test("marks explicit commercial restriction text in license files", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "commons-clause-package@1.0.0",
@@ -627,6 +766,24 @@ describe("normalizeLicenseEvidence", () => {
 
     expect(normalized.signals).toEqual(["commercial-restriction", "malformed", "custom-text"]);
     expect(normalized.confidence).toBe("low");
+  });
+
+  test("marks explicit commercial-purpose denial text in license files", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "commercial-purpose-denial@1.0.0",
+      packageJsonLicense: "MIT",
+      files: [
+        {
+          path: "LICENSE",
+          kind: "license",
+          text: "This package may not be used for commercial purposes without a commercial license."
+        }
+      ],
+      source: "local",
+      warnings: []
+    });
+
+    expect(normalized.signals).toContain("commercial-restriction");
   });
 
   test("preserves commercial restriction signals even when package metadata is parseable", () => {
