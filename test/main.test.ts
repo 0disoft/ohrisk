@@ -98,7 +98,7 @@ describe("main", () => {
     expect(output).toContain("--workspace-root <path>");
     expect(output).toContain("--help, -h");
     expect(output).toContain("--html");
-    expect(output).toContain("--language <en|ko|es|fr>");
+    expect(output).toContain("--language <en|ko|es|fr|zh|hi|ja|id|tr|ru|de>");
     expect(output).toContain("--open");
     expect(output).toContain("--cyclonedx");
   });
@@ -115,7 +115,7 @@ describe("main", () => {
     expect(scanOutput).toContain("--lockfile <path>");
     expect(scanOutput).toContain("--workspace-root <path>");
     expect(scanOutput).toContain("--html");
-    expect(scanOutput).toContain("--language <en|ko|es|fr>");
+    expect(scanOutput).toContain("--language <en|ko|es|fr|zh|hi|ja|id|tr|ru|de>");
     expect(scanOutput).toContain("--open");
     expect(scanOutput).toContain("--cyclonedx");
     expect(scanOutput).toContain("--help, -h");
@@ -132,7 +132,7 @@ describe("main", () => {
     expect(ciOutput).toContain("--fail-on <severity>");
     expect(ciOutput).toContain("--strict-waivers");
     expect(ciOutput).toContain("--html");
-    expect(ciOutput).toContain("--language <en|ko|es|fr>");
+    expect(ciOutput).toContain("--language <en|ko|es|fr|zh|hi|ja|id|tr|ru|de>");
     expect(ciOutput).toContain("--open");
     expect(ciOutput).toContain("--help, -h");
 

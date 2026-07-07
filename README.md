@@ -45,12 +45,19 @@ Open a browser-friendly HTML report:
 ohrisk scan --html --output ohrisk-report.html --open
 ```
 
-Use Korean, Spanish, or French HTML report text when you want a local review artifact for those readers:
+Use Korean, Spanish, French, Chinese, Hindi, Japanese, Indonesian, Turkish, Russian, or German HTML report text when you want a local review artifact for those readers:
 
 ```bash
 ohrisk scan --html --language ko --output ohrisk-report.html --open
 ohrisk scan --html --language es --output ohrisk-report-es.html --open
 ohrisk scan --html --language fr --output ohrisk-report-fr.html --open
+ohrisk scan --html --language zh --output ohrisk-report-zh.html --open
+ohrisk scan --html --language hi --output ohrisk-report-hi.html --open
+ohrisk scan --html --language ja --output ohrisk-report-ja.html --open
+ohrisk scan --html --language id --output ohrisk-report-id.html --open
+ohrisk scan --html --language tr --output ohrisk-report-tr.html --open
+ohrisk scan --html --language ru --output ohrisk-report-ru.html --open
+ohrisk scan --html --language de --output ohrisk-report-de.html --open
 ```
 
 Prefer not to install globally? Use `npx ohrisk scan` instead.
@@ -286,6 +293,13 @@ ohrisk scan --html --output reports\ohrisk-report.html --open
 ohrisk scan --html --language ko --output reports\ohrisk-report-ko.html --open
 ohrisk scan --html --language es --output reports\ohrisk-report-es.html --open
 ohrisk scan --html --language fr --output reports\ohrisk-report-fr.html --open
+ohrisk scan --html --language zh --output reports\ohrisk-report-zh.html --open
+ohrisk scan --html --language hi --output reports\ohrisk-report-hi.html --open
+ohrisk scan --html --language ja --output reports\ohrisk-report-ja.html --open
+ohrisk scan --html --language id --output reports\ohrisk-report-id.html --open
+ohrisk scan --html --language tr --output reports\ohrisk-report-tr.html --open
+ohrisk scan --html --language ru --output reports\ohrisk-report-ru.html --open
+ohrisk scan --html --language de --output reports\ohrisk-report-de.html --open
 ```
 
 The scan prints live terminal progress while it reads the project, collects
@@ -473,6 +487,13 @@ ohrisk scan --html --output reports/ohrisk.html --open
 ohrisk scan --html --language ko --output reports/ohrisk-ko.html --open
 ohrisk scan --html --language es --output reports/ohrisk-es.html --open
 ohrisk scan --html --language fr --output reports/ohrisk-fr.html --open
+ohrisk scan --html --language zh --output reports/ohrisk-zh.html --open
+ohrisk scan --html --language hi --output reports/ohrisk-hi.html --open
+ohrisk scan --html --language ja --output reports/ohrisk-ja.html --open
+ohrisk scan --html --language id --output reports/ohrisk-id.html --open
+ohrisk scan --html --language tr --output reports/ohrisk-tr.html --open
+ohrisk scan --html --language ru --output reports/ohrisk-ru.html --open
+ohrisk scan --html --language de --output reports/ohrisk-de.html --open
 ohrisk scan --sarif --output reports/ohrisk.sarif
 ohrisk scan --cyclonedx --output reports/ohrisk.cdx.json
 ohrisk diff main --prod --markdown --output reports/ohrisk-pr.md

@@ -1,4 +1,4 @@
-export const REPORT_LANGUAGES = ["en", "ko", "es", "fr"] as const;
+export const REPORT_LANGUAGES = ["en", "ko", "es", "fr", "zh", "hi", "ja", "id", "tr", "ru", "de"] as const;
 
 export type ReportLanguage = typeof REPORT_LANGUAGES[number];
 

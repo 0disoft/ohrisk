@@ -14,8 +14,8 @@
 - Added HTML report guidance for scans where `unknown` findings are dominated
   by missing local package source/cache evidence, including lightweight
   dependency-restore examples before users try a full app build.
-- Added Spanish and French (`--language es|fr`) HTML report text alongside
-  the existing English and Korean report languages.
+- Added Spanish, French, Chinese, Hindi, Japanese, Indonesian, Turkish, Russian, and German (`--language es|fr|zh|hi|ja|id|tr|ru|de`)
+  HTML report text alongside the existing English and Korean report languages.
 
 ## 1.1.0 - 2026-07-07
 

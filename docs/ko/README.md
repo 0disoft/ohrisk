@@ -338,7 +338,7 @@ Findings:
 `--html --output <file> --open`을 쓴다. 이때 브라우저는 임시 `127.0.0.1`
 URL로 열리므로 파일 URL 권한이 없어도 된다.
 한국어 HTML 리포트가 필요하면 `--html --language ko --output <file>`을 쓴다.
-스페인어 리포트는 `--language es`, 프랑스어 리포트는 `--language fr`를 쓰고, 영어는 기본값이며 명시하려면 `--language en`을 사용할 수 있다.
+스페인어 리포트는 `--language es`, 프랑스어 리포트는 `--language fr`, 중국어 리포트는 `--language zh`, 힌디어 리포트는 `--language hi`, 일본어 리포트는 `--language ja`, 인도네시아어 리포트는 `--language id`, 튀르키예어 리포트는 `--language tr`, 러시아어 리포트는 `--language ru`, 독일어 리포트는 `--language de`를 쓰고, 영어는 기본값이며 명시하려면 `--language en`을 사용할 수 있다.
 
 `--output`은 프로젝트 내부 상대 파일 경로만 받는다. 절대 경로, drive-relative
 경로, UNC 경로, `.` 또는 `..` 경로 segment는 거부된다.
