@@ -28,6 +28,29 @@ const waiver: RiskWaiver = {
   expiresOn: "2026-12-31"
 };
 
+function unknownCacheFinding(input: {
+  packageId: string;
+  warning: string;
+  paths?: string[][];
+}): RiskFinding {
+  return {
+    id: `${input.packageId}::production::direct::fixture-app>${input.packageId}`,
+    fingerprint: `${input.packageId}::unknown::collect-evidence::missing-local-source`,
+    packageId: input.packageId,
+    severity: "unknown",
+    reason: "Package metadata does not declare a license expression.",
+    action: "Collect license evidence before approving this package.",
+    dependencyType: "production",
+    dependencyScope: "direct",
+    evidence: [
+      "source: unavailable",
+      `warning: ${input.warning}`
+    ],
+    paths: input.paths ?? [["fixture-app", input.packageId]],
+    recommendation: "collect-evidence"
+  };
+}
+
 function scanInput(overrides: Partial<ScanReportInput> = {}): ScanReportInput {
   const project: ProjectInput = {
     rootDir: "/tmp/fixture-app",
@@ -513,6 +536,223 @@ describe("HTML scan report", () => {
     expect(output).toContain('data-recommendation="replace"');
     expect(output).toContain("risk&lt;script&gt;@1.0.0");
     expect(output).not.toContain("<script>alert(1)</script>");
+  });
+
+  test("renders Spanish HTML report text without changing machine identifiers", () => {
+    const output = renderScanReport(scanInput({
+      riskFindings: [
+        {
+          ...finding,
+          reason: "License expression is high risk for saas.",
+          action: "Replace this package or escalate before shipping."
+        }
+      ],
+      reportLanguage: "es"
+    }));
+
+    expect(output).toStartWith("<!doctype html>");
+    expect(output).toContain('<html lang="es">');
+    expect(output).toContain("<title>Escaneo de Ohrisk</title>");
+    expect(output).toContain("<h1>Escaneo de Ohrisk</h1>");
+    expect(output).toContain('<h2 id="review-summary-heading">Resumen de revisión</h2>');
+    expect(output).toContain("<dt>Estado</dt>");
+    expect(output).toContain("<dd>Se requiere revisión de alto riesgo</dd>");
+    expect(output).toContain("<dt>Hallazgos activos</dt>");
+    expect(output).toContain("<dd>1 activos (1 altos, 0 revisión, 0 desconocidos, 0 bajos)</dd>");
+    expect(output).toContain("<dt>Dependencias</dt>");
+    expect(output).toContain("<dd>1 en total, 1 directas, 0 transitivas</dd>");
+    expect(output).toContain("Reemplaza o escala las dependencias de alto riesgo antes de publicar.");
+    expect(output).toContain("La expresión de licencia es de alto riesgo para saas.");
+    expect(output).toContain("Reemplaza este paquete o escálalo antes de publicar.");
+    expect(output).toContain("{visible} de {total} hallazgos mostrados");
+    expect(output).toContain("Menos");
+    expect(output).toContain('data-severity="high"');
+    expect(output).toContain('data-recommendation="replace"');
+    expect(output).toContain("risk&lt;script&gt;@1.0.0");
+    expect(output).not.toContain("<script>alert(1)</script>");
+  });
+
+  test("renders French HTML report text without changing machine identifiers", () => {
+    const output = renderScanReport(scanInput({
+      riskFindings: [
+        {
+          ...finding,
+          reason: "License expression is high risk for saas.",
+          action: "Replace this package or escalate before shipping."
+        }
+      ],
+      reportLanguage: "fr"
+    }));
+
+    expect(output).toStartWith("<!doctype html>");
+    expect(output).toContain('<html lang="fr">');
+    expect(output).toContain("<title>Analyse Ohrisk</title>");
+    expect(output).toContain("<h1>Analyse Ohrisk</h1>");
+    expect(output).toContain('<h2 id="review-summary-heading">Résumé de revue</h2>');
+    expect(output).toContain("<dt>Statut</dt>");
+    expect(output).toContain("<dd>Revue de risque élevé requise</dd>");
+    expect(output).toContain("<dt>Résultats actifs</dt>");
+    expect(output).toContain("<dd>1 actifs (1 élevés, 0 revue, 0 inconnus, 0 faibles)</dd>");
+    expect(output).toContain("<dt>Dépendances</dt>");
+    expect(output).toContain("<dd>1 au total, 1 directes, 0 transitives</dd>");
+    expect(output).toContain("Remplacez ou escaladez les dépendances à haut risque avant la publication.");
+    expect(output).toContain("L&#x27;expression de licence présente un risque élevé pour saas.");
+    expect(output).toContain("Remplacez ce paquet ou escaladez-le avant la publication.");
+    expect(output).toContain("{visible} résultats sur {total} affichés");
+    expect(output).toContain("Moins");
+    expect(output).toContain('data-severity="high"');
+    expect(output).toContain('data-recommendation="replace"');
+    expect(output).toContain("risk&lt;script&gt;@1.0.0");
+    expect(output).not.toContain("<script>alert(1)</script>");
+  });
+
+  test("adds evidence recovery guidance when unknown findings are dominated by local Go cache misses", () => {
+    const output = renderScanReport(scanInput({
+      project: {
+        rootDir: "/tmp/fixture-app",
+        lockfile: {
+          kind: "go-work",
+          path: "/tmp/fixture-app/go.work"
+        }
+      },
+      riskFindings: [
+        unknownCacheFinding({
+          packageId: "github.com/acme/risk-one@v1.0.0",
+          warning: "Go module source was not found in a local Go module cache."
+        }),
+        unknownCacheFinding({
+          packageId: "github.com/acme/risk-two@v1.0.0",
+          warning: "Go module source was not found in a local Go module cache."
+        })
+      ],
+      waivedFindings: []
+    }));
+
+    expect(output).toContain("<dt>Evidence recovery</dt>");
+    expect(output).toContain("2 of 2 unknown");
+    expect(output).toContain("`go mod download all`");
+    expect(output).toContain("directory containing go.work (scan root)");
+    expect(output).toContain("rerun Ohrisk");
+    expect(output).toContain("cargo fetch");
+    expect(output).toContain("dotnet restore");
+    expect(output).toContain("swift package resolve");
+  });
+
+  test("adds localized evidence recovery guidance for Korean HTML reports", () => {
+    const output = renderScanReport(scanInput({
+      project: {
+        rootDir: "/tmp/fixture-app",
+        lockfile: {
+          kind: "go-work",
+          path: "/tmp/fixture-app/go.work"
+        }
+      },
+      riskFindings: [
+        unknownCacheFinding({
+          packageId: "github.com/acme/risk-one@v1.0.0",
+          warning: "Go module source was not found in a local Go module cache."
+        }),
+        unknownCacheFinding({
+          packageId: "github.com/acme/risk-two@v1.0.0",
+          warning: "Go module source was not found in a local Go module cache."
+        })
+      ],
+      reportLanguage: "ko",
+      waivedFindings: []
+    }));
+
+    expect(output).toContain("<dt>근거 보강</dt>");
+    expect(output).toContain("불명 2개 중 2개");
+    expect(output).toContain("go.work가 있는 폴더(스캔 루트)에서 `go mod download all`을 실행하세요.");
+    expect(output).toContain("Ohrisk를 다시 실행하세요.");
+    expect(output).toContain("cargo fetch");
+    expect(output).toContain("dotnet restore");
+    expect(output).toContain("swift package resolve");
+  });
+
+  test("adds localized evidence recovery guidance for Spanish HTML reports", () => {
+    const output = renderScanReport(scanInput({
+      project: {
+        rootDir: "/tmp/fixture-app",
+        lockfile: {
+          kind: "go-work",
+          path: "/tmp/fixture-app/go.work"
+        }
+      },
+      riskFindings: [
+        unknownCacheFinding({
+          packageId: "github.com/acme/risk-one@v1.0.0",
+          warning: "Go module source was not found in a local Go module cache."
+        }),
+        unknownCacheFinding({
+          packageId: "github.com/acme/risk-two@v1.0.0",
+          warning: "Go module source was not found in a local Go module cache."
+        })
+      ],
+      reportLanguage: "es",
+      waivedFindings: []
+    }));
+
+    expect(output).toContain("<dt>Recuperación de evidencia</dt>");
+    expect(output).toContain("2 de 2 desconocidos");
+    expect(output).toContain("Ejecuta `go mod download all` desde el directorio que contiene go.work (raíz del escaneo)");
+    expect(output).toContain("vuelve a ejecutar Ohrisk");
+    expect(output).toContain("cargo fetch");
+    expect(output).toContain("dotnet restore");
+    expect(output).toContain("swift package resolve");
+  });
+
+  test("adds localized evidence recovery guidance for French HTML reports", () => {
+    const output = renderScanReport(scanInput({
+      project: {
+        rootDir: "/tmp/fixture-app",
+        lockfile: {
+          kind: "go-work",
+          path: "/tmp/fixture-app/go.work"
+        }
+      },
+      riskFindings: [
+        unknownCacheFinding({
+          packageId: "github.com/acme/risk-one@v1.0.0",
+          warning: "Go module source was not found in a local Go module cache."
+        }),
+        unknownCacheFinding({
+          packageId: "github.com/acme/risk-two@v1.0.0",
+          warning: "Go module source was not found in a local Go module cache."
+        })
+      ],
+      reportLanguage: "fr",
+      waivedFindings: []
+    }));
+
+    expect(output).toContain("<dt>Récupération de l&#x27;évidence</dt>");
+    expect(output).toContain("2 sur 2 inconnus");
+    expect(output).toContain("Exécutez `go mod download all` depuis le répertoire contenant go.work (racine du scan)");
+    expect(output).toContain("relancez Ohrisk");
+    expect(output).toContain("cargo fetch");
+    expect(output).toContain("dotnet restore");
+    expect(output).toContain("swift package resolve");
+  });
+
+  test("does not add evidence recovery guidance when local cache misses are not the dominant finding source", () => {
+    const output = renderScanReport(scanInput({
+      riskFindings: [
+        finding,
+        {
+          ...finding,
+          id: "second-high@1.0.0::production::direct::fixture-app>second-high@1.0.0",
+          fingerprint: "second-high@1.0.0::high::replace::unsafe",
+          packageId: "second-high@1.0.0"
+        },
+        unknownCacheFinding({
+          packageId: "github.com/acme/risk-one@v1.0.0",
+          warning: "Go module source was not found in a local Go module cache."
+        })
+      ]
+    }));
+
+    expect(output).not.toContain("<dt>Evidence recovery</dt>");
+    expect(output).not.toContain("go mod download all");
   });
 
   test("runs finding filters, search, collapsible toggles, and coalesced resize refreshes", () => {

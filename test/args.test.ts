@@ -205,7 +205,7 @@ describe("parseArgs", () => {
   });
 
   test("parses scan HTML output language", () => {
-    const parsed = parseArgs(["scan", "--html", "--language", "ko"]);
+    const parsed = parseArgs(["scan", "--html", "--language", "fr"]);
 
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) {
@@ -220,22 +220,22 @@ describe("parseArgs", () => {
       sarif: false,
       markdown: false,
       html: true,
-      reportLanguage: "ko",
+      reportLanguage: "fr",
       cyclonedx: false,
       noWaivers: false
     });
   });
 
   test("rejects unsupported report languages", () => {
-    const parsed = parseArgs(["scan", "--html", "--language", "fr"]);
+    const parsed = parseArgs(["scan", "--html", "--language", "de"]);
 
     expect(parsed.ok).toBe(false);
     if (parsed.ok) {
       throw new Error("Expected unsupported report language to fail.");
     }
 
-    expect(parsed.error.message).toBe('Unsupported report language "fr".');
-    expect(parsed.error.details?.supportedLanguages).toEqual(["en", "ko"]);
+    expect(parsed.error.message).toBe('Unsupported report language "de".');
+    expect(parsed.error.details?.supportedLanguages).toEqual(["en", "ko", "es", "fr"]);
   });
 
   test("rejects report language without HTML output", () => {

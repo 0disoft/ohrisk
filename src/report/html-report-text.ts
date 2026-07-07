@@ -20,6 +20,18 @@ type WaiverDriftSummary = {
   waiverDriftFailed?: boolean;
   waiverDriftCount?: number;
 };
+export type EvidenceRecoveryAdvice = {
+  unknownFindings: number;
+  localEvidenceMissingFindings: number;
+  primaryHint?: EvidenceRecoveryHint;
+};
+export type EvidenceRecoveryHint = {
+  ecosystem: "go" | "generic";
+  command: string;
+  directoryLabel: string;
+  directoryIsScanRoot: boolean;
+  sourceFileLabel?: string;
+};
 
 export type HtmlReportText = {
   htmlLang: string;
@@ -31,6 +43,7 @@ export type HtmlReportText = {
     dependencies: string;
     evidence: string;
     evidenceDetail: string;
+    evidenceRecovery: string;
     expiresOn: string;
     expiredWaivers: string;
     findingPath: string;
@@ -88,6 +101,7 @@ export type HtmlReportText = {
     scope: (profile: string, prodOnly: boolean) => string;
     reviewWaivers: (applied: number, driftEntries: number) => string;
     reviewWaiverDrift: (summary: WaiverDriftSummary) => string;
+    evidenceRecovery: (advice: EvidenceRecoveryAdvice) => string;
     threshold: (summary: ThresholdSummary) => string | undefined;
     waiverDrift: (summary: WaiverDriftSummary) => string | undefined;
     nextAction: (findings: RiskFinding[]) => string;
@@ -120,6 +134,7 @@ const ENGLISH_TEXT: HtmlReportText = {
     dependencies: "Dependencies",
     evidence: "Evidence",
     evidenceDetail: "Evidence",
+    evidenceRecovery: "Evidence recovery",
     expiresOn: "Expires on",
     expiredWaivers: "Expired waivers",
     findingPath: "Path",
@@ -195,6 +210,7 @@ const ENGLISH_TEXT: HtmlReportText = {
       const line = englishWaiverDrift(summary);
       return line?.replace(/^Waiver drift: /, "") ?? "Not checked (--strict-waivers not set)";
     },
+    evidenceRecovery: englishEvidenceRecovery,
     threshold: englishThreshold,
     waiverDrift: englishWaiverDrift,
     nextAction: englishNextAction,
@@ -228,6 +244,7 @@ const KOREAN_TEXT: HtmlReportText = {
     dependencies: "의존성",
     evidence: "근거",
     evidenceDetail: "근거",
+    evidenceRecovery: "근거 보강",
     expiresOn: "만료일",
     expiredWaivers: "만료된 예외",
     findingPath: "경로",
@@ -301,6 +318,7 @@ const KOREAN_TEXT: HtmlReportText = {
     reviewWaivers: (applied, driftEntries) =>
       `적용 ${applied}개, 드리프트 항목 ${driftEntries}개`,
     reviewWaiverDrift: (summary) => koreanWaiverDrift(summary) ?? "확인 안 됨 (--strict-waivers 미설정)",
+    evidenceRecovery: koreanEvidenceRecovery,
     threshold: koreanThreshold,
     waiverDrift: koreanWaiverDrift,
     nextAction: koreanNextAction,
@@ -362,9 +380,309 @@ const KOREAN_TEXT: HtmlReportText = {
   }
 };
 
+const SPANISH_TEXT: HtmlReportText = {
+  htmlLang: "es",
+  title: "Escaneo de Ohrisk",
+  labels: {
+    action: "Acción",
+    activeFindings: "Hallazgos activos",
+    dependency: "Dependencia",
+    dependencies: "Dependencias",
+    evidence: "Evidencia",
+    evidenceDetail: "Evidencia",
+    evidenceRecovery: "Recuperación de evidencia",
+    expiresOn: "Caduca el",
+    expiredWaivers: "Excepciones caducadas",
+    findingPath: "Ruta",
+    findings: "Hallazgos",
+    fingerprint: "Huella",
+    licenseConfidence: "Confianza de licencia",
+    licenseIssues: "Problemas de licencia",
+    lockfile: "Lockfile",
+    matchedBy: "Coincidencia",
+    next: "Siguiente",
+    package: "Paquete",
+    path: "Ruta",
+    prodOnly: "Solo producción",
+    profile: "Perfil",
+    project: "Proyecto",
+    reason: "Motivo",
+    reviewFocus: "Foco de revisión",
+    reviewSummary: "Resumen de revisión",
+    risks: "Riesgos",
+    scope: "Alcance",
+    search: "Buscar",
+    severity: "Severidad",
+    status: "Estado",
+    summary: "Resumen",
+    target: "Objetivo",
+    threshold: "Umbral",
+    unmatchedWaivers: "Excepciones sin coincidencia",
+    waiverDrift: "Desviación de excepciones",
+    waiverMode: "Modo de excepciones",
+    waived: "Exceptuados",
+    waivedFindings: "Hallazgos exceptuados",
+    waivers: "Excepciones"
+  },
+  messages: {
+    allActions: "Todas las acciones",
+    allDependencies: "Todas las dependencias",
+    collapseText: "Menos",
+    defaultCollapseLabel: "Contraer valor",
+    defaultExpandLabel: "Mostrar valor completo",
+    searchPlaceholder: "Paquete, motivo, evidencia",
+    noActiveFindings: "No hay hallazgos activos.",
+    noExpiredWaivers: "No hay excepciones caducadas.",
+    noMatchingFindings: "No hay hallazgos que coincidan con los filtros seleccionados.",
+    noUnmatchedWaivers: "No hay excepciones sin coincidencia.",
+    noWaivedFindings: "No hay hallazgos exceptuados.",
+    waiverMode: (mode) =>
+      mode === "ignored" ? "ignorado (--no-waivers)" : "local (.ohrisk-waivers.json)",
+    dependencies: (total, direct, transitive) =>
+      `${total} en total, ${direct} directas, ${transitive} transitivas`,
+    evidence: (files, warnings) => `${files} archivos, ${warnings} advertencias`,
+    licenseConfidence: (high, medium, low) =>
+      `${high} de alta confianza, ${medium} de confianza media, ${low} de baja confianza`,
+    licenseIssues: (missing, malformed) => `${missing} faltantes, ${malformed} mal formadas`,
+    risks: (risks) =>
+      `${risks.high} altos, ${risks.review} revisión, ${risks.unknown} desconocidos, ${risks.low} bajos`,
+    waived: (applied, expired, unmatched) =>
+      `${applied} aplicadas, ${expired} caducadas, ${unmatched} sin coincidencia`,
+    reviewStatus: (risks) => {
+      if (risks.high > 0) return "Se requiere revisión de alto riesgo";
+      if (risks.unknown > 0) return "Se requiere revisión de evidencia";
+      if (risks.review > 0) return "Se requiere revisión de política";
+      if (risks.low > 0) return "Solo hallazgos de bajo riesgo";
+      return "No hay hallazgos activos";
+    },
+    activeFindings: (risks) => {
+      const total = risks.high + risks.review + risks.unknown + risks.low;
+      return `${total} activos (${risks.high} altos, ${risks.review} revisión, ${risks.unknown} desconocidos, ${risks.low} bajos)`;
+    },
+    scope: (profile, prodOnly) =>
+      `perfil ${profile}, ${prodOnly ? "solo dependencias de producción" : "todas las dependencias"}`,
+    reviewWaivers: (applied, driftEntries) =>
+      `${applied} aplicadas, ${driftEntries} desviaciones`,
+    reviewWaiverDrift: (summary) => {
+      const line = spanishWaiverDrift(summary);
+      return line?.replace(/^Desviación de excepciones: /, "") ?? "No comprobado (--strict-waivers no configurado)";
+    },
+    evidenceRecovery: spanishEvidenceRecovery,
+    threshold: spanishThreshold,
+    waiverDrift: spanishWaiverDrift,
+    nextAction: spanishNextAction,
+    severity: (severity) => {
+      switch (severity) {
+        case "high":
+          return "alto";
+        case "review":
+          return "revisión";
+        case "unknown":
+          return "desconocido";
+        case "low":
+          return "bajo";
+      }
+    },
+    recommendation: (recommendation) => {
+      switch (recommendation) {
+        case "replace":
+          return "reemplazar";
+        case "review":
+          return "revisar";
+        case "collect-evidence":
+          return "recopilar evidencia";
+        case "exclude-dev-only":
+          return "excluir solo desarrollo";
+        case "allow":
+          return "permitir";
+      }
+    },
+    dependencyScope: (scope) => (scope === "direct" ? "directa" : "transitiva"),
+    dependencyType: (type) => {
+      switch (type) {
+        case "production":
+          return "producción";
+        case "development":
+          return "desarrollo";
+        case "optional":
+          return "opcional";
+        case "peer":
+          return "peer";
+        case "unknown":
+          return "desconocida";
+      }
+    },
+    dependencyContext: (finding) =>
+      `${SPANISH_TEXT.messages.dependencyType(finding.dependencyType)} ${SPANISH_TEXT.messages.dependencyScope(finding.dependencyScope)}`,
+    findingReason: spanishFindingReason,
+    findingAction: spanishFindingAction,
+    waiverTarget: (waiver) =>
+      waiver.id ? `id: ${waiver.id}` : `huella: ${waiver.fingerprint ?? "desconocida"}`,
+    expandLabel: (label) => `Mostrar ${label} completo`,
+    collapseLabel: (label) => `Contraer ${label}`,
+    filterStatusTemplate: "{visible} de {total} hallazgos mostrados"
+  },
+  captions: {
+    waivedFindings: "Hallazgos suprimidos por excepciones locales",
+    expiredWaivers: "Excepciones locales caducadas",
+    unmatchedWaivers: "Excepciones activas que no coincidieron con hallazgos actuales"
+  }
+};
+
+const FRENCH_TEXT: HtmlReportText = {
+  htmlLang: "fr",
+  title: "Analyse Ohrisk",
+  labels: {
+    action: "Action",
+    activeFindings: "Résultats actifs",
+    dependency: "Dépendance",
+    dependencies: "Dépendances",
+    evidence: "Évidence",
+    evidenceDetail: "Évidence",
+    evidenceRecovery: "Récupération de l'évidence",
+    expiresOn: "Expire le",
+    expiredWaivers: "Exceptions expirées",
+    findingPath: "Chemin",
+    findings: "Résultats",
+    fingerprint: "Empreinte",
+    licenseConfidence: "Confiance de licence",
+    licenseIssues: "Problèmes de licence",
+    lockfile: "Lockfile",
+    matchedBy: "Correspondance",
+    next: "Suivant",
+    package: "Paquet",
+    path: "Chemin",
+    prodOnly: "Production uniquement",
+    profile: "Profil",
+    project: "Projet",
+    reason: "Motif",
+    reviewFocus: "Point de revue",
+    reviewSummary: "Résumé de revue",
+    risks: "Risques",
+    scope: "Portée",
+    search: "Rechercher",
+    severity: "Sévérité",
+    status: "Statut",
+    summary: "Résumé",
+    target: "Cible",
+    threshold: "Seuil",
+    unmatchedWaivers: "Exceptions sans correspondance",
+    waiverDrift: "Dérive des exceptions",
+    waiverMode: "Mode d'exception",
+    waived: "Exceptés",
+    waivedFindings: "Résultats exceptés",
+    waivers: "Exceptions"
+  },
+  messages: {
+    allActions: "Toutes les actions",
+    allDependencies: "Toutes les dépendances",
+    collapseText: "Moins",
+    defaultCollapseLabel: "Réduire la valeur",
+    defaultExpandLabel: "Afficher la valeur complète",
+    searchPlaceholder: "Paquet, motif, évidence",
+    noActiveFindings: "Aucun résultat actif.",
+    noExpiredWaivers: "Aucune exception expirée.",
+    noMatchingFindings: "Aucun résultat ne correspond aux filtres sélectionnés.",
+    noUnmatchedWaivers: "Aucune exception sans correspondance.",
+    noWaivedFindings: "Aucun résultat excepté.",
+    waiverMode: (mode) =>
+      mode === "ignored" ? "ignoré (--no-waivers)" : "local (.ohrisk-waivers.json)",
+    dependencies: (total, direct, transitive) =>
+      `${total} au total, ${direct} directes, ${transitive} transitives`,
+    evidence: (files, warnings) => `${files} fichiers, ${warnings} avertissements`,
+    licenseConfidence: (high, medium, low) =>
+      `${high} confiance élevée, ${medium} confiance moyenne, ${low} confiance faible`,
+    licenseIssues: (missing, malformed) => `${missing} manquantes, ${malformed} mal formées`,
+    risks: (risks) =>
+      `${risks.high} élevés, ${risks.review} revue, ${risks.unknown} inconnus, ${risks.low} faibles`,
+    waived: (applied, expired, unmatched) =>
+      `${applied} appliquées, ${expired} expirées, ${unmatched} sans correspondance`,
+    reviewStatus: (risks) => {
+      if (risks.high > 0) return "Revue de risque élevé requise";
+      if (risks.unknown > 0) return "Revue de l'évidence requise";
+      if (risks.review > 0) return "Revue de politique requise";
+      if (risks.low > 0) return "Résultats de faible risque seulement";
+      return "Aucun résultat actif";
+    },
+    activeFindings: (risks) => {
+      const total = risks.high + risks.review + risks.unknown + risks.low;
+      return `${total} actifs (${risks.high} élevés, ${risks.review} revue, ${risks.unknown} inconnus, ${risks.low} faibles)`;
+    },
+    scope: (profile, prodOnly) =>
+      `profil ${profile}, ${prodOnly ? "dépendances de production uniquement" : "toutes les dépendances"}`,
+    reviewWaivers: (applied, driftEntries) =>
+      `${applied} appliquées, ${driftEntries} dérives`,
+    reviewWaiverDrift: (summary) => {
+      const line = frenchWaiverDrift(summary);
+      return line?.replace(/^Dérive des exceptions: /, "") ?? "Non vérifié (--strict-waivers non configuré)";
+    },
+    evidenceRecovery: frenchEvidenceRecovery,
+    threshold: frenchThreshold,
+    waiverDrift: frenchWaiverDrift,
+    nextAction: frenchNextAction,
+    severity: (severity) => {
+      switch (severity) {
+        case "high":
+          return "élevé";
+        case "review":
+          return "revue";
+        case "unknown":
+          return "inconnu";
+        case "low":
+          return "faible";
+      }
+    },
+    recommendation: (recommendation) => {
+      switch (recommendation) {
+        case "replace":
+          return "remplacer";
+        case "review":
+          return "revoir";
+        case "collect-evidence":
+          return "collecter l'évidence";
+        case "exclude-dev-only":
+          return "exclure le développement";
+        case "allow":
+          return "autoriser";
+      }
+    },
+    dependencyScope: (scope) => (scope === "direct" ? "directe" : "transitive"),
+    dependencyType: (type) => {
+      switch (type) {
+        case "production":
+          return "production";
+        case "development":
+          return "développement";
+        case "optional":
+          return "optionnelle";
+        case "peer":
+          return "peer";
+        case "unknown":
+          return "inconnue";
+      }
+    },
+    dependencyContext: (finding) =>
+      `${FRENCH_TEXT.messages.dependencyType(finding.dependencyType)} ${FRENCH_TEXT.messages.dependencyScope(finding.dependencyScope)}`,
+    findingReason: frenchFindingReason,
+    findingAction: frenchFindingAction,
+    waiverTarget: (waiver) =>
+      waiver.id ? `id: ${waiver.id}` : `empreinte: ${waiver.fingerprint ?? "inconnue"}`,
+    expandLabel: (label) => `Afficher ${label} complet`,
+    collapseLabel: (label) => `Réduire ${label}`,
+    filterStatusTemplate: "{visible} résultats sur {total} affichés"
+  },
+  captions: {
+    waivedFindings: "Résultats supprimés par des exceptions locales",
+    expiredWaivers: "Entrées d'exception locale expirées",
+    unmatchedWaivers: "Exceptions actives sans correspondance avec les résultats actuels"
+  }
+};
+
 const HTML_REPORT_TEXT: Record<ReportLanguage, HtmlReportText> = {
   en: ENGLISH_TEXT,
-  ko: KOREAN_TEXT
+  ko: KOREAN_TEXT,
+  es: SPANISH_TEXT,
+  fr: FRENCH_TEXT
 };
 
 export function htmlReportText(language: ReportLanguage | undefined): HtmlReportText {
@@ -427,6 +745,60 @@ function koreanWaiverDrift(summary: WaiverDriftSummary): string | undefined {
   return `예외 드리프트: ${status} (만료 또는 미매칭 예외 ${summary.waiverDriftCount}개)`;
 }
 
+function spanishThreshold(summary: ThresholdSummary): string | undefined {
+  if (!summary.failOn || typeof summary.failed !== "boolean") {
+    return undefined;
+  }
+
+  if (typeof summary.failingFindingCount !== "number") {
+    return undefined;
+  }
+
+  const outcome = summary.failed ? "fallo" : "paso";
+  const severity = SPANISH_TEXT.messages.severity(summary.failOn);
+  return `Umbral: ${outcome} en ${severity} (${summary.failingFindingCount} hallazgos en o por encima del umbral)`;
+}
+
+function spanishWaiverDrift(summary: WaiverDriftSummary): string | undefined {
+  if (!summary.strictWaivers || typeof summary.waiverDriftFailed !== "boolean") {
+    return undefined;
+  }
+
+  if (typeof summary.waiverDriftCount !== "number") {
+    return undefined;
+  }
+
+  const status = summary.waiverDriftFailed ? "fallo" : "paso";
+  return `Desviación de excepciones: ${status} (${summary.waiverDriftCount} excepciones caducadas o sin coincidencia)`;
+}
+
+function frenchThreshold(summary: ThresholdSummary): string | undefined {
+  if (!summary.failOn || typeof summary.failed !== "boolean") {
+    return undefined;
+  }
+
+  if (typeof summary.failingFindingCount !== "number") {
+    return undefined;
+  }
+
+  const outcome = summary.failed ? "échec" : "réussite";
+  const severity = FRENCH_TEXT.messages.severity(summary.failOn);
+  return `Seuil: ${outcome} sur ${severity} (${summary.failingFindingCount} résultats au seuil ou au-dessus)`;
+}
+
+function frenchWaiverDrift(summary: WaiverDriftSummary): string | undefined {
+  if (!summary.strictWaivers || typeof summary.waiverDriftFailed !== "boolean") {
+    return undefined;
+  }
+
+  if (typeof summary.waiverDriftCount !== "number") {
+    return undefined;
+  }
+
+  const status = summary.waiverDriftFailed ? "échec" : "réussite";
+  return `Dérive des exceptions: ${status} (${summary.waiverDriftCount} exceptions expirées ou sans correspondance)`;
+}
+
 function englishNextAction(findings: RiskFinding[]): string {
   if (findings.some((finding) => finding.recommendation === "replace")) {
     return "Replace or escalate high-risk dependencies before shipping.";
@@ -451,6 +823,25 @@ function englishNextAction(findings: RiskFinding[]): string {
   return "No action needed for this profile.";
 }
 
+function englishEvidenceRecovery(advice: EvidenceRecoveryAdvice): string {
+  const ratio = `${advice.localEvidenceMissingFindings} of ${advice.unknownFindings} unknown`;
+  const prefix = `Many unknown findings look caused by missing local package source/cache evidence (${ratio}).`;
+  const primary = advice.primaryHint
+    ? ` ${englishEvidenceRecoveryHint(advice.primaryHint)}`
+    : "";
+  return `${prefix}${primary} Restore dependencies without a full app build when possible, then rerun Ohrisk. Other ecosystem examples: npm/pnpm/Bun install, cargo fetch, dotnet restore, Maven/Gradle dependency resolution, Python virtualenv install, dart pub get, and swift package resolve.`;
+}
+
+function englishEvidenceRecoveryHint(hint: EvidenceRecoveryHint): string {
+  const directory = hint.directoryIsScanRoot ? "scan root" : hint.directoryLabel;
+  if (hint.ecosystem === "go") {
+    const source = hint.sourceFileLabel ? ` containing ${hint.sourceFileLabel}` : "";
+    return `Run ${hint.command} from the directory${source} (${directory}); for go.work, use a module listed by use if the Go toolchain asks for a module.`;
+  }
+
+  return `Run ${hint.command} from ${directory}.`;
+}
+
 function koreanNextAction(findings: RiskFinding[]): string {
   if (findings.some((finding) => finding.recommendation === "replace")) {
     return "배포 전에 높은 위험 의존성을 교체하거나 검토 단계로 올리세요.";
@@ -473,6 +864,111 @@ function koreanNextAction(findings: RiskFinding[]): string {
   }
 
   return "이 프로필에서는 추가 조치가 필요하지 않습니다.";
+}
+
+function koreanEvidenceRecovery(advice: EvidenceRecoveryAdvice): string {
+  const ratio = `불명 ${advice.unknownFindings}개 중 ${advice.localEvidenceMissingFindings}개`;
+  const prefix = `불명 항목 다수가 로컬 패키지 소스/캐시 근거 부족으로 보입니다(${ratio}).`;
+  const primary = advice.primaryHint
+    ? ` ${koreanEvidenceRecoveryHint(advice.primaryHint)}`
+    : "";
+  return `${prefix}${primary} 가능하면 전체 앱 빌드 대신 의존성 복원만 먼저 실행한 뒤 Ohrisk를 다시 실행하세요. 다른 생태계 예시는 npm/pnpm/Bun install, cargo fetch, dotnet restore, Maven/Gradle 의존성 해석, Python 가상환경 설치, dart pub get, swift package resolve입니다.`;
+}
+
+function koreanEvidenceRecoveryHint(hint: EvidenceRecoveryHint): string {
+  const directory = hint.directoryIsScanRoot ? "스캔 루트" : hint.directoryLabel;
+  if (hint.ecosystem === "go") {
+    const source = hint.sourceFileLabel ? ` ${hint.sourceFileLabel}가 있는 폴더` : "해당 폴더";
+    return `${source}(${directory})에서 ${hint.command}을 실행하세요. go.work에서는 Go 도구가 모듈을 요구하면 use에 적힌 모듈 폴더에서 실행하세요.`;
+  }
+
+  return `${directory}에서 ${hint.command}을 실행하세요.`;
+}
+
+function spanishNextAction(findings: RiskFinding[]): string {
+  if (findings.some((finding) => finding.recommendation === "replace")) {
+    return "Reemplaza o escala las dependencias de alto riesgo antes de publicar.";
+  }
+
+  if (findings.some((finding) => finding.recommendation === "collect-evidence")) {
+    return "Recopila la evidencia de licencia faltante antes de aprobar este proyecto.";
+  }
+
+  if (findings.some((finding) => finding.recommendation === "review")) {
+    return "Revisa las dependencias marcadas antes de publicar con este perfil.";
+  }
+
+  if (findings.some((finding) => finding.recommendation === "exclude-dev-only")) {
+    return "Ejecuta con --prod o mantén el riesgo de desarrollo fuera de producción.";
+  }
+
+  if (findings.some((finding) => finding.action === NOTICE_ACTION)) {
+    return "Conserva los archivos NOTICE o de atribución requeridos al distribuir este proyecto.";
+  }
+
+  return "No se requiere acción para este perfil.";
+}
+
+function spanishEvidenceRecovery(advice: EvidenceRecoveryAdvice): string {
+  const ratio = `${advice.localEvidenceMissingFindings} de ${advice.unknownFindings} desconocidos`;
+  const prefix = `Muchos hallazgos desconocidos parecen venir de evidencia local de fuente/cache de paquetes faltante (${ratio}).`;
+  const primary = advice.primaryHint
+    ? ` ${spanishEvidenceRecoveryHint(advice.primaryHint)}`
+    : "";
+  return `${prefix}${primary} Cuando sea posible, restaura dependencias antes de hacer una compilación completa de la app y vuelve a ejecutar Ohrisk. Otros ejemplos por ecosistema: npm/pnpm/Bun install, cargo fetch, dotnet restore, resolución de dependencias Maven/Gradle, instalación en virtualenv de Python, dart pub get y swift package resolve.`;
+}
+
+function spanishEvidenceRecoveryHint(hint: EvidenceRecoveryHint): string {
+  const directory = hint.directoryIsScanRoot ? "raíz del escaneo" : hint.directoryLabel;
+  if (hint.ecosystem === "go") {
+    const source = hint.sourceFileLabel ? ` que contiene ${hint.sourceFileLabel}` : "";
+    return `Ejecuta ${hint.command} desde el directorio${source} (${directory}); con go.work, usa un módulo listado en use si la herramienta Go pide un módulo.`;
+  }
+
+  return `Ejecuta ${hint.command} desde ${directory}.`;
+}
+
+function frenchNextAction(findings: RiskFinding[]): string {
+  if (findings.some((finding) => finding.recommendation === "replace")) {
+    return "Remplacez ou escaladez les dépendances à haut risque avant la publication.";
+  }
+
+  if (findings.some((finding) => finding.recommendation === "collect-evidence")) {
+    return "Collectez l'évidence de licence manquante avant d'approuver ce projet.";
+  }
+
+  if (findings.some((finding) => finding.recommendation === "review")) {
+    return "Passez en revue les dépendances signalées avant de publier avec ce profil.";
+  }
+
+  if (findings.some((finding) => finding.recommendation === "exclude-dev-only")) {
+    return "Exécutez avec --prod ou gardez le risque de développement hors production.";
+  }
+
+  if (findings.some((finding) => finding.action === NOTICE_ACTION)) {
+    return "Conservez les fichiers NOTICE ou d'attribution requis lors de la distribution de ce projet.";
+  }
+
+  return "Aucune action requise pour ce profil.";
+}
+
+function frenchEvidenceRecovery(advice: EvidenceRecoveryAdvice): string {
+  const ratio = `${advice.localEvidenceMissingFindings} sur ${advice.unknownFindings} inconnus`;
+  const prefix = `De nombreux résultats inconnus semblent venir d'une évidence locale de source/cache de paquets manquante (${ratio}).`;
+  const primary = advice.primaryHint
+    ? ` ${frenchEvidenceRecoveryHint(advice.primaryHint)}`
+    : "";
+  return `${prefix}${primary} Quand c'est possible, restaurez les dépendances avant une compilation complète de l'app, puis relancez Ohrisk. Autres exemples par écosystème: npm/pnpm/Bun install, cargo fetch, dotnet restore, résolution des dépendances Maven/Gradle, installation dans un virtualenv Python, dart pub get et swift package resolve.`;
+}
+
+function frenchEvidenceRecoveryHint(hint: EvidenceRecoveryHint): string {
+  const directory = hint.directoryIsScanRoot ? "racine du scan" : hint.directoryLabel;
+  if (hint.ecosystem === "go") {
+    const source = hint.sourceFileLabel ? ` contenant ${hint.sourceFileLabel}` : "";
+    return `Exécutez ${hint.command} depuis le répertoire${source} (${directory}); avec go.work, utilisez un module listé dans use si l'outil Go demande un module.`;
+  }
+
+  return `Exécutez ${hint.command} depuis ${directory}.`;
 }
 
 function koreanFindingReason(finding: RiskFinding, profile: string): string {
@@ -502,6 +998,60 @@ function koreanFindingReason(finding: RiskFinding, profile: string): string {
   }
 }
 
+function spanishFindingReason(finding: RiskFinding, profile: string): string {
+  switch (finding.reason) {
+    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
+      return "El paquete local está marcado como private en package.json, así que la falta de metadatos públicos de licencia se trata como evidencia de paquete interno.";
+    case `License expression is low risk for ${profile}.`:
+      return `La expresión de licencia es de bajo riesgo para ${profile}.`;
+    case `License expression should be reviewed before shipping under ${profile}.`:
+      return `La expresión de licencia debe revisarse antes de publicar bajo ${profile}.`;
+    case "Package metadata explicitly marks the package as UNLICENSED.":
+      return "Los metadatos del paquete marcan explícitamente el paquete como UNLICENSED.";
+    case `License expression includes a source-available or commercial-use restriction for ${profile}.`:
+      return `La expresión de licencia incluye una restricción de código disponible o uso comercial para ${profile}.`;
+    case `License evidence contains an explicit commercial-use restriction for ${profile}.`:
+      return `La evidencia de licencia contiene una restricción explícita de uso comercial para ${profile}.`;
+    case `License expression is high risk for ${profile}.`:
+      return `La expresión de licencia es de alto riesgo para ${profile}.`;
+    case "Package metadata does not declare a license expression.":
+      return "Los metadatos del paquete no declaran una expresión de licencia.";
+    case "Package metadata declares a malformed license expression.":
+      return "Los metadatos del paquete declaran una expresión de licencia mal formada.";
+    case "License expression is not recognized by Ohrisk.":
+      return "Ohrisk no reconoce la expresión de licencia.";
+    default:
+      return finding.reason;
+  }
+}
+
+function frenchFindingReason(finding: RiskFinding, profile: string): string {
+  switch (finding.reason) {
+    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
+      return "Le paquet local est marqué private dans package.json; les métadonnées publiques de licence manquantes sont donc traitées comme évidence de paquet interne.";
+    case `License expression is low risk for ${profile}.`:
+      return `L'expression de licence présente un faible risque pour ${profile}.`;
+    case `License expression should be reviewed before shipping under ${profile}.`:
+      return `L'expression de licence doit être revue avant une publication sous ${profile}.`;
+    case "Package metadata explicitly marks the package as UNLICENSED.":
+      return "Les métadonnées du paquet marquent explicitement le paquet comme UNLICENSED.";
+    case `License expression includes a source-available or commercial-use restriction for ${profile}.`:
+      return `L'expression de licence inclut une restriction source-available ou d'usage commercial pour ${profile}.`;
+    case `License evidence contains an explicit commercial-use restriction for ${profile}.`:
+      return `L'évidence de licence contient une restriction explicite d'usage commercial pour ${profile}.`;
+    case `License expression is high risk for ${profile}.`:
+      return `L'expression de licence présente un risque élevé pour ${profile}.`;
+    case "Package metadata does not declare a license expression.":
+      return "Les métadonnées du paquet ne déclarent pas d'expression de licence.";
+    case "Package metadata declares a malformed license expression.":
+      return "Les métadonnées du paquet déclarent une expression de licence mal formée.";
+    case "License expression is not recognized by Ohrisk.":
+      return "Ohrisk ne reconnaît pas l'expression de licence.";
+    default:
+      return finding.reason;
+  }
+}
+
 function koreanFindingAction(finding: RiskFinding): string {
   switch (finding.action) {
     case "No action needed for this profile.":
@@ -522,6 +1072,56 @@ function koreanFindingAction(finding: RiskFinding): string {
       return "이 패키지를 승인하기 전에 선언된 라이선스 표현식을 수정하거나 수동 검토하세요.";
     case "Collect license evidence before approving this package.":
       return "이 패키지를 승인하기 전에 라이선스 근거를 수집하세요.";
+    default:
+      return finding.action;
+  }
+}
+
+function spanishFindingAction(finding: RiskFinding): string {
+  switch (finding.action) {
+    case "No action needed for this profile.":
+      return "No se requiere acción para este perfil.";
+    case "Replace this package or escalate before shipping.":
+      return "Reemplaza este paquete o escálalo antes de publicar.";
+    case "Do not ship this package until license permissions are clarified.":
+      return "No publiques este paquete hasta aclarar los permisos de licencia.";
+    case NOTICE_ACTION:
+      return "Conserva los archivos NOTICE o de atribución requeridos al distribuir este paquete.";
+    case "Review this package before shipping.":
+      return "Revisa este paquete antes de publicar.";
+    case "Keep this package out of production or scan with --prod.":
+      return "Mantén este paquete fuera de producción o escanea con --prod.";
+    case "Add or verify package license metadata before approving this package.":
+      return "Agrega o verifica los metadatos de licencia del paquete antes de aprobarlo.";
+    case "Fix or manually review the declared license expression before approving this package.":
+      return "Corrige o revisa manualmente la expresión de licencia declarada antes de aprobar este paquete.";
+    case "Collect license evidence before approving this package.":
+      return "Recopila evidencia de licencia antes de aprobar este paquete.";
+    default:
+      return finding.action;
+  }
+}
+
+function frenchFindingAction(finding: RiskFinding): string {
+  switch (finding.action) {
+    case "No action needed for this profile.":
+      return "Aucune action requise pour ce profil.";
+    case "Replace this package or escalate before shipping.":
+      return "Remplacez ce paquet ou escaladez-le avant la publication.";
+    case "Do not ship this package until license permissions are clarified.":
+      return "Ne publiez pas ce paquet tant que les permissions de licence ne sont pas clarifiées.";
+    case NOTICE_ACTION:
+      return "Conservez les fichiers NOTICE ou d'attribution requis lors de la distribution de ce paquet.";
+    case "Review this package before shipping.":
+      return "Passez ce paquet en revue avant la publication.";
+    case "Keep this package out of production or scan with --prod.":
+      return "Gardez ce paquet hors production ou scannez avec --prod.";
+    case "Add or verify package license metadata before approving this package.":
+      return "Ajoutez ou vérifiez les métadonnées de licence du paquet avant de l'approuver.";
+    case "Fix or manually review the declared license expression before approving this package.":
+      return "Corrigez ou revoyez manuellement l'expression de licence déclarée avant d'approuver ce paquet.";
+    case "Collect license evidence before approving this package.":
+      return "Collectez l'évidence de licence avant d'approuver ce paquet.";
     default:
       return finding.action;
   }

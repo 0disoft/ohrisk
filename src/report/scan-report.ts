@@ -17,7 +17,12 @@ import {
   formatMarkdownTableCell,
   formatMarkdownTableCode
 } from "./markdown";
-import { htmlReportText, type HtmlReportText } from "./html-report-text";
+import {
+  htmlReportText,
+  type EvidenceRecoveryAdvice,
+  type EvidenceRecoveryHint,
+  type HtmlReportText
+} from "./html-report-text";
 import { HTML_REPORT_CONTENT_SECURITY_POLICY } from "./html-security";
 import type { ReportLanguage } from "./language";
 import { buildThresholdSummary, formatThresholdSummary } from "./threshold-summary";
@@ -319,6 +324,8 @@ function buildReviewSummaryCards(
   text: HtmlReportText,
   waiverDriftSummary: ReturnType<typeof buildWaiverDriftSummary>
 ): ReadonlyArray<readonly [string, string]> {
+  const evidenceRecoveryAdvice = buildEvidenceRecoveryAdvice(input, summary);
+
   return [
     [text.labels.status, text.messages.reviewStatus(summary.risks)],
     [text.labels.activeFindings, text.messages.activeFindings(summary.risks)],
@@ -331,8 +338,74 @@ function buildReviewSummaryCards(
       )
     ],
     [text.labels.reviewFocus, text.messages.nextAction(input.riskFindings)],
+    ...(evidenceRecoveryAdvice
+      ? [[text.labels.evidenceRecovery, text.messages.evidenceRecovery(evidenceRecoveryAdvice)] as const]
+      : []),
     [text.labels.waiverDrift, text.messages.reviewWaiverDrift(waiverDriftSummary)]
   ];
+}
+
+function buildEvidenceRecoveryAdvice(
+  input: ScanReportInput,
+  summary: ReturnType<typeof buildScanSummary>
+): EvidenceRecoveryAdvice | undefined {
+  const activeFindings = summary.risks.high + summary.risks.review + summary.risks.unknown + summary.risks.low;
+  if (activeFindings === 0 || summary.risks.unknown / activeFindings < 0.5) {
+    return undefined;
+  }
+
+  const unknownFindings = input.riskFindings.filter((finding) => finding.severity === "unknown");
+  if (unknownFindings.length === 0) {
+    return undefined;
+  }
+
+  const localEvidenceMissingFindings = unknownFindings.filter(hasLocalPackageEvidenceMissingSignal);
+  if (
+    localEvidenceMissingFindings.length === 0
+    || localEvidenceMissingFindings.length / unknownFindings.length < 0.5
+  ) {
+    return undefined;
+  }
+
+  return {
+    unknownFindings: unknownFindings.length,
+    localEvidenceMissingFindings: localEvidenceMissingFindings.length,
+    primaryHint: evidenceRecoveryHintFor(input, localEvidenceMissingFindings)
+  };
+}
+
+function hasLocalPackageEvidenceMissingSignal(finding: RiskFinding): boolean {
+  const evidenceText = finding.evidence.join("\n");
+  return [
+    /\bsource:\s*unavailable\b/i,
+    /\bwas not found in (?:a )?local\b/i,
+    /\bwas not found in [^\n.]*\blocal\b[^\n.]*\bcache\b/i,
+    /\b(?:package|module|gem|provider|distribution) source was not found\b/i,
+    /\bmetadata was not found in [^\n.]*\blocal\b/i,
+    /\blocal\b[^\n.]*\b(?:cache|registry|install path|package source)\b[^\n.]*\bwas not found\b/i
+  ].some((pattern) => pattern.test(evidenceText));
+}
+
+function evidenceRecoveryHintFor(
+  input: ScanReportInput,
+  findings: RiskFinding[]
+): EvidenceRecoveryHint | undefined {
+  const evidenceText = findings.map((finding) => finding.evidence.join("\n")).join("\n");
+  if (
+    input.project.lockfile.kind === "go-mod"
+    || input.project.lockfile.kind === "go-work"
+    || /\bGo module source was not found\b/i.test(evidenceText)
+  ) {
+    return {
+      ecosystem: "go",
+      command: "`go mod download all`",
+      directoryLabel: displayLockfileDirectoryPath(input.project),
+      directoryIsScanRoot: displayLockfileDirectoryPath(input.project) === ".",
+      sourceFileLabel: input.project.lockfile.kind === "go-work" ? "go.work" : "go.mod"
+    };
+  }
+
+  return undefined;
 }
 
 function renderHtmlFindingsSection(
@@ -808,6 +881,11 @@ function renderMarkdownReport(
 function displayLockfilePath(project: ScanReportInput["project"]): string {
   const relativePath = path.relative(project.rootDir, project.lockfile.path);
   return relativePath === "" ? path.basename(project.lockfile.path) : relativePath;
+}
+
+function displayLockfileDirectoryPath(project: ScanReportInput["project"]): string {
+  const directoryPath = path.dirname(displayLockfilePath(project));
+  return directoryPath === "" ? "." : directoryPath;
 }
 
 function markdownProjectLabel(input: ScanReportInput): string {

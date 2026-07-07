@@ -45,10 +45,12 @@ Open a browser-friendly HTML report:
 ohrisk scan --html --output ohrisk-report.html --open
 ```
 
-Use Korean HTML report text when you want a local review artifact for Korean readers:
+Use Korean, Spanish, or French HTML report text when you want a local review artifact for those readers:
 
 ```bash
 ohrisk scan --html --language ko --output ohrisk-report.html --open
+ohrisk scan --html --language es --output ohrisk-report-es.html --open
+ohrisk scan --html --language fr --output ohrisk-report-fr.html --open
 ```
 
 Prefer not to install globally? Use `npx ohrisk scan` instead.
@@ -282,6 +284,8 @@ ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
 ohrisk scan --html --language ko --output reports\ohrisk-report-ko.html --open
+ohrisk scan --html --language es --output reports\ohrisk-report-es.html --open
+ohrisk scan --html --language fr --output reports\ohrisk-report-fr.html --open
 ```
 
 The scan prints live terminal progress while it reads the project, collects
@@ -467,6 +471,8 @@ Write browser, SARIF, SBOM, or PR reports to files:
 ```bash
 ohrisk scan --html --output reports/ohrisk.html --open
 ohrisk scan --html --language ko --output reports/ohrisk-ko.html --open
+ohrisk scan --html --language es --output reports/ohrisk-es.html --open
+ohrisk scan --html --language fr --output reports/ohrisk-fr.html --open
 ohrisk scan --sarif --output reports/ohrisk.sarif
 ohrisk scan --cyclonedx --output reports/ohrisk.cdx.json
 ohrisk diff main --prod --markdown --output reports/ohrisk-pr.md
