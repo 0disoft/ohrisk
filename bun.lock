@@ -15,7 +15,7 @@
     },
   },
   "packages": {
-    "@0disoft/laqu": ["@0disoft/laqu@1.0.5", "", {}, "sha512-ytUT6SOTSLrhk5D4pB0MO7rTL6p2VJl9nzjXsRyHNtgNEl84j7MhgP3yZk53qYyCYNJ5haPWyJTJ7uAK9h0+fA=="],
+    "@0disoft/laqu": ["@0disoft/laqu@1.0.6", "", {}, "sha512-41Zm8xE4GZuESzGodfSSZi+l4BwFewgGEC4/iHXkCWqcG52XHnXAcuH5nmYtdM1M8zmVBEujj3AWKTZKo3C/gA=="],
 
     "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 

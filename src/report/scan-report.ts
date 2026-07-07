@@ -17,7 +17,9 @@ import {
   formatMarkdownTableCell,
   formatMarkdownTableCode
 } from "./markdown";
+import { htmlReportText, type HtmlReportText } from "./html-report-text";
 import { HTML_REPORT_CONTENT_SECURITY_POLICY } from "./html-security";
+import type { ReportLanguage } from "./language";
 import { buildThresholdSummary, formatThresholdSummary } from "./threshold-summary";
 
 export type ScanReportInput = {
@@ -31,6 +33,7 @@ export type ScanReportInput = {
   json: boolean;
   markdown: boolean;
   html: boolean;
+  reportLanguage?: ReportLanguage;
   waiverMode: "local" | "ignored";
   failOn?: RiskSeverity;
   strictWaivers?: boolean;
@@ -116,16 +119,14 @@ function renderHtmlReport(
   input: ScanReportInput,
   summary: ReturnType<typeof buildScanSummary>
 ): string {
-  const nextAction = nextActionFor(input.riskFindings);
   const thresholdSummary = buildThresholdSummary(input.riskFindings, input.failOn);
   const waiverDriftSummary = buildWaiverDriftSummary(input);
-  const thresholdLine = formatThresholdSummary(thresholdSummary);
-  const waiverDriftLine = formatWaiverDriftSummary(waiverDriftSummary);
-  const title = "Ohrisk scan";
+  const text = htmlReportText(input.reportLanguage);
+  const title = text.title;
 
   return [
     "<!doctype html>",
-    '<html lang="en">',
+    `<html lang="${escapeHtml(text.htmlLang)}">`,
     "<head>",
     '  <meta charset="utf-8">',
     '  <meta name="viewport" content="width=device-width, initial-scale=1">',
@@ -140,57 +141,73 @@ function renderHtmlReport(
     "    <header>",
     `      <p class="eyebrow">${escapeHtml(input.project.lockfile.kind)}</p>`,
     `      <h1>${escapeHtml(title)}</h1>`,
-    `      <p class="lead">${escapeHtml(nextAction)}</p>`,
+    `      <p class="lead">${escapeHtml(text.messages.nextAction(input.riskFindings))}</p>`,
     "    </header>",
     '    <section aria-labelledby="review-summary-heading">',
-    '      <h2 id="review-summary-heading">Review summary</h2>',
+    `      <h2 id="review-summary-heading">${escapeHtml(text.labels.reviewSummary)}</h2>`,
     '      <dl class="summary-grid review-summary-grid">',
-    ...renderSummaryCards(buildReviewSummaryCards(input, summary, nextAction, waiverDriftLine)),
+    ...renderSummaryCards(buildReviewSummaryCards(input, summary, text, waiverDriftSummary)),
     "      </dl>",
     "    </section>",
     '    <section aria-labelledby="summary-heading">',
-    '      <h2 id="summary-heading">Summary</h2>',
+    `      <h2 id="summary-heading">${escapeHtml(text.labels.summary)}</h2>`,
     '      <dl class="summary-grid">',
     ...renderSummaryCards([
-      ["Project", markdownProjectLabel(input)],
-      ["Lockfile", `${displayLockfilePath(input.project)} (${input.project.lockfile.kind})`],
-      ["Profile", input.profile],
-      ["Production only", input.prodOnly ? "yes" : "no"],
+      [text.labels.project, markdownProjectLabel(input)],
+      [text.labels.lockfile, `${displayLockfilePath(input.project)} (${input.project.lockfile.kind})`],
+      [text.labels.profile, input.profile],
+      [text.labels.prodOnly, input.prodOnly ? "yes" : "no"],
       [
-        "Dependencies",
-        `${summary.dependencyGraph.total} total, ${summary.dependencyGraph.direct} direct, ${summary.dependencyGraph.transitive} transitive`
+        text.labels.dependencies,
+        text.messages.dependencies(
+          summary.dependencyGraph.total,
+          summary.dependencyGraph.direct,
+          summary.dependencyGraph.transitive
+        )
       ],
-      ["Evidence", `${summary.evidence.files} files, ${summary.evidence.warnings} warnings`],
+      [text.labels.evidence, text.messages.evidence(summary.evidence.files, summary.evidence.warnings)],
       [
-        "License confidence",
-        `${summary.licenses.highConfidence} high-confidence, ${summary.licenses.mediumConfidence} medium-confidence, ${summary.licenses.lowConfidence} low-confidence`
+        text.labels.licenseConfidence,
+        text.messages.licenseConfidence(
+          summary.licenses.highConfidence,
+          summary.licenses.mediumConfidence,
+          summary.licenses.lowConfidence
+        )
       ],
-      ["License issues", `${summary.licenses.missing} missing, ${summary.licenses.malformed} malformed`],
       [
-        "Risks",
-        `${summary.risks.high} high, ${summary.risks.review} review, ${summary.risks.unknown} unknown, ${summary.risks.low} low`
+        text.labels.licenseIssues,
+        text.messages.licenseIssues(summary.licenses.missing, summary.licenses.malformed)
       ],
-      ["Waiver mode", formatWaiverMode(input.waiverMode)],
+      [text.labels.risks, text.messages.risks(summary.risks)],
+      [text.labels.waiverMode, text.messages.waiverMode(input.waiverMode)],
       [
-        "Waived",
-        `${summary.waivers.applied} applied, ${summary.waivers.expired} expired, ${summary.waivers.unmatched} unmatched`
+        text.labels.waived,
+        text.messages.waived(
+          summary.waivers.applied,
+          summary.waivers.expired,
+          summary.waivers.unmatched
+        )
       ],
-      ...(thresholdLine ? [["Threshold", thresholdLine] as const] : []),
-      ...(waiverDriftLine ? [["Waiver drift", waiverDriftLine] as const] : [])
+      ...(text.messages.threshold(thresholdSummary)
+        ? [[text.labels.threshold, text.messages.threshold(thresholdSummary) as string] as const]
+        : []),
+      ...(text.messages.waiverDrift(waiverDriftSummary)
+        ? [[text.labels.waiverDrift, text.messages.waiverDrift(waiverDriftSummary) as string] as const]
+        : [])
     ]),
     "      </dl>",
     "    </section>",
-    ...renderHtmlFindingsSection(input.riskFindings),
-    ...renderHtmlWaivedFindingsSection(input.waivedFindings),
-    ...renderHtmlExpiredWaiversSection(input.expiredWaivers),
-    ...renderHtmlUnmatchedWaiversSection(input.unmatchedWaivers),
+    ...renderHtmlFindingsSection(input.riskFindings, input.profile, text),
+    ...renderHtmlWaivedFindingsSection(input.waivedFindings, text),
+    ...renderHtmlExpiredWaiversSection(input.expiredWaivers, text),
+    ...renderHtmlUnmatchedWaiversSection(input.unmatchedWaivers, text),
     '    <section aria-labelledby="next-heading">',
-    '      <h2 id="next-heading">Next</h2>',
-    `      <p>${escapeHtml(nextAction)}</p>`,
+    `      <h2 id="next-heading">${escapeHtml(text.labels.next)}</h2>`,
+    `      <p>${escapeHtml(text.messages.nextAction(input.riskFindings))}</p>`,
     "    </section>",
     "  </main>",
     "  <script>",
-    ...renderHtmlFilterScript().map((line) => `    ${line}`),
+    ...renderHtmlFilterScript(text).map((line) => `    ${line}`),
     "  </script>",
     "</body>",
     "</html>"
@@ -299,29 +316,35 @@ function renderSummaryCards(items: ReadonlyArray<readonly [string, string]>): st
 function buildReviewSummaryCards(
   input: ScanReportInput,
   summary: ReturnType<typeof buildScanSummary>,
-  nextAction: string,
-  waiverDriftLine: string | undefined
+  text: HtmlReportText,
+  waiverDriftSummary: ReturnType<typeof buildWaiverDriftSummary>
 ): ReadonlyArray<readonly [string, string]> {
   return [
-    ["Status", reviewStatusFor(summary.risks)],
-    ["Active findings", formatRiskCounts(summary.risks)],
-    ["Scope", `${input.profile} profile, ${input.prodOnly ? "production only" : "all dependencies"}`],
-    ["Waivers", `${summary.waivers.applied} applied, ${summary.waivers.expired + summary.waivers.unmatched} drift entries`],
-    ["Review focus", nextAction],
-    ["Waiver drift", formatReviewWaiverDrift(waiverDriftLine)]
+    [text.labels.status, text.messages.reviewStatus(summary.risks)],
+    [text.labels.activeFindings, text.messages.activeFindings(summary.risks)],
+    [text.labels.scope, text.messages.scope(input.profile, input.prodOnly)],
+    [
+      text.labels.waivers,
+      text.messages.reviewWaivers(
+        summary.waivers.applied,
+        summary.waivers.expired + summary.waivers.unmatched
+      )
+    ],
+    [text.labels.reviewFocus, text.messages.nextAction(input.riskFindings)],
+    [text.labels.waiverDrift, text.messages.reviewWaiverDrift(waiverDriftSummary)]
   ];
 }
 
-function formatReviewWaiverDrift(waiverDriftLine: string | undefined): string {
-  return waiverDriftLine?.replace(/^Waiver drift: /, "") ?? "Not checked (--strict-waivers not set)";
-}
-
-function renderHtmlFindingsSection(findings: RiskFinding[]): string[] {
+function renderHtmlFindingsSection(
+  findings: RiskFinding[],
+  profile: string,
+  text: HtmlReportText
+): string[] {
   if (findings.length === 0) {
     return [
       '    <section aria-labelledby="findings-heading">',
-      '      <h2 id="findings-heading">Findings</h2>',
-      '      <p class="empty">No active findings.</p>',
+      `      <h2 id="findings-heading">${escapeHtml(text.labels.findings)}</h2>`,
+      `      <p class="empty">${escapeHtml(text.messages.noActiveFindings)}</p>`,
       "    </section>"
     ];
   }
@@ -332,57 +355,66 @@ function renderHtmlFindingsSection(findings: RiskFinding[]): string[] {
   return [
     '    <section aria-labelledby="findings-heading">',
     '      <div class="section-head">',
-    '        <h2 id="findings-heading">Findings</h2>',
+    `        <h2 id="findings-heading">${escapeHtml(text.labels.findings)}</h2>`,
     '        <p class="filter-status" data-finding-filter-status></p>',
     "      </div>",
     '      <div class="finding-filter-panel">',
     '      <fieldset class="finding-filters">',
-    "        <legend>Severity</legend>",
+    `        <legend>${escapeHtml(text.labels.severity)}</legend>`,
     '        <div class="filter-options">',
-    ...renderSeverityFilterControls(counts),
+    ...renderSeverityFilterControls(counts, text),
     "      </div>",
     "      </fieldset>",
     '        <div class="filter-fields">',
-    '          <label class="filter-field" for="finding-search">Search<input id="finding-search" type="search" data-finding-search placeholder="Package, reason, evidence"></label>',
-    '          <label class="filter-field" for="finding-dependency-filter">Dependency<select id="finding-dependency-filter" data-finding-dependency-filter>',
-    '            <option value="all">All dependencies</option>',
-    ...renderDependencyFilterOptions(filterCounts.dependencyScopes),
+    `          <label class="filter-field" for="finding-search">${escapeHtml(text.labels.search)}<input id="finding-search" type="search" data-finding-search placeholder="${escapeHtml(text.messages.searchPlaceholder)}"></label>`,
+    `          <label class="filter-field" for="finding-dependency-filter">${escapeHtml(text.labels.dependency)}<select id="finding-dependency-filter" data-finding-dependency-filter>`,
+    `            <option value="all">${escapeHtml(text.messages.allDependencies)}</option>`,
+    ...renderDependencyFilterOptions(filterCounts.dependencyScopes, text),
     "          </select></label>",
-    '          <label class="filter-field" for="finding-action-filter">Action<select id="finding-action-filter" data-finding-action-filter>',
-    '            <option value="all">All actions</option>',
-    ...renderRecommendationFilterOptions(filterCounts.recommendations),
+    `          <label class="filter-field" for="finding-action-filter">${escapeHtml(text.labels.action)}<select id="finding-action-filter" data-finding-action-filter>`,
+    `            <option value="all">${escapeHtml(text.messages.allActions)}</option>`,
+    ...renderRecommendationFilterOptions(filterCounts.recommendations, text),
     "          </select></label>",
     "        </div>",
     "      </div>",
-    '      <p class="empty" data-finding-filter-empty hidden>No findings match the selected filters.</p>',
+    `      <p class="empty" data-finding-filter-empty hidden>${escapeHtml(text.messages.noMatchingFindings)}</p>`,
     '      <div class="finding-list">',
-    ...findings.flatMap((finding, index) => renderHtmlFindingCard(finding, index)),
+    ...findings.flatMap((finding, index) => renderHtmlFindingCard(finding, index, profile, text)),
     "      </div>",
     "    </section>"
   ];
 }
 
-function renderSeverityFilterControls(counts: Record<RiskSeverity, number>): string[] {
+function renderSeverityFilterControls(
+  counts: Record<RiskSeverity, number>,
+  text: HtmlReportText
+): string[] {
   const severities: RiskSeverity[] = ["high", "review", "unknown", "low"];
 
   return severities.map((severity) => {
     const checked = severity === "low" ? "" : " checked";
-    const label = `${severity} (${counts[severity]})`;
+    const label = `${text.messages.severity(severity)} (${counts[severity]})`;
     return `          <label class="filter-option"><input type="checkbox" value="${severity}" data-finding-filter${checked}> ${escapeHtml(label)}</label>`;
   });
 }
 
-function renderDependencyFilterOptions(counts: Record<RiskDependencyScope, number>): string[] {
+function renderDependencyFilterOptions(
+  counts: Record<RiskDependencyScope, number>,
+  text: HtmlReportText
+): string[] {
   const scopes: RiskDependencyScope[] = ["direct", "transitive"];
   return scopes
     .filter((scope) => counts[scope] > 0)
     .map(
       (scope) =>
-        `            <option value="${scope}">${escapeHtml(`${scope} (${counts[scope]})`)}</option>`
+        `            <option value="${scope}">${escapeHtml(`${text.messages.dependencyScope(scope)} (${counts[scope]})`)}</option>`
     );
 }
 
-function renderRecommendationFilterOptions(counts: Record<RiskRecommendation, number>): string[] {
+function renderRecommendationFilterOptions(
+  counts: Record<RiskRecommendation, number>,
+  text: HtmlReportText
+): string[] {
   const recommendations: RiskRecommendation[] = [
     "replace",
     "review",
@@ -394,41 +426,51 @@ function renderRecommendationFilterOptions(counts: Record<RiskRecommendation, nu
     .filter((recommendation) => counts[recommendation] > 0)
     .map(
       (recommendation) =>
-        `            <option value="${recommendation}">${escapeHtml(`${recommendation} (${counts[recommendation]})`)}</option>`
+        `            <option value="${recommendation}">${escapeHtml(`${text.messages.recommendation(recommendation)} (${counts[recommendation]})`)}</option>`
     );
 }
 
-function renderHtmlFindingCard(finding: RiskFinding, index: number): string[] {
+function renderHtmlFindingCard(
+  finding: RiskFinding,
+  index: number,
+  profile: string,
+  text: HtmlReportText
+): string[] {
   const titleId = `finding-${index + 1}-title`;
-  const searchText = normalizeFindingSearchText(finding);
+  const searchText = normalizeFindingSearchText(finding, profile, text);
 
   return [
     `        <article class="finding-card" data-finding-card data-severity="${escapeHtml(finding.severity)}" data-dependency-scope="${escapeHtml(finding.dependencyScope)}" data-recommendation="${escapeHtml(finding.recommendation)}" data-search-text="${escapeHtml(searchText)}" aria-labelledby="${titleId}">`,
     '          <div class="finding-card-header">',
     "            <div>",
     `              <h3 class="finding-title" id="${titleId}"><code>${escapeHtml(finding.packageId)}</code></h3>`,
-    `              <p class="finding-context">${escapeHtml(formatDependencyContext(finding))}</p>`,
+    `              <p class="finding-context">${escapeHtml(text.messages.dependencyContext(finding))}</p>`,
     "            </div>",
-    `            ${renderSeverity(finding.severity)}`,
+    `            ${renderSeverity(finding.severity, text)}`,
     "          </div>",
     '          <dl class="finding-details">',
-    ...renderFindingDetail("Severity", renderSeverity(finding.severity)),
-    ...renderFindingDetail("Package", `<code class="wrap-value">${escapeHtml(finding.packageId)}</code>`),
-    ...renderFindingDetail("Dependency", escapeHtml(formatDependencyContext(finding))),
-    ...renderFindingDetail("Reason", escapeHtml(finding.reason), true),
-    ...renderFindingDetail("Action", escapeHtml(finding.action), true),
-    ...renderFindingDetail("Path", `<code class="wrap-value">${escapeHtml(formatPath(finding.paths[0]))}</code>`, true),
-    ...renderFindingDetail("Evidence", escapeHtml(finding.evidence.join("; ")), true),
-    ...renderFindingDetail("Fingerprint", `<code class="wrap-value">${escapeHtml(finding.fingerprint)}</code>`, true),
+    ...renderFindingDetail(text.labels.severity, renderSeverity(finding.severity, text), text),
+    ...renderFindingDetail(text.labels.package, `<code class="wrap-value">${escapeHtml(finding.packageId)}</code>`, text),
+    ...renderFindingDetail(text.labels.dependency, escapeHtml(text.messages.dependencyContext(finding)), text),
+    ...renderFindingDetail(text.labels.reason, escapeHtml(text.messages.findingReason(finding, profile)), text, true),
+    ...renderFindingDetail(text.labels.action, escapeHtml(text.messages.findingAction(finding)), text, true),
+    ...renderFindingDetail(text.labels.findingPath, `<code class="wrap-value">${escapeHtml(formatPath(finding.paths[0]))}</code>`, text, true),
+    ...renderFindingDetail(text.labels.evidenceDetail, escapeHtml(finding.evidence.join("; ")), text, true),
+    ...renderFindingDetail(text.labels.fingerprint, `<code class="wrap-value">${escapeHtml(finding.fingerprint)}</code>`, text, true),
     "          </dl>",
     "        </article>"
   ];
 }
 
-function renderFindingDetail(label: string, valueHtml: string, collapsible = false): string[] {
+function renderFindingDetail(
+  label: string,
+  valueHtml: string,
+  text: HtmlReportText,
+  collapsible = false
+): string[] {
   if (collapsible) {
-    const expandLabel = `Show full ${label}`;
-    const collapseLabel = `Collapse ${label}`;
+    const expandLabel = text.messages.expandLabel(label);
+    const collapseLabel = text.messages.collapseLabel(label);
     return [
       `            <dt>${escapeHtml(label)}</dt>`,
       '            <dd class="finding-detail-value" data-collapsible>',
@@ -444,9 +486,17 @@ function renderFindingDetail(label: string, valueHtml: string, collapsible = fal
   ];
 }
 
-function renderHtmlFilterScript(): string[] {
+function renderHtmlFilterScript(text: HtmlReportText): string[] {
+  const filterMessages = JSON.stringify({
+    status: text.messages.filterStatusTemplate,
+    expandFallback: text.messages.defaultExpandLabel,
+    collapseFallback: text.messages.defaultCollapseLabel,
+    collapseText: text.messages.collapseText
+  });
+
   return [
     "(() => {",
+    `  const messages = ${filterMessages};`,
     "  const severityFilters = Array.from(document.querySelectorAll('[data-finding-filter]'));",
     "  const cards = Array.from(document.querySelectorAll('[data-finding-card]'));",
     "  const searchInput = document.querySelector('[data-finding-search]');",
@@ -475,7 +525,7 @@ function renderHtmlFilterScript(): string[] {
     "    }",
     "",
     "    if (status) {",
-    "      status.textContent = `${visibleCount} of ${cards.length} findings shown`;",
+    "      status.textContent = messages.status.replace('{visible}', String(visibleCount)).replace('{total}', String(cards.length));",
     "    }",
     "",
     "    if (empty) {",
@@ -540,7 +590,7 @@ function renderHtmlFilterScript(): string[] {
     "    toggle.hidden = !overflowed;",
     "    if (!overflowed) {",
     "      toggle.setAttribute('aria-expanded', 'false');",
-    "      toggle.setAttribute('aria-label', toggle.dataset.expandLabel || 'Show full value');",
+    "      toggle.setAttribute('aria-label', toggle.dataset.expandLabel || messages.expandFallback);",
     "      toggle.textContent = '...';",
     "      content.classList.add('is-collapsed');",
     "    }",
@@ -574,8 +624,8 @@ function renderHtmlFilterScript(): string[] {
     "      const expanded = toggle.getAttribute('aria-expanded') === 'true';",
     "      const nextExpanded = !expanded;",
     "      toggle.setAttribute('aria-expanded', String(nextExpanded));",
-    "      toggle.setAttribute('aria-label', nextExpanded ? toggle.dataset.collapseLabel || 'Collapse' : toggle.dataset.expandLabel || 'Show full value');",
-    "      toggle.textContent = nextExpanded ? 'Less' : '...';",
+    "      toggle.setAttribute('aria-label', nextExpanded ? toggle.dataset.collapseLabel || messages.collapseFallback : toggle.dataset.expandLabel || messages.expandFallback);",
+    "      toggle.textContent = nextExpanded ? messages.collapseText : '...';",
     "      content.classList.toggle('is-collapsed', !nextExpanded);",
     "    });",
     "  }",
@@ -590,33 +640,36 @@ function renderHtmlFilterScript(): string[] {
   ];
 }
 
-function renderHtmlWaivedFindingsSection(waivedFindings: WaivedRiskFinding[]): string[] {
+function renderHtmlWaivedFindingsSection(
+  waivedFindings: WaivedRiskFinding[],
+  text: HtmlReportText
+): string[] {
   if (waivedFindings.length === 0) {
     return [
       '    <section aria-labelledby="waived-heading">',
-      '      <h2 id="waived-heading">Waived findings</h2>',
-      '      <p class="empty">No waived findings.</p>',
+      `      <h2 id="waived-heading">${escapeHtml(text.labels.waivedFindings)}</h2>`,
+      `      <p class="empty">${escapeHtml(text.messages.noWaivedFindings)}</p>`,
       "    </section>"
     ];
   }
 
   return [
     '    <section aria-labelledby="waived-heading">',
-    '      <h2 id="waived-heading">Waived findings</h2>',
+    `      <h2 id="waived-heading">${escapeHtml(text.labels.waivedFindings)}</h2>`,
     '      <div class="table-wrap">',
     '        <table>',
-    "          <caption>Findings suppressed by local waivers</caption>",
+    `          <caption>${escapeHtml(text.captions.waivedFindings)}</caption>`,
     "          <thead>",
-    "            <tr><th scope=\"col\">Severity</th><th scope=\"col\">Package</th><th scope=\"col\">Matched by</th><th scope=\"col\">Reason</th><th scope=\"col\">Action</th><th scope=\"col\">Fingerprint</th></tr>",
+    `            <tr><th scope="col">${escapeHtml(text.labels.severity)}</th><th scope="col">${escapeHtml(text.labels.package)}</th><th scope="col">${escapeHtml(text.labels.matchedBy)}</th><th scope="col">${escapeHtml(text.labels.reason)}</th><th scope="col">${escapeHtml(text.labels.action)}</th><th scope="col">${escapeHtml(text.labels.fingerprint)}</th></tr>`,
     "          </thead>",
     "          <tbody>",
     ...waivedFindings.map((waived) => [
       "            <tr>",
-      `              <td>${renderSeverity(waived.finding.severity)}</td>`,
+      `              <td>${renderSeverity(waived.finding.severity, text)}</td>`,
       `              <td><code>${escapeHtml(waived.finding.packageId)}</code></td>`,
       `              <td>${escapeHtml(waived.matchedBy)}</td>`,
       `              <td>${escapeHtml(waived.waiver.reason)}</td>`,
-      `              <td>${escapeHtml(waived.finding.action)}</td>`,
+      `              <td>${escapeHtml(text.messages.findingAction(waived.finding))}</td>`,
       `              <td><code>${escapeHtml(waived.finding.fingerprint)}</code></td>`,
       "            </tr>"
     ].join("\n")),
@@ -627,29 +680,32 @@ function renderHtmlWaivedFindingsSection(waivedFindings: WaivedRiskFinding[]): s
   ];
 }
 
-function renderHtmlExpiredWaiversSection(expiredWaivers: RiskWaiver[]): string[] {
+function renderHtmlExpiredWaiversSection(
+  expiredWaivers: RiskWaiver[],
+  text: HtmlReportText
+): string[] {
   if (expiredWaivers.length === 0) {
     return [
       '    <section aria-labelledby="expired-waivers-heading">',
-      '      <h2 id="expired-waivers-heading">Expired waivers</h2>',
-      '      <p class="empty">No expired waivers.</p>',
+      `      <h2 id="expired-waivers-heading">${escapeHtml(text.labels.expiredWaivers)}</h2>`,
+      `      <p class="empty">${escapeHtml(text.messages.noExpiredWaivers)}</p>`,
       "    </section>"
     ];
   }
 
   return [
     '    <section aria-labelledby="expired-waivers-heading">',
-    '      <h2 id="expired-waivers-heading">Expired waivers</h2>',
+    `      <h2 id="expired-waivers-heading">${escapeHtml(text.labels.expiredWaivers)}</h2>`,
     '      <div class="table-wrap">',
     '        <table>',
-    "          <caption>Expired local waiver entries</caption>",
+    `          <caption>${escapeHtml(text.captions.expiredWaivers)}</caption>`,
     "          <thead>",
-    "            <tr><th scope=\"col\">Target</th><th scope=\"col\">Expires on</th><th scope=\"col\">Reason</th></tr>",
+    `            <tr><th scope="col">${escapeHtml(text.labels.target)}</th><th scope="col">${escapeHtml(text.labels.expiresOn)}</th><th scope="col">${escapeHtml(text.labels.reason)}</th></tr>`,
     "          </thead>",
     "          <tbody>",
     ...expiredWaivers.map((waiver) => [
       "            <tr>",
-      `              <td><code>${escapeHtml(formatWaiverTarget(waiver))}</code></td>`,
+      `              <td><code>${escapeHtml(text.messages.waiverTarget(waiver))}</code></td>`,
       `              <td>${escapeHtml(waiver.expiresOn ?? "unknown")}</td>`,
       `              <td>${escapeHtml(waiver.reason)}</td>`,
       "            </tr>"
@@ -661,29 +717,32 @@ function renderHtmlExpiredWaiversSection(expiredWaivers: RiskWaiver[]): string[]
   ];
 }
 
-function renderHtmlUnmatchedWaiversSection(unmatchedWaivers: RiskWaiver[]): string[] {
+function renderHtmlUnmatchedWaiversSection(
+  unmatchedWaivers: RiskWaiver[],
+  text: HtmlReportText
+): string[] {
   if (unmatchedWaivers.length === 0) {
     return [
       '    <section aria-labelledby="unmatched-waivers-heading">',
-      '      <h2 id="unmatched-waivers-heading">Unmatched waivers</h2>',
-      '      <p class="empty">No unmatched waivers.</p>',
+      `      <h2 id="unmatched-waivers-heading">${escapeHtml(text.labels.unmatchedWaivers)}</h2>`,
+      `      <p class="empty">${escapeHtml(text.messages.noUnmatchedWaivers)}</p>`,
       "    </section>"
     ];
   }
 
   return [
     '    <section aria-labelledby="unmatched-waivers-heading">',
-    '      <h2 id="unmatched-waivers-heading">Unmatched waivers</h2>',
+    `      <h2 id="unmatched-waivers-heading">${escapeHtml(text.labels.unmatchedWaivers)}</h2>`,
     '      <div class="table-wrap">',
     '        <table>',
-    "          <caption>Active waiver entries that did not match current findings</caption>",
+    `          <caption>${escapeHtml(text.captions.unmatchedWaivers)}</caption>`,
     "          <thead>",
-    "            <tr><th scope=\"col\">Target</th><th scope=\"col\">Reason</th></tr>",
+    `            <tr><th scope="col">${escapeHtml(text.labels.target)}</th><th scope="col">${escapeHtml(text.labels.reason)}</th></tr>`,
     "          </thead>",
     "          <tbody>",
     ...unmatchedWaivers.map((waiver) => [
       "            <tr>",
-      `              <td><code>${escapeHtml(formatWaiverTarget(waiver))}</code></td>`,
+      `              <td><code>${escapeHtml(text.messages.waiverTarget(waiver))}</code></td>`,
       `              <td>${escapeHtml(waiver.reason)}</td>`,
       "            </tr>"
     ].join("\n")),
@@ -694,8 +753,8 @@ function renderHtmlUnmatchedWaiversSection(unmatchedWaivers: RiskWaiver[]): stri
   ];
 }
 
-function renderSeverity(severity: RiskSeverity): string {
-  return `<span class="severity severity-${severity}">${escapeHtml(severity)}</span>`;
+function renderSeverity(severity: RiskSeverity, text?: HtmlReportText): string {
+  return `<span class="severity severity-${severity}">${escapeHtml(text?.messages.severity(severity) ?? severity)}</span>`;
 }
 
 function escapeHtml(value: string): string {
@@ -1014,31 +1073,6 @@ function summarizeRiskFindings(riskFindings: RiskFinding[]): Record<RiskSeverity
   );
 }
 
-function reviewStatusFor(risks: Record<RiskSeverity, number>): string {
-  if (risks.high > 0) {
-    return "High risk review needed";
-  }
-
-  if (risks.unknown > 0) {
-    return "Evidence review needed";
-  }
-
-  if (risks.review > 0) {
-    return "Policy review needed";
-  }
-
-  if (risks.low > 0) {
-    return "Low risk findings only";
-  }
-
-  return "No active findings";
-}
-
-function formatRiskCounts(risks: Record<RiskSeverity, number>): string {
-  const total = risks.high + risks.review + risks.unknown + risks.low;
-  return `${total} active (${risks.high} high, ${risks.review} review, ${risks.unknown} unknown, ${risks.low} low)`;
-}
-
 function summarizeFindingFilters(riskFindings: RiskFinding[]): {
   dependencyScopes: Record<RiskDependencyScope, number>;
   recommendations: Record<RiskRecommendation, number>;
@@ -1065,17 +1099,27 @@ function summarizeFindingFilters(riskFindings: RiskFinding[]): {
   );
 }
 
-function normalizeFindingSearchText(finding: RiskFinding): string {
+function normalizeFindingSearchText(
+  finding: RiskFinding,
+  profile: string,
+  text: HtmlReportText
+): string {
   return [
     finding.id,
     finding.fingerprint,
     finding.packageId,
     finding.severity,
+    text.messages.severity(finding.severity),
     finding.reason,
+    text.messages.findingReason(finding, profile),
     finding.action,
+    text.messages.findingAction(finding),
     finding.dependencyType,
+    text.messages.dependencyType(finding.dependencyType),
     finding.dependencyScope,
+    text.messages.dependencyScope(finding.dependencyScope),
     finding.recommendation,
+    text.messages.recommendation(finding.recommendation),
     finding.evidence.join(" "),
     formatPath(finding.paths[0])
   ]

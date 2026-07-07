@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.0 - 2026-07-07
+
+- Added `--language en|ko` for HTML reports so generated review summaries,
+  filter controls, and Ohrisk-generated reason/action text can be rendered in
+  English or Korean while machine-readable identifiers stay stable.
+- Kept HTML report localization in an extensible report text catalog so future
+  languages can be added without changing parser, policy, JSON, SARIF, or SBOM
+  contracts.
+
 ## 1.0.4 - 2026-07-04
 
 - Hardened local Maven parent and BOM POM lookup so malformed coordinates

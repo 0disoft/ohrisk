@@ -204,6 +204,51 @@ describe("parseArgs", () => {
     });
   });
 
+  test("parses scan HTML output language", () => {
+    const parsed = parseArgs(["scan", "--html", "--language", "ko"]);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+
+    expect(parsed.value).toEqual({
+      kind: "scan",
+      profile: "saas",
+      prodOnly: false,
+      json: false,
+      sarif: false,
+      markdown: false,
+      html: true,
+      reportLanguage: "ko",
+      cyclonedx: false,
+      noWaivers: false
+    });
+  });
+
+  test("rejects unsupported report languages", () => {
+    const parsed = parseArgs(["scan", "--html", "--language", "fr"]);
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) {
+      throw new Error("Expected unsupported report language to fail.");
+    }
+
+    expect(parsed.error.message).toBe('Unsupported report language "fr".');
+    expect(parsed.error.details?.supportedLanguages).toEqual(["en", "ko"]);
+  });
+
+  test("rejects report language without HTML output", () => {
+    const parsed = parseArgs(["scan", "--language", "ko"]);
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) {
+      throw new Error("Expected report language without HTML to fail.");
+    }
+
+    expect(parsed.error.message).toBe("--language currently requires --html.");
+  });
+
   test("parses scan CycloneDX output", () => {
     const parsed = parseArgs(["scan", "--cyclonedx"]);
 

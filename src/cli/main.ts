@@ -15,102 +15,29 @@ import { diffRiskFindings } from "../diff/compare";
 import { collectGraphEvidence, type EvidenceCollectionProgress } from "../evidence/collect";
 import type { LicenseEvidence } from "../evidence/types";
 import { readGitRefFile, type GitRefFileReader } from "../git/ref-file";
-import { parseBazelModuleFile, parseBazelModuleText } from "../graph/bazel-module";
 import {
-  parseCartfileResolvedFile,
-  parseCartfileResolvedText
-} from "../graph/carthage-cartfile-resolved";
-import { parsePodfileLockfile, parsePodfileLockText } from "../graph/cocoapods-podfile-lock";
-import {
-  parseCondaEnvironmentFile,
-  parseCondaEnvironmentText
-} from "../graph/conda-environment";
-import { parseCondaLockfile, parseCondaLockText } from "../graph/conda-lock";
-import { parseConanLockfile, parseConanLockText } from "../graph/conan-lock";
-import { parseCycloneDxJsonFile, parseCycloneDxJsonText } from "../graph/cyclonedx-json";
-import { parseCycloneDxXmlFile, parseCycloneDxXmlText } from "../graph/cyclonedx-xml";
-import {
-  parseDotnetProjectFile,
-  parseDotnetProjectText,
-  parseDirectoryPackagesPropsText,
-  findNearestDirectoryPackagesPropsPath,
-  parseNugetLockfile,
-  parseNugetLockText,
-  parseNugetPackagesConfigFile,
-  parseNugetPackagesConfigText,
-  parseNugetProjectAssetsFile,
-  parseNugetProjectAssetsText
+  findNearestDirectoryPackagesPropsPath
 } from "../graph/dotnet-nuget-lock";
-import { parseDenoLockfile, parseDenoLockText } from "../graph/deno-lock";
-import { parsePubspecLockfile, parsePubspecLockText } from "../graph/dart-pubspec-lock";
-import { parseMixLockfile, parseMixLockText } from "../graph/elixir-mix-lock";
-import { parseRebarLockfile, parseRebarLockText } from "../graph/erlang-rebar-lock";
-import { parseGoModFile, parseGoModText } from "../graph/go-mod";
 import {
   findGoWorkModulePaths,
-  parseGoWorkFile,
-  parseGoWorkText,
   type GoWorkModuleInput
 } from "../graph/go-work";
-import { parseHelmChartFile, parseHelmChartText } from "../graph/helm-chart";
-import { parseGradleLockfile, parseGradleLockText } from "../graph/java-gradle-lock";
-import {
-  parseGradleVersionCatalogFile,
-  parseGradleVersionCatalogText
-} from "../graph/java-gradle-version-catalog";
-import { parseMavenPomFile, parseMavenPomText } from "../graph/java-maven-pom";
-import { parseJuliaManifestFile, parseJuliaManifestText } from "../graph/julia-manifest";
-import { parseStackLockfile, parseStackLockText } from "../graph/haskell-stack-lock";
-import { parseLuarocksLockfile, parseLuarocksLockText } from "../graph/lua-luarocks-lock";
-import { parseNixFlakeLockfile, parseNixFlakeLockText } from "../graph/nix-flake-lock";
-import { parseBunLockfile, parseBunLockText } from "../graph/npm-bun-lock";
-import {
-  parsePackageJsonManifestFile,
-  parsePackageJsonManifestText
-} from "../graph/npm-package-json";
-import { parsePackageLockfile, parsePackageLockText } from "../graph/npm-package-lock";
-import { parsePnpmLockfile, parsePnpmLockText } from "../graph/npm-pnpm-lock";
 import {
   findYarnWorkspacePackageJsonPaths,
-  parseYarnLockfile,
-  parseYarnLockText,
   type YarnWorkspacePackageJsonInput
 } from "../graph/npm-yarn-lock";
-import { parsePdmLockfile, parsePdmLockText } from "../graph/python-pdm-lock";
-import { parsePipfileLockfile, parsePipfileLockText } from "../graph/python-pipfile-lock";
-import { parsePylockFile, parsePylockText } from "../graph/python-pylock";
-import { parsePyprojectFile, parsePyprojectText } from "../graph/python-pyproject";
-import { parsePoetryLockfile, parsePoetryLockText } from "../graph/python-poetry-lock";
 import {
-  parseRequirementsFile,
-  parseRequirementsText,
+  parseLockfileTextForKind,
+  parseProjectLockfile
+} from "../graph/project-lockfile";
+import {
   type RequirementsIncludedFileReader
 } from "../graph/python-requirements";
 import type { PythonLocalSourceFileReader } from "../graph/python-local-source";
-import { parseUvLockfile, parseUvLockText } from "../graph/python-uv-lock";
-import { parseGemfileLockfile, parseGemfileLockText } from "../graph/ruby-gemfile-lock";
 import {
-  parseCpanfileSnapshotFile,
-  parseCpanfileSnapshotText
-} from "../graph/perl-cpanfile-snapshot";
-import { parseComposerLockfile, parseComposerLockText } from "../graph/php-composer-lock";
-import { parseRenvLockfile, parseRenvLockText } from "../graph/r-renv-lock";
-import {
-  findCargoWorkspaceMemberManifestPaths,
-  parseCargoLockfile,
-  parseCargoLockText
+  findCargoWorkspaceMemberManifestPaths
 } from "../graph/rust-cargo-lock";
-import { parseSpdxJsonFile, parseSpdxJsonText } from "../graph/spdx-json";
-import { parseSpdxRdfFile, parseSpdxRdfText } from "../graph/spdx-rdf";
-import { parseSpdxTagValueFile, parseSpdxTagValueText } from "../graph/spdx-tag-value";
-import {
-  parseSwiftPackageResolvedFile,
-  parseSwiftPackageResolvedText
-} from "../graph/swift-package-resolved";
-import { parseTerraformLockfile, parseTerraformLockText } from "../graph/terraform-lock";
-import { parseUnityPackagesLockfile, parseUnityPackagesLockText } from "../graph/unity-packages-lock";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
-import { parseVcpkgJsonFile, parseVcpkgJsonText } from "../graph/vcpkg-json";
 import { normalizeAllLicenseEvidence, normalizeLicenseEvidence } from "../license/normalize";
 import type { NormalizedLicense } from "../license/types";
 import { evaluateLicenseRisk, evaluateLicenseRisks } from "../policy/evaluate";
@@ -596,6 +523,7 @@ async function runScan(
     json: command.json,
     markdown: command.markdown,
     html: command.html,
+    reportLanguage: command.reportLanguage,
     waiverMode: command.noWaivers ? "ignored" : "local",
     failOn: command.kind === "ci" ? command.failOn : undefined,
     strictWaivers: command.kind === "ci" ? command.strictWaivers : false,
@@ -795,116 +723,6 @@ async function evaluateProjectScan(input: {
     expiredWaivers: appliedWaivers.expiredWaivers,
     unmatchedWaivers: appliedWaivers.unmatchedWaivers
   });
-}
-
-function parseProjectLockfile(project: ProjectInput): Result<DependencyGraph, OhriskError> {
-  switch (project.lockfile.kind) {
-    case "bun":
-      return parseBunLockfile(project.lockfile.path);
-    case "package-lock":
-      return parsePackageLockfile(project.lockfile.path);
-    case "npm-shrinkwrap":
-      return parsePackageLockfile(project.lockfile.path);
-    case "pnpm-lock":
-      return parsePnpmLockfile(project.lockfile.path);
-    case "deno-lock":
-      return parseDenoLockfile(project.lockfile.path);
-    case "cargo-lock":
-      return parseCargoLockfile(project.lockfile.path);
-    case "go-work":
-      return parseGoWorkFile(project.lockfile.path);
-    case "go-mod":
-      return parseGoModFile(project.lockfile.path);
-    case "pipfile-lock":
-      return parsePipfileLockfile(project.lockfile.path);
-    case "pdm-lock":
-      return parsePdmLockfile(project.lockfile.path);
-    case "poetry-lock":
-      return parsePoetryLockfile(project.lockfile.path);
-    case "pyproject-toml":
-      return parsePyprojectFile(project.lockfile.path);
-    case "requirements-txt":
-      return parseRequirementsFile(project.lockfile.path);
-    case "uv-lock":
-      return parseUvLockfile(project.lockfile.path);
-    case "pylock":
-      return parsePylockFile(project.lockfile.path);
-    case "gradle-lock":
-      return parseGradleLockfile(project.lockfile.path);
-    case "gradle-version-catalog":
-      return parseGradleVersionCatalogFile(project.lockfile.path);
-    case "bazel-module":
-      return parseBazelModuleFile(project.lockfile.path);
-    case "maven-pom":
-      return parseMavenPomFile(project.lockfile.path, {
-        projectRoot: project.rootDir
-      });
-    case "nuget-lock":
-      return parseNugetLockfile(project.lockfile.path);
-    case "nuget-assets":
-      return parseNugetProjectAssetsFile(project.lockfile.path);
-    case "dotnet-project":
-      return parseDotnetProjectFile(project.lockfile.path);
-    case "nuget-packages-config":
-      return parseNugetPackagesConfigFile(project.lockfile.path);
-    case "conan-lock":
-      return parseConanLockfile(project.lockfile.path);
-    case "conda-environment":
-      return parseCondaEnvironmentFile(project.lockfile.path);
-    case "conda-lock":
-      return parseCondaLockfile(project.lockfile.path);
-    case "vcpkg-json":
-      return parseVcpkgJsonFile(project.lockfile.path);
-    case "terraform-lock":
-      return parseTerraformLockfile(project.lockfile.path);
-    case "helm-chart-lock":
-    case "helm-chart-yaml":
-      return parseHelmChartFile(project.lockfile.path);
-    case "nix-flake-lock":
-      return parseNixFlakeLockfile(project.lockfile.path);
-    case "unity-packages-lock":
-      return parseUnityPackagesLockfile(project.lockfile.path);
-    case "renv-lock":
-      return parseRenvLockfile(project.lockfile.path);
-    case "julia-manifest":
-      return parseJuliaManifestFile(project.lockfile.path);
-    case "stack-lock":
-      return parseStackLockfile(project.lockfile.path);
-    case "cpanfile-snapshot":
-      return parseCpanfileSnapshotFile(project.lockfile.path);
-    case "luarocks-lock":
-      return parseLuarocksLockfile(project.lockfile.path);
-    case "pubspec-lock":
-      return parsePubspecLockfile(project.lockfile.path);
-    case "swift-package-resolved":
-      return parseSwiftPackageResolvedFile(project.lockfile.path);
-    case "cartfile-resolved":
-      return parseCartfileResolvedFile(project.lockfile.path);
-    case "podfile-lock":
-      return parsePodfileLockfile(project.lockfile.path);
-    case "mix-lock":
-      return parseMixLockfile(project.lockfile.path);
-    case "rebar-lock":
-      return parseRebarLockfile(project.lockfile.path);
-    case "gemfile-lock":
-      return parseGemfileLockfile(project.lockfile.path);
-    case "composer-lock":
-      return parseComposerLockfile(project.lockfile.path);
-    case "cyclonedx-json":
-      return parseCycloneDxJsonFile(project.lockfile.path);
-    case "cyclonedx-xml":
-      return parseCycloneDxXmlFile(project.lockfile.path);
-    case "spdx-json":
-      return parseSpdxJsonFile(project.lockfile.path);
-    case "spdx-rdf":
-      return parseSpdxRdfFile(project.lockfile.path);
-    case "spdx-tag-value":
-      return parseSpdxTagValueFile(project.lockfile.path);
-    case "yarn-lock":
-      return parseYarnLockfile(project.lockfile.path);
-    case "package-json":
-      return parsePackageJsonManifestFile(project.lockfile.path);
-  }
 }
 
 function filterGraphForProdOnly(graph: DependencyGraph, prodOnly: boolean): DependencyGraph {
@@ -1123,194 +941,6 @@ function isProductionRelevantPath(
 
 function isDirectDependencyPath(pathSegments: string[], dependencyPathSegments: Set<string>): boolean {
   return pathSegments.slice(1).filter((segment) => dependencyPathSegments.has(segment)).length <= 1;
-}
-
-function parseLockfileTextForKind(input: {
-  kind: ProjectInput["lockfile"]["kind"];
-  text: string;
-  lockfilePath: string;
-  packageJsonText?: string;
-  packageJsonPath?: string;
-  workspacePackageJsonTexts?: YarnWorkspacePackageJsonInput[];
-  pnpmWorkspaceText?: string;
-  pnpmWorkspacePath?: string;
-  pyprojectText?: string;
-  cargoManifestText?: string;
-  cargoMemberManifestTexts?: string[];
-  cargoRootName?: string;
-  goSumText?: string;
-  goWorkModuleInputs?: GoWorkModuleInput[];
-  goWorkDir?: string;
-  composerJsonText?: string;
-  directoryPackagesPropsText?: string;
-  directoryPackagesPropsPath?: string;
-  dotnetProjectRootName?: string;
-  projectRoot?: string;
-  requirementsRootName?: string;
-  requirementsIncludedFileReader?: RequirementsIncludedFileReader;
-  pythonLocalSourceFileReader?: PythonLocalSourceFileReader;
-}): Result<DependencyGraph, OhriskError> {
-  switch (input.kind) {
-    case "bun":
-      return parseBunLockText(input.text, input.lockfilePath);
-    case "package-lock":
-      return parsePackageLockText(input.text, input.lockfilePath);
-    case "npm-shrinkwrap":
-      return parsePackageLockText(input.text, input.lockfilePath);
-    case "pnpm-lock":
-      return parsePnpmLockText(input.text, input.lockfilePath, {
-        workspaceText: input.pnpmWorkspaceText,
-        workspacePath: input.pnpmWorkspacePath
-      });
-    case "deno-lock":
-      return parseDenoLockText(input.text, input.lockfilePath);
-    case "cargo-lock":
-      return parseCargoLockText(input.text, input.lockfilePath, {
-        manifestText: input.cargoManifestText,
-        memberManifestTexts: input.cargoMemberManifestTexts,
-        rootName: input.cargoRootName
-      });
-    case "go-work":
-      return parseGoWorkText(input.text, input.lockfilePath, {
-        moduleInputs: input.goWorkModuleInputs,
-        workspaceRootDir: input.projectRoot,
-        goWorkDir: input.goWorkDir
-      });
-    case "go-mod":
-      return parseGoModText(input.text, input.lockfilePath, {
-        goSumText: input.goSumText
-      });
-    case "pipfile-lock":
-      return parsePipfileLockText(input.text, input.lockfilePath, {
-        readLocalSourceFile: input.pythonLocalSourceFileReader,
-        rootName: input.requirementsRootName
-      });
-    case "pdm-lock":
-      return parsePdmLockText(input.text, input.lockfilePath, {
-        pyprojectText: input.pyprojectText,
-        readLocalSourceFile: input.pythonLocalSourceFileReader
-      });
-    case "poetry-lock":
-      return parsePoetryLockText(input.text, input.lockfilePath, {
-        pyprojectText: input.pyprojectText
-      });
-    case "pyproject-toml":
-      return parsePyprojectText(input.text, input.lockfilePath);
-    case "requirements-txt":
-      return parseRequirementsText(input.text, input.lockfilePath, {
-        rootName: input.requirementsRootName,
-        readIncludedFile: input.requirementsIncludedFileReader,
-        readLocalSourceFile: input.pythonLocalSourceFileReader
-      });
-    case "uv-lock":
-      return parseUvLockText(input.text, input.lockfilePath, {
-        readLocalSourceFile: input.pythonLocalSourceFileReader
-      });
-    case "pylock":
-      return parsePylockText(input.text, input.lockfilePath, {
-        readLocalSourceFile: input.pythonLocalSourceFileReader
-      });
-    case "gradle-lock":
-      return parseGradleLockText(input.text, input.lockfilePath);
-    case "gradle-version-catalog":
-      return parseGradleVersionCatalogText(input.text, input.lockfilePath);
-    case "bazel-module":
-      return parseBazelModuleText(input.text, input.lockfilePath);
-    case "maven-pom":
-      return parseMavenPomText(input.text, input.lockfilePath, {
-        projectRoot: input.projectRoot
-      });
-    case "nuget-lock":
-      return parseNugetLockText(input.text, input.lockfilePath);
-    case "nuget-assets":
-      return parseNugetProjectAssetsText(input.text, input.lockfilePath);
-    case "dotnet-project":
-      if (input.directoryPackagesPropsText) {
-        const centralPackageVersions = parseDirectoryPackagesPropsText(
-          input.directoryPackagesPropsText,
-          input.directoryPackagesPropsPath
-        );
-        if (isErr(centralPackageVersions)) {
-          return centralPackageVersions;
-        }
-
-        return parseDotnetProjectText(input.text, input.lockfilePath, {
-          centralPackageVersions: centralPackageVersions.value,
-          rootName: input.dotnetProjectRootName
-        });
-      }
-
-      return parseDotnetProjectText(input.text, input.lockfilePath, {
-        rootName: input.dotnetProjectRootName
-      });
-    case "nuget-packages-config":
-      return parseNugetPackagesConfigText(input.text, input.lockfilePath);
-    case "conan-lock":
-      return parseConanLockText(input.text, input.lockfilePath);
-    case "conda-environment":
-      return parseCondaEnvironmentText(input.text, input.lockfilePath);
-    case "conda-lock":
-      return parseCondaLockText(input.text, input.lockfilePath);
-    case "vcpkg-json":
-      return parseVcpkgJsonText(input.text, input.lockfilePath);
-    case "terraform-lock":
-      return parseTerraformLockText(input.text, input.lockfilePath);
-    case "helm-chart-lock":
-    case "helm-chart-yaml":
-      return parseHelmChartText(input.text, input.lockfilePath);
-    case "nix-flake-lock":
-      return parseNixFlakeLockText(input.text, input.lockfilePath);
-    case "unity-packages-lock":
-      return parseUnityPackagesLockText(input.text, input.lockfilePath);
-    case "renv-lock":
-      return parseRenvLockText(input.text, input.lockfilePath);
-    case "julia-manifest":
-      return parseJuliaManifestText(input.text, input.lockfilePath);
-    case "stack-lock":
-      return parseStackLockText(input.text, input.lockfilePath);
-    case "cpanfile-snapshot":
-      return parseCpanfileSnapshotText(input.text, input.lockfilePath);
-    case "luarocks-lock":
-      return parseLuarocksLockText(input.text, input.lockfilePath);
-    case "pubspec-lock":
-      return parsePubspecLockText(input.text, input.lockfilePath);
-    case "swift-package-resolved":
-      return parseSwiftPackageResolvedText(input.text, input.lockfilePath);
-    case "cartfile-resolved":
-      return parseCartfileResolvedText(input.text, input.lockfilePath);
-    case "podfile-lock":
-      return parsePodfileLockText(input.text, input.lockfilePath);
-    case "mix-lock":
-      return parseMixLockText(input.text, input.lockfilePath);
-    case "rebar-lock":
-      return parseRebarLockText(input.text, input.lockfilePath);
-    case "gemfile-lock":
-      return parseGemfileLockText(input.text, input.lockfilePath);
-    case "composer-lock":
-      return parseComposerLockText(input.text, input.lockfilePath, {
-        composerJsonText: input.composerJsonText
-      });
-    case "cyclonedx-json":
-      return parseCycloneDxJsonText(input.text, input.lockfilePath);
-    case "cyclonedx-xml":
-      return parseCycloneDxXmlText(input.text, input.lockfilePath);
-    case "spdx-json":
-      return parseSpdxJsonText(input.text, input.lockfilePath);
-    case "spdx-rdf":
-      return parseSpdxRdfText(input.text, input.lockfilePath);
-    case "spdx-tag-value":
-      return parseSpdxTagValueText(input.text, input.lockfilePath);
-    case "yarn-lock":
-      return parseYarnLockText({
-        lockfileText: input.text,
-        packageJsonText: input.packageJsonText ?? "{}",
-        lockfilePath: input.lockfilePath,
-        packageJsonPath: input.packageJsonPath,
-        workspacePackageJsonTexts: input.workspacePackageJsonTexts
-      });
-    case "package-json":
-      return parsePackageJsonManifestText(input.text, input.lockfilePath);
-  }
 }
 
 function readBaselineGoWorkModuleInputs(input: {
@@ -1819,8 +1449,8 @@ function renderTopLevelHelp(): string {
     "Ohrisk",
     "",
     "Usage:",
-    "  ohrisk scan [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--output <file>] [--open]",
-    "  ohrisk ci [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
+    "  ohrisk scan [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko] [--output <file>] [--open]",
+    "  ohrisk ci [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
     "  ohrisk diff <baseline-ref> [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
     "  ohrisk help [command]",
@@ -1844,6 +1474,7 @@ function renderTopLevelHelp(): string {
     "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
     "  --markdown             Print a Markdown report for PRs or release notes.",
     "  --html                 Print a browser-friendly HTML report.",
+    "  --language <en|ko>     Set the HTML report language. Defaults to en.",
     "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
     "  --output <file>        Write report output to a project-relative file instead of stdout.",
     "  --open                 Open the written HTML report after scan completion.",
@@ -1859,7 +1490,7 @@ function renderScanHelp(): string {
     "Ohrisk scan",
     "",
     "Usage:",
-    "  ohrisk scan [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--output <file>] [--open]",
+    "  ohrisk scan [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko] [--output <file>] [--open]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
@@ -1871,6 +1502,7 @@ function renderScanHelp(): string {
     "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
     "  --markdown             Print a Markdown report for PRs or release notes.",
     "  --html                 Print a browser-friendly HTML report.",
+    "  --language <en|ko>     Set the HTML report language. Defaults to en.",
     "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
     "  --output <file>        Write report output to a project-relative file instead of stdout.",
     "  --open                 Open the written HTML report after scan completion.",
@@ -1883,7 +1515,7 @@ function renderCiHelp(): string {
     "Ohrisk ci",
     "",
     "Usage:",
-    "  ohrisk ci [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
+    "  ohrisk ci [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
@@ -1895,6 +1527,7 @@ function renderCiHelp(): string {
     "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
     "  --markdown             Print a Markdown report for PRs or release notes.",
     "  --html                 Print a browser-friendly HTML report.",
+    "  --language <en|ko>     Set the HTML report language. Defaults to en.",
     "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
     "  --fail-on <severity>   CI threshold. Defaults to high.",
     "  --strict-waivers       Fail CI when local waivers are expired or unmatched.",

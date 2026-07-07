@@ -62,6 +62,7 @@ Formatted as a standalone browser-friendly HTML document for local review.
 - **Unmatched waivers**: table with columns Target, Reason
 - **Waiver mode**: shown in the summary cards
 - **Strict waiver drift**: shown in the summary cards when `--strict-waivers` is set
+- **Language**: `--language en|ko` localizes the HTML report chrome and Ohrisk-generated review text. Machine-readable IDs, enum values, fingerprints, paths, and raw evidence remain stable.
 - **Local paths**: the project summary uses the package/project name, not the absolute project root, so local browser artifacts are safer to share than terminal output
 - **Open after write**: `--open` can be combined with `--html --output <file>` to open a project-relative report path through a temporary `127.0.0.1` URL after scan completion
 

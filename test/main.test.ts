@@ -98,6 +98,7 @@ describe("main", () => {
     expect(output).toContain("--workspace-root <path>");
     expect(output).toContain("--help, -h");
     expect(output).toContain("--html");
+    expect(output).toContain("--language <en|ko>");
     expect(output).toContain("--open");
     expect(output).toContain("--cyclonedx");
   });
@@ -114,6 +115,7 @@ describe("main", () => {
     expect(scanOutput).toContain("--lockfile <path>");
     expect(scanOutput).toContain("--workspace-root <path>");
     expect(scanOutput).toContain("--html");
+    expect(scanOutput).toContain("--language <en|ko>");
     expect(scanOutput).toContain("--open");
     expect(scanOutput).toContain("--cyclonedx");
     expect(scanOutput).toContain("--help, -h");
@@ -130,6 +132,7 @@ describe("main", () => {
     expect(ciOutput).toContain("--fail-on <severity>");
     expect(ciOutput).toContain("--strict-waivers");
     expect(ciOutput).toContain("--html");
+    expect(ciOutput).toContain("--language <en|ko>");
     expect(ciOutput).toContain("--open");
     expect(ciOutput).toContain("--help, -h");
 
@@ -7390,6 +7393,38 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       expect(stderr).toContain(`Wrote report to ${reportPath}`);
       expect(readFileSync(reportPath, "utf8")).toContain("<!doctype html>");
       expect(readFileSync(reportPath, "utf8")).toContain("0 total, 0 direct, 0 transitive");
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("writes Korean HTML reports for dependency-free package.json manifest projects", async () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-empty-package-json-ko-html-"));
+    const reportPath = path.join(projectDir, "reports", "ohrisk.html");
+
+    try {
+      writeFileSync(
+        path.join(projectDir, "package.json"),
+        JSON.stringify({
+          name: "fixture-empty-package-json"
+        }),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectDir);
+      const exitCode = await main(
+        ["scan", "--html", "--language", "ko", "--output", "reports/ohrisk.html"],
+        io
+      );
+      const report = readFileSync(reportPath, "utf8");
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toEqual([]);
+      expect(stderr).toContain(`Wrote report to ${reportPath}`);
+      expect(report).toContain('<html lang="ko">');
+      expect(report).toContain("<h1>Ohrisk 스캔</h1>");
+      expect(report).toContain("총 0개, 직접 0개, 전이 0개");
+      expect(report).toContain("활성 발견 항목이 없습니다.");
     } finally {
       rmSync(projectDir, { recursive: true, force: true });
     }

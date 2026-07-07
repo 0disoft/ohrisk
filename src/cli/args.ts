@@ -1,6 +1,12 @@
 import { createError, type OhriskError } from "../shared/errors";
 import { isUsageProfile, USAGE_PROFILES, type UsageProfile } from "../policy/profiles";
 import type { RiskSeverity } from "../policy/types";
+import {
+  DEFAULT_REPORT_LANGUAGE,
+  isReportLanguage,
+  supportedReportLanguages,
+  type ReportLanguage
+} from "../report/language";
 import { err, isErr, ok, type Result } from "../shared/result";
 
 const FAIL_ON_SEVERITIES: RiskSeverity[] = ["high", "unknown", "review", "low"];
@@ -21,6 +27,7 @@ export type CliCommand =
       sarif: boolean;
       markdown: boolean;
       html: boolean;
+      reportLanguage?: ReportLanguage;
       cyclonedx: boolean;
       noWaivers: boolean;
       lockfilePath?: string;
@@ -36,6 +43,7 @@ export type CliCommand =
       sarif: boolean;
       markdown: boolean;
       html: boolean;
+      reportLanguage?: ReportLanguage;
       cyclonedx: boolean;
       noWaivers: boolean;
       lockfilePath?: string;
@@ -185,6 +193,8 @@ function parseScanLikeArgs(
   let sarif = false;
   let markdown = false;
   let html = false;
+  let reportLanguage: ReportLanguage = DEFAULT_REPORT_LANGUAGE;
+  let reportLanguageSet = false;
   let cyclonedx = false;
   let noWaivers = false;
   let lockfilePath: string | undefined;
@@ -281,6 +291,32 @@ function parseScanLikeArgs(
 
         html = true;
         break;
+      case "--language": {
+        const value = readRequiredOptionValue(argv, index, "--language", {
+          supportedLanguages: supportedReportLanguages()
+        });
+        if (isErr(value)) {
+          return value;
+        }
+
+        if (!isReportLanguage(value.value)) {
+          return err(
+            createError({
+              code: "INVALID_ARGUMENT",
+              category: "invalid_input",
+              message: `Unsupported report language "${value.value}".`,
+              details: {
+                supportedLanguages: supportedReportLanguages()
+              }
+            })
+          );
+        }
+
+        reportLanguage = value.value;
+        reportLanguageSet = true;
+        index += 1;
+        break;
+      }
       case "--cyclonedx":
         if (json || sarif || markdown || html) {
           return outputFormatConflict("--cyclonedx", SCAN_OUTPUT_FORMAT_OPTIONS);
@@ -399,6 +435,19 @@ function parseScanLikeArgs(
     );
   }
 
+  if (reportLanguageSet && !html) {
+    return err(
+      createError({
+        code: "INVALID_ARGUMENT",
+        category: "invalid_input",
+        message: "--language currently requires --html.",
+        details: {
+          supportedOptions: supportedOptionsFor(kind)
+        }
+      })
+    );
+  }
+
   if (kind === "ci") {
     return ok({
       kind,
@@ -414,6 +463,7 @@ function parseScanLikeArgs(
       ...(workspaceRootPath ? { workspaceRootPath } : {}),
       ...(outputPath ? { outputPath } : {}),
       ...(openReport ? { openReport } : {}),
+      ...(reportLanguage !== DEFAULT_REPORT_LANGUAGE ? { reportLanguage } : {}),
       failOn,
       strictWaivers
     });
@@ -432,7 +482,8 @@ function parseScanLikeArgs(
     ...(lockfilePath ? { lockfilePath } : {}),
     ...(workspaceRootPath ? { workspaceRootPath } : {}),
     ...(outputPath ? { outputPath } : {}),
-    ...(openReport ? { openReport } : {})
+    ...(openReport ? { openReport } : {}),
+    ...(reportLanguage !== DEFAULT_REPORT_LANGUAGE ? { reportLanguage } : {})
   });
 }
 
@@ -452,6 +503,7 @@ function supportedOptionsFor(kind: "scan" | "ci"): string[] {
     "--sarif",
     "--markdown",
     "--html",
+    "--language",
     "--cyclonedx",
     "--no-waivers",
     "--lockfile",

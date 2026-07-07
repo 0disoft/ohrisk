@@ -45,6 +45,12 @@ Open a browser-friendly HTML report:
 ohrisk scan --html --output ohrisk-report.html --open
 ```
 
+Use Korean HTML report text when you want a local review artifact for Korean readers:
+
+```bash
+ohrisk scan --html --language ko --output ohrisk-report.html --open
+```
+
 Prefer not to install globally? Use `npx ohrisk scan` instead.
 
 Ready to gate PRs? Run `ohrisk ci --fail-on high` locally, or see the [GitHub Actions guide](https://github.com/0disoft/ohrisk/blob/main/docs/github-actions.md) to wire it into CI.
@@ -275,6 +281,7 @@ npm install -g ohrisk@latest
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
+ohrisk scan --html --language ko --output reports\ohrisk-report-ko.html --open
 ```
 
 The scan prints live terminal progress while it reads the project, collects
@@ -459,6 +466,7 @@ Write browser, SARIF, SBOM, or PR reports to files:
 
 ```bash
 ohrisk scan --html --output reports/ohrisk.html --open
+ohrisk scan --html --language ko --output reports/ohrisk-ko.html --open
 ohrisk scan --sarif --output reports/ohrisk.sarif
 ohrisk scan --cyclonedx --output reports/ohrisk.cdx.json
 ohrisk diff main --prod --markdown --output reports/ohrisk-pr.md

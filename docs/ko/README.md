@@ -337,6 +337,8 @@ Findings:
 `--cyclonedx`를 쓴다. HTML 리포트를 파일로 쓴 뒤 바로 열려면
 `--html --output <file> --open`을 쓴다. 이때 브라우저는 임시 `127.0.0.1`
 URL로 열리므로 파일 URL 권한이 없어도 된다.
+한국어 HTML 리포트가 필요하면 `--html --language ko --output <file>`을 쓴다.
+영어는 기본값이며 명시하려면 `--language en`을 사용할 수 있다.
 
 `--output`은 프로젝트 내부 상대 파일 경로만 받는다. 절대 경로, drive-relative
 경로, UNC 경로, `.` 또는 `..` 경로 segment는 거부된다.

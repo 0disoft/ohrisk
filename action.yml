@@ -83,7 +83,7 @@ runs:
             return 0
           fi
 
-          echo "::error::version must be latest or a semantic version such as 1.0.4 or v1.0.4."
+          echo "::error::version must be latest or a semantic version such as 1.1.0 or v1.1.0."
           exit 1
         }
 

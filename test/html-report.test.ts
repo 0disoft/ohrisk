@@ -481,6 +481,40 @@ describe("HTML scan report", () => {
     expect(output).toContain("No unmatched waivers.");
   });
 
+  test("renders Korean HTML report text without changing machine identifiers", () => {
+    const output = renderScanReport(scanInput({
+      riskFindings: [
+        {
+          ...finding,
+          reason: "License expression is high risk for saas.",
+          action: "Replace this package or escalate before shipping."
+        }
+      ],
+      reportLanguage: "ko"
+    }));
+
+    expect(output).toStartWith("<!doctype html>");
+    expect(output).toContain('<html lang="ko">');
+    expect(output).toContain("<title>Ohrisk 스캔</title>");
+    expect(output).toContain("<h1>Ohrisk 스캔</h1>");
+    expect(output).toContain('<h2 id="review-summary-heading">검토 요약</h2>');
+    expect(output).toContain("<dt>상태</dt>");
+    expect(output).toContain("<dd>높은 위험 검토 필요</dd>");
+    expect(output).toContain("<dt>활성 발견 항목</dt>");
+    expect(output).toContain("<dd>활성 1개 (높음 1개, 검토 0개, 불명 0개, 낮음 0개)</dd>");
+    expect(output).toContain("<dt>의존성</dt>");
+    expect(output).toContain("<dd>총 1개, 직접 1개, 전이 0개</dd>");
+    expect(output).toContain("배포 전에 높은 위험 의존성을 교체하거나 검토 단계로 올리세요.");
+    expect(output).toContain("라이선스 표현식은 saas 기준에서 높은 위험입니다.");
+    expect(output).toContain("배포 전에 이 패키지를 교체하거나 검토 단계로 올리세요.");
+    expect(output).toContain("전체 {total}개 중 {visible}개 표시");
+    expect(output).toContain("접기");
+    expect(output).toContain('data-severity="high"');
+    expect(output).toContain('data-recommendation="replace"');
+    expect(output).toContain("risk&lt;script&gt;@1.0.0");
+    expect(output).not.toContain("<script>alert(1)</script>");
+  });
+
   test("runs finding filters, search, collapsible toggles, and coalesced resize refreshes", () => {
     const root = new FakeElement();
     const highFilter = makeFilter("high", true);
