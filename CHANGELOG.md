@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.1 - 2026-07-07
+
+- Fixed permissive MIT-CMU license handling so packages such as Pillow are no
+  longer reported as high-risk commercial-use restrictions when their license
+  text only restricts name, advertising, or promotional use.
+- Fixed Unlicense text handling so commercial and non-commercial permission
+  language is not mistaken for a commercial-use restriction.
+- Fixed MPL-2.0 license text recognition so secondary-license compatibility
+  language does not get misclassified as GPL or AGPL.
+- Kept explicit commercial-use denial detection for license text that actually
+  prohibits commercial use.
+- Added HTML report guidance for scans where `unknown` findings are dominated
+  by missing local package source/cache evidence, including lightweight
+  dependency-restore examples before users try a full app build.
+- Added Spanish and French (`--language es|fr`) HTML report text alongside
+  the existing English and Korean report languages.
+
 ## 1.1.0 - 2026-07-07
 
 - Added `--language en|ko` for HTML reports so generated review summaries,
