@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.2 - 2026-07-09
+
+- Refreshed the bundled `@0disoft/laqu` dependency to 1.0.7 for the next
+  packaged CLI build.
+
 ## 1.1.1 - 2026-07-07
 
 - Fixed permissive MIT-CMU license handling so packages such as Pillow are no
