@@ -2047,6 +2047,8 @@ describe("main", () => {
 
     const payload = JSON.parse(stdout.join("\n")) as {
       status: string;
+      projectRoot: string;
+      lockfile: { kind: string; path: string };
       profile: string;
       prodOnly: boolean;
       dependencyGraph: {
@@ -2088,6 +2090,9 @@ describe("main", () => {
     };
 
     expect(payload.status).toBe("profile_risk_evaluated");
+    expect(payload.projectRoot).toBe(".");
+    expect(payload.lockfile).toEqual({ kind: "bun", path: "bun.lock" });
+    expect(stdout.join("\n")).not.toContain(path.join(fixturesDir, "bun-project"));
     expect(payload.profile).toBe("saas");
     expect(payload.prodOnly).toBe(true);
     expect(payload.dependencyGraph).toEqual({
@@ -2192,10 +2197,15 @@ describe("main", () => {
         readFileSync(path.join(projectRoot, "reports", "scan.json"), "utf8")
       ) as {
         status: string;
+        projectRoot: string;
+        lockfile: { kind: string; path: string };
         prodOnly: boolean;
       };
 
       expect(payload.status).toBe("profile_risk_evaluated");
+      expect(payload.projectRoot).toBe(".");
+      expect(payload.lockfile).toEqual({ kind: "bun", path: "bun.lock" });
+      expect(JSON.stringify(payload)).not.toContain(projectRoot);
       expect(payload.prodOnly).toBe(true);
     } finally {
       rmSync(tempRoot, { recursive: true, force: true });

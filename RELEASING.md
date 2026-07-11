@@ -36,8 +36,8 @@ file's example tag when needed, push `main`, then push a version tag matching
 `package.json`:
 
 ```bash
-git tag v1.1.2
-git push origin v1.1.2
+git tag v1.1.3
+git push origin v1.1.3
 ```
 
 The publish workflow verifies that the tag version matches `package.json`, runs

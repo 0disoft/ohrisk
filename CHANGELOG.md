@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.3 - 2026-07-11
+
+- Removed absolute project and lockfile paths from JSON scan reports so
+  shareable CI artifacts no longer expose local workspace locations.
+
 ## 1.1.2 - 2026-07-09
 
 - Refreshed the bundled `@0disoft/laqu` dependency to 1.0.7 for the next

@@ -38,6 +38,7 @@ Structured output for scripting and CI automation.
 - **Waiver mode**: `waiverMode` field (`"local"` or `"ignored"`)
 - **Strict waiver drift**: `strictWaivers`, `waiverDriftFailed`, `waiverDriftCount` fields when `--strict-waivers` is set
 - **CI threshold**: `failOn`, `failingFindingCount` fields in CI mode
+- **Local paths**: `projectRoot` is represented as `.`, and lockfile metadata uses a project-relative path so CI artifacts do not expose workspace paths
 
 ## Markdown
 

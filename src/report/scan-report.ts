@@ -57,10 +57,10 @@ export function renderScanReport(input: ScanReportInput): string {
     return JSON.stringify(
       {
         status: "profile_risk_evaluated",
-        projectRoot: input.project.rootDir,
+        projectRoot: ".",
         lockfile: {
           kind: input.project.lockfile.kind,
-          path: input.project.lockfile.path
+          path: displayLockfilePath(input.project)
         },
         profile: input.profile,
         prodOnly: input.prodOnly,
