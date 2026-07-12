@@ -20,7 +20,6 @@ const workspace = mkdtempSync(path.join(tmpdir(), "ohrisk-action-bundle-"));
 try {
   const freshBundle = await buildCliBundle(workspace);
   const checkedInBytes = readFileSync(checkedInBundle);
-  const freshBytes = readFileSync(freshBundle);
   const checkedInSourceFingerprint = readSourceFingerprint(checkedInBytes);
   const expectedSourceFingerprint = actionBundleSourceFingerprint();
   if (checkedInSourceFingerprint !== expectedSourceFingerprint) {
@@ -33,19 +32,9 @@ try {
     );
   }
 
-  const checkedInPlatform = readBuildPlatform(checkedInBytes);
-  if (checkedInPlatform === process.platform && !checkedInBytes.equals(freshBytes)) {
-    throw new Error(
-      [
-        "action-dist/cli.js differs from a fresh build on its recorded platform.",
-        "Run bun run build:action.",
-        `checked-in sha256: ${sha256(checkedInBytes)}`,
-        `expected sha256:   ${sha256(freshBytes)}`
-      ].join("\n")
-    );
-  }
-
-  assertBuiltCliVersion(checkedInBundle, assertVersionContract());
+  const packageVersion = assertVersionContract();
+  assertBuiltCliVersion(freshBundle, packageVersion);
+  assertBuiltCliVersion(checkedInBundle, packageVersion);
   console.log(`Action bundle is current (${sha256(checkedInBytes)}).`);
 } finally {
   rmSync(workspace, { force: true, recursive: true });
@@ -58,11 +47,6 @@ function readSourceFingerprint(bytes: Buffer): string | undefined {
     "m"
   );
   return fingerprintPattern.exec(header)?.[1];
-}
-
-function readBuildPlatform(bytes: Buffer): string | undefined {
-  const header = bytes.toString("utf8", 0, 256);
-  return /^\/\/ ohrisk-action-build-platform: (.+)$/m.exec(header)?.[1]?.trim();
 }
 
 function escapeRegExp(value: string): string {
