@@ -7,7 +7,7 @@ manifests and lockfiles for open-source license risk.
 
 This repository owns:
 
-- CLI behavior for `ohrisk scan`, `ohrisk ci`, `ohrisk diff`, and `ohrisk explain`.
+- CLI behavior for `ohrisk scan`, `ohrisk ci`, `ohrisk diff`, `ohrisk explain`, and `ohrisk cache`.
 - Dependency graph parsers under `src/graph/`.
 - License evidence collectors under `src/evidence/`.
 - Risk policy, waiver handling, report rendering, and output contracts.

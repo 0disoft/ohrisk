@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@latest
+npm install -g ohrisk@1.1.3
 cd your-project
 ohrisk scan
 ```
@@ -130,6 +130,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - dependency-free `package.json` manifests, Bun `bun.lock`, npm `package-lock.json`, npm `npm-shrinkwrap.json`, pnpm `pnpm-lock.yaml`, Deno `deno.lock`, Rust `Cargo.lock`, Go `go.work`, Go `go.mod`, Python `pyproject.toml`, Python `pylock.toml`, named Python `pylock.<name>.toml`, Python `uv.lock`, Python Pipenv `Pipfile.lock`, Python PDM `pdm.lock`, Python `poetry.lock`, Python `requirements.txt`, Java Gradle `gradle.lockfile`, Java Gradle `gradle/dependency-locks` directories and `gradle/dependency-locks/*.lockfile`, Java Gradle `gradle/libs.versions.toml`, Java Maven `pom.xml`, Bazel `MODULE.bazel`, .NET NuGet `packages.lock.json`, .NET restored `obj/project.assets.json`, .NET NuGet `packages.config`, .NET `*.csproj`, Conan `conan.lock`, Conda `environment.yml`, Conda `environment.yaml`, Conda `conda-lock.yml`, Conda `conda-lock.yaml`, vcpkg `vcpkg.json`, Terraform `.terraform.lock.hcl`, Helm `Chart.lock`, Helm `Chart.yaml`, Nix `flake.lock`, Unity Package Manager `Packages/packages-lock.json`, R `renv.lock`, Julia `Manifest.toml`, Haskell Stack `stack.yaml.lock`, Perl Carton `cpanfile.snapshot`, LuaRocks `luarocks.lock`, Dart/Flutter `pubspec.lock`, SwiftPM `Package.resolved`, Carthage `Cartfile.resolved`, CocoaPods `Podfile.lock`, Elixir Mix `mix.lock`, Erlang Rebar3 `rebar.lock`, Ruby Bundler `Gemfile.lock`, PHP Composer `composer.lock`, CycloneDX JSON/XML, SPDX JSON/RDF, SPDX tag-value `.spdx`, and Yarn classic/Berry `yarn.lock` project discovery
 - Node-compatible packaged CLI entrypoint for npm, pnpm, Yarn, npx, pnpm dlx, and yarn dlx users
 - explicit dependency input selection with `--lockfile <path>` for projects that contain more than one supported input file
+- opt-in `--all` discovery that merges every supported input at one project root, deduplicates packages by Package URL, and preserves contributing-lockfile provenance
 - direct and transitive dependency graph extraction when the dependency input records parent/child relationships
 - Bun, npm, pnpm, and Yarn classic/Berry workspace projects are scanned from every workspace/importer package root
 - pnpm `catalog:` and `catalog:<name>` dependency specifiers are resolved from `pnpm-workspace.yaml`
@@ -199,6 +200,8 @@ The current implementation is the first local dependency-risk vertical slice:
 - local Bundler/RubyGems install path gemspec evidence before unavailable fallback for `Gemfile.lock` gems
 - local Composer `vendor/<vendor>/<package>/composer.json` evidence before unavailable fallback for `composer.lock` packages
 - remote HTTPS package tarball evidence when the lockfile points to a tarball with supported integrity metadata, with plaintext HTTP, credential-bearing URLs, obvious local, private, special-purpose, and DNS-resolved internal hosts blocked before fetch, connected socket addresses rechecked by the default fetcher, redirects followed only after each target is validated, and transient network failures recorded as unavailable package evidence so other packages can still be scanned
+- a shared content-addressed artifact cache with HTTP freshness metadata, conditional `ETag`/`Last-Modified` revalidation, valid stale-entry support in `--offline` mode, and automatic 2 GiB LRU trimming
+- `ohrisk cache status|prune|clear` commands for cache inspection, age/size cleanup, and bounded removal
 - lockfile integrity verification for local and remote package tarballs; remote tarballs without integrity are reported as unavailable instead of being trusted as license evidence
 - npm registry metadata lookup when the lockfile does not include a direct tarball URL
 - gzipped package tarball evidence
@@ -236,6 +239,8 @@ The current implementation is the first local dependency-risk vertical slice:
 - command-specific help with `ohrisk help <command>` and `ohrisk <command> --help`
 - standalone license expression explanation
 - git ref diff reports that show only new or meaningfully changed findings
+- `diff --all` comparison of independently discovered current and baseline input sets, including added and removed lockfiles
+- strict Draft 2020-12 JSON Schemas for scan, diff, and explain reports, with shared nested definitions and release-time output validation
 - JSON threshold outcomes for `ci --fail-on` and `diff --fail-on`
 - terminal and Markdown threshold outcomes for `ci --fail-on` and `diff --fail-on`
 - strict CI waiver drift checks for expired or unmatched local waivers
@@ -286,7 +291,7 @@ ohrisk scan
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@latest
+npm install -g ohrisk@1.1.3
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
@@ -441,6 +446,7 @@ ohrisk scan --lockfile spdx.rdf
 ohrisk scan --lockfile sbom.spdx.rdf.xml
 ohrisk scan --lockfile sbom.spdx
 ohrisk diff main --lockfile bun.lock
+ohrisk diff main --all
 ```
 
 Pick the usage profile:
@@ -496,7 +502,7 @@ ohrisk scan --html --language ru --output reports/ohrisk-ru.html --open
 ohrisk scan --html --language de --output reports/ohrisk-de.html --open
 ohrisk scan --sarif --output reports/ohrisk.sarif
 ohrisk scan --cyclonedx --output reports/ohrisk.cdx.json
-ohrisk diff main --prod --markdown --output reports/ohrisk-pr.md
+ohrisk diff main --all --prod --markdown --output reports/ohrisk-pr.md
 ```
 
 `--output` accepts project-relative file paths only. Absolute paths,
@@ -567,7 +573,22 @@ ohrisk diff main --prod --markdown
 
 Baseline refs must be branch, tag, or commit-like names such as `main`,
 `origin/main`, `release/v1.2.3`, or a commit hash. Git rev syntax such as
-`HEAD@{1}`, `HEAD~1`, and `main:path` is rejected.
+`HEAD@{1}`, `HEAD~1`, and `main:path` is rejected. `diff --all` discovers and
+merges the current and baseline input sets independently, then reports added and
+removed lockfiles alongside finding changes.
+
+Inspect or clean the shared artifact cache:
+
+```bash
+ohrisk cache status
+ohrisk cache prune --max-age 7d --max-size 1GiB
+ohrisk cache clear
+```
+
+The default cache follows the platform cache directory, uses a 24-hour fallback
+TTL, conditionally revalidates expired HTTP entries, and automatically trims
+least-recently-used content above 2 GiB. Add `--json` for machine-readable cache
+command output or `--cache-dir <path>` to target an explicit cache.
 
 Print the package version:
 
@@ -688,6 +709,7 @@ bun run ../../../src/cli/main.ts scan --profile saas
 - [CI Usage Guide](https://github.com/0disoft/ohrisk/blob/main/docs/ci.md) — GitHub Actions examples for PR gates and artifacts
 - [Waiver Guide](https://github.com/0disoft/ohrisk/blob/main/docs/waivers.md) — Managing license risk waivers safely
 - [Profile Guide](https://github.com/0disoft/ohrisk/blob/main/docs/profiles.md) — Choosing between saas and distributed-app
+- [Cache and Registry Configuration](https://github.com/0disoft/ohrisk/blob/main/docs/cache-and-registries.md) — Cache freshness, cleanup, offline mode, and registry authentication
 - [Report Formats Guide](https://github.com/0disoft/ohrisk/blob/main/docs/report-formats.md) — What each output format includes
 - [Remote Fetching Boundary](https://github.com/0disoft/ohrisk/blob/main/docs/remote-fetching.md) — Remote evidence scope and safety rules
 - [한국어 사용 가이드](https://github.com/0disoft/ohrisk/blob/main/docs/ko/README.md) — Korean usage guide for developers

@@ -8,6 +8,11 @@ A profile is not a legal judgment. It is a usage-context severity filter. Ohrisk
 reports `low`, `review`, `high`, and `unknown` findings; you decide what to do
 with them.
 
+Organization policy is evaluated after the built-in profile. A checked-in
+`.ohrisk.yml` can allow or deny licenses, override severity, and apply package
+exceptions, so policy-controlled results can intentionally differ from the
+built-in table below.
+
 ## When to choose saas
 
 Use `saas` (the default) when you run a service and do not redistribute package

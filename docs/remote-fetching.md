@@ -1,89 +1,104 @@
 # Remote Fetching Boundary
 
 Ohrisk is a local-first scanner. Remote fetching is allowed only where the code
-can keep the request target, downloaded bytes, and resulting evidence bounded
-and reproducible enough for a license-risk check.
+can keep the request target, downloaded bytes, credentials, cache entry, and
+resulting evidence bounded and reproducible enough for a license-risk check.
 
 ## Current Scope
 
-Remote fetching is currently limited to npm package evidence:
+Remote fetching is limited to npm package evidence:
 
-- direct HTTPS package tarball URLs recorded in supported npm-family
-  lockfiles;
-- npm registry metadata lookup for a locked package version when no direct
-  tarball URL is available;
-- the tarball URL returned by that exact-version npm registry metadata response.
+- direct HTTPS package tarball URLs recorded in supported npm-family lockfiles;
+- npm-compatible registry metadata lookup for an exact locked package version when no direct tarball URL is available;
+- the tarball URL returned by that exact-version registry metadata response.
 
-Other ecosystems may use local caches, vendored source, lockfile-embedded
-evidence, or local package metadata. Remote Maven parent/BOM resolution, remote
-PyPI artifacts, remote Bazel registries, remote Conda channels, remote Swift
-checkouts, remote CocoaPods podspecs or sources, and similar ecosystem-specific
-fetches remain out of scope until they have the same safety and reproducibility
+Other ecosystems use local caches, vendored source, lockfile-embedded evidence,
+or local package metadata. A new remote ecosystem adapter is not enabled until
+it implements the same target, integrity, cache, credential, and resource
 boundary.
 
-## Security Rules
+## Target and Redirect Rules
 
-Every remote artifact target must pass URL validation before fetch. The URL must
-use HTTPS, must not carry username or password credentials, and must not target
-obvious local, private, special-purpose, multicast, reserved, documentation, or
-benchmark-only hosts.
+Every remote target must use HTTPS, contain no URL username or password, and
+pass hostname and address validation. Local, private, special-purpose,
+multicast, reserved, documentation, and benchmark-only destinations are
+rejected.
 
-Hostname targets are resolved before the default fetch path proceeds. DNS
-answers that point at blocked local or private addresses are rejected, and the
-default HTTPS fetch path rechecks the connected socket address before trusting
-the response stream. Redirects are followed manually; each redirect target is
-validated with the same URL and DNS checks before the next request is made.
-Redirect chains are capped.
+Hostname targets are resolved before an online request. DNS answers that point
+to blocked addresses are rejected, and the default HTTPS path rechecks the
+connected socket address before trusting the response. Redirects are followed
+manually, capped, and fully revalidated. A bearer token is attached only to the
+exact configured registry hostname and is never forwarded to another redirect
+host.
 
-Error details must redact credential-bearing URLs. Public diagnostics can name a
-package id, registry URL, tarball URL, redirect source, redirect target, blocked
-host reason, status, size limit, or timeout, but must not echo raw credentials.
+Additional public artifact hosts must be declared through policy or repeatable
+`--allow-host` options. `--registry-url` automatically permits only its exact
+hostname. Host matching does not use suffix or substring rules.
+
+## Credential Rules
+
+Registry credentials are read from the environment through
+`--registry-token-env` or a policy `tokenEnv` entry. Raw token CLI arguments and
+credential-bearing URLs are rejected. Reports, cache keys, diagnostics, and
+policy summaries never include token values.
+
+## Cache and Offline Rules
+
+The persistent cache is content-addressed and stores artifact bytes with an
+integrity digest plus bounded freshness metadata. Corrupt, truncated, or
+mismatched entries are removed rather than trusted. Cache directories and files
+use private permissions where the platform supports them.
+
+Online collection validates the target before using a cached remote result, so
+an old cache entry cannot bypass the current SSRF allowlist. Fresh entries are
+used directly; expired entries are conditionally revalidated with `ETag` and
+`Last-Modified` when available. A `304 Not Modified` response refreshes the
+entry without replacing its bytes, while `Cache-Control: no-store` prevents
+persistence and removes a previous entry for that request.
+
+Cache validators are attached only to the first validated request and are not
+forwarded across redirects. The same rule already applies to registry bearer
+tokens, preventing request-specific state from crossing host boundaries.
+
+`--offline` performs no DNS lookup or network request. It may use a valid stale
+entry because revalidation is impossible by definition, but a missing,
+corrupt, or oversized entry is reported as unavailable evidence instead of
+silently going online. Cache locations, TTL rules, size limits, and management
+commands are defined in `docs/cache-and-registries.md`.
 
 ## Resource Rules
 
-Remote fetches are bounded:
+Remote fetches have a bounded per-request timeout, response byte limits, archive
+decompression limits, archive entry limits, and evidence-worker concurrency.
+The CLI exposes bounded `--timeout` and `--jobs` values; policy cannot expand
+hard safety ceilings.
 
-- request and body reads are covered by a timeout;
-- registry metadata responses have a maximum byte size;
-- package tarball responses have a maximum byte size;
-- package tarball decompression, entry count, and unpacked size are bounded;
-- evidence collection runs with bounded concurrency.
+When a remote package artifact has supported lockfile integrity metadata,
+Ohrisk verifies downloaded bytes before trusting tarball evidence. Without
+supported integrity metadata, Ohrisk does not fetch or trust that tarball and
+records unavailable evidence with a warning.
 
-If a remote package artifact has lockfile integrity metadata, Ohrisk verifies the
-downloaded bytes before trusting the tarball evidence. When remote artifact
-integrity metadata is not available, Ohrisk does not fetch or trust that tarball
-as license evidence; it records unavailable evidence with a warning instead.
+## Failure Semantics
 
-## Reproducibility Rules
+Transient online failures such as DNS resolver errors, timeouts, connection
+errors, and failed HTTP responses are recorded as unavailable evidence so the
+remaining graph can be evaluated. Security violations, integrity mismatches,
+malformed registry metadata, unreadable bodies, and parser failures fail closed
+instead of pretending evidence coverage is complete.
 
-Remote fetching must not be used to guess a dependency graph that the lockfile
-does not already resolve. Fetches may collect license evidence for an already
-resolved package identity; they must not silently add dependencies, change root
-classification, or invent transitive relationships.
+Error details may name a package id, sanitized URL, redirect relation, blocked
+host reason, HTTP status, size limit, timeout, or cache state. They must not echo
+credentials, authorization headers, or raw secret-bearing configuration.
 
-Offline and cache-first behavior stays preferred. If local evidence exists, use
-it before registry fallback. Transient remote network failures, including fetch
-errors, failed HTTP responses, timeouts, and DNS resolver failures, are recorded
-as unavailable package evidence so the rest of the graph can still be scanned.
-Security, integrity, malformed metadata, unreadable body, and parser failures
-still fail closed instead of pretending coverage is complete.
+## Adding a Registry or Artifact Source
 
-## Adding A New Registry
+A new source must define and test the exact package identity and version source,
+allowed hosts, redirect behavior, credential scope, redaction, cache key and
+integrity contract, offline behavior, time and byte limits, decompression and
+entry limits, concurrency, and partial-failure semantics. Tests must include
+blocked hosts, private DNS answers, connected-address rechecks, credential URLs,
+cross-host redirects, corrupt cache entries, oversized responses, timeouts,
+integrity failures, malformed metadata, and offline cache misses.
 
-Before adding a new remote registry or artifact source, the implementation must
-define:
-
-- the exact package identity and version source;
-- the allowed registry host or host family;
-- whether redirects are allowed and how every redirect target is revalidated;
-- credential rejection and redaction behavior;
-- timeout, byte, decompression, entry count, and concurrency limits;
-- integrity verification and unavailable evidence behavior when integrity is unavailable;
-- local-cache precedence and offline behavior;
-- tests for blocked hosts, DNS-rebound-style answers, connected socket address
-  rechecks, credential URLs, redirects, oversized responses, timeouts, partial
-  remote fetch failures, and malformed metadata.
-
-Broad "fetch whatever the lockfile mentions" support is intentionally not a
-target. Each ecosystem needs a narrow registry-specific adapter with tests that
-prove the above boundary.
+Broad fetch-whatever-the-lockfile-mentions behavior is forbidden. Each remote
+source requires a narrow adapter and explicit tests for this boundary.

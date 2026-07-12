@@ -14,6 +14,31 @@ includes different levels of waiver detail.
 | SARIF | `--sarif` | GitHub code scanning | Full results | Suppressed results | Count properties only | Yes |
 | CycloneDX | `--cyclonedx` | SBOM, supply chain tools | Component properties | Not listed | Not listed | Yes |
 
+## JSON schema versioning
+
+Every Ohrisk JSON report includes `$schema` and `schemaVersion`. The published
+Draft 2020-12 contracts live in `schemas/common.schema.json`,
+`schemas/scan-report.schema.json`, `schemas/diff-report.schema.json`, and
+`schemas/explain-report.schema.json`.
+
+Schema `2.0.0` is a closed contract. Report roots and structured nested objects
+reject unknown properties, while common `$defs` define findings, evidence,
+normalized licenses, policy summaries, waivers, thresholds, provenance, and
+lockfile changes. Required-field, enum, array-item, path, and dependent-field
+rules are validated against real scan, diff, and explain output during release
+verification.
+
+Schema 2.0 is intentionally incompatible with the earlier permissive 1.x
+contracts. Consumers should select the schema identified by both `$schema` and
+`schemaVersion`, reject unsupported major versions, and treat a validation
+failure as a producer/consumer contract mismatch rather than accepting a
+partially shaped report.
+
+Scan reports expose `dependencyOrigins` keyed by canonical package ID when
+several lockfiles contribute the same Package URL. Diff reports expose
+`lockfileChanges.current`, `baseline`, `added`, and `removed`, allowing
+automation to distinguish finding changes from input-set changes.
+
 ## Terminal
 
 Default output when no format flag is passed. Designed for quick local checks.
@@ -38,6 +63,8 @@ Structured output for scripting and CI automation.
 - **Waiver mode**: `waiverMode` field (`"local"` or `"ignored"`)
 - **Strict waiver drift**: `strictWaivers`, `waiverDriftFailed`, `waiverDriftCount` fields when `--strict-waivers` is set
 - **CI threshold**: `failOn`, `failingFindingCount` fields in CI mode
+- **Input changes**: diff JSON includes `lockfileChanges.current`, `baseline`, `added`, and `removed` arrays with project-relative paths and lockfile kinds
+- **Schema validation**: scan, diff, and explain JSON must satisfy the packaged 2.0.0 schema; unknown object properties are rejected
 - **Local paths**: `projectRoot` is represented as `.`, and lockfile metadata uses a project-relative path so CI artifacts do not expose workspace paths
 
 ## Markdown

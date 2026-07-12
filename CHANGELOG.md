@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased
+
+- Added `diff --all` baseline discovery so current and baseline revisions can
+  contain different lockfile sets, with added and removed inputs reported in
+  terminal, Markdown, and JSON output.
+- Upgraded the artifact cache to format v3 with 24-hour fallback freshness,
+  `ETag`/`Last-Modified` conditional revalidation, offline stale reads,
+  `no-store` handling, automatic 2 GiB LRU trimming, lazy v2 migration, and
+  `cache status`, `cache prune`, and `cache clear` commands.
+- Replaced permissive report schemas with strict Draft 2020-12 schema 2.0.0
+  contracts, shared nested definitions, closed object shapes, and release tests
+  that validate real scan, diff, and explain documents plus malformed examples.
+- Added full-project strict TypeScript, unused-code, formatting, documentation,
+  test, coverage, Action-bundle, and package-smoke release gates.
+- Replaced flattened SPDX handling with an expression parser that preserves
+  parentheses, `AND`/`OR` precedence, and `WITH` exceptions.
+- Added opt-in `--all` multi-lockfile graph merging with Package URL
+  deduplication and per-package lockfile provenance.
+- Added inherited `.ohrisk.yml` organization policy, profile overrides, license
+  rules, package exceptions, and bounded registry configuration.
+- Added registries for dependency-graph parsers and evidence collectors so new
+  ecosystems can be registered without extending central command branches.
+- Added integrity-checked persistent evidence caching, offline mode, bounded
+  concurrency and timeout controls, private npm-compatible registry support,
+  exact-host authentication, and artifact host allowlists.
+- Added versioned JSON Schemas for scan, diff, and explain reports.
+- Split HTML localization into validated per-locale catalogs with English
+  fallback and placeholder-contract checks.
+- Added deterministic parser and archive fuzz tests, enforced coverage
+  thresholds, and Linux, Windows, and macOS release verification.
+- Bundled the CLI into the GitHub Action, removed runtime npm installation,
+  pinned workflow actions by commit SHA, and synchronized version references.
+
 ## 1.1.3 - 2026-07-11
 
 - Removed absolute project and lockfile paths from JSON scan reports so

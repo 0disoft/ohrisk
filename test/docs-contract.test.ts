@@ -8,7 +8,11 @@ const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 function extractLinks(text: string): Array<{ text: string; url: string }> {
   const links: Array<{ text: string; url: string }> = [];
   for (const match of text.matchAll(/\[([^\]]+)\]\(([^)]+)\)/g)) {
-    links.push({ text: match[1], url: match[2] });
+    const linkText = match[1];
+    const url = match[2];
+    if (linkText !== undefined && url !== undefined) {
+      links.push({ text: linkText, url });
+    }
   }
   return links;
 }
@@ -49,7 +53,8 @@ describe("documentation contract", () => {
     expect(relativeLinks.length).toBeGreaterThan(0);
 
     for (const link of relativeLinks) {
-      const target = link.url.split("#")[0];
+      const target = link.url.split("#", 1)[0];
+      if (target === undefined) throw new Error("Expected a documentation link target.");
       const resolved = path.resolve(repoRoot, "docs", target);
       expect(existsSync(resolved), `missing: ${target}`).toBe(true);
     }
@@ -66,7 +71,8 @@ describe("documentation contract", () => {
     expect(relativeLinks.length).toBeGreaterThan(0);
 
     for (const link of relativeLinks) {
-      const target = link.url.split("#")[0];
+      const target = link.url.split("#", 1)[0];
+      if (target === undefined) throw new Error("Expected a documentation link target.");
       const resolved = path.resolve(repoRoot, "docs", "ko", target);
       expect(existsSync(resolved), `missing: ${target}`).toBe(true);
     }
