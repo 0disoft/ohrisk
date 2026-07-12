@@ -41946,26 +41946,39 @@ function isWorkspaceLocalPathSpecifier(value) {
 function findNodeModulesPackage(input) {
   const packageNames = [...new Set([...input.node.installNames ?? [], input.node.name])];
   for (const packageName of packageNames) {
-    const packagePath = resolveNodeModulesPackage(packageName, input.projectRoot);
-    if (!packagePath) {
-      continue;
-    }
-    if (existsSync44(packagePath) && isReadableDirectory23(packagePath) && installedPackageMatchesNode({
-      node: input.node,
-      packagePath,
-      maxBytes: input.packageJsonMaxBytes
+    for (const packagePath of resolveNodeModulesPackageCandidates({
+      packageName,
+      version: input.node.version,
+      projectRoot: input.projectRoot
     })) {
-      return packagePath;
+      if (existsSync44(packagePath) && isReadableDirectory23(packagePath) && installedPackageMatchesNode({
+        node: input.node,
+        packagePath,
+        maxBytes: input.packageJsonMaxBytes
+      })) {
+        return packagePath;
+      }
     }
   }
   return;
 }
-function resolveNodeModulesPackage(packageName, projectRoot) {
-  const segments = nodeModulesPackageSegments(packageName);
+function resolveNodeModulesPackageCandidates(input) {
+  const segments = nodeModulesPackageSegments(input.packageName);
   if (!segments) {
+    return [];
+  }
+  const candidates = [path71.join(input.projectRoot, "node_modules", ...segments)];
+  const bunStoreSegment = bunIsolatedStoreSegment(input.packageName, input.version);
+  if (bunStoreSegment) {
+    candidates.push(path71.join(input.projectRoot, "node_modules", ".bun", bunStoreSegment, "node_modules", ...segments));
+  }
+  return candidates;
+}
+function bunIsolatedStoreSegment(packageName, version) {
+  if (version === "" || version === "." || version === ".." || version.includes("/") || version.includes("\\") || version.includes(":")) {
     return;
   }
-  return path71.join(projectRoot, "node_modules", ...segments);
+  return `${packageName.replaceAll("/", "+")}@${version}`;
 }
 function nodeModulesPackageSegments(packageName) {
   if (packageName === "" || packageName.includes("\\") || packageName.includes(":")) {

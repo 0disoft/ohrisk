@@ -25,6 +25,9 @@
 - Added integrity-checked persistent evidence caching, offline mode, bounded
   concurrency and timeout controls, private npm-compatible registry support,
   exact-host authentication, and artifact host allowlists.
+- Added local evidence discovery for transitive packages stored by Bun's
+  isolated linker so offline scans do not report installed dependencies as
+  missing registry evidence.
 - Added versioned JSON Schemas for scan, diff, and explain reports.
 - Split HTML localization into validated per-locale catalogs with English
   fallback and placeholder-contract checks.

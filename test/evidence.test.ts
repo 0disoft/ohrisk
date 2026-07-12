@@ -701,6 +701,61 @@ describe("collectGraphEvidence", () => {
     expect(missingLicense).not.toHaveProperty("packageJsonLicense");
   });
 
+  test("collects transitive package evidence from Bun isolated linker storage", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-bun-isolated-evidence-"));
+    const packageDir = path.join(
+      projectRoot,
+      "node_modules",
+      ".bun",
+      "@scope+transitive@1.2.3",
+      "node_modules",
+      "@scope",
+      "transitive"
+    );
+
+    try {
+      mkdirSync(packageDir, { recursive: true });
+      writeFileSync(path.join(packageDir, "package.json"), JSON.stringify({
+        name: "@scope/transitive",
+        version: "1.2.3",
+        license: "MIT"
+      }), "utf8");
+      writeFileSync(path.join(packageDir, "LICENSE"), "MIT License fixture text.", "utf8");
+
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "bun.lock",
+          nodes: [{
+            id: "@scope/transitive@1.2.3",
+            name: "@scope/transitive",
+            version: "1.2.3",
+            ecosystem: "npm",
+            resolved: "https://registry.example.test/@scope/transitive/-/transitive-1.2.3.tgz",
+            dependencyType: "development",
+            direct: false,
+            paths: [["fixture", "@scope/transitive@1.2.3"]]
+          }]
+        },
+        projectRoot,
+        offline: true
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+      expect(evidence.value).toHaveLength(1);
+      expect(evidence.value[0]).toMatchObject({
+        packageId: "@scope/transitive@1.2.3",
+        packageJsonLicense: "MIT",
+        source: "local"
+      });
+      expect(evidence.value[0]?.files.map((file) => file.path)).toEqual(["LICENSE"]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("collects graph evidence with bounded concurrency while preserving graph order", async () => {
     let activeFetches = 0;
     let maxActiveFetches = 0;

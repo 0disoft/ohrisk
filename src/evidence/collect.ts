@@ -797,34 +797,65 @@ function findNodeModulesPackage(input: {
   const packageNames = [...new Set([...(input.node.installNames ?? []), input.node.name])];
 
   for (const packageName of packageNames) {
-    const packagePath = resolveNodeModulesPackage(packageName, input.projectRoot);
-    if (!packagePath) {
-      continue;
-    }
-
-    if (
-      existsSync(packagePath)
-      && isReadableDirectory(packagePath)
-      && installedPackageMatchesNode({
-        node: input.node,
-        packagePath,
-        maxBytes: input.packageJsonMaxBytes
-      })
-    ) {
-      return packagePath;
+    for (const packagePath of resolveNodeModulesPackageCandidates({
+      packageName,
+      version: input.node.version,
+      projectRoot: input.projectRoot
+    })) {
+      if (
+        existsSync(packagePath)
+        && isReadableDirectory(packagePath)
+        && installedPackageMatchesNode({
+          node: input.node,
+          packagePath,
+          maxBytes: input.packageJsonMaxBytes
+        })
+      ) {
+        return packagePath;
+      }
     }
   }
 
   return undefined;
 }
 
-function resolveNodeModulesPackage(packageName: string, projectRoot: string): string | undefined {
-  const segments = nodeModulesPackageSegments(packageName);
+function resolveNodeModulesPackageCandidates(input: {
+  packageName: string;
+  version: string;
+  projectRoot: string;
+}): string[] {
+  const segments = nodeModulesPackageSegments(input.packageName);
   if (!segments) {
-    return undefined;
+    return [];
   }
 
-  return path.join(projectRoot, "node_modules", ...segments);
+  const candidates = [path.join(input.projectRoot, "node_modules", ...segments)];
+  const bunStoreSegment = bunIsolatedStoreSegment(input.packageName, input.version);
+  if (bunStoreSegment) {
+    candidates.push(path.join(
+      input.projectRoot,
+      "node_modules",
+      ".bun",
+      bunStoreSegment,
+      "node_modules",
+      ...segments
+    ));
+  }
+  return candidates;
+}
+
+function bunIsolatedStoreSegment(packageName: string, version: string): string | undefined {
+  if (
+    version === ""
+    || version === "."
+    || version === ".."
+    || version.includes("/")
+    || version.includes("\\")
+    || version.includes(":")
+  ) {
+    return undefined;
+  }
+  return `${packageName.replaceAll("/", "+")}@${version}`;
 }
 
 function nodeModulesPackageSegments(packageName: string): string[] | undefined {
