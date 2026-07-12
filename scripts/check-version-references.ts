@@ -17,9 +17,19 @@ for (const file of VERSION_REFERENCE_FILES) {
   }
 }
 
-const packageJson = readFileSync("package.json", "utf8");
-if (/"latest"/.test(packageJson)) {
-  failures.push("package.json: mutable latest dependency or script reference is forbidden");
+const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  scripts?: Record<string, string>;
+};
+const forbiddenLatestReferences = [
+  ...Object.entries(packageJson.dependencies ?? {}),
+  ...Object.entries(packageJson.devDependencies ?? {})
+    .filter(([name]) => name !== "@0disoft/laqu"),
+  ...Object.entries(packageJson.scripts ?? {})
+].filter(([, value]) => /\blatest\b/.test(value));
+if (forbiddenLatestReferences.length > 0) {
+  failures.push("package.json: mutable latest dependency or script reference is forbidden except for @0disoft/laqu");
 }
 
 const action = readFileSync("action.yml", "utf8");

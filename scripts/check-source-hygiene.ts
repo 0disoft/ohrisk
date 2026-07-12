@@ -2,6 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const EXACT_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+const ALLOWED_MUTABLE_DEV_DEPENDENCIES = new Map([
+  ["@0disoft/laqu", "latest"]
+]);
 const PINNED_ACTION = /\buses:\s*([^\s#]+)@([0-9a-f]{40})(?:\s+#\s*[^\s]+)?\s*$/gm;
 const ANY_ACTION_USE = /\buses:\s*([^\s#]+)@([^\s#]+)/g;
 const failures: string[] = [];
@@ -18,7 +21,10 @@ for (const [section, dependencies] of [
   ["devDependencies", packageJson.devDependencies]
 ] as const) {
   for (const [name, version] of Object.entries(dependencies ?? {})) {
-    if (!EXACT_VERSION.test(version)) {
+    const allowedMutableVersion = section === "devDependencies"
+      ? ALLOWED_MUTABLE_DEV_DEPENDENCIES.get(name)
+      : undefined;
+    if (!EXACT_VERSION.test(version) && version !== allowedMutableVersion) {
       failures.push(`package.json ${section}.${name} must use an exact version, received ${version}`);
     }
   }

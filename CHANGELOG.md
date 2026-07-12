@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.1 - 2026-07-12
+
+- Changed the `@0disoft/laqu` development dependency to follow its `latest`
+  npm dist-tag while preserving exact-version enforcement for every other
+  dependency and mutable-version protection for scripts and the GitHub Action.
+- Updated the resolved Bun dependency graph to `@0disoft/laqu` 1.0.8 and
+  regenerated the checked-in Action bundle from the synchronized package
+  metadata.
+
 ## 1.2.0 - 2026-07-12
 
 - Added `diff --all` baseline discovery so current and baseline revisions can

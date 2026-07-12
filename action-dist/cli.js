@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 5c20f7086d62b1d6b08e46ea7582c27acbd977b2993269f1004476a3e6632ddb
+// ohrisk-action-source-sha256: 24322d5b9e7ad12fcf0a2a4e6044157a73f460a37abd48cc3f7c58315859dcf3
 // ohrisk-action-build-platform: win32
 import { createRequire } from "node:module";
 var __create = Object.create;
@@ -14562,10 +14562,10 @@ ${indent}`);
 // src/cli/main.ts
 import { isIP as isIP4 } from "node:net";
 
-// node_modules/.bun/@0disoft+laqu@1.0.7/node_modules/@0disoft/laqu/dist/runtime.js
+// node_modules/.bun/@0disoft+laqu@1.0.8/node_modules/@0disoft/laqu/dist/runtime.js
 import { AsyncLocalStorage } from "node:async_hooks";
 
-// node_modules/.bun/@0disoft+laqu@1.0.7/node_modules/@0disoft/laqu/dist/output-coordinator.js
+// node_modules/.bun/@0disoft+laqu@1.0.8/node_modules/@0disoft/laqu/dist/output-coordinator.js
 class TerminalLease {
   closed = false;
   renderedLineCount = 0;
@@ -14823,7 +14823,7 @@ function eraseLines(count) {
   return output;
 }
 
-// node_modules/.bun/@0disoft+laqu@1.0.7/node_modules/@0disoft/laqu/dist/events.js
+// node_modules/.bun/@0disoft+laqu@1.0.8/node_modules/@0disoft/laqu/dist/events.js
 var LAQU_EVENT_SCHEMA = "laqu.event";
 var LAQU_EVENT_SCHEMA_VERSION = 1;
 function taskEvent(task) {
@@ -14880,7 +14880,7 @@ function eventProgress(progress) {
   }
 }
 
-// node_modules/.bun/@0disoft+laqu@1.0.7/node_modules/@0disoft/laqu/dist/width.js
+// node_modules/.bun/@0disoft+laqu@1.0.8/node_modules/@0disoft/laqu/dist/width.js
 var ansiPattern = new RegExp(String.raw`\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007]*(?:\u0007|\u001b\\)|[@-Z\\-_])`, "g");
 var resetSequence = "\x1B[0m";
 var unsafeControlPattern = new RegExp(String.raw`[\u0000-\u0008\u000a-\u001f\u007f-\u009f]`, "g");
@@ -14962,7 +14962,11 @@ function truncateToColumns(input, columns, options = {}) {
   return needsSgrReset(result) ? `${result}${resetSequence}` : result;
 }
 function normalizedTabSize(tabSize) {
-  return Math.max(1, tabSize ?? 8);
+  const value = tabSize ?? 8;
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new TypeError("tabSize must be a safe positive integer");
+  }
+  return value;
 }
 function tabWidthAtColumn(column, tabSize) {
   return tabSize - column % tabSize;
@@ -15168,7 +15172,7 @@ function isSgrActive(state) {
   return state.intensity || state.italic || state.underline || state.blink || state.inverse || state.conceal || state.strike || state.overline || state.foreground || state.background || state.underlineColor;
 }
 
-// node_modules/.bun/@0disoft+laqu@1.0.7/node_modules/@0disoft/laqu/dist/theme.js
+// node_modules/.bun/@0disoft+laqu@1.0.8/node_modules/@0disoft/laqu/dist/theme.js
 var defaultTokens = {
   successSymbol: "✓",
   failSymbol: "×",
@@ -15235,7 +15239,7 @@ function sanitizeToken(value, name) {
   return sanitizeText(value);
 }
 
-// node_modules/.bun/@0disoft+laqu@1.0.7/node_modules/@0disoft/laqu/dist/renderer.js
+// node_modules/.bun/@0disoft+laqu@1.0.8/node_modules/@0disoft/laqu/dist/renderer.js
 function chooseRenderer(options) {
   if (options.policy === "silent" || options.policy === "never") {
     return { renderer: new NullRenderer, live: false, jsonSerialization: "none" };
@@ -15249,7 +15253,7 @@ function chooseRenderer(options) {
   }
   if (options.policy === "plain") {
     return {
-      renderer: new PlainLogRenderer(options.theme, options.columns, options.maxRows),
+      renderer: new PlainLogRenderer(options.theme),
       live: false,
       jsonSerialization: "none"
     };
@@ -15262,7 +15266,7 @@ function chooseRenderer(options) {
     };
   }
   return {
-    renderer: new PlainLogRenderer(options.theme, options.columns, options.maxRows),
+    renderer: new PlainLogRenderer(options.theme),
     live: false,
     jsonSerialization: "none"
   };
@@ -15292,29 +15296,25 @@ class AnsiLiveRenderer {
 
 class PlainLogRenderer {
   theme;
-  columns;
-  maxRows;
   #seenTaskStates = new Map;
   #seenLogSequence = 0;
-  constructor(theme, columns, maxRows) {
+  constructor(theme, _columns, _maxRows) {
     this.theme = theme;
-    this.columns = columns;
-    this.maxRows = maxRows;
   }
   render(snapshot) {
     const lines = [];
     const newLogs = logsAfterSequence(snapshot.logs, this.#seenLogSequence);
-    lines.push(...renderLogLines(newLogs, this.theme, this.columns));
+    lines.push(...newLogs.map((log) => sanitizeText(log.message)));
     this.#seenLogSequence = lastLogSequence(snapshot.logs, this.#seenLogSequence);
-    const rows = flattenTasks(snapshot.tasks).slice(0, this.maxRows);
+    const rows = flattenTasks(snapshot.tasks);
     pruneSeenTaskStates(this.#seenTaskStates, rows);
     for (const row of rows) {
-      const state = `${row.status}:${row.message ?? ""}:${row.detail ?? ""}:${progressText(row, this.theme)}`;
+      const state = taskStateKey(row);
       if (this.#seenTaskStates.get(row.id) === state) {
         continue;
       }
       this.#seenTaskStates.set(row.id, state);
-      lines.push(renderTaskRow(row, this.theme, this.columns));
+      lines.push(renderTaskRow(row, this.theme));
     }
     return lines.length === 0 ? { kind: "none" } : { kind: "plain", lines };
   }
@@ -15333,9 +15333,7 @@ class JsonEventRenderer {
     }
     this.#seenLogSequence = lastLogSequence(snapshot.logs, this.#seenLogSequence);
     for (const task of tasks) {
-      const ratio = task.aggregate.kind === "ratio" ? task.aggregate.ratio : undefined;
-      const overrun = task.aggregate.kind === "ratio" ? task.aggregate.overrun : undefined;
-      const state = `${task.status}:${task.message ?? ""}:${task.detail ?? ""}:${task.aggregate.kind}:${ratio ?? ""}:${overrun ?? ""}`;
+      const state = taskStateKey(task);
       if (this.#seenTaskStates.get(task.id) === state) {
         continue;
       }
@@ -15422,9 +15420,11 @@ function renderTaskRow(task, theme, columns) {
     text(progress === "" ? "" : `${theme.tokens.gap}${progress}`, "accent"),
     text(message)
   ]);
-  return truncateToColumns(`${row}${detail}`, columns, {
-    overflowMarker: theme.tokens.overflowMarker
-  });
+  const rendered = `${row}${detail}`;
+  return columns === undefined ? rendered : truncateToColumns(rendered, columns, { overflowMarker: theme.tokens.overflowMarker });
+}
+function taskStateKey(task) {
+  return JSON.stringify([task.status, task.message, task.detail, task.progress, task.aggregate]);
 }
 function statusSymbol(task, theme) {
   switch (task.status) {
@@ -15478,7 +15478,7 @@ function progressBar(ratio, overrun, theme) {
   return `[${theme.tokens.progressComplete.repeat(completed)}${theme.tokens.progressIncomplete.repeat(incomplete)}${tail}]`;
 }
 
-// node_modules/.bun/@0disoft+laqu@1.0.7/node_modules/@0disoft/laqu/dist/task-store.js
+// node_modules/.bun/@0disoft+laqu@1.0.8/node_modules/@0disoft/laqu/dist/task-store.js
 class TaskStore {
   #tasks = new Map;
   #rootIds = [];
@@ -15867,6 +15867,9 @@ function assertTaskOptions(options) {
   if (options.detail !== undefined) {
     assertString(options.detail, "detail");
   }
+  if (options.ratio !== undefined && (options.total !== undefined || options.completed !== undefined)) {
+    throw new TypeError("task options must not mix ratio with total or completed progress");
+  }
   if (options.signal !== undefined) {
     const signal = options.signal;
     if (typeof signal !== "object" || signal === null || typeof signal.aborted !== "boolean" || typeof signal.addEventListener !== "function" || typeof signal.removeEventListener !== "function") {
@@ -15947,7 +15950,7 @@ function rememberTerminalTasks(tasks, seenTerminalIds) {
   }
 }
 
-// node_modules/.bun/@0disoft+laqu@1.0.7/node_modules/@0disoft/laqu/dist/runtime.js
+// node_modules/.bun/@0disoft+laqu@1.0.8/node_modules/@0disoft/laqu/dist/runtime.js
 var defaultFlushHz = 15;
 var liveStreamLeases = new WeakSet;
 function createProgressRuntime(options = {}) {
@@ -15998,6 +16001,8 @@ class LaquRuntime {
   #taskCloseContext = new AsyncLocalStorage;
   #activeScopedTasks = 0;
   #closeRequestedByScopedTask = false;
+  #scopedTasksDrained;
+  #resolveScopedTasksDrained;
   constructor(store, coordinator, policy, liveStreamLease) {
     this.store = store;
     this.coordinator = coordinator;
@@ -16032,6 +16037,11 @@ class LaquRuntime {
     } finally {
       handle.dispose();
       this.#activeScopedTasks -= 1;
+      if (this.#activeScopedTasks === 0) {
+        this.#resolveScopedTasksDrained?.();
+        this.#resolveScopedTasksDrained = undefined;
+        this.#scopedTasksDrained = undefined;
+      }
       await this.flush();
       if (this.#shouldRunDeferredScopedClose()) {
         this.#closeRequestedByScopedTask = false;
@@ -16059,8 +16069,17 @@ class LaquRuntime {
       await this.flush();
       return;
     }
-    this.#closePromise ??= this.#closeOnce();
+    this.#closePromise ??= this.#closeAfterScopedTasks();
     await this.#closePromise;
+  }
+  async#closeAfterScopedTasks() {
+    if (this.#activeScopedTasks > 0) {
+      this.#scopedTasksDrained ??= new Promise((resolve) => {
+        this.#resolveScopedTasksDrained = resolve;
+      });
+      await this.#scopedTasksDrained;
+    }
+    await this.#closeOnce();
   }
   manageProcessLifecycle() {
     this.#processLifecycle ??= new ProcessLifecycleLease(() => {
@@ -16417,19 +16436,22 @@ function unknownToMessage(error) {
     return;
   }
   if (error instanceof Error) {
-    return error.message;
+    try {
+      return typeof error.message === "string" ? error.message : "Error";
+    } catch {
+      return "Error";
+    }
   }
   if (typeof error === "string") {
     return error;
   }
-  if (error === null || typeof error === "number" || typeof error === "boolean" || typeof error === "bigint" || typeof error === "symbol") {
+  if (error === null) {
+    return "Non-Error thrown";
+  }
+  if (typeof error === "number" || typeof error === "boolean" || typeof error === "bigint" || typeof error === "symbol") {
     return String(error);
   }
-  try {
-    return JSON.stringify(error) ?? String(error);
-  } catch {
-    return String(error);
-  }
+  return "Non-Error thrown";
 }
 function unknownToRejectionError(reason) {
   if (reason instanceof Error) {
@@ -17651,7 +17673,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.2.0";
+var OHRISK_VERSION = "1.2.1";
 
 // src/diff/compare.ts
 function diffRiskFindings(input) {
