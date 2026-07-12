@@ -1,3 +1,11 @@
 [install]
 exact = true
 linker = "isolated"
+
+[test]
+coverageDir = "coverage"
+coverageThreshold = { lines = 0.80, functions = 0.75, statements = 0.80 }
+coveragePathIgnorePatterns = [
+  "src/report/locales/**",
+  "src/types/**"
+]
