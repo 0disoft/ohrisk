@@ -3,15 +3,15 @@ description: Catch open-source license risk in GitHub Actions.
 
 inputs:
   version:
-    description: npm package version to install. Defaults to the matching action tag version for v* tags, otherwise latest.
+    description: Bundled CLI version assertion. Use bundled or the exact CLI version shipped with this action.
     required: false
-    default: ""
+    default: bundled
   node-version:
-    description: Node.js version used by the packaged Ohrisk CLI.
+    description: Node.js version used by the bundled Ohrisk CLI.
     required: false
     default: "24"
   setup-node:
-    description: Run actions/setup-node before installing Ohrisk.
+    description: Run actions/setup-node before executing Ohrisk.
     required: false
     default: "true"
   command:
@@ -31,7 +31,15 @@ inputs:
     required: false
     default: high
   lockfile:
-    description: Supported lockfile path to scan.
+    description: Supported repository-relative lockfile path to scan.
+    required: false
+    default: ""
+  all:
+    description: Discover and merge every supported lockfile at the selected project root.
+    required: false
+    default: "false"
+  policy:
+    description: Repository-relative Ohrisk policy file path.
     required: false
     default: ""
   format:
@@ -50,6 +58,34 @@ inputs:
     description: Fail when local waivers are expired or unmatched.
     required: false
     default: "false"
+  offline:
+    description: Disable remote evidence requests and use only local evidence or cache entries.
+    required: false
+    default: "false"
+  cache-dir:
+    description: Repository-relative persistent artifact cache directory.
+    required: false
+    default: ""
+  jobs:
+    description: Evidence collection concurrency from 1 to 64.
+    required: false
+    default: ""
+  timeout:
+    description: Per-request timeout such as 30s or 2m.
+    required: false
+    default: ""
+  registry-url:
+    description: HTTPS npm-compatible registry URL.
+    required: false
+    default: ""
+  registry-token-env:
+    description: Environment variable name containing a bearer token for registry-url.
+    required: false
+    default: ""
+  allow-hosts:
+    description: Comma- or newline-separated DNS hostnames explicitly allowed for artifact fetching.
+    required: false
+    default: ""
 
 outputs:
   report-path:
@@ -61,60 +97,65 @@ runs:
   steps:
     - name: Setup Node
       if: ${{ inputs.setup-node == 'true' }}
-      uses: actions/setup-node@v6
+      uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
       with:
         node-version: ${{ inputs.node-version }}
 
-    - name: Install Ohrisk
+    - name: Verify bundled Ohrisk version
       shell: bash
       env:
-        OHRISK_VERSION: ${{ inputs.version }}
-        OHRISK_ACTION_REF: ${{ github.action_ref }}
+        OHRISK_ACTION_PATH: ${{ github.action_path }}
+        OHRISK_REQUESTED_VERSION: ${{ inputs.version }}
       run: |
         set -euo pipefail
 
-        require_ohrisk_version() {
-          local value="$1"
-          case "$value" in
-            latest) return 0 ;;
-          esac
-
-          if [[ "$value" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            return 0
-          fi
-
-          echo "::error::version must be latest or a semantic version such as 1.1.0 or v1.1.0."
+        version_output="$(node "${OHRISK_ACTION_PATH}/action-dist/cli.js" version)"
+        read -r cli_name bundled_version extra <<< "$version_output"
+        if [ "$cli_name" != "ohrisk" ] || [ -z "$bundled_version" ] || [ -n "${extra:-}" ]; then
+          echo "::error::Bundled Ohrisk CLI returned an invalid version string."
           exit 1
-        }
-
-        version="$OHRISK_VERSION"
-        if [ -z "$version" ]; then
-          case "$OHRISK_ACTION_REF" in
-            v*) version="${OHRISK_ACTION_REF#v}" ;;
-            *) version="latest" ;;
-          esac
         fi
 
-        require_ohrisk_version "$version"
-        case "$version" in
-          v*) version="${version#v}" ;;
+        requested_version="$OHRISK_REQUESTED_VERSION"
+        case "$requested_version" in
+          ""|bundled) ;;
+          v*) requested_version="${requested_version#v}" ;;
         esac
 
-        npm install -g "ohrisk@${version}"
+        if [ "$requested_version" != "" ] && [ "$requested_version" != "bundled" ]; then
+          if [[ ! "$requested_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::version must be bundled or an exact semantic version."
+            exit 1
+          fi
+          if [ "$requested_version" != "$bundled_version" ]; then
+            echo "::error::version ${requested_version} does not match bundled Ohrisk ${bundled_version}."
+            exit 1
+          fi
+        fi
 
     - name: Run Ohrisk
       id: run
       shell: bash
       env:
+        OHRISK_ACTION_PATH: ${{ github.action_path }}
         OHRISK_COMMAND: ${{ inputs.command }}
         OHRISK_PROFILE: ${{ inputs.profile }}
         OHRISK_PROD: ${{ inputs.prod }}
         OHRISK_FAIL_ON: ${{ inputs.fail-on }}
         OHRISK_LOCKFILE: ${{ inputs.lockfile }}
+        OHRISK_ALL: ${{ inputs.all }}
+        OHRISK_POLICY: ${{ inputs.policy }}
         OHRISK_FORMAT: ${{ inputs.format }}
         OHRISK_OUTPUT: ${{ inputs.output }}
         OHRISK_NO_WAIVERS: ${{ inputs.no-waivers }}
         OHRISK_STRICT_WAIVERS: ${{ inputs.strict-waivers }}
+        OHRISK_OFFLINE: ${{ inputs.offline }}
+        OHRISK_CACHE_DIR: ${{ inputs.cache-dir }}
+        OHRISK_JOBS: ${{ inputs.jobs }}
+        OHRISK_TIMEOUT: ${{ inputs.timeout }}
+        OHRISK_REGISTRY_URL: ${{ inputs.registry-url }}
+        OHRISK_REGISTRY_TOKEN_ENV: ${{ inputs.registry-token-env }}
+        OHRISK_ALLOW_HOSTS: ${{ inputs.allow-hosts }}
       run: |
         set -euo pipefail
 
@@ -162,8 +203,15 @@ runs:
         }
 
         require_bool "prod" "$OHRISK_PROD"
+        require_bool "all" "$OHRISK_ALL"
         require_bool "no-waivers" "$OHRISK_NO_WAIVERS"
         require_bool "strict-waivers" "$OHRISK_STRICT_WAIVERS"
+        require_bool "offline" "$OHRISK_OFFLINE"
+
+        if [ "$OHRISK_ALL" = "true" ] && [ -n "$OHRISK_LOCKFILE" ]; then
+          echo "::error::all=true cannot be combined with lockfile."
+          exit 1
+        fi
 
         args=()
         case "$OHRISK_COMMAND" in
@@ -186,9 +234,18 @@ runs:
           args+=("--prod")
         fi
 
+        if [ "$OHRISK_ALL" = "true" ]; then
+          args+=("--all")
+        fi
+
         if [ -n "$OHRISK_LOCKFILE" ]; then
           require_relative_workspace_path "lockfile" "$OHRISK_LOCKFILE"
           args+=("--lockfile" "$OHRISK_LOCKFILE")
+        fi
+
+        if [ -n "$OHRISK_POLICY" ]; then
+          require_relative_workspace_path "policy" "$OHRISK_POLICY"
+          args+=("--policy" "$OHRISK_POLICY")
         fi
 
         case "$OHRISK_FORMAT" in
@@ -215,6 +272,54 @@ runs:
           args+=("--strict-waivers")
         fi
 
+        if [ "$OHRISK_OFFLINE" = "true" ]; then
+          args+=("--offline")
+        fi
+
+        if [ -n "$OHRISK_CACHE_DIR" ]; then
+          require_relative_workspace_path "cache-dir" "$OHRISK_CACHE_DIR"
+          args+=("--cache-dir" "$OHRISK_CACHE_DIR")
+        fi
+
+        if [ -n "$OHRISK_JOBS" ]; then
+          if [[ ! "$OHRISK_JOBS" =~ ^[0-9]+$ ]]; then
+            echo "::error::jobs must be an integer from 1 to 64."
+            exit 1
+          fi
+          jobs_number=$((10#$OHRISK_JOBS))
+          if [ "$jobs_number" -lt 1 ] || [ "$jobs_number" -gt 64 ]; then
+            echo "::error::jobs must be an integer from 1 to 64."
+            exit 1
+          fi
+          args+=("--jobs" "$OHRISK_JOBS")
+        fi
+
+        if [ -n "$OHRISK_TIMEOUT" ]; then
+          args+=("--timeout" "$OHRISK_TIMEOUT")
+        fi
+
+        if [ -n "$OHRISK_REGISTRY_URL" ]; then
+          args+=("--registry-url" "$OHRISK_REGISTRY_URL")
+        fi
+
+        if [ -n "$OHRISK_REGISTRY_TOKEN_ENV" ]; then
+          if [[ ! "$OHRISK_REGISTRY_TOKEN_ENV" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            echo "::error::registry-token-env must be an environment variable name."
+            exit 1
+          fi
+          args+=("--registry-token-env" "$OHRISK_REGISTRY_TOKEN_ENV")
+        fi
+
+        if [ -n "$OHRISK_ALLOW_HOSTS" ]; then
+          while IFS= read -r host; do
+            host="${host#"${host%%[![:space:]]*}"}"
+            host="${host%"${host##*[![:space:]]}"}"
+            if [ -n "$host" ]; then
+              args+=("--allow-host" "$host")
+            fi
+          done < <(printf '%s' "$OHRISK_ALLOW_HOSTS" | tr ',' '\n')
+        fi
+
         if [ -n "$OHRISK_FAIL_ON" ]; then
           if [ "$OHRISK_COMMAND" != "ci" ]; then
             echo "::error::fail-on can only be used with command=ci."
@@ -229,4 +334,4 @@ runs:
           esac
         fi
 
-        ohrisk "${args[@]}"
+        node "${OHRISK_ACTION_PATH}/action-dist/cli.js" "${args[@]}"
