@@ -17649,7 +17649,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.1.3";
+var OHRISK_VERSION = "1.2.0";
 
 // src/diff/compare.ts
 function diffRiskFindings(input) {

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 - 2026-07-12
 
 - Added `diff --all` baseline discovery so current and baseline revisions can
   contain different lockfile sets, with added and removed inputs reported in

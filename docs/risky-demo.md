@@ -14,7 +14,7 @@ Clone the repository and run the fixture scan from the repository root:
 ```bash
 git clone https://github.com/0disoft/ohrisk.git
 cd ohrisk
-npm install -g ohrisk@1.1.3
+npm install -g ohrisk@1.2.0
 ohrisk scan --lockfile test/fixtures/bun-project/bun.lock --profile saas --prod
 ```
 
@@ -55,4 +55,3 @@ ohrisk scan --lockfile test/fixtures/bun-project/bun.lock --profile distributed-
 
 GPL risk is stricter for distributed apps because users receive the software
 instead of only using a hosted service.
-

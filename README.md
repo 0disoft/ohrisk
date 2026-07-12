@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.1.3
+npm install -g ohrisk@1.2.0
 cd your-project
 ohrisk scan
 ```
@@ -291,7 +291,7 @@ ohrisk scan
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.1.3
+npm install -g ohrisk@1.2.0
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open

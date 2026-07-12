@@ -35,7 +35,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install -g ohrisk@1.1.3
+      - run: npm install -g ohrisk@1.2.0
 
       - run: ohrisk diff origin/main --prod --fail-on high
 ```
@@ -73,7 +73,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install -g ohrisk@1.1.3
+      - run: npm install -g ohrisk@1.2.0
 
       - name: Generate Ohrisk report
         run: |
@@ -148,7 +148,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install -g ohrisk@1.1.3
+      - run: npm install -g ohrisk@1.2.0
 
       - run: |
           mkdir -p reports
