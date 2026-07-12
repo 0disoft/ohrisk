@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import { existsSync, readdirSync, type Dirent } from "node:fs";
 import path from "node:path";
 
@@ -87,10 +88,10 @@ export function parseCargoLockfile(
     return memberManifests;
   }
 
-  return parseCargoLockText(lockfileText.value, lockfilePath, {
+  return parseCargoLockText(lockfileText.value, lockfilePath, omitUndefined({
     manifestText: manifest.value,
     memberManifestTexts: memberManifests.value
-  });
+  }));
 }
 
 export function parseCargoLockText(
@@ -117,18 +118,18 @@ export function parseCargoLockText(
       ?? readCargoPackageName(options.manifestText)
       ?? path.basename(path.dirname(lockfilePath))
       ?? "<cargo-project>";
-    const rootDependencies = readCargoRootDependencies({
+    const rootDependencies = readCargoRootDependencies(omitUndefined({
       manifestText: options.manifestText,
       memberManifestTexts: options.memberManifestTexts,
       records
-    });
+    }));
     const nodeMap = new Map<string, DependencyNode>();
 
     for (const rootDependency of rootDependencies) {
-      const record = resolveCargoPackageRecord(records, {
+      const record = resolveCargoPackageRecord(records, omitUndefined({
         name: rootDependency.name,
         version: rootDependency.version
-      });
+      }));
       if (!record) {
         continue;
       }
@@ -239,6 +240,54 @@ function readCargoWorkspaceMemberManifests(input: {
   return ok(manifestTexts);
 }
 
+export function findCargoWorkspaceMemberManifestPathsFromRelativePaths(input: {
+  rootManifestText: string;
+  lockfilePath: string;
+  projectRoot: string;
+  relativePaths: Iterable<string>;
+}): CargoWorkspaceMemberManifestPath[] {
+  const projectRoot = path.resolve(input.projectRoot);
+  const lockfileRoot = path.dirname(path.resolve(input.lockfilePath));
+  const members = readCargoWorkspaceMembers(input.rootManifestText);
+  const excludes = readCargoWorkspaceExcludes(input.rootManifestText);
+  const paths = new Map<string, CargoWorkspaceMemberManifestPath>();
+
+  for (const rawRelativeManifestPath of input.relativePaths) {
+    const relativeManifestPath = normalizeProjectRelativeManifestPath(rawRelativeManifestPath);
+    if (!relativeManifestPath || path.posix.basename(relativeManifestPath) !== "Cargo.toml") {
+      continue;
+    }
+
+    const manifestPath = path.resolve(projectRoot, ...relativeManifestPath.split("/"));
+    if (!isInsideDirectory(projectRoot, manifestPath) || manifestPath === path.join(lockfileRoot, "Cargo.toml")) {
+      continue;
+    }
+
+    const memberPath = normalizeCargoWorkspaceMemberPath(
+      path.relative(lockfileRoot, path.dirname(manifestPath))
+    );
+    if (!memberPath) {
+      continue;
+    }
+    if (
+      !members.some((pattern) => cargoWorkspaceMemberPatternMatches(memberPath, pattern))
+      || excludes.some((pattern) => cargoWorkspaceMemberPatternMatches(memberPath, pattern))
+    ) {
+      continue;
+    }
+
+    paths.set(relativeManifestPath, {
+      memberPath,
+      manifestPath,
+      relativeManifestPath
+    });
+  }
+
+  return [...paths.values()].sort((left, right) =>
+    left.relativeManifestPath.localeCompare(right.relativeManifestPath)
+  );
+}
+
 export function findCargoWorkspaceMemberManifestPaths(input: {
   rootManifestText: string;
   lockfilePath: string;
@@ -302,6 +351,31 @@ export function findCargoWorkspaceMemberManifestPaths(input: {
 
   return [...paths.values()].sort((left, right) =>
     left.relativeManifestPath.localeCompare(right.relativeManifestPath)
+  );
+}
+
+function normalizeProjectRelativeManifestPath(value: string): string | undefined {
+  const normalized = path.posix.normalize(value.replace(/\\/g, "/"));
+  if (
+    normalized === "."
+    || normalized === ".."
+    || normalized.startsWith("../")
+    || normalized.startsWith("/")
+  ) {
+    return undefined;
+  }
+  return normalized;
+}
+
+function cargoWorkspaceMemberPatternMatches(memberPath: string, rawPattern: string): boolean {
+  const normalizedPattern = rawPattern.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/$/, "");
+  const memberSegments = memberPath.split("/").filter(Boolean);
+  const patternSegments = normalizedPattern.split("/").filter(Boolean);
+  if (memberSegments.length !== patternSegments.length) {
+    return false;
+  }
+  return patternSegments.every((segment, index) =>
+    cargoWorkspaceGlobSegmentPattern(segment).test(memberSegments[index] ?? "")
   );
 }
 
@@ -581,11 +655,11 @@ function mergeCargoManifestRootDependencies(
     )) {
       const existing = roots.get(dependency.name);
       roots.set(dependency.name, existing
-        ? {
+        ? omitUndefined({
             name: dependency.name,
             version: existing.version ?? dependency.version,
             type: mergeDependencyType(existing.type, dependency.type)
-          }
+          })
         : dependency);
     }
   }
@@ -831,7 +905,7 @@ function walkCargoDependency(input: {
     existing.dependencyType = mergeDependencyType(existing.dependencyType, input.dependencyType);
     existing.paths.push(nextPath);
   } else {
-    input.nodeMap.set(input.record.id, {
+    input.nodeMap.set(input.record.id, omitUndefined<DependencyNode>({
       id: input.record.id,
       name: input.record.name,
       version: input.record.version,
@@ -840,7 +914,7 @@ function walkCargoDependency(input: {
       dependencyType: input.dependencyType,
       direct: input.direct,
       paths: [nextPath]
-    });
+    }));
   }
 
   for (const dependency of input.record.dependencies) {

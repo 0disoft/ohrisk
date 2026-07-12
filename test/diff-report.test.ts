@@ -27,6 +27,7 @@ describe("renderDiffReport", () => {
       baselineRef: "main",
       profile: "distributed-app",
       prodOnly: true,
+      lockfileChanges: { current: [], baseline: [], added: [], removed: [] },
       diff: {
         baselineFindings: [],
         currentFindings: [finding],
@@ -51,6 +52,7 @@ describe("renderDiffReport", () => {
         baselineRef: "main",
         profile: "distributed-app",
         prodOnly: true,
+        lockfileChanges: { current: [], baseline: [], added: [], removed: [] },
         diff: {
           baselineFindings: [],
           currentFindings: [finding],

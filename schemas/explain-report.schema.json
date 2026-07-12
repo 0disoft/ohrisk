@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ohrisk:schema:explain-report:2.0.0",
+  "title": "Ohrisk explain report",
+  "type": "object",
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "status",
+    "expression",
+    "profile",
+    "license",
+    "finding"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "urn:ohrisk:schema:explain-report:2.0.0"
+    },
+    "schemaVersion": {
+      "const": "2.0.0"
+    },
+    "status": {
+      "const": "license_explained"
+    },
+    "expression": {
+      "type": "string",
+      "minLength": 1
+    },
+    "profile": {
+      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/usageProfile"
+    },
+    "license": {
+      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/normalizedLicense"
+    },
+    "finding": {
+      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskFinding"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -116,9 +117,9 @@ export function parseDotnetProjectFile(
     return centralPackageVersions;
   }
 
-  return parseDotnetProjectText(projectFileText.value, projectFilePath, {
+  return parseDotnetProjectText(projectFileText.value, projectFilePath, omitUndefined({
     centralPackageVersions: centralPackageVersions.value
-  });
+  }));
 }
 
 export function parseNugetPackagesConfigFile(
@@ -206,7 +207,7 @@ export function parseDirectoryPackagesPropsText(
   input: string,
   propsPath = "Directory.Packages.props"
 ): Result<DotnetCentralPackageVersions, OhriskError> {
-  const parsed = parseDirectoryPackagesPropsXml(input, propsPath);
+  const parsed = parseDirectoryPackagesPropsXml(input);
   if (!parsed.ok) {
     return parsed;
   }
@@ -617,8 +618,7 @@ export function findNearestDirectoryPackagesPropsPath(projectFilePath: string): 
 }
 
 function parseDirectoryPackagesPropsXml(
-  input: string,
-  propsPath: string
+  input: string
 ): Result<{ versions: Map<string, string>; unresolved: Map<string, string> }, OhriskError> {
   const versions = new Map<string, string>();
   const unresolved = new Map<string, string>();

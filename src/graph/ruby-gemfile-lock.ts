@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -60,9 +61,9 @@ export function parseGemfileLockfile(
     return gemfileText;
   }
 
-  return parseGemfileLockText(lockfileText.value, lockfilePath, {
+  return parseGemfileLockText(lockfileText.value, lockfilePath, omitUndefined({
     gemfileText: gemfileText.value
-  });
+  }));
 }
 
 export function parseGemfileLockText(
@@ -86,11 +87,11 @@ export function parseGemfileLockText(
     }
 
     const rootName = path.basename(path.dirname(lockfilePath)) || "<ruby-project>";
-    const roots = readGemRootDependencies({
+    const roots = readGemRootDependencies(omitUndefined({
       gemfileText: options.gemfileText,
       lockfileDependencies: parsed.dependencies,
       records: parsed.records
-    });
+    }));
     const nodeMap = new Map<string, DependencyNode>();
 
     for (const root of roots) {

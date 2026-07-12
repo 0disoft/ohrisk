@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -30,10 +31,10 @@ export function collectCpanPackageEvidence(input: {
   projectRoot: string;
   archiveMaxBytes?: number;
 }): Result<LicenseEvidence, OhriskError> {
-  const archivePath = cpanArchivePath({
+  const archivePath = cpanArchivePath(omitUndefined({
     projectRoot: input.projectRoot,
     pathname: input.resolved
-  });
+  }));
 
   if (!archivePath || !existsSync(archivePath)) {
     return ok({
@@ -208,11 +209,11 @@ function parseCpanMetaObject(value: unknown): CpanMeta {
     return { licenses: [] };
   }
 
-  return {
+  return omitUndefined({
     name: readString(value.name),
     version: readString(value.version),
     licenses: readCpanLicenses(value.license)
-  };
+  });
 }
 
 function readCpanLicenses(value: unknown): string[] {

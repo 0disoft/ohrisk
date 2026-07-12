@@ -17,7 +17,14 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
-import { collectEcosystemEvidence } from "./ecosystem-collectors";
+import {
+  artifactCacheMetadataFromHeaders,
+  createArtifactCache,
+  type ArtifactCache,
+  type ArtifactCacheEntry,
+  type ArtifactCacheResponseMetadata
+} from "./cache";
+import { collectRegisteredEcosystemEvidence } from "../ecosystems/registry";
 import { collectLocalPackageEvidence } from "./local-package";
 import { collectTarballEvidence } from "./tarball";
 import type { LicenseEvidence } from "./types";
@@ -42,6 +49,13 @@ type ArtifactFetchResponse = {
 type ArtifactFetchOptions = {
   signal?: AbortSignal;
   redirect?: "manual";
+  headers?: Record<string, string>;
+};
+
+type RemoteArtifactRead = {
+  bytes: Buffer;
+  cacheMetadata: ArtifactCacheResponseMetadata;
+  notModified: boolean;
 };
 
 type ArtifactFetcher = (
@@ -75,6 +89,7 @@ type RemoteArtifactFetchPolicy = {
   resolveFailureMessage: string;
   details: Record<string, unknown>;
   resolveArtifactHost: ArtifactHostResolver | undefined;
+  allowedHosts?: ReadonlySet<string>;
 };
 
 export type EvidenceCollectionProgress = {
@@ -112,6 +127,11 @@ export async function collectGraphEvidence(input: {
   installedPackageJsonMaxBytes?: number;
   resolveArtifactHost?: ArtifactHostResolver;
   evidenceConcurrency?: number;
+  offline?: boolean;
+  cacheDir?: string;
+  npmRegistryUrl?: string;
+  registryAuthTokens?: ReadonlyMap<string, string>;
+  allowedArtifactHosts?: Iterable<string>;
   progress?: (progress: EvidenceCollectionProgress) => void;
 }): Promise<Result<LicenseEvidence[], OhriskError>> {
   const evidence = new Array<LicenseEvidence>(input.graph.nodes.length);
@@ -131,10 +151,13 @@ export async function collectGraphEvidence(input: {
   let nextIndex = 0;
   let failure: { index: number; error: OhriskError } | undefined;
   const workerCount = normalizeEvidenceConcurrency(input.evidenceConcurrency, total);
-  const fetchArtifact = input.fetchArtifact ?? defaultArtifactFetcher;
+  const allowedHosts = normalizeAllowedArtifactHosts(input.allowedArtifactHosts);
+  const baseFetchArtifact = input.fetchArtifact ?? createDefaultArtifactFetcher(allowedHosts);
+  const fetchArtifact = withRegistryAuthorization(baseFetchArtifact, input.registryAuthTokens);
   const resolveArtifactHost =
     input.resolveArtifactHost ??
     (input.fetchArtifact ? undefined : defaultArtifactHostResolver);
+  const artifactCache = input.cacheDir ? createArtifactCache(input.cacheDir) : undefined;
   const fetchTimeoutMs = input.fetchTimeoutMs ?? ARTIFACT_FETCH_TIMEOUT_MS;
   const registryMetadataMaxBytes = input.registryMetadataMaxBytes ?? REGISTRY_METADATA_MAX_BYTES;
   const tarballMaxBytes = input.tarballMaxBytes ?? PACKAGE_TARBALL_MAX_BYTES;
@@ -164,7 +187,11 @@ export async function collectGraphEvidence(input: {
         fetchTimeoutMs,
         registryMetadataMaxBytes,
         tarballMaxBytes,
-        installedPackageJsonMaxBytes
+        installedPackageJsonMaxBytes,
+        offline: input.offline ?? false,
+        artifactCache,
+        npmRegistryUrl: input.npmRegistryUrl,
+        allowedHosts
       });
 
       if (!collected.ok) {
@@ -183,7 +210,8 @@ export async function collectGraphEvidence(input: {
           continue;
         }
 
-        if (!failure || index < failure.index) {
+        const previousFailure = failure as { index: number; error: OhriskError } | undefined;
+        if (!previousFailure || index < previousFailure.index) {
           failure = {
             index,
             error: collected.error
@@ -258,8 +286,12 @@ async function collectNodeEvidence(input: {
   registryMetadataMaxBytes: number;
   tarballMaxBytes: number;
   installedPackageJsonMaxBytes: number;
+  offline: boolean;
+  artifactCache: ArtifactCache | undefined;
+  npmRegistryUrl: string | undefined;
+  allowedHosts: ReadonlySet<string>;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
-  const ecosystemEvidence = collectEcosystemEvidence({
+  const ecosystemEvidence = collectRegisteredEcosystemEvidence({
     node: input.node,
     projectRoot: input.projectRoot
   });
@@ -323,7 +355,11 @@ async function collectNodeEvidence(input: {
       resolveArtifactHost: input.resolveArtifactHost,
       fetchTimeoutMs: input.fetchTimeoutMs,
       registryMetadataMaxBytes: input.registryMetadataMaxBytes,
-      tarballMaxBytes: input.tarballMaxBytes
+      tarballMaxBytes: input.tarballMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      npmRegistryUrl: input.npmRegistryUrl,
+      allowedHosts: input.allowedHosts
     });
   }
 
@@ -331,11 +367,14 @@ async function collectNodeEvidence(input: {
     return collectRemoteTarballEvidence({
       packageId: input.node.id,
       resolved: input.node.resolved,
-      integrity: input.node.integrity,
+      ...(input.node.integrity ? { integrity: input.node.integrity } : {}),
       fetchArtifact: input.fetchArtifact,
       resolveArtifactHost: input.resolveArtifactHost,
       fetchTimeoutMs: input.fetchTimeoutMs,
-      tarballMaxBytes: input.tarballMaxBytes
+      tarballMaxBytes: input.tarballMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      allowedHosts: input.allowedHosts
     });
   }
 
@@ -562,154 +601,87 @@ async function collectRegistryTarballEvidence(input: {
   fetchTimeoutMs: number;
   registryMetadataMaxBytes: number;
   tarballMaxBytes: number;
+  offline: boolean;
+  artifactCache: ArtifactCache | undefined;
+  npmRegistryUrl: string | undefined;
+  allowedHosts: ReadonlySet<string>;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
-  const metadataUrl = npmRegistryPackageVersionUrl(input.node.name, input.node.version);
-
-  const metadataUrlPreflight = await preflightRemoteArtifactFetchTarget({
+  const metadataUrl = npmRegistryPackageVersionUrl(
+    input.node.name,
+    input.node.version,
+    input.npmRegistryUrl
+  );
+  const metadataBytes = await readRemoteArtifactBytes({
     code: "REGISTRY_METADATA_FETCH_FAILED",
     packageId: input.node.id,
-    resolved: metadataUrl,
-    message: "npm registry metadata URL targets an unsupported or blocked host.",
+    url: metadataUrl,
+    blockedMessage: "npm registry metadata URL targets an unsupported or blocked host.",
     resolveFailureMessage: "Failed to resolve npm registry metadata host.",
-    details: {
-      registryUrl: metadataUrl
-    },
-    resolveArtifactHost: input.resolveArtifactHost
+    fetchFailureMessage: "Failed to fetch npm registry metadata.",
+    tooLargeMessage: "npm registry metadata response exceeded the maximum supported size.",
+    unreadableMessage: "npm registry metadata response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find npm registry metadata in the artifact cache.",
+    details: { registryUrl: metadataUrl },
+    maxBytes: input.registryMetadataMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts,
+    urlDetailKey: "registryUrl"
   });
-
-  if (!metadataUrlPreflight.ok) {
-    return err(metadataUrlPreflight.error);
+  if (!metadataBytes.ok) {
+    return err(metadataBytes.error);
   }
 
-  try {
-    const metadataText = await readArtifactWithTimeout({
-      fetchArtifact: input.fetchArtifact,
-      url: metadataUrl,
-      timeoutMs: input.fetchTimeoutMs,
-      redirectPolicy: {
-        code: "REGISTRY_METADATA_FETCH_FAILED",
-        packageId: input.node.id,
-        message: "npm registry metadata URL targets an unsupported or blocked host.",
-        resolveFailureMessage: "Failed to resolve npm registry metadata host.",
-        details: {
-          registryUrl: metadataUrl
-        },
-        resolveArtifactHost: input.resolveArtifactHost
-      },
-      readResponse: async (response, signal) => {
-        if (!response.ok) {
-          cancelReadableBody(response.body);
-          return err(
-            createError({
-              code: "REGISTRY_METADATA_FETCH_FAILED",
-              category: "network",
-              message: "Failed to fetch npm registry metadata.",
-              details: {
-                packageId: input.node.id,
-                registryUrl: safeUrlForErrorDetails(response.url ?? metadataUrl),
-                status: response.status,
-                statusText: response.statusText
-              }
-            })
-          );
-        }
+  const metadata = parseRegistryMetadata({
+    packageId: input.node.id,
+    registryUrl: metadataUrl,
+    text: metadataBytes.value.toString("utf8")
+  });
+  if (!metadata.ok) {
+    return err(metadata.error);
+  }
 
-        const metadataBody = await readResponseBodyWithLimit({
-          response,
-          signal,
-          maxBytes: input.registryMetadataMaxBytes,
-          createTooLargeError: (limit) => createError({
-            code: "REGISTRY_METADATA_FETCH_FAILED",
-            category: "unsupported_input",
-              message: "npm registry metadata response exceeded the maximum supported size.",
-              details: {
-                packageId: input.node.id,
-                registryUrl: safeUrlForErrorDetails(response.url ?? metadataUrl),
-                ...artifactBodyLimitDetails(limit)
-              }
-            }),
-          createUnreadableBodyError: () => createError({
-            code: "REGISTRY_METADATA_FETCH_FAILED",
-            category: "unsupported_input",
-            message: "npm registry metadata response did not expose a readable body stream.",
-            details: {
-              packageId: input.node.id,
-              registryUrl: safeUrlForErrorDetails(response.url ?? metadataUrl)
-            }
-          })
-        });
-
-        if (!metadataBody.ok) {
-          return err(metadataBody.error);
-        }
-
-        return ok(metadataBody.value.toString("utf8"));
-      }
-    });
-
-    if (!metadataText.ok) {
-      return err(metadataText.error);
-    }
-
-    const metadata = parseRegistryMetadata({
-      packageId: input.node.id,
-      registryUrl: metadataUrl,
-      text: metadataText.value
-    });
-    if (!metadata.ok) {
-      return err(metadata.error);
-    }
-
-    const tarballUrl = readRegistryTarballUrl(metadata.value, input.node.version);
-
-    if (!tarballUrl) {
-      return err(
-        createError({
-          code: "REGISTRY_METADATA_FETCH_FAILED",
-          category: "unsupported_input",
-          message: "npm registry metadata did not include a tarball for the requested version.",
-          details: {
-            packageId: input.node.id,
-            registryUrl: metadataUrl,
-            version: input.node.version
-          }
-        })
-      );
-    }
-
-    return collectRemoteTarballEvidence({
-      packageId: input.node.id,
-      resolved: tarballUrl,
-      integrity: input.node.integrity,
-      fetchArtifact: input.fetchArtifact,
-      resolveArtifactHost: input.resolveArtifactHost,
-      fetchTimeoutMs: input.fetchTimeoutMs,
-      tarballMaxBytes: input.tarballMaxBytes,
-      urlError: {
-        code: "REGISTRY_METADATA_FETCH_FAILED",
-        message: "npm registry metadata included an unsupported tarball URL.",
-        resolveFailureMessage: "Failed to resolve registry tarball host.",
-        details: {
-          registryUrl: metadataUrl,
-          version: input.node.version,
-          tarballUrl
-        }
-      }
-    });
-  } catch (cause) {
+  const tarballUrl = readRegistryTarballUrl(metadata.value, input.node.version);
+  if (!tarballUrl) {
     return err(
-      createRemoteArtifactExceptionError({
+      createError({
         code: "REGISTRY_METADATA_FETCH_FAILED",
-        message: "Failed to read npm registry metadata.",
-        blockedMessage: "npm registry metadata URL targets an unsupported or blocked host.",
+        category: "unsupported_input",
+        message: "npm registry metadata did not include a tarball for the requested version.",
         details: {
           packageId: input.node.id,
-          registryUrl: metadataUrl
-        },
-        cause
+          registryUrl: metadataUrl,
+          version: input.node.version
+        }
       })
     );
   }
+
+  return collectRemoteTarballEvidence({
+    packageId: input.node.id,
+    resolved: tarballUrl,
+    ...(input.node.integrity ? { integrity: input.node.integrity } : {}),
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    tarballMaxBytes: input.tarballMaxBytes,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts,
+    urlError: {
+      code: "REGISTRY_METADATA_FETCH_FAILED",
+      message: "npm registry metadata included an unsupported tarball URL.",
+      resolveFailureMessage: "Failed to resolve registry tarball host.",
+      details: {
+        registryUrl: metadataUrl,
+        version: input.node.version,
+        tarballUrl
+      }
+    }
+  });
 }
 
 function parseRegistryMetadata(input: {
@@ -862,19 +834,24 @@ function nodeModulesPackageSegments(packageName: string): string[] | undefined {
 
   const segments = packageName.split("/");
   if (segments.length === 1) {
-    return isSafeNodeModulesSegment(segments[0]) && !segments[0].startsWith("@")
+    const [name] = segments;
+    return name && isSafeNodeModulesSegment(name) && !name.startsWith("@")
       ? segments
       : undefined;
   }
 
-  if (
-    segments.length === 2
-    && segments[0].startsWith("@")
-    && segments[0].length > 1
-    && isSafeNodeModulesSegment(segments[0])
-    && isSafeNodeModulesSegment(segments[1])
-  ) {
-    return segments;
+  if (segments.length === 2) {
+    const [scope, name] = segments;
+    if (
+      scope
+      && name
+      && scope.startsWith("@")
+      && scope.length > 1
+      && isSafeNodeModulesSegment(scope)
+      && isSafeNodeModulesSegment(name)
+    ) {
+      return segments;
+    }
   }
 
   return undefined;
@@ -1023,6 +1000,9 @@ async function collectRemoteTarballEvidence(input: {
   resolveArtifactHost: ArtifactHostResolver | undefined;
   fetchTimeoutMs: number;
   tarballMaxBytes: number;
+  offline: boolean;
+  artifactCache: ArtifactCache | undefined;
+  allowedHosts: ReadonlySet<string>;
   urlError?: {
     code: "REGISTRY_METADATA_FETCH_FAILED" | "TARBALL_FETCH_FAILED";
     message: string;
@@ -1039,96 +1019,63 @@ async function collectRemoteTarballEvidence(input: {
     }
   };
 
-  const urlPreflight = await preflightRemoteArtifactFetchTarget({
+  const urlValidation = validateRemoteArtifactUrl({
     code: urlError.code,
     packageId: input.packageId,
     resolved: input.resolved,
     message: urlError.message,
-    resolveFailureMessage: urlError.resolveFailureMessage,
     details: urlError.details,
-    resolveArtifactHost: input.resolveArtifactHost
+    allowedHosts: input.allowedHosts
   });
-
-  if (!urlPreflight.ok) {
-    return err(urlPreflight.error);
-  }
-
-  if (!isHttpUrl(input.resolved)) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: [`Unsupported resolved artifact specifier: ${safeUrlForErrorDetails(input.resolved)}`]
-    });
+  if (!urlValidation.ok) {
+    return err(urlValidation.error);
   }
 
   if (!input.integrity) {
+    if (!input.offline) {
+      const preflight = await preflightRemoteArtifactFetchTarget({
+        code: urlError.code,
+        packageId: input.packageId,
+        resolved: input.resolved,
+        message: urlError.message,
+        resolveFailureMessage: urlError.resolveFailureMessage,
+        details: urlError.details,
+        resolveArtifactHost: input.resolveArtifactHost,
+        allowedHosts: input.allowedHosts
+      });
+      if (!preflight.ok) {
+        return err(preflight.error);
+      }
+    }
     return ok(unavailableUnverifiedRemoteTarballEvidence(input.packageId));
   }
 
   try {
-    const tarball = await readArtifactWithTimeout({
-      fetchArtifact: input.fetchArtifact,
+    const tarball = await readRemoteArtifactBytes({
+      code: urlError.code,
+      packageId: input.packageId,
       url: input.resolved,
-      timeoutMs: input.fetchTimeoutMs,
-      redirectPolicy: {
-        code: urlError.code,
-        packageId: input.packageId,
-        message: urlError.message,
-        resolveFailureMessage: urlError.resolveFailureMessage,
-        details: urlError.details,
-        resolveArtifactHost: input.resolveArtifactHost
-      },
-      readResponse: async (response, signal) => {
-        if (!response.ok) {
-          cancelReadableBody(response.body);
-          return err(
-            createError({
-              code: "TARBALL_FETCH_FAILED",
-              category: "network",
-              message: "Failed to fetch package tarball.",
-              details: {
-                packageId: input.packageId,
-                resolved: safeUrlForErrorDetails(response.url ?? input.resolved),
-                status: response.status,
-                statusText: response.statusText
-              }
-            })
-          );
-        }
-
-        return readResponseBodyWithLimit({
-          response,
-          signal,
-          maxBytes: input.tarballMaxBytes,
-          createTooLargeError: (limit) => createError({
-            code: "TARBALL_FETCH_FAILED",
-            category: "unsupported_input",
-            message: "Package tarball response exceeded the maximum supported size.",
-            details: {
-              packageId: input.packageId,
-              resolved: safeUrlForErrorDetails(response.url ?? input.resolved),
-              ...artifactBodyLimitDetails(limit)
-            }
-          }),
-          createUnreadableBodyError: () => createError({
-            code: "TARBALL_FETCH_FAILED",
-            category: "unsupported_input",
-            message: "Package tarball response did not expose a readable body stream.",
-            details: {
-              packageId: input.packageId,
-              resolved: safeUrlForErrorDetails(response.url ?? input.resolved)
-            }
-          })
-        });
-      }
+      blockedMessage: urlError.message,
+      resolveFailureMessage: urlError.resolveFailureMessage,
+      fetchFailureMessage: "Failed to fetch package tarball.",
+      tooLargeMessage: "Package tarball response exceeded the maximum supported size.",
+      unreadableMessage: "Package tarball response did not expose a readable body stream.",
+      offlineMissMessage: "Offline mode could not find the package tarball in the artifact cache.",
+      details: urlError.details,
+      maxBytes: input.tarballMaxBytes,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      allowedHosts: input.allowedHosts,
+      urlDetailKey: "resolved"
     });
 
     if (!tarball.ok) {
       if (isPackageTarballTooLargeError(tarball.error)) {
         return ok(unavailableOversizedTarballEvidence(input.packageId));
       }
-
       return err(tarball.error);
     }
 
@@ -1138,7 +1085,6 @@ async function collectRemoteTarballEvidence(input: {
       integrity: input.integrity,
       tarball: tarball.value
     });
-
     if (!verified.ok) {
       return err(verified.error);
     }
@@ -1147,12 +1093,10 @@ async function collectRemoteTarballEvidence(input: {
       packageId: input.packageId,
       tarball: tarball.value
     });
-
     if (!evidence.ok) {
       if (isPackageTarballTooLargeError(evidence.error)) {
         return ok(unavailableOversizedTarballEvidence(input.packageId));
       }
-
       return err(evidence.error);
     }
 
@@ -1177,6 +1121,178 @@ async function collectRemoteTarballEvidence(input: {
   }
 }
 
+async function readRemoteArtifactBytes(input: {
+  code: "REGISTRY_METADATA_FETCH_FAILED" | "TARBALL_FETCH_FAILED";
+  packageId: string;
+  url: string;
+  blockedMessage: string;
+  resolveFailureMessage: string;
+  fetchFailureMessage: string;
+  tooLargeMessage: string;
+  unreadableMessage: string;
+  offlineMissMessage: string;
+  details: Record<string, unknown>;
+  maxBytes: number;
+  fetchArtifact: ArtifactFetcher;
+  resolveArtifactHost: ArtifactHostResolver | undefined;
+  fetchTimeoutMs: number;
+  offline: boolean;
+  artifactCache: ArtifactCache | undefined;
+  allowedHosts: ReadonlySet<string>;
+  urlDetailKey: "registryUrl" | "resolved";
+  skipPreflight?: boolean;
+}): Promise<Result<Buffer, OhriskError>> {
+  const urlValidation = validateRemoteArtifactUrl({
+    code: input.code,
+    packageId: input.packageId,
+    resolved: input.url,
+    message: input.blockedMessage,
+    details: input.details,
+    allowedHosts: input.allowedHosts
+  });
+  if (!urlValidation.ok) {
+    return err(urlValidation.error);
+  }
+
+  const cached = input.artifactCache?.read(input.url, input.maxBytes);
+  if (cached && (!cached.stale || input.offline)) {
+    return ok(cached.bytes);
+  }
+
+  if (input.offline) {
+    return err(createError({
+      code: input.code,
+      category: "network",
+      message: input.offlineMissMessage,
+      details: {
+        packageId: input.packageId,
+        ...redactUrlCredentialsInDetails(input.details),
+        reason: "offline_cache_miss"
+      }
+    }));
+  }
+
+  if (!input.skipPreflight) {
+    const preflight = await preflightRemoteArtifactFetchTarget({
+      code: input.code,
+      packageId: input.packageId,
+      resolved: input.url,
+      message: input.blockedMessage,
+      resolveFailureMessage: input.resolveFailureMessage,
+      details: input.details,
+      resolveArtifactHost: input.resolveArtifactHost,
+      allowedHosts: input.allowedHosts
+    });
+    if (!preflight.ok) {
+      return err(preflight.error);
+    }
+  }
+
+  const artifact = await readArtifactWithTimeout<RemoteArtifactRead>({
+    fetchArtifact: input.fetchArtifact,
+    url: input.url,
+    requestHeaders: conditionalArtifactRequestHeaders(cached),
+    timeoutMs: input.fetchTimeoutMs,
+    redirectPolicy: {
+      code: input.code,
+      packageId: input.packageId,
+      message: input.blockedMessage,
+      resolveFailureMessage: input.resolveFailureMessage,
+      details: input.details,
+      resolveArtifactHost: input.resolveArtifactHost,
+      allowedHosts: input.allowedHosts
+    },
+    readResponse: async (response, signal) => {
+      const cacheMetadata = artifactCacheMetadataFromHeaders(response.headers);
+      if (response.status === 304) {
+        cancelReadableBody(response.body);
+        if (!cached) {
+          return err(createError({
+            code: input.code,
+            category: "network",
+            message: input.fetchFailureMessage,
+            details: {
+              packageId: input.packageId,
+              [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url),
+              status: response.status,
+              statusText: response.statusText,
+              reason: "not_modified_without_cache_entry"
+            }
+          }));
+        }
+        return ok({
+          bytes: cached.bytes,
+          cacheMetadata,
+          notModified: true
+        });
+      }
+
+      if (!response.ok) {
+        cancelReadableBody(response.body);
+        return err(createError({
+          code: input.code,
+          category: "network",
+          message: input.fetchFailureMessage,
+          details: {
+            packageId: input.packageId,
+            [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url),
+            status: response.status,
+            statusText: response.statusText
+          }
+        }));
+      }
+
+      const bytes = await readResponseBodyWithLimit({
+        response,
+        signal,
+        maxBytes: input.maxBytes,
+        createTooLargeError: (limit) => createError({
+          code: input.code,
+          category: "unsupported_input",
+          message: input.tooLargeMessage,
+          details: {
+            packageId: input.packageId,
+            [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url),
+            ...artifactBodyLimitDetails(limit)
+          }
+        }),
+        createUnreadableBodyError: () => createError({
+          code: input.code,
+          category: "unsupported_input",
+          message: input.unreadableMessage,
+          details: {
+            packageId: input.packageId,
+            [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url)
+          }
+        })
+      });
+      return bytes.ok
+        ? ok({ bytes: bytes.value, cacheMetadata, notModified: false })
+        : bytes;
+    }
+  });
+  if (!artifact.ok) {
+    return artifact;
+  }
+
+  if (artifact.value.notModified) {
+    if (artifact.value.cacheMetadata.cacheable) {
+      input.artifactCache?.revalidate(input.url, artifact.value.cacheMetadata);
+    } else {
+      input.artifactCache?.remove(input.url);
+    }
+  } else if (artifact.value.cacheMetadata.cacheable) {
+    input.artifactCache?.write(
+      input.url,
+      artifact.value.bytes,
+      artifact.value.cacheMetadata
+    );
+  } else {
+    input.artifactCache?.remove(input.url);
+  }
+  return ok(artifact.value.bytes);
+}
+
 function isPackageTarballTooLargeError(error: OhriskError): boolean {
   return (
     error.code === "TARBALL_FETCH_FAILED"
@@ -1184,7 +1300,7 @@ function isPackageTarballTooLargeError(error: OhriskError): boolean {
   ) || (
     error.code === "TARBALL_PARSE_FAILED"
     && error.message === "Failed to decompress package tarball evidence."
-    && typeof error.details.maxUnpackedBytes === "number"
+    && typeof error.details?.maxUnpackedBytes === "number"
   );
 }
 
@@ -1500,6 +1616,7 @@ function readContentLength(headers: ArtifactFetchResponse["headers"]): number | 
 async function readArtifactWithTimeout<T>(input: {
   fetchArtifact: ArtifactFetcher;
   url: string;
+  requestHeaders?: Record<string, string>;
   timeoutMs: number;
   redirectPolicy: RemoteArtifactFetchPolicy;
   readResponse: (
@@ -1524,6 +1641,7 @@ async function readArtifactWithTimeout<T>(input: {
       fetchArtifact: input.fetchArtifact,
       url: input.url,
       signal: controller.signal,
+      ...(input.requestHeaders ? { requestHeaders: input.requestHeaders } : {}),
       redirectPolicy: input.redirectPolicy
     })
       .then(async (response) => {
@@ -1550,6 +1668,7 @@ async function fetchArtifactWithManualRedirects(input: {
   fetchArtifact: ArtifactFetcher;
   url: string;
   signal: AbortSignal;
+  requestHeaders?: Record<string, string>;
   redirectPolicy: RemoteArtifactFetchPolicy;
 }): Promise<Result<ArtifactFetchResponse, OhriskError>> {
   let currentUrl = input.url;
@@ -1557,7 +1676,10 @@ async function fetchArtifactWithManualRedirects(input: {
   for (let redirectCount = 0; redirectCount <= MAX_ARTIFACT_REDIRECTS; redirectCount += 1) {
     const response = await input.fetchArtifact(currentUrl, {
       signal: input.signal,
-      redirect: "manual"
+      redirect: "manual",
+      ...(redirectCount === 0 && input.requestHeaders
+        ? { headers: input.requestHeaders }
+        : {})
     });
     const responseWithUrl = {
       ...response,
@@ -1621,7 +1743,10 @@ async function fetchArtifactWithManualRedirects(input: {
         redirectFrom: currentUrl,
         redirectUrl: nextUrl
       },
-      resolveArtifactHost: input.redirectPolicy.resolveArtifactHost
+      resolveArtifactHost: input.redirectPolicy.resolveArtifactHost,
+      ...(input.redirectPolicy.allowedHosts
+        ? { allowedHosts: input.redirectPolicy.allowedHosts }
+        : {})
     });
 
     if (!redirectPreflight.ok) {
@@ -1647,7 +1772,27 @@ async function fetchArtifactWithManualRedirects(input: {
 }
 
 function isRedirectResponse(response: ArtifactFetchResponse): boolean {
-  return response.status >= 300 && response.status < 400;
+  return response.status === 301
+    || response.status === 302
+    || response.status === 303
+    || response.status === 307
+    || response.status === 308;
+}
+
+function conditionalArtifactRequestHeaders(
+  cached: ArtifactCacheEntry | undefined
+): Record<string, string> | undefined {
+  if (!cached?.stale) {
+    return undefined;
+  }
+  const headers: Record<string, string> = {};
+  if (cached.etag) {
+    headers["if-none-match"] = cached.etag;
+  }
+  if (cached.lastModified) {
+    headers["if-modified-since"] = cached.lastModified;
+  }
+  return Object.keys(headers).length > 0 ? headers : undefined;
 }
 
 function resolveRedirectLocation(currentUrl: string, location: string): string | undefined {
@@ -1669,6 +1814,7 @@ function validateRemoteArtifactUrl(input: {
   resolved: string;
   message: string;
   details: Record<string, unknown>;
+  allowedHosts?: ReadonlySet<string>;
 }): Result<void, OhriskError> {
   const url = parseHttpUrl(input.resolved);
   if (!url) {
@@ -1718,7 +1864,10 @@ function validateRemoteArtifactUrl(input: {
     );
   }
 
-  const blockedHostReason = blockedRemoteArtifactHostReason(url.hostname);
+  const normalizedHost = normalizeUrlHostname(url.hostname);
+  const blockedHostReason = isExplicitlyAllowedArtifactHost(normalizedHost, input.allowedHosts)
+    ? undefined
+    : blockedRemoteArtifactHostReason(normalizedHost);
   if (blockedHostReason) {
     return err(
       createError({
@@ -1746,13 +1895,15 @@ async function preflightRemoteArtifactFetchTarget(input: {
   resolveFailureMessage: string;
   details: Record<string, unknown>;
   resolveArtifactHost: ArtifactHostResolver | undefined;
+  allowedHosts?: ReadonlySet<string>;
 }): Promise<Result<void, OhriskError>> {
   const urlValidation = validateRemoteArtifactUrl({
     code: input.code,
     packageId: input.packageId,
     resolved: input.resolved,
     message: input.message,
-    details: input.details
+    details: input.details,
+    ...(input.allowedHosts ? { allowedHosts: input.allowedHosts } : {})
   });
 
   if (!urlValidation.ok) {
@@ -1769,6 +1920,13 @@ async function preflightRemoteArtifactFetchTarget(input: {
   }
 
   const artifactHost = normalizeUrlHostname(url.hostname);
+  const explicitlyAllowed = isExplicitlyAllowedArtifactHost(
+    artifactHost,
+    input.allowedHosts
+  );
+  if (explicitlyAllowed) {
+    return ok(undefined);
+  }
   if (!shouldResolveRemoteArtifactHost(artifactHost)) {
     return ok(undefined);
   }
@@ -1957,6 +2115,20 @@ function redactUrlCredentialsInText(value: string): string {
       /([a-z][a-z0-9+.-]{1,}:\\+)([^@/?#\s\\]*)(@)/gi,
       "$1redacted$3"
     );
+}
+
+function isExplicitlyAllowedArtifactHost(
+  hostname: string,
+  allowedHosts: ReadonlySet<string> | undefined
+): boolean {
+  const host = normalizeUrlHostname(hostname);
+  if (!allowedHosts?.has(host)) {
+    return false;
+  }
+
+  // Explicit trust is limited to DNS hostnames. Literal addresses and localhost
+  // remain blocked even when supplied through a malformed configuration value.
+  return isIP(host) === 0 && host !== "localhost" && !host.endsWith(".localhost");
 }
 
 function blockedRemoteArtifactHostReason(hostname: string): string | undefined {
@@ -2278,12 +2450,17 @@ function decodeIntegrityDigest(input: {
   return normalizedDecoded === normalizedInput ? decoded : undefined;
 }
 
-function npmRegistryPackageVersionUrl(name: string, version: string): string {
-  return `${npmRegistryPackageUrl(name)}/${encodeURIComponent(version)}`;
+function npmRegistryPackageVersionUrl(
+  name: string,
+  version: string,
+  registryUrl?: string
+): string {
+  return `${npmRegistryPackageUrl(name, registryUrl)}/${encodeURIComponent(version)}`;
 }
 
-function npmRegistryPackageUrl(name: string): string {
-  return `https://registry.npmjs.org/${encodeURIComponent(name).replace(/^%40/, "@")}`;
+function npmRegistryPackageUrl(name: string, registryUrl?: string): string {
+  const baseUrl = (registryUrl ?? "https://registry.npmjs.org").replace(/\/$/, "");
+  return `${baseUrl}/${encodeURIComponent(name).replace(/^%40/, "@")}`;
 }
 
 function readRegistryTarballUrl(metadata: unknown, version: string): string | undefined {
@@ -2318,9 +2495,63 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function normalizeAllowedArtifactHosts(
+  hosts: Iterable<string> | undefined
+): ReadonlySet<string> {
+  const normalized = new Set<string>();
+  for (const host of hosts ?? []) {
+    const value = normalizeUrlHostname(host.trim());
+    if (value) {
+      normalized.add(value);
+    }
+  }
+  return normalized;
+}
+
+function withRegistryAuthorization(
+  fetchArtifact: ArtifactFetcher,
+  tokens: ReadonlyMap<string, string> | undefined
+): ArtifactFetcher {
+  if (!tokens || tokens.size === 0) {
+    return fetchArtifact;
+  }
+
+  const normalizedTokens = new Map<string, string>();
+  for (const [host, token] of tokens) {
+    if (token) {
+      normalizedTokens.set(normalizeUrlHostname(host), token);
+    }
+  }
+
+  return (url, options) => {
+    const parsed = parseHttpUrl(url);
+    const token = parsed?.protocol === "https:"
+      ? normalizedTokens.get(normalizeUrlHostname(parsed.hostname))
+      : undefined;
+    if (!token) {
+      return fetchArtifact(url, options);
+    }
+
+    return fetchArtifact(url, {
+      ...options,
+      headers: {
+        ...(options?.headers ?? {}),
+        authorization: `Bearer ${token}`
+      }
+    });
+  };
+}
+
+function createDefaultArtifactFetcher(
+  allowedHosts: ReadonlySet<string>
+): ArtifactFetcher {
+  return (url, options) => defaultArtifactFetcher(url, options, allowedHosts);
+}
+
 function defaultArtifactFetcher(
   url: string,
-  options?: ArtifactFetchOptions
+  options: ArtifactFetchOptions | undefined,
+  allowedHosts: ReadonlySet<string>
 ): Promise<ArtifactFetchResponse> {
   const parsedUrl = parseHttpUrl(url);
   if (!parsedUrl || parsedUrl.protocol !== "https:") {
@@ -2328,16 +2559,21 @@ function defaultArtifactFetcher(
   }
 
   return new Promise((resolve, reject) => {
+    const normalizedHost = normalizeUrlHostname(parsedUrl.hostname);
+    const explicitlyAllowed = allowedHosts.has(normalizedHost);
     const req = httpsRequest(parsedUrl, {
       method: "GET",
       signal: options?.signal,
-      lookup: secureArtifactLookup
+      headers: options?.headers,
+      ...(explicitlyAllowed ? {} : { lookup: secureArtifactLookup as import("node:net").LookupFunction })
     }, (response) => {
-      const socketAddress = validateArtifactSocketRemoteAddress(
-        parsedUrl.hostname,
-        response.socket.remoteAddress,
-        { allowMissingWhenLookupGuarded: true }
-      );
+      const socketAddress = explicitlyAllowed
+        ? ok(undefined)
+        : validateArtifactSocketRemoteAddress(
+            parsedUrl.hostname,
+            response.socket.remoteAddress,
+            { allowMissingWhenLookupGuarded: true }
+          );
       if (!socketAddress.ok) {
         response.destroy(socketAddress.error);
         reject(socketAddress.error);
@@ -2350,13 +2586,10 @@ function defaultArtifactFetcher(
         statusText: response.statusMessage ?? "",
         url,
         headers: headersForIncomingMessage(response.headers),
-        body: Readable.toWeb(response) as ReadableStream<Uint8Array>,
+        body: Readable.toWeb(response) as unknown as ReadableStream<Uint8Array>,
         arrayBuffer: async () => {
           const buffer = await readIncomingMessageToBuffer(response);
-          return buffer.buffer.slice(
-            buffer.byteOffset,
-            buffer.byteOffset + buffer.byteLength
-          );
+          return Uint8Array.from(buffer).buffer;
         }
       });
     });

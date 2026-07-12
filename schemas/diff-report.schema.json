@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ohrisk:schema:diff-report:2.0.0",
+  "title": "Ohrisk diff report",
+  "type": "object",
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "status",
+    "baselineRef",
+    "profile",
+    "prodOnly",
+    "baselineFindingCount",
+    "currentFindingCount",
+    "newFindingCount",
+    "newRisks",
+    "lockfileChanges",
+    "nextAction",
+    "findings"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "urn:ohrisk:schema:diff-report:2.0.0"
+    },
+    "schemaVersion": {
+      "const": "2.0.0"
+    },
+    "status": {
+      "const": "risk_diff_evaluated"
+    },
+    "baselineRef": {
+      "type": "string",
+      "minLength": 1
+    },
+    "profile": {
+      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/usageProfile"
+    },
+    "prodOnly": {
+      "type": "boolean"
+    },
+    "baselineFindingCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "currentFindingCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "newFindingCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "newRisks": {
+      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskCounts"
+    },
+    "lockfileChanges": {
+      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/lockfileChanges"
+    },
+    "nextAction": {
+      "type": "string",
+      "minLength": 1
+    },
+    "policy": {
+      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/policySummary"
+    },
+    "failOn": {
+      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskSeverity"
+    },
+    "failed": {
+      "type": "boolean"
+    },
+    "failingFindingCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskFinding"
+      }
+    }
+  },
+  "dependentRequired": {
+    "failOn": [
+      "failed",
+      "failingFindingCount"
+    ],
+    "failed": [
+      "failOn",
+      "failingFindingCount"
+    ],
+    "failingFindingCount": [
+      "failOn",
+      "failed"
+    ]
+  },
+  "additionalProperties": false
+}

@@ -2,6 +2,7 @@ import { existsSync, readdirSync, statSync, type Dirent } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
+import { omitUndefined } from "../shared/object";
 import {
   readTextFileWithLimit,
   textFileReadErrorCategory,
@@ -163,11 +164,11 @@ function readHackagePackageConf(input: {
   }
 
   const fields = parsePackageConfFields(text.value);
-  return ok({
+  return ok(omitUndefined({
     name: fields.get("name"),
     version: fields.get("version"),
     license: fields.get("license")
-  });
+  }));
 }
 
 function parsePackageConfFields(text: string): Map<string, string> {

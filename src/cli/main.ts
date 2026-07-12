@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { isIP } from "node:net";
 import {
   createProgressRuntime,
   type ProgressRuntime,
@@ -12,9 +13,20 @@ import { fileURLToPath } from "node:url";
 import { parseArgs, type CliCommand, type HelpTarget } from "./args";
 import { OHRISK_VERSION } from "./version";
 import { diffRiskFindings } from "../diff/compare";
+import {
+  createArtifactCache,
+  defaultArtifactCacheDirectory,
+  type ArtifactCacheStatus
+} from "../evidence/cache";
 import { collectGraphEvidence, type EvidenceCollectionProgress } from "../evidence/collect";
+import { parseProjectDependencyGraph } from "../ecosystems/registry";
 import type { LicenseEvidence } from "../evidence/types";
-import { readGitRefFile, type GitRefFileReader } from "../git/ref-file";
+import {
+  listGitRefFiles,
+  readGitRefFile,
+  type GitRefFileLister,
+  type GitRefFileReader
+} from "../git/ref-file";
 import {
   findNearestDirectoryPackagesPropsPath
 } from "../graph/dotnet-nuget-lock";
@@ -24,23 +36,29 @@ import {
 } from "../graph/go-work";
 import {
   findYarnWorkspacePackageJsonPaths,
+  findYarnWorkspacePackageJsonPathsFromRelativePaths,
   type YarnWorkspacePackageJsonInput
 } from "../graph/npm-yarn-lock";
-import {
-  parseLockfileTextForKind,
-  parseProjectLockfile
-} from "../graph/project-lockfile";
+import { parseLockfileTextForKind } from "../graph/project-lockfile";
 import {
   type RequirementsIncludedFileReader
 } from "../graph/python-requirements";
 import type { PythonLocalSourceFileReader } from "../graph/python-local-source";
 import {
-  findCargoWorkspaceMemberManifestPaths
+  findCargoWorkspaceMemberManifestPaths,
+  findCargoWorkspaceMemberManifestPathsFromRelativePaths
 } from "../graph/rust-cargo-lock";
+import { mergeDependencyGraphs, type SourcedDependencyGraph } from "../graph/merge";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
 import { normalizeAllLicenseEvidence, normalizeLicenseEvidence } from "../license/normalize";
 import type { NormalizedLicense } from "../license/types";
 import { evaluateLicenseRisk, evaluateLicenseRisks } from "../policy/evaluate";
+import {
+  readPolicyConfig,
+  summarizePolicyConfig,
+  type PolicyConfigSummary,
+  type ResolvedPolicyConfig
+} from "../policy/config";
 import { hasFindingAtOrAbove } from "../policy/severity";
 import type { RiskFinding } from "../policy/types";
 import {
@@ -50,13 +68,19 @@ import {
   type WaivedRiskFinding
 } from "../policy/waivers";
 import { renderCycloneDxReport } from "../report/cyclonedx-report";
-import { renderDiffReport } from "../report/diff-report";
+import { renderDiffReport, type DiffLockfileChanges } from "../report/diff-report";
 import { renderExplainReport } from "../report/explain-report";
 import { renderSarifReport } from "../report/sarif-report";
-import { renderScanReport } from "../report/scan-report";
+import { renderScanReport, type ScanReportInput } from "../report/scan-report";
 import { openReportFile, type ReportOpener } from "../report/open-report";
 import { writeReportFile, type ReportWriter } from "../report/write-output";
-import { discoverProject, type ProjectInput } from "../project/discover";
+import {
+  discoverProject,
+  projectLockfiles,
+  projectLockfilesFromRelativePaths,
+  type ProjectInput,
+  type ProjectLockfile
+} from "../project/discover";
 import { createError, exitCodeForError, formatError, type OhriskError } from "../shared/errors";
 import { err, isErr, ok, type Result } from "../shared/result";
 
@@ -68,6 +92,7 @@ export type CliIO = {
   env?: Record<string, string | undefined>;
   now?: () => number;
   readRefFile?: GitRefFileReader;
+  listRefFiles?: GitRefFileLister;
   writeReport?: ReportWriter;
   openReport?: ReportOpener;
 };
@@ -86,6 +111,17 @@ type ScanResult = {
   waivedFindings: WaivedRiskFinding[];
   expiredWaivers: RiskWaiver[];
   unmatchedWaivers: RiskWaiver[];
+  policy: PolicyConfigSummary;
+};
+
+type EvidenceRuntimeOptions = {
+  offline: boolean;
+  cacheDir: string;
+  jobs?: number;
+  timeoutMs?: number;
+  npmRegistryUrl?: string;
+  registryAuthTokens: ReadonlyMap<string, string>;
+  allowedArtifactHosts: ReadonlySet<string>;
 };
 
 const SCAN_PROGRESS_DISCOVER_PERCENT = 5;
@@ -119,6 +155,8 @@ export async function main(
     case "version":
       io.stdout(renderVersion());
       return 0;
+    case "cache":
+      return runCache(command, io);
     case "scan":
       return runScan(command, io);
     case "ci":
@@ -128,6 +166,118 @@ export async function main(
     case "explain":
       return runExplain(command, io);
   }
+}
+
+function runCache(
+  command: Extract<CliCommand, { kind: "cache" }>,
+  io: CliIO
+): number {
+  const env = io.env ?? process.env;
+  const configuredCacheDir = command.cacheDir ?? env.OHRISK_CACHE_DIR;
+  const cacheDir = configuredCacheDir
+    ? path.resolve(io.cwd, configuredCacheDir)
+    : defaultArtifactCacheDirectory(env);
+  const cache = createArtifactCache(cacheDir);
+  const location = configuredCacheDir
+    ? path.relative(io.cwd, cacheDir) || "."
+    : cacheDir;
+
+  if (command.action === "status") {
+    const status = cache.status();
+    if (!status.ok) {
+      io.stderr(formatError(status.error));
+      return exitCodeForError(status.error);
+    }
+    io.stdout(command.json
+      ? renderCacheJson("status", configuredCacheDir !== undefined, status.value)
+      : renderCacheStatus(status.value, location));
+    return 0;
+  }
+
+  if (command.action === "prune") {
+    const pruned = cache.prune({
+      ...(command.maxSizeBytes !== undefined
+        ? { maxSizeBytes: command.maxSizeBytes }
+        : {}),
+      ...(command.maxAgeMs !== undefined ? { maxAgeMs: command.maxAgeMs } : {})
+    });
+    if (!pruned.ok) {
+      io.stderr(formatError(pruned.error));
+      return exitCodeForError(pruned.error);
+    }
+    io.stdout(command.json
+      ? renderCacheJson("prune", configuredCacheDir !== undefined, pruned.value)
+      : [
+          "Artifact cache pruned",
+          `Location: ${location}`,
+          `Entries removed: ${pruned.value.removedEntryCount}`,
+          `Objects removed: ${pruned.value.removedObjectCount}`,
+          `Bytes removed: ${formatByteCount(pruned.value.removedBytes)}`,
+          `Remaining entries: ${pruned.value.after.entryCount}`,
+          `Remaining size: ${formatByteCount(pruned.value.after.totalBytes)}`
+        ].join("\n"));
+    return 0;
+  }
+
+  const cleared = cache.clear();
+  if (!cleared.ok) {
+    io.stderr(formatError(cleared.error));
+    return exitCodeForError(cleared.error);
+  }
+  io.stdout(command.json
+    ? renderCacheJson("clear", configuredCacheDir !== undefined, cleared.value)
+    : [
+        "Artifact cache cleared",
+        `Location: ${location}`,
+        `Entries removed: ${cleared.value.removedEntryCount}`,
+        `Objects removed: ${cleared.value.removedObjectCount}`,
+        `Bytes removed: ${formatByteCount(cleared.value.removedBytes)}`
+      ].join("\n"));
+  return 0;
+}
+
+function renderCacheJson(
+  action: "status" | "prune" | "clear",
+  configured: boolean,
+  result: unknown
+): string {
+  return `${JSON.stringify({
+    action,
+    cacheLocation: configured ? "configured" : "default",
+    result
+  }, null, 2)}\n`;
+}
+
+function renderCacheStatus(status: ArtifactCacheStatus, location: string): string {
+  return [
+    "Artifact cache status",
+    `Location: ${location}`,
+    `Entries: ${status.entryCount}`,
+    `Objects: ${status.objectCount}`,
+    `Size: ${formatByteCount(status.totalBytes)}`,
+    `Orphan objects: ${status.orphanObjectCount}`,
+    `Orphan bytes: ${formatByteCount(status.orphanBytes)}`,
+    `Stale entries: ${status.staleEntryCount}`,
+    `Corrupt entries: ${status.corruptEntryCount}`,
+    `Oldest access: ${formatCacheTimestamp(status.oldestAccessedAt)}`,
+    `Newest access: ${formatCacheTimestamp(status.newestAccessedAt)}`
+  ].join("\n");
+}
+
+function formatByteCount(bytes: number): string {
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"] as const;
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const formatted = unitIndex === 0 ? String(value) : value.toFixed(value >= 10 ? 1 : 2);
+  return `${formatted} ${units[unitIndex]}`;
+}
+
+function formatCacheTimestamp(value: number | undefined): string {
+  return value === undefined ? "none" : new Date(value).toISOString();
 }
 
 async function runDiff(
@@ -145,7 +295,8 @@ async function runDiff(
 
   const currentProject = loadProjectGraph({
     cwd: io.cwd,
-    lockfilePath: command.lockfilePath,
+    ...(command.lockfilePath ? { lockfilePath: command.lockfilePath } : {}),
+    ...(command.allLockfiles ? { allLockfiles: true } : {}),
     prodOnly: command.prodOnly
   });
 
@@ -154,226 +305,57 @@ async function runDiff(
     return exitCodeForError(currentProject.error);
   }
 
-  const relativeLockfilePath = path.relative(
-    currentProject.value.project.rootDir,
-    currentProject.value.project.lockfile.path
-  );
+  const policy = readPolicyConfig({
+    projectRoot: currentProject.value.project.rootDir,
+    ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}),
+    ...(command.policyPath ? { policyPath: command.policyPath } : {})
+  });
+  if (isErr(policy)) {
+    io.stderr(formatError(policy.error));
+    return exitCodeForError(policy.error);
+  }
+
+  const evidenceRuntime = resolveEvidenceRuntimeOptions({
+    cwd: io.cwd,
+    projectRoot: currentProject.value.project.rootDir,
+    policy: policy.value,
+    offline: command.offline ?? false,
+    ...(command.cacheDir ? { cacheDir: command.cacheDir } : {}),
+    ...(command.jobs !== undefined ? { jobs: command.jobs } : {}),
+    ...(command.timeoutMs !== undefined ? { timeoutMs: command.timeoutMs } : {}),
+    ...(command.registryUrl ? { registryUrl: command.registryUrl } : {}),
+    ...(command.registryTokenEnv ? { registryTokenEnv: command.registryTokenEnv } : {}),
+    allowedHosts: command.allowedHosts ?? [],
+    env: io.env ?? process.env
+  });
+  if (isErr(evidenceRuntime)) {
+    io.stderr(formatError(evidenceRuntime.error));
+    return exitCodeForError(evidenceRuntime.error);
+  }
+
   const readRefFile = io.readRefFile ?? readGitRefFile;
-  const baselineLockfile = readBaselinePrimaryLockfile({
-    projectRoot: currentProject.value.project.rootDir,
-    lockfilePath: currentProject.value.project.lockfile.path,
-    ref: command.baselineRef,
-    relativePath: relativeLockfilePath,
-    readRefFile
+  const listRefFiles = io.listRefFiles ?? listGitRefFiles;
+  const baselineProject = loadBaselineProjectGraph({
+    currentProject: currentProject.value,
+    baselineRef: command.baselineRef,
+    allLockfiles: command.allLockfiles ?? false,
+    readRefFile,
+    listRefFiles
   });
 
-  if (isErr(baselineLockfile)) {
-    io.stderr(formatError(baselineLockfile.error));
-    return exitCodeForError(baselineLockfile.error);
+  if (isErr(baselineProject)) {
+    io.stderr(formatError(baselineProject.error));
+    return exitCodeForError(baselineProject.error);
   }
 
-  const baselinePackageJson = currentProject.value.project.lockfile.kind === "yarn-lock"
-    ? readRefFile({
-        projectRoot: currentProject.value.project.rootDir,
-        ref: command.baselineRef,
-        relativePath: "package.json"
-      })
-    : undefined;
-
-  if (baselinePackageJson && isErr(baselinePackageJson)) {
-    io.stderr(formatError(baselinePackageJson.error));
-    return exitCodeForError(baselinePackageJson.error);
-  }
-
-  const baselineWorkspacePackageJsons = baselinePackageJson && !isErr(baselinePackageJson)
-    ? readBaselineYarnWorkspacePackageJsons({
-        projectRoot: currentProject.value.project.rootDir,
-        baselineRef: command.baselineRef,
-        rootPackageJsonText: baselinePackageJson.value,
-        readRefFile
-      })
-    : ok([]);
-
-  if (isErr(baselineWorkspacePackageJsons)) {
-    io.stderr(formatError(baselineWorkspacePackageJsons.error));
-    return exitCodeForError(baselineWorkspacePackageJsons.error);
-  }
-
-  const baselinePnpmWorkspace = currentProject.value.project.lockfile.kind === "pnpm-lock"
-    ? readOptionalBaselineFile({
-        projectRoot: currentProject.value.project.rootDir,
-        baselineRef: command.baselineRef,
-        relativePath: "pnpm-workspace.yaml",
-        readRefFile
-      })
-    : ok(undefined);
-
-  if (isErr(baselinePnpmWorkspace)) {
-    io.stderr(formatError(baselinePnpmWorkspace.error));
-    return exitCodeForError(baselinePnpmWorkspace.error);
-  }
-
-  const baselinePyproject = (
-    currentProject.value.project.lockfile.kind === "pdm-lock"
-    || currentProject.value.project.lockfile.kind === "poetry-lock"
-  )
-    ? readOptionalBaselineFile({
-        projectRoot: currentProject.value.project.rootDir,
-        baselineRef: command.baselineRef,
-        relativePath: "pyproject.toml",
-        readRefFile
-      })
-    : ok(undefined);
-
-  if (isErr(baselinePyproject)) {
-    io.stderr(formatError(baselinePyproject.error));
-    return exitCodeForError(baselinePyproject.error);
-  }
-
-  const baselineCargoManifest = currentProject.value.project.lockfile.kind === "cargo-lock"
-    ? readOptionalBaselineFile({
-        projectRoot: currentProject.value.project.rootDir,
-        baselineRef: command.baselineRef,
-        relativePath: "Cargo.toml",
-        readRefFile
-      })
-    : ok(undefined);
-
-  if (isErr(baselineCargoManifest)) {
-    io.stderr(formatError(baselineCargoManifest.error));
-    return exitCodeForError(baselineCargoManifest.error);
-  }
-
-  const baselineCargoMemberManifests = currentProject.value.project.lockfile.kind === "cargo-lock"
-    && baselineCargoManifest.value
-    ? readBaselineCargoMemberManifests({
-        project: currentProject.value.project,
-        baselineRef: command.baselineRef,
-        rootManifestText: baselineCargoManifest.value,
-        readRefFile
-      })
-    : ok(undefined);
-
-  if (isErr(baselineCargoMemberManifests)) {
-    io.stderr(formatError(baselineCargoMemberManifests.error));
-    return exitCodeForError(baselineCargoMemberManifests.error);
-  }
-
-  const baselineGoSum = currentProject.value.project.lockfile.kind === "go-mod"
-    ? readOptionalBaselineFile({
-        projectRoot: currentProject.value.project.rootDir,
-        baselineRef: command.baselineRef,
-        relativePath: "go.sum",
-        readRefFile
-      })
-    : ok(undefined);
-
-  if (isErr(baselineGoSum)) {
-    io.stderr(formatError(baselineGoSum.error));
-    return exitCodeForError(baselineGoSum.error);
-  }
-
-  const baselineGoWorkModules = currentProject.value.project.lockfile.kind === "go-work"
-    ? readBaselineGoWorkModuleInputs({
-        project: currentProject.value.project,
-        baselineRef: command.baselineRef,
-        goWorkText: baselineLockfile.value,
-        readRefFile
-      })
-    : ok(undefined);
-
-  if (isErr(baselineGoWorkModules)) {
-    io.stderr(formatError(baselineGoWorkModules.error));
-    return exitCodeForError(baselineGoWorkModules.error);
-  }
-
-  const baselineComposerJson = currentProject.value.project.lockfile.kind === "composer-lock"
-    ? readOptionalBaselineFile({
-        projectRoot: currentProject.value.project.rootDir,
-        baselineRef: command.baselineRef,
-        relativePath: "composer.json",
-        readRefFile
-      })
-    : ok(undefined);
-
-  if (isErr(baselineComposerJson)) {
-    io.stderr(formatError(baselineComposerJson.error));
-    return exitCodeForError(baselineComposerJson.error);
-  }
-
-  const baselineDirectoryPackagesProps = currentProject.value.project.lockfile.kind === "dotnet-project"
-    ? readBaselineDirectoryPackagesProps({
-        project: currentProject.value.project,
-        baselineRef: command.baselineRef,
-        readRefFile
-      })
-    : ok(undefined);
-
-  if (isErr(baselineDirectoryPackagesProps)) {
-    io.stderr(formatError(baselineDirectoryPackagesProps.error));
-    return exitCodeForError(baselineDirectoryPackagesProps.error);
-  }
-
-  const baselinePythonLocalSourceErrors = baselinePythonLocalSourceErrorsForKind(
-    currentProject.value.project.lockfile.kind
+  const baselineScanGraph = filterGraphForProdOnly(
+    baselineProject.value.graph,
+    command.prodOnly
   );
-  const baselineGraph = parseLockfileTextForKind({
-    kind: currentProject.value.project.lockfile.kind,
-    text: baselineLockfile.value,
-    lockfilePath: baselineLockfilePathForKind({
-      kind: currentProject.value.project.lockfile.kind,
-      rootName: currentProject.value.scanGraph.rootName,
-      relativeLockfilePath,
-      baselineRef: command.baselineRef
-    }),
-    packageJsonText: baselinePackageJson?.value,
-    packageJsonPath: `${command.baselineRef}:package.json`,
-    workspacePackageJsonTexts: baselineWorkspacePackageJsons.value,
-    pnpmWorkspaceText: baselinePnpmWorkspace.value,
-    pnpmWorkspacePath: `${command.baselineRef}:pnpm-workspace.yaml`,
-    pyprojectText: baselinePyproject.value,
-    cargoManifestText: baselineCargoManifest.value,
-    cargoMemberManifestTexts: baselineCargoMemberManifests.value,
-    cargoRootName: currentProject.value.project.lockfile.kind === "cargo-lock"
-      ? currentProject.value.scanGraph.rootName
-      : undefined,
-    goSumText: baselineGoSum.value,
-    goWorkModuleInputs: baselineGoWorkModules.value,
-    goWorkDir: path.dirname(currentProject.value.project.lockfile.path),
-    composerJsonText: baselineComposerJson.value,
-    directoryPackagesPropsText: baselineDirectoryPackagesProps.value?.text,
-    directoryPackagesPropsPath: baselineDirectoryPackagesProps.value?.path,
-    dotnetProjectRootName: currentProject.value.project.lockfile.kind === "dotnet-project"
-      ? currentProject.value.scanGraph.rootName
-      : undefined,
-    projectRoot: currentProject.value.project.rootDir,
-    requirementsRootName: currentProject.value.scanGraph.rootName,
-    requirementsIncludedFileReader: currentProject.value.project.lockfile.kind === "requirements-txt"
-      ? createBaselineRequirementsIncludedFileReader({
-          projectRoot: currentProject.value.project.rootDir,
-          baselineRef: command.baselineRef,
-          readRefFile
-        })
-      : undefined,
-    pythonLocalSourceFileReader: baselinePythonLocalSourceErrors
-      ? createBaselinePythonLocalSourceFileReader({
-          projectRoot: currentProject.value.project.rootDir,
-          baselineRef: command.baselineRef,
-          readRefFile,
-          errors: baselinePythonLocalSourceErrors
-        })
-      : undefined
-  });
-
-  if (isErr(baselineGraph)) {
-    io.stderr(formatError(baselineGraph.error));
-    return exitCodeForError(baselineGraph.error);
-  }
-
-  const baselineScanGraph = filterGraphForProdOnly(baselineGraph.value, command.prodOnly);
   const baselineEvidence = await collectEvidenceForGraph({
     graph: baselineScanGraph,
     projectRoot: currentProject.value.project.rootDir,
+    evidenceRuntime: evidenceRuntime.value,
     ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {})
   });
 
@@ -386,12 +368,16 @@ async function runDiff(
   const baselineFindings = evaluateLicenseRisks({
     licenses: baselineLicenses,
     dependencies: baselineScanGraph.nodes,
-    profile: command.profile
+    profile: command.profile,
+    policy: policy.value
   });
   const current = await evaluateProjectScan({
     ...currentProject.value,
     profile: command.profile,
+    policy: policy.value,
+    evidenceRuntime: evidenceRuntime.value,
     applyWaivers: false,
+    now: io.now ?? Date.now,
     ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {})
   });
 
@@ -406,14 +392,20 @@ async function runDiff(
   });
 
   const output = renderDiffReport({
-      baselineRef: command.baselineRef,
-      profile: command.profile,
-      prodOnly: command.prodOnly,
-      diff,
-      json: command.json,
-      markdown: command.markdown,
-      failOn: command.failOn
-    });
+    baselineRef: command.baselineRef,
+    profile: command.profile,
+    prodOnly: command.prodOnly,
+    diff,
+    json: command.json,
+    markdown: command.markdown,
+    lockfileChanges: buildDiffLockfileChanges({
+      projectRoot: currentProject.value.project.rootDir,
+      currentLockfiles: projectLockfiles(currentProject.value.project),
+      baselineLockfiles: baselineProject.value.lockfiles
+    }),
+    ...(command.failOn ? { failOn: command.failOn } : {}),
+    policy: summarizePolicyConfig(policy.value)
+  });
   const emitted = emitReport({
     contents: output,
     outputPath: command.outputPath,
@@ -497,7 +489,17 @@ async function runScan(
 
   const scanned = await scanProject({
     cwd: io.cwd,
-    lockfilePath: command.lockfilePath,
+    ...(command.lockfilePath ? { lockfilePath: command.lockfilePath } : {}),
+    allLockfiles: command.allLockfiles ?? false,
+    ...(command.policyPath ? { policyPath: command.policyPath } : {}),
+    offline: command.offline ?? false,
+    ...(command.cacheDir ? { cacheDir: command.cacheDir } : {}),
+    ...(command.jobs !== undefined ? { jobs: command.jobs } : {}),
+    ...(command.timeoutMs !== undefined ? { timeoutMs: command.timeoutMs } : {}),
+    ...(command.registryUrl ? { registryUrl: command.registryUrl } : {}),
+    ...(command.registryTokenEnv ? { registryTokenEnv: command.registryTokenEnv } : {}),
+    allowedHosts: command.allowedHosts ?? [],
+    env: io.env ?? process.env,
     profile: command.profile,
     prodOnly: command.prodOnly,
     applyWaivers: !command.noWaivers,
@@ -512,7 +514,7 @@ async function runScan(
     return exitCodeForError(scanned.error);
   }
 
-  const reportInput = {
+  const reportInput: ScanReportInput = {
     project: scanned.value.project,
     graph: scanned.value.graph,
     evidence: scanned.value.evidence,
@@ -523,13 +525,14 @@ async function runScan(
     json: command.json,
     markdown: command.markdown,
     html: command.html,
-    reportLanguage: command.reportLanguage,
+    ...(command.reportLanguage ? { reportLanguage: command.reportLanguage } : {}),
     waiverMode: command.noWaivers ? "ignored" : "local",
-    failOn: command.kind === "ci" ? command.failOn : undefined,
-    strictWaivers: command.kind === "ci" ? command.strictWaivers : false,
+    ...(command.kind === "ci" && command.failOn ? { failOn: command.failOn } : {}),
+    ...(command.kind === "ci" ? { strictWaivers: command.strictWaivers } : {}),
     waivedFindings: scanned.value.waivedFindings,
     expiredWaivers: scanned.value.expiredWaivers,
-    unmatchedWaivers: scanned.value.unmatchedWaivers
+    unmatchedWaivers: scanned.value.unmatchedWaivers,
+    policy: scanned.value.policy
   };
 
   reportProgress?.(SCAN_PROGRESS_RENDER_PERCENT, `Rendering ${reportFormatLabel(command)} report...`);
@@ -589,6 +592,16 @@ function hasWaiverDrift(input: {
 async function scanProject(input: {
   cwd: string;
   lockfilePath?: string;
+  allLockfiles: boolean;
+  policyPath?: string;
+  offline: boolean;
+  cacheDir?: string;
+  jobs?: number;
+  timeoutMs?: number;
+  registryUrl?: string;
+  registryTokenEnv?: string;
+  allowedHosts: string[];
+  env: Record<string, string | undefined>;
   profile: Extract<CliCommand, { kind: "scan" | "ci" | "diff" }>["profile"];
   prodOnly: boolean;
   applyWaivers: boolean;
@@ -598,7 +611,8 @@ async function scanProject(input: {
 }): Promise<Result<ScanResult, OhriskError>> {
   const loaded = loadProjectGraph({
     cwd: input.cwd,
-    lockfilePath: input.lockfilePath,
+    ...(input.lockfilePath ? { lockfilePath: input.lockfilePath } : {}),
+    allLockfiles: input.allLockfiles,
     prodOnly: input.prodOnly,
     ...(input.progress ? { progress: input.progress } : {})
   });
@@ -607,9 +621,37 @@ async function scanProject(input: {
     return loaded;
   }
 
+  const policy = readPolicyConfig({
+    projectRoot: loaded.value.project.rootDir,
+    ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
+    ...(input.policyPath ? { policyPath: input.policyPath } : {})
+  });
+  if (isErr(policy)) {
+    return policy;
+  }
+
+  const evidenceRuntime = resolveEvidenceRuntimeOptions({
+    cwd: input.cwd,
+    projectRoot: loaded.value.project.rootDir,
+    policy: policy.value,
+    offline: input.offline,
+    ...(input.cacheDir ? { cacheDir: input.cacheDir } : {}),
+    ...(input.jobs !== undefined ? { jobs: input.jobs } : {}),
+    ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+    ...(input.registryUrl ? { registryUrl: input.registryUrl } : {}),
+    ...(input.registryTokenEnv ? { registryTokenEnv: input.registryTokenEnv } : {}),
+    allowedHosts: input.allowedHosts,
+    env: input.env
+  });
+  if (isErr(evidenceRuntime)) {
+    return evidenceRuntime;
+  }
+
   return evaluateProjectScan({
     ...loaded.value,
     profile: input.profile,
+    policy: policy.value,
+    evidenceRuntime: evidenceRuntime.value,
     applyWaivers: input.applyWaivers,
     now: input.now,
     ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
@@ -620,6 +662,7 @@ async function scanProject(input: {
 function loadProjectGraph(input: {
   cwd: string;
   lockfilePath?: string;
+  allLockfiles?: boolean;
   prodOnly: boolean;
   progress?: ScanProgressReporter;
 }): Result<{
@@ -629,15 +672,22 @@ function loadProjectGraph(input: {
   input.progress?.(SCAN_PROGRESS_DISCOVER_PERCENT, "Discovering project...");
   const discovered = discoverProject({
     cwd: input.cwd,
-    ...(input.lockfilePath ? { lockfilePath: input.lockfilePath } : {})
+    ...(input.lockfilePath ? { lockfilePath: input.lockfilePath } : {}),
+    ...(input.allLockfiles ? { allLockfiles: true } : {})
   });
 
   if (isErr(discovered)) {
     return discovered;
   }
 
-  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, `Reading ${path.basename(discovered.value.lockfile.path)}...`);
-  const graph = parseProjectLockfile(discovered.value);
+  const lockfileCount = discovered.value.lockfiles?.length ?? 1;
+  input.progress?.(
+    SCAN_PROGRESS_READ_LOCKFILE_PERCENT,
+    lockfileCount > 1
+      ? `Reading ${lockfileCount} lockfiles...`
+      : `Reading ${path.basename(discovered.value.lockfile.path)}...`
+  );
+  const graph = parseProjectDependencyGraph(discovered.value);
 
   if (isErr(graph)) {
     return graph;
@@ -655,6 +705,8 @@ async function evaluateProjectScan(input: {
   project: ProjectInput;
   scanGraph: DependencyGraph;
   profile: Extract<CliCommand, { kind: "scan" | "ci" | "diff" }>["profile"];
+  policy: ResolvedPolicyConfig;
+  evidenceRuntime: EvidenceRuntimeOptions;
   applyWaivers: boolean;
   now: ScanClock;
   workspaceRoot?: string;
@@ -674,6 +726,7 @@ async function evaluateProjectScan(input: {
   const evidence = await collectEvidenceForGraph({
     graph: input.scanGraph,
     projectRoot: input.project.rootDir,
+    evidenceRuntime: input.evidenceRuntime,
     ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
     ...(evidenceProgress ? { progress: evidenceProgress } : {})
   });
@@ -687,7 +740,8 @@ async function evaluateProjectScan(input: {
   const riskFindings = evaluateLicenseRisks({
     licenses: normalizedLicenses,
     dependencies: input.scanGraph.nodes,
-    profile: input.profile
+    profile: input.profile,
+    policy: input.policy
   });
   if (!input.applyWaivers) {
     return ok({
@@ -698,7 +752,8 @@ async function evaluateProjectScan(input: {
       riskFindings,
       waivedFindings: [],
       expiredWaivers: [],
-      unmatchedWaivers: []
+      unmatchedWaivers: [],
+      policy: summarizePolicyConfig(input.policy)
     });
   }
 
@@ -721,7 +776,8 @@ async function evaluateProjectScan(input: {
     riskFindings: appliedWaivers.activeFindings,
     waivedFindings: appliedWaivers.waivedFindings,
     expiredWaivers: appliedWaivers.expiredWaivers,
-    unmatchedWaivers: appliedWaivers.unmatchedWaivers
+    unmatchedWaivers: appliedWaivers.unmatchedWaivers,
+    policy: summarizePolicyConfig(input.policy)
   });
 }
 
@@ -754,10 +810,13 @@ function filterGraphForProdOnly(graph: DependencyGraph, prodOnly: boolean): Depe
     .filter((node) => node.paths.length > 0);
   const nodeIds = new Set(nodes.map((node) => node.id));
 
+  const embeddedEvidence = graph.embeddedEvidence?.filter((evidence) =>
+    nodeIds.has(evidence.packageId)
+  );
   return {
     ...graph,
     nodes,
-    embeddedEvidence: graph.embeddedEvidence?.filter((evidence) => nodeIds.has(evidence.packageId))
+    ...(embeddedEvidence ? { embeddedEvidence } : {})
   };
 }
 
@@ -765,6 +824,7 @@ async function collectEvidenceForGraph(input: {
   graph: DependencyGraph;
   projectRoot: string;
   workspaceRoot?: string;
+  evidenceRuntime: EvidenceRuntimeOptions;
   progress?: (progress: EvidenceCollectionProgress) => void;
 }): Promise<Result<LicenseEvidence[], OhriskError>> {
   const embeddedEvidence = input.graph.embeddedEvidence ?? [];
@@ -796,6 +856,19 @@ async function collectEvidenceForGraph(input: {
   const collected = await collectGraphEvidence({
     graph: collectionGraph,
     projectRoot: input.projectRoot,
+    offline: input.evidenceRuntime.offline,
+    cacheDir: input.evidenceRuntime.cacheDir,
+    ...(input.evidenceRuntime.jobs !== undefined
+      ? { evidenceConcurrency: input.evidenceRuntime.jobs }
+      : {}),
+    ...(input.evidenceRuntime.timeoutMs !== undefined
+      ? { fetchTimeoutMs: input.evidenceRuntime.timeoutMs }
+      : {}),
+    ...(input.evidenceRuntime.npmRegistryUrl
+      ? { npmRegistryUrl: input.evidenceRuntime.npmRegistryUrl }
+      : {}),
+    registryAuthTokens: input.evidenceRuntime.registryAuthTokens,
+    allowedArtifactHosts: input.evidenceRuntime.allowedArtifactHosts,
     ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
     ...(input.progress
       ? {
@@ -816,6 +889,145 @@ async function collectEvidenceForGraph(input: {
   }
 
   return ok([...relevantEmbeddedEvidence, ...collected.value]);
+}
+
+function resolveEvidenceRuntimeOptions(input: {
+  cwd: string;
+  projectRoot: string;
+  policy: ResolvedPolicyConfig;
+  offline: boolean;
+  cacheDir?: string;
+  jobs?: number;
+  timeoutMs?: number;
+  registryUrl?: string;
+  registryTokenEnv?: string;
+  allowedHosts: string[];
+  env: Record<string, string | undefined>;
+}): Result<EvidenceRuntimeOptions, OhriskError> {
+  const npmRegistryUrl = input.registryUrl ?? input.policy.npmRegistryUrl;
+  const allowedArtifactHosts = new Set<string>(input.policy.allowedRegistryHosts);
+
+  for (const host of input.allowedHosts) {
+    const normalizedHost = normalizeRegistryHostname(host);
+    if (!normalizedHost) {
+      return err(invalidRuntimeOption("Allowed artifact host is invalid.", {
+        host
+      }));
+    }
+    allowedArtifactHosts.add(normalizedHost);
+  }
+
+  const registryHost = npmRegistryUrl
+    ? registryHostname(npmRegistryUrl)
+    : "registry.npmjs.org";
+  if (!registryHost) {
+    return err(invalidRuntimeOption("npm registry URL is invalid.", {
+      registryUrl: safeRegistryUrl(npmRegistryUrl)
+    }));
+  }
+  if (npmRegistryUrl) {
+    allowedArtifactHosts.add(registryHost);
+  }
+
+  const registryAuthTokens = new Map<string, string>();
+  if (!input.offline) {
+    for (const [host, auth] of input.policy.registryAuth) {
+      const token = input.env[auth.tokenEnv]?.trim();
+      if (!token) {
+        return err(invalidRuntimeOption(
+          "A registry authentication environment variable required by the policy is missing or empty.",
+          { host, tokenEnv: auth.tokenEnv }
+        ));
+      }
+      registryAuthTokens.set(host, token);
+    }
+
+    if (input.registryTokenEnv) {
+      const token = input.env[input.registryTokenEnv]?.trim();
+      if (!token) {
+        return err(invalidRuntimeOption(
+          "The registry authentication environment variable is missing or empty.",
+          { host: registryHost, tokenEnv: input.registryTokenEnv }
+        ));
+      }
+      registryAuthTokens.set(registryHost, token);
+    }
+  }
+
+  const configuredCacheDir = input.cacheDir ?? input.env.OHRISK_CACHE_DIR;
+  const cacheDir = configuredCacheDir
+    ? path.resolve(input.cwd, configuredCacheDir)
+    : defaultArtifactCacheDirectory(input.env);
+
+  return ok({
+    offline: input.offline,
+    cacheDir,
+    registryAuthTokens,
+    allowedArtifactHosts,
+    ...(input.jobs !== undefined ? { jobs: input.jobs } : {}),
+    ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+    ...(npmRegistryUrl ? { npmRegistryUrl } : {})
+  });
+}
+
+function normalizeRegistryHostname(value: string): string | undefined {
+  const trimmed = value.trim().toLowerCase().replace(/\.$/, "");
+  if (!trimmed || trimmed.includes("/") || trimmed.includes("@")) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(`https://${trimmed}`);
+    return url.hostname.toLowerCase() === trimmed
+      && isIP(trimmed) === 0
+      && trimmed !== "localhost"
+      && !trimmed.endsWith(".localhost")
+      ? trimmed
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function registryHostname(value: string): string | undefined {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/\.$/, "");
+    return url.protocol === "https:"
+      && !url.username
+      && !url.password
+      && isIP(host) === 0
+      && host !== "localhost"
+      && !host.endsWith(".localhost")
+      ? host
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function safeRegistryUrl(value: string | undefined): string {
+  if (!value) {
+    return "<default>";
+  }
+  try {
+    const url = new URL(value);
+    return `${url.protocol}//${url.host}${url.pathname}`;
+  } catch {
+    return "<invalid>";
+  }
+}
+
+function invalidRuntimeOption(
+  message: string,
+  details: Record<string, unknown>
+): OhriskError {
+  return createError({
+    code: "INVALID_ARGUMENT",
+    category: "invalid_input",
+    message,
+    details
+  });
 }
 
 function createEvidenceProgressReporter(input: {
@@ -840,8 +1052,7 @@ function createEvidenceProgressReporter(input: {
     input.progress(
       evidenceCollectionPercent({
         completed,
-        total,
-        packageId: progress.packageId
+        total
       }),
       [
         `Collecting license evidence ${completed}/${total}: ${formatProgressPackageId(progress.packageId)}`,
@@ -851,7 +1062,9 @@ function createEvidenceProgressReporter(input: {
   };
 }
 
-function evidenceCollectionPercent(progress: EvidenceCollectionProgress): number {
+function evidenceCollectionPercent(
+  progress: Pick<EvidenceCollectionProgress, "completed" | "total">
+): number {
   const fraction = progress.total <= 0
     ? 1
     : Math.min(1, Math.max(0, progress.completed / progress.total));
@@ -991,12 +1204,380 @@ function readBaselineGoWorkModuleInputs(input: {
   return ok(modules);
 }
 
+type BaselineProjectGraph = {
+  graph: DependencyGraph;
+  lockfiles: ProjectLockfile[];
+};
+
+function loadBaselineProjectGraph(input: {
+  currentProject: {
+    project: ProjectInput;
+    scanGraph: DependencyGraph;
+  };
+  baselineRef: string;
+  allLockfiles: boolean;
+  readRefFile: GitRefFileReader;
+  listRefFiles: GitRefFileLister;
+}): Result<BaselineProjectGraph, OhriskError> {
+  const projectRoot = input.currentProject.project.rootDir;
+  let baselineRelativePaths: string[] | undefined;
+  let baselineLockfiles: ProjectLockfile[];
+
+  if (input.allLockfiles) {
+    const listed = input.listRefFiles({
+      projectRoot,
+      ref: input.baselineRef
+    });
+    if (isErr(listed)) {
+      return listed;
+    }
+
+    baselineRelativePaths = listed.value;
+    baselineLockfiles = projectLockfilesFromRelativePaths({
+      rootDir: projectRoot,
+      relativePaths: listed.value
+    });
+
+    if (baselineLockfiles.length === 0 && listed.value.includes("package.json")) {
+      baselineLockfiles = [{
+        kind: "package-json",
+        path: path.join(projectRoot, "package.json")
+      }];
+    }
+  } else {
+    baselineLockfiles = [input.currentProject.project.lockfile];
+  }
+
+  if (baselineLockfiles.length === 0) {
+    return ok({
+      graph: {
+        rootName: path.basename(projectRoot),
+        lockfilePath: `${input.baselineRef}:<none>`,
+        lockfilePaths: [],
+        nodes: []
+      },
+      lockfiles: []
+    });
+  }
+
+  const baselineFiles = baselineRelativePaths
+    ? new Set(baselineRelativePaths.map((value) => value.replace(/\\/g, "/")))
+    : undefined;
+  const graphs: SourcedDependencyGraph[] = [];
+
+  for (const lockfile of baselineLockfiles) {
+    const parsed = parseBaselineLockfileGraph({
+      projectRoot,
+      lockfile,
+      baselineRef: input.baselineRef,
+      readRefFile: input.readRefFile,
+      rootNameHint: input.currentProject.scanGraph.rootName ?? path.basename(projectRoot),
+      ...(baselineFiles ? { baselineFiles } : {})
+    });
+    if (isErr(parsed)) {
+      return parsed;
+    }
+
+    graphs.push({
+      graph: parsed.value,
+      source: {
+        lockfileKind: lockfile.kind,
+        lockfilePath: projectRelativeLockfilePath(projectRoot, lockfile.path)
+      }
+    });
+  }
+
+  return ok({
+    graph: graphs.length === 1
+      ? graphs[0]!.graph
+      : mergeDependencyGraphs(graphs),
+    lockfiles: baselineLockfiles
+  });
+}
+
+function parseBaselineLockfileGraph(input: {
+  projectRoot: string;
+  lockfile: ProjectLockfile;
+  baselineRef: string;
+  readRefFile: GitRefFileReader;
+  rootNameHint: string;
+  baselineFiles?: ReadonlySet<string>;
+}): Result<DependencyGraph, OhriskError> {
+  const relativeLockfilePath = projectRelativeLockfilePath(
+    input.projectRoot,
+    input.lockfile.path
+  );
+  const project: ProjectInput = {
+    rootDir: input.projectRoot,
+    lockfile: input.lockfile
+  };
+  const baselineLockfile = readBaselinePrimaryLockfile({
+    projectRoot: input.projectRoot,
+    lockfilePath: input.lockfile.path,
+    ref: input.baselineRef,
+    relativePath: relativeLockfilePath,
+    readRefFile: input.readRefFile,
+    ...(input.baselineFiles ? { baselineFiles: input.baselineFiles } : {})
+  });
+  if (isErr(baselineLockfile)) {
+    return baselineLockfile;
+  }
+
+  const lockfileDirectory = path.posix.dirname(relativeLockfilePath);
+  const relativeCompanionPath = (filename: string): string =>
+    lockfileDirectory === "." ? filename : `${lockfileDirectory}/${filename}`;
+  const packageJsonRelativePath = relativeCompanionPath("package.json");
+  const baselinePackageJson = input.lockfile.kind === "yarn-lock"
+    ? input.readRefFile({
+        projectRoot: input.projectRoot,
+        ref: input.baselineRef,
+        relativePath: packageJsonRelativePath
+      })
+    : undefined;
+  if (baselinePackageJson && isErr(baselinePackageJson)) {
+    return baselinePackageJson;
+  }
+
+  const baselineWorkspacePackageJsons = baselinePackageJson && !isErr(baselinePackageJson)
+    ? readBaselineYarnWorkspacePackageJsons({
+        projectRoot: input.projectRoot,
+        baselineRef: input.baselineRef,
+        rootPackageJsonText: baselinePackageJson.value,
+        readRefFile: input.readRefFile,
+        ...(input.baselineFiles ? { baselineFiles: input.baselineFiles } : {})
+      })
+    : ok([]);
+  if (isErr(baselineWorkspacePackageJsons)) {
+    return baselineWorkspacePackageJsons;
+  }
+
+  const pnpmWorkspaceRelativePath = relativeCompanionPath("pnpm-workspace.yaml");
+  const baselinePnpmWorkspace = input.lockfile.kind === "pnpm-lock"
+    ? readOptionalBaselineFile({
+        projectRoot: input.projectRoot,
+        baselineRef: input.baselineRef,
+        relativePath: pnpmWorkspaceRelativePath,
+        readRefFile: input.readRefFile
+      })
+    : ok(undefined);
+  if (isErr(baselinePnpmWorkspace)) {
+    return baselinePnpmWorkspace;
+  }
+
+  const pyprojectRelativePath = relativeCompanionPath("pyproject.toml");
+  const baselinePyproject = (
+    input.lockfile.kind === "pdm-lock"
+    || input.lockfile.kind === "poetry-lock"
+  )
+    ? readOptionalBaselineFile({
+        projectRoot: input.projectRoot,
+        baselineRef: input.baselineRef,
+        relativePath: pyprojectRelativePath,
+        readRefFile: input.readRefFile
+      })
+    : ok(undefined);
+  if (isErr(baselinePyproject)) {
+    return baselinePyproject;
+  }
+
+  const cargoManifestRelativePath = relativeCompanionPath("Cargo.toml");
+  const baselineCargoManifest = input.lockfile.kind === "cargo-lock"
+    ? readOptionalBaselineFile({
+        projectRoot: input.projectRoot,
+        baselineRef: input.baselineRef,
+        relativePath: cargoManifestRelativePath,
+        readRefFile: input.readRefFile
+      })
+    : ok(undefined);
+  if (isErr(baselineCargoManifest)) {
+    return baselineCargoManifest;
+  }
+
+  const baselineCargoMemberManifests = input.lockfile.kind === "cargo-lock"
+    && baselineCargoManifest.value
+    ? readBaselineCargoMemberManifests({
+        project,
+        baselineRef: input.baselineRef,
+        rootManifestText: baselineCargoManifest.value,
+        readRefFile: input.readRefFile,
+        ...(input.baselineFiles ? { baselineFiles: input.baselineFiles } : {})
+      })
+    : ok(undefined);
+  if (isErr(baselineCargoMemberManifests)) {
+    return baselineCargoMemberManifests;
+  }
+
+  const goSumRelativePath = relativeCompanionPath("go.sum");
+  const baselineGoSum = input.lockfile.kind === "go-mod"
+    ? readOptionalBaselineFile({
+        projectRoot: input.projectRoot,
+        baselineRef: input.baselineRef,
+        relativePath: goSumRelativePath,
+        readRefFile: input.readRefFile
+      })
+    : ok(undefined);
+  if (isErr(baselineGoSum)) {
+    return baselineGoSum;
+  }
+
+  const baselineGoWorkModules = input.lockfile.kind === "go-work"
+    ? readBaselineGoWorkModuleInputs({
+        project,
+        baselineRef: input.baselineRef,
+        goWorkText: baselineLockfile.value,
+        readRefFile: input.readRefFile
+      })
+    : ok(undefined);
+  if (isErr(baselineGoWorkModules)) {
+    return baselineGoWorkModules;
+  }
+
+  const composerJsonRelativePath = relativeCompanionPath("composer.json");
+  const baselineComposerJson = input.lockfile.kind === "composer-lock"
+    ? readOptionalBaselineFile({
+        projectRoot: input.projectRoot,
+        baselineRef: input.baselineRef,
+        relativePath: composerJsonRelativePath,
+        readRefFile: input.readRefFile
+      })
+    : ok(undefined);
+  if (isErr(baselineComposerJson)) {
+    return baselineComposerJson;
+  }
+
+  const baselineDirectoryPackagesProps = input.lockfile.kind === "dotnet-project"
+    ? readBaselineDirectoryPackagesProps({
+        project,
+        baselineRef: input.baselineRef,
+        readRefFile: input.readRefFile,
+        ...(input.baselineFiles ? { baselineFiles: input.baselineFiles } : {})
+      })
+    : ok(undefined);
+  if (isErr(baselineDirectoryPackagesProps)) {
+    return baselineDirectoryPackagesProps;
+  }
+
+  const baselinePythonLocalSourceErrors = baselinePythonLocalSourceErrorsForKind(
+    input.lockfile.kind
+  );
+  const baselineRequirementsReader = input.lockfile.kind === "requirements-txt"
+    ? createBaselineRequirementsIncludedFileReader({
+        projectRoot: input.projectRoot,
+        baselineRef: input.baselineRef,
+        readRefFile: input.readRefFile
+      })
+    : undefined;
+  const baselinePythonSourceReader = baselinePythonLocalSourceErrors
+    ? createBaselinePythonLocalSourceFileReader({
+        projectRoot: input.projectRoot,
+        baselineRef: input.baselineRef,
+        readRefFile: input.readRefFile,
+        errors: baselinePythonLocalSourceErrors
+      })
+    : undefined;
+
+  return parseLockfileTextForKind({
+    kind: input.lockfile.kind,
+    text: baselineLockfile.value,
+    lockfilePath: baselineLockfilePathForKind({
+      kind: input.lockfile.kind,
+      rootName: input.rootNameHint,
+      relativeLockfilePath,
+      baselineRef: input.baselineRef
+    }),
+    ...(baselinePackageJson?.value ? { packageJsonText: baselinePackageJson.value } : {}),
+    packageJsonPath: `${input.baselineRef}:${packageJsonRelativePath}`,
+    ...(baselineWorkspacePackageJsons.value.length > 0
+      ? { workspacePackageJsonTexts: baselineWorkspacePackageJsons.value }
+      : {}),
+    ...(baselinePnpmWorkspace.value ? { pnpmWorkspaceText: baselinePnpmWorkspace.value } : {}),
+    pnpmWorkspacePath: `${input.baselineRef}:${pnpmWorkspaceRelativePath}`,
+    ...(baselinePyproject.value ? { pyprojectText: baselinePyproject.value } : {}),
+    ...(baselineCargoManifest.value ? { cargoManifestText: baselineCargoManifest.value } : {}),
+    ...(baselineCargoMemberManifests.value?.length
+      ? { cargoMemberManifestTexts: baselineCargoMemberManifests.value }
+      : {}),
+    ...(input.lockfile.kind === "cargo-lock"
+      ? { cargoRootName: input.rootNameHint }
+      : {}),
+    ...(baselineGoSum.value ? { goSumText: baselineGoSum.value } : {}),
+    ...(baselineGoWorkModules.value?.length
+      ? { goWorkModuleInputs: baselineGoWorkModules.value }
+      : {}),
+    goWorkDir: path.dirname(input.lockfile.path),
+    ...(baselineComposerJson.value ? { composerJsonText: baselineComposerJson.value } : {}),
+    ...(baselineDirectoryPackagesProps.value?.text
+      ? { directoryPackagesPropsText: baselineDirectoryPackagesProps.value.text }
+      : {}),
+    ...(baselineDirectoryPackagesProps.value?.path
+      ? { directoryPackagesPropsPath: baselineDirectoryPackagesProps.value.path }
+      : {}),
+    ...(input.lockfile.kind === "dotnet-project"
+      ? { dotnetProjectRootName: input.rootNameHint }
+      : {}),
+    projectRoot: input.projectRoot,
+    requirementsRootName: input.rootNameHint,
+    ...(baselineRequirementsReader
+      ? { requirementsIncludedFileReader: baselineRequirementsReader }
+      : {}),
+    ...(baselinePythonSourceReader
+      ? { pythonLocalSourceFileReader: baselinePythonSourceReader }
+      : {})
+  });
+}
+
+function buildDiffLockfileChanges(input: {
+  projectRoot: string;
+  currentLockfiles: ProjectLockfile[];
+  baselineLockfiles: ProjectLockfile[];
+}): DiffLockfileChanges {
+  const current = normalizeDiffLockfiles(input.projectRoot, input.currentLockfiles);
+  const baseline = normalizeDiffLockfiles(input.projectRoot, input.baselineLockfiles);
+  const currentKeys = new Set(current.map(diffLockfileKey));
+  const baselineKeys = new Set(baseline.map(diffLockfileKey));
+
+  return {
+    current,
+    baseline,
+    added: current.filter((lockfile) => !baselineKeys.has(diffLockfileKey(lockfile))),
+    removed: baseline.filter((lockfile) => !currentKeys.has(diffLockfileKey(lockfile)))
+  };
+}
+
+function normalizeDiffLockfiles(
+  projectRoot: string,
+  lockfiles: ProjectLockfile[]
+): DiffLockfileChanges["current"] {
+  const byKey = new Map<string, DiffLockfileChanges["current"][number]>();
+  for (const lockfile of lockfiles) {
+    const normalized = {
+      kind: lockfile.kind,
+      path: projectRelativeLockfilePath(projectRoot, lockfile.path)
+    };
+    byKey.set(diffLockfileKey(normalized), normalized);
+  }
+  return [...byKey.values()].sort((left, right) =>
+    left.path.localeCompare(right.path) || left.kind.localeCompare(right.kind)
+  );
+}
+
+function diffLockfileKey(lockfile: DiffLockfileChanges["current"][number]): string {
+  return `${lockfile.kind}\0${lockfile.path}`;
+}
+
+function projectRelativeLockfilePath(projectRoot: string, lockfilePath: string): string {
+  const relativePath = path.relative(projectRoot, lockfilePath).replace(/\\/g, "/");
+  return relativePath === "" ? path.basename(lockfilePath) : relativePath;
+}
+
+
 function readBaselinePrimaryLockfile(input: {
   projectRoot: string;
   lockfilePath: string;
   ref: string;
   relativePath: string;
   readRefFile: GitRefFileReader;
+  baselineFiles?: ReadonlySet<string>;
 }): Result<string, OhriskError> {
   if (isGradleDependencyLocksDirectory(input.lockfilePath)) {
     return readBaselineGradleDependencyLocksDirectory(input);
@@ -1015,13 +1596,24 @@ function readBaselineGradleDependencyLocksDirectory(input: {
   ref: string;
   relativePath: string;
   readRefFile: GitRefFileReader;
+  baselineFiles?: ReadonlySet<string>;
 }): Result<string, OhriskError> {
   let entries: string[];
   try {
-    entries = readdirSync(input.lockfilePath)
-      .filter((entry) => entry.toLowerCase().endsWith(".lockfile"))
-      .filter((entry) => isFile(path.join(input.lockfilePath, entry)))
-      .sort();
+    if (input.baselineFiles) {
+      const normalizedDirectory = input.relativePath.replace(/\\/g, "/").replace(/\/$/, "");
+      const prefix = `${normalizedDirectory}/`;
+      entries = [...input.baselineFiles]
+        .filter((entry) => entry.startsWith(prefix))
+        .map((entry) => entry.slice(prefix.length))
+        .filter((entry) => !entry.includes("/") && entry.toLowerCase().endsWith(".lockfile"))
+        .sort();
+    } else {
+      entries = readdirSync(input.lockfilePath)
+        .filter((entry) => entry.toLowerCase().endsWith(".lockfile"))
+        .filter((entry) => isFile(path.join(input.lockfilePath, entry)))
+        .sort();
+    }
   } catch (cause) {
     return err(createError({
       code: "GRADLE_LOCK_READ_FAILED",
@@ -1040,7 +1632,7 @@ function readBaselineGradleDependencyLocksDirectory(input: {
     const result = input.readRefFile({
       projectRoot: input.projectRoot,
       ref: input.ref,
-      relativePath: path.join(input.relativePath, entry)
+      relativePath: `${input.relativePath.replace(/\\/g, "/").replace(/\/$/, "")}/${entry}`
     });
 
     if (isErr(result)) {
@@ -1088,12 +1680,20 @@ function readBaselineCargoMemberManifests(input: {
   baselineRef: string;
   rootManifestText: string;
   readRefFile: GitRefFileReader;
+  baselineFiles?: ReadonlySet<string>;
 }): Result<string[] | undefined, OhriskError> {
-  const memberManifestPaths = findCargoWorkspaceMemberManifestPaths({
-    rootManifestText: input.rootManifestText,
-    lockfilePath: input.project.lockfile.path,
-    projectRoot: input.project.rootDir
-  });
+  const memberManifestPaths = input.baselineFiles
+    ? findCargoWorkspaceMemberManifestPathsFromRelativePaths({
+        rootManifestText: input.rootManifestText,
+        lockfilePath: input.project.lockfile.path,
+        projectRoot: input.project.rootDir,
+        relativePaths: input.baselineFiles
+      })
+    : findCargoWorkspaceMemberManifestPaths({
+        rootManifestText: input.rootManifestText,
+        lockfilePath: input.project.lockfile.path,
+        projectRoot: input.project.rootDir
+      });
   const manifestTexts: string[] = [];
 
   for (const memberManifestPath of memberManifestPaths) {
@@ -1120,6 +1720,7 @@ function readBaselineYarnWorkspacePackageJsons(input: {
   baselineRef: string;
   rootPackageJsonText: string;
   readRefFile: GitRefFileReader;
+  baselineFiles?: ReadonlySet<string>;
 }): Result<YarnWorkspacePackageJsonInput[], OhriskError> {
   const rootPackageJson = tryParseObject(input.rootPackageJsonText);
   if (!rootPackageJson) {
@@ -1127,10 +1728,17 @@ function readBaselineYarnWorkspacePackageJsons(input: {
   }
 
   const packageJsons: YarnWorkspacePackageJsonInput[] = [];
-  for (const workspacePackageJsonPath of findYarnWorkspacePackageJsonPaths({
-    projectRoot: input.projectRoot,
-    workspaces: rootPackageJson.workspaces
-  })) {
+  const workspacePackageJsonPaths = input.baselineFiles
+    ? findYarnWorkspacePackageJsonPathsFromRelativePaths({
+        projectRoot: input.projectRoot,
+        workspaces: rootPackageJson.workspaces,
+        relativePaths: input.baselineFiles
+      })
+    : findYarnWorkspacePackageJsonPaths({
+        projectRoot: input.projectRoot,
+        workspaces: rootPackageJson.workspaces
+      });
+  for (const workspacePackageJsonPath of workspacePackageJsonPaths) {
     const baselinePackageJson = input.readRefFile({
       projectRoot: input.projectRoot,
       ref: input.baselineRef,
@@ -1350,23 +1958,52 @@ function isGradleDependencyLocksDirectory(lockfilePath: string): boolean {
   const segments = path.normalize(lockfilePath).split(path.sep);
   return segments.length >= 2
     && segments[segments.length - 1] === "dependency-locks"
-    && segments[segments.length - 2] === "gradle"
-    && isDirectory(lockfilePath);
+    && segments[segments.length - 2] === "gradle";
+}
+
+function findBaselineDirectoryPackagesPropsPath(input: {
+  projectRoot: string;
+  projectFilePath: string;
+  baselineFiles: ReadonlySet<string>;
+}): string | undefined {
+  let current = path.posix.dirname(projectRelativeLockfilePath(
+    input.projectRoot,
+    input.projectFilePath
+  ));
+
+  while (true) {
+    const candidate = current === "."
+      ? "Directory.Packages.props"
+      : `${current}/Directory.Packages.props`;
+    if (input.baselineFiles.has(candidate)) {
+      return candidate;
+    }
+    if (current === ".") {
+      return undefined;
+    }
+    const parent = path.posix.dirname(current);
+    current = parent === current ? "." : parent;
+  }
 }
 
 function readBaselineDirectoryPackagesProps(input: {
   project: ProjectInput;
   baselineRef: string;
   readRefFile: GitRefFileReader;
+  baselineFiles?: ReadonlySet<string>;
 }): Result<{ path: string; text: string } | undefined, OhriskError> {
-  const currentPropsPath = findNearestDirectoryPackagesPropsPath(input.project.lockfile.path);
-  if (!currentPropsPath) {
-    return ok(undefined);
-  }
-
-  const relativePath = normalizeBaselineRelativePath(
-    path.relative(input.project.rootDir, currentPropsPath)
-  );
+  const relativePath = input.baselineFiles
+    ? findBaselineDirectoryPackagesPropsPath({
+        projectRoot: input.project.rootDir,
+        projectFilePath: input.project.lockfile.path,
+        baselineFiles: input.baselineFiles
+      })
+    : normalizeBaselineRelativePath(
+        path.relative(
+          input.project.rootDir,
+          findNearestDirectoryPackagesPropsPath(input.project.lockfile.path) ?? ""
+        )
+      );
 
   if (!relativePath) {
     return ok(undefined);
@@ -1435,6 +2072,8 @@ function renderHelp(target?: HelpTarget): string {
       return renderDiffHelp();
     case "explain":
       return renderExplainHelp();
+    case "cache":
+      return renderCacheHelp();
     case "help":
       return renderHelpCommandHelp();
     case "version":
@@ -1449,10 +2088,11 @@ function renderTopLevelHelp(): string {
     "Ohrisk",
     "",
     "Usage:",
-    "  ohrisk scan [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
-    "  ohrisk ci [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
-    "  ohrisk diff <baseline-ref> [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
+    "  ohrisk scan [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
+    "  ohrisk ci [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
+    "  ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
+    "  ohrisk cache status|prune|clear [--cache-dir <path>] [--json]",
     "  ohrisk help [command]",
     "  ohrisk version",
     "",
@@ -1461,15 +2101,25 @@ function renderTopLevelHelp(): string {
     "  ci      Run a scan and exit non-zero when findings meet the fail threshold.",
     "  diff    Compare current findings against a baseline git ref.",
     "  explain Explain how a license expression is classified for a profile.",
+    "  cache   Inspect, prune, or clear the persistent artifact cache.",
     "  help    Print this help text.",
     "  version Print the Ohrisk package version.",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
+    "  --all                  Discover and merge every supported lockfile in the project root.",
+    "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
     "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
     "  --prod                 Exclude development-only dependencies.",
     "  --no-waivers           Ignore local .ohrisk-waivers.json files.",
+    "  --offline             Disable network requests and use local or cached evidence only.",
+    "  --cache-dir <path>    Use a persistent artifact cache directory.",
+    "  --jobs <1..64>        Set evidence collection concurrency. Defaults to 8.",
+    "  --timeout <duration>  Set the per-request timeout from 100ms to 10m.",
+    "  --registry-url <url>  Use an HTTPS npm-compatible registry base URL.",
+    "  --registry-token-env <name> Read a registry bearer token from this environment variable.",
+    "  --allow-host <hostname> Add an artifact hostname to the allowlist; repeatable.",
     "  --json                 Print machine-readable output.",
     "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
     "  --markdown             Print a Markdown report for PRs or release notes.",
@@ -1490,14 +2140,23 @@ function renderScanHelp(): string {
     "Ohrisk scan",
     "",
     "Usage:",
-    "  ohrisk scan [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
+    "  ohrisk scan [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
+    "  --all                  Discover and merge every supported lockfile in the project root.",
+    "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
     "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
     "  --prod                 Exclude development-only dependencies.",
     "  --no-waivers           Ignore local .ohrisk-waivers.json files.",
+    "  --offline             Disable network requests and use local or cached evidence only.",
+    "  --cache-dir <path>    Use a persistent artifact cache directory.",
+    "  --jobs <1..64>        Set evidence collection concurrency. Defaults to 8.",
+    "  --timeout <duration>  Set the per-request timeout from 100ms to 10m.",
+    "  --registry-url <url>  Use an HTTPS npm-compatible registry base URL.",
+    "  --registry-token-env <name> Read a registry bearer token from this environment variable.",
+    "  --allow-host <hostname> Add an artifact hostname to the allowlist; repeatable.",
     "  --json                 Print machine-readable output.",
     "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
     "  --markdown             Print a Markdown report for PRs or release notes.",
@@ -1515,14 +2174,23 @@ function renderCiHelp(): string {
     "Ohrisk ci",
     "",
     "Usage:",
-    "  ohrisk ci [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
+    "  ohrisk ci [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
+    "  --all                  Discover and merge every supported lockfile in the project root.",
+    "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
     "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
     "  --prod                 Exclude development-only dependencies.",
     "  --no-waivers           Ignore local .ohrisk-waivers.json files.",
+    "  --offline             Disable network requests and use local or cached evidence only.",
+    "  --cache-dir <path>    Use a persistent artifact cache directory.",
+    "  --jobs <1..64>        Set evidence collection concurrency. Defaults to 8.",
+    "  --timeout <duration>  Set the per-request timeout from 100ms to 10m.",
+    "  --registry-url <url>  Use an HTTPS npm-compatible registry base URL.",
+    "  --registry-token-env <name> Read a registry bearer token from this environment variable.",
+    "  --allow-host <hostname> Add an artifact hostname to the allowlist; repeatable.",
     "  --json                 Print machine-readable output.",
     "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
     "  --markdown             Print a Markdown report for PRs or release notes.",
@@ -1542,18 +2210,50 @@ function renderDiffHelp(): string {
     "Ohrisk diff",
     "",
     "Usage:",
-    "  ohrisk diff <baseline-ref> [--lockfile <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
+    "  ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
+    "  --all                  Compare every supported lockfile in both revisions.",
+    "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
     "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
     "  --prod                 Exclude development-only dependencies.",
+    "  --offline             Disable network requests and use local or cached evidence only.",
+    "  --cache-dir <path>    Use a persistent artifact cache directory.",
+    "  --jobs <1..64>        Set evidence collection concurrency. Defaults to 8.",
+    "  --timeout <duration>  Set the per-request timeout from 100ms to 10m.",
+    "  --registry-url <url>  Use an HTTPS npm-compatible registry base URL.",
+    "  --registry-token-env <name> Read a registry bearer token from this environment variable.",
+    "  --allow-host <hostname> Add an artifact hostname to the allowlist; repeatable.",
     "  --json                 Print machine-readable output.",
     "  --markdown             Print a Markdown report for PRs or release notes.",
     "  --fail-on <severity>   Optional diff threshold.",
     "  --output <file>        Write report output to a project-relative file instead of stdout.",
     "  --help, -h             Print this help text."
+  ].join("\n");
+}
+
+function renderCacheHelp(): string {
+  return [
+    "Ohrisk cache",
+    "",
+    "Usage:",
+    "  ohrisk cache status [--cache-dir <path>] [--json]",
+    "  ohrisk cache prune [--cache-dir <path>] [--max-size <size>] [--max-age <duration>] [--json]",
+    "  ohrisk cache clear [--cache-dir <path>] [--json]",
+    "",
+    "Actions:",
+    "  status                Show entry, object, size, freshness, and corruption counts.",
+    "  prune                 Remove expired, old, orphaned, or least-recently-used entries.",
+    "  clear                 Remove all Ohrisk cache entries and objects.",
+    "",
+    "Options:",
+    "  --cache-dir <path>    Manage this cache directory instead of the default cache.",
+    "  --max-size <size>     Keep cache objects within a size such as 512MiB or 2GB.",
+    "  --max-age <duration>  Remove entries unused for a duration such as 24h or 7d.",
+    "  --json                Print machine-readable output without an absolute cache path.",
+    "  --help, -h            Print this help text."
   ].join("\n");
 }
 
@@ -1584,6 +2284,7 @@ function renderHelpCommandHelp(): string {
     "  ci",
     "  diff",
     "  explain",
+    "  cache",
     "  help",
     "  version",
     "",
@@ -1786,14 +2487,6 @@ function isCliEntrypoint(metaUrl: string, argvPath: string | undefined): boolean
 function isFile(pathname: string): boolean {
   try {
     return statSync(pathname).isFile();
-  } catch {
-    return false;
-  }
-}
-
-function isDirectory(pathname: string): boolean {
-  try {
-    return statSync(pathname).isDirectory();
   } catch {
     return false;
   }

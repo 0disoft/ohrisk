@@ -361,28 +361,29 @@ function readCycloneDxDependencyMap(
       continue;
     }
 
-    const hasUnsupportedShape = typeof entry.ref !== "string" || !Array.isArray(entry.dependsOn);
-    if (typeof entry.ref !== "string") {
+    const ref = entry.ref;
+    const dependsOn = entry.dependsOn;
+    if (typeof ref !== "string") {
       unsupportedEntryIndexes.add(index);
       unsupportedFields.add("ref");
     }
-    if (!Array.isArray(entry.dependsOn)) {
+    if (!Array.isArray(dependsOn)) {
       unsupportedEntryIndexes.add(index);
       unsupportedFields.add("dependsOn");
     }
-    if (hasUnsupportedShape) {
+    if (typeof ref !== "string" || !Array.isArray(dependsOn)) {
       continue;
     }
 
-    for (const child of entry.dependsOn) {
+    for (const child of dependsOn) {
       if (typeof child !== "string") {
         unsupportedEntryIndexes.add(index);
         unsupportedValueKinds.add(cycloneDxDependencyValueKind(child));
       }
     }
 
-    const parentRef = aliases.get(entry.ref) ?? entry.ref;
-    const childRefs = entry.dependsOn
+    const parentRef = aliases.get(ref) ?? ref;
+    const childRefs = dependsOn
       .filter((child): child is string => typeof child === "string")
       .map((child) => aliases.get(child) ?? child)
       .filter((child, index, all) => child !== parentRef && all.indexOf(child) === index);

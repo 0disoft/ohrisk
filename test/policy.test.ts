@@ -336,7 +336,7 @@ describe("evaluateLicenseRisk", () => {
       original: "GPL-3.0-only",
       expression: "GPL-3.0-only",
       choices: ["GPL-3.0-only"],
-      joiner: "single",
+      joiner: "single" as const,
       signals: [],
       evidenceSources: ["source: local", "package.json license: GPL-3.0-only"],
       confidence: "high" as const

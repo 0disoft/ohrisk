@@ -85,8 +85,8 @@ export function parseHelmChartText(
         installNames: [record.chartName],
         version: record.version,
         ecosystem: "helm",
-        resolved: record.repository,
-        integrity: record.digest,
+        ...(record.repository !== undefined ? { resolved: record.repository } : {}),
+        ...(record.digest !== undefined ? { integrity: record.digest } : {}),
         dependencyType: "production",
         direct: true,
         paths: [[rootName, record.id]]

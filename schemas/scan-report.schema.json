@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ohrisk:schema:scan-report:2.0.0",
+  "title": "Ohrisk scan report",
+  "type": "object",
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "status",
+    "projectRoot",
+    "lockfile",
+    "lockfiles",
+    "profile",
+    "prodOnly",
+    "dependencyGraph",
+    "dependencyOrigins",
+    "evidence",
+    "licenses",
+    "risks",
+    "waiverMode",
+    "waivers",
+    "policy",
+    "nextAction",
+    "findings",
+    "waivedFindings",
+    "expiredWaivers",
+    "unmatchedWaivers"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "urn:ohrisk:schema:scan-report:2.0.0"
+    },
+    "schemaVersion": {
+      "const": "2.0.0"
+    },
+    "status": {
+      "const": "profile_risk_evaluated"
+    },
+    "projectRoot": {
+      "const": "."
+    },
+    "lockfile": {
+      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/lockfile"
+    },
+    "lockfiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/lockfile"
+      }
+    },
+    "profile": {
+      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/usageProfile"
+    },
+    "prodOnly": {
+      "type": "boolean"
+    },
+    "dependencyGraph": {
+      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/dependencyGraphCounts"
+    },
+    "dependencyOrigins": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/packageProvenance"
+      }
+    },
+    "evidence": {
+      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/evidenceCounts"
+    },
+    "licenses": {
+      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/licenseCounts"
+    },
+    "risks": {
+      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskCounts"
+    },
+    "waiverMode": {
+      "type": "string",
+      "enum": [
+        "local",
+        "ignored"
+      ]
+    },
+    "waivers": {
+      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/waiverCounts"
+    },
+    "policy": {
+      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/policySummary"
+    },
+    "nextAction": {
+      "type": "string",
+      "minLength": 1
+    },
+    "failOn": {
+      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskSeverity"
+    },
+    "failed": {
+      "type": "boolean"
+    },
+    "failingFindingCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "strictWaivers": {
+      "const": true
+    },
+    "waiverDriftFailed": {
+      "type": "boolean"
+    },
+    "waiverDriftCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskFinding"
+      }
+    },
+    "waivedFindings": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/waivedRiskFinding"
+      }
+    },
+    "expiredWaivers": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskWaiver"
+      }
+    },
+    "unmatchedWaivers": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskWaiver"
+      }
+    }
+  },
+  "dependentRequired": {
+    "failOn": [
+      "failed",
+      "failingFindingCount"
+    ],
+    "failed": [
+      "failOn",
+      "failingFindingCount"
+    ],
+    "failingFindingCount": [
+      "failOn",
+      "failed"
+    ],
+    "strictWaivers": [
+      "waiverDriftFailed",
+      "waiverDriftCount"
+    ],
+    "waiverDriftFailed": [
+      "strictWaivers",
+      "waiverDriftCount"
+    ],
+    "waiverDriftCount": [
+      "strictWaivers",
+      "waiverDriftFailed"
+    ]
+  },
+  "additionalProperties": false
+}

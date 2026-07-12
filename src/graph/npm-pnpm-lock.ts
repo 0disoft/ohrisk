@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
@@ -112,11 +113,11 @@ export function parsePnpmLockText(
     return parsed;
   }
 
-  const catalogs = resolvePnpmCatalogs({
+  const catalogs = resolvePnpmCatalogs(omitUndefined({
     workspaceText: options.workspaceText,
     workspacePath: options.workspacePath,
     catalogs: options.catalogs
-  });
+  }));
   if (!catalogs.ok) {
     return catalogs;
   }
@@ -667,10 +668,13 @@ function walkDependency(input: {
   if (existing) {
     existing.direct = existing.direct || input.direct;
     existing.dependencyType = mergeDependencyType(existing.dependencyType, input.dependencyType);
-    existing.installNames = addUniqueInstallName({
+    const installNames = addUniqueInstallName({
       current: existing.installNames,
       installName
     });
+    if (installNames !== undefined) {
+      existing.installNames = installNames;
+    }
     existing.paths.push(nextPath);
   } else {
     input.nodeMap.set(input.record.id, {

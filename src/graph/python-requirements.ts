@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import type { LicenseEvidence } from "../evidence/types";
-import { createError, type OhriskError } from "../shared/errors";
+import { createError, type OhriskError, type OhriskErrorCode } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 import {
   createDiskPythonLocalSourceFileReader,
@@ -65,7 +65,7 @@ const REQUIREMENTS_LOCAL_SOURCE_ERRORS = {
   parseCode: "REQUIREMENTS_PARSE_FAILED",
   readCode: "REQUIREMENTS_READ_FAILED",
   displayName: "requirements.txt"
-};
+} satisfies { parseCode: OhriskErrorCode; readCode: OhriskErrorCode; displayName: string };
 
 export function parseRequirementsFile(
   lockfilePath: string,
@@ -118,7 +118,7 @@ export function parseRequirementsText(
     readIncludedFile: options.readIncludedFile,
     readLocalSourceFile: options.readLocalSourceFile,
     constraints,
-    seenFiles: new Set(),
+    seenFiles: new Set<string>(),
     depth: 0
   });
 

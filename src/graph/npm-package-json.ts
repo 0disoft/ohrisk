@@ -33,7 +33,7 @@ export function parsePackageJsonManifestFile(
       createError({
         code: "PACKAGE_JSON_READ_FAILED",
         category: inputFileReadErrorCategory(text.error),
-        message: text.error.reason === "size_limit"
+        message: text.error.kind === "too_large"
           ? "package.json exceeded the maximum supported size."
           : "Failed to read package.json.",
         details: {

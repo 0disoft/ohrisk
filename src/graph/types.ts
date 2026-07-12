@@ -35,6 +35,11 @@ export type DependencyType =
   | "peer"
   | "unknown";
 
+export type DependencyOrigin = {
+  lockfileKind: string;
+  lockfilePath: string;
+};
+
 export type DependencyNode = {
   id: string;
   name: string;
@@ -46,11 +51,14 @@ export type DependencyNode = {
   dependencyType: DependencyType;
   direct: boolean;
   paths: string[][];
+  origins?: DependencyOrigin[];
 };
 
 export type DependencyGraph = {
   rootName?: string;
   lockfilePath: string;
+  lockfilePaths?: string[];
   nodes: DependencyNode[];
   embeddedEvidence?: LicenseEvidence[];
+  warnings?: string[];
 };

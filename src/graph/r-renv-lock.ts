@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -51,9 +52,9 @@ export function parseRenvLockfile(
     return descriptionText;
   }
 
-  return parseRenvLockText(lockfileText.value, lockfilePath, {
+  return parseRenvLockText(lockfileText.value, lockfilePath, omitUndefined({
     descriptionText: descriptionText.value
-  });
+  }));
 }
 
 export function parseRenvLockText(

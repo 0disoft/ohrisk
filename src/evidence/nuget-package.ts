@@ -52,7 +52,7 @@ export function collectNugetPackageEvidence(input: {
         nuspecPath,
         maxBytes: input.nuspecMaxBytes ?? NUGET_NUSPEC_MAX_BYTES
       })
-    : ok({});
+    : (ok({}) as Result<NuspecMetadata, OhriskError>);
 
   if (!metadata.ok) {
     return err(metadata.error);

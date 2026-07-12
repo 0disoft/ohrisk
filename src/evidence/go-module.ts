@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -25,12 +26,12 @@ export function collectGoModuleEvidence(input: {
   const warnings = replacement.warnings;
   const evidenceModulePath = replacement.modulePath ?? input.modulePath;
   const evidenceVersion = replacement.version ?? input.version;
-  const moduleDir = findGoModuleDir({
+  const moduleDir = findGoModuleDir(omitUndefined({
     projectRoot: input.projectRoot,
     modulePath: evidenceModulePath,
     version: evidenceVersion,
     localPath: replacement.localPath
-  });
+  }));
 
   if (!moduleDir) {
     return ok({

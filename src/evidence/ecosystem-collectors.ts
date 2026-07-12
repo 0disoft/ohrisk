@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import { collectBazelModuleEvidence } from "./bazel-module";
 import { collectCargoPackageEvidence } from "./cargo-package";
 import { collectCarthagePackageEvidence } from "./carthage-package";
@@ -33,7 +34,7 @@ export type EcosystemEvidenceInput = {
   projectRoot: string;
 };
 
-type EcosystemEvidenceCollector = (
+export type EcosystemEvidenceCollector = (
   input: EcosystemEvidenceInput
 ) => Result<LicenseEvidence, OhriskError>;
 
@@ -41,7 +42,7 @@ type EcosystemEvidenceCollectors = Partial<
   Record<DependencyNode["ecosystem"], EcosystemEvidenceCollector>
 >;
 
-const ECOSYSTEM_EVIDENCE_COLLECTORS: EcosystemEvidenceCollectors = {
+const DEFAULT_ECOSYSTEM_EVIDENCE_COLLECTORS: EcosystemEvidenceCollectors = {
   bazel: ({ node, projectRoot }) => collectBazelModuleEvidence({
     packageId: node.id,
     packageName: node.name,
@@ -75,20 +76,20 @@ const ECOSYSTEM_EVIDENCE_COLLECTORS: EcosystemEvidenceCollectors = {
     version: node.version,
     projectRoot
   }),
-  conda: ({ node, projectRoot }) => collectCondaPackageEvidence({
+  conda: ({ node, projectRoot }) => collectCondaPackageEvidence(omitUndefined({
     packageId: node.id,
     packageName: node.name,
     version: node.version,
     resolved: node.resolved,
     projectRoot
-  }),
-  cpan: ({ node, projectRoot }) => collectCpanPackageEvidence({
+  })),
+  cpan: ({ node, projectRoot }) => collectCpanPackageEvidence(omitUndefined({
     packageId: node.id,
     packageName: node.name,
     version: node.version,
     resolved: node.resolved,
     projectRoot
-  }),
+  })),
   cran: ({ node, projectRoot }) => collectRPackageEvidence({
     packageId: node.id,
     packageName: node.name,
@@ -101,13 +102,13 @@ const ECOSYSTEM_EVIDENCE_COLLECTORS: EcosystemEvidenceCollectors = {
     version: node.version,
     projectRoot
   }),
-  go: ({ node, projectRoot }) => collectGoModuleEvidence({
+  go: ({ node, projectRoot }) => collectGoModuleEvidence(omitUndefined({
     packageId: node.id,
     modulePath: node.name,
     version: node.version,
     resolved: node.resolved,
     projectRoot
-  }),
+  })),
   hackage: ({ node, projectRoot }) => collectHackagePackageEvidence({
     packageId: node.id,
     packageName: node.name,
@@ -190,9 +191,39 @@ const ECOSYSTEM_EVIDENCE_COLLECTORS: EcosystemEvidenceCollectors = {
   })
 };
 
+const ecosystemEvidenceCollectors = new Map<
+  DependencyNode["ecosystem"],
+  EcosystemEvidenceCollector
+>(Object.entries(DEFAULT_ECOSYSTEM_EVIDENCE_COLLECTORS) as [
+  DependencyNode["ecosystem"],
+  EcosystemEvidenceCollector
+][]);
+
+export function registerEcosystemEvidenceCollector(
+  ecosystem: DependencyNode["ecosystem"],
+  collector: EcosystemEvidenceCollector,
+  options: { replace?: boolean } = {}
+): () => void {
+  const previous = ecosystemEvidenceCollectors.get(ecosystem);
+  if (previous && previous !== collector && !options.replace) {
+    throw new Error(`Evidence collector for ${ecosystem} is already registered.`);
+  }
+
+  ecosystemEvidenceCollectors.set(ecosystem, collector);
+  return () => {
+    if (ecosystemEvidenceCollectors.get(ecosystem) !== collector) {
+      return;
+    }
+    if (previous) {
+      ecosystemEvidenceCollectors.set(ecosystem, previous);
+    } else {
+      ecosystemEvidenceCollectors.delete(ecosystem);
+    }
+  };
+}
+
 export function collectEcosystemEvidence(
   input: EcosystemEvidenceInput
 ): Result<LicenseEvidence, OhriskError> | undefined {
-  const collector = ECOSYSTEM_EVIDENCE_COLLECTORS[input.node.ecosystem];
-  return collector?.(input);
+  return ecosystemEvidenceCollectors.get(input.node.ecosystem)?.(input);
 }

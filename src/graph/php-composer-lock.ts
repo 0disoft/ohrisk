@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -57,9 +58,9 @@ export function parseComposerLockfile(
     return manifest;
   }
 
-  return parseComposerLockText(lockfileText.value, lockfilePath, {
+  return parseComposerLockText(lockfileText.value, lockfilePath, omitUndefined({
     composerJsonText: manifest.value
-  });
+  }));
 }
 
 export function parseComposerLockText(
@@ -75,10 +76,10 @@ export function parseComposerLockText(
   const rootName = readComposerProjectName(options.composerJsonText)
     ?? path.basename(path.dirname(lockfilePath))
     ?? "<composer-project>";
-  const rootDependencies = readComposerRootDependencies({
+  const rootDependencies = readComposerRootDependencies(omitUndefined({
     composerJsonText: options.composerJsonText,
     records: parsed.value
-  });
+  }));
   const nodeMap = new Map<string, DependencyNode>();
 
   for (const rootDependency of rootDependencies) {

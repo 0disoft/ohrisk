@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -142,7 +143,7 @@ export function parseGoWorkText(
   for (const moduleInput of [...moduleInputs].sort((left, right) =>
     left.goModPath.localeCompare(right.goModPath)
   )) {
-    const graph = parseGoModText(moduleInput.goModText, moduleInput.goModPath, {
+    const graph = parseGoModText(moduleInput.goModText, moduleInput.goModPath, omitUndefined({
       goSumText: moduleInput.goSumText,
       replacementOverrideGroups: [
         workspaceReplacementGroup.value,
@@ -150,7 +151,7 @@ export function parseGoWorkText(
       ],
       localReplacementBaseDir: moduleInput.moduleRootDir,
       localReplacementRootDir: workspaceRootDir
-    });
+    }));
     if (!graph.ok) {
       return graph;
     }

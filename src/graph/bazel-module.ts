@@ -217,6 +217,9 @@ function readStarlarkCalls(input: string): StarlarkCall[] {
 
   for (let index = 0; index < input.length; index += 1) {
     const char = input[index];
+    if (char === undefined) {
+      break;
+    }
 
     if (char === "\n") {
       line += 1;

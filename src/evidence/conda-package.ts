@@ -1,4 +1,5 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { omitUndefined } from "../shared/object";
+import { existsSync, readdirSync, statSync, type Dirent } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
@@ -32,12 +33,12 @@ export function collectCondaPackageEvidence(input: {
   indexMaxBytes?: number;
   evidenceFileMaxBytes?: number;
 }): Result<LicenseEvidence, OhriskError> {
-  const packageDir = findCondaPackageDir({
+  const packageDir = findCondaPackageDir(omitUndefined({
     packageName: input.packageName,
     version: input.version,
     resolved: input.resolved,
     projectRoot: input.projectRoot
-  });
+  }));
 
   if (!packageDir) {
     return ok({
@@ -209,12 +210,12 @@ function readCondaPackageIndex(input: {
     return ok(undefined);
   }
 
-  return ok({
+  return ok(omitUndefined({
     name: readString(parsed.name),
     version: readString(parsed.version),
     license: readString(parsed.license),
     licenseFamily: readString(parsed.license_family)
-  });
+  }));
 }
 
 function readCondaEvidenceFiles(input: {
@@ -290,12 +291,12 @@ function condaEvidenceReadError(error: TextFileReadError): string {
   switch (error.kind) {
     case "too_large":
       return `file exceeded ${error.maxBytes} bytes`;
-    case "read_failed":
+    case "filesystem":
       return error.cause;
   }
 }
 
-function readDirectoryEntries(pathname: string): ReturnType<typeof readdirSync> {
+function readDirectoryEntries(pathname: string): Dirent<string>[] {
   try {
     return readdirSync(pathname, { withFileTypes: true });
   } catch {

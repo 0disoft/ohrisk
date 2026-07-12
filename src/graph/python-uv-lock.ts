@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import path from "node:path";
 
 import type { LicenseEvidence } from "../evidence/types";
@@ -95,10 +96,10 @@ export function parseUvLockText(
   options: UvLockParseOptions = {}
 ): Result<DependencyGraph, OhriskError> {
   try {
-    const parsedRecords = parseUvPackageRecords(input, {
+    const parsedRecords = parseUvPackageRecords(input, omitUndefined({
       lockfilePath,
       readLocalSourceFile: options.readLocalSourceFile
-    });
+    }));
     if (!parsedRecords.ok) {
       return parsedRecords;
     }
@@ -153,12 +154,12 @@ export function parseUvLockText(
       }
     }
 
-    return ok({
+    return ok(omitUndefined({
       rootName: roots[0]?.name,
       lockfilePath,
       nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
       ...embeddedEvidenceFromUvRecords(records)
-    });
+    }));
   } catch (cause) {
     return err(
       createError({

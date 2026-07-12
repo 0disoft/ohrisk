@@ -1,3 +1,5 @@
+import { isIP } from "node:net";
+
 import { createError, type OhriskError } from "../shared/errors";
 import { isUsageProfile, USAGE_PROFILES, type UsageProfile } from "../policy/profiles";
 import type { RiskSeverity } from "../policy/types";
@@ -13,12 +15,20 @@ const FAIL_ON_SEVERITIES: RiskSeverity[] = ["high", "unknown", "review", "low"];
 const SCAN_OUTPUT_FORMAT_OPTIONS = ["--json", "--sarif", "--markdown", "--html", "--cyclonedx"];
 const DIFF_OUTPUT_FORMAT_OPTIONS = ["--json", "--markdown"];
 const BASELINE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
-const SUPPORTED_COMMANDS = ["scan", "ci", "diff", "explain", "help", "version"] as const;
+const SUPPORTED_COMMANDS = ["scan", "ci", "diff", "explain", "cache", "help", "version"] as const;
 export type HelpTarget = typeof SUPPORTED_COMMANDS[number];
 
 export type CliCommand =
   | { kind: "help"; target?: HelpTarget }
   | { kind: "version" }
+  | {
+      kind: "cache";
+      action: "status" | "prune" | "clear";
+      json: boolean;
+      cacheDir?: string;
+      maxSizeBytes?: number;
+      maxAgeMs?: number;
+    }
   | {
       kind: "scan";
       profile: UsageProfile;
@@ -31,6 +41,15 @@ export type CliCommand =
       cyclonedx: boolean;
       noWaivers: boolean;
       lockfilePath?: string;
+      allLockfiles?: boolean;
+      policyPath?: string;
+      offline?: boolean;
+      cacheDir?: string;
+      jobs?: number;
+      timeoutMs?: number;
+      registryUrl?: string;
+      registryTokenEnv?: string;
+      allowedHosts?: string[];
       workspaceRootPath?: string;
       outputPath?: string;
       openReport?: boolean;
@@ -47,6 +66,15 @@ export type CliCommand =
       cyclonedx: boolean;
       noWaivers: boolean;
       lockfilePath?: string;
+      allLockfiles?: boolean;
+      policyPath?: string;
+      offline?: boolean;
+      cacheDir?: string;
+      jobs?: number;
+      timeoutMs?: number;
+      registryUrl?: string;
+      registryTokenEnv?: string;
+      allowedHosts?: string[];
       workspaceRootPath?: string;
       outputPath?: string;
       openReport?: boolean;
@@ -61,6 +89,15 @@ export type CliCommand =
       json: boolean;
       markdown: boolean;
       lockfilePath?: string;
+      allLockfiles?: boolean;
+      policyPath?: string;
+      offline?: boolean;
+      cacheDir?: string;
+      jobs?: number;
+      timeoutMs?: number;
+      registryUrl?: string;
+      registryTokenEnv?: string;
+      allowedHosts?: string[];
       workspaceRootPath?: string;
       outputPath?: string;
       failOn?: RiskSeverity;
@@ -101,7 +138,13 @@ export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
   const command = argv[0];
   const rest = argv.slice(1);
 
-  if (command !== "scan" && command !== "ci" && command !== "diff" && command !== "explain") {
+  if (
+    command !== "scan"
+    && command !== "ci"
+    && command !== "diff"
+    && command !== "explain"
+    && command !== "cache"
+  ) {
     return err(
       createError({
         code: "UNSUPPORTED_COMMAND",
@@ -112,6 +155,10 @@ export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
         }
       })
     );
+  }
+
+  if (command === "cache") {
+    return parseCacheArgs(rest);
   }
 
   if (command === "explain") {
@@ -175,6 +222,134 @@ function unexpectedTopLevelArgs(
   );
 }
 
+function parseCacheArgs(argv: string[]): Result<CliCommand, OhriskError> {
+  if (argv.length === 0 || isHelpFlag(argv[0])) {
+    return argv.length <= 1
+      ? ok({ kind: "help", target: "cache" })
+      : unexpectedTopLevelArgs(argv[0], argv.slice(1));
+  }
+
+  const action = argv[0];
+  if (action !== "status" && action !== "prune" && action !== "clear") {
+    return err(
+      createError({
+        code: "INVALID_ARGUMENT",
+        category: "invalid_input",
+        message: `Unsupported cache action "${action}".`,
+        details: {
+          supportedActions: ["status", "prune", "clear"]
+        }
+      })
+    );
+  }
+
+  let json = false;
+  let cacheDir: string | undefined;
+  let maxSizeBytes: number | undefined;
+  let maxAgeMs: number | undefined;
+
+  for (let index = 1; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (!arg) {
+      continue;
+    }
+
+    switch (arg) {
+      case "--json":
+        json = true;
+        break;
+      case "--cache-dir": {
+        const value = readRequiredOptionValue(argv, index, "--cache-dir");
+        if (isErr(value)) {
+          return value;
+        }
+        cacheDir = value.value;
+        index += 1;
+        break;
+      }
+      case "--max-size": {
+        if (action !== "prune") {
+          return cachePruneOnlyOptionError(arg, action);
+        }
+        const value = readRequiredOptionValue(argv, index, arg);
+        if (isErr(value)) {
+          return value;
+        }
+        const parsed = parseByteSize(value.value);
+        if (parsed === undefined) {
+          return invalidOptionValue(arg, value.value, "a non-negative byte size such as 512MiB or 2GB");
+        }
+        maxSizeBytes = parsed;
+        index += 1;
+        break;
+      }
+      case "--max-age": {
+        if (action !== "prune") {
+          return cachePruneOnlyOptionError(arg, action);
+        }
+        const value = readRequiredOptionValue(argv, index, arg);
+        if (isErr(value)) {
+          return value;
+        }
+        const parsed = parseCacheAgeMilliseconds(value.value);
+        if (parsed === undefined) {
+          return invalidOptionValue(arg, value.value, "a non-negative duration such as 24h or 7d");
+        }
+        maxAgeMs = parsed;
+        index += 1;
+        break;
+      }
+      case "--help":
+      case "-h":
+        return ok({ kind: "help", target: "cache" });
+      default:
+        return err(
+          createError({
+            code: "INVALID_ARGUMENT",
+            category: "invalid_input",
+            message: arg.startsWith("-")
+              ? `Unknown cache option "${arg}".`
+              : "cache accepts exactly one action.",
+            details: arg.startsWith("-")
+              ? {
+                  supportedOptions: [
+                    "--cache-dir",
+                    "--json",
+                    ...(action === "prune" ? ["--max-size", "--max-age"] : []),
+                    "--help",
+                    "-h"
+                  ]
+                }
+              : { action, extraArgument: arg }
+          })
+        );
+    }
+  }
+
+  return ok({
+    kind: "cache",
+    action,
+    json,
+    ...(cacheDir ? { cacheDir } : {}),
+    ...(maxSizeBytes !== undefined ? { maxSizeBytes } : {}),
+    ...(maxAgeMs !== undefined ? { maxAgeMs } : {})
+  });
+}
+
+function cachePruneOnlyOptionError(
+  option: string,
+  action: "status" | "clear"
+): Result<CliCommand, OhriskError> {
+  return err(
+    createError({
+      code: "INVALID_ARGUMENT",
+      category: "invalid_input",
+      message: `${option} is supported only by cache prune.`,
+      details: { option, action }
+    })
+  );
+}
+
 function parseScanArgs(argv: string[]): Result<CliCommand, OhriskError> {
   return parseScanLikeArgs(argv, "scan");
 }
@@ -198,6 +373,15 @@ function parseScanLikeArgs(
   let cyclonedx = false;
   let noWaivers = false;
   let lockfilePath: string | undefined;
+  let allLockfiles = false;
+  let policyPath: string | undefined;
+  let offline = false;
+  let cacheDir: string | undefined;
+  let jobs: number | undefined;
+  let timeoutMs: number | undefined;
+  let registryUrl: string | undefined;
+  let registryTokenEnv: string | undefined;
+  const allowedHosts: string[] = [];
   let workspaceRootPath: string | undefined;
   let outputPath: string | undefined;
   let openReport = false;
@@ -212,6 +396,107 @@ function parseScanLikeArgs(
     }
 
     switch (arg) {
+      case "--all":
+        allLockfiles = true;
+        break;
+      case "--policy":
+      case "--config": {
+        const value = readRequiredOptionValue(argv, index, arg);
+        if (isErr(value)) {
+          return value;
+        }
+        policyPath = value.value;
+        index += 1;
+        break;
+      }
+      case "--offline":
+        offline = true;
+        break;
+      case "--cache-dir": {
+        const value = readRequiredOptionValue(argv, index, "--cache-dir");
+        if (isErr(value)) {
+          return value;
+        }
+        cacheDir = value.value;
+        index += 1;
+        break;
+      }
+      case "--jobs": {
+        const value = readRequiredOptionValue(argv, index, "--jobs");
+        if (isErr(value)) {
+          return value;
+        }
+        const parsed = parseBoundedPositiveInteger(value.value, 64);
+        if (parsed === undefined) {
+          return invalidOptionValue("--jobs", value.value, "an integer from 1 to 64");
+        }
+        jobs = parsed;
+        index += 1;
+        break;
+      }
+      case "--timeout": {
+        const value = readRequiredOptionValue(argv, index, "--timeout");
+        if (isErr(value)) {
+          return value;
+        }
+        const parsed = parseDurationMilliseconds(value.value);
+        if (parsed === undefined || parsed < 100 || parsed > 600_000) {
+          return invalidOptionValue("--timeout", value.value, "100ms to 10m");
+        }
+        timeoutMs = parsed;
+        index += 1;
+        break;
+      }
+      case "--registry-url": {
+        const value = readRequiredOptionValue(argv, index, "--registry-url");
+        if (isErr(value)) {
+          return value;
+        }
+        const normalized = normalizeRegistryUrl(value.value);
+        if (!normalized) {
+          return invalidOptionValue(
+            "--registry-url",
+            value.value,
+            "an HTTPS URL without credentials, query, or fragment"
+          );
+        }
+        registryUrl = normalized;
+        index += 1;
+        break;
+      }
+      case "--registry-token-env": {
+        const value = readRequiredOptionValue(argv, index, "--registry-token-env");
+        if (isErr(value)) {
+          return value;
+        }
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value.value)) {
+          return invalidOptionValue(
+            "--registry-token-env",
+            value.value,
+            "an environment variable name"
+          );
+        }
+        registryTokenEnv = value.value;
+        index += 1;
+        break;
+      }
+      case "--allow-host": {
+        const value = readRequiredOptionValue(argv, index, "--allow-host");
+        if (isErr(value)) {
+          return value;
+        }
+        const host = normalizeHostnameOption(value.value);
+        if (!host) {
+          return invalidOptionValue(
+            "--allow-host",
+            value.value,
+            "a hostname without a scheme, port, or path"
+          );
+        }
+        allowedHosts.push(host);
+        index += 1;
+        break;
+      }
       case "--profile": {
         const value = readRequiredOptionValue(argv, index, "--profile", {
           supportedProfiles: [...USAGE_PROFILES]
@@ -409,6 +694,17 @@ function parseScanLikeArgs(
     }
   }
 
+  if (allLockfiles && lockfilePath) {
+    return err(
+      createError({
+        code: "INVALID_ARGUMENT",
+        category: "invalid_input",
+        message: "--all cannot be combined with --lockfile.",
+        details: { supportedOptions: supportedOptionsFor(kind) }
+      })
+    );
+  }
+
   if (kind === "ci" && noWaivers && strictWaivers) {
     return err(
       createError({
@@ -460,6 +756,15 @@ function parseScanLikeArgs(
       cyclonedx,
       noWaivers,
       ...(lockfilePath ? { lockfilePath } : {}),
+      ...(allLockfiles ? { allLockfiles: true } : {}),
+      ...(policyPath ? { policyPath } : {}),
+      ...(offline ? { offline: true } : {}),
+      ...(cacheDir ? { cacheDir } : {}),
+      ...(jobs !== undefined ? { jobs } : {}),
+      ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+      ...(registryUrl ? { registryUrl } : {}),
+      ...(registryTokenEnv ? { registryTokenEnv } : {}),
+      ...(allowedHosts.length > 0 ? { allowedHosts: [...new Set(allowedHosts)] } : {}),
       ...(workspaceRootPath ? { workspaceRootPath } : {}),
       ...(outputPath ? { outputPath } : {}),
       ...(openReport ? { openReport } : {}),
@@ -480,11 +785,134 @@ function parseScanLikeArgs(
     cyclonedx,
     noWaivers,
     ...(lockfilePath ? { lockfilePath } : {}),
+    ...(allLockfiles ? { allLockfiles: true } : {}),
+    ...(policyPath ? { policyPath } : {}),
+    ...(offline ? { offline: true } : {}),
+    ...(cacheDir ? { cacheDir } : {}),
+    ...(jobs !== undefined ? { jobs } : {}),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(registryUrl ? { registryUrl } : {}),
+    ...(registryTokenEnv ? { registryTokenEnv } : {}),
+    ...(allowedHosts.length > 0 ? { allowedHosts: [...new Set(allowedHosts)] } : {}),
     ...(workspaceRootPath ? { workspaceRootPath } : {}),
     ...(outputPath ? { outputPath } : {}),
     ...(openReport ? { openReport } : {}),
     ...(reportLanguage !== DEFAULT_REPORT_LANGUAGE ? { reportLanguage } : {})
   });
+}
+
+function invalidOptionValue(
+  option: string,
+  value: string,
+  expected: string
+): Result<CliCommand, OhriskError> {
+  return err(
+    createError({
+      code: "INVALID_ARGUMENT",
+      category: "invalid_input",
+      message: `${option} must be ${expected}.`,
+      details: { option, value, expected }
+    })
+  );
+}
+
+function parseBoundedPositiveInteger(value: string, max: number): number | undefined {
+  if (!/^[1-9][0-9]*$/.test(value)) {
+    return undefined;
+  }
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed <= max ? parsed : undefined;
+}
+
+function parseDurationMilliseconds(value: string): number | undefined {
+  const match = /^(\d+)(ms|s|m)?$/.exec(value.trim().toLowerCase());
+  if (!match?.[1]) {
+    return undefined;
+  }
+  const amount = Number(match[1]);
+  const unit = match[2] ?? "ms";
+  const multiplier = unit === "m" ? 60_000 : unit === "s" ? 1_000 : 1;
+  const milliseconds = amount * multiplier;
+  return Number.isSafeInteger(milliseconds) ? milliseconds : undefined;
+}
+
+function parseCacheAgeMilliseconds(value: string): number | undefined {
+  const match = /^(\d+)(ms|s|m|h|d)?$/.exec(value.trim().toLowerCase());
+  if (!match?.[1]) {
+    return undefined;
+  }
+  const amount = Number(match[1]);
+  const unit = match[2] ?? "ms";
+  const multiplier = unit === "d"
+    ? 86_400_000
+    : unit === "h"
+      ? 3_600_000
+      : unit === "m"
+        ? 60_000
+        : unit === "s"
+          ? 1_000
+          : 1;
+  const milliseconds = amount * multiplier;
+  return Number.isSafeInteger(milliseconds) ? milliseconds : undefined;
+}
+
+function parseByteSize(value: string): number | undefined {
+  const match = /^(\d+)(b|kb|mb|gb|tb|kib|mib|gib|tib)?$/i.exec(value.trim());
+  if (!match?.[1]) {
+    return undefined;
+  }
+  const amount = Number(match[1]);
+  const unit = match[2]?.toLowerCase() ?? "b";
+  const multipliers: Readonly<Record<string, number>> = {
+    b: 1,
+    kb: 1_000,
+    mb: 1_000_000,
+    gb: 1_000_000_000,
+    tb: 1_000_000_000_000,
+    kib: 1_024,
+    mib: 1_048_576,
+    gib: 1_073_741_824,
+    tib: 1_099_511_627_776
+  };
+  const bytes = amount * (multipliers[unit] ?? 0);
+  return Number.isSafeInteger(bytes) ? bytes : undefined;
+}
+
+function normalizeRegistryUrl(value: string): string | undefined {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/\.$/, "");
+    if (
+      url.protocol !== "https:"
+      || url.username
+      || url.password
+      || url.search
+      || url.hash
+      || !isAllowedRegistryHostname(host)
+    ) {
+      return undefined;
+    }
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeHostnameOption(value: string): string | undefined {
+  const host = value.trim().toLowerCase().replace(/\.$/, "");
+  if (!host || host.includes(":") || host.includes("/") || host.includes("@")) {
+    return undefined;
+  }
+  try {
+    const url = new URL(`https://${host}`);
+    return url.hostname === host && isAllowedRegistryHostname(host) ? host : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isAllowedRegistryHostname(host: string): boolean {
+  return isIP(host) === 0 && host !== "localhost" && !host.endsWith(".localhost");
 }
 
 function isFailOnSeverity(value: string): value is RiskSeverity {
@@ -499,6 +927,16 @@ function supportedOptionsFor(kind: "scan" | "ci"): string[] {
   const common = [
     "--profile",
     "--prod",
+    "--all",
+    "--policy",
+    "--config",
+    "--offline",
+    "--cache-dir",
+    "--jobs",
+    "--timeout",
+    "--registry-url",
+    "--registry-token-env",
+    "--allow-host",
     "--json",
     "--sarif",
     "--markdown",
@@ -663,6 +1101,15 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
   let json = false;
   let markdown = false;
   let lockfilePath: string | undefined;
+  let allLockfiles = false;
+  let policyPath: string | undefined;
+  let offline = false;
+  let cacheDir: string | undefined;
+  let jobs: number | undefined;
+  let timeoutMs: number | undefined;
+  let registryUrl: string | undefined;
+  let registryTokenEnv: string | undefined;
+  const allowedHosts: string[] = [];
   let workspaceRootPath: string | undefined;
   let outputPath: string | undefined;
   let failOn: RiskSeverity | undefined;
@@ -676,6 +1123,104 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
     }
 
     switch (arg) {
+      case "--policy":
+      case "--config": {
+        const value = readRequiredOptionValue(argv, index, arg);
+        if (isErr(value)) {
+          return value;
+        }
+        policyPath = value.value;
+        index += 1;
+        break;
+      }
+      case "--offline":
+        offline = true;
+        break;
+      case "--cache-dir": {
+        const value = readRequiredOptionValue(argv, index, "--cache-dir");
+        if (isErr(value)) {
+          return value;
+        }
+        cacheDir = value.value;
+        index += 1;
+        break;
+      }
+      case "--jobs": {
+        const value = readRequiredOptionValue(argv, index, "--jobs");
+        if (isErr(value)) {
+          return value;
+        }
+        const parsed = parseBoundedPositiveInteger(value.value, 64);
+        if (parsed === undefined) {
+          return invalidOptionValue("--jobs", value.value, "an integer from 1 to 64");
+        }
+        jobs = parsed;
+        index += 1;
+        break;
+      }
+      case "--timeout": {
+        const value = readRequiredOptionValue(argv, index, "--timeout");
+        if (isErr(value)) {
+          return value;
+        }
+        const parsed = parseDurationMilliseconds(value.value);
+        if (parsed === undefined || parsed < 100 || parsed > 600_000) {
+          return invalidOptionValue("--timeout", value.value, "100ms to 10m");
+        }
+        timeoutMs = parsed;
+        index += 1;
+        break;
+      }
+      case "--registry-url": {
+        const value = readRequiredOptionValue(argv, index, "--registry-url");
+        if (isErr(value)) {
+          return value;
+        }
+        const normalized = normalizeRegistryUrl(value.value);
+        if (!normalized) {
+          return invalidOptionValue(
+            "--registry-url",
+            value.value,
+            "an HTTPS URL without credentials, query, or fragment"
+          );
+        }
+        registryUrl = normalized;
+        index += 1;
+        break;
+      }
+      case "--registry-token-env": {
+        const value = readRequiredOptionValue(argv, index, "--registry-token-env");
+        if (isErr(value)) {
+          return value;
+        }
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value.value)) {
+          return invalidOptionValue(
+            "--registry-token-env",
+            value.value,
+            "an environment variable name"
+          );
+        }
+        registryTokenEnv = value.value;
+        index += 1;
+        break;
+      }
+      case "--allow-host": {
+        const value = readRequiredOptionValue(argv, index, "--allow-host");
+        if (isErr(value)) {
+          return value;
+        }
+        const host = normalizeHostnameOption(value.value);
+        if (!host) {
+          return invalidOptionValue(
+            "--allow-host",
+            value.value,
+            "a hostname without a scheme, port, or path"
+          );
+        }
+        allowedHosts.push(host);
+        index += 1;
+        break;
+      }
       case "--profile": {
         const value = readRequiredOptionValue(argv, index, "--profile", {
           supportedProfiles: [...USAGE_PROFILES]
@@ -714,6 +1259,9 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
         index += 1;
         break;
       }
+      case "--all":
+        allLockfiles = true;
+        break;
       case "--workspace-root": {
         const value = readRequiredOptionValue(argv, index, "--workspace-root");
         if (isErr(value)) {
@@ -788,6 +1336,16 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
                   "--profile",
                   "--prod",
                   "--lockfile",
+                  "--all",
+                  "--policy",
+                  "--config",
+                  "--offline",
+                  "--cache-dir",
+                  "--jobs",
+                  "--timeout",
+                  "--registry-url",
+                  "--registry-token-env",
+                  "--allow-host",
                   "--workspace-root",
                   "--json",
                   "--markdown",
@@ -820,6 +1378,19 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
     }
   }
 
+  if (allLockfiles && lockfilePath) {
+    return err(
+      createError({
+        code: "INVALID_ARGUMENT",
+        category: "invalid_input",
+        message: "--all cannot be combined with --lockfile.",
+        details: {
+          conflictingOptions: ["--all", "--lockfile"]
+        }
+      })
+    );
+  }
+
   if (!baselineRef) {
     return err(
       createError({
@@ -846,6 +1417,15 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
     json,
     markdown,
     ...(lockfilePath ? { lockfilePath } : {}),
+    ...(allLockfiles ? { allLockfiles: true } : {}),
+    ...(policyPath ? { policyPath } : {}),
+    ...(offline ? { offline: true } : {}),
+    ...(cacheDir ? { cacheDir } : {}),
+    ...(jobs !== undefined ? { jobs } : {}),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(registryUrl ? { registryUrl } : {}),
+    ...(registryTokenEnv ? { registryTokenEnv } : {}),
+    ...(allowedHosts.length > 0 ? { allowedHosts: [...new Set(allowedHosts)] } : {}),
     ...(workspaceRootPath ? { workspaceRootPath } : {}),
     ...(outputPath ? { outputPath } : {}),
     ...(failOn ? { failOn } : {})

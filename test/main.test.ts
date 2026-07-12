@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { main, type CliIO } from "../src/cli/main";
+import { createArtifactCache } from "../src/evidence/cache";
 import { createReportOpener } from "../src/report/open-report";
 import { createError } from "../src/shared/errors";
 import { err, ok } from "../src/shared/result";
@@ -93,6 +94,7 @@ describe("main", () => {
     expect(output).toContain("Ohrisk");
     expect(output).toContain("ohrisk scan");
     expect(output).toContain("ohrisk help [command]");
+    expect(output).toContain("ohrisk cache status|prune|clear");
     expect(output).toContain("ohrisk version");
     expect(output).toContain("--lockfile <path>");
     expect(output).toContain("--workspace-root <path>");
@@ -111,7 +113,7 @@ describe("main", () => {
     expect(scanExitCode).toBe(0);
     expect(scan.stderr).toEqual([]);
     expect(scanOutput).toContain("Ohrisk scan");
-    expect(scanOutput).toContain("ohrisk scan [--lockfile <path>]");
+    expect(scanOutput).toContain("ohrisk scan [--lockfile <path>|--all] [--policy <path>]");
     expect(scanOutput).toContain("--lockfile <path>");
     expect(scanOutput).toContain("--workspace-root <path>");
     expect(scanOutput).toContain("--html");
@@ -145,9 +147,25 @@ describe("main", () => {
     expect(diffOutput).toContain("Ohrisk diff");
     expect(diffOutput).toContain("ohrisk diff <baseline-ref>");
     expect(diffOutput).toContain("--workspace-root <path>");
+    expect(diffOutput).toContain("[--lockfile <path>|--all]");
+    expect(diffOutput).toContain("Compare every supported lockfile in both revisions.");
     expect(diffOutput).toContain("--markdown");
     expect(diffOutput).toContain("--help, -h");
     expect(diffOutput).not.toContain("--sarif");
+
+    const cache = createTestIO(fixturesDir);
+    const cacheExitCode = await main(["help", "cache"], cache.io);
+    const cacheOutput = cache.stdout.join("\n");
+
+    expect(cacheExitCode).toBe(0);
+    expect(cache.stderr).toEqual([]);
+    expect(cacheOutput).toContain("Ohrisk cache");
+    expect(cacheOutput).toContain("ohrisk cache status");
+    expect(cacheOutput).toContain("ohrisk cache prune");
+    expect(cacheOutput).toContain("ohrisk cache clear");
+    expect(cacheOutput).toContain("--max-size <size>");
+    expect(cacheOutput).toContain("--max-age <duration>");
+    expect(cacheOutput).toContain("--help, -h");
 
     const explain = createTestIO(fixturesDir);
     const explainExitCode = await main(["help", "explain"], explain.io);
@@ -185,6 +203,83 @@ describe("main", () => {
     expect(versionFlag.stdout.join("\n")).toContain("Ohrisk version");
     expect(versionFlag.stdout.join("\n")).toContain("ohrisk --version");
     expect(versionFlag.stdout.join("\n")).toContain("--help, -h");
+  });
+
+  test("manages a configured artifact cache without exposing its absolute path in JSON", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cache-cli-"));
+    const relativeCacheDir = ".ohrisk-test-cache";
+    const cacheDir = path.join(projectRoot, relativeCacheDir);
+    const artifactUrl = "https://registry.example.com/package.tgz";
+
+    try {
+      createArtifactCache(cacheDir).write(artifactUrl, Buffer.from("cached artifact"));
+
+      const statusIO = createTestIO(projectRoot);
+      const statusExitCode = await main([
+        "cache",
+        "status",
+        "--cache-dir",
+        relativeCacheDir,
+        "--json"
+      ], statusIO.io);
+      expect(statusExitCode).toBe(0);
+      expect(statusIO.stderr).toEqual([]);
+      expect(statusIO.stdout.join("\n")).not.toContain(projectRoot);
+      expect(JSON.parse(statusIO.stdout.join("\n"))).toMatchObject({
+        action: "status",
+        cacheLocation: "configured",
+        result: {
+          entryCount: 1,
+          objectCount: 1,
+          totalBytes: Buffer.byteLength("cached artifact")
+        }
+      });
+
+      const pruneIO = createTestIO(projectRoot);
+      const pruneExitCode = await main([
+        "cache",
+        "prune",
+        "--cache-dir",
+        relativeCacheDir,
+        "--max-size",
+        "0B",
+        "--json"
+      ], pruneIO.io);
+      expect(pruneExitCode).toBe(0);
+      expect(pruneIO.stderr).toEqual([]);
+      expect(JSON.parse(pruneIO.stdout.join("\n"))).toMatchObject({
+        action: "prune",
+        cacheLocation: "configured",
+        result: {
+          removedEntryCount: 1,
+          removedObjectCount: 1,
+          after: { entryCount: 0, totalBytes: 0 }
+        }
+      });
+
+      createArtifactCache(cacheDir).write(artifactUrl, Buffer.from("cached artifact"));
+      const clearIO = createTestIO(projectRoot);
+      const clearExitCode = await main([
+        "cache",
+        "clear",
+        "--cache-dir",
+        relativeCacheDir,
+        "--json"
+      ], clearIO.io);
+      expect(clearExitCode).toBe(0);
+      expect(clearIO.stderr).toEqual([]);
+      expect(JSON.parse(clearIO.stdout.join("\n"))).toMatchObject({
+        action: "clear",
+        cacheLocation: "configured",
+        result: {
+          removedEntryCount: 1,
+          removedObjectCount: 1,
+          removedBytes: Buffer.byteLength("cached artifact")
+        }
+      });
+    } finally {
+      rmSync(projectRoot, { force: true, recursive: true });
+    }
   });
 
   test("prints package version", async () => {
@@ -262,7 +357,7 @@ describe("main", () => {
 
   test("prints actionable findings for a package-lock project", async () => {
     const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "package-lock-project"));
-    const exitCode = await main(["scan", "--prod"], io);
+    const exitCode = await main(["scan", "--prod", "--workspace-root", repoRoot], io);
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
@@ -482,7 +577,7 @@ describe("main", () => {
 
   test("prints actionable findings for a pnpm-lock project", async () => {
     const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "pnpm-project"));
-    const exitCode = await main(["scan", "--prod"], io);
+    const exitCode = await main(["scan", "--prod", "--workspace-root", repoRoot], io);
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
@@ -609,7 +704,7 @@ describe("main", () => {
 
   test("prints actionable findings for a Yarn lockfile project", async () => {
     const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "yarn-project"));
-    const exitCode = await main(["scan", "--prod"], io);
+    const exitCode = await main(["scan", "--prod", "--workspace-root", repoRoot], io);
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
@@ -4219,6 +4314,86 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
     expect(payload.newFindingCount).toBe(0);
   });
 
+  test("diff --all compares lockfile sets in both revisions", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-diff-all-lockfiles-"));
+    const packageLock = JSON.stringify({
+      name: "fixture-diff-all",
+      version: "1.0.0",
+      lockfileVersion: 3,
+      packages: {
+        "": { name: "fixture-diff-all", version: "1.0.0" }
+      }
+    }, null, 2);
+    const packageJson = JSON.stringify({
+      name: "fixture-diff-all",
+      version: "1.0.0"
+    }, null, 2);
+
+    try {
+      writeFileSync(path.join(projectRoot, "package.json"), packageJson, "utf8");
+      writeFileSync(path.join(projectRoot, "package-lock.json"), packageLock, "utf8");
+      writeFileSync(
+        path.join(projectRoot, "Cargo.toml"),
+        "[package]\nname = \"fixture-cargo\"\nversion = \"0.1.0\"\n",
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectRoot, "Cargo.lock"),
+        "[[package]]\nname = \"fixture-cargo\"\nversion = \"0.1.0\"\n",
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      let listCalls = 0;
+      io.listRefFiles = ({ projectRoot: listedRoot, ref }) => {
+        listCalls += 1;
+        expect(listedRoot).toBe(projectRoot);
+        expect(ref).toBe("main");
+        return ok(["package-lock.json", "package.json", "yarn.lock"]);
+      };
+      io.readRefFile = ({ relativePath }) => {
+        const baselineFiles: Record<string, string> = {
+          "package-lock.json": packageLock,
+          "package.json": packageJson,
+          "yarn.lock": "# yarn lockfile v1\n"
+        };
+        const contents = baselineFiles[relativePath];
+        if (contents === undefined) {
+          throw new Error(`Unexpected baseline path: ${relativePath}`);
+        }
+        return ok(contents);
+      };
+
+      const exitCode = await main(["diff", "main", "--all", "--json"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+      expect(listCalls).toBe(1);
+      const payload = JSON.parse(stdout.join("\n")) as {
+        lockfileChanges: {
+          current: Array<{ kind: string; path: string }>;
+          baseline: Array<{ kind: string; path: string }>;
+          added: Array<{ kind: string; path: string }>;
+          removed: Array<{ kind: string; path: string }>;
+        };
+      };
+      expect(payload.lockfileChanges).toEqual({
+        current: [
+          { kind: "cargo-lock", path: "Cargo.lock" },
+          { kind: "package-lock", path: "package-lock.json" }
+        ],
+        baseline: [
+          { kind: "package-lock", path: "package-lock.json" },
+          { kind: "yarn-lock", path: "yarn.lock" }
+        ],
+        added: [{ kind: "cargo-lock", path: "Cargo.lock" }],
+        removed: [{ kind: "yarn-lock", path: "yarn.lock" }]
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("diff reads baseline Gradle dependency-locks directory files", async () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-gradle-locks-diff-"));
     const lockDir = path.join(projectRoot, "gradle", "dependency-locks");
@@ -4281,7 +4456,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       const { io, stdout, stderr } = createTestIO(projectRoot);
       io.readRefFile = ({ relativePath }) => {
         requestedBaselinePaths.push(relativePath);
-        if (relativePath === path.join("gradle", "dependency-locks", "compileClasspath.lockfile")) {
+        if (relativePath === "gradle/dependency-locks/compileClasspath.lockfile") {
           return err(createError({
             code: "GIT_REF_FILE_NOT_FOUND",
             category: "invalid_input",
@@ -4293,7 +4468,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
           }));
         }
 
-        if (relativePath === path.join("gradle", "dependency-locks", "runtimeClasspath.lockfile")) {
+        if (relativePath === "gradle/dependency-locks/runtimeClasspath.lockfile") {
           return { ok: true as const, value: runtimeLockfile };
         }
 
@@ -4305,8 +4480,8 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       expect(exitCode).toBe(0);
       expect(stderr).toEqual([]);
       expect(requestedBaselinePaths).toEqual([
-        path.join("gradle", "dependency-locks", "compileClasspath.lockfile"),
-        path.join("gradle", "dependency-locks", "runtimeClasspath.lockfile")
+        "gradle/dependency-locks/compileClasspath.lockfile",
+        "gradle/dependency-locks/runtimeClasspath.lockfile"
       ]);
 
       const payload = JSON.parse(stdout.join("\n")) as {
@@ -6220,7 +6395,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
 
       const output = stdout.join("\n");
       expect(output).toContain("Ohrisk scan");
-      expect(output).toContain(`Packages${path.sep}packages-lock.json (unity-packages-lock)`);
+      expect(output).toContain("Packages/packages-lock.json (unity-packages-lock)");
       expect(output).toContain("- [high] com.acme.risk@1.0.0");
       expect(output).toContain("dependency: production direct");
       expect(output).toContain("package.json license: AGPL-3.0-only");
@@ -6849,7 +7024,13 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       throw new Error(`Unexpected baseline path: ${relativePath}`);
     };
 
-    const exitCode = await main(["diff", "main", "--prod"], io);
+    const exitCode = await main([
+      "diff",
+      "main",
+      "--prod",
+      "--workspace-root",
+      repoRoot
+    ], io);
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);

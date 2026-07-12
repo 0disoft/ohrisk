@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 import type { LicenseEvidence } from "../evidence/types";
@@ -157,7 +158,7 @@ function readSpdxPackageRecords(value: unknown[]): SpdxPackageRecord[] {
       continue;
     }
 
-    records.push({
+    records.push(omitUndefined({
       spdxId: pkg.SPDXID,
       name: purl.name,
       version: purl.version,
@@ -166,7 +167,7 @@ function readSpdxPackageRecords(value: unknown[]): SpdxPackageRecord[] {
       ...(readSpdxPackageLicenseExpression(pkg) ? {
         licenseExpression: readSpdxPackageLicenseExpression(pkg)
       } : {})
-    });
+    }));
   }
 
   return deduplicateSpdxPackageRecords(records);
@@ -308,13 +309,13 @@ function readSpdxDependencyMap(
   }
 
   if (unsupportedIndexes.size > 0) {
-    return err({
+    return err(omitUndefined({
       reason: unsupportedReasons.size === 1
         ? [...unsupportedReasons][0]
         : "unsupported_spdx_relationships",
       relationshipIndexes: [...unsupportedIndexes].sort((left, right) => left - right),
       unsupportedRelationshipFields: [...unsupportedFields].sort()
-    });
+    }));
   }
 
   return ok(dependencyMap);
@@ -442,10 +443,10 @@ function deduplicateSpdxPackageRecords(records: SpdxPackageRecord[]): SpdxPackag
   for (const record of records) {
     const existing = seen.get(record.spdxId);
     seen.set(record.spdxId, existing
-      ? {
+      ? omitUndefined({
           ...existing,
           licenseExpression: existing.licenseExpression ?? record.licenseExpression
-        }
+        })
       : record);
   }
 

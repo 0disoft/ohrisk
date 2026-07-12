@@ -46,6 +46,7 @@ describe("Markdown report formatting", () => {
       baselineRef: "main`release",
       profile: "saas",
       prodOnly: true,
+      lockfileChanges: { current: [], baseline: [], added: [], removed: [] },
       diff: {
         baselineFindings: [],
         currentFindings: [finding],

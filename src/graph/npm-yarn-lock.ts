@@ -229,7 +229,7 @@ export function parseYarnLockText(input: {
   }
 
   return ok({
-    rootName,
+    ...(rootName !== undefined ? { rootName } : {}),
     lockfilePath,
     nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id))
   });
@@ -328,6 +328,48 @@ function readWorkspacePackageJsonTexts(input: {
   }
 
   return ok(packageJsons);
+}
+
+export function findYarnWorkspacePackageJsonPathsFromRelativePaths(input: {
+  projectRoot: string;
+  workspaces: unknown;
+  relativePaths: Iterable<string>;
+}): YarnWorkspacePackageJsonPath[] {
+  const projectRoot = path.resolve(input.projectRoot);
+  const patterns = readWorkspacePatterns(input.workspaces);
+  const includedPatterns = patterns.filter((pattern) => !pattern.startsWith("!"));
+  const excludedPatterns = patterns
+    .filter((pattern) => pattern.startsWith("!"))
+    .map((pattern) => pattern.slice(1));
+  const locations = new Map<string, YarnWorkspacePackageJsonPath>();
+
+  for (const rawRelativePath of input.relativePaths) {
+    const relativePackageJsonPath = normalizeWorkspaceRelativePath(rawRelativePath);
+    if (!relativePackageJsonPath || relativePackageJsonPath === "package.json") {
+      continue;
+    }
+    if (!relativePackageJsonPath.endsWith("/package.json")) {
+      continue;
+    }
+
+    const workspacePath = relativePackageJsonPath.slice(0, -"/package.json".length);
+    if (
+      !includedPatterns.some((pattern) => matchesWorkspacePattern(workspacePath, pattern))
+      || excludedPatterns.some((pattern) => matchesWorkspacePattern(workspacePath, pattern))
+    ) {
+      continue;
+    }
+
+    locations.set(relativePackageJsonPath, {
+      packageJsonPath: path.join(projectRoot, ...relativePackageJsonPath.split("/")),
+      relativePackageJsonPath,
+      workspacePath
+    });
+  }
+
+  return [...locations.values()].sort((left, right) =>
+    left.relativePackageJsonPath.localeCompare(right.relativePackageJsonPath)
+  );
 }
 
 export function findYarnWorkspacePackageJsonPaths(input: {
@@ -429,6 +471,54 @@ function expandWorkspaceSegments(currentPath: string, segments: string[]): strin
   }
 
   return expandWorkspaceSegments(path.join(currentPath, segment), rest);
+}
+
+function normalizeWorkspaceRelativePath(value: string): string | undefined {
+  const normalized = path.posix.normalize(value.replace(/\\/g, "/"));
+  if (
+    normalized === "."
+    || normalized === ".."
+    || normalized.startsWith("../")
+    || normalized.startsWith("/")
+  ) {
+    return undefined;
+  }
+  return normalized;
+}
+
+function matchesWorkspacePattern(workspacePath: string, rawPattern: string): boolean {
+  const pattern = rawPattern.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/$/, "");
+  const pathSegments = workspacePath.split("/").filter(Boolean);
+  const patternSegments = pattern.split("/").filter(Boolean);
+  return matchesWorkspaceSegments(pathSegments, patternSegments, 0, 0);
+}
+
+function matchesWorkspaceSegments(
+  pathSegments: string[],
+  patternSegments: string[],
+  pathIndex: number,
+  patternIndex: number
+): boolean {
+  if (patternIndex === patternSegments.length) {
+    return pathIndex === pathSegments.length;
+  }
+
+  const pattern = patternSegments[patternIndex];
+  if (pattern === "**") {
+    return matchesWorkspaceSegments(pathSegments, patternSegments, pathIndex, patternIndex + 1)
+      || (
+        pathIndex < pathSegments.length
+        && matchesWorkspaceSegments(pathSegments, patternSegments, pathIndex + 1, patternIndex)
+      );
+  }
+
+  if (pathIndex >= pathSegments.length || !pattern) {
+    return false;
+  }
+
+  const matcher = wildcardSegmentMatcher(pattern);
+  return matcher.test(pathSegments[pathIndex] ?? "")
+    && matchesWorkspaceSegments(pathSegments, patternSegments, pathIndex + 1, patternIndex + 1);
 }
 
 function isInsideDirectory(rootPath: string, candidatePath: string): boolean {
@@ -929,10 +1019,13 @@ function walkDependency(input: {
   if (existing) {
     existing.direct = existing.direct || input.direct;
     existing.dependencyType = mergeDependencyType(existing.dependencyType, input.dependencyType);
-    existing.installNames = addUniqueInstallName({
+    const installNames = addUniqueInstallName({
       current: existing.installNames,
       installName
     });
+    if (installNames !== undefined) {
+      existing.installNames = installNames;
+    }
     existing.paths.push(nextPath);
   } else {
     input.nodeMap.set(input.record.id, {

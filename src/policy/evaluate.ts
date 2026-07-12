@@ -1,7 +1,14 @@
+import { packageUrl } from "../graph/package-url";
 import type { DependencyNode } from "../graph/types";
 import type { NormalizedLicense } from "../license/types";
+import type { SpdxExpressionNode, SpdxLicenseNode } from "../license/spdx";
 import { buildFindingFingerprint, buildFindingId } from "./finding-id";
 import type { UsageProfile } from "./profiles";
+import {
+  evaluationPolicyForProfile,
+  matchPolicyPackageRule,
+  type EvaluationPolicy
+} from "./config";
 import type {
   RiskDependencyScope,
   RiskFinding,
@@ -36,6 +43,23 @@ const NETWORK_COPYLEFT_LICENSE_PREFIXES = [
   "AGPL"
 ];
 
+const COPYLEFT_RELAXING_EXCEPTIONS = new Set([
+  "Autoconf-exception-2.0",
+  "Autoconf-exception-3.0",
+  "Bison-exception-2.2",
+  "Classpath-exception-2.0",
+  "eCos-exception-2.0",
+  "FLTK-exception",
+  "Font-exception-2.0",
+  "GCC-exception-2.0",
+  "GCC-exception-3.1",
+  "LLVM-exception",
+  "Linux-syscall-note",
+  "OpenJDK-assembly-exception-1.0",
+  "Qt-GPL-exception-1.0",
+  "WxWindows-exception-3.1"
+]);
+
 const SOURCE_AVAILABLE_RESTRICTION_LICENSES = new Set([
   "SSPL-1.0",
   "BUSL-1.1",
@@ -59,13 +83,26 @@ export function evaluateLicenseRisk(input: {
   license: NormalizedLicense;
   dependency: DependencyNode;
   profile: UsageProfile;
+  policy?: EvaluationPolicy;
 }): RiskFinding {
-  const severity = classifySeverity(input.license, input.profile);
-  const recommendation = recommendationFor(severity, input.dependency);
+  const effectivePolicy = input.policy
+    ? evaluationPolicyForProfile(input.policy, input.profile)
+    : undefined;
+  const policyRule = effectivePolicy
+    ? matchPolicyPackageRule(
+        [input.license.packageId, packageUrl(input.dependency)],
+        effectivePolicy.packageRules
+      )
+    : undefined;
+  const classifiedSeverity = classifySeverity(input.license, input.profile, effectivePolicy);
+  const severity = policyRule?.severity ?? classifiedSeverity;
+  const recommendation = policyRule?.recommendation
+    ?? recommendationFor(severity, input.dependency);
   const paths = input.dependency.paths;
   const packageId = input.license.packageId;
-  const reason = explainSeverity(input.license, input.profile, severity);
-  const action = actionFor(recommendation, input.license);
+  const reason = policyRule?.reason
+    ?? explainSeverity(input.license, input.profile, severity, effectivePolicy);
+  const action = policyRule?.action ?? actionFor(recommendation, input.license);
   const dependencyScope = dependencyScopeFor(input.dependency);
   const evidence = buildEvidence(input.license, input.dependency);
   const id = buildFindingId({
@@ -100,6 +137,7 @@ export function evaluateLicenseRisks(input: {
   licenses: NormalizedLicense[];
   dependencies: DependencyNode[];
   profile: UsageProfile;
+  policy?: EvaluationPolicy;
 }): RiskFinding[] {
   const dependencyById = new Map(input.dependencies.map((dependency) => [dependency.id, dependency]));
 
@@ -113,14 +151,19 @@ export function evaluateLicenseRisks(input: {
       return evaluateLicenseRisk({
         license,
         dependency,
-        profile: input.profile
+        profile: input.profile,
+        ...(input.policy ? { policy: input.policy } : {})
       });
     })
     .filter((finding): finding is RiskFinding => finding !== undefined)
     .sort(compareFindings);
 }
 
-function classifySeverity(license: NormalizedLicense, profile: UsageProfile): RiskSeverity {
+function classifySeverity(
+  license: NormalizedLicense,
+  profile: UsageProfile,
+  policy: EvaluationPolicy | undefined
+): RiskSeverity {
   if (
     license.signals.includes("commercial-restriction")
     && !hasCommercialRestrictionChoice(license)
@@ -136,11 +179,17 @@ function classifySeverity(license: NormalizedLicense, profile: UsageProfile): Ri
     return "unknown";
   }
 
+  if (license.spdxAst) {
+    return classifySpdxNode(license.spdxAst, profile, policy);
+  }
+
   if (license.choices.length === 0) {
     return "unknown";
   }
 
-  const severities = license.choices.map((choice) => classifyLicenseChoice(choice, profile));
+  const severities = license.choices.map((choice) =>
+    classifyLicenseChoice({ type: "license", license: choice }, profile, policy)
+  );
 
   if (license.joiner === "or") {
     return minSeverity(severities);
@@ -149,24 +198,65 @@ function classifySeverity(license: NormalizedLicense, profile: UsageProfile): Ri
   return maxSeverity(severities);
 }
 
-function classifyLicenseChoice(choice: string, profile: UsageProfile): RiskSeverity {
-  if (PERMISSIVE_LICENSES.has(choice)) {
+function classifySpdxNode(
+  node: SpdxExpressionNode,
+  profile: UsageProfile,
+  policy: EvaluationPolicy | undefined
+): RiskSeverity {
+  if (node.type === "license") {
+    return classifyLicenseChoice(node, profile, policy);
+  }
+
+  const left = classifySpdxNode(node.left, profile, policy);
+  const right = classifySpdxNode(node.right, profile, policy);
+  return node.type === "or"
+    ? minSeverity([left, right])
+    : maxSeverity([left, right]);
+}
+
+function classifyLicenseChoice(
+  choice: SpdxLicenseNode,
+  profile: UsageProfile,
+  policy: EvaluationPolicy | undefined
+): RiskSeverity {
+  const term = choice.exception
+    ? `${choice.license} WITH ${choice.exception}`
+    : choice.license;
+
+  if (policy?.denyLicenses.has(term) || policy?.denyLicenses.has(choice.license)) {
+    return "high";
+  }
+
+  const policySeverity = policy?.severityOverrides.get(term)
+    ?? policy?.severityOverrides.get(choice.license);
+  if (policySeverity) {
+    return policySeverity;
+  }
+
+  if (policy?.allowLicenses.has(term) || policy?.allowLicenses.has(choice.license)) {
     return "low";
   }
 
-  if (COMMERCIAL_RESTRICTION_LICENSES.has(choice)) {
+  if (PERMISSIVE_LICENSES.has(choice.license)) {
+    return "low";
+  }
+
+  if (COMMERCIAL_RESTRICTION_LICENSES.has(choice.license)) {
     return "high";
   }
 
-  if (matchesPrefix(choice, NETWORK_COPYLEFT_LICENSE_PREFIXES)) {
+  if (matchesPrefix(choice.license, NETWORK_COPYLEFT_LICENSE_PREFIXES)) {
     return "high";
   }
 
-  if (matchesPrefix(choice, STRONG_COPYLEFT_LICENSE_PREFIXES)) {
+  if (matchesPrefix(choice.license, STRONG_COPYLEFT_LICENSE_PREFIXES)) {
+    if (choice.exception && COPYLEFT_RELAXING_EXCEPTIONS.has(choice.exception)) {
+      return "review";
+    }
     return profile === "distributed-app" ? "high" : "review";
   }
 
-  if (matchesPrefix(choice, WEAK_COPYLEFT_LICENSE_PREFIXES)) {
+  if (matchesPrefix(choice.license, WEAK_COPYLEFT_LICENSE_PREFIXES)) {
     return "review";
   }
 
@@ -180,8 +270,17 @@ function hasCommercialRestrictionChoice(license: NormalizedLicense): boolean {
 function explainSeverity(
   license: NormalizedLicense,
   profile: UsageProfile,
-  severity: RiskSeverity
+  severity: RiskSeverity,
+  policy: EvaluationPolicy | undefined
 ): string {
+  const policyMatchedTerms = license.choices.filter((choice) =>
+    policy?.allowLicenses.has(choice)
+    || policy?.denyLicenses.has(choice)
+    || policy?.severityOverrides.has(choice)
+  );
+  if (policyMatchedTerms.length > 0) {
+    return `Organization policy classified ${policyMatchedTerms.join(", ")} as ${severity} risk for ${profile}.`;
+  }
   switch (severity) {
     case "low":
       if (license.signals.includes("internal-private") && license.choices.length === 0) {

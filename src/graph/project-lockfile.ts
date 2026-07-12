@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import { parseBazelModuleFile, parseBazelModuleText } from "./bazel-module";
 import {
   parseCartfileResolvedFile,
@@ -235,58 +236,58 @@ export function parseLockfileTextForKind(
     case "npm-shrinkwrap":
       return parsePackageLockText(input.text, input.lockfilePath);
     case "pnpm-lock":
-      return parsePnpmLockText(input.text, input.lockfilePath, {
+      return parsePnpmLockText(input.text, input.lockfilePath, omitUndefined({
         workspaceText: input.pnpmWorkspaceText,
         workspacePath: input.pnpmWorkspacePath
-      });
+      }));
     case "deno-lock":
       return parseDenoLockText(input.text, input.lockfilePath);
     case "cargo-lock":
-      return parseCargoLockText(input.text, input.lockfilePath, {
+      return parseCargoLockText(input.text, input.lockfilePath, omitUndefined({
         manifestText: input.cargoManifestText,
         memberManifestTexts: input.cargoMemberManifestTexts,
         rootName: input.cargoRootName
-      });
+      }));
     case "go-work":
-      return parseGoWorkText(input.text, input.lockfilePath, {
+      return parseGoWorkText(input.text, input.lockfilePath, omitUndefined({
         moduleInputs: input.goWorkModuleInputs,
         workspaceRootDir: input.projectRoot,
         goWorkDir: input.goWorkDir
-      });
+      }));
     case "go-mod":
-      return parseGoModText(input.text, input.lockfilePath, {
+      return parseGoModText(input.text, input.lockfilePath, omitUndefined({
         goSumText: input.goSumText
-      });
+      }));
     case "pipfile-lock":
-      return parsePipfileLockText(input.text, input.lockfilePath, {
+      return parsePipfileLockText(input.text, input.lockfilePath, omitUndefined({
         readLocalSourceFile: input.pythonLocalSourceFileReader,
         rootName: input.requirementsRootName
-      });
+      }));
     case "pdm-lock":
-      return parsePdmLockText(input.text, input.lockfilePath, {
+      return parsePdmLockText(input.text, input.lockfilePath, omitUndefined({
         pyprojectText: input.pyprojectText,
         readLocalSourceFile: input.pythonLocalSourceFileReader
-      });
+      }));
     case "poetry-lock":
-      return parsePoetryLockText(input.text, input.lockfilePath, {
+      return parsePoetryLockText(input.text, input.lockfilePath, omitUndefined({
         pyprojectText: input.pyprojectText
-      });
+      }));
     case "pyproject-toml":
       return parsePyprojectText(input.text, input.lockfilePath);
     case "requirements-txt":
-      return parseRequirementsText(input.text, input.lockfilePath, {
+      return parseRequirementsText(input.text, input.lockfilePath, omitUndefined({
         rootName: input.requirementsRootName,
         readIncludedFile: input.requirementsIncludedFileReader,
         readLocalSourceFile: input.pythonLocalSourceFileReader
-      });
+      }));
     case "uv-lock":
-      return parseUvLockText(input.text, input.lockfilePath, {
+      return parseUvLockText(input.text, input.lockfilePath, omitUndefined({
         readLocalSourceFile: input.pythonLocalSourceFileReader
-      });
+      }));
     case "pylock":
-      return parsePylockText(input.text, input.lockfilePath, {
+      return parsePylockText(input.text, input.lockfilePath, omitUndefined({
         readLocalSourceFile: input.pythonLocalSourceFileReader
-      });
+      }));
     case "gradle-lock":
       return parseGradleLockText(input.text, input.lockfilePath);
     case "gradle-version-catalog":
@@ -294,9 +295,9 @@ export function parseLockfileTextForKind(
     case "bazel-module":
       return parseBazelModuleText(input.text, input.lockfilePath);
     case "maven-pom":
-      return parseMavenPomText(input.text, input.lockfilePath, {
+      return parseMavenPomText(input.text, input.lockfilePath, omitUndefined({
         projectRoot: input.projectRoot
-      });
+      }));
     case "nuget-lock":
       return parseNugetLockText(input.text, input.lockfilePath);
     case "nuget-assets":
@@ -311,15 +312,15 @@ export function parseLockfileTextForKind(
           return centralPackageVersions;
         }
 
-        return parseDotnetProjectText(input.text, input.lockfilePath, {
+        return parseDotnetProjectText(input.text, input.lockfilePath, omitUndefined({
           centralPackageVersions: centralPackageVersions.value,
           rootName: input.dotnetProjectRootName
-        });
+        }));
       }
 
-      return parseDotnetProjectText(input.text, input.lockfilePath, {
+      return parseDotnetProjectText(input.text, input.lockfilePath, omitUndefined({
         rootName: input.dotnetProjectRootName
-      });
+      }));
     case "nuget-packages-config":
       return parseNugetPackagesConfigText(input.text, input.lockfilePath);
     case "conan-lock":
@@ -364,9 +365,9 @@ export function parseLockfileTextForKind(
     case "gemfile-lock":
       return parseGemfileLockText(input.text, input.lockfilePath);
     case "composer-lock":
-      return parseComposerLockText(input.text, input.lockfilePath, {
+      return parseComposerLockText(input.text, input.lockfilePath, omitUndefined({
         composerJsonText: input.composerJsonText
-      });
+      }));
     case "cyclonedx-json":
       return parseCycloneDxJsonText(input.text, input.lockfilePath);
     case "cyclonedx-xml":
@@ -378,13 +379,13 @@ export function parseLockfileTextForKind(
     case "spdx-tag-value":
       return parseSpdxTagValueText(input.text, input.lockfilePath);
     case "yarn-lock":
-      return parseYarnLockText({
+      return parseYarnLockText(omitUndefined({
         lockfileText: input.text,
         packageJsonText: input.packageJsonText ?? "{}",
         lockfilePath: input.lockfilePath,
         packageJsonPath: input.packageJsonPath,
         workspacePackageJsonTexts: input.workspacePackageJsonTexts
-      });
+      }));
     case "package-json":
       return parsePackageJsonManifestText(input.text, input.lockfilePath);
   }

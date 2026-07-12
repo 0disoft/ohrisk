@@ -2,6 +2,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
+import { omitUndefined } from "../shared/object";
 import {
   readTextFileWithLimit,
   textFileReadErrorCategory,
@@ -236,13 +237,13 @@ function readPythonMetadata(input: {
 
   const headers = parseEmailStyleHeaders(text.value);
 
-  return ok({
+  return ok(omitUndefined({
     name: firstHeader(headers, "Name"),
     version: firstHeader(headers, "Version"),
     licenseExpression: firstHeader(headers, "License-Expression"),
     license: firstHeader(headers, "License"),
     classifiers: headers.get("Classifier") ?? []
-  });
+  }));
 }
 
 function parseEmailStyleHeaders(text: string): Map<string, string[]> {

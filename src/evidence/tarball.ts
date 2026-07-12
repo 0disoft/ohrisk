@@ -39,7 +39,7 @@ export function collectTarballEvidence(input: {
       ? undefined
       : entries.find((entry) => normalizePackagePath(entry.path, packageRoot) === "package.json");
 
-    if (!packageJsonEntry) {
+    if (packageRoot === undefined || !packageJsonEntry) {
       return err(
         createError({
           code: "PACKAGE_JSON_PARSE_FAILED",

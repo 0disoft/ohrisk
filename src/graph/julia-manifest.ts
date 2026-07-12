@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -54,9 +55,9 @@ export function parseJuliaManifestFile(
     return projectText;
   }
 
-  return parseJuliaManifestText(lockfileText.value, lockfilePath, {
+  return parseJuliaManifestText(lockfileText.value, lockfilePath, omitUndefined({
     projectText: projectText.value
-  });
+  }));
 }
 
 export function parseJuliaManifestText(
@@ -94,12 +95,12 @@ export function parseJuliaManifestText(
         direct: projectRootTypes.size > 0
           ? projectRootTypes.has(record.name)
           : !referencedNames.has(record.name),
-        paths: juliaPackagePaths({
+        paths: juliaPackagePaths(omitUndefined({
           record,
           records: records.value,
           rootName,
           rootNames: projectRootNames
-        })
+        }))
       }))
       .sort((left, right) => left.id.localeCompare(right.id))
   });
@@ -177,7 +178,10 @@ function readJuliaManifestRecords(
     const key = keyValue[1];
     const value = keyValue[2].trim();
     if (key === "version") {
-      current.version = parseTomlString(value);
+      const version = parseTomlString(value);
+      if (version !== undefined) {
+        current.version = version;
+      }
     } else if (key === "deps") {
       const dependencies = parseTomlStringArrayStrict(value);
       if (!dependencies.ok) {
@@ -186,7 +190,10 @@ function readJuliaManifestRecords(
 
       current.dependencies = dependencies.value;
     } else if (key === "git-tree-sha1" || key === "repo-rev") {
-      current.resolved = parseTomlString(value);
+      const resolved = parseTomlString(value);
+      if (resolved !== undefined) {
+        current.resolved = resolved;
+      }
     }
   }
 
@@ -339,13 +346,13 @@ function juliaPackagePaths(input: {
 
   paths.push(
     ...parentRecords.flatMap((parent) =>
-      juliaPackagePaths({
+      juliaPackagePaths(omitUndefined({
         record: parent,
         records: input.records,
         rootName: input.rootName,
         rootNames: input.rootNames,
         visiting: nextVisiting
-      }).map((parentPath) => [...parentPath, input.record.id])
+      })).map((parentPath) => [...parentPath, input.record.id])
     )
   );
 

@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 
@@ -119,7 +120,7 @@ function readCondaPackageRecords(
     }
 
     const ecosystem = ecosystemForCondaManager(manager);
-    records.push({
+    records.push(omitUndefined({
       id: packageIdForCondaRecord({
         ecosystem,
         name,
@@ -133,7 +134,7 @@ function readCondaPackageRecords(
       url: readOptionalString(item.url),
       dependencies: readDependencyNames(item.dependencies),
       dependencyType: dependencyTypeForCondaPackage(item)
-    });
+    }));
   }
 
   if (records.length === 0) {

@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import path from "node:path";
 
 import type { LicenseEvidence } from "../evidence/types";
@@ -14,7 +15,7 @@ import {
   LOCKFILE_MAX_BYTES,
   readInputTextFile
 } from "./read-input-file";
-import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
+import type { DependencyGraph, DependencyNode } from "./types";
 
 type PylockPackageRecord = {
   name: string;
@@ -101,10 +102,10 @@ export function parsePylockText(
   options: PylockParseOptions = {}
 ): Result<DependencyGraph, OhriskError> {
   try {
-    const parsedRecords = parsePylockPackageRecords(input, {
+    const parsedRecords = parsePylockPackageRecords(input, omitUndefined({
       lockfilePath,
       readLocalSourceFile: options.readLocalSourceFile
-    });
+    }));
     if (!parsedRecords.ok) {
       return parsedRecords;
     }
@@ -172,12 +173,12 @@ export function parsePylockText(
       });
     }
 
-    return ok({
+    return ok(omitUndefined({
       rootName,
       lockfilePath,
       nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
       ...embeddedEvidenceFromPylockRecords(records)
-    });
+    }));
   } catch (cause) {
     return err(
       createError({
@@ -224,10 +225,10 @@ function parsePylockPackageRecords(input: string, options: {
     }
 
     if (currentDependency.name) {
-      current.dependencies.push({
+      current.dependencies.push(omitUndefined({
         name: currentDependency.name,
         version: currentDependency.version
-      });
+      }));
     }
 
     currentDependency = undefined;
@@ -250,10 +251,10 @@ function parsePylockPackageRecords(input: string, options: {
     } else if (current.directoryPath) {
       if (options.readLocalSourceFile) {
         const localSource = readPythonLocalSourcePackage({
-          source: {
+          source: omitUndefined({
             sourcePath: current.directoryPath,
             expectedName: current.name
-          },
+          }),
           fromFilePath: options.lockfilePath,
           readLocalSourceFile: options.readLocalSourceFile,
           errors: PYLOCK_LOCAL_SOURCE_ERRORS
@@ -273,10 +274,10 @@ function parsePylockPackageRecords(input: string, options: {
         return;
       }
 
-      unsupportedSourceTreeRecords.push({
+      unsupportedSourceTreeRecords.push(omitUndefined({
         name: current.name,
         path: current.directoryPath
-      });
+      }));
     }
   };
 
@@ -402,10 +403,10 @@ function readDependencyRefsFromInlineTableArray(value: string): PylockDependency
       continue;
     }
 
-    refs.push({
+    refs.push(omitUndefined({
       name,
       version: readStringAssignment(table.trim(), "version")
-    });
+    }));
   }
 
   return refs;

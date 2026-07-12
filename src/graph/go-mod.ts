@@ -1,7 +1,8 @@
+import { omitUndefined } from "../shared/object";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-import { createError, type OhriskError } from "../shared/errors";
+import { createError, type OhriskError, type OhriskErrorCode } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 import {
   inputFileReadErrorCategory,
@@ -76,9 +77,9 @@ export function parseGoModFile(
     return goSum;
   }
 
-  return parseGoModText(goModText.value, goModPath, {
+  return parseGoModText(goModText.value, goModPath, omitUndefined({
     goSumText: goSum.value
-  });
+  }));
 }
 
 export function parseGoModText(
@@ -292,7 +293,7 @@ export function parseGoModRecords(
   }
 
   return ok({
-    modulePath,
+    ...(modulePath !== undefined ? { modulePath } : {}),
     records,
     replacements
   });
@@ -320,7 +321,7 @@ export function parseGoReplaceDirectiveLine(input: {
   line: string;
   sourcePath: string;
   lineNumber: number;
-  errorCode: string;
+  errorCode: OhriskErrorCode;
   errorMessage: string;
 }
 ): Result<GoReplaceDirective | undefined, OhriskError> {
@@ -457,7 +458,7 @@ function replaceDirectiveError(input: {
   sourcePath: string;
   line: number;
   entry: string;
-  code: string;
+  code: OhriskErrorCode;
   message: string;
   reason: string;
 }): Result<never, OhriskError> {

@@ -138,7 +138,7 @@ function evidenceReadError(error: TextFileReadError): string {
   switch (error.kind) {
     case "too_large":
       return `file exceeded ${error.maxBytes} bytes`;
-    case "read_failed":
+    case "filesystem":
       return error.cause;
   }
 }

@@ -1,8 +1,9 @@
+import { omitUndefined } from "../shared/object";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
 import type { LicenseEvidence } from "../evidence/types";
-import { createError, type OhriskError } from "../shared/errors";
+import { createError, type OhriskError, type OhriskErrorCode } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 import {
   createDiskPythonLocalSourceFileReader,
@@ -55,7 +56,7 @@ const PDM_LOCK_LOCAL_SOURCE_ERRORS = {
   parseCode: "PDM_LOCK_PARSE_FAILED",
   readCode: "PDM_LOCK_READ_FAILED",
   displayName: "pdm.lock"
-};
+} satisfies { parseCode: OhriskErrorCode; readCode: OhriskErrorCode; displayName: string };
 
 export function parsePdmLockfile(
   lockfilePath: string,
@@ -90,14 +91,14 @@ export function parsePdmLockfile(
     return pyproject;
   }
 
-  return parsePdmLockText(lockfileText.value, lockfilePath, {
+  return parsePdmLockText(lockfileText.value, lockfilePath, omitUndefined({
     pyprojectText: pyproject.value,
     readLocalSourceFile: createDiskPythonLocalSourceFileReader({
       rootDir: path.dirname(lockfilePath),
       maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES,
       errors: PDM_LOCK_LOCAL_SOURCE_ERRORS
     })
-  });
+  }));
 }
 
 export function parsePdmLockText(
@@ -105,10 +106,10 @@ export function parsePdmLockText(
   lockfilePath = "pdm.lock",
   options: PdmLockParseOptions = {}
 ): Result<DependencyGraph, OhriskError> {
-  const parsedRecords = parsePdmPackageRecords(input, {
+  const parsedRecords = parsePdmPackageRecords(input, omitUndefined({
     lockfilePath,
     readLocalSourceFile: options.readLocalSourceFile
-  });
+  }));
   if (!parsedRecords.ok) {
     return parsedRecords;
   }
@@ -131,10 +132,10 @@ export function parsePdmLockText(
     const rootName = readPyprojectName(options.pyprojectText)
       ?? path.basename(path.dirname(lockfilePath))
       ?? "<root>";
-    const rootDependencies = readPdmRootDependencies({
+    const rootDependencies = readPdmRootDependencies(omitUndefined({
       pyprojectText: options.pyprojectText,
       records
-    });
+    }));
     const nodeMap = new Map<string, DependencyNode>();
 
     for (const rootDependency of rootDependencies) {

@@ -5,7 +5,7 @@ import { parseSpdxExpression } from "../src/license/spdx";
 
 describe("parseSpdxExpression", () => {
   test("parses simple OR expressions", () => {
-    expect(parseSpdxExpression("MIT OR Apache-2.0")).toEqual({
+    expect(parseSpdxExpression("MIT OR Apache-2.0")).toMatchObject({
       original: "MIT OR Apache-2.0",
       expression: "MIT OR Apache-2.0",
       choices: ["MIT", "Apache-2.0"],
@@ -16,7 +16,7 @@ describe("parseSpdxExpression", () => {
   });
 
   test("normalizes common shorthand OR separators", () => {
-    expect(parseSpdxExpression("MIT/Apache-2.0")).toEqual({
+    expect(parseSpdxExpression("MIT/Apache-2.0")).toMatchObject({
       original: "MIT/Apache-2.0",
       expression: "MIT OR Apache-2.0",
       choices: ["MIT", "Apache-2.0"],
@@ -25,7 +25,7 @@ describe("parseSpdxExpression", () => {
       usedAlias: true
     });
 
-    expect(parseSpdxExpression("MIT, Apache-2.0")).toEqual({
+    expect(parseSpdxExpression("MIT, Apache-2.0")).toMatchObject({
       original: "MIT, Apache-2.0",
       expression: "MIT OR Apache-2.0",
       choices: ["MIT", "Apache-2.0"],
@@ -36,7 +36,7 @@ describe("parseSpdxExpression", () => {
   });
 
   test("parses simple AND expressions", () => {
-    expect(parseSpdxExpression("MIT AND Apache-2.0")).toEqual({
+    expect(parseSpdxExpression("MIT AND Apache-2.0")).toMatchObject({
       original: "MIT AND Apache-2.0",
       expression: "MIT AND Apache-2.0",
       choices: ["MIT", "Apache-2.0"],
@@ -56,7 +56,7 @@ describe("parseSpdxExpression", () => {
   });
 
   test("normalizes common aliases", () => {
-    expect(parseSpdxExpression("MIT License")).toEqual({
+    expect(parseSpdxExpression("MIT License")).toMatchObject({
       original: "MIT License",
       expression: "MIT",
       choices: ["MIT"],
@@ -140,19 +140,49 @@ describe("parseSpdxExpression", () => {
     });
   });
 
-  test("normalizes SPDX exception expressions to their base license", () => {
-    expect(parseSpdxExpression("GPL-2.0-only WITH Classpath-exception-2.0")).toEqual({
+  test("preserves SPDX exceptions on the license term", () => {
+    const parsed = parseSpdxExpression("GPL-2.0-only WITH Classpath-exception-2.0");
+
+    expect(parsed).toMatchObject({
       original: "GPL-2.0-only WITH Classpath-exception-2.0",
-      expression: "GPL-2.0-only",
+      expression: "GPL-2.0-only WITH Classpath-exception-2.0",
       choices: ["GPL-2.0-only"],
       joiner: "single",
       malformed: false,
-      usedAlias: true
+      usedAlias: false,
+      exceptions: ["Classpath-exception-2.0"]
+    });
+    expect(parsed.ast).toEqual({
+      type: "license",
+      license: "GPL-2.0-only",
+      exception: "Classpath-exception-2.0"
+    });
+  });
+
+  test("preserves operator precedence and parenthesized grouping", () => {
+    expect(parseSpdxExpression("MIT OR GPL-3.0-only AND Apache-2.0").ast).toEqual({
+      type: "or",
+      left: { type: "license", license: "MIT" },
+      right: {
+        type: "and",
+        left: { type: "license", license: "GPL-3.0-only" },
+        right: { type: "license", license: "Apache-2.0" }
+      }
+    });
+
+    expect(parseSpdxExpression("(MIT OR GPL-3.0-only) AND Apache-2.0").ast).toEqual({
+      type: "and",
+      left: {
+        type: "or",
+        left: { type: "license", license: "MIT" },
+        right: { type: "license", license: "GPL-3.0-only" }
+      },
+      right: { type: "license", license: "Apache-2.0" }
     });
   });
 
   test("recognizes UNLICENSED as a license decision instead of malformed text", () => {
-    expect(parseSpdxExpression("UNLICENSED")).toEqual({
+    expect(parseSpdxExpression("UNLICENSED")).toMatchObject({
       original: "UNLICENSED",
       expression: "UNLICENSED",
       choices: ["UNLICENSED"],
@@ -819,7 +849,7 @@ describe("normalizeLicenseEvidence", () => {
       packageId: "metadata-restricted-package@1.0.0",
       packageJsonLicense: "not for commercial use",
       files: [],
-      source: "registry",
+      source: "tarball",
       warnings: []
     });
 

@@ -1,3 +1,5 @@
+import type { SpdxExpressionNode } from "./spdx";
+
 export type NormalizedLicenseSignal =
   | "missing"
   | "malformed"
@@ -26,4 +28,6 @@ export type NormalizedLicense = {
   signals: NormalizedLicenseSignal[];
   evidenceSources: string[];
   confidence: NormalizedLicenseConfidence;
+  spdxAst?: SpdxExpressionNode;
+  exceptions?: string[];
 };

@@ -2,12 +2,29 @@ import type { RiskDiff } from "../diff/compare";
 import { NOTICE_ACTION } from "../policy/evaluate";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
 import type { UsageProfile } from "../policy/profiles";
+import type { PolicyConfigSummary } from "../policy/config";
 import {
   formatMarkdownInlineCode,
   formatMarkdownTableCell,
   formatMarkdownTableCode
 } from "./markdown";
 import { buildThresholdSummary, formatThresholdSummary } from "./threshold-summary";
+import {
+  OHRISK_DIFF_REPORT_SCHEMA,
+  OHRISK_REPORT_SCHEMA_VERSION
+} from "./schema";
+
+export type DiffLockfile = {
+  kind: string;
+  path: string;
+};
+
+export type DiffLockfileChanges = {
+  current: DiffLockfile[];
+  baseline: DiffLockfile[];
+  added: DiffLockfile[];
+  removed: DiffLockfile[];
+};
 
 export type DiffReportInput = {
   baselineRef: string;
@@ -16,7 +33,9 @@ export type DiffReportInput = {
   diff: RiskDiff;
   json: boolean;
   markdown: boolean;
+  lockfileChanges: DiffLockfileChanges;
   failOn?: RiskSeverity;
+  policy?: PolicyConfigSummary;
 };
 
 export function renderDiffReport(input: DiffReportInput): string {
@@ -27,6 +46,8 @@ export function renderDiffReport(input: DiffReportInput): string {
   if (input.json) {
     return JSON.stringify(
       {
+        $schema: OHRISK_DIFF_REPORT_SCHEMA,
+        schemaVersion: OHRISK_REPORT_SCHEMA_VERSION,
         status: "risk_diff_evaluated",
         baselineRef: input.baselineRef,
         profile: input.profile,
@@ -35,7 +56,9 @@ export function renderDiffReport(input: DiffReportInput): string {
         currentFindingCount: input.diff.currentFindings.length,
         newFindingCount: input.diff.newFindings.length,
         newRisks: summary,
+        lockfileChanges: input.lockfileChanges,
         nextAction,
+        ...(input.policy ? { policy: input.policy } : {}),
         ...thresholdSummary,
         findings: input.diff.newFindings
       },
@@ -54,6 +77,7 @@ export function renderDiffReport(input: DiffReportInput): string {
     `Profile: ${input.profile}`,
     `Production only: ${input.prodOnly ? "yes" : "no"}`,
     `Findings: ${input.diff.currentFindings.length} current, ${input.diff.baselineFindings.length} baseline, ${input.diff.newFindings.length} new or changed`,
+    ...renderLockfileChangeLines(input.lockfileChanges),
     `New or changed risks: ${summary.high} high, ${summary.review} review, ${summary.unknown} unknown, ${summary.low} low`,
     ...renderThresholdLines(thresholdSummary),
     "Status: profile-aware risk diff evaluated",
@@ -78,6 +102,7 @@ function renderMarkdownReport(
     `- Profile: ${formatMarkdownInlineCode(input.profile)}`,
     `- Production only: ${formatMarkdownInlineCode(input.prodOnly ? "yes" : "no")}`,
     `- Findings: ${formatMarkdownInlineCode(`${input.diff.currentFindings.length} current`)}, ${formatMarkdownInlineCode(`${input.diff.baselineFindings.length} baseline`)}, ${formatMarkdownInlineCode(`${input.diff.newFindings.length} new or changed`)}`,
+    ...renderMarkdownLockfileChangeLines(input.lockfileChanges),
     `- New or changed risks: ${formatMarkdownInlineCode(`${summary.high} high`)}, ${formatMarkdownInlineCode(`${summary.review} review`)}, ${formatMarkdownInlineCode(`${summary.unknown} unknown`)}, ${formatMarkdownInlineCode(`${summary.low} low`)}`,
     ...renderMarkdownThresholdLines(thresholdSummary),
     "",
@@ -87,6 +112,34 @@ function renderMarkdownReport(
     "",
     nextAction
   ].join("\n");
+}
+
+function renderLockfileChangeLines(changes: DiffLockfileChanges): string[] {
+  return [
+    `Lockfiles: ${changes.current.length} current, ${changes.baseline.length} baseline, ${changes.added.length} added, ${changes.removed.length} removed`,
+    ...(changes.added.length > 0
+      ? [`Added lockfiles: ${changes.added.map(formatLockfile).join(", ")}`]
+      : []),
+    ...(changes.removed.length > 0
+      ? [`Removed lockfiles: ${changes.removed.map(formatLockfile).join(", ")}`]
+      : [])
+  ];
+}
+
+function renderMarkdownLockfileChangeLines(changes: DiffLockfileChanges): string[] {
+  return [
+    `- Lockfiles: ${formatMarkdownInlineCode(`${changes.current.length} current`)}, ${formatMarkdownInlineCode(`${changes.baseline.length} baseline`)}, ${formatMarkdownInlineCode(`${changes.added.length} added`)}, ${formatMarkdownInlineCode(`${changes.removed.length} removed`)}`,
+    ...(changes.added.length > 0
+      ? [`- Added lockfiles: ${changes.added.map((lockfile) => formatMarkdownInlineCode(formatLockfile(lockfile))).join(", ")}`]
+      : []),
+    ...(changes.removed.length > 0
+      ? [`- Removed lockfiles: ${changes.removed.map((lockfile) => formatMarkdownInlineCode(formatLockfile(lockfile))).join(", ")}`]
+      : [])
+  ];
+}
+
+function formatLockfile(lockfile: DiffLockfile): string {
+  return `${lockfile.path} (${lockfile.kind})`;
 }
 
 function summarize(findings: RiskFinding[]): Record<RiskSeverity, number> {

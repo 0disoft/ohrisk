@@ -1,7 +1,8 @@
+import { omitUndefined } from "../shared/object";
 import path from "node:path";
 
 import type { LicenseEvidence } from "../evidence/types";
-import { createError, type OhriskError } from "../shared/errors";
+import { createError, type OhriskError, type OhriskErrorCode } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 import {
   createDiskPythonLocalSourceFileReader,
@@ -39,7 +40,7 @@ const PIPFILE_LOCK_LOCAL_SOURCE_ERRORS = {
   parseCode: "PIPFILE_LOCK_PARSE_FAILED",
   readCode: "PIPFILE_LOCK_READ_FAILED",
   displayName: "Pipfile.lock"
-};
+} satisfies { parseCode: OhriskErrorCode; readCode: OhriskErrorCode; displayName: string };
 
 export function parsePipfileLockfile(
   lockfilePath: string,
@@ -209,14 +210,14 @@ function readPipfileLockSection(input: {
 
     const localSourcePath = readPipfileLockLocalSourcePath(rawEntry);
     if (localSourcePath) {
-      const record = readPipfileLockLocalSourceRecord({
+      const record = readPipfileLockLocalSourceRecord(omitUndefined({
         lockfilePath: input.lockfilePath,
         sectionName: input.sectionName,
         packageName: rawName,
         sourcePath: localSourcePath,
         dependencyType: input.dependencyType,
         readLocalSourceFile: input.readLocalSourceFile
-      });
+      }));
       if (!record.ok) {
         return record;
       }

@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -96,14 +97,14 @@ export function readPythonLocalSourcePackage(input: {
   errors: PythonLocalSourceErrorOptions;
 }): Result<PythonLocalSourcePackage, OhriskError> {
   if (!input.readLocalSourceFile) {
-    return pythonLocalSourceError({
+    return pythonLocalSourceError(omitUndefined({
       errors: input.errors,
       fromFilePath: input.fromFilePath,
       sourcePath: input.source.sourcePath,
       line: input.line,
       entry: input.entry,
       message: `Failed to parse ${input.errors.displayName}. Local source package entries require file access.`
-    });
+    }));
   }
 
   const metadata = readLocalSourceMetadata({
@@ -116,14 +117,14 @@ export function readPythonLocalSourcePackage(input: {
   }
 
   if (!metadata.value.name || !metadata.value.version) {
-    return pythonLocalSourceError({
+    return pythonLocalSourceError(omitUndefined({
       errors: input.errors,
       fromFilePath: input.fromFilePath,
       sourcePath: input.source.sourcePath,
       line: input.line,
       entry: input.entry,
       message: `Failed to parse ${input.errors.displayName}. Local source package entries must declare package name and version metadata.`
-    });
+    }));
   }
 
   if (
@@ -327,12 +328,12 @@ function parseLocalSourcePyproject(input: string): LocalSourceMetadata {
   }
 
   const selected = project.name && project.version ? project : poetry;
-  return {
+  return omitUndefined({
     name: selected.name,
     version: selected.version,
     license: selected.license,
     source: "pyproject.toml"
-  };
+  });
 }
 
 function parseLocalSourceSetupCfg(input: string): LocalSourceMetadata {
@@ -366,12 +367,12 @@ function parseLocalSourceSetupCfg(input: string): LocalSourceMetadata {
     }
   }
 
-  return {
+  return omitUndefined({
     name: metadata.name,
     version: metadata.version,
     license: metadata.license,
     source: "setup.cfg"
-  };
+  });
 }
 
 function parseLocalSourceEmailMetadata(input: string, source: string): LocalSourceMetadata {
@@ -394,12 +395,12 @@ function parseLocalSourceEmailMetadata(input: string, source: string): LocalSour
     }
   }
 
-  return {
+  return omitUndefined({
     name: headers.get("name"),
     version: headers.get("version"),
     license: headers.get("license-expression") ?? headers.get("license"),
     source
-  };
+  });
 }
 
 function readLocalSourceEvidence(input: {

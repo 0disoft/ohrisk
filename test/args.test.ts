@@ -19,7 +19,7 @@ describe("parseArgs", () => {
   });
 
   test("parses supported help targets", () => {
-    for (const target of ["scan", "ci", "diff", "explain", "help", "version"]) {
+    for (const target of ["scan", "ci", "diff", "explain", "cache", "help", "version"] as const) {
       const parsed = parseArgs(["help", target]);
 
       expect(parsed.ok).toBe(true);
@@ -41,6 +41,7 @@ describe("parseArgs", () => {
       [["ci", "--help"], "ci"],
       [["diff", "--help"], "diff"],
       [["explain", "--help"], "explain"],
+      [["cache", "--help"], "cache"],
       [["help", "--help"], "help"],
       [["version", "--help"], "version"]
     ] as const) {
@@ -527,6 +528,99 @@ describe("parseArgs", () => {
       outputPath: "reports/diff.json",
       failOn: "unknown"
     });
+  });
+
+  test("parses diff --all and rejects an explicit lockfile at the same time", () => {
+    const parsed = parseArgs(["diff", "main", "--all", "--json"]);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+    expect(parsed.value).toEqual({
+      kind: "diff",
+      baselineRef: "main",
+      profile: "saas",
+      prodOnly: false,
+      json: true,
+      markdown: false,
+      allLockfiles: true
+    });
+
+    const conflicting = parseArgs([
+      "diff",
+      "main",
+      "--all",
+      "--lockfile",
+      "package-lock.json"
+    ]);
+    expect(conflicting.ok).toBe(false);
+    if (conflicting.ok) {
+      throw new Error("Expected --all and --lockfile to conflict.");
+    }
+    expect(conflicting.error.code).toBe("INVALID_ARGUMENT");
+    expect(conflicting.error.message).toContain("--all cannot be combined with --lockfile");
+  });
+
+  test("parses cache management actions, sizes, and ages", () => {
+    const status = parseArgs(["cache", "status", "--json", "--cache-dir", ".cache"]);
+    expect(status.ok).toBe(true);
+    if (!status.ok) {
+      throw new Error(status.error.message);
+    }
+    expect(status.value).toEqual({
+      kind: "cache",
+      action: "status",
+      json: true,
+      cacheDir: ".cache"
+    });
+
+    const prune = parseArgs([
+      "cache",
+      "prune",
+      "--max-size",
+      "512MiB",
+      "--max-age",
+      "7d"
+    ]);
+    expect(prune.ok).toBe(true);
+    if (!prune.ok) {
+      throw new Error(prune.error.message);
+    }
+    expect(prune.value).toEqual({
+      kind: "cache",
+      action: "prune",
+      json: false,
+      maxSizeBytes: 512 * 1024 * 1024,
+      maxAgeMs: 7 * 24 * 60 * 60 * 1000
+    });
+
+    const clear = parseArgs(["cache", "clear"]);
+    expect(clear.ok).toBe(true);
+    if (!clear.ok) {
+      throw new Error(clear.error.message);
+    }
+    expect(clear.value).toEqual({
+      kind: "cache",
+      action: "clear",
+      json: false
+    });
+  });
+
+  test("rejects invalid cache actions and prune-only options", () => {
+    for (const argv of [
+      ["cache", "vacuum"],
+      ["cache", "status", "--max-size", "1GiB"],
+      ["cache", "clear", "--max-age", "1d"],
+      ["cache", "prune", "--max-size", "large"],
+      ["cache", "prune", "--max-age", "forever"]
+    ]) {
+      const parsed = parseArgs(argv);
+      expect(parsed.ok).toBe(false);
+      if (parsed.ok) {
+        throw new Error(`Expected ${argv.join(" ")} to fail.`);
+      }
+      expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+    }
   });
 
   test("parses branch, tag, and commit-like diff baseline refs", () => {

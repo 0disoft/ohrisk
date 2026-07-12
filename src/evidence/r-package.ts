@@ -2,6 +2,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
+import { omitUndefined } from "../shared/object";
 import {
   readTextFileWithLimit,
   textFileReadErrorCategory,
@@ -206,11 +207,11 @@ function readRDescription(input: {
   }
 
   const fields = parseDcfFields(text.value);
-  return ok({
+  return ok(omitUndefined({
     packageName: fields.get("Package"),
     version: fields.get("Version"),
     license: fields.get("License")
-  });
+  }));
 }
 
 function parseDcfFields(text: string): Map<string, string> {

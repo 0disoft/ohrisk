@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 import {
@@ -138,18 +139,18 @@ export function parsePackageLockText(
   const rootEntries = readPackageLockRootEntries({
     packages: lockfile.packages,
     rootPackage,
-    rootName
+    ...(rootName !== undefined ? { rootName } : {})
   });
   const nodeMap = new Map<string, DependencyNode>();
 
   for (const rootEntry of rootEntries) {
     for (const rootDependency of collectRootDependencies(rootEntry.pkg)) {
-      const record = resolvePackageRecord({
+      const record = resolvePackageRecord(omitUndefined({
         records,
         name: rootDependency.name,
         range: rootDependency.range,
         parentPath: rootEntry.packagePath
-      });
+      }));
 
       if (!record) {
         continue;
@@ -168,11 +169,11 @@ export function parsePackageLockText(
     }
   }
 
-  return ok({
+  return ok(omitUndefined({
     rootName,
     lockfilePath,
     nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id))
-  });
+  }));
 }
 
 function parsePackageLockV1(input: {
@@ -206,11 +207,11 @@ function parsePackageLockV1(input: {
     });
   }
 
-  return ok({
+  return ok(omitUndefined({
     rootName,
     lockfilePath: input.lockfilePath,
     nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id))
-  });
+  }));
 }
 
 function parseLockfileJson(
@@ -429,10 +430,13 @@ function walkDependency(input: {
   if (existing) {
     existing.direct = existing.direct || input.direct;
     existing.dependencyType = mergeDependencyType(existing.dependencyType, input.dependencyType);
-    existing.installNames = addUniqueInstallName({
+    const installNames = addUniqueInstallName({
       current: existing.installNames,
       installName
     });
+    if (installNames !== undefined) {
+      existing.installNames = installNames;
+    }
     existing.paths.push(nextPath);
   } else {
     input.nodeMap.set(input.record.id, {

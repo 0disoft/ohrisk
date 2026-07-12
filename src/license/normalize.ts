@@ -79,28 +79,47 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
       signals.push("custom-text");
     }
 
-    return {
+    return withSpdxAst({
       packageId: evidence.packageId,
       original: parsed.original,
       ...(parsed.expression ? { expression: parsed.expression } : {}),
       choices: parsed.choices,
       joiner: parsed.joiner,
+      ...(parsed.exceptions.length > 0 ? { exceptions: parsed.exceptions } : {}),
       signals,
       evidenceSources,
       confidence: "low"
-    };
+    }, parsed.ast);
   }
 
-  return {
+  return withSpdxAst({
     packageId: evidence.packageId,
     original: parsed.original,
     ...(parsed.expression ? { expression: parsed.expression } : {}),
     choices: parsed.choices,
     joiner: parsed.joiner,
+    ...(parsed.exceptions.length > 0 ? { exceptions: parsed.exceptions } : {}),
     signals,
     evidenceSources,
     confidence: parsed.usedAlias || licenseExpression.source === "license-file" ? "medium" : "high"
-  };
+  }, parsed.ast);
+}
+
+function withSpdxAst(
+  license: NormalizedLicense,
+  ast: NormalizedLicense["spdxAst"]
+): NormalizedLicense {
+  if (!ast) {
+    return license;
+  }
+
+  Object.defineProperty(license, "spdxAst", {
+    value: ast,
+    enumerable: false,
+    configurable: false,
+    writable: false
+  });
+  return license;
 }
 
 export function normalizeAllLicenseEvidence(evidence: LicenseEvidence[]): NormalizedLicense[] {

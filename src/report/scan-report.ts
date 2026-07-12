@@ -1,7 +1,9 @@
+import { omitUndefined } from "../shared/object";
 import path from "node:path";
 
 import type { LicenseEvidence } from "../evidence/types";
-import type { DependencyGraph } from "../graph/types";
+import { packageUrl } from "../graph/package-url";
+import type { DependencyGraph, DependencyNode } from "../graph/types";
 import type { NormalizedLicense } from "../license/types";
 import { NOTICE_ACTION } from "../policy/evaluate";
 import type {
@@ -11,7 +13,9 @@ import type {
   RiskSeverity
 } from "../policy/types";
 import type { RiskWaiver, WaivedRiskFinding } from "../policy/waivers";
-import type { ProjectInput } from "../project/discover";
+import type { PolicyConfigSummary } from "../policy/config";
+import type { UsageProfile } from "../policy/profiles";
+import { projectLockfiles, type ProjectInput } from "../project/discover";
 import {
   formatMarkdownInlineCode,
   formatMarkdownTableCell,
@@ -26,6 +30,10 @@ import {
 import { HTML_REPORT_CONTENT_SECURITY_POLICY } from "./html-security";
 import type { ReportLanguage } from "./language";
 import { buildThresholdSummary, formatThresholdSummary } from "./threshold-summary";
+import {
+  OHRISK_REPORT_SCHEMA_VERSION,
+  OHRISK_SCAN_REPORT_SCHEMA
+} from "./schema";
 
 export type ScanReportInput = {
   project: ProjectInput;
@@ -33,7 +41,7 @@ export type ScanReportInput = {
   evidence: LicenseEvidence[];
   normalizedLicenses: NormalizedLicense[];
   riskFindings: RiskFinding[];
-  profile: string;
+  profile: UsageProfile;
   prodOnly: boolean;
   json: boolean;
   markdown: boolean;
@@ -45,6 +53,7 @@ export type ScanReportInput = {
   waivedFindings: WaivedRiskFinding[];
   expiredWaivers: RiskWaiver[];
   unmatchedWaivers: RiskWaiver[];
+  policy?: PolicyConfigSummary;
 };
 
 export function renderScanReport(input: ScanReportInput): string {
@@ -56,20 +65,25 @@ export function renderScanReport(input: ScanReportInput): string {
   if (input.json) {
     return JSON.stringify(
       {
+        $schema: OHRISK_SCAN_REPORT_SCHEMA,
+        schemaVersion: OHRISK_REPORT_SCHEMA_VERSION,
         status: "profile_risk_evaluated",
         projectRoot: ".",
         lockfile: {
           kind: input.project.lockfile.kind,
           path: displayLockfilePath(input.project)
         },
+        lockfiles: displayLockfiles(input.project),
         profile: input.profile,
         prodOnly: input.prodOnly,
         dependencyGraph: summary.dependencyGraph,
+        dependencyOrigins: dependencyProvenance(input),
         evidence: summary.evidence,
         licenses: summary.licenses,
         risks: summary.risks,
         waiverMode: input.waiverMode,
         waivers: summary.waivers,
+        policy: input.policy ?? disabledPolicySummary(),
         nextAction,
         ...thresholdSummary,
         ...waiverDriftSummary,
@@ -95,6 +109,7 @@ export function renderScanReport(input: ScanReportInput): string {
     "Ohrisk scan",
     `Project: ${input.project.rootDir}`,
     `Lockfile: ${displayLockfilePath(input.project)} (${input.project.lockfile.kind})`,
+    ...renderAdditionalLockfileLines(input.project),
     `Profile: ${input.profile}`,
     `Production only: ${input.prodOnly ? "yes" : "no"}`,
     `Dependencies: ${summary.dependencyGraph.total} total, ${summary.dependencyGraph.direct} direct, ${summary.dependencyGraph.transitive} transitive`,
@@ -159,7 +174,7 @@ function renderHtmlReport(
     '      <dl class="summary-grid">',
     ...renderSummaryCards([
       [text.labels.project, markdownProjectLabel(input)],
-      [text.labels.lockfile, `${displayLockfilePath(input.project)} (${input.project.lockfile.kind})`],
+      [text.labels.lockfile, displayLockfileSummary(input.project)],
       [text.labels.profile, input.profile],
       [text.labels.prodOnly, input.prodOnly ? "yes" : "no"],
       [
@@ -367,11 +382,11 @@ function buildEvidenceRecoveryAdvice(
     return undefined;
   }
 
-  return {
+  return omitUndefined({
     unknownFindings: unknownFindings.length,
     localEvidenceMissingFindings: localEvidenceMissingFindings.length,
     primaryHint: evidenceRecoveryHintFor(input, localEvidenceMissingFindings)
-  };
+  });
 }
 
 function hasLocalPackageEvidenceMissingSignal(finding: RiskFinding): boolean {
@@ -852,6 +867,7 @@ function renderMarkdownReport(
     "",
     `- Project: ${formatMarkdownInlineCode(markdownProjectLabel(input))}`,
     `- Lockfile: ${formatMarkdownInlineCode(displayLockfilePath(input.project))} (${formatMarkdownInlineCode(input.project.lockfile.kind)})`,
+    ...renderAdditionalMarkdownLockfileLines(input.project),
     `- Profile: ${formatMarkdownInlineCode(input.profile)}`,
     `- Production only: ${formatMarkdownInlineCode(input.prodOnly ? "yes" : "no")}`,
     `- Dependencies: ${formatMarkdownInlineCode(`${summary.dependencyGraph.total} total`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.direct} direct`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.transitive} transitive`)}`,
@@ -878,9 +894,98 @@ function renderMarkdownReport(
   ].join("\n");
 }
 
+
+function dependencyProvenance(input: ScanReportInput): Array<{
+  packageId: string;
+  purl: string;
+  origins: Array<{ kind: string; path: string }>;
+}> {
+  return input.graph.nodes
+    .map((node) => ({
+      packageId: node.id,
+      purl: packageUrl(node),
+      origins: displayDependencyOrigins(input.project, node)
+    }))
+    .sort((left, right) => left.purl.localeCompare(right.purl));
+}
+
+function displayDependencyOrigins(
+  project: ScanReportInput["project"],
+  node: DependencyNode
+): Array<{ kind: string; path: string }> {
+  const origins = node.origins && node.origins.length > 0
+    ? node.origins.map((origin) => ({
+        kind: origin.lockfileKind,
+        path: displayProjectPath(project.rootDir, origin.lockfilePath)
+      }))
+    : [{
+        kind: project.lockfile.kind,
+        path: displayLockfilePath(project)
+      }];
+
+  const uniqueOrigins = new Map<string, { kind: string; path: string }>();
+  for (const origin of origins) {
+    uniqueOrigins.set(`${origin.kind}\0${origin.path}`, origin);
+  }
+  return [...uniqueOrigins.values()].sort((left, right) =>
+    left.path.localeCompare(right.path) || left.kind.localeCompare(right.kind)
+  );
+}
+
+function displayLockfileSummary(project: ScanReportInput["project"]): string {
+  return displayLockfiles(project)
+    .map((lockfile) => `${lockfile.path} (${lockfile.kind})`)
+    .join(", ");
+}
+
+function renderAdditionalLockfileLines(project: ScanReportInput["project"]): string[] {
+  const lockfiles = displayLockfiles(project);
+  return lockfiles.length > 1
+    ? [`Lockfiles: ${lockfiles.map((lockfile) => `${lockfile.path} (${lockfile.kind})`).join(", ")}`]
+    : [];
+}
+
+function renderAdditionalMarkdownLockfileLines(
+  project: ScanReportInput["project"]
+): string[] {
+  const lockfiles = displayLockfiles(project);
+  return lockfiles.length > 1
+    ? [`- Lockfiles: ${lockfiles.map((lockfile) => `${formatMarkdownInlineCode(lockfile.path)} (${formatMarkdownInlineCode(lockfile.kind)})`).join(", ")}`]
+    : [];
+}
+
+function displayLockfiles(project: ScanReportInput["project"]): Array<{ kind: string; path: string }> {
+  return projectLockfiles(project).map((lockfile) => ({
+    kind: lockfile.kind,
+    path: displayProjectPath(project.rootDir, lockfile.path)
+  }));
+}
+
+function disabledPolicySummary(): PolicyConfigSummary {
+  return {
+    enabled: false,
+    sourceFiles: [],
+    allowLicenseCount: 0,
+    denyLicenseCount: 0,
+    severityOverrideCount: 0,
+    packageRuleCount: 0,
+    profileCount: 0,
+    profileOverrideCount: 0,
+    allowedRegistryHostCount: 0,
+    registryAuthHostCount: 0
+  };
+}
+
+function displayProjectPath(projectRoot: string, targetPath: string): string {
+  const relativePath = path.relative(projectRoot, targetPath);
+  if (relativePath && !relativePath.startsWith("..") && !path.isAbsolute(relativePath)) {
+    return relativePath.replace(/\\/g, "/");
+  }
+  return path.basename(targetPath);
+}
+
 function displayLockfilePath(project: ScanReportInput["project"]): string {
-  const relativePath = path.relative(project.rootDir, project.lockfile.path);
-  return relativePath === "" ? path.basename(project.lockfile.path) : relativePath;
+  return displayProjectPath(project.rootDir, project.lockfile.path);
 }
 
 function displayLockfileDirectoryPath(project: ScanReportInput["project"]): string {

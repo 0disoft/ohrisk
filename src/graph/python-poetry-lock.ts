@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -66,9 +67,9 @@ export function parsePoetryLockfile(
     return pyproject;
   }
 
-  return parsePoetryLockText(lockfileText.value, lockfilePath, {
+  return parsePoetryLockText(lockfileText.value, lockfilePath, omitUndefined({
     pyprojectText: pyproject.value
-  });
+  }));
 }
 
 export function parsePoetryLockText(
@@ -94,10 +95,10 @@ export function parsePoetryLockText(
     const rootName = readPyprojectName(options.pyprojectText)
       ?? path.basename(path.dirname(lockfilePath))
       ?? "<root>";
-    const rootDependencies = readPoetryRootDependencies({
+    const rootDependencies = readPoetryRootDependencies(omitUndefined({
       pyprojectText: options.pyprojectText,
       records
-    });
+    }));
     const nodeMap = new Map<string, DependencyNode>();
 
     for (const rootDependency of rootDependencies) {

@@ -67,12 +67,83 @@ export type ProjectLockfile = {
 export type ProjectInput = {
   rootDir: string;
   lockfile: ProjectLockfile;
+  lockfiles?: ProjectLockfile[];
 };
 
 export type DiscoverProjectOptions = {
   cwd?: string;
   lockfilePath?: string;
+  allLockfiles?: boolean;
 };
+
+export function projectLockfiles(project: ProjectInput): ProjectLockfile[] {
+  return project.lockfiles ?? [project.lockfile];
+}
+
+export function projectLockfilesFromRelativePaths(input: {
+  rootDir: string;
+  relativePaths: Iterable<string>;
+}): ProjectLockfile[] {
+  const rootDir = path.resolve(input.rootDir);
+  const files = new Set(
+    [...input.relativePaths]
+      .map(normalizeListedProjectPath)
+      .filter((value): value is string => value !== undefined)
+  );
+  const candidates: string[] = [];
+
+  for (const lockfile of KNOWN_LOCKFILES) {
+    if (files.has(normalizeListedProjectPath(lockfile) ?? lockfile)) {
+      candidates.push(lockfile);
+    }
+  }
+
+  for (const lockfile of KNOWN_NESTED_LOCKFILES) {
+    const normalized = normalizeListedProjectPath(lockfile);
+    if (normalized && files.has(normalized)) {
+      candidates.push(lockfile);
+    }
+  }
+
+  const gradleLockDirectory = normalizeListedProjectPath(GRADLE_DEPENDENCY_LOCKS_DIR);
+  if (gradleLockDirectory && [...files].some((file) =>
+    file.startsWith(`${gradleLockDirectory}/`)
+    && file.slice(gradleLockDirectory.length + 1).toLowerCase().endsWith(".lockfile")
+    && !file.slice(gradleLockDirectory.length + 1).includes("/")
+  )) {
+    candidates.push(GRADLE_DEPENDENCY_LOCKS_DIR);
+  }
+
+  for (const file of files) {
+    if (!file.includes("/") && file.toLowerCase().endsWith(".csproj")) {
+      candidates.push(file);
+      continue;
+    }
+
+    if (!file.includes("/") && isPylockTomlFile(file)) {
+      candidates.push(file);
+      continue;
+    }
+
+    if (isListedXcodePackageResolvedPath(file)) {
+      candidates.push(file);
+    }
+  }
+
+  return normalizeCompanionLockfiles([...new Set(candidates)])
+    .sort()
+    .flatMap((relativePath) => {
+      const kind = supportedKindForLockfilePath(relativePath);
+      if (!kind) {
+        return [];
+      }
+
+      return [{
+        kind,
+        path: path.join(rootDir, ...relativePath.replace(/\\/g, "/").split("/"))
+      } satisfies ProjectLockfile];
+    });
+}
 
 const SUPPORTED_LOCKFILES: Record<string, SupportedLockfileKind> = {
   "bun.lock": "bun",
@@ -136,6 +207,15 @@ const SUPPORTED_LOCKFILES: Record<string, SupportedLockfileKind> = {
   "bom.spdx": "spdx-tag-value",
   "yarn.lock": "yarn-lock"
 };
+
+export function supportedLockfileKinds(): SupportedLockfileKind[] {
+  return [...new Set<SupportedLockfileKind>([
+    ...Object.values(SUPPORTED_LOCKFILES),
+    "package-json",
+    "dotnet-project",
+    "unity-packages-lock"
+  ])].sort();
+}
 
 const KNOWN_LOCKFILES = [
   "bun.lock",
@@ -302,12 +382,12 @@ export function discoverProject(
         continue;
       }
 
-      if (lockfiles.length > 1) {
+      if (lockfiles.length > 1 && !options.allLockfiles) {
         return err(
           createError({
             code: "MULTIPLE_LOCKFILES",
             category: "unsupported_input",
-            message: "Multiple lockfiles found in the same project root. Select one with --lockfile.",
+            message: "Multiple lockfiles found in the same project root. Select one with --lockfile or scan all with --all.",
             details: {
               rootDir: dir,
               lockfiles
@@ -316,15 +396,15 @@ export function discoverProject(
         );
       }
 
-      const lockfileName = lockfiles[0];
+      const selectedLockfiles = options.allLockfiles ? lockfiles : lockfiles.slice(0, 1);
+      const projectLockfileEntries = selectedLockfiles.flatMap((lockfileName) => {
+        const kind = supportedKindForLockfilePath(lockfileName);
+        return kind
+          ? [{ kind, path: path.join(dir, lockfileName) } satisfies ProjectLockfile]
+          : [];
+      });
 
-      if (!lockfileName) {
-        continue;
-      }
-
-      const kind = supportedKindForLockfilePath(lockfileName);
-
-      if (!kind) {
+      if (projectLockfileEntries.length !== selectedLockfiles.length) {
         return err(
           createError({
             code: "NO_SUPPORTED_LOCKFILE",
@@ -339,12 +419,17 @@ export function discoverProject(
         );
       }
 
+      const primaryLockfile = projectLockfileEntries[0];
+      if (!primaryLockfile) {
+        continue;
+      }
+
       return ok({
-        rootDir: rootDirForLockfilePath(path.join(dir, lockfileName), kind),
-        lockfile: {
-          kind,
-          path: path.join(dir, lockfileName)
-        }
+        rootDir: options.allLockfiles
+          ? dir
+          : rootDirForLockfilePath(primaryLockfile.path, primaryLockfile.kind),
+        lockfile: primaryLockfile,
+        ...(projectLockfileEntries.length > 1 ? { lockfiles: projectLockfileEntries } : {})
       });
     }
 
@@ -516,6 +601,33 @@ function readFilePrefix(filePath: string): string | undefined {
   }
 }
 
+function normalizeListedProjectPath(value: string): string | undefined {
+  const normalized = path.posix.normalize(value.replace(/\\/g, "/"));
+  if (
+    normalized === "."
+    || normalized === ".."
+    || normalized.startsWith("../")
+    || normalized.startsWith("/")
+  ) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
+function isListedXcodePackageResolvedPath(relativePath: string): boolean {
+  const segments = relativePath.split("/");
+  return (
+    segments.length === 5
+    && segments[0]?.endsWith(".xcodeproj")
+    && segments.slice(1).join("/") === "project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+  ) || (
+    segments.length === 4
+    && segments[0]?.endsWith(".xcworkspace")
+    && segments.slice(1).join("/") === "xcshareddata/swiftpm/Package.resolved"
+  );
+}
+
 function findKnownLockfiles(dir: string): string[] {
   const directLockfiles = KNOWN_LOCKFILES.filter((lockfile) => isFile(path.join(dir, lockfile)));
   const nestedLockfiles = KNOWN_NESTED_LOCKFILES.filter((lockfile) => isFile(path.join(dir, lockfile)));
@@ -565,11 +677,13 @@ function findGradleDependencyLockfiles(dir: string): string[] {
 }
 
 function normalizeCompanionLockfiles(lockfiles: string[]): string[] {
-  if (lockfiles.includes("go.work")) {
-    return lockfiles.filter((lockfile) => lockfile !== "go.mod");
+  let normalized = [...lockfiles];
+
+  if (normalized.includes("go.work")) {
+    normalized = normalized.filter((lockfile) => lockfile !== "go.mod");
   }
 
-  const hasResolvedPythonInput = lockfiles.some((lockfile) =>
+  const hasResolvedPythonInput = normalized.some((lockfile) =>
     lockfile === "Pipfile.lock"
     || lockfile === "pdm.lock"
     || lockfile === "poetry.lock"
@@ -578,30 +692,33 @@ function normalizeCompanionLockfiles(lockfiles: string[]): string[] {
     || isPylockTomlFile(lockfile)
   );
   if (hasResolvedPythonInput) {
-    return lockfiles.filter((lockfile) => lockfile !== "pyproject.toml");
+    normalized = normalized.filter((lockfile) => lockfile !== "pyproject.toml");
   }
 
-  if (lockfiles.includes("gradle.lockfile")) {
-    return lockfiles.filter((lockfile) =>
+  if (normalized.includes("gradle.lockfile")) {
+    normalized = normalized.filter((lockfile) =>
       lockfile !== path.join("gradle", "libs.versions.toml")
       && !isGradleDependencyLockInputPath(lockfile)
     );
+  } else if (normalized.includes(GRADLE_DEPENDENCY_LOCKS_DIR)) {
+    normalized = normalized.filter(
+      (lockfile) => lockfile !== path.join("gradle", "libs.versions.toml")
+    );
   }
 
-  if (lockfiles.includes(GRADLE_DEPENDENCY_LOCKS_DIR)) {
-    return lockfiles.filter((lockfile) => lockfile !== path.join("gradle", "libs.versions.toml"));
+  if (normalized.includes("Chart.lock")) {
+    normalized = normalized.filter((lockfile) => lockfile !== "Chart.yaml");
   }
 
-  if (lockfiles.includes("Chart.lock")) {
-    return lockfiles.filter((lockfile) => lockfile !== "Chart.yaml");
-  }
-
-  const hasCondaLock = lockfiles.includes("conda-lock.yml") || lockfiles.includes("conda-lock.yaml");
+  const hasCondaLock = normalized.includes("conda-lock.yml")
+    || normalized.includes("conda-lock.yaml");
   if (hasCondaLock) {
-    return lockfiles.filter((lockfile) => lockfile !== "environment.yml" && lockfile !== "environment.yaml");
+    normalized = normalized.filter((lockfile) =>
+      lockfile !== "environment.yml" && lockfile !== "environment.yaml"
+    );
   }
 
-  return lockfiles;
+  return normalized;
 }
 
 function findXcodeSwiftPackageResolvedFiles(dir: string): string[] {

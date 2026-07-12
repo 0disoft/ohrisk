@@ -2145,7 +2145,11 @@ describe("discoverProject", () => {
   });
 
   test("sniffs explicit SBOM paths without supported names or suffixes", () => {
-    const cases = [
+    const cases: Array<{
+      filename: string;
+      kind: import("../src/project/discover").SupportedLockfileKind;
+      contents: string;
+    }> = [
       {
         filename: "cyclonedx-report.input",
         kind: "cyclonedx-json",

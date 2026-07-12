@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import { omitUndefined } from "../shared/object";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 import {
@@ -219,12 +220,12 @@ function deduplicateCpanRecords(records: CpanDistributionRecord[]): CpanDistribu
   for (const record of records) {
     const existing = seen.get(record.id);
     seen.set(record.id, existing
-      ? {
+      ? omitUndefined({
           ...existing,
           pathname: existing.pathname ?? record.pathname,
           provides: [...new Set([...existing.provides, ...record.provides])].sort(),
           requirements: [...new Set([...existing.requirements, ...record.requirements])].sort()
-        }
+        })
       : record);
   }
 

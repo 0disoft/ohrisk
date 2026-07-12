@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
@@ -407,13 +408,13 @@ function readMavenPomDependencies(
         );
       }
 
-      dependencies.push({
+      dependencies.push(omitUndefined({
         groupId,
         artifactId,
         version,
         scope: readXmlTagText(dependencyText, "scope"),
         optional: readXmlTagText(dependencyText, "optional") === "true"
-      });
+      }));
     }
   }
 
@@ -626,31 +627,31 @@ function deduplicateMavenDependencies(dependencies: MavenPomDependency[]): Maven
       continue;
     }
 
-    seen.set(key, {
+    seen.set(key, omitUndefined({
       ...existing,
       optional: existing.optional && dependency.optional,
       scope: mergeMavenScope(existing.scope, dependency.scope)
-    });
+    }));
   }
 
   return [...seen.values()];
 }
 
 function mergeMavenScope(left: string | undefined, right: string | undefined): string | undefined {
-  const leftType = dependencyTypeForMavenDependency({
+  const leftType = dependencyTypeForMavenDependency(omitUndefined({
     groupId: "group",
     artifactId: "artifact",
     version: "0",
     optional: false,
     scope: left
-  });
-  const rightType = dependencyTypeForMavenDependency({
+  }));
+  const rightType = dependencyTypeForMavenDependency(omitUndefined({
     groupId: "group",
     artifactId: "artifact",
     version: "0",
     optional: false,
     scope: right
-  });
+  }));
 
   return dependencyTypeRank(leftType) >= dependencyTypeRank(rightType) ? left : right;
 }

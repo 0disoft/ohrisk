@@ -143,7 +143,7 @@ export function parseDenoLockText(
   }
 
   return ok({
-    rootName,
+    ...(rootName !== undefined ? { rootName } : {}),
     lockfilePath,
     nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id))
   });
@@ -593,10 +593,13 @@ function walkDependency(input: {
   if (existing) {
     existing.direct = existing.direct || input.direct;
     existing.dependencyType = mergeDependencyType(existing.dependencyType, input.dependencyType);
-    existing.installNames = addUniqueInstallName({
+    const installNames = addUniqueInstallName({
       current: existing.installNames,
       installName
     });
+    if (installNames !== undefined) {
+      existing.installNames = installNames;
+    }
     existing.paths.push(nextPath);
   } else {
     input.nodeMap.set(input.record.id, {

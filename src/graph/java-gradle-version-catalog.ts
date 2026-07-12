@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
@@ -203,13 +204,13 @@ function readGradleCatalogLibraryRecord(input: {
   const resolvedVersion = version ?? (versionRef ? input.versions.get(versionRef) : undefined);
 
   if (!groupId || !artifactId || !resolvedVersion) {
-    return gradleCatalogParseError({
+    return gradleCatalogParseError(omitUndefined({
       lockfilePath: input.catalogPath,
       line: input.line,
       alias: input.alias,
       reason: "library_missing_group_artifact_or_exact_version",
       versionRef
-    });
+    }));
   }
 
   return ok(gradleCatalogRecord({

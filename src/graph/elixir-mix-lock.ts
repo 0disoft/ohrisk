@@ -1,3 +1,4 @@
+import { omitUndefined } from "../shared/object";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -50,9 +51,9 @@ export function parseMixLockfile(
     return mixExsText;
   }
 
-  return parseMixLockText(lockfileText.value, lockfilePath, {
+  return parseMixLockText(lockfileText.value, lockfilePath, omitUndefined({
     mixExsText: mixExsText.value
-  });
+  }));
 }
 
 export function parseMixLockText(
