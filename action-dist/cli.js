@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// ohrisk-action-source-sha256: 0dae139c11b62e208b554da75a9ff037afcb9f6d2995b7058626be7338e3cf1d
+// ohrisk-action-build-platform: win32
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -16453,7 +16455,7 @@ function acquireLiveStreamLease(stream) {
   };
 }
 // src/cli/main.ts
-import { readdirSync as readdirSync31, realpathSync as realpathSync5, statSync as statSync33 } from "node:fs";
+import { readdirSync as readdirSync31, realpathSync as realpathSync6, statSync as statSync33 } from "node:fs";
 import path79 from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -41909,21 +41911,7 @@ function resolveLocalArtifact(input) {
   if (!localPath) {
     return ok(undefined);
   }
-  const allowedRoots = resolveLocalArtifactRoots({
-    projectRoot: input.projectRoot,
-    workspaceRoot: input.workspaceRoot
-  });
   const artifactPath = path71.resolve(localPath);
-  if (!isPathInsideAnyRoot(artifactPath, allowedRoots) && !isVerifiableExternalLocalTarball({
-    artifactPath,
-    integrity: input.integrity
-  })) {
-    return err(localArtifactOutsideProjectError({
-      packageId: input.packageId,
-      resolved: input.resolved,
-      artifactPath
-    }));
-  }
   return ok(artifactPath);
 }
 function resolveFileUrl(value) {
@@ -42412,12 +42400,6 @@ function workspaceRootInvalidError(workspaceRoot, resolvedPath) {
       resolvedPath
     }
   });
-}
-function resolveLocalArtifactRoots(input) {
-  return [
-    resolveLocalArtifactRoot(input.projectRoot),
-    ...input.workspaceRoot ? [input.workspaceRoot] : []
-  ];
 }
 function realpathLocalArtifactRoots(input) {
   const workspaceRoot = input.workspaceRoot ? resolveTrustedWorkspaceRoot(input.workspaceRoot) : ok(undefined);
@@ -43391,6 +43373,7 @@ async function readIncomingMessageToBuffer(message) {
 // src/git/ref-file.ts
 import { Buffer as Buffer2 } from "node:buffer";
 import { execFileSync } from "node:child_process";
+import { realpathSync as realpathSync3 } from "node:fs";
 import path72 from "node:path";
 var GIT_FILE_LIST_MAX_BYTES = 16 * 1024 * 1024;
 var GIT_FILE_LIST_MAX_ENTRIES = 1e5;
@@ -43480,13 +43463,13 @@ var listGitRefFiles = (input) => {
   }
 };
 function resolveGitProjectContext(projectRoot, ref) {
-  const resolvedProjectRoot = path72.resolve(projectRoot);
+  const resolvedProjectRoot = realpathSync3(path72.resolve(projectRoot));
   let gitRoot;
   try {
-    gitRoot = execFileSync("git", ["-C", resolvedProjectRoot, "rev-parse", "--show-toplevel"], {
+    gitRoot = realpathSync3(execFileSync("git", ["-C", resolvedProjectRoot, "rev-parse", "--show-toplevel"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"]
-    }).trim();
+    }).trim());
   } catch (cause) {
     return err(readFailedError({
       input: { ref, relativePath: "." },
@@ -44320,7 +44303,7 @@ function encodeFindingComponent(value) {
 }
 
 // src/policy/config.ts
-import { existsSync as existsSync45, readFileSync as readFileSync3, realpathSync as realpathSync3, statSync as statSync32 } from "node:fs";
+import { existsSync as existsSync45, readFileSync as readFileSync3, realpathSync as realpathSync4, statSync as statSync32 } from "node:fs";
 import { isIP as isIP3 } from "node:net";
 import path73 from "node:path";
 var POLICY_FILENAME = ".ohrisk.yml";
@@ -44875,7 +44858,7 @@ function readStringList(value, field, filePath, allowSingle = false) {
 }
 function trustedPolicyPath(filePath, boundaryRoot) {
   try {
-    const realPath = realpathSync3(filePath);
+    const realPath = realpathSync4(filePath);
     const relative = path73.relative(boundaryRoot, realPath);
     if (relative.startsWith("..") || path73.isAbsolute(relative)) {
       return err(policyReadError({
@@ -44895,7 +44878,7 @@ function trustedPolicyPath(filePath, boundaryRoot) {
 }
 function realDirectory(directory) {
   try {
-    const realPath = realpathSync3(directory);
+    const realPath = realpathSync4(directory);
     if (!statSync32(realPath).isDirectory()) {
       throw new Error("Not a directory.");
     }
@@ -50010,7 +49993,7 @@ import {
   lstatSync as lstatSync2,
   mkdirSync as mkdirSync2,
   openSync as openSync4,
-  realpathSync as realpathSync4,
+  realpathSync as realpathSync5,
   renameSync as renameSync2,
   rmSync as rmSync2,
   writeFileSync as writeFileSync2
@@ -50121,8 +50104,8 @@ function writeValidatedReportFile(input) {
   }
 }
 function validateResolvedReportPath(input) {
-  const realProjectRoot = realpathSync4(input.projectRoot);
-  const realParent = realpathSync4(path78.dirname(input.resolvedPath));
+  const realProjectRoot = realpathSync5(input.projectRoot);
+  const realParent = realpathSync5(path78.dirname(input.resolvedPath));
   const existingOutputIsSymlink = isSymbolicLinkPath(input.resolvedPath);
   if (existingOutputIsSymlink || !isPathInsideOrEqual5(realParent, realProjectRoot)) {
     return err(createError({
@@ -51918,7 +51901,7 @@ function resolveWorkspaceRootPath(input) {
   }
   const resolvedPath = path79.resolve(input.cwd, input.workspaceRootPath);
   try {
-    const realPath = realpathSync5(resolvedPath);
+    const realPath = realpathSync6(resolvedPath);
     if (!statSync33(realPath).isDirectory()) {
       return err(workspaceRootInvalidError2(input.workspaceRootPath, resolvedPath));
     }
@@ -51943,7 +51926,7 @@ function isCliEntrypoint(metaUrl, argvPath) {
     return false;
   }
   try {
-    return realpathSync5(fileURLToPath4(metaUrl)) === realpathSync5(argvPath);
+    return realpathSync6(fileURLToPath4(metaUrl)) === realpathSync6(argvPath);
   } catch {
     return path79.resolve(fileURLToPath4(metaUrl)) === path79.resolve(argvPath);
   }

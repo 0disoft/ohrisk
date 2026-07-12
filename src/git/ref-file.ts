@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
@@ -131,14 +132,14 @@ function resolveGitProjectContext(
   projectRoot: string,
   ref: string
 ): Result<{ gitRoot: string; projectRoot: string }, OhriskError> {
-  const resolvedProjectRoot = path.resolve(projectRoot);
+  const resolvedProjectRoot = realpathSync(path.resolve(projectRoot));
   let gitRoot: string;
 
   try {
-    gitRoot = execFileSync("git", ["-C", resolvedProjectRoot, "rev-parse", "--show-toplevel"], {
+    gitRoot = realpathSync(execFileSync("git", ["-C", resolvedProjectRoot, "rev-parse", "--show-toplevel"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"]
-    }).trim();
+    }).trim());
   } catch (cause) {
     return err(readFailedError({
       input: { ref, relativePath: "." },

@@ -743,26 +743,10 @@ function resolveLocalArtifact(input: {
     return ok(undefined);
   }
 
-  const allowedRoots = resolveLocalArtifactRoots({
-    projectRoot: input.projectRoot,
-    workspaceRoot: input.workspaceRoot
-  });
   const artifactPath = path.resolve(localPath);
-
-  if (
-    !isPathInsideAnyRoot(artifactPath, allowedRoots)
-    && !isVerifiableExternalLocalTarball({
-      artifactPath,
-      integrity: input.integrity
-    })
-  ) {
-    return err(localArtifactOutsideProjectError({
-      packageId: input.packageId,
-      resolved: input.resolved,
-      artifactPath
-    }));
-  }
-
+  // Containment is checked after existence with canonical paths in
+  // resolveExistingLocalArtifactPath. A lexical check here misclassifies
+  // macOS /var -> /private/var aliases and other filesystem aliases.
   return ok(artifactPath);
 }
 
@@ -1436,16 +1420,6 @@ function workspaceRootInvalidError(workspaceRoot: string, resolvedPath: string):
       resolvedPath
     }
   });
-}
-
-function resolveLocalArtifactRoots(input: {
-  projectRoot: string;
-  workspaceRoot: string | undefined;
-}): string[] {
-  return [
-    resolveLocalArtifactRoot(input.projectRoot),
-    ...(input.workspaceRoot ? [input.workspaceRoot] : [])
-  ];
 }
 
 function realpathLocalArtifactRoots(input: {

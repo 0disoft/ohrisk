@@ -1,17 +1,21 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { chmodSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 export const CLI_ENTRYPOINT = "src/cli/main.ts";
 export const CLI_BUNDLE_FILENAME = "cli.js";
+export const ACTION_BUNDLE_FINGERPRINT_PREFIX = "// ohrisk-action-source-sha256: ";
 
 export async function buildCliBundle(outdir: string): Promise<string> {
+  const sourceFingerprint = actionBundleSourceFingerprint();
   const result = await Bun.build({
     entrypoints: [CLI_ENTRYPOINT],
     naming: CLI_BUNDLE_FILENAME,
     outdir,
     packages: "bundle",
-    target: "node"
+    target: "node",
+    banner: `${ACTION_BUNDLE_FINGERPRINT_PREFIX}${sourceFingerprint}\n// ohrisk-action-build-platform: ${process.platform}`
   });
 
   if (!result.success) {
@@ -24,6 +28,33 @@ export async function buildCliBundle(outdir: string): Promise<string> {
   const bundlePath = path.join(outdir, CLI_BUNDLE_FILENAME);
   chmodSync(bundlePath, 0o755);
   return bundlePath;
+}
+
+export function actionBundleSourceFingerprint(): string {
+  const files = [
+    "bun.lock",
+    "package.json",
+    ...listSourceFiles("src")
+  ].sort((left, right) => left.localeCompare(right));
+  const hash = createHash("sha256");
+
+  for (const file of files) {
+    const normalizedPath = file.replace(/\\/g, "/");
+    const normalizedContents = readFileSync(file, "utf8").replace(/\r\n/g, "\n");
+    hash.update(`${normalizedPath}\0${normalizedContents}\0`, "utf8");
+  }
+
+  return hash.digest("hex");
+}
+
+function listSourceFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      return listSourceFiles(entryPath);
+    }
+    return entry.isFile() && entry.name.endsWith(".ts") ? [entryPath] : [];
+  });
 }
 
 export function assertVersionContract(): string {

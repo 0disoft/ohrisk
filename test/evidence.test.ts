@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1421,7 +1421,7 @@ describe("collectGraphEvidence", () => {
       expect(evidence.error.details).toMatchObject({
         packageId: "oversized-local-fixture@1.0.0",
         resolved: "file:oversized-local-fixture.tgz",
-        artifactPath: tarballPath,
+        artifactPath: realpathSync(tarballPath),
         maxBytes: 8,
         observedBytes: 9
       });
