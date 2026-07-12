@@ -136,10 +136,16 @@ function resolveGitProjectContext(
   let gitRoot: string;
 
   try {
-    gitRoot = realpathSync(execFileSync("git", ["-C", resolvedProjectRoot, "rev-parse", "--show-toplevel"], {
+    const gitRootRelativePath = execFileSync("git", [
+      "-C",
+      resolvedProjectRoot,
+      "rev-parse",
+      "--show-cdup"
+    ], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"]
-    }).trim());
+    }).trim();
+    gitRoot = realpathSync(path.resolve(resolvedProjectRoot, gitRootRelativePath || "."));
   } catch (cause) {
     return err(readFailedError({
       input: { ref, relativePath: "." },

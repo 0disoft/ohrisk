@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 0dae139c11b62e208b554da75a9ff037afcb9f6d2995b7058626be7338e3cf1d
+// ohrisk-action-source-sha256: 5c20f7086d62b1d6b08e46ea7582c27acbd977b2993269f1004476a3e6632ddb
 // ohrisk-action-build-platform: win32
 import { createRequire } from "node:module";
 var __create = Object.create;
@@ -43466,10 +43466,16 @@ function resolveGitProjectContext(projectRoot, ref) {
   const resolvedProjectRoot = realpathSync3(path72.resolve(projectRoot));
   let gitRoot;
   try {
-    gitRoot = realpathSync3(execFileSync("git", ["-C", resolvedProjectRoot, "rev-parse", "--show-toplevel"], {
+    const gitRootRelativePath = execFileSync("git", [
+      "-C",
+      resolvedProjectRoot,
+      "rev-parse",
+      "--show-cdup"
+    ], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"]
-    }).trim());
+    }).trim();
+    gitRoot = realpathSync3(path72.resolve(resolvedProjectRoot, gitRootRelativePath || "."));
   } catch (cause) {
     return err(readFailedError({
       input: { ref, relativePath: "." },
