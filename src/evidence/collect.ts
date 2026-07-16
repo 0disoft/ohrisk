@@ -92,6 +92,13 @@ type RemoteArtifactFetchPolicy = {
   allowedHosts?: ReadonlySet<string>;
 };
 
+type YarnCacheIndex = {
+  cacheDir: string;
+  filenames: string[];
+};
+
+type YarnCacheIndexLoader = () => Result<YarnCacheIndex | undefined, OhriskError>;
+
 export type EvidenceCollectionProgress = {
   completed: number;
   total: number;
@@ -120,6 +127,7 @@ export async function collectGraphEvidence(input: {
   graph: DependencyGraph;
   projectRoot: string;
   workspaceRoot?: string;
+  allowLocalProjectEvidence?: boolean;
   fetchArtifact?: ArtifactFetcher;
   fetchTimeoutMs?: number;
   registryMetadataMaxBytes?: number;
@@ -152,7 +160,7 @@ export async function collectGraphEvidence(input: {
   let failure: { index: number; error: OhriskError } | undefined;
   const workerCount = normalizeEvidenceConcurrency(input.evidenceConcurrency, total);
   const allowedHosts = normalizeAllowedArtifactHosts(input.allowedArtifactHosts);
-  const baseFetchArtifact = input.fetchArtifact ?? createDefaultArtifactFetcher(allowedHosts);
+  const baseFetchArtifact = input.fetchArtifact ?? createDefaultArtifactFetcher();
   const fetchArtifact = withRegistryAuthorization(baseFetchArtifact, input.registryAuthTokens);
   const resolveArtifactHost =
     input.resolveArtifactHost ??
@@ -163,6 +171,10 @@ export async function collectGraphEvidence(input: {
   const tarballMaxBytes = input.tarballMaxBytes ?? PACKAGE_TARBALL_MAX_BYTES;
   const installedPackageJsonMaxBytes =
     input.installedPackageJsonMaxBytes ?? INSTALLED_PACKAGE_JSON_MAX_BYTES;
+  const allowLocalProjectEvidence = input.allowLocalProjectEvidence ?? true;
+  const loadYarnCacheIndex = allowLocalProjectEvidence
+    ? createYarnCacheIndexLoader(input.projectRoot)
+    : () => ok(undefined);
 
   const collectNext = async (): Promise<void> => {
     while (!failure) {
@@ -181,6 +193,7 @@ export async function collectGraphEvidence(input: {
       const collected = await collectNodeEvidence({
         node,
         projectRoot: input.projectRoot,
+        allowLocalProjectEvidence,
         ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}),
         fetchArtifact,
         resolveArtifactHost,
@@ -191,7 +204,8 @@ export async function collectGraphEvidence(input: {
         offline: input.offline ?? false,
         artifactCache,
         npmRegistryUrl: input.npmRegistryUrl,
-        allowedHosts
+        allowedHosts,
+        loadYarnCacheIndex
       });
 
       if (!collected.ok) {
@@ -279,6 +293,7 @@ function normalizeEvidenceConcurrency(value: number | undefined, total: number):
 async function collectNodeEvidence(input: {
   node: DependencyNode;
   projectRoot: string;
+  allowLocalProjectEvidence: boolean;
   workspaceRoot?: string;
   fetchArtifact: ArtifactFetcher;
   resolveArtifactHost: ArtifactHostResolver | undefined;
@@ -290,16 +305,19 @@ async function collectNodeEvidence(input: {
   artifactCache: ArtifactCache | undefined;
   npmRegistryUrl: string | undefined;
   allowedHosts: ReadonlySet<string>;
+  loadYarnCacheIndex: YarnCacheIndexLoader;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
-  const ecosystemEvidence = collectRegisteredEcosystemEvidence({
-    node: input.node,
-    projectRoot: input.projectRoot
-  });
+  const ecosystemEvidence = input.allowLocalProjectEvidence
+    ? collectRegisteredEcosystemEvidence({
+        node: input.node,
+        projectRoot: input.projectRoot
+      })
+    : undefined;
   if (ecosystemEvidence) {
     return ecosystemEvidence;
   }
 
-  const explicitLocalPath = input.node.resolved
+  const explicitLocalPath = input.allowLocalProjectEvidence && input.node.resolved
     ? resolveLocalArtifact({
       packageId: input.node.id,
       resolved: input.node.resolved,
@@ -323,11 +341,13 @@ async function collectNodeEvidence(input: {
     });
   }
 
-  const nodeModulesPath = findNodeModulesPackage({
-    node: input.node,
-    projectRoot: input.projectRoot,
-    packageJsonMaxBytes: input.installedPackageJsonMaxBytes
-  });
+  const nodeModulesPath = input.allowLocalProjectEvidence
+    ? findNodeModulesPackage({
+        node: input.node,
+        projectRoot: input.projectRoot,
+        packageJsonMaxBytes: input.installedPackageJsonMaxBytes
+      })
+    : undefined;
   if (nodeModulesPath) {
     return collectLocalPackageEvidence({
       packageId: input.node.id,
@@ -335,11 +355,13 @@ async function collectNodeEvidence(input: {
     });
   }
 
-  const yarnCacheEvidence = collectYarnCachePackageEvidence({
-    node: input.node,
-    projectRoot: input.projectRoot,
-    zipMaxBytes: input.tarballMaxBytes
-  });
+  const yarnCacheEvidence = input.allowLocalProjectEvidence
+    ? collectYarnCachePackageEvidence({
+        node: input.node,
+        loadYarnCacheIndex: input.loadYarnCacheIndex,
+        zipMaxBytes: input.tarballMaxBytes
+      })
+    : ok(undefined);
   if (!yarnCacheEvidence.ok) {
     return err(yarnCacheEvidence.error);
   }
@@ -911,45 +933,27 @@ function installedPackageMatchesNode(input: {
 
 function collectYarnCachePackageEvidence(input: {
   node: DependencyNode;
-  projectRoot: string;
+  loadYarnCacheIndex: YarnCacheIndexLoader;
   zipMaxBytes: number;
 }): Result<LicenseEvidence | undefined, OhriskError> {
-  const cacheDir = path.join(input.projectRoot, ".yarn", "cache");
-  if (!existsSync(cacheDir) || !isReadableDirectory(cacheDir)) {
-    return ok(undefined);
-  }
-
   const filenamePrefix = yarnCacheFilenamePrefix(input.node);
   if (!filenamePrefix) {
     return ok(undefined);
   }
 
-  let entries;
-  try {
-    entries = readdirSync(cacheDir, { withFileTypes: true })
-      .filter((entry) =>
-        entry.isFile()
-        && entry.name.startsWith(filenamePrefix)
-        && entry.name.endsWith(".zip")
-      )
-      .sort((left, right) => left.name.localeCompare(right.name));
-  } catch (cause) {
-    return err(
-      createError({
-        code: "PACKAGE_EVIDENCE_READ_FAILED",
-        category: "filesystem",
-        message: "Failed to read Yarn package cache directory.",
-        details: {
-          packageId: input.node.id,
-          cacheDir,
-          cause: safeUrlForErrorDetails(cause instanceof Error ? cause.message : String(cause))
-        }
-      })
-    );
+  const loadedIndex = input.loadYarnCacheIndex();
+  if (!loadedIndex.ok) {
+    return err(loadedIndex.error);
+  }
+  if (!loadedIndex.value) {
+    return ok(undefined);
   }
 
-  for (const entry of entries) {
-    const cachePath = path.join(cacheDir, entry.name);
+  for (const filename of loadedIndex.value.filenames) {
+    if (!filename.startsWith(filenamePrefix)) {
+      continue;
+    }
+    const cachePath = path.join(loadedIndex.value.cacheDir, filename);
     const stats = readLocalArtifactStats({
       filePath: cachePath,
       packageId: input.node.id,
@@ -995,6 +999,42 @@ function collectYarnCachePackageEvidence(input: {
   }
 
   return ok(undefined);
+}
+
+function createYarnCacheIndexLoader(projectRoot: string): YarnCacheIndexLoader {
+  let loaded: Result<YarnCacheIndex | undefined, OhriskError> | undefined;
+  return () => {
+    if (loaded) {
+      return loaded;
+    }
+
+    const cacheDir = path.join(projectRoot, ".yarn", "cache");
+    if (!existsSync(cacheDir) || !isReadableDirectory(cacheDir)) {
+      loaded = ok(undefined);
+      return loaded;
+    }
+
+    try {
+      loaded = ok({
+        cacheDir,
+        filenames: readdirSync(cacheDir, { withFileTypes: true })
+          .filter((entry) => entry.isFile() && entry.name.endsWith(".zip"))
+          .map((entry) => entry.name)
+          .sort((left, right) => left.localeCompare(right))
+      });
+    } catch (cause) {
+      loaded = err(createError({
+        code: "PACKAGE_EVIDENCE_READ_FAILED",
+        category: "filesystem",
+        message: "Failed to read Yarn package cache directory.",
+        details: {
+          cacheDir,
+          cause: safeUrlForErrorDetails(cause instanceof Error ? cause.message : String(cause))
+        }
+      }));
+    }
+    return loaded;
+  };
 }
 
 function yarnCacheFilenamePrefix(node: DependencyNode): string | undefined {
@@ -1155,7 +1195,6 @@ async function readRemoteArtifactBytes(input: {
   artifactCache: ArtifactCache | undefined;
   allowedHosts: ReadonlySet<string>;
   urlDetailKey: "registryUrl" | "resolved";
-  skipPreflight?: boolean;
 }): Promise<Result<Buffer, OhriskError>> {
   const urlValidation = validateRemoteArtifactUrl({
     code: input.code,
@@ -1187,20 +1226,18 @@ async function readRemoteArtifactBytes(input: {
     }));
   }
 
-  if (!input.skipPreflight) {
-    const preflight = await preflightRemoteArtifactFetchTarget({
-      code: input.code,
-      packageId: input.packageId,
-      resolved: input.url,
-      message: input.blockedMessage,
-      resolveFailureMessage: input.resolveFailureMessage,
-      details: input.details,
-      resolveArtifactHost: input.resolveArtifactHost,
-      allowedHosts: input.allowedHosts
-    });
-    if (!preflight.ok) {
-      return err(preflight.error);
-    }
+  const preflight = await preflightRemoteArtifactFetchTarget({
+    code: input.code,
+    packageId: input.packageId,
+    resolved: input.url,
+    message: input.blockedMessage,
+    resolveFailureMessage: input.resolveFailureMessage,
+    details: input.details,
+    resolveArtifactHost: input.resolveArtifactHost,
+    allowedHosts: input.allowedHosts
+  });
+  if (!preflight.ok) {
+    return err(preflight.error);
   }
 
   const artifact = await readArtifactWithTimeout<RemoteArtifactRead>({
@@ -1925,13 +1962,6 @@ async function preflightRemoteArtifactFetchTarget(input: {
   }
 
   const artifactHost = normalizeUrlHostname(url.hostname);
-  const explicitlyAllowed = isExplicitlyAllowedArtifactHost(
-    artifactHost,
-    input.allowedHosts
-  );
-  if (explicitlyAllowed) {
-    return ok(undefined);
-  }
   if (!shouldResolveRemoteArtifactHost(artifactHost)) {
     return ok(undefined);
   }
@@ -2547,16 +2577,13 @@ function withRegistryAuthorization(
   };
 }
 
-function createDefaultArtifactFetcher(
-  allowedHosts: ReadonlySet<string>
-): ArtifactFetcher {
-  return (url, options) => defaultArtifactFetcher(url, options, allowedHosts);
+function createDefaultArtifactFetcher(): ArtifactFetcher {
+  return defaultArtifactFetcher;
 }
 
 function defaultArtifactFetcher(
   url: string,
-  options: ArtifactFetchOptions | undefined,
-  allowedHosts: ReadonlySet<string>
+  options: ArtifactFetchOptions | undefined
 ): Promise<ArtifactFetchResponse> {
   const parsedUrl = parseHttpUrl(url);
   if (!parsedUrl || parsedUrl.protocol !== "https:") {
@@ -2564,21 +2591,17 @@ function defaultArtifactFetcher(
   }
 
   return new Promise((resolve, reject) => {
-    const normalizedHost = normalizeUrlHostname(parsedUrl.hostname);
-    const explicitlyAllowed = allowedHosts.has(normalizedHost);
     const req = httpsRequest(parsedUrl, {
       method: "GET",
       signal: options?.signal,
       headers: options?.headers,
-      ...(explicitlyAllowed ? {} : { lookup: secureArtifactLookup as import("node:net").LookupFunction })
+      lookup: secureArtifactLookup as import("node:net").LookupFunction
     }, (response) => {
-      const socketAddress = explicitlyAllowed
-        ? ok(undefined)
-        : validateArtifactSocketRemoteAddress(
-            parsedUrl.hostname,
-            response.socket.remoteAddress,
-            { allowMissingWhenLookupGuarded: true }
-          );
+      const socketAddress = validateArtifactSocketRemoteAddress(
+        parsedUrl.hostname,
+        response.socket.remoteAddress,
+        { allowMissingWhenLookupGuarded: true }
+      );
       if (!socketAddress.ok) {
         response.destroy(socketAddress.error);
         reject(socketAddress.error);

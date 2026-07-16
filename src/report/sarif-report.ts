@@ -82,8 +82,7 @@ const RULES: SarifRule[] = [
 const RULE_INDEX_BY_ID = new Map(RULES.map((rule, index) => [rule.id, index]));
 
 export function renderSarifReport(input: ScanReportInput): string {
-  const lockfileUri = path.relative(input.project.rootDir, input.project.lockfile.path)
-    .replace(/\\/g, "/") || path.basename(input.project.lockfile.path);
+  const lockfileUri = sarifLockfileUri(input);
 
   return JSON.stringify(
     {
@@ -116,6 +115,14 @@ export function renderSarifReport(input: ScanReportInput): string {
             ohriskWaivedFindingCount: input.waivedFindings.length,
             ohriskExpiredWaiverCount: input.expiredWaivers.length,
             ohriskUnmatchedWaiverCount: input.unmatchedWaivers.length,
+            ...(input.project.source
+              ? {
+                  ohriskArchiveName: input.project.source.displayPath,
+                  ohriskArchiveFormat: input.project.source.format,
+                  ohriskArchiveSha256: input.project.source.sha256,
+                  ohriskArchiveRoot: input.project.source.entryRoot
+                }
+              : {}),
             ...sarifWaiverDriftProperties(input)
           },
           results: [
@@ -128,6 +135,19 @@ export function renderSarifReport(input: ScanReportInput): string {
     null,
     2
   );
+}
+
+function sarifLockfileUri(input: ScanReportInput): string {
+  const relativePath = path.relative(input.project.rootDir, input.project.lockfile.path)
+    .replace(/\\/g, "/") || path.basename(input.project.lockfile.path);
+  if (!input.project.source) {
+    return relativePath;
+  }
+
+  const root = input.project.source.entryRoot === "."
+    ? ""
+    : `${input.project.source.entryRoot}/`;
+  return `${input.project.source.displayPath}!/${root}${relativePath}`;
 }
 
 function sarifWaiverDriftProperties(input: ScanReportInput):

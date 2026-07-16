@@ -38,10 +38,13 @@ describe("diffRiskFindings", () => {
       currentFindings: [current]
     });
 
-    expect(diff.newFindings).toEqual([current]);
+    expect(diff.newFindings).toEqual([]);
+    expect(diff.changedFindings).toEqual([current]);
+    expect(diff.resolvedFindings).toEqual([]);
+    expect(diff.introducedFindings).toEqual([current]);
   });
 
-  test("reports an existing package path as new when severity changes", () => {
+  test("reports an existing package path as changed when severity changes", () => {
     const baseline = finding({
       fingerprint: "package@1.0.0::review::review::old reason::old evidence",
       severity: "review",
@@ -59,7 +62,8 @@ describe("diffRiskFindings", () => {
       currentFindings: [current]
     });
 
-    expect(diff.newFindings).toEqual([current]);
+    expect(diff.newFindings).toEqual([]);
+    expect(diff.changedFindings).toEqual([current]);
   });
 
   test("does not report an existing finding as changed when only action prose changes", () => {
@@ -80,5 +84,29 @@ describe("diffRiskFindings", () => {
     });
 
     expect(diff.newFindings).toEqual([]);
+    expect(diff.changedFindings).toEqual([]);
+    expect(diff.resolvedFindings).toEqual([]);
+    expect(diff.introducedFindings).toEqual([]);
+  });
+
+  test("classifies added and resolved finding identities separately", () => {
+    const baseline = finding();
+    const current = finding({
+      id: "new-package@2.0.0::production::direct::fixture>new-package@2.0.0",
+      fingerprint: "new-package@2.0.0::review::review::new reason::new evidence",
+      packageId: "new-package@2.0.0",
+      severity: "review",
+      recommendation: "review"
+    });
+
+    const diff = diffRiskFindings({
+      baselineFindings: [baseline],
+      currentFindings: [current]
+    });
+
+    expect(diff.newFindings).toEqual([current]);
+    expect(diff.changedFindings).toEqual([]);
+    expect(diff.resolvedFindings).toEqual([baseline]);
+    expect(diff.introducedFindings).toEqual([current]);
   });
 });

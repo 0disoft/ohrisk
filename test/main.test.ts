@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -9,7 +10,7 @@ import { createArtifactCache } from "../src/evidence/cache";
 import { createReportOpener } from "../src/report/open-report";
 import { createError } from "../src/shared/errors";
 import { err, ok } from "../src/shared/result";
-import { createTarGz } from "./helpers/tar";
+import { createTar, createTarGz } from "./helpers/tar";
 import { createZip } from "./helpers/zip";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -113,7 +114,8 @@ describe("main", () => {
     expect(scanExitCode).toBe(0);
     expect(scan.stderr).toEqual([]);
     expect(scanOutput).toContain("Ohrisk scan");
-    expect(scanOutput).toContain("ohrisk scan [--lockfile <path>|--all] [--policy <path>]");
+    expect(scanOutput).toContain("ohrisk scan [--archive <path>] [--lockfile <path>|--all] [--policy <path>]");
+    expect(scanOutput).toContain("--archive <path>");
     expect(scanOutput).toContain("--lockfile <path>");
     expect(scanOutput).toContain("--workspace-root <path>");
     expect(scanOutput).toContain("--html");
@@ -130,6 +132,7 @@ describe("main", () => {
     expect(ciExitCode).toBe(0);
     expect(ci.stderr).toEqual([]);
     expect(ciOutput).toContain("Ohrisk ci");
+    expect(ciOutput).toContain("--archive <path>");
     expect(ciOutput).toContain("--workspace-root <path>");
     expect(ciOutput).toContain("--fail-on <severity>");
     expect(ciOutput).toContain("--strict-waivers");
@@ -205,6 +208,210 @@ describe("main", () => {
     expect(versionFlag.stdout.join("\n")).toContain("--help, -h");
   });
 
+  test("scans ZIP, TAR, and TGZ projects with safe archive provenance", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-archive-cli-"));
+    const files = {
+      "release/package.json": JSON.stringify({
+        name: "archive-empty",
+        version: "1.0.0"
+      })
+    };
+    const fixtures = [
+      { name: "source.zip", bytes: createZip(files), format: "zip" },
+      { name: "source.tar", bytes: createTar(files), format: "tar" },
+      { name: "source.tgz", bytes: createTarGz(files), format: "tar.gz" }
+    ] as const;
+
+    try {
+      for (const fixture of fixtures) {
+        writeFileSync(path.join(projectRoot, fixture.name), fixture.bytes);
+        const { io, stdout, stderr } = createTestIO(projectRoot);
+        const exitCode = await main([
+          "scan",
+          "--archive",
+          fixture.name,
+          "--offline",
+          "--json"
+        ], io);
+
+        expect(exitCode).toBe(0);
+        expect(stderr).toEqual([]);
+        const output = stdout.join("\n");
+        expect(output).not.toContain(projectRoot);
+        const payload = JSON.parse(output) as {
+          archive: { name: string; format: string; sha256: string; root: string };
+          lockfile: { kind: string; path: string };
+          dependencyGraph: { total: number };
+        };
+        expect(payload.archive).toEqual({
+          name: fixture.name,
+          format: fixture.format,
+          sha256: createHash("sha256").update(fixture.bytes).digest("hex"),
+          root: "release"
+        });
+        expect(payload.lockfile).toEqual({
+          kind: "package-json",
+          path: `${fixture.name}!/release/package.json`
+        });
+        expect(payload.dependencyGraph.total).toBe(0);
+      }
+
+      for (const [flag, marker] of [
+        [undefined, "Project: source.zip!/release"],
+        ["--markdown", "- Project: `source.zip!/release`"],
+        ["--html", "source.zip!/release"]
+      ] as const) {
+        const report = createTestIO(projectRoot);
+        const argv = ["scan", "--archive", "source.zip", "--offline"];
+        if (flag) argv.push(flag);
+        expect(await main(argv, report.io)).toBe(0);
+        expect(report.stderr).toEqual([]);
+        expect(report.stdout.join("\n")).toContain(marker);
+        expect(report.stdout.join("\n")).not.toContain(projectRoot);
+      }
+
+      const sarif = createTestIO(projectRoot);
+      expect(await main([
+        "scan",
+        "--archive",
+        "source.zip",
+        "--offline",
+        "--sarif"
+      ], sarif.io)).toBe(0);
+      const sarifPayload = JSON.parse(sarif.stdout.join("\n")) as {
+        runs: Array<{ properties: Record<string, unknown> }>;
+      };
+      expect(sarifPayload.runs[0]?.properties).toMatchObject({
+        ohriskArchiveName: "source.zip",
+        ohriskArchiveFormat: "zip",
+        ohriskArchiveRoot: "release"
+      });
+      expect(sarif.stdout.join("\n")).not.toContain(projectRoot);
+
+      const cyclonedx = createTestIO(projectRoot);
+      expect(await main([
+        "scan",
+        "--archive",
+        "source.zip",
+        "--offline",
+        "--cyclonedx"
+      ], cyclonedx.io)).toBe(0);
+      const cyclonedxPayload = JSON.parse(cyclonedx.stdout.join("\n")) as {
+        metadata: { properties: Array<{ name: string; value: string }> };
+      };
+      expect(cyclonedxPayload.metadata.properties).toEqual(expect.arrayContaining([
+        { name: "ohrisk:lockfilePath", value: "source.zip!/release/package.json" },
+        { name: "ohrisk:archiveName", value: "source.zip" },
+        { name: "ohrisk:archiveFormat", value: "zip" },
+        { name: "ohrisk:archiveRoot", value: "release" }
+      ]));
+      expect(cyclonedx.stdout.join("\n")).not.toContain(projectRoot);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps archive policy and waivers outside the trusted host configuration", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-archive-trust-"));
+    const archivePath = path.join(projectRoot, "policy.zip");
+    const cyclonedx = JSON.stringify({
+      bomFormat: "CycloneDX",
+      specVersion: "1.5",
+      metadata: {
+        component: {
+          name: "archive-policy-app",
+          "bom-ref": "root-app"
+        }
+      },
+      components: [
+        {
+          type: "library",
+          "bom-ref": "pkg:npm/archive-mit@1.0.0",
+          purl: "pkg:npm/archive-mit@1.0.0",
+          licenses: [{ license: { id: "MIT" } }]
+        }
+      ],
+      dependencies: [
+        {
+          ref: "root-app",
+          dependsOn: ["pkg:npm/archive-mit@1.0.0"]
+        }
+      ]
+    });
+    const archiveFiles = (waiverId?: string): Record<string, string> => ({
+      "release/cyclonedx.json": cyclonedx,
+      "release/.ohrisk.yml": "version: 1\nlicenses:\n  allow:\n    - MIT\n",
+      "release/.ohrisk-waivers.json": JSON.stringify({
+        waivers: waiverId
+          ? [{ id: waiverId, reason: "Untrusted archive waiver." }]
+          : []
+      })
+    });
+
+    try {
+      writeFileSync(
+        path.join(projectRoot, ".ohrisk.yml"),
+        "version: 1\nlicenses:\n  deny:\n    - MIT\n",
+        "utf8"
+      );
+      writeFileSync(archivePath, createZip(archiveFiles()));
+
+      const first = createTestIO(projectRoot);
+      expect(await main(["scan", "--archive", "policy.zip", "--offline", "--json"], first.io))
+        .toBe(0);
+      expect(first.stderr).toEqual([]);
+      const firstPayload = JSON.parse(first.stdout.join("\n")) as {
+        findings: Array<{ id: string; severity: string }>;
+        waivedFindings: unknown[];
+      };
+      expect(firstPayload.findings).toHaveLength(1);
+      expect(firstPayload.findings[0]?.severity).toBe("high");
+      const findingId = firstPayload.findings[0]?.id;
+      expect(typeof findingId).toBe("string");
+      if (!findingId) throw new Error("Expected an archive policy finding ID.");
+
+      writeFileSync(archivePath, createZip(archiveFiles(findingId)));
+      const archiveWaiver = createTestIO(projectRoot);
+      expect(await main([
+        "scan",
+        "--archive",
+        "policy.zip",
+        "--offline",
+        "--json"
+      ], archiveWaiver.io)).toBe(0);
+      const archiveWaiverPayload = JSON.parse(archiveWaiver.stdout.join("\n")) as {
+        findings: unknown[];
+        waivedFindings: unknown[];
+      };
+      expect(archiveWaiverPayload.findings).toHaveLength(1);
+      expect(archiveWaiverPayload.waivedFindings).toEqual([]);
+
+      writeFileSync(
+        path.join(projectRoot, ".ohrisk-waivers.json"),
+        JSON.stringify({
+          waivers: [{ id: findingId, reason: "Trusted host waiver." }]
+        }),
+        "utf8"
+      );
+      const hostWaiver = createTestIO(projectRoot);
+      expect(await main([
+        "scan",
+        "--archive",
+        "policy.zip",
+        "--offline",
+        "--json"
+      ], hostWaiver.io)).toBe(0);
+      const hostWaiverPayload = JSON.parse(hostWaiver.stdout.join("\n")) as {
+        findings: unknown[];
+        waivedFindings: unknown[];
+      };
+      expect(hostWaiverPayload.findings).toEqual([]);
+      expect(hostWaiverPayload.waivedFindings).toHaveLength(1);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("manages a configured artifact cache without exposing its absolute path in JSON", async () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cache-cli-"));
     const relativeCacheDir = ".ohrisk-test-cache";
@@ -277,6 +484,32 @@ describe("main", () => {
           removedBytes: Buffer.byteLength("cached artifact")
         }
       });
+    } finally {
+      rmSync(projectRoot, { force: true, recursive: true });
+    }
+  });
+
+  test("refuses CLI cache cleanup for a non-empty directory without an ownership marker", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cache-cli-unowned-"));
+    const relativeCacheDir = "shared-data";
+    const sentinel = path.join(projectRoot, relativeCacheDir, "index", "sentinel.txt");
+
+    try {
+      mkdirSync(path.dirname(sentinel), { recursive: true });
+      writeFileSync(sentinel, "preserve", "utf8");
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main([
+        "cache",
+        "clear",
+        "--cache-dir",
+        relativeCacheDir,
+        "--json"
+      ], io);
+
+      expect(exitCode).toBe(1);
+      expect(stdout).toEqual([]);
+      expect(stderr.join("\n")).toContain("CACHE_OPERATION_FAILED");
+      expect(readFileSync(sentinel, "utf8")).toBe("preserve");
     } finally {
       rmSync(projectRoot, { force: true, recursive: true });
     }
@@ -2155,6 +2388,13 @@ describe("main", () => {
         packages: number;
         files: number;
         warnings: number;
+        sources: Record<string, { packages: number; files: number; warnings: number }>;
+        diagnostics: Array<{
+          code: string;
+          source: string;
+          packageCount: number;
+          occurrenceCount: number;
+        }>;
       };
       licenses: {
         highConfidence: number;
@@ -2198,7 +2438,27 @@ describe("main", () => {
     expect(payload.evidence).toEqual({
       packages: 5,
       files: 4,
-      warnings: 1
+      warnings: 1,
+      sources: {
+        local: { packages: 5, files: 4, warnings: 1 },
+        sbom: { packages: 0, files: 0, warnings: 0 },
+        tarball: { packages: 0, files: 0, warnings: 0 },
+        unavailable: { packages: 0, files: 0, warnings: 0 }
+      },
+      diagnostics: [
+        {
+          code: "collector_warning",
+          source: "local",
+          packageCount: 1,
+          occurrenceCount: 1
+        },
+        {
+          code: "license_evidence_missing",
+          source: "local",
+          packageCount: 1,
+          occurrenceCount: 1
+        }
+      ]
     });
     expect(payload.licenses).toEqual({
       highConfidence: 4,
@@ -4265,7 +4525,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
     }
   });
 
-  test("prints only new or changed findings for a git ref diff", async () => {
+  test("prints separately classified findings for a git ref diff", async () => {
     const baselineLockfile = readFileSync(path.join(fixturesDir, "baseline-bun.lock"), "utf8");
     const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
     io.readRefFile = () => ({ ok: true as const, value: baselineLockfile });
@@ -4279,8 +4539,8 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
     expect(output).toContain("Ohrisk diff");
     expect(output).toContain("Baseline: main");
     expect(output).toContain("Production only: yes");
-    expect(output).toContain("Findings: 5 current, 3 baseline, 2 new or changed");
-    expect(output).toContain("New or changed risks: 0 high, 1 review, 1 unknown, 0 low");
+    expect(output).toContain("Findings: 5 current, 3 baseline, 2 new, 0 changed, 0 resolved");
+    expect(output).toContain("Introduced risks: 0 high, 1 review, 1 unknown, 0 low");
     expect(output).toContain("- [unknown] missing-license@4.0.0");
     expect(output).toContain("fingerprint: missing-license@4.0.0");
     expect(output).toContain("dependency: production direct");
@@ -6984,7 +7244,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
     }
   });
 
-  test("prints only new or changed findings for a Yarn v1 git ref diff", async () => {
+  test("prints separately classified findings for a Yarn v1 git ref diff", async () => {
     const baselineLockfile = [
       "# yarn lockfile v1",
       "",
@@ -7038,8 +7298,8 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
     const output = stdout.join("\n");
     expect(output).toContain("Ohrisk diff");
     expect(output).toContain("Baseline: main");
-    expect(output).toContain("Findings: 5 current, 3 baseline, 2 new or changed");
-    expect(output).toContain("New or changed risks: 0 high, 1 review, 1 unknown, 0 low");
+    expect(output).toContain("Findings: 5 current, 3 baseline, 2 new, 0 changed, 0 resolved");
+    expect(output).toContain("Introduced risks: 0 high, 1 review, 1 unknown, 0 low");
     expect(output).toContain("- [unknown] missing-license@4.0.0");
     expect(output).toContain("- [review] gpl-package@5.0.0");
     expect(output).not.toContain("- [high] agpl-child@0.1.0");
@@ -7112,8 +7372,8 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       expect(stderr).toEqual([]);
 
       const output = stdout.join("\n");
-      expect(output).toContain("Findings: 2 current, 2 baseline, 0 new or changed");
-      expect(output).toContain("New or changed risks: 0 high, 0 review, 0 unknown, 0 low");
+      expect(output).toContain("Findings: 2 current, 2 baseline, 0 new, 0 changed, 0 resolved");
+      expect(output).toContain("Introduced risks: 0 high, 0 review, 0 unknown, 0 low");
       expect(output).not.toContain("- [high] agpl-child@0.1.0");
       expect(output).not.toContain("- [low] permissive-parent@1.0.0");
     } finally {
@@ -7203,8 +7463,8 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       expect(stderr).toEqual([]);
 
       const output = stdout.join("\n");
-      expect(output).toContain("Findings: 2 current, 0 baseline, 2 new or changed");
-      expect(output).toContain("New or changed risks: 1 high, 0 review, 0 unknown, 1 low");
+      expect(output).toContain("Findings: 2 current, 0 baseline, 2 new, 0 changed, 0 resolved");
+      expect(output).toContain("Introduced risks: 1 high, 0 review, 0 unknown, 1 low");
       expect(output).toContain("- [high] agpl-child@0.1.0");
       expect(output).toContain("- [low] permissive-parent@1.0.0");
     } finally {
@@ -7364,7 +7624,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
     const output = stdout.join("\n");
     expect(output).toContain("# Ohrisk diff");
     expect(output).toContain("- Baseline: `main`");
-    expect(output).toContain("- New or changed risks: `0 high`, `1 review`, `1 unknown`, `0 low`");
+    expect(output).toContain("- Introduced risks: `0 high`, `1 review`, `1 unknown`, `0 low`");
     expect(output).toContain(
       "| ID | Fingerprint | Severity | Package | Dependency | Reason | Recommendation | Action | Path |"
     );
@@ -7470,6 +7730,60 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
     expect(payload.finding.severity).toBe("low");
     expect(payload.finding.recommendation).toBe("allow");
     expect(payload.finding.action).toBe("No action needed for this profile.");
+  });
+
+  test("applies license policy to explain without pretending package rules matched", async () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-explain-policy-"));
+    try {
+      writeFileSync(
+        path.join(projectDir, "policy.yml"),
+        [
+          "version: 1",
+          "licenses:",
+          "  severity:",
+          "    'GPL-2.0-only WITH Classpath-exception-2.0': low",
+          "packages:",
+          "  '*':",
+          "    severity: high",
+          "    reason: Package override must not apply without a package identity."
+        ].join("\n") + "\n"
+      );
+      const { io, stdout, stderr } = createTestIO(projectDir);
+      const exitCode = await main([
+        "explain",
+        "GPL-2.0-only",
+        "WITH",
+        "Classpath-exception-2.0",
+        "--policy",
+        "policy.yml",
+        "--workspace-root",
+        ".",
+        "--json"
+      ], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+      const output = stdout.join("\n");
+      expect(output).not.toContain(projectDir);
+      const payload = JSON.parse(output) as {
+        policyScope: string;
+        policy: { enabled: boolean; sourceFiles: string[]; packageRuleCount: number };
+        finding: { severity: string; reason: string };
+      };
+      expect(payload.policyScope).toBe("license-only");
+      expect(payload.policy).toMatchObject({
+        enabled: true,
+        sourceFiles: ["policy.yml"],
+        packageRuleCount: 1
+      });
+      expect(payload.finding.severity).toBe("low");
+      expect(payload.finding.reason).toContain(
+        "Organization policy matched license rule(s) GPL-2.0-only WITH Classpath-exception-2.0"
+      );
+      expect(payload.finding.reason).not.toContain("Package override must not apply");
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
   });
 
   test.each(["NOASSERTION", "NONE"])(
@@ -7806,6 +8120,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
     expect(stderr.join("\n")).toContain("INVALID_ARGUMENT");
     expect(stderr.join("\n")).toContain("--workspace-root must point to an existing directory.");
     expect(stderr.join("\n")).toContain("workspaceRootPath:");
-    expect(stderr.join("\n")).toContain("missing-workspace-root");
+    expect(stderr.join("\n")).toContain("<absolute-path>");
+    expect(stderr.join("\n")).not.toContain(missingRoot);
   });
 });

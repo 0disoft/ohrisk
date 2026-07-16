@@ -1,7 +1,13 @@
 import { omitUndefined } from "../shared/object";
 import path from "node:path";
 
-import type { LicenseEvidence } from "../evidence/types";
+import type {
+  EvidenceDiagnostic,
+  EvidenceDiagnosticCode,
+  EvidenceSourceCounts,
+  LicenseEvidence,
+  LicenseEvidenceSource
+} from "../evidence/types";
 import { packageUrl } from "../graph/package-url";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
 import type { NormalizedLicense } from "../license/types";
@@ -69,6 +75,7 @@ export function renderScanReport(input: ScanReportInput): string {
         schemaVersion: OHRISK_REPORT_SCHEMA_VERSION,
         status: "profile_risk_evaluated",
         projectRoot: ".",
+        ...(input.project.source ? { archive: archiveReportSource(input.project) } : {}),
         lockfile: {
           kind: input.project.lockfile.kind,
           path: displayLockfilePath(input.project)
@@ -77,6 +84,7 @@ export function renderScanReport(input: ScanReportInput): string {
         profile: input.profile,
         prodOnly: input.prodOnly,
         dependencyGraph: summary.dependencyGraph,
+        dependencyGraphDiagnostics: input.graph.diagnostics ?? [],
         dependencyOrigins: dependencyProvenance(input),
         evidence: summary.evidence,
         licenses: summary.licenses,
@@ -107,12 +115,13 @@ export function renderScanReport(input: ScanReportInput): string {
 
   return [
     "Ohrisk scan",
-    `Project: ${input.project.rootDir}`,
+    `Project: ${displayProjectLabel(input.project)}`,
     `Lockfile: ${displayLockfilePath(input.project)} (${input.project.lockfile.kind})`,
     ...renderAdditionalLockfileLines(input.project),
     `Profile: ${input.profile}`,
     `Production only: ${input.prodOnly ? "yes" : "no"}`,
     `Dependencies: ${summary.dependencyGraph.total} total, ${summary.dependencyGraph.direct} direct, ${summary.dependencyGraph.transitive} transitive`,
+    ...renderDependencyGraphDiagnostics(input.graph.diagnostics ?? []),
     `Evidence: ${summary.evidence.files} files, ${summary.evidence.warnings} warnings`,
     `Licenses: ${summary.licenses.highConfidence} high-confidence, ${summary.licenses.mediumConfidence} medium-confidence, ${summary.licenses.lowConfidence} low-confidence`,
     `License issues: ${summary.licenses.missing} missing, ${summary.licenses.malformed} malformed`,
@@ -871,6 +880,7 @@ function renderMarkdownReport(
     `- Profile: ${formatMarkdownInlineCode(input.profile)}`,
     `- Production only: ${formatMarkdownInlineCode(input.prodOnly ? "yes" : "no")}`,
     `- Dependencies: ${formatMarkdownInlineCode(`${summary.dependencyGraph.total} total`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.direct} direct`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.transitive} transitive`)}`,
+    ...renderMarkdownDependencyGraphDiagnostics(input.graph.diagnostics ?? []),
     `- Evidence: ${formatMarkdownInlineCode(`${summary.evidence.files} files`)}, ${formatMarkdownInlineCode(`${summary.evidence.warnings} warnings`)}`,
     `- Licenses: ${formatMarkdownInlineCode(`${summary.licenses.highConfidence} high-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.mediumConfidence} medium-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.lowConfidence} low-confidence`)}`,
     `- License issues: ${formatMarkdownInlineCode(`${summary.licenses.missing} missing`)}, ${formatMarkdownInlineCode(`${summary.licenses.malformed} malformed`)}`,
@@ -916,7 +926,7 @@ function displayDependencyOrigins(
   const origins = node.origins && node.origins.length > 0
     ? node.origins.map((origin) => ({
         kind: origin.lockfileKind,
-        path: displayProjectPath(project.rootDir, origin.lockfilePath)
+        path: displayProjectPath(project, origin.lockfilePath)
       }))
     : [{
         kind: project.lockfile.kind,
@@ -957,7 +967,7 @@ function renderAdditionalMarkdownLockfileLines(
 function displayLockfiles(project: ScanReportInput["project"]): Array<{ kind: string; path: string }> {
   return projectLockfiles(project).map((lockfile) => ({
     kind: lockfile.kind,
-    path: displayProjectPath(project.rootDir, lockfile.path)
+    path: displayProjectPath(project, lockfile.path)
   }));
 }
 
@@ -976,16 +986,19 @@ function disabledPolicySummary(): PolicyConfigSummary {
   };
 }
 
-function displayProjectPath(projectRoot: string, targetPath: string): string {
-  const relativePath = path.relative(projectRoot, targetPath);
+function displayProjectPath(project: ScanReportInput["project"], targetPath: string): string {
+  const relativePath = path.relative(project.rootDir, targetPath);
   if (relativePath && !relativePath.startsWith("..") && !path.isAbsolute(relativePath)) {
-    return relativePath.replace(/\\/g, "/");
+    const normalizedPath = relativePath.replace(/\\/g, "/");
+    return project.source
+      ? `${project.source.displayPath}!/${archiveEntryPath(project, normalizedPath)}`
+      : normalizedPath;
   }
   return path.basename(targetPath);
 }
 
 function displayLockfilePath(project: ScanReportInput["project"]): string {
-  return displayProjectPath(project.rootDir, project.lockfile.path);
+  return displayProjectPath(project, project.lockfile.path);
 }
 
 function displayLockfileDirectoryPath(project: ScanReportInput["project"]): string {
@@ -994,7 +1007,49 @@ function displayLockfileDirectoryPath(project: ScanReportInput["project"]): stri
 }
 
 function markdownProjectLabel(input: ScanReportInput): string {
-  return input.graph.rootName ?? ".";
+  return input.project.source
+    ? displayProjectLabel(input.project)
+    : input.graph.rootName ?? ".";
+}
+
+function displayProjectLabel(project: ScanReportInput["project"]): string {
+  if (!project.source) {
+    return project.rootDir;
+  }
+
+  return project.source.entryRoot === "." || project.source.entryRoot === ""
+    ? project.source.displayPath
+    : `${project.source.displayPath}!/${project.source.entryRoot}`;
+}
+
+function archiveEntryPath(
+  project: ScanReportInput["project"],
+  relativePath: string
+): string {
+  const root = project.source?.entryRoot;
+  if (!root || root === ".") {
+    return relativePath;
+  }
+  return `${root}/${relativePath}`;
+}
+
+function archiveReportSource(project: ScanReportInput["project"]): {
+  name: string;
+  format: "zip" | "tar" | "tar.gz";
+  sha256: string;
+  root: string;
+} {
+  const source = project.source;
+  if (!source) {
+    throw new Error("Archive report source is unavailable.");
+  }
+
+  return {
+    name: source.displayPath,
+    format: source.format,
+    sha256: source.sha256,
+    root: source.entryRoot
+  };
 }
 
 function buildWaiverDriftSummary(input: ScanReportInput):
@@ -1026,6 +1081,8 @@ function buildScanSummary(input: ScanReportInput): {
     packages: number;
     files: number;
     warnings: number;
+    sources: Record<LicenseEvidenceSource, EvidenceSourceCounts>;
+    diagnostics: EvidenceDiagnostic[];
   };
   licenses: {
     highConfidence: number;
@@ -1045,6 +1102,7 @@ function buildScanSummary(input: ScanReportInput): {
   const transitiveCount = input.graph.nodes.length - directCount;
   const evidenceFileCount = input.evidence.reduce((sum, item) => sum + item.files.length, 0);
   const evidenceWarningCount = input.evidence.reduce((sum, item) => sum + item.warnings.length, 0);
+  const evidenceDetails = summarizeEvidence(input.evidence);
   const licenseSummary = summarizeLicenses(input.normalizedLicenses);
 
   return {
@@ -1056,7 +1114,9 @@ function buildScanSummary(input: ScanReportInput): {
     evidence: {
       packages: input.evidence.length,
       files: evidenceFileCount,
-      warnings: evidenceWarningCount
+      warnings: evidenceWarningCount,
+      sources: evidenceDetails.sources,
+      diagnostics: evidenceDetails.diagnostics
     },
     licenses: {
       highConfidence: licenseSummary.high,
@@ -1072,6 +1132,119 @@ function buildScanSummary(input: ScanReportInput): {
       unmatched: input.unmatchedWaivers.length
     }
   };
+}
+
+function summarizeEvidence(evidence: LicenseEvidence[]): {
+  sources: Record<LicenseEvidenceSource, EvidenceSourceCounts>;
+  diagnostics: EvidenceDiagnostic[];
+} {
+  const sources: Record<LicenseEvidenceSource, EvidenceSourceCounts> = {
+    local: { packages: 0, files: 0, warnings: 0 },
+    sbom: { packages: 0, files: 0, warnings: 0 },
+    tarball: { packages: 0, files: 0, warnings: 0 },
+    unavailable: { packages: 0, files: 0, warnings: 0 }
+  };
+  const diagnosticCounts = new Map<string, {
+    code: EvidenceDiagnosticCode;
+    source: LicenseEvidenceSource;
+    packageIds: Set<string>;
+    occurrenceCount: number;
+  }>();
+
+  for (const item of evidence) {
+    const source = sources[item.source];
+    source.packages += 1;
+    source.files += item.files.length;
+    source.warnings += item.warnings.length;
+
+    if (item.warnings.length > 0) {
+      addEvidenceDiagnostic(diagnosticCounts, {
+        code: "collector_warning",
+        source: item.source,
+        packageId: item.packageId,
+        occurrenceCount: item.warnings.length
+      });
+    }
+    if (item.source === "unavailable") {
+      addEvidenceDiagnostic(diagnosticCounts, {
+        code: "source_unavailable",
+        source: item.source,
+        packageId: item.packageId,
+        occurrenceCount: 1
+      });
+    }
+    if (item.files.length === 0 && !hasDeclaredLicenseEvidence(item)) {
+      addEvidenceDiagnostic(diagnosticCounts, {
+        code: "license_evidence_missing",
+        source: item.source,
+        packageId: item.packageId,
+        occurrenceCount: 1
+      });
+    }
+  }
+
+  return {
+    sources,
+    diagnostics: [...diagnosticCounts.values()]
+      .map((item) => ({
+        code: item.code,
+        source: item.source,
+        packageCount: item.packageIds.size,
+        occurrenceCount: item.occurrenceCount
+      }))
+      .sort((left, right) =>
+        left.code.localeCompare(right.code) || left.source.localeCompare(right.source)
+      )
+  };
+}
+
+function addEvidenceDiagnostic(
+  diagnostics: Map<string, {
+    code: EvidenceDiagnosticCode;
+    source: LicenseEvidenceSource;
+    packageIds: Set<string>;
+    occurrenceCount: number;
+  }>,
+  input: {
+    code: EvidenceDiagnosticCode;
+    source: LicenseEvidenceSource;
+    packageId: string;
+    occurrenceCount: number;
+  }
+): void {
+  const key = `${input.code}\u0000${input.source}`;
+  const current = diagnostics.get(key) ?? {
+    code: input.code,
+    source: input.source,
+    packageIds: new Set<string>(),
+    occurrenceCount: 0
+  };
+  current.packageIds.add(input.packageId);
+  current.occurrenceCount += input.occurrenceCount;
+  diagnostics.set(key, current);
+}
+
+function hasDeclaredLicenseEvidence(evidence: LicenseEvidence): boolean {
+  return typeof evidence.packageJsonLicense === "string"
+    || evidence.packageJsonLicenses !== undefined
+    || typeof evidence.metadataLicense === "string"
+    || evidence.metadataLicenses !== undefined;
+}
+
+function renderDependencyGraphDiagnostics(
+  diagnostics: NonNullable<DependencyGraph["diagnostics"]>
+): string[] {
+  return diagnostics.map((diagnostic) =>
+    `Graph diagnostic [${diagnostic.code}]: ${diagnostic.message} (${diagnostic.affectedNodeCount} affected)`
+  );
+}
+
+function renderMarkdownDependencyGraphDiagnostics(
+  diagnostics: NonNullable<DependencyGraph["diagnostics"]>
+): string[] {
+  return diagnostics.map((diagnostic) =>
+    `- Graph diagnostic ${formatMarkdownInlineCode(diagnostic.code)}: ${formatMarkdownTableCell(diagnostic.message)} (${formatMarkdownInlineCode(`${diagnostic.affectedNodeCount} affected`)})`
+  );
 }
 
 function renderFindings(findings: RiskFinding[]): string[] {

@@ -8,7 +8,18 @@ import {
   readInputTextFile
 } from "./read-input-file";
 import type { LicenseEvidence } from "../evidence/types";
-import type { DependencyGraph, DependencyNode, DependencyType, PackageEcosystem } from "./types";
+import type {
+  DependencyGraph,
+  DependencyGraphDiagnostic,
+  DependencyNode,
+  DependencyType,
+  PackageEcosystem
+} from "./types";
+
+export const CYCLONEDX_MAX_PATHS_PER_COMPONENT = 64;
+export const CYCLONEDX_MAX_DEPENDENCY_DEPTH = 256;
+
+const CYCLONEDX_TRUNCATED_PATH_SEGMENT = "<cyclonedx-path-truncated>";
 
 type CycloneDxComponentRecord = {
   ref: string;
@@ -90,25 +101,13 @@ export function parseCycloneDxDocument(
     aliases,
     dependencyMap: dependencyMap.value
   });
-  const nodeMap = new Map<string, DependencyNode>();
-
-  for (const rootRef of rootRefs) {
-    const record = components.find((component) => component.ref === rootRef);
-    if (!record) {
-      continue;
-    }
-
-    walkCycloneDxDependency({
-      record,
-      dependencyType: record.dependencyType,
-      direct: true,
-      path: [rootName],
-      components,
-      dependencyMap: dependencyMap.value,
-      nodeMap,
-      seen: new Set()
-    });
-  }
+  const traversal = traverseCycloneDxDependencies({
+    rootName,
+    rootRefs,
+    components,
+    dependencyMap: dependencyMap.value
+  });
+  const nodeMap = traversal.nodeMap;
 
   const nodes = [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id));
   const nodeIds = new Set(nodes.map((node) => node.id));
@@ -119,7 +118,10 @@ export function parseCycloneDxDocument(
     nodes,
     embeddedEvidence: components
       .filter((component) => nodeIds.has(component.id))
-      .map(cycloneDxComponentEvidence)
+      .map(cycloneDxComponentEvidence),
+    ...(traversal.diagnostics.length > 0
+      ? { diagnostics: traversal.diagnostics }
+      : {})
   });
 }
 
@@ -496,58 +498,183 @@ function readCycloneDxRootName(bom: Record<string, unknown>): string | undefined
     : undefined;
 }
 
-function walkCycloneDxDependency(input: {
-  record: CycloneDxComponentRecord;
-  dependencyType: DependencyType;
-  direct: boolean;
-  path: string[];
+function traverseCycloneDxDependencies(input: {
+  rootName: string;
+  rootRefs: string[];
   components: CycloneDxComponentRecord[];
   dependencyMap: Map<string, string[]>;
+}): {
   nodeMap: Map<string, DependencyNode>;
-  seen: Set<string>;
-}): void {
-  if (input.seen.has(input.record.ref)) {
-    return;
-  }
+  diagnostics: DependencyGraphDiagnostic[];
+} {
+  const componentsByRef = new Map(input.components.map((component) => [component.ref, component]));
+  const directRefs = new Set(input.rootRefs);
+  const dependencyTypesByRef = resolveCycloneDxDependencyTypes({
+    rootRefs: input.rootRefs,
+    componentsByRef,
+    dependencyMap: input.dependencyMap
+  });
+  const nodeMap = new Map<string, DependencyNode>();
 
-  const nextSeen = new Set(input.seen);
-  nextSeen.add(input.record.ref);
-  const nextPath = [...input.path, input.record.id];
-  const existing = input.nodeMap.get(input.record.id);
-
-  if (existing) {
-    existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType(existing.dependencyType, input.dependencyType);
-    existing.paths.push(nextPath);
-  } else {
-    input.nodeMap.set(input.record.id, {
-      id: input.record.id,
-      name: input.record.name,
-      version: input.record.version,
-      ecosystem: input.record.ecosystem,
-      dependencyType: input.dependencyType,
-      direct: input.direct,
-      paths: [nextPath]
-    });
-  }
-
-  for (const childRef of input.dependencyMap.get(input.record.ref) ?? []) {
-    const child = input.components.find((component) => component.ref === childRef);
-    if (!child) {
+  for (const [ref, dependencyType] of dependencyTypesByRef) {
+    const record = componentsByRef.get(ref);
+    if (!record) {
       continue;
     }
 
-    walkCycloneDxDependency({
-      record: child,
-      dependencyType: dependencyTypeForChildEdge(input.dependencyType, child.dependencyType),
-      direct: false,
-      path: nextPath,
-      components: input.components,
-      dependencyMap: input.dependencyMap,
-      nodeMap: input.nodeMap,
-      seen: nextSeen
+    const existing = nodeMap.get(record.id);
+    if (existing) {
+      existing.direct = existing.direct || directRefs.has(ref);
+      existing.dependencyType = mergeDependencyType(existing.dependencyType, dependencyType);
+      continue;
+    }
+
+    nodeMap.set(record.id, {
+      id: record.id,
+      name: record.name,
+      version: record.version,
+      ecosystem: record.ecosystem,
+      dependencyType,
+      direct: directRefs.has(ref),
+      paths: []
     });
   }
+
+  const pathLimitAffected = new Set<string>();
+  const depthLimitAffected = new Set<string>();
+  const pathKeysByNodeId = new Map<string, Set<string>>();
+
+  for (const rootRef of input.rootRefs) {
+    const stack: Array<{
+      ref: string;
+      pathIds: string[];
+      pathRefs: string[];
+    }> = [{ ref: rootRef, pathIds: [input.rootName], pathRefs: [] }];
+
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (!current || current.pathRefs.includes(current.ref)) {
+        continue;
+      }
+
+      const record = componentsByRef.get(current.ref);
+      if (!record) {
+        continue;
+      }
+
+      const componentDepth = current.pathRefs.length + 1;
+      if (componentDepth > CYCLONEDX_MAX_DEPENDENCY_DEPTH) {
+        depthLimitAffected.add(record.id);
+        continue;
+      }
+
+      const nextPath = [...current.pathIds, record.id];
+      const pathKey = nextPath.join("\u0000");
+      const pathKeys = pathKeysByNodeId.get(record.id) ?? new Set<string>();
+      if (pathKeys.has(pathKey)) {
+        continue;
+      }
+
+      if (pathKeys.size >= CYCLONEDX_MAX_PATHS_PER_COMPONENT) {
+        pathLimitAffected.add(record.id);
+        continue;
+      }
+
+      pathKeys.add(pathKey);
+      pathKeysByNodeId.set(record.id, pathKeys);
+      nodeMap.get(record.id)?.paths.push(nextPath);
+
+      const nextPathRefs = [...current.pathRefs, current.ref];
+      const childRefs = input.dependencyMap.get(current.ref) ?? [];
+      for (let index = childRefs.length - 1; index >= 0; index -= 1) {
+        const childRef = childRefs[index];
+        if (!childRef) {
+          continue;
+        }
+
+        stack.push({
+          ref: childRef,
+          pathIds: nextPath,
+          pathRefs: nextPathRefs
+        });
+      }
+    }
+  }
+
+  for (const node of nodeMap.values()) {
+    if (node.paths.length > 0) {
+      continue;
+    }
+
+    node.paths.push([input.rootName, CYCLONEDX_TRUNCATED_PATH_SEGMENT, node.id]);
+    depthLimitAffected.add(node.id);
+  }
+
+  const diagnostics: DependencyGraphDiagnostic[] = [];
+  if (pathLimitAffected.size > 0) {
+    diagnostics.push({
+      code: "dependency_paths_truncated",
+      affectedNodeCount: pathLimitAffected.size,
+      limit: CYCLONEDX_MAX_PATHS_PER_COMPONENT,
+      message: `CycloneDX dependency paths were limited to ${CYCLONEDX_MAX_PATHS_PER_COMPONENT} paths per component.`
+    });
+  }
+  if (depthLimitAffected.size > 0) {
+    diagnostics.push({
+      code: "dependency_path_depth_summarized",
+      affectedNodeCount: depthLimitAffected.size,
+      limit: CYCLONEDX_MAX_DEPENDENCY_DEPTH,
+      message: `CycloneDX dependency paths deeper than ${CYCLONEDX_MAX_DEPENDENCY_DEPTH} components were summarized.`
+    });
+  }
+
+  return { nodeMap, diagnostics };
+}
+
+function resolveCycloneDxDependencyTypes(input: {
+  rootRefs: string[];
+  componentsByRef: Map<string, CycloneDxComponentRecord>;
+  dependencyMap: Map<string, string[]>;
+}): Map<string, DependencyType> {
+  const resolved = new Map<string, DependencyType>();
+  const queue: Array<{ ref: string; dependencyType: DependencyType }> = input.rootRefs
+    .map((ref) => {
+      const record = input.componentsByRef.get(ref);
+      return record ? { ref, dependencyType: record.dependencyType } : undefined;
+    })
+    .filter((item): item is { ref: string; dependencyType: DependencyType } => item !== undefined);
+  let head = 0;
+
+  while (head < queue.length) {
+    const current = queue[head];
+    head += 1;
+    if (!current) {
+      continue;
+    }
+
+    const previous = resolved.get(current.ref);
+    const dependencyType = previous
+      ? mergeDependencyType(previous, current.dependencyType)
+      : current.dependencyType;
+    if (previous === dependencyType) {
+      continue;
+    }
+    resolved.set(current.ref, dependencyType);
+
+    for (const childRef of input.dependencyMap.get(current.ref) ?? []) {
+      const child = input.componentsByRef.get(childRef);
+      if (!child) {
+        continue;
+      }
+
+      queue.push({
+        ref: childRef,
+        dependencyType: dependencyTypeForChildEdge(dependencyType, child.dependencyType)
+      });
+    }
+  }
+
+  return resolved;
 }
 
 function cycloneDxComponentEvidence(record: CycloneDxComponentRecord): LicenseEvidence {

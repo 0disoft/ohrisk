@@ -104,6 +104,13 @@ describe("package metadata", () => {
     expect(bundleScript).toContain('target: "node"');
     expect(bundleScript).toContain("assertBuiltCliVersion");
     expect(actionCheck).toContain("action-dist/cli.js is stale");
+    expect(actionCheck).toContain("normalizePlatformBanner");
+    expect(actionCheck).toContain("normalizedFreshBytes");
+    expect(actionCheck).toContain("normalizedCheckedInBytes");
+    expect(actionCheck).toContain(
+      "normalizedFreshBytes.equals(normalizedCheckedInBytes)"
+    );
+    expect(actionCheck).toContain("bytes differ from a fresh bundle");
     expect(readme).toContain("the packaged CLI runs on Node.js");
     expect(readme).toContain("npm install -g ohrisk");
     expect(readme).toContain("pnpm dlx ohrisk scan");

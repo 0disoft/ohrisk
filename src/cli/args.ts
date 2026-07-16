@@ -41,6 +41,7 @@ export type CliCommand =
       cyclonedx: boolean;
       noWaivers: boolean;
       lockfilePath?: string;
+      archivePath?: string;
       allLockfiles?: boolean;
       policyPath?: string;
       offline?: boolean;
@@ -66,6 +67,7 @@ export type CliCommand =
       cyclonedx: boolean;
       noWaivers: boolean;
       lockfilePath?: string;
+      archivePath?: string;
       allLockfiles?: boolean;
       policyPath?: string;
       offline?: boolean;
@@ -107,6 +109,8 @@ export type CliCommand =
       expression: string;
       profile: UsageProfile;
       json: boolean;
+      policyPath?: string;
+      workspaceRootPath?: string;
       outputPath?: string;
     };
 
@@ -373,6 +377,7 @@ function parseScanLikeArgs(
   let cyclonedx = false;
   let noWaivers = false;
   let lockfilePath: string | undefined;
+  let archivePath: string | undefined;
   let allLockfiles = false;
   let policyPath: string | undefined;
   let offline = false;
@@ -535,6 +540,16 @@ function parseScanLikeArgs(
         }
 
         lockfilePath = value.value;
+        index += 1;
+        break;
+      }
+      case "--archive": {
+        const value = readRequiredOptionValue(argv, index, "--archive");
+        if (isErr(value)) {
+          return value;
+        }
+
+        archivePath = value.value;
         index += 1;
         break;
       }
@@ -705,6 +720,28 @@ function parseScanLikeArgs(
     );
   }
 
+  if (archivePath && lockfilePath) {
+    return err(
+      createError({
+        code: "INVALID_ARGUMENT",
+        category: "invalid_input",
+        message: "--archive cannot be combined with --lockfile.",
+        details: { supportedOptions: supportedOptionsFor(kind) }
+      })
+    );
+  }
+
+  if (archivePath && workspaceRootPath) {
+    return err(
+      createError({
+        code: "INVALID_ARGUMENT",
+        category: "invalid_input",
+        message: "--archive cannot be combined with --workspace-root.",
+        details: { supportedOptions: supportedOptionsFor(kind) }
+      })
+    );
+  }
+
   if (kind === "ci" && noWaivers && strictWaivers) {
     return err(
       createError({
@@ -756,6 +793,7 @@ function parseScanLikeArgs(
       cyclonedx,
       noWaivers,
       ...(lockfilePath ? { lockfilePath } : {}),
+      ...(archivePath ? { archivePath } : {}),
       ...(allLockfiles ? { allLockfiles: true } : {}),
       ...(policyPath ? { policyPath } : {}),
       ...(offline ? { offline: true } : {}),
@@ -785,6 +823,7 @@ function parseScanLikeArgs(
     cyclonedx,
     noWaivers,
     ...(lockfilePath ? { lockfilePath } : {}),
+    ...(archivePath ? { archivePath } : {}),
     ...(allLockfiles ? { allLockfiles: true } : {}),
     ...(policyPath ? { policyPath } : {}),
     ...(offline ? { offline: true } : {}),
@@ -945,6 +984,7 @@ function supportedOptionsFor(kind: "scan" | "ci"): string[] {
     "--cyclonedx",
     "--no-waivers",
     "--lockfile",
+    "--archive",
     "--workspace-root",
     "--output",
     "--open",
@@ -1001,6 +1041,8 @@ function outputFormatConflict(
 function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
   let profile: UsageProfile = "saas";
   let json = false;
+  let policyPath: string | undefined;
+  let workspaceRootPath: string | undefined;
   let outputPath: string | undefined;
   const expressionParts: string[] = [];
 
@@ -1040,6 +1082,25 @@ function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
       case "--json":
         json = true;
         break;
+      case "--policy":
+      case "--config": {
+        const value = readRequiredOptionValue(argv, index, arg);
+        if (isErr(value)) {
+          return value;
+        }
+        policyPath = value.value;
+        index += 1;
+        break;
+      }
+      case "--workspace-root": {
+        const value = readRequiredOptionValue(argv, index, arg);
+        if (isErr(value)) {
+          return value;
+        }
+        workspaceRootPath = value.value;
+        index += 1;
+        break;
+      }
       case "--output": {
         const value = readRequiredOptionValue(argv, index, "--output");
         if (isErr(value)) {
@@ -1061,7 +1122,15 @@ function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
               category: "invalid_input",
               message: `Unknown explain option "${arg}".`,
               details: {
-                supportedOptions: ["--profile", "--json", "--output", "--help", "-h"]
+                supportedOptions: [
+                  "--profile",
+                  "--policy",
+                  "--workspace-root",
+                  "--json",
+                  "--output",
+                  "--help",
+                  "-h"
+                ]
               }
             })
           );
@@ -1091,6 +1160,8 @@ function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
     expression,
     profile,
     json,
+    ...(policyPath ? { policyPath } : {}),
+    ...(workspaceRootPath ? { workspaceRootPath } : {}),
     ...(outputPath ? { outputPath } : {})
   });
 }

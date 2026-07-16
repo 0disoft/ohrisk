@@ -86,10 +86,12 @@ describe("machine-readable report schemas", () => {
 
   test("validates complete scan, diff, and explain output documents", () => {
     const scan = renderCompleteScanReport();
+    const archiveScan = renderCompleteArchiveScanReport(scan);
     const diff = renderCompleteDiffReport();
     const explain = renderCompleteExplainReport();
 
     expectValid(OHRISK_SCAN_REPORT_SCHEMA, scan);
+    expectValid(OHRISK_SCAN_REPORT_SCHEMA, archiveScan);
     expectValid(OHRISK_DIFF_REPORT_SCHEMA, diff);
     expectValid(OHRISK_EXPLAIN_REPORT_SCHEMA, explain);
 
@@ -98,6 +100,25 @@ describe("machine-readable report schemas", () => {
       purl: "pkg:npm/example@1.0.0",
       origins: [{ kind: "package-lock", path: "nested/package-lock.json" }]
     }]);
+    expect(scan.dependencyGraphDiagnostics).toEqual([{
+      code: "dependency_paths_truncated",
+      affectedNodeCount: 1,
+      limit: 64,
+      message: "CycloneDX dependency paths were limited."
+    }]);
+    expect(scan.evidence.sources.local).toEqual({ packages: 1, files: 1, warnings: 1 });
+    expect(scan.evidence.diagnostics).toEqual([{
+      code: "collector_warning",
+      source: "local",
+      packageCount: 1,
+      occurrenceCount: 1
+    }]);
+    expect(archiveScan.archive).toEqual({
+      name: "artifacts/source.zip",
+      format: "zip",
+      sha256: "a".repeat(64),
+      root: "release"
+    });
     expect(JSON.stringify(scan)).not.toContain(scan.projectRootPathForTest);
     expect(explain.license).not.toHaveProperty("spdxAst");
     expect(explain.license).not.toHaveProperty("debug");
@@ -112,6 +133,10 @@ describe("machine-readable report schemas", () => {
       { ...scan, findings: [{ ...finding, legalVerdict: "safe" }] },
       { ...scan, findings: [{ ...finding, severity: "critical" }] },
       { ...scan, lockfile: { kind: "package-lock", path: "/absolute/package-lock.json" } },
+      { ...scan, archive: { name: "/absolute/source.zip", format: "zip", sha256: "a".repeat(64), root: "." } },
+      { ...scan, archive: { name: "source.zip", format: "rar", sha256: "a".repeat(64), root: "." } },
+      { ...scan, archive: { name: "source.zip", format: "zip", sha256: "not-a-digest", root: "." } },
+      { ...scan, archive: { name: "source.zip", format: "zip", sha256: "a".repeat(64), root: ".", absolutePath: "C:/secret" } },
       { ...scan, policy: { ...policy, token: "must-not-exist" } },
       withoutProperty(scan, "failed"),
       {
@@ -137,6 +162,12 @@ describe("machine-readable report schemas", () => {
     });
 
     const explain = renderCompleteExplainReport();
+    const explainWithoutPolicyScope = { ...explain };
+    delete explainWithoutPolicyScope.policyScope;
+    expectInvalid(OHRISK_EXPLAIN_REPORT_SCHEMA, explainWithoutPolicyScope);
+    const explainWithoutPolicy = { ...explain };
+    delete explainWithoutPolicy.policy;
+    expectInvalid(OHRISK_EXPLAIN_REPORT_SCHEMA, explainWithoutPolicy);
     expectInvalid(OHRISK_EXPLAIN_REPORT_SCHEMA, {
       ...explain,
       license: {}
@@ -177,6 +208,12 @@ function renderCompleteScanReport(): Record<string, any> {
           lockfileKind: "package-lock",
           lockfilePath
         }]
+      }],
+      diagnostics: [{
+        code: "dependency_paths_truncated",
+        affectedNodeCount: 1,
+        limit: 64,
+        message: "CycloneDX dependency paths were limited."
       }]
     },
     evidence: [{
@@ -184,7 +221,7 @@ function renderCompleteScanReport(): Record<string, any> {
       packageJsonLicense: "AGPL-3.0-only",
       files: [{ path: "LICENSE", kind: "license", text: "license text" }],
       source: "local",
-      warnings: []
+      warnings: ["Metadata source was incomplete."]
     }],
     normalizedLicenses: [{
       packageId: "example@1.0.0",
@@ -229,6 +266,39 @@ function renderCompleteScanReport(): Record<string, any> {
   return payload;
 }
 
+function renderCompleteArchiveScanReport(
+  scan: Record<string, any>
+): Record<string, any> {
+  const archiveName = "artifacts/source.zip";
+  const root = "release";
+  const archivePath = (relativePath: string): string =>
+    `${archiveName}!/${root}/${relativePath}`;
+  return {
+    ...structuredClone(scan),
+    archive: {
+      name: archiveName,
+      format: "zip",
+      sha256: "a".repeat(64),
+      root
+    },
+    lockfile: {
+      ...scan.lockfile,
+      path: archivePath("nested/package-lock.json")
+    },
+    lockfiles: scan.lockfiles.map((lockfile: Record<string, any>) => ({
+      ...lockfile,
+      path: archivePath(lockfile.path)
+    })),
+    dependencyOrigins: scan.dependencyOrigins.map((origin: Record<string, any>) => ({
+      ...origin,
+      origins: origin.origins.map((item: Record<string, any>) => ({
+        ...item,
+        path: archivePath(item.path)
+      }))
+    }))
+  };
+}
+
 function renderCompleteDiffReport(): Record<string, any> {
   return JSON.parse(renderDiffReport({
     baselineRef: "origin/main",
@@ -249,7 +319,10 @@ function renderCompleteDiffReport(): Record<string, any> {
     diff: {
       baselineFindings: [],
       currentFindings: [finding],
-      newFindings: [finding]
+      newFindings: [finding],
+      changedFindings: [],
+      resolvedFindings: [],
+      introducedFindings: [finding]
     },
     json: true,
     markdown: false,
@@ -282,7 +355,8 @@ function renderCompleteExplainReport(): Record<string, any> {
     profile: "saas",
     normalizedLicense,
     finding,
-    json: true
+    json: true,
+    policy
   })) as Record<string, any>;
 }
 

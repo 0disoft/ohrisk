@@ -54,6 +54,13 @@ export type DependencyNode = {
   origins?: DependencyOrigin[];
 };
 
+export type DependencyGraphDiagnostic = {
+  code: "dependency_paths_truncated" | "dependency_path_depth_summarized";
+  affectedNodeCount: number;
+  limit: number;
+  message: string;
+};
+
 export type DependencyGraph = {
   rootName?: string;
   lockfilePath: string;
@@ -61,4 +68,5 @@ export type DependencyGraph = {
   nodes: DependencyNode[];
   embeddedEvidence?: LicenseEvidence[];
   warnings?: string[];
+  diagnostics?: DependencyGraphDiagnostic[];
 };

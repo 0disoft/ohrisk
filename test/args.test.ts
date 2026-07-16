@@ -142,6 +142,38 @@ describe("parseArgs", () => {
     });
   });
 
+  test("parses archive input for scan and ci", () => {
+    const scan = parseArgs(["scan", "--archive", "fixtures/project.zip", "--all"]);
+    expect(scan.ok).toBe(true);
+    if (!scan.ok) throw new Error(scan.error.message);
+    expect(scan.value).toMatchObject({
+      kind: "scan",
+      archivePath: "fixtures/project.zip",
+      allLockfiles: true
+    });
+
+    const ci = parseArgs(["ci", "--archive", "fixtures/project.tar.gz"]);
+    expect(ci.ok).toBe(true);
+    if (!ci.ok) throw new Error(ci.error.message);
+    expect(ci.value).toMatchObject({
+      kind: "ci",
+      archivePath: "fixtures/project.tar.gz"
+    });
+  });
+
+  test("rejects archive with filesystem-only project selectors", () => {
+    for (const argv of [
+      ["scan", "--archive", "project.zip", "--lockfile", "package-lock.json"],
+      ["ci", "--archive", "project.tar", "--workspace-root", "."]
+    ]) {
+      const parsed = parseArgs(argv);
+      expect(parsed.ok).toBe(false);
+      if (parsed.ok) throw new Error("Expected archive selector conflict.");
+      expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+      expect(parsed.error.message).toContain("--archive cannot be combined");
+    }
+  });
+
   test("parses scan sarif output", () => {
     const parsed = parseArgs(["scan", "--sarif"]);
 
@@ -493,6 +525,27 @@ describe("parseArgs", () => {
     });
   });
 
+  test("parses explain policy and workspace boundary options", () => {
+    const parsed = parseArgs([
+      "explain",
+      "MIT",
+      "--policy",
+      "config/ohrisk.yml",
+      "--workspace-root",
+      ".."
+    ]);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) throw new Error(parsed.error.message);
+    expect(parsed.value).toEqual({
+      kind: "explain",
+      expression: "MIT",
+      profile: "saas",
+      json: false,
+      policyPath: "config/ohrisk.yml",
+      workspaceRootPath: ".."
+    });
+  });
+
   test("parses diff baseline, profile, prod, json, and fail threshold", () => {
     const parsed = parseArgs([
       "diff",
@@ -714,6 +767,10 @@ describe("parseArgs", () => {
       {
         argv: ["scan", "--lockfile", "--prod"],
         message: "--lockfile requires a value."
+      },
+      {
+        argv: ["scan", "--archive", "--prod"],
+        message: "--archive requires a value."
       },
       {
         argv: ["scan", "--workspace-root", "--prod"],

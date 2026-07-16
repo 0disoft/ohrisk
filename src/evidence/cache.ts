@@ -159,6 +159,21 @@ export function createArtifactCache(
   rootDir: string,
   options: ArtifactCacheOptions = {}
 ): ArtifactCache {
+  return createArtifactCacheHandle(rootDir, options, true);
+}
+
+export function openArtifactCacheForManagement(
+  rootDir: string,
+  options: ArtifactCacheOptions = {}
+): ArtifactCache {
+  return createArtifactCacheHandle(rootDir, options, false);
+}
+
+function createArtifactCacheHandle(
+  rootDir: string,
+  options: ArtifactCacheOptions,
+  initializeOwnership: boolean
+): ArtifactCache {
   const resolvedRoot = path.resolve(rootDir);
   const now = options.now ?? Date.now;
   const defaultTtlMs = normalizeTtl(options.defaultTtlMs, DEFAULT_ARTIFACT_CACHE_TTL_MS);
@@ -166,8 +181,9 @@ export function createArtifactCache(
     options.maxSizeBytes,
     DEFAULT_ARTIFACT_CACHE_MAX_BYTES
   );
-  ensureCacheMarker(resolvedRoot);
-
+  if (initializeOwnership) {
+    ensureCacheMarker(resolvedRoot);
+  }
   return {
     rootDir: resolvedRoot,
     read: (url, maxBytes) => readArtifactCacheEntry({
@@ -262,6 +278,9 @@ function readArtifactCacheEntry(input: {
   if (!Number.isSafeInteger(input.maxBytes) || input.maxBytes < 0) {
     return undefined;
   }
+  if (!hasValidCacheMarker(input.rootDir)) {
+    return undefined;
+  }
 
   const indexPath = cacheIndexPath(input.rootDir, input.url);
   const loaded = readIndexFile(indexPath, cacheUrlKey(input.url), input.now, input.defaultTtlMs);
@@ -337,7 +356,9 @@ function writeArtifactCacheEntry(input: {
   };
 
   try {
-    ensureCacheMarker(input.rootDir);
+    if (!ensureCacheMarker(input.rootDir)) {
+      return;
+    }
     writeIfAbsent(objectPath, input.bytes);
     replaceAtomic(indexPath, Buffer.from(`${JSON.stringify(index)}\n`, "utf8"));
   } catch {
@@ -353,6 +374,9 @@ function revalidateArtifactCacheEntry(input: {
   defaultTtlMs: number;
   metadata?: ArtifactCacheWriteMetadata;
 }): void {
+  if (!hasValidCacheMarker(input.rootDir)) {
+    return;
+  }
   const indexPath = cacheIndexPath(input.rootDir, input.url);
   const loaded = readIndexFile(
     indexPath,
@@ -385,6 +409,9 @@ function revalidateArtifactCacheEntry(input: {
 }
 
 function removeArtifactCacheEntry(rootDir: string, url: string, now: number): void {
+  if (!hasValidCacheMarker(rootDir)) {
+    return;
+  }
   const indexPath = cacheIndexPath(rootDir, url);
   const loaded = readIndexFile(indexPath, cacheUrlKey(url), now, 0);
   removeQuietly(indexPath);
@@ -411,6 +438,7 @@ function pruneArtifactCache(
   now: number
 ): Result<ArtifactCachePruneResult, OhriskError> {
   try {
+    requireValidCacheMarker(rootDir);
     const inventory = scanCacheInventory(rootDir, now);
     const before = statusFromInventory(inventory, now);
     const maxSizeBytes = normalizeMaxSize(options.maxSizeBytes, Number.MAX_SAFE_INTEGER);
@@ -474,16 +502,14 @@ function clearArtifactCache(
   rootDir: string,
   now: number
 ): Result<ArtifactCacheClearResult, OhriskError> {
-  const before = artifactCacheStatus(rootDir, now);
-  if (!before.ok) {
-    return err(before.error);
-  }
-
   try {
+    requireValidCacheMarker(rootDir);
+    const before = artifactCacheStatus(rootDir, now);
+    if (!before.ok) {
+      return err(before.error);
+    }
     removeCacheChild(rootDir, "index");
     removeCacheChild(rootDir, "objects");
-    removeCacheChild(rootDir, CACHE_MARKER_FILENAME);
-    ensureCacheMarker(rootDir);
     return ok({
       removedEntryCount: before.value.entryCount,
       removedObjectCount: before.value.objectCount,
@@ -807,15 +833,42 @@ function cacheObjectPath(rootDir: string, digest: string): string {
   return path.join(rootDir, "objects", "sha256", digest.slice(0, 2), digest);
 }
 
-function ensureCacheMarker(rootDir: string): void {
+function ensureCacheMarker(rootDir: string): boolean {
   try {
+    const rootExisted = existsSync(rootDir);
     mkdirSync(rootDir, { recursive: true });
     const markerPath = path.join(rootDir, CACHE_MARKER_FILENAME);
-    if (!existsSync(markerPath)) {
+    if (existsSync(markerPath)) {
+      requireValidCacheMarker(rootDir);
+    } else {
+      if (rootExisted && readdirSync(rootDir).length > 0) {
+        throw new Error("Artifact cache directory is not empty and has no ownership marker.");
+      }
       writeFileSync(markerPath, CACHE_MARKER_CONTENT, { flag: "wx", mode: 0o600 });
     }
+    return true;
   } catch {
     // Cache initialization is an optimization during scans.
+    return false;
+  }
+}
+
+function hasValidCacheMarker(rootDir: string): boolean {
+  try {
+    requireValidCacheMarker(rootDir);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function requireValidCacheMarker(rootDir: string): void {
+  const markerPath = path.join(rootDir, CACHE_MARKER_FILENAME);
+  if (!lstatSync(markerPath).isFile()) {
+    throw new Error("Artifact cache ownership marker is not a regular file.");
+  }
+  if (readFileSync(markerPath, "utf8") !== CACHE_MARKER_CONTENT) {
+    throw new Error("Artifact cache ownership marker does not match this cache format.");
   }
 }
 

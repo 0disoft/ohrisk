@@ -50,7 +50,10 @@ describe("Markdown report formatting", () => {
       diff: {
         baselineFindings: [],
         currentFindings: [finding],
-        newFindings: [finding]
+        newFindings: [finding],
+        changedFindings: [],
+        resolvedFindings: [],
+        introducedFindings: [finding]
       },
       json: false,
       markdown: true

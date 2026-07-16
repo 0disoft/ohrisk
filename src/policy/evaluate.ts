@@ -6,7 +6,7 @@ import { buildFindingFingerprint, buildFindingId } from "./finding-id";
 import type { UsageProfile } from "./profiles";
 import {
   evaluationPolicyForProfile,
-  matchPolicyPackageRule,
+  matchPolicyPackageRuleWithProvenance,
   type EvaluationPolicy
 } from "./config";
 import type {
@@ -84,24 +84,33 @@ export function evaluateLicenseRisk(input: {
   dependency: DependencyNode;
   profile: UsageProfile;
   policy?: EvaluationPolicy;
+  includePackagePolicy?: boolean;
 }): RiskFinding {
   const effectivePolicy = input.policy
     ? evaluationPolicyForProfile(input.policy, input.profile)
     : undefined;
-  const policyRule = effectivePolicy
-    ? matchPolicyPackageRule(
+  const policyRuleMatch = effectivePolicy && input.includePackagePolicy !== false
+    ? matchPolicyPackageRuleWithProvenance(
         [input.license.packageId, packageUrl(input.dependency)],
         effectivePolicy.packageRules
       )
     : undefined;
+  const policyRule = policyRuleMatch?.rule;
   const classifiedSeverity = classifySeverity(input.license, input.profile, effectivePolicy);
   const severity = policyRule?.severity ?? classifiedSeverity;
   const recommendation = policyRule?.recommendation
     ?? recommendationFor(severity, input.dependency);
   const paths = input.dependency.paths;
   const packageId = input.license.packageId;
-  const reason = policyRule?.reason
-    ?? explainSeverity(input.license, input.profile, severity, effectivePolicy);
+  const classificationReason = explainSeverity(
+    input.license,
+    input.profile,
+    classifiedSeverity,
+    effectivePolicy
+  );
+  const reason = policyRuleMatch
+    ? explainPackagePolicy(policyRuleMatch.pattern, policyRuleMatch.rule, classificationReason)
+    : classificationReason;
   const action = policyRule?.action ?? actionFor(recommendation, input.license);
   const dependencyScope = dependencyScopeFor(input.dependency);
   const evidence = buildEvidence(input.license, input.dependency);
@@ -131,6 +140,22 @@ export function evaluateLicenseRisk(input: {
     paths,
     recommendation
   };
+}
+
+function explainPackagePolicy(
+  pattern: string,
+  rule: NonNullable<ReturnType<typeof matchPolicyPackageRuleWithProvenance>>["rule"],
+  classificationReason: string
+): string {
+  const overrides = [
+    rule.severity ? `severity=${rule.severity}` : undefined,
+    rule.recommendation ? `recommendation=${rule.recommendation}` : undefined,
+    rule.action ? "action" : undefined
+  ].filter((value): value is string => value !== undefined);
+  const provenance = `Package policy rule ${JSON.stringify(pattern)} applied${overrides.length > 0 ? ` (${overrides.join(", ")})` : ""}.`;
+  return rule.reason
+    ? `${provenance} ${rule.reason}`
+    : `${provenance} Base license classification: ${classificationReason}`;
 }
 
 export function evaluateLicenseRisks(input: {
@@ -273,13 +298,13 @@ function explainSeverity(
   severity: RiskSeverity,
   policy: EvaluationPolicy | undefined
 ): string {
-  const policyMatchedTerms = license.choices.filter((choice) =>
-    policy?.allowLicenses.has(choice)
-    || policy?.denyLicenses.has(choice)
-    || policy?.severityOverrides.has(choice)
+  const policyMatchedTerms = policyTerms(license).filter((term) =>
+    policy?.allowLicenses.has(term)
+    || policy?.denyLicenses.has(term)
+    || policy?.severityOverrides.has(term)
   );
   if (policyMatchedTerms.length > 0) {
-    return `Organization policy classified ${policyMatchedTerms.join(", ")} as ${severity} risk for ${profile}.`;
+    return `Organization policy matched license rule(s) ${policyMatchedTerms.join(", ")}; the effective expression is ${severity} risk for ${profile}.`;
   }
   switch (severity) {
     case "low":
@@ -315,6 +340,27 @@ function explainSeverity(
 
       return "License expression is not recognized by Ohrisk.";
   }
+}
+
+function policyTerms(license: NormalizedLicense): string[] {
+  const terms: string[] = [];
+  if (license.spdxAst) {
+    collectPolicyTerms(license.spdxAst, terms);
+  }
+  terms.push(...license.choices);
+  return [...new Set(terms)];
+}
+
+function collectPolicyTerms(node: SpdxExpressionNode, terms: string[]): void {
+  if (node.type === "license") {
+    if (node.exception) {
+      terms.push(`${node.license} WITH ${node.exception}`);
+    }
+    terms.push(node.license);
+    return;
+  }
+  collectPolicyTerms(node.left, terms);
+  collectPolicyTerms(node.right, terms);
 }
 
 function buildEvidence(license: NormalizedLicense, dependency: DependencyNode): string[] {

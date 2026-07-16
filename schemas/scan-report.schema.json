@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:ohrisk:schema:scan-report:2.0.0",
+  "$id": "urn:ohrisk:schema:scan-report:3.1.0",
   "title": "Ohrisk scan report",
   "type": "object",
   "required": [
@@ -13,6 +13,7 @@
     "profile",
     "prodOnly",
     "dependencyGraph",
+    "dependencyGraphDiagnostics",
     "dependencyOrigins",
     "evidence",
     "licenses",
@@ -28,10 +29,10 @@
   ],
   "properties": {
     "$schema": {
-      "const": "urn:ohrisk:schema:scan-report:2.0.0"
+      "const": "urn:ohrisk:schema:scan-report:3.1.0"
     },
     "schemaVersion": {
-      "const": "2.0.0"
+      "const": "3.1.0"
     },
     "status": {
       "const": "profile_risk_evaluated"
@@ -39,39 +40,82 @@
     "projectRoot": {
       "const": "."
     },
+    "archive": {
+      "type": "object",
+      "required": [
+        "name",
+        "format",
+        "sha256",
+        "root"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/relativePath"
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "zip",
+            "tar",
+            "tar.gz"
+          ]
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "root": {
+          "anyOf": [
+            {
+              "const": "."
+            },
+            {
+              "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/relativePath"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "lockfile": {
-      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/lockfile"
+      "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/lockfile"
     },
     "lockfiles": {
       "type": "array",
       "minItems": 1,
       "items": {
-        "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/lockfile"
+        "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/lockfile"
       }
     },
     "profile": {
-      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/usageProfile"
+      "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/usageProfile"
     },
     "prodOnly": {
       "type": "boolean"
     },
     "dependencyGraph": {
-      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/dependencyGraphCounts"
+      "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/dependencyGraphCounts"
+    },
+    "dependencyGraphDiagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/dependencyGraphDiagnostic"
+      }
     },
     "dependencyOrigins": {
       "type": "array",
       "items": {
-        "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/packageProvenance"
+        "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/packageProvenance"
       }
     },
     "evidence": {
-      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/evidenceCounts"
+      "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/evidenceCounts"
     },
     "licenses": {
-      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/licenseCounts"
+      "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/licenseCounts"
     },
     "risks": {
-      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskCounts"
+      "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskCounts"
     },
     "waiverMode": {
       "type": "string",
@@ -81,17 +125,17 @@
       ]
     },
     "waivers": {
-      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/waiverCounts"
+      "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/waiverCounts"
     },
     "policy": {
-      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/policySummary"
+      "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/policySummary"
     },
     "nextAction": {
       "type": "string",
       "minLength": 1
     },
     "failOn": {
-      "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskSeverity"
+      "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskSeverity"
     },
     "failed": {
       "type": "boolean"
@@ -113,25 +157,25 @@
     "findings": {
       "type": "array",
       "items": {
-        "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskFinding"
+        "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskFinding"
       }
     },
     "waivedFindings": {
       "type": "array",
       "items": {
-        "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/waivedRiskFinding"
+        "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/waivedRiskFinding"
       }
     },
     "expiredWaivers": {
       "type": "array",
       "items": {
-        "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskWaiver"
+        "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskWaiver"
       }
     },
     "unmatchedWaivers": {
       "type": "array",
       "items": {
-        "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskWaiver"
+        "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskWaiver"
       }
     }
   },

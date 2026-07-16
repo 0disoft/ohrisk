@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { parseCycloneDxJsonText } from "../src/graph/cyclonedx-json";
+import {
+  CYCLONEDX_MAX_DEPENDENCY_DEPTH,
+  CYCLONEDX_MAX_PATHS_PER_COMPONENT,
+  parseCycloneDxJsonText
+} from "../src/graph/cyclonedx-json";
 
 describe("parseCycloneDxJsonText", () => {
   test("parses dependency graph and embedded license evidence from CycloneDX JSON", () => {
@@ -239,6 +243,79 @@ describe("parseCycloneDxJsonText", () => {
         direct: false,
         paths: [["fixture-cyclonedx-cycle", "parent@1.0.0", "child@2.0.0"]]
       });
+  });
+
+  test("bounds path enumeration for dense dependency DAGs without dropping components", () => {
+    const levels = Array.from({ length: 10 }, (_, level) => [
+      `level-${level}-a`,
+      `level-${level}-b`
+    ]);
+    const refs = levels.flat();
+    const dependencies = [
+      { ref: "root-app", dependsOn: levels[0] },
+      ...levels.flatMap((level, index) => level.map((ref) => ({
+        ref,
+        dependsOn: levels[index + 1] ?? []
+      })))
+    ];
+    const result = parseCycloneDxJsonText(JSON.stringify({
+      bomFormat: "CycloneDX",
+      metadata: { component: { name: "dense-app", "bom-ref": "root-app" } },
+      components: refs.map((ref) => ({
+        type: "library",
+        "bom-ref": ref,
+        purl: `pkg:npm/${ref}@1.0.0`
+      })),
+      dependencies
+    }), "dense.cdx.json");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes).toHaveLength(refs.length);
+    expect(Math.max(...result.value.nodes.map((node) => node.paths.length)))
+      .toBe(CYCLONEDX_MAX_PATHS_PER_COMPONENT);
+    expect(result.value.diagnostics).toContainEqual(expect.objectContaining({
+      code: "dependency_paths_truncated",
+      limit: CYCLONEDX_MAX_PATHS_PER_COMPONENT
+    }));
+  });
+
+  test("summarizes dependency paths deeper than the parser budget without recursion failure", () => {
+    const refs = Array.from(
+      { length: CYCLONEDX_MAX_DEPENDENCY_DEPTH + 8 },
+      (_, index) => `depth-${index}`
+    );
+    const result = parseCycloneDxJsonText(JSON.stringify({
+      bomFormat: "CycloneDX",
+      metadata: { component: { name: "deep-app", "bom-ref": "root-app" } },
+      components: refs.map((ref) => ({
+        type: "library",
+        "bom-ref": ref,
+        purl: `pkg:npm/${ref}@1.0.0`
+      })),
+      dependencies: [
+        { ref: "root-app", dependsOn: [refs[0]] },
+        ...refs.map((ref, index) => ({ ref, dependsOn: refs[index + 1] ? [refs[index + 1]] : [] }))
+      ]
+    }), "deep.cdx.json");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes).toHaveLength(refs.length);
+    const deepestNode = result.value.nodes.find((node) => node.id === `${refs.at(-1)}@1.0.0`);
+    expect(deepestNode?.paths).toEqual([
+      ["deep-app", "<cyclonedx-path-truncated>", `${refs.at(-1)}@1.0.0`]
+    ]);
+    expect(result.value.diagnostics).toContainEqual(expect.objectContaining({
+      code: "dependency_path_depth_summarized",
+      limit: CYCLONEDX_MAX_DEPENDENCY_DEPTH
+    }));
   });
 
   test("reports malformed documents as typed CycloneDX errors", () => {

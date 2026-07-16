@@ -63,6 +63,24 @@ try {
     );
   }
 
+  const archiveName = "source.tar";
+  writeFileSync(
+    path.join(consumerDir, archiveName),
+    createTar({
+      "package.json": JSON.stringify({
+        name: "packaged-archive-smoke",
+        version: "1.0.0"
+      })
+    })
+  );
+  const archiveOutput = runWithPath(
+    "ohrisk",
+    ["scan", "--archive", archiveName, "--offline", "--json"],
+    consumerDir,
+    consumerBinDir
+  );
+  assertArchiveScanReport(readJsonObject(archiveOutput), archiveName);
+
   const sarifOutput = runWithPath("ohrisk", ["scan", "--sarif"], consumerDir, consumerBinDir);
   assertSarifReport(readJsonObject(sarifOutput), expectedVersion);
 
@@ -217,6 +235,53 @@ function assertMarkdownReport(report: string): void {
   if (!report.includes("## Next")) {
     throw new Error("Packaged CLI Markdown smoke test expected the next-action section.");
   }
+}
+
+function assertArchiveScanReport(report: Record<string, unknown>, archiveName: string): void {
+  const archive = isJsonObject(report.archive) ? report.archive : undefined;
+  const lockfile = isJsonObject(report.lockfile) ? report.lockfile : undefined;
+  if (
+    archive?.name !== archiveName
+    || archive.format !== "tar"
+    || archive.root !== "."
+    || typeof archive.sha256 !== "string"
+    || !/^[0-9a-f]{64}$/.test(archive.sha256)
+  ) {
+    throw new Error("Packaged CLI archive smoke test returned invalid archive provenance.");
+  }
+  if (
+    lockfile?.kind !== "package-json"
+    || lockfile.path !== `${archiveName}!/package.json`
+  ) {
+    throw new Error("Packaged CLI archive smoke test returned invalid lockfile provenance.");
+  }
+}
+
+function createTar(files: Record<string, string>): Buffer {
+  const chunks: Buffer[] = [];
+  for (const [filePath, text] of Object.entries(files)) {
+    const data = Buffer.from(text, "utf8");
+    const header = Buffer.alloc(512);
+    header.write(filePath, 0, 100, "utf8");
+    header.write("0000644\0", 100, 8, "ascii");
+    header.write("0000000\0", 108, 8, "ascii");
+    header.write("0000000\0", 116, 8, "ascii");
+    header.write(`${data.length.toString(8).padStart(11, "0")}\0`, 124, 12, "ascii");
+    header.write("00000000000\0", 136, 12, "ascii");
+    header.fill(" ", 148, 156);
+    header.write("0", 156, 1, "ascii");
+    header.write("ustar\0", 257, 6, "ascii");
+    header.write("00", 263, 2, "ascii");
+    const checksum = header.reduce((sum, byte) => sum + byte, 0);
+    header.write(`${checksum.toString(8).padStart(6, "0")}\0 `, 148, 8, "ascii");
+    chunks.push(
+      header,
+      data,
+      Buffer.alloc(Math.ceil(data.length / 512) * 512 - data.length)
+    );
+  }
+  chunks.push(Buffer.alloc(1024));
+  return Buffer.concat(chunks);
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {

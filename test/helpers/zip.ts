@@ -4,23 +4,46 @@ export function createZip(
   files: Record<string, string>,
   options: { deflate?: boolean } = {}
 ): Buffer {
+  return createZipEntries(
+    Object.entries(files).map(([path, text]) => ({ path, data: Buffer.from(text, "utf8") })),
+    options
+  );
+}
+
+export function createZipEntries(
+  entries: readonly {
+    path: string;
+    data: Buffer | Uint8Array | string;
+    directory?: boolean;
+    encrypted?: boolean;
+    method?: number;
+  }[],
+  options: { deflate?: boolean } = {}
+): Buffer {
   const localParts: Buffer[] = [];
   const centralParts: Buffer[] = [];
   let localOffset = 0;
 
-  for (const [filePath, text] of Object.entries(files)) {
+  for (const entry of entries) {
+    const filePath = entry.directory && !entry.path.endsWith("/") ? `${entry.path}/` : entry.path;
     const fileName = Buffer.from(filePath, "utf8");
-    const data = Buffer.from(text, "utf8");
-    const compressed = options.deflate ? deflateRawSync(data) : data;
-    const compressionMethod = options.deflate ? 8 : 0;
+    const data = entry.directory
+      ? Buffer.alloc(0)
+      : typeof entry.data === "string"
+        ? Buffer.from(entry.data, "utf8")
+        : Buffer.from(entry.data);
+    const compressionMethod = entry.method ?? (options.deflate ? 8 : 0);
+    const compressed = compressionMethod === 8 ? deflateRawSync(data) : data;
+    const flags = 0x0800 | (entry.encrypted ? 0x0001 : 0);
+    const checksum = crc32(data);
     const localHeader = Buffer.alloc(30);
 
     localHeader.writeUInt32LE(0x04034b50, 0);
     localHeader.writeUInt16LE(20, 4);
-    localHeader.writeUInt16LE(0x0800, 6);
+    localHeader.writeUInt16LE(flags, 6);
     localHeader.writeUInt16LE(compressionMethod, 8);
     localHeader.writeUInt32LE(0, 10);
-    localHeader.writeUInt32LE(0, 14);
+    localHeader.writeUInt32LE(checksum, 14);
     localHeader.writeUInt32LE(compressed.length, 18);
     localHeader.writeUInt32LE(data.length, 22);
     localHeader.writeUInt16LE(fileName.length, 26);
@@ -32,10 +55,10 @@ export function createZip(
     centralHeader.writeUInt32LE(0x02014b50, 0);
     centralHeader.writeUInt16LE(20, 4);
     centralHeader.writeUInt16LE(20, 6);
-    centralHeader.writeUInt16LE(0x0800, 8);
+    centralHeader.writeUInt16LE(flags, 8);
     centralHeader.writeUInt16LE(compressionMethod, 10);
     centralHeader.writeUInt32LE(0, 12);
-    centralHeader.writeUInt32LE(0, 16);
+    centralHeader.writeUInt32LE(checksum, 16);
     centralHeader.writeUInt32LE(compressed.length, 20);
     centralHeader.writeUInt32LE(data.length, 24);
     centralHeader.writeUInt16LE(fileName.length, 28);
@@ -43,7 +66,7 @@ export function createZip(
     centralHeader.writeUInt16LE(0, 32);
     centralHeader.writeUInt16LE(0, 34);
     centralHeader.writeUInt16LE(0, 36);
-    centralHeader.writeUInt32LE(0, 38);
+    centralHeader.writeUInt32LE(entry.directory ? 0x41ed0000 : 0x81a40000, 38);
     centralHeader.writeUInt32LE(localOffset, 42);
 
     centralParts.push(centralHeader, fileName);
@@ -57,11 +80,22 @@ export function createZip(
   eocd.writeUInt32LE(0x06054b50, 0);
   eocd.writeUInt16LE(0, 4);
   eocd.writeUInt16LE(0, 6);
-  eocd.writeUInt16LE(Object.keys(files).length, 8);
-  eocd.writeUInt16LE(Object.keys(files).length, 10);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
   eocd.writeUInt32LE(centralDirectory.length, 12);
   eocd.writeUInt32LE(localDirectory.length, 16);
   eocd.writeUInt16LE(0, 20);
 
   return Buffer.concat([localDirectory, centralDirectory, eocd]);
+}
+
+function crc32(bytes: Buffer): number {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc & 1) !== 0 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
 }

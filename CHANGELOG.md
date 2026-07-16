@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.4.0 - 2026-07-16
+
+- Added `scan` and `ci --archive` support for ZIP, TAR, TAR.GZ, and TGZ project
+  inputs through a bounded read-only virtual filesystem with no disk extraction.
+- Reject encrypted, ZIP64, multi-disk, path-conflicting, special-file,
+  integrity-failing, and resource-exhausting archives; nested archives remain
+  opaque.
+- Added archive provenance to terminal, JSON, Markdown, HTML, SARIF, and
+  CycloneDX reports without exposing absolute host paths, and advanced the
+  closed report contract to schema 3.1.0.
+- Added the GitHub Action `archive` input with repository containment,
+  symlink, regular-file, command, and option-conflict validation.
+- Kept policy, waiver, and local package evidence outside the untrusted archive
+  boundary; the host invocation directory remains authoritative.
+- Added external-tool ZIP, TAR, and TGZ interoperability fixtures and replaced
+  quadratic entry-prefix checks so the 50,000-entry ceiling stays usable.
+
+## 1.3.0 - 2026-07-16
+
+- Added policy-aware `explain --policy` output with explicit license-only scope,
+  strict waiver-file validation, package-rule provenance, and SPDX exception
+  policy matching.
+- Added GitHub Action `diff` support with a required baseline ref, safe default
+  input combinations, exact-version npm publication checks, and full bundle
+  byte verification.
+- Added separate new, changed, and resolved diff findings plus typed evidence
+  source and diagnostic summaries in report schema 3.0.0.
+- Hardened remote evidence fetching so hostname allowlists cannot bypass DNS,
+  socket, or redirect address checks, and protected destructive cache operations
+  with pre-existing ownership markers.
+- Bounded CycloneDX dependency path expansion, removed recursive traversal, and
+  rejected invalid XML 1.0 numeric character references without throwing.
+- Indexed Yarn Berry cache entries once per scan instead of rescanning the
+  cache directory for each package.
+
 ## 1.2.1 - 2026-07-12
 
 - Changed the `@0disoft/laqu` development dependency to follow its `latest`

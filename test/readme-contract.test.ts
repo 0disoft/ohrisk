@@ -10,7 +10,7 @@ describe("README report contract", () => {
     const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
 
     expect(readme).toContain("Beginner HTML report flow on Windows PowerShell");
-    expect(readme).toContain("npm install -g ohrisk@1.2.1");
+    expect(readme).toContain("npm install -g ohrisk@1.4.0");
     expect(readme).toContain("ohrisk scan --html --output reports\\ohrisk-report.html --open");
     expect(readme).toContain("The scan prints live terminal progress");
     expect(readme).toContain("plain append-only progress lines");
@@ -53,7 +53,24 @@ describe("README report contract", () => {
     expect(readme).toContain('"waiverMode": "local"');
     expect(readme).toContain("| ID | Fingerprint | Severity | Package | Dependency | Reason | Recommendation | Action | Path |");
     expect(readme).toContain("fingerprint: agpl-child@0.1.0::production::transitive");
-    expect(readme).toContain("stable diff matching that uses finding fingerprints");
+    expect(readme).toContain("stable diff matching that uses finding IDs and fingerprints");
     expect(readme).toContain("ci --no-waivers");
+  });
+
+  test("documents bounded archive scanning and its trust boundary", () => {
+    const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
+    const normalized = readme.replace(/\s+/g, " ");
+
+    expect(readme).toContain("ohrisk scan --archive artifacts/source.zip");
+    expect(readme).toContain(
+      "ohrisk ci --archive artifacts/source.tar.gz --all --fail-on high"
+    );
+    expect(readme).toContain("Archive mode is available for `scan` and `ci`, not `diff`");
+    expect(normalized).toContain("nested archives are not opened");
+    expect(normalized).toContain("`--archive` cannot be combined with `--lockfile` or `--workspace-root`");
+    expect(normalized).toContain("it can be combined with `--all`");
+    expect(normalized).toContain("Policy and waiver files inside an archive are never auto-loaded");
+    expect(readme).toContain("Encrypted or ZIP64 archives");
+    expect(readme).toContain("exact limits");
   });
 });

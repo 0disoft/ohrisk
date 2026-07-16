@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -15,7 +16,8 @@ import path from "node:path";
 import {
   artifactCacheMetadataFromHeaders,
   createArtifactCache,
-  defaultArtifactCacheDirectory
+  defaultArtifactCacheDirectory,
+  openArtifactCacheForManagement
 } from "../src/evidence/cache";
 
 describe("persistent artifact cache", () => {
@@ -117,6 +119,7 @@ describe("persistent artifact cache", () => {
       mkdirSync(path.dirname(indexPath), { recursive: true });
       mkdirSync(path.dirname(objectPath), { recursive: true });
       writeFileSync(objectPath, bytes);
+      writeFileSync(path.join(root, ".ohrisk-artifact-cache"), "ohrisk artifact cache v3\n");
       writeFileSync(indexPath, JSON.stringify({
         version: 2,
         key,
@@ -264,6 +267,57 @@ describe("persistent artifact cache", () => {
           corruptEntryCount: 0
         }
       });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  test("refuses prune and clear when the cache ownership marker is missing", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "ohrisk-cache-unowned-"));
+    const sentinel = path.join(root, "index", "sentinel.txt");
+    try {
+      mkdirSync(path.dirname(sentinel), { recursive: true });
+      writeFileSync(sentinel, "preserve", "utf8");
+      const cache = openArtifactCacheForManagement(root);
+
+      cache.write("https://registry.example.com/blocked.tgz", Buffer.from("blocked"));
+      const pruned = cache.prune();
+      const cleared = cache.clear();
+
+      expect(pruned.ok).toBe(false);
+      expect(cleared.ok).toBe(false);
+      if (pruned.ok || cleared.ok) {
+        throw new Error("Expected unowned cache management to fail closed.");
+      }
+      expect(pruned.error.code).toBe("CACHE_OPERATION_FAILED");
+      expect(cleared.error.code).toBe("CACHE_OPERATION_FAILED");
+      expect(readFileSync(sentinel, "utf8")).toBe("preserve");
+      expect(existsSync(path.join(root, "objects"))).toBe(false);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  test("refuses prune and clear when the cache ownership marker does not match", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "ohrisk-cache-wrong-owner-"));
+    const marker = path.join(root, ".ohrisk-artifact-cache");
+    const sentinel = path.join(root, "objects", "sentinel.txt");
+    try {
+      mkdirSync(path.dirname(sentinel), { recursive: true });
+      writeFileSync(marker, "owned by another tool\n", "utf8");
+      writeFileSync(sentinel, "preserve", "utf8");
+      const cache = openArtifactCacheForManagement(root);
+
+      cache.write("https://registry.example.com/blocked.tgz", Buffer.from("blocked"));
+      const pruned = cache.prune();
+      const cleared = cache.clear();
+
+      expect(pruned.ok).toBe(false);
+      expect(cleared.ok).toBe(false);
+      expect(readFileSync(marker, "utf8")).toBe("owned by another tool\n");
+      expect(readFileSync(sentinel, "utf8")).toBe("preserve");
+      expect(existsSync(path.join(root, "index"))).toBe(false);
+      expect(existsSync(path.join(root, "objects", "sha256"))).toBe(false);
     } finally {
       rmSync(root, { force: true, recursive: true });
     }

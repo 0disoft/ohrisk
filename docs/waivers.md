@@ -29,6 +29,12 @@ Waivers live in `.ohrisk-waivers.json` at the project root:
 Each waiver requires at least one of `id` or `fingerprint`, plus a non-empty
 `reason`. The `expiresOn` field is optional but recommended.
 
+The file contract is closed: the root accepts only `waivers`, and each waiver
+accepts only `id`, `fingerprint`, `reason`, and `expiresOn`. Unknown fields are
+rejected instead of ignored, so typos such as `expiresOnn` cannot silently turn
+an expiring waiver into a permanent one. The packaged Draft 2020-12 contract is
+[`schemas/waiver-file.schema.json`](../schemas/waiver-file.schema.json).
+
 ## Matching by id
 
 A finding's `id` is built from the package ID, dependency type, dependency

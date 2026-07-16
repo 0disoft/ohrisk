@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.2.1
+npm install -g ohrisk@1.4.0
 cd your-project
 ohrisk scan
 ```
@@ -84,8 +84,8 @@ evidence and a profile-aware severity so you can decide.
 | --- | --- |
 | `ohrisk scan` | What does my dependency tree look like right now? Non-failing local decision aid. |
 | `ohrisk ci` | Should this PR fail the build? Runs a scan and exits non-zero when findings meet `--fail-on`. |
-| `ohrisk diff <ref>` | What changed since the baseline git ref? Surfaces only new or meaningfully changed findings. |
-| `ohrisk explain <expr>` | How would Ohrisk classify this license expression for a profile, without scanning a project? |
+| `ohrisk diff <ref>` | What changed since the baseline git ref? Separates new, meaningfully changed, and resolved findings. |
+| `ohrisk explain <expr>` | How would Ohrisk classify this license expression for a profile, optionally with license-level organization policy? |
 
 ## Usage profiles
 
@@ -230,7 +230,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - CycloneDX 1.5 JSON SBOM reports with dependency relationships and Ohrisk risk decision properties
 - stable finding IDs for PR comments and local waiver workflows
 - local `.ohrisk-waivers.json` waivers by finding ID or fingerprint
-- stable diff matching that uses finding fingerprints so severity, recommendation, reason, or evidence changes surface without being triggered by action prose churn
+- stable diff matching that uses finding IDs and fingerprints to separate new, changed, and resolved findings without being triggered by action prose churn
 - exact finding fingerprints for SARIF partial fingerprints and audit trails
 - finding fingerprints in terminal and Markdown reports for waiver and audit workflows
 - structured dependency type and direct/transitive scope in findings
@@ -238,7 +238,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - optional browser opening for written HTML reports with `--open` through a temporary `127.0.0.1` URL
 - command-specific help with `ohrisk help <command>` and `ohrisk <command> --help`
 - standalone license expression explanation
-- git ref diff reports that show only new or meaningfully changed findings
+- git ref diff reports that separate new, meaningfully changed, and resolved findings
 - `diff --all` comparison of independently discovered current and baseline input sets, including added and removed lockfiles
 - strict Draft 2020-12 JSON Schemas for scan, diff, and explain reports, with shared nested definitions and release-time output validation
 - JSON threshold outcomes for `ci --fail-on` and `diff --fail-on`
@@ -288,10 +288,28 @@ Run a local scan from a supported project:
 ohrisk scan
 ```
 
+Scan a source archive without extracting it to disk:
+
+```bash
+ohrisk scan --archive artifacts/source.zip
+ohrisk ci --archive artifacts/source.tar.gz --all --fail-on high
+```
+
+Archive mode is available for `scan` and `ci`, not `diff`. It accepts ZIP, TAR,
+TAR.GZ, and TGZ through a strict read-only in-memory reader; nested archives are
+not opened. `--archive` cannot be combined with `--lockfile` or
+`--workspace-root`, but it can be combined with `--all`. Policy and waiver files
+inside an archive are never auto-loaded: `.ohrisk.yml` and
+`.ohrisk-waivers.json` from the host invocation directory remain authoritative.
+Encrypted or ZIP64 archives, unsupported compression and entry types, unsafe
+paths, integrity failures, and archives over the documented resource limits are
+rejected. See the [CLI command contract](docs/cli/command-contract.md#archive-input)
+for the supported subset and exact limits.
+
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.2.1
+npm install -g ohrisk@1.4.0
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
@@ -383,7 +401,7 @@ Supported dependency input files:
 - Elixir Mix `mix.lock` Hex package pins, using adjacent root `mix.exs` literal `only:` options for production/development classification and local `deps/` package source and `mix.exs` metadata for evidence; Erlang Rebar3 `rebar.lock` Hex package pins, using depth-0 production root classification and local `deps/` package source and `rebar.config` metadata for evidence
 - Ruby Bundler `Gemfile.lock` gem entries, using literal companion `Gemfile` group blocks and inline `group:` options for development classification and local Bundler/RubyGems gemspec metadata for evidence
 - PHP Composer `composer.lock` package entries, using adjacent `composer.json` root dependencies when available and local `vendor/` package metadata for evidence
-- CycloneDX JSON/XML SBOM package entries with Package URL identities, dependency relationships, and embedded license evidence
+- CycloneDX JSON/XML SBOM package entries with Package URL identities, dependency relationships, and embedded license evidence; traversal is iterative, retains every reachable component, stores at most 64 paths per component, and summarizes paths deeper than 256 components with typed graph diagnostics
 - SPDX JSON/RDF and tag-value SBOM package entries with Package URL external refs, dependency relationships, and embedded license evidence
 - Yarn classic/Berry `yarn.lock` with root and workspace dependency sets from `package.json` manifests, plus local `.yarn/cache` zip evidence for Berry/PnP installs
 
@@ -561,6 +579,7 @@ Explain a license expression without scanning a project:
 
 ```bash
 ohrisk explain AGPL-3.0-only --profile saas
+ohrisk explain "GPL-2.0-only WITH Classpath-exception-2.0" --policy .ohrisk.yml --json
 ```
 
 Compare the current findings against a baseline git ref:
@@ -575,7 +594,7 @@ Baseline refs must be branch, tag, or commit-like names such as `main`,
 `origin/main`, `release/v1.2.3`, or a commit hash. Git rev syntax such as
 `HEAD@{1}`, `HEAD~1`, and `main:path` is rejected. `diff --all` discovers and
 merges the current and baseline input sets independently, then reports added and
-removed lockfiles alongside finding changes.
+removed lockfiles alongside separate new, changed, and resolved findings.
 
 Inspect or clean the shared artifact cache:
 

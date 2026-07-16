@@ -644,6 +644,22 @@ describe("collectGraphEvidence", () => {
     expect(validation.error.message).toContain("loopback_ipv4");
   });
 
+  test("keeps socket address blocking independent from hostname allowlisting", () => {
+    const allowedHosts = new Set(["packages.example.test"]);
+    expect(allowedHosts.has("packages.example.test")).toBe(true);
+
+    const validation = validateArtifactSocketRemoteAddress(
+      "packages.example.test",
+      "169.254.169.254"
+    );
+
+    expect(validation.ok).toBe(false);
+    if (validation.ok) {
+      throw new Error("Expected allowlisted host socket address to remain blocked.");
+    }
+    expect(validation.error.message).toContain("link_local_ipv4");
+  });
+
   test("rejects missing socket remote addresses after HTTPS connection", () => {
     const validation = validateArtifactSocketRemoteAddress("registry.example.test", undefined);
 
@@ -1941,6 +1957,84 @@ describe("collectGraphEvidence", () => {
     }
   });
 
+  test("uses one sorted Yarn Berry cache index for multiple packages", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-yarn-cache-index-"));
+    const cacheDir = path.join(projectRoot, ".yarn", "cache");
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(
+      path.join(cacheDir, "alpha-npm-1.0.0-z-last.zip"),
+      createZip({
+        "node_modules/alpha/package.json": JSON.stringify({
+          name: "alpha",
+          version: "1.0.0",
+          license: "BSD-3-Clause"
+        })
+      })
+    );
+    writeFileSync(
+      path.join(cacheDir, "alpha-npm-1.0.0-a-first.zip"),
+      createZip({
+        "node_modules/alpha/package.json": JSON.stringify({
+          name: "alpha",
+          version: "1.0.0",
+          license: "MIT"
+        })
+      })
+    );
+    writeFileSync(
+      path.join(cacheDir, "beta-npm-2.0.0-only.zip"),
+      createZip({
+        "node_modules/beta/package.json": JSON.stringify({
+          name: "beta",
+          version: "2.0.0",
+          license: "Apache-2.0"
+        })
+      })
+    );
+
+    try {
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "yarn.lock",
+          nodes: [
+            {
+              id: "alpha@1.0.0",
+              name: "alpha",
+              version: "1.0.0",
+              ecosystem: "npm",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "alpha@1.0.0"]]
+            },
+            {
+              id: "beta@2.0.0",
+              name: "beta",
+              version: "2.0.0",
+              ecosystem: "npm",
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "beta@2.0.0"]]
+            }
+          ]
+        },
+        projectRoot,
+        evidenceConcurrency: 2,
+        fetchArtifact: async () => {
+          throw new Error("Registry fallback should not run for indexed Yarn cache entries.");
+        }
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) throw new Error(evidence.error.message);
+      expect(evidence.value.map((item) => item.packageJsonLicense)).toEqual([
+        "MIT",
+        "Apache-2.0"
+      ]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("ignores stale Yarn cache zip evidence that does not match package metadata", async () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-yarn-cache-stale-"));
     const cacheDir = path.join(projectRoot, ".yarn", "cache");
@@ -3074,8 +3168,9 @@ describe("collectGraphEvidence", () => {
     });
   });
 
-  test("rejects remote tarball redirects to blocked targets before fetching them", async () => {
+  test("revalidates allowlisted redirect hosts and rejects private DNS answers", async () => {
     const fetchedUrls: string[] = [];
+    const resolvedHosts: string[] = [];
     const evidence = await collectGraphEvidence({
       graph: {
         lockfilePath: "bun.lock",
@@ -3094,6 +3189,13 @@ describe("collectGraphEvidence", () => {
         ]
       },
       projectRoot: bunProjectDir,
+      allowedArtifactHosts: ["registry.example.test", "cdn.example.test"],
+      resolveArtifactHost: async (hostname) => {
+        resolvedHosts.push(hostname);
+        return hostname === "registry.example.test"
+          ? [{ address: "93.184.216.34", family: 4 }]
+          : [{ address: "10.0.0.9", family: 4 }];
+      },
       fetchArtifact: async (url, options) => {
         fetchedUrls.push(`${url} ${options?.redirect ?? "none"}`);
         return {
@@ -3102,7 +3204,7 @@ describe("collectGraphEvidence", () => {
           statusText: "Found",
           headers: {
             get: (name) => name.toLowerCase() === "location"
-              ? "http://127.0.0.1:4873/redirect-local-remote/-/redirect-local-remote-1.0.0.tgz"
+              ? "https://cdn.example.test/redirect-local-remote/-/redirect-local-remote-1.0.0.tgz"
               : null
           },
           arrayBuffer: async () => new ArrayBuffer(0)
@@ -3113,6 +3215,7 @@ describe("collectGraphEvidence", () => {
     expect(fetchedUrls).toEqual([
       "https://registry.example.test/redirect-local-remote/-/redirect-local-remote-1.0.0.tgz manual"
     ]);
+    expect(resolvedHosts).toEqual(["registry.example.test", "cdn.example.test"]);
     expect(evidence.ok).toBe(false);
     if (evidence.ok) {
       throw new Error("Expected blocked redirect target to fail.");
@@ -3123,9 +3226,10 @@ describe("collectGraphEvidence", () => {
     expect(evidence.error.details).toMatchObject({
       packageId: "redirect-local-remote@1.0.0",
       redirectFrom: "https://registry.example.test/redirect-local-remote/-/redirect-local-remote-1.0.0.tgz",
-      redirectUrl: "http://127.0.0.1:4873/redirect-local-remote/-/redirect-local-remote-1.0.0.tgz",
-      artifactHost: "127.0.0.1",
-      reason: "insecure_http_not_supported"
+      redirectUrl: "https://cdn.example.test/redirect-local-remote/-/redirect-local-remote-1.0.0.tgz",
+      artifactHost: "cdn.example.test",
+      resolvedAddress: "10.0.0.9",
+      reason: "private_ipv4"
     });
   });
 
@@ -3407,7 +3511,7 @@ describe("collectGraphEvidence", () => {
     ]);
   });
 
-  test("rejects remote tarball hostnames that resolve to private hosts before fetch", async () => {
+  test("rejects every private DNS answer for an allowlisted remote tarball host", async () => {
     let fetchCalled = false;
     const resolvedHosts: string[] = [];
 
@@ -3428,9 +3532,13 @@ describe("collectGraphEvidence", () => {
         ]
       },
       projectRoot: bunProjectDir,
+      allowedArtifactHosts: ["tarballs.example.test"],
       resolveArtifactHost: async (hostname) => {
         resolvedHosts.push(hostname);
-        return [{ address: "10.0.0.5", family: 4 }];
+        return [
+          { address: "93.184.216.34", family: 4 },
+          { address: "10.0.0.5", family: 4 }
+        ];
       },
       fetchArtifact: async () => {
         fetchCalled = true;

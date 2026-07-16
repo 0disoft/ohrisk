@@ -30,6 +30,11 @@ export type PackagePolicyRule = {
   recommendation?: RiskRecommendation;
 };
 
+export type MatchedPackagePolicyRule = {
+  pattern: string;
+  rule: PackagePolicyRule;
+};
+
 export type RegistryAuthPolicy = {
   tokenEnv: string;
 };
@@ -144,6 +149,13 @@ export function matchPolicyPackageRule(
   packageIdentifiers: string | readonly string[],
   packageRules: ReadonlyMap<string, PackagePolicyRule>
 ): PackagePolicyRule | undefined {
+  return matchPolicyPackageRuleWithProvenance(packageIdentifiers, packageRules)?.rule;
+}
+
+export function matchPolicyPackageRuleWithProvenance(
+  packageIdentifiers: string | readonly string[],
+  packageRules: ReadonlyMap<string, PackagePolicyRule>
+): MatchedPackagePolicyRule | undefined {
   const identifiers = typeof packageIdentifiers === "string"
     ? [packageIdentifiers]
     : [...packageIdentifiers];
@@ -151,7 +163,7 @@ export function matchPolicyPackageRule(
   for (const identifier of identifiers) {
     const exact = packageRules.get(identifier);
     if (exact) {
-      return exact;
+      return { pattern: identifier, rule: exact };
     }
   }
 
@@ -167,7 +179,9 @@ export function matchPolicyPackageRule(
       bestMatch = { pattern, rule };
     }
   }
-  return bestMatch?.rule;
+  return bestMatch
+    ? { pattern: bestMatch.pattern, rule: bestMatch.rule }
+    : undefined;
 }
 
 function readPolicyFile(input: {

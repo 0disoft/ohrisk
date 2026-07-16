@@ -1,6 +1,6 @@
 {
   "name": "ohrisk",
-  "version": "1.2.1",
+  "version": "1.4.0",
   "description": "Catch open-source license risk before your PR ships.",
   "license": "MIT",
   "type": "module",

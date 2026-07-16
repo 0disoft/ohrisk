@@ -77,12 +77,13 @@ export function renderCycloneDxReport(input: CycloneDxReportInput): string {
           },
           {
             name: "ohrisk:lockfilePath",
-            value: projectRelativePath(input.project.rootDir, input.project.lockfile.path)
+            value: projectInputPath(input.project, input.project.lockfile.path)
           },
           {
             name: "ohrisk:waiverMode",
             value: input.waiverMode
-          }
+          },
+          ...archiveProperties(input.project)
         ]
       },
       components,
@@ -104,6 +105,27 @@ export function renderCycloneDxReport(input: CycloneDxReportInput): string {
     null,
     2
   );
+}
+
+function projectInputPath(project: ProjectInput, targetPath: string): string {
+  const relativePath = projectRelativePath(project.rootDir, targetPath);
+  if (!project.source) {
+    return relativePath;
+  }
+  const root = project.source.entryRoot === "." ? "" : `${project.source.entryRoot}/`;
+  return `${project.source.displayPath}!/${root}${relativePath}`;
+}
+
+function archiveProperties(project: ProjectInput): Array<{ name: string; value: string }> {
+  if (!project.source) {
+    return [];
+  }
+  return [
+    { name: "ohrisk:archiveName", value: project.source.displayPath },
+    { name: "ohrisk:archiveFormat", value: project.source.format },
+    { name: "ohrisk:archiveSha256", value: project.source.sha256 },
+    { name: "ohrisk:archiveRoot", value: project.source.entryRoot }
+  ];
 }
 
 function projectRelativePath(projectRoot: string, targetPath: string): string {

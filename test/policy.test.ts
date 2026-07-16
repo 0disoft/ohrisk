@@ -477,4 +477,71 @@ describe("evaluateLicenseRisk", () => {
     expect(finding.action).toBe("Replace this package or escalate before shipping.");
     expect(finding.evidence).toContain("signals: commercial-restriction, malformed, custom-text");
   });
+
+  test("attributes package overrides to the matched rule instead of the license classifier", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "package@1.0.0",
+        original: "MIT",
+        expression: "MIT",
+        choices: ["MIT"],
+        joiner: "single",
+        signals: [],
+        evidenceSources: ["source: local"],
+        confidence: "high"
+      },
+      dependency: baseDependency,
+      profile: "saas",
+      policy: {
+        allowLicenses: new Set(),
+        denyLicenses: new Set(),
+        severityOverrides: new Map(),
+        packageRules: new Map([
+          ["pkg:npm/package@*", { severity: "high", recommendation: "replace", action: "Use the reviewed replacement." }]
+        ])
+      }
+    });
+
+    expect(finding.severity).toBe("high");
+    expect(finding.recommendation).toBe("replace");
+    expect(finding.action).toBe("Use the reviewed replacement.");
+    expect(finding.reason).toContain('Package policy rule "pkg:npm/package@*" applied');
+    expect(finding.reason).toContain("Base license classification: License expression is low risk for saas.");
+  });
+
+  test("reports the exact SPDX WITH term matched by license policy", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "package@1.0.0",
+        original: "GPL-2.0-only WITH Classpath-exception-2.0",
+        expression: "GPL-2.0-only WITH Classpath-exception-2.0",
+        choices: ["GPL-2.0-only"],
+        joiner: "single",
+        signals: [],
+        evidenceSources: ["source: local"],
+        confidence: "high",
+        exceptions: ["Classpath-exception-2.0"],
+        spdxAst: {
+          type: "license",
+          license: "GPL-2.0-only",
+          exception: "Classpath-exception-2.0"
+        }
+      },
+      dependency: baseDependency,
+      profile: "distributed-app",
+      policy: {
+        allowLicenses: new Set(),
+        denyLicenses: new Set(),
+        severityOverrides: new Map([
+          ["GPL-2.0-only WITH Classpath-exception-2.0", "low"]
+        ]),
+        packageRules: new Map()
+      }
+    });
+
+    expect(finding.severity).toBe("low");
+    expect(finding.reason).toBe(
+      "Organization policy matched license rule(s) GPL-2.0-only WITH Classpath-exception-2.0; the effective expression is low risk for distributed-app."
+    );
+  });
 });

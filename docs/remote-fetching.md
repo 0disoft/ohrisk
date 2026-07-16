@@ -33,7 +33,10 @@ host.
 
 Additional public artifact hosts must be declared through policy or repeatable
 `--allow-host` options. `--registry-url` automatically permits only its exact
-hostname. Host matching does not use suffix or substring rules.
+hostname. Host matching does not use suffix or substring rules. Allowlisting
+changes only hostname policy: DNS preflight, rejection of every blocked DNS
+answer, guarded socket lookup, connected-address checks, and per-redirect
+revalidation remain mandatory.
 
 ## Credential Rules
 

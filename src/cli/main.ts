@@ -12,10 +12,12 @@ import { fileURLToPath } from "node:url";
 
 import { parseArgs, type CliCommand, type HelpTarget } from "./args";
 import { OHRISK_VERSION } from "./version";
+import { loadArchiveProject } from "../archive/archive-project";
+import { readArchiveFile } from "../archive/archive-reader";
 import { diffRiskFindings } from "../diff/compare";
 import {
-  createArtifactCache,
   defaultArtifactCacheDirectory,
+  openArtifactCacheForManagement,
   type ArtifactCacheStatus
 } from "../evidence/cache";
 import { collectGraphEvidence, type EvidenceCollectionProgress } from "../evidence/collect";
@@ -177,7 +179,7 @@ function runCache(
   const cacheDir = configuredCacheDir
     ? path.resolve(io.cwd, configuredCacheDir)
     : defaultArtifactCacheDirectory(env);
-  const cache = createArtifactCache(cacheDir);
+  const cache = openArtifactCacheForManagement(cacheDir);
   const location = configuredCacheDir
     ? path.relative(io.cwd, cacheDir) || "."
     : cacheDir;
@@ -417,7 +419,7 @@ async function runDiff(
     return exitCodeForError(emitted.error);
   }
 
-  if (command.failOn && hasFindingAtOrAbove(diff.newFindings, command.failOn)) {
+  if (command.failOn && hasFindingAtOrAbove(diff.introducedFindings, command.failOn)) {
     return 1;
   }
 
@@ -428,6 +430,25 @@ async function runExplain(
   command: Extract<CliCommand, { kind: "explain" }>,
   io: CliIO
 ): Promise<number> {
+  const workspaceRoot = resolveWorkspaceRootPath({
+    cwd: io.cwd,
+    workspaceRootPath: command.workspaceRootPath
+  });
+  if (isErr(workspaceRoot)) {
+    io.stderr(formatError(workspaceRoot.error));
+    return exitCodeForError(workspaceRoot.error);
+  }
+
+  const policy = readPolicyConfig({
+    projectRoot: io.cwd,
+    ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}),
+    ...(command.policyPath ? { policyPath: command.policyPath } : {})
+  });
+  if (isErr(policy)) {
+    io.stderr(formatError(policy.error));
+    return exitCodeForError(policy.error);
+  }
+
   const normalizedLicense = normalizeLicenseEvidence({
     packageId: "input",
     packageJsonLicense: command.expression,
@@ -446,16 +467,19 @@ async function runExplain(
       direct: true,
       paths: [["input"]]
     },
-    profile: command.profile
+    profile: command.profile,
+    policy: policy.value,
+    includePackagePolicy: false
   });
 
   const output = renderExplainReport({
-      expression: command.expression,
-      profile: command.profile,
-      normalizedLicense,
-      finding,
-      json: command.json
-    });
+    expression: command.expression,
+    profile: command.profile,
+    normalizedLicense,
+    finding,
+    json: command.json,
+    policy: summarizePolicyConfig(policy.value)
+  });
   const emitted = emitReport({
     contents: output,
     outputPath: command.outputPath,
@@ -490,6 +514,7 @@ async function runScan(
   const scanned = await scanProject({
     cwd: io.cwd,
     ...(command.lockfilePath ? { lockfilePath: command.lockfilePath } : {}),
+    ...(command.archivePath ? { archivePath: command.archivePath } : {}),
     allLockfiles: command.allLockfiles ?? false,
     ...(command.policyPath ? { policyPath: command.policyPath } : {}),
     offline: command.offline ?? false,
@@ -592,6 +617,7 @@ function hasWaiverDrift(input: {
 async function scanProject(input: {
   cwd: string;
   lockfilePath?: string;
+  archivePath?: string;
   allLockfiles: boolean;
   policyPath?: string;
   offline: boolean;
@@ -609,20 +635,29 @@ async function scanProject(input: {
   workspaceRoot?: string;
   progress?: ScanProgressReporter;
 }): Promise<Result<ScanResult, OhriskError>> {
-  const loaded = loadProjectGraph({
-    cwd: input.cwd,
-    ...(input.lockfilePath ? { lockfilePath: input.lockfilePath } : {}),
-    allLockfiles: input.allLockfiles,
-    prodOnly: input.prodOnly,
-    ...(input.progress ? { progress: input.progress } : {})
-  });
+  const loaded = input.archivePath
+    ? loadArchiveProjectGraph({
+        cwd: input.cwd,
+        archivePath: input.archivePath,
+        allLockfiles: input.allLockfiles,
+        prodOnly: input.prodOnly,
+        now: input.now,
+        ...(input.progress ? { progress: input.progress } : {})
+      })
+    : loadProjectGraph({
+        cwd: input.cwd,
+        ...(input.lockfilePath ? { lockfilePath: input.lockfilePath } : {}),
+        allLockfiles: input.allLockfiles,
+        prodOnly: input.prodOnly,
+        ...(input.progress ? { progress: input.progress } : {})
+      });
 
   if (isErr(loaded)) {
     return loaded;
   }
 
   const policy = readPolicyConfig({
-    projectRoot: loaded.value.project.rootDir,
+    projectRoot: loaded.value.project.source ? input.cwd : loaded.value.project.rootDir,
     ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
     ...(input.policyPath ? { policyPath: input.policyPath } : {})
   });
@@ -654,8 +689,45 @@ async function scanProject(input: {
     evidenceRuntime: evidenceRuntime.value,
     applyWaivers: input.applyWaivers,
     now: input.now,
+    ...(loaded.value.project.source ? { configurationRoot: input.cwd } : {}),
     ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
     ...(input.progress ? { progress: input.progress } : {})
+  });
+}
+
+function loadArchiveProjectGraph(input: {
+  cwd: string;
+  archivePath: string;
+  allLockfiles: boolean;
+  prodOnly: boolean;
+  now: ScanClock;
+  progress?: ScanProgressReporter;
+}): Result<{
+  project: ProjectInput;
+  scanGraph: DependencyGraph;
+}, OhriskError> {
+  input.progress?.(SCAN_PROGRESS_DISCOVER_PERCENT, "Reading archive index...");
+  const archive = readArchiveFile({
+    cwd: input.cwd,
+    archivePath: input.archivePath,
+    now: input.now
+  });
+  if (isErr(archive)) {
+    return archive;
+  }
+
+  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, "Reading archived lockfiles...");
+  const loaded = loadArchiveProject({
+    source: archive.value,
+    allLockfiles: input.allLockfiles
+  });
+  if (isErr(loaded)) {
+    return loaded;
+  }
+
+  return ok({
+    project: loaded.value.project,
+    scanGraph: filterGraphForProdOnly(loaded.value.graph, input.prodOnly)
   });
 }
 
@@ -704,6 +776,7 @@ function loadProjectGraph(input: {
 async function evaluateProjectScan(input: {
   project: ProjectInput;
   scanGraph: DependencyGraph;
+  configurationRoot?: string;
   profile: Extract<CliCommand, { kind: "scan" | "ci" | "diff" }>["profile"];
   policy: ResolvedPolicyConfig;
   evidenceRuntime: EvidenceRuntimeOptions;
@@ -726,6 +799,7 @@ async function evaluateProjectScan(input: {
   const evidence = await collectEvidenceForGraph({
     graph: input.scanGraph,
     projectRoot: input.project.rootDir,
+    ...(!input.project.source ? {} : { allowLocalProjectEvidence: false }),
     evidenceRuntime: input.evidenceRuntime,
     ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
     ...(evidenceProgress ? { progress: evidenceProgress } : {})
@@ -757,7 +831,7 @@ async function evaluateProjectScan(input: {
     });
   }
 
-  const waivers = readRiskWaivers(input.project.rootDir);
+  const waivers = readRiskWaivers(input.configurationRoot ?? input.project.rootDir);
 
   if (isErr(waivers)) {
     return waivers;
@@ -823,6 +897,7 @@ function filterGraphForProdOnly(graph: DependencyGraph, prodOnly: boolean): Depe
 async function collectEvidenceForGraph(input: {
   graph: DependencyGraph;
   projectRoot: string;
+  allowLocalProjectEvidence?: boolean;
   workspaceRoot?: string;
   evidenceRuntime: EvidenceRuntimeOptions;
   progress?: (progress: EvidenceCollectionProgress) => void;
@@ -856,6 +931,9 @@ async function collectEvidenceForGraph(input: {
   const collected = await collectGraphEvidence({
     graph: collectionGraph,
     projectRoot: input.projectRoot,
+    ...(input.allowLocalProjectEvidence !== undefined
+      ? { allowLocalProjectEvidence: input.allowLocalProjectEvidence }
+      : {}),
     offline: input.evidenceRuntime.offline,
     cacheDir: input.evidenceRuntime.cacheDir,
     ...(input.evidenceRuntime.jobs !== undefined
@@ -2088,8 +2166,8 @@ function renderTopLevelHelp(): string {
     "Ohrisk",
     "",
     "Usage:",
-    "  ohrisk scan [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
-    "  ohrisk ci [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
+    "  ohrisk scan [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
+    "  ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
     "  ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
     "  ohrisk cache status|prune|clear [--cache-dir <path>] [--json]",
@@ -2108,6 +2186,7 @@ function renderTopLevelHelp(): string {
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
+    "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
     "  --all                  Discover and merge every supported lockfile in the project root.",
     "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
     "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
@@ -2140,11 +2219,12 @@ function renderScanHelp(): string {
     "Ohrisk scan",
     "",
     "Usage:",
-    "  ohrisk scan [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
+    "  ohrisk scan [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
+    "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
     "  --all                  Discover and merge every supported lockfile in the project root.",
     "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
     "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
@@ -2174,11 +2254,12 @@ function renderCiHelp(): string {
     "Ohrisk ci",
     "",
     "Usage:",
-    "  ohrisk ci [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
+    "  ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
+    "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
     "  --all                  Discover and merge every supported lockfile in the project root.",
     "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
     "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
@@ -2262,10 +2343,12 @@ function renderExplainHelp(): string {
     "Ohrisk explain",
     "",
     "Usage:",
-    "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
+    "  ohrisk explain <license-expression> [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--json] [--output <file>]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
+    "  --policy <path>        Apply license rules from a workspace-contained policy file.",
+    "  --workspace-root <path> Set the boundary for local policy inheritance.",
     "  --json                 Print machine-readable output.",
     "  --output <file>        Write report output to a project-relative file instead of stdout.",
     "  --help, -h             Print this help text."
@@ -2451,23 +2534,26 @@ function resolveWorkspaceRootPath(input: {
   try {
     const realPath = realpathSync(resolvedPath);
     if (!statSync(realPath).isDirectory()) {
-      return err(workspaceRootInvalidError(input.workspaceRootPath, resolvedPath));
+      return err(workspaceRootInvalidError(input.workspaceRootPath));
     }
 
     return ok(realPath);
   } catch {
-    return err(workspaceRootInvalidError(input.workspaceRootPath, resolvedPath));
+    return err(workspaceRootInvalidError(input.workspaceRootPath));
   }
 }
 
-function workspaceRootInvalidError(workspaceRootPath: string, resolvedPath: string): OhriskError {
+function workspaceRootInvalidError(workspaceRootPath: string): OhriskError {
+  const absolute = path.isAbsolute(workspaceRootPath);
   return createError({
     code: "INVALID_ARGUMENT",
     category: "invalid_input",
     message: "--workspace-root must point to an existing directory.",
     details: {
-      workspaceRootPath,
-      resolvedPath
+      workspaceRootPath: absolute ? "<absolute-path>" : workspaceRootPath,
+      reason: absolute
+        ? "absolute_workspace_root_not_available"
+        : "workspace_root_not_available"
     }
   });
 }

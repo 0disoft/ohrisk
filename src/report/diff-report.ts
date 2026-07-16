@@ -40,8 +40,11 @@ export type DiffReportInput = {
 
 export function renderDiffReport(input: DiffReportInput): string {
   const summary = summarize(input.diff.newFindings);
-  const nextAction = nextActionFor(input.diff.newFindings);
-  const thresholdSummary = buildThresholdSummary(input.diff.newFindings, input.failOn);
+  const changedSummary = summarize(input.diff.changedFindings);
+  const resolvedSummary = summarize(input.diff.resolvedFindings);
+  const introducedSummary = summarize(input.diff.introducedFindings);
+  const nextAction = nextActionFor(input.diff.introducedFindings);
+  const thresholdSummary = buildThresholdSummary(input.diff.introducedFindings, input.failOn);
 
   if (input.json) {
     return JSON.stringify(
@@ -55,12 +58,21 @@ export function renderDiffReport(input: DiffReportInput): string {
         baselineFindingCount: input.diff.baselineFindings.length,
         currentFindingCount: input.diff.currentFindings.length,
         newFindingCount: input.diff.newFindings.length,
+        changedFindingCount: input.diff.changedFindings.length,
+        resolvedFindingCount: input.diff.resolvedFindings.length,
+        introducedFindingCount: input.diff.introducedFindings.length,
         newRisks: summary,
+        changedRisks: changedSummary,
+        resolvedRisks: resolvedSummary,
+        introducedRisks: introducedSummary,
         lockfileChanges: input.lockfileChanges,
         nextAction,
         ...(input.policy ? { policy: input.policy } : {}),
         ...thresholdSummary,
-        findings: input.diff.newFindings
+        findings: input.diff.introducedFindings,
+        newFindings: input.diff.newFindings,
+        changedFindings: input.diff.changedFindings,
+        resolvedFindings: input.diff.resolvedFindings
       },
       null,
       2
@@ -68,7 +80,7 @@ export function renderDiffReport(input: DiffReportInput): string {
   }
 
   if (input.markdown) {
-    return renderMarkdownReport(input, summary);
+    return renderMarkdownReport(input);
   }
 
   return [
@@ -76,24 +88,26 @@ export function renderDiffReport(input: DiffReportInput): string {
     `Baseline: ${input.baselineRef}`,
     `Profile: ${input.profile}`,
     `Production only: ${input.prodOnly ? "yes" : "no"}`,
-    `Findings: ${input.diff.currentFindings.length} current, ${input.diff.baselineFindings.length} baseline, ${input.diff.newFindings.length} new or changed`,
+    `Findings: ${input.diff.currentFindings.length} current, ${input.diff.baselineFindings.length} baseline, ${input.diff.newFindings.length} new, ${input.diff.changedFindings.length} changed, ${input.diff.resolvedFindings.length} resolved`,
     ...renderLockfileChangeLines(input.lockfileChanges),
-    `New or changed risks: ${summary.high} high, ${summary.review} review, ${summary.unknown} unknown, ${summary.low} low`,
+    `Introduced risks: ${introducedSummary.high} high, ${introducedSummary.review} review, ${introducedSummary.unknown} unknown, ${introducedSummary.low} low`,
     ...renderThresholdLines(thresholdSummary),
     "Status: profile-aware risk diff evaluated",
     "",
-    ...renderNewFindings(input.diff.newFindings),
+    ...renderFindings("New findings", input.diff.newFindings),
+    "",
+    ...renderFindings("Changed findings", input.diff.changedFindings),
+    "",
+    ...renderFindings("Resolved findings", input.diff.resolvedFindings),
     "",
     `Next: ${nextAction}`
   ].join("\n");
 }
 
-function renderMarkdownReport(
-  input: DiffReportInput,
-  summary: Record<RiskSeverity, number>
-): string {
-  const nextAction = nextActionFor(input.diff.newFindings);
-  const thresholdSummary = buildThresholdSummary(input.diff.newFindings, input.failOn);
+function renderMarkdownReport(input: DiffReportInput): string {
+  const introducedSummary = summarize(input.diff.introducedFindings);
+  const nextAction = nextActionFor(input.diff.introducedFindings);
+  const thresholdSummary = buildThresholdSummary(input.diff.introducedFindings, input.failOn);
 
   return [
     "# Ohrisk diff",
@@ -101,12 +115,16 @@ function renderMarkdownReport(
     `- Baseline: ${formatMarkdownInlineCode(input.baselineRef)}`,
     `- Profile: ${formatMarkdownInlineCode(input.profile)}`,
     `- Production only: ${formatMarkdownInlineCode(input.prodOnly ? "yes" : "no")}`,
-    `- Findings: ${formatMarkdownInlineCode(`${input.diff.currentFindings.length} current`)}, ${formatMarkdownInlineCode(`${input.diff.baselineFindings.length} baseline`)}, ${formatMarkdownInlineCode(`${input.diff.newFindings.length} new or changed`)}`,
+    `- Findings: ${formatMarkdownInlineCode(`${input.diff.currentFindings.length} current`)}, ${formatMarkdownInlineCode(`${input.diff.baselineFindings.length} baseline`)}, ${formatMarkdownInlineCode(`${input.diff.newFindings.length} new`)}, ${formatMarkdownInlineCode(`${input.diff.changedFindings.length} changed`)}, ${formatMarkdownInlineCode(`${input.diff.resolvedFindings.length} resolved`)}`,
     ...renderMarkdownLockfileChangeLines(input.lockfileChanges),
-    `- New or changed risks: ${formatMarkdownInlineCode(`${summary.high} high`)}, ${formatMarkdownInlineCode(`${summary.review} review`)}, ${formatMarkdownInlineCode(`${summary.unknown} unknown`)}, ${formatMarkdownInlineCode(`${summary.low} low`)}`,
+    `- Introduced risks: ${formatMarkdownInlineCode(`${introducedSummary.high} high`)}, ${formatMarkdownInlineCode(`${introducedSummary.review} review`)}, ${formatMarkdownInlineCode(`${introducedSummary.unknown} unknown`)}, ${formatMarkdownInlineCode(`${introducedSummary.low} low`)}`,
     ...renderMarkdownThresholdLines(thresholdSummary),
     "",
-    ...renderMarkdownNewFindings(input.diff.newFindings),
+    ...renderMarkdownFindings("New findings", input.diff.newFindings),
+    "",
+    ...renderMarkdownFindings("Changed findings", input.diff.changedFindings),
+    "",
+    ...renderMarkdownFindings("Resolved findings", input.diff.resolvedFindings),
     "",
     "## Next",
     "",
@@ -169,13 +187,13 @@ function renderMarkdownThresholdLines(
   return thresholdLine ? [`- ${thresholdLine}`] : [];
 }
 
-function renderNewFindings(findings: RiskFinding[]): string[] {
+function renderFindings(label: string, findings: RiskFinding[]): string[] {
   if (findings.length === 0) {
-    return ["New or changed findings: none"];
+    return [`${label}: none`];
   }
 
   return [
-    "New or changed findings:",
+    `${label}:`,
     ...findings.flatMap((finding) => [
       `- [${finding.severity}] ${finding.packageId}`,
       `  id: ${finding.id}`,
@@ -190,13 +208,13 @@ function renderNewFindings(findings: RiskFinding[]): string[] {
   ];
 }
 
-function renderMarkdownNewFindings(findings: RiskFinding[]): string[] {
+function renderMarkdownFindings(label: string, findings: RiskFinding[]): string[] {
   if (findings.length === 0) {
-    return ["## New or changed findings", "", "No new or changed findings."];
+    return [`## ${label}`, "", `No ${label.toLowerCase()}.`];
   }
 
   return [
-    "## New or changed findings",
+    `## ${label}`,
     "",
     "| ID | Fingerprint | Severity | Package | Dependency | Reason | Recommendation | Action | Path |",
     "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",

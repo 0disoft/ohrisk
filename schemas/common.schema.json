@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:ohrisk:schema:common:2.0.0",
+  "$id": "urn:ohrisk:schema:common:3.1.0",
   "title": "Ohrisk report common definitions",
   "$defs": {
     "usageProfile": {
@@ -103,7 +103,7 @@
           "minLength": 1
         },
         "severity": {
-          "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskSeverity"
+          "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskSeverity"
         },
         "reason": {
           "type": "string",
@@ -114,10 +114,10 @@
           "minLength": 1
         },
         "dependencyType": {
-          "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskDependencyType"
+          "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskDependencyType"
         },
         "dependencyScope": {
-          "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskDependencyScope"
+          "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskDependencyScope"
         },
         "evidence": {
           "type": "array",
@@ -139,7 +139,7 @@
           }
         },
         "recommendation": {
-          "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskRecommendation"
+          "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskRecommendation"
         }
       },
       "additionalProperties": false
@@ -190,10 +190,10 @@
       ],
       "properties": {
         "finding": {
-          "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskFinding"
+          "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskFinding"
         },
         "waiver": {
-          "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/riskWaiver"
+          "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskWaiver"
         },
         "matchedBy": {
           "type": "string",
@@ -307,7 +307,7 @@
           "type": "array",
           "uniqueItems": true,
           "items": {
-            "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/relativePath"
+            "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/relativePath"
           }
         },
         "allowLicenseCount": {
@@ -401,7 +401,38 @@
       },
       "additionalProperties": false
     },
-    "evidenceCounts": {
+    "dependencyGraphDiagnostic": {
+      "type": "object",
+      "required": [
+        "code",
+        "affectedNodeCount",
+        "limit",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "dependency_paths_truncated",
+            "dependency_path_depth_summarized"
+          ]
+        },
+        "affectedNodeCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "evidenceSourceCounts": {
       "type": "object",
       "required": [
         "packages",
@@ -420,6 +451,98 @@
         "warnings": {
           "type": "integer",
           "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "evidenceDiagnostic": {
+      "type": "object",
+      "required": [
+        "code",
+        "source",
+        "packageCount",
+        "occurrenceCount"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "collector_warning",
+            "license_evidence_missing",
+            "source_unavailable"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "local",
+            "sbom",
+            "tarball",
+            "unavailable"
+          ]
+        },
+        "packageCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurrenceCount": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "evidenceCounts": {
+      "type": "object",
+      "required": [
+        "packages",
+        "files",
+        "warnings",
+        "sources",
+        "diagnostics"
+      ],
+      "properties": {
+        "packages": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "files": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warnings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sources": {
+          "type": "object",
+          "required": [
+            "local",
+            "sbom",
+            "tarball",
+            "unavailable"
+          ],
+          "properties": {
+            "local": {
+              "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/evidenceSourceCounts"
+            },
+            "sbom": {
+              "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/evidenceSourceCounts"
+            },
+            "tarball": {
+              "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/evidenceSourceCounts"
+            },
+            "unavailable": {
+              "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/evidenceSourceCounts"
+            }
+          },
+          "additionalProperties": false
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/evidenceDiagnostic"
+          }
         }
       },
       "additionalProperties": false
@@ -501,7 +624,7 @@
           "type": "array",
           "minItems": 1,
           "items": {
-            "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/lockfile"
+            "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/lockfile"
           }
         }
       },
@@ -519,25 +642,25 @@
         "current": {
           "type": "array",
           "items": {
-            "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/lockfile"
+            "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/lockfile"
           }
         },
         "baseline": {
           "type": "array",
           "items": {
-            "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/lockfile"
+            "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/lockfile"
           }
         },
         "added": {
           "type": "array",
           "items": {
-            "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/lockfile"
+            "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/lockfile"
           }
         },
         "removed": {
           "type": "array",
           "items": {
-            "$ref": "urn:ohrisk:schema:common:2.0.0#/$defs/lockfile"
+            "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/lockfile"
           }
         }
       },

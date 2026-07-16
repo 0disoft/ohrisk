@@ -1,0 +1,41 @@
+{
+  "generatedAt": "2026-07-16T11:33:03.4634949Z",
+  "sourceFiles": [
+    {
+      "path": "package-lock.json",
+      "bytes": 215,
+      "sha256": "2fc80ba7ffb9ca3a5e953420f00158b3334b3a232c5fd9730052f13a2211558c"
+    },
+    {
+      "path": "docs/README.txt",
+      "bytes": 21,
+      "sha256": "1e3d81952d5ade2e7ce2679397c51da9dfd6307c1190085edd7a7b72991a62b0"
+    }
+  ],
+  "fixtures": [
+    {
+      "path": "external-7zip.zip.b64",
+      "format": "zip",
+      "decodedBytes": 464,
+      "sha256": "0d5d6105fbcb8d1ed2400ac8f0a1fb5aab407b7c7a88b76e18abba3b686b1d7c",
+      "producer": "7-Zip",
+      "producerVersion": "26.01 (x64)"
+    },
+    {
+      "path": "external-bsdtar.tar.b64",
+      "format": "tar",
+      "decodedBytes": 3072,
+      "sha256": "e5f1271ffc15fdeb0fe4bc022a2903d05b316a1b7d0ff7ce59ad565b945225f1",
+      "producer": "bsdtar/libarchive",
+      "producerVersion": "3.8.4"
+    },
+    {
+      "path": "external-bsdtar.tgz.b64",
+      "format": "tar.gz",
+      "decodedBytes": 271,
+      "sha256": "ca2d027a0eed039f4863e28030abc32cd2e533c0eefd9a27893cfcb2ead6fe7b",
+      "producer": "bsdtar/libarchive",
+      "producerVersion": "3.8.4"
+    }
+  ]
+}

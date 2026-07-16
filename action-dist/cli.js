@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 24322d5b9e7ad12fcf0a2a4e6044157a73f460a37abd48cc3f7c58315859dcf3
+// ohrisk-action-source-sha256: 0dd93732bd6ccc83eea104c48f501098f5acc29319dfafc7d2bce3bfe5654f77
 // ohrisk-action-build-platform: win32
 import { createRequire } from "node:module";
 var __create = Object.create;
@@ -107,17 +107,17 @@ var require_visit = __commonJS((exports) => {
   visit.BREAK = BREAK;
   visit.SKIP = SKIP;
   visit.REMOVE = REMOVE;
-  function visit_(key, node, visitor, path9) {
-    const ctrl = callVisitor(key, node, visitor, path9);
+  function visit_(key, node, visitor, path4) {
+    const ctrl = callVisitor(key, node, visitor, path4);
     if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-      replaceNode(key, path9, ctrl);
-      return visit_(key, ctrl, visitor, path9);
+      replaceNode(key, path4, ctrl);
+      return visit_(key, ctrl, visitor, path4);
     }
     if (typeof ctrl !== "symbol") {
       if (identity.isCollection(node)) {
-        path9 = Object.freeze(path9.concat(node));
+        path4 = Object.freeze(path4.concat(node));
         for (let i = 0;i < node.items.length; ++i) {
-          const ci = visit_(i, node.items[i], visitor, path9);
+          const ci = visit_(i, node.items[i], visitor, path4);
           if (typeof ci === "number")
             i = ci - 1;
           else if (ci === BREAK)
@@ -128,13 +128,13 @@ var require_visit = __commonJS((exports) => {
           }
         }
       } else if (identity.isPair(node)) {
-        path9 = Object.freeze(path9.concat(node));
-        const ck = visit_("key", node.key, visitor, path9);
+        path4 = Object.freeze(path4.concat(node));
+        const ck = visit_("key", node.key, visitor, path4);
         if (ck === BREAK)
           return BREAK;
         else if (ck === REMOVE)
           node.key = null;
-        const cv = visit_("value", node.value, visitor, path9);
+        const cv = visit_("value", node.value, visitor, path4);
         if (cv === BREAK)
           return BREAK;
         else if (cv === REMOVE)
@@ -155,17 +155,17 @@ var require_visit = __commonJS((exports) => {
   visitAsync.BREAK = BREAK;
   visitAsync.SKIP = SKIP;
   visitAsync.REMOVE = REMOVE;
-  async function visitAsync_(key, node, visitor, path9) {
-    const ctrl = await callVisitor(key, node, visitor, path9);
+  async function visitAsync_(key, node, visitor, path4) {
+    const ctrl = await callVisitor(key, node, visitor, path4);
     if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-      replaceNode(key, path9, ctrl);
-      return visitAsync_(key, ctrl, visitor, path9);
+      replaceNode(key, path4, ctrl);
+      return visitAsync_(key, ctrl, visitor, path4);
     }
     if (typeof ctrl !== "symbol") {
       if (identity.isCollection(node)) {
-        path9 = Object.freeze(path9.concat(node));
+        path4 = Object.freeze(path4.concat(node));
         for (let i = 0;i < node.items.length; ++i) {
-          const ci = await visitAsync_(i, node.items[i], visitor, path9);
+          const ci = await visitAsync_(i, node.items[i], visitor, path4);
           if (typeof ci === "number")
             i = ci - 1;
           else if (ci === BREAK)
@@ -176,13 +176,13 @@ var require_visit = __commonJS((exports) => {
           }
         }
       } else if (identity.isPair(node)) {
-        path9 = Object.freeze(path9.concat(node));
-        const ck = await visitAsync_("key", node.key, visitor, path9);
+        path4 = Object.freeze(path4.concat(node));
+        const ck = await visitAsync_("key", node.key, visitor, path4);
         if (ck === BREAK)
           return BREAK;
         else if (ck === REMOVE)
           node.key = null;
-        const cv = await visitAsync_("value", node.value, visitor, path9);
+        const cv = await visitAsync_("value", node.value, visitor, path4);
         if (cv === BREAK)
           return BREAK;
         else if (cv === REMOVE)
@@ -209,23 +209,23 @@ var require_visit = __commonJS((exports) => {
     }
     return visitor;
   }
-  function callVisitor(key, node, visitor, path9) {
+  function callVisitor(key, node, visitor, path4) {
     if (typeof visitor === "function")
-      return visitor(key, node, path9);
+      return visitor(key, node, path4);
     if (identity.isMap(node))
-      return visitor.Map?.(key, node, path9);
+      return visitor.Map?.(key, node, path4);
     if (identity.isSeq(node))
-      return visitor.Seq?.(key, node, path9);
+      return visitor.Seq?.(key, node, path4);
     if (identity.isPair(node))
-      return visitor.Pair?.(key, node, path9);
+      return visitor.Pair?.(key, node, path4);
     if (identity.isScalar(node))
-      return visitor.Scalar?.(key, node, path9);
+      return visitor.Scalar?.(key, node, path4);
     if (identity.isAlias(node))
-      return visitor.Alias?.(key, node, path9);
+      return visitor.Alias?.(key, node, path4);
     return;
   }
-  function replaceNode(key, path9, node) {
-    const parent = path9[path9.length - 1];
+  function replaceNode(key, path4, node) {
+    const parent = path4[path4.length - 1];
     if (identity.isCollection(parent)) {
       parent.items[key] = node;
     } else if (identity.isPair(parent)) {
@@ -784,10 +784,10 @@ var require_Collection = __commonJS((exports) => {
   var createNode = require_createNode();
   var identity = require_identity();
   var Node = require_Node();
-  function collectionFromPath(schema, path9, value) {
+  function collectionFromPath(schema, path4, value) {
     let v = value;
-    for (let i = path9.length - 1;i >= 0; --i) {
-      const k = path9[i];
+    for (let i = path4.length - 1;i >= 0; --i) {
+      const k = path4[i];
       if (typeof k === "number" && Number.isInteger(k) && k >= 0) {
         const a = [];
         a[k] = v;
@@ -806,7 +806,7 @@ var require_Collection = __commonJS((exports) => {
       sourceObjects: new Map
     });
   }
-  var isEmptyPath = (path9) => path9 == null || typeof path9 === "object" && !!path9[Symbol.iterator]().next().done;
+  var isEmptyPath = (path4) => path4 == null || typeof path4 === "object" && !!path4[Symbol.iterator]().next().done;
 
   class Collection extends Node.NodeBase {
     constructor(type, schema) {
@@ -827,11 +827,11 @@ var require_Collection = __commonJS((exports) => {
         copy.range = this.range.slice();
       return copy;
     }
-    addIn(path9, value) {
-      if (isEmptyPath(path9))
+    addIn(path4, value) {
+      if (isEmptyPath(path4))
         this.add(value);
       else {
-        const [key, ...rest] = path9;
+        const [key, ...rest] = path4;
         const node = this.get(key, true);
         if (identity.isCollection(node))
           node.addIn(rest, value);
@@ -841,8 +841,8 @@ var require_Collection = __commonJS((exports) => {
           throw new Error(`Expected YAML collection at ${key}. Remaining path: ${rest}`);
       }
     }
-    deleteIn(path9) {
-      const [key, ...rest] = path9;
+    deleteIn(path4) {
+      const [key, ...rest] = path4;
       if (rest.length === 0)
         return this.delete(key);
       const node = this.get(key, true);
@@ -851,8 +851,8 @@ var require_Collection = __commonJS((exports) => {
       else
         throw new Error(`Expected YAML collection at ${key}. Remaining path: ${rest}`);
     }
-    getIn(path9, keepScalar) {
-      const [key, ...rest] = path9;
+    getIn(path4, keepScalar) {
+      const [key, ...rest] = path4;
       const node = this.get(key, true);
       if (rest.length === 0)
         return !keepScalar && identity.isScalar(node) ? node.value : node;
@@ -867,15 +867,15 @@ var require_Collection = __commonJS((exports) => {
         return n == null || allowScalar && identity.isScalar(n) && n.value == null && !n.commentBefore && !n.comment && !n.tag;
       });
     }
-    hasIn(path9) {
-      const [key, ...rest] = path9;
+    hasIn(path4) {
+      const [key, ...rest] = path4;
       if (rest.length === 0)
         return this.has(key);
       const node = this.get(key, true);
       return identity.isCollection(node) ? node.hasIn(rest) : false;
     }
-    setIn(path9, value) {
-      const [key, ...rest] = path9;
+    setIn(path4, value) {
+      const [key, ...rest] = path4;
       if (rest.length === 0) {
         this.set(key, value);
       } else {
@@ -3268,9 +3268,9 @@ var require_Document = __commonJS((exports) => {
       if (assertCollection(this.contents))
         this.contents.add(value);
     }
-    addIn(path9, value) {
+    addIn(path4, value) {
       if (assertCollection(this.contents))
-        this.contents.addIn(path9, value);
+        this.contents.addIn(path4, value);
     }
     createAlias(node, name) {
       if (!node.anchor) {
@@ -3319,30 +3319,30 @@ var require_Document = __commonJS((exports) => {
     delete(key) {
       return assertCollection(this.contents) ? this.contents.delete(key) : false;
     }
-    deleteIn(path9) {
-      if (Collection.isEmptyPath(path9)) {
+    deleteIn(path4) {
+      if (Collection.isEmptyPath(path4)) {
         if (this.contents == null)
           return false;
         this.contents = null;
         return true;
       }
-      return assertCollection(this.contents) ? this.contents.deleteIn(path9) : false;
+      return assertCollection(this.contents) ? this.contents.deleteIn(path4) : false;
     }
     get(key, keepScalar) {
       return identity.isCollection(this.contents) ? this.contents.get(key, keepScalar) : undefined;
     }
-    getIn(path9, keepScalar) {
-      if (Collection.isEmptyPath(path9))
+    getIn(path4, keepScalar) {
+      if (Collection.isEmptyPath(path4))
         return !keepScalar && identity.isScalar(this.contents) ? this.contents.value : this.contents;
-      return identity.isCollection(this.contents) ? this.contents.getIn(path9, keepScalar) : undefined;
+      return identity.isCollection(this.contents) ? this.contents.getIn(path4, keepScalar) : undefined;
     }
     has(key) {
       return identity.isCollection(this.contents) ? this.contents.has(key) : false;
     }
-    hasIn(path9) {
-      if (Collection.isEmptyPath(path9))
+    hasIn(path4) {
+      if (Collection.isEmptyPath(path4))
         return this.contents !== undefined;
-      return identity.isCollection(this.contents) ? this.contents.hasIn(path9) : false;
+      return identity.isCollection(this.contents) ? this.contents.hasIn(path4) : false;
     }
     set(key, value) {
       if (this.contents == null) {
@@ -3351,13 +3351,13 @@ var require_Document = __commonJS((exports) => {
         this.contents.set(key, value);
       }
     }
-    setIn(path9, value) {
-      if (Collection.isEmptyPath(path9)) {
+    setIn(path4, value) {
+      if (Collection.isEmptyPath(path4)) {
         this.contents = value;
       } else if (this.contents == null) {
-        this.contents = Collection.collectionFromPath(this.schema, Array.from(path9), value);
+        this.contents = Collection.collectionFromPath(this.schema, Array.from(path4), value);
       } else if (assertCollection(this.contents)) {
-        this.contents.setIn(path9, value);
+        this.contents.setIn(path4, value);
       }
     }
     setSchema(version, options = {}) {
@@ -5254,9 +5254,9 @@ var require_cst_visit = __commonJS((exports) => {
   visit.BREAK = BREAK;
   visit.SKIP = SKIP;
   visit.REMOVE = REMOVE;
-  visit.itemAtPath = (cst, path9) => {
+  visit.itemAtPath = (cst, path4) => {
     let item = cst;
-    for (const [field, index] of path9) {
+    for (const [field, index] of path4) {
       const tok = item?.[field];
       if (tok && "items" in tok) {
         item = tok.items[index];
@@ -5265,23 +5265,23 @@ var require_cst_visit = __commonJS((exports) => {
     }
     return item;
   };
-  visit.parentCollection = (cst, path9) => {
-    const parent = visit.itemAtPath(cst, path9.slice(0, -1));
-    const field = path9[path9.length - 1][0];
+  visit.parentCollection = (cst, path4) => {
+    const parent = visit.itemAtPath(cst, path4.slice(0, -1));
+    const field = path4[path4.length - 1][0];
     const coll = parent?.[field];
     if (coll && "items" in coll)
       return coll;
     throw new Error("Parent collection not found");
   };
-  function _visit(path9, item, visitor) {
-    let ctrl = visitor(item, path9);
+  function _visit(path4, item, visitor) {
+    let ctrl = visitor(item, path4);
     if (typeof ctrl === "symbol")
       return ctrl;
     for (const field of ["key", "value"]) {
       const token = item[field];
       if (token && "items" in token) {
         for (let i = 0;i < token.items.length; ++i) {
-          const ci = _visit(Object.freeze(path9.concat([[field, i]])), token.items[i], visitor);
+          const ci = _visit(Object.freeze(path4.concat([[field, i]])), token.items[i], visitor);
           if (typeof ci === "number")
             i = ci - 1;
           else if (ci === BREAK)
@@ -5292,10 +5292,10 @@ var require_cst_visit = __commonJS((exports) => {
           }
         }
         if (typeof ctrl === "function" && field === "key")
-          ctrl = ctrl(item, path9);
+          ctrl = ctrl(item, path4);
       }
     }
-    return typeof ctrl === "function" ? ctrl(item, path9) : ctrl;
+    return typeof ctrl === "function" ? ctrl(item, path4) : ctrl;
   }
   exports.visit = visit;
 });
@@ -7826,11 +7826,11 @@ var require_lockfile = __commonJS((exports, module) => {
         };
       })();
       let getEolFromFile = (() => {
-        var _ref30 = (0, (_asyncToGenerator2 || _load_asyncToGenerator()).default)(function* (path52) {
-          if (!(yield exists(path52))) {
+        var _ref30 = (0, (_asyncToGenerator2 || _load_asyncToGenerator()).default)(function* (path26) {
+          if (!(yield exists(path26))) {
             return;
           }
-          const buffer = yield readFileBuffer(path52);
+          const buffer = yield readFileBuffer(path26);
           for (let i = 0;i < buffer.length; ++i) {
             if (buffer[i] === cr) {
               return `\r
@@ -7848,13 +7848,13 @@ var require_lockfile = __commonJS((exports, module) => {
         };
       })();
       let writeFilePreservingEol = exports2.writeFilePreservingEol = (() => {
-        var _ref31 = (0, (_asyncToGenerator2 || _load_asyncToGenerator()).default)(function* (path52, data) {
-          const eol = (yield getEolFromFile(path52)) || (_os || _load_os()).default.EOL;
+        var _ref31 = (0, (_asyncToGenerator2 || _load_asyncToGenerator()).default)(function* (path26, data) {
+          const eol = (yield getEolFromFile(path26)) || (_os || _load_os()).default.EOL;
           if (eol !== `
 `) {
             data = data.replace(/\n/g, eol);
           }
-          yield writeFile(path52, data);
+          yield writeFile(path26, data);
         });
         return function writeFilePreservingEol2(_x30, _x31) {
           return _ref31.apply(this, arguments);
@@ -7905,10 +7905,10 @@ var require_lockfile = __commonJS((exports, module) => {
                 break;
               _ref35 = _i15.value;
             }
-            const path52 = _ref35;
+            const path26 = _ref35;
             try {
-              const fd = yield open(path52, "r");
-              return (_fs || _load_fs()).default.createReadStream(path52, { fd });
+              const fd = yield open(path26, "r");
+              return (_fs || _load_fs()).default.createReadStream(path26, { fd });
             } catch (err2) {}
           }
           return null;
@@ -8071,8 +8071,8 @@ var require_lockfile = __commonJS((exports, module) => {
         value: true
       });
       exports2.getPathKey = getPathKey;
-      const os3 = __webpack_require__(36);
-      const path52 = __webpack_require__(0);
+      const os = __webpack_require__(36);
+      const path26 = __webpack_require__(0);
       const userHome = __webpack_require__(45).default;
       var _require = __webpack_require__(171);
       const { getCacheDir, getConfigDir, getDataDir } = _require;
@@ -8095,29 +8095,29 @@ var require_lockfile = __commonJS((exports, module) => {
       function getPreferredCacheDirectories() {
         const preferredCacheDirectories = [getCacheDir()];
         if (process.getuid) {
-          preferredCacheDirectories.push(path52.join(os3.tmpdir(), `.yarn-cache-${process.getuid()}`));
+          preferredCacheDirectories.push(path26.join(os.tmpdir(), `.yarn-cache-${process.getuid()}`));
         }
-        preferredCacheDirectories.push(path52.join(os3.tmpdir(), `.yarn-cache`));
+        preferredCacheDirectories.push(path26.join(os.tmpdir(), `.yarn-cache`));
         return preferredCacheDirectories;
       }
       const PREFERRED_MODULE_CACHE_DIRECTORIES = exports2.PREFERRED_MODULE_CACHE_DIRECTORIES = getPreferredCacheDirectories();
       const CONFIG_DIRECTORY = exports2.CONFIG_DIRECTORY = getConfigDir();
       const DATA_DIRECTORY = exports2.DATA_DIRECTORY = getDataDir();
-      const LINK_REGISTRY_DIRECTORY = exports2.LINK_REGISTRY_DIRECTORY = path52.join(DATA_DIRECTORY, "link");
-      const GLOBAL_MODULE_DIRECTORY = exports2.GLOBAL_MODULE_DIRECTORY = path52.join(DATA_DIRECTORY, "global");
+      const LINK_REGISTRY_DIRECTORY = exports2.LINK_REGISTRY_DIRECTORY = path26.join(DATA_DIRECTORY, "link");
+      const GLOBAL_MODULE_DIRECTORY = exports2.GLOBAL_MODULE_DIRECTORY = path26.join(DATA_DIRECTORY, "global");
       const NODE_BIN_PATH = exports2.NODE_BIN_PATH = process.execPath;
       const YARN_BIN_PATH = exports2.YARN_BIN_PATH = getYarnBinPath();
       function getYarnBinPath() {
         if (isWebpackBundle) {
           return __filename;
         } else {
-          return path52.join(__dirname, "..", "bin", "yarn.js");
+          return path26.join(__dirname, "..", "bin", "yarn.js");
         }
       }
       const NODE_MODULES_FOLDER = exports2.NODE_MODULES_FOLDER = "node_modules";
       const NODE_PACKAGE_JSON = exports2.NODE_PACKAGE_JSON = "package.json";
       const POSIX_GLOBAL_PREFIX = exports2.POSIX_GLOBAL_PREFIX = `${process.env.DESTDIR || ""}/usr/local`;
-      const FALLBACK_GLOBAL_PREFIX = exports2.FALLBACK_GLOBAL_PREFIX = path52.join(userHome, ".yarn");
+      const FALLBACK_GLOBAL_PREFIX = exports2.FALLBACK_GLOBAL_PREFIX = path26.join(userHome, ".yarn");
       const META_FOLDER = exports2.META_FOLDER = ".yarn-meta";
       const INTEGRITY_FILENAME = exports2.INTEGRITY_FILENAME = ".yarn-integrity";
       const LOCKFILE_FILENAME = exports2.LOCKFILE_FILENAME = "yarn.lock";
@@ -8351,7 +8351,7 @@ var require_lockfile = __commonJS((exports, module) => {
         return obj && obj.__esModule ? obj : { default: obj };
       }
       const invariant = __webpack_require__(7);
-      const path52 = __webpack_require__(0);
+      const path26 = __webpack_require__(0);
       const ssri = __webpack_require__(55);
       function getName(pattern) {
         return (0, (_normalizePattern || _load_normalizePattern()).normalizePattern)(pattern).name;
@@ -8417,7 +8417,7 @@ var require_lockfile = __commonJS((exports, module) => {
         }
         static fromDirectory(dir, reporter) {
           return (0, (_asyncToGenerator2 || _load_asyncToGenerator()).default)(function* () {
-            const lockfileLoc = path52.join(dir, (_constants || _load_constants()).LOCKFILE_FILENAME);
+            const lockfileLoc = path26.join(dir, (_constants || _load_constants()).LOCKFILE_FILENAME);
             let lockfile;
             let rawLockfile = "";
             let parseResult;
@@ -8836,9 +8836,9 @@ var require_lockfile = __commonJS((exports, module) => {
       function _interopRequireDefault(obj) {
         return obj && obj.__esModule ? obj : { default: obj };
       }
-      const path52 = __webpack_require__(0);
+      const path26 = __webpack_require__(0);
       const home = exports2.home = __webpack_require__(36).homedir();
-      const userHomeDir = (_rootUser || _load_rootUser()).default ? path52.resolve("/usr/local/share") : home;
+      const userHomeDir = (_rootUser || _load_rootUser()).default ? path26.resolve("/usr/local/share") : home;
       exports2.default = userHomeDir;
     },
     function(module2, exports2) {
@@ -9238,9 +9238,9 @@ var require_lockfile = __commonJS((exports, module) => {
     function(module2, exports2, __webpack_require__) {
       module2.exports = minimatch;
       minimatch.Minimatch = Minimatch;
-      var path52 = { sep: "/" };
+      var path26 = { sep: "/" };
       try {
-        path52 = __webpack_require__(0);
+        path26 = __webpack_require__(0);
       } catch (er) {}
       var GLOBSTAR = minimatch.GLOBSTAR = Minimatch.GLOBSTAR = {};
       var expand = __webpack_require__(175);
@@ -9322,8 +9322,8 @@ var require_lockfile = __commonJS((exports, module) => {
         if (!options)
           options = {};
         pattern = pattern.trim();
-        if (path52.sep !== "/") {
-          pattern = pattern.split(path52.sep).join("/");
+        if (path26.sep !== "/") {
+          pattern = pattern.split(path26.sep).join("/");
         }
         this.options = options;
         this.set = [];
@@ -9690,8 +9690,8 @@ var require_lockfile = __commonJS((exports, module) => {
         if (f === "/" && partial)
           return true;
         var options = this.options;
-        if (path52.sep !== "/") {
-          f = f.split(path52.sep).join("/");
+        if (path26.sep !== "/") {
+          f = f.split(path26.sep).join("/");
         }
         f = f.split(slashSplit);
         this.debug(this.pattern, "split", f);
@@ -9921,7 +9921,7 @@ globstar while`, file, fr, pattern, pr, swallowee);
       var Minimatch = minimatch.Minimatch;
       var inherits = __webpack_require__(42);
       var EE = __webpack_require__(54).EventEmitter;
-      var path52 = __webpack_require__(0);
+      var path26 = __webpack_require__(0);
       var assert = __webpack_require__(22);
       var isAbsolute = __webpack_require__(76);
       var globSync = __webpack_require__(218);
@@ -10204,7 +10204,7 @@ globstar while`, file, fr, pattern, pr, swallowee);
                 e = prefix + e;
             }
             if (e.charAt(0) === "/" && !this.nomount) {
-              e = path52.join(this.root, e);
+              e = path26.join(this.root, e);
             }
             this._emitMatch(index, e);
           }
@@ -10391,9 +10391,9 @@ globstar while`, file, fr, pattern, pr, swallowee);
         if (prefix && isAbsolute(prefix) && !this.nomount) {
           var trail = /[\/\\]$/.test(prefix);
           if (prefix.charAt(0) === "/") {
-            prefix = path52.join(this.root, prefix);
+            prefix = path26.join(this.root, prefix);
           } else {
-            prefix = path52.resolve(this.root, prefix);
+            prefix = path26.resolve(this.root, prefix);
             if (trail)
               prefix += "/";
           }
@@ -10466,12 +10466,12 @@ globstar while`, file, fr, pattern, pr, swallowee);
       };
     },
     function(module2, exports2, __webpack_require__) {
-      function posix(path52) {
-        return path52.charAt(0) === "/";
+      function posix(path26) {
+        return path26.charAt(0) === "/";
       }
-      function win32(path52) {
+      function win32(path26) {
         var splitDeviceRe = /^([a-zA-Z]:|[\\\/]{2}[^\\\/]+[\\\/]+[^\\\/]+)?([\\\/])?([\s\S]*?)$/;
-        var result = splitDeviceRe.exec(path52);
+        var result = splitDeviceRe.exec(path26);
         var device = result[1] || "";
         var isUnc = Boolean(device && device.charAt(1) !== ":");
         return Boolean(result[2] || isUnc);
@@ -11367,8 +11367,8 @@ globstar while`, file, fr, pattern, pr, swallowee);
     function(module2, exports2, __webpack_require__) {
       module2.exports = realpath;
       realpath.realpath = realpath;
-      realpath.sync = realpathSync2;
-      realpath.realpathSync = realpathSync2;
+      realpath.sync = realpathSync;
+      realpath.realpathSync = realpathSync;
       realpath.monkeypatch = monkeypatch;
       realpath.unmonkeypatch = unmonkeypatch;
       var fs = __webpack_require__(3);
@@ -11396,7 +11396,7 @@ globstar while`, file, fr, pattern, pr, swallowee);
           }
         });
       }
-      function realpathSync2(p, cache) {
+      function realpathSync(p, cache) {
         if (ok2) {
           return origRealpathSync(p, cache);
         }
@@ -11412,7 +11412,7 @@ globstar while`, file, fr, pattern, pr, swallowee);
       }
       function monkeypatch() {
         fs.realpath = realpath;
-        fs.realpathSync = realpathSync2;
+        fs.realpathSync = realpathSync;
       }
       function unmonkeypatch() {
         fs.realpath = origRealpath;
@@ -11432,7 +11432,7 @@ globstar while`, file, fr, pattern, pr, swallowee);
       function ownProp(obj, field) {
         return Object.prototype.hasOwnProperty.call(obj, field);
       }
-      var path52 = __webpack_require__(0);
+      var path26 = __webpack_require__(0);
       var minimatch = __webpack_require__(60);
       var isAbsolute = __webpack_require__(76);
       var Minimatch = minimatch.Minimatch;
@@ -11499,11 +11499,11 @@ globstar while`, file, fr, pattern, pr, swallowee);
         if (!ownProp(options, "cwd"))
           self2.cwd = cwd;
         else {
-          self2.cwd = path52.resolve(options.cwd);
+          self2.cwd = path26.resolve(options.cwd);
           self2.changedCwd = self2.cwd !== cwd;
         }
-        self2.root = options.root || path52.resolve(self2.cwd, "/");
-        self2.root = path52.resolve(self2.root);
+        self2.root = options.root || path26.resolve(self2.cwd, "/");
+        self2.root = path26.resolve(self2.root);
         if (process.platform === "win32")
           self2.root = self2.root.replace(/\\/g, "/");
         self2.cwdAbs = isAbsolute(self2.cwd) ? self2.cwd : makeAbs(self2, self2.cwd);
@@ -11584,35 +11584,35 @@ globstar while`, file, fr, pattern, pr, swallowee);
       function makeAbs(self2, f) {
         var abs = f;
         if (f.charAt(0) === "/") {
-          abs = path52.join(self2.root, f);
+          abs = path26.join(self2.root, f);
         } else if (isAbsolute(f) || f === "") {
           abs = f;
         } else if (self2.changedCwd) {
-          abs = path52.resolve(self2.cwd, f);
+          abs = path26.resolve(self2.cwd, f);
         } else {
-          abs = path52.resolve(f);
+          abs = path26.resolve(f);
         }
         if (process.platform === "win32")
           abs = abs.replace(/\\/g, "/");
         return abs;
       }
-      function isIgnored(self2, path53) {
+      function isIgnored(self2, path27) {
         if (!self2.ignore.length)
           return false;
         return self2.ignore.some(function(item) {
-          return item.matcher.match(path53) || !!(item.gmatcher && item.gmatcher.match(path53));
+          return item.matcher.match(path27) || !!(item.gmatcher && item.gmatcher.match(path27));
         });
       }
-      function childrenIgnored(self2, path53) {
+      function childrenIgnored(self2, path27) {
         if (!self2.ignore.length)
           return false;
         return self2.ignore.some(function(item) {
-          return !!(item.gmatcher && item.gmatcher.match(path53));
+          return !!(item.gmatcher && item.gmatcher.match(path27));
         });
       }
     },
     function(module2, exports2, __webpack_require__) {
-      var path52 = __webpack_require__(0);
+      var path26 = __webpack_require__(0);
       var fs = __webpack_require__(3);
       var _0777 = parseInt("0777", 8);
       module2.exports = mkdirP.mkdirp = mkdirP.mkdirP = mkdirP;
@@ -11631,7 +11631,7 @@ globstar while`, file, fr, pattern, pr, swallowee);
         if (!made)
           made = null;
         var cb = f || function() {};
-        p = path52.resolve(p);
+        p = path26.resolve(p);
         xfs.mkdir(p, mode, function(er) {
           if (!er) {
             made = made || p;
@@ -11639,7 +11639,7 @@ globstar while`, file, fr, pattern, pr, swallowee);
           }
           switch (er.code) {
             case "ENOENT":
-              mkdirP(path52.dirname(p), opts, function(er2, made2) {
+              mkdirP(path26.dirname(p), opts, function(er2, made2) {
                 if (er2)
                   cb(er2, made2);
                 else
@@ -11668,14 +11668,14 @@ globstar while`, file, fr, pattern, pr, swallowee);
         }
         if (!made)
           made = null;
-        p = path52.resolve(p);
+        p = path26.resolve(p);
         try {
           xfs.mkdirSync(p, mode);
           made = made || p;
         } catch (err0) {
           switch (err0.code) {
             case "ENOENT":
-              made = sync(path52.dirname(p), opts, made);
+              made = sync(path26.dirname(p), opts, made);
               sync(p, opts, made);
               break;
             default:
@@ -12053,27 +12053,27 @@ ${indent}`);
       exports2.getDataDir = getDataDir;
       exports2.getCacheDir = getCacheDir;
       exports2.getConfigDir = getConfigDir;
-      const path52 = __webpack_require__(0);
+      const path26 = __webpack_require__(0);
       const userHome = __webpack_require__(45).default;
-      const FALLBACK_CONFIG_DIR = path52.join(userHome, ".config", "yarn");
-      const FALLBACK_CACHE_DIR = path52.join(userHome, ".cache", "yarn");
+      const FALLBACK_CONFIG_DIR = path26.join(userHome, ".config", "yarn");
+      const FALLBACK_CACHE_DIR = path26.join(userHome, ".cache", "yarn");
       function getDataDir() {
         if (process.platform === "win32") {
           const WIN32_APPDATA_DIR = getLocalAppDataDir();
-          return WIN32_APPDATA_DIR == null ? FALLBACK_CONFIG_DIR : path52.join(WIN32_APPDATA_DIR, "Data");
+          return WIN32_APPDATA_DIR == null ? FALLBACK_CONFIG_DIR : path26.join(WIN32_APPDATA_DIR, "Data");
         } else if (process.env.XDG_DATA_HOME) {
-          return path52.join(process.env.XDG_DATA_HOME, "yarn");
+          return path26.join(process.env.XDG_DATA_HOME, "yarn");
         } else {
           return FALLBACK_CONFIG_DIR;
         }
       }
       function getCacheDir() {
         if (process.platform === "win32") {
-          return path52.join(getLocalAppDataDir() || path52.join(userHome, "AppData", "Local", "Yarn"), "Cache");
+          return path26.join(getLocalAppDataDir() || path26.join(userHome, "AppData", "Local", "Yarn"), "Cache");
         } else if (process.env.XDG_CACHE_HOME) {
-          return path52.join(process.env.XDG_CACHE_HOME, "yarn");
+          return path26.join(process.env.XDG_CACHE_HOME, "yarn");
         } else if (process.platform === "darwin") {
-          return path52.join(userHome, "Library", "Caches", "Yarn");
+          return path26.join(userHome, "Library", "Caches", "Yarn");
         } else {
           return FALLBACK_CACHE_DIR;
         }
@@ -12081,15 +12081,15 @@ ${indent}`);
       function getConfigDir() {
         if (process.platform === "win32") {
           const WIN32_APPDATA_DIR = getLocalAppDataDir();
-          return WIN32_APPDATA_DIR == null ? FALLBACK_CONFIG_DIR : path52.join(WIN32_APPDATA_DIR, "Config");
+          return WIN32_APPDATA_DIR == null ? FALLBACK_CONFIG_DIR : path26.join(WIN32_APPDATA_DIR, "Config");
         } else if (process.env.XDG_CONFIG_HOME) {
-          return path52.join(process.env.XDG_CONFIG_HOME, "yarn");
+          return path26.join(process.env.XDG_CONFIG_HOME, "yarn");
         } else {
           return FALLBACK_CONFIG_DIR;
         }
       }
       function getLocalAppDataDir() {
-        return process.env.LOCALAPPDATA ? path52.join(process.env.LOCALAPPDATA, "Yarn") : null;
+        return process.env.LOCALAPPDATA ? path26.join(process.env.LOCALAPPDATA, "Yarn") : null;
       }
     },
     ,
@@ -13518,7 +13518,7 @@ ${indent}`);
       } else {
         var splitRootRe = /^[\/]*/;
       }
-      exports2.realpathSync = function realpathSync2(p, cache) {
+      exports2.realpathSync = function realpathSync(p, cache) {
         p = pathModule.resolve(p);
         if (cache && Object.prototype.hasOwnProperty.call(cache, p)) {
           return cache[p];
@@ -13685,7 +13685,7 @@ ${indent}`);
       var Minimatch = minimatch.Minimatch;
       var Glob = __webpack_require__(75).Glob;
       var util = __webpack_require__(2);
-      var path52 = __webpack_require__(0);
+      var path26 = __webpack_require__(0);
       var assert = __webpack_require__(22);
       var isAbsolute = __webpack_require__(76);
       var common = __webpack_require__(115);
@@ -13815,7 +13815,7 @@ ${indent}`);
                 e = prefix + e;
             }
             if (e.charAt(0) === "/" && !this.nomount) {
-              e = path52.join(this.root, e);
+              e = path26.join(this.root, e);
             }
             this._emitMatch(index, e);
           }
@@ -13964,9 +13964,9 @@ ${indent}`);
         if (prefix && isAbsolute(prefix) && !this.nomount) {
           var trail = /[\/\\]$/.test(prefix);
           if (prefix.charAt(0) === "/") {
-            prefix = path52.join(this.root, prefix);
+            prefix = path26.join(this.root, prefix);
           } else {
-            prefix = path52.resolve(this.root, prefix);
+            prefix = path26.resolve(this.root, prefix);
             if (trail)
               prefix += "/";
           }
@@ -14212,7 +14212,7 @@ ${indent}`);
       module2.exports = rimraf;
       rimraf.sync = rimrafSync;
       var assert = __webpack_require__(22);
-      var path52 = __webpack_require__(0);
+      var path26 = __webpack_require__(0);
       var fs = __webpack_require__(3);
       var glob = __webpack_require__(75);
       var _0666 = parseInt("666", 8);
@@ -14397,7 +14397,7 @@ ${indent}`);
             return options.rmdir(p, cb);
           var errState;
           files.forEach(function(f) {
-            rimraf(path52.join(p, f), options, function(er2) {
+            rimraf(path26.join(p, f), options, function(er2) {
               if (errState)
                 return;
               if (er2)
@@ -14474,7 +14474,7 @@ ${indent}`);
         assert(p);
         assert(options);
         options.readdirSync(p).forEach(function(f) {
-          rimrafSync(path52.join(p, f), options);
+          rimrafSync(path26.join(p, f), options);
         });
         var retries = isWindows ? 100 : 1;
         var i = 0;
@@ -16477,8 +16477,8 @@ function acquireLiveStreamLease(stream) {
   };
 }
 // src/cli/main.ts
-import { readdirSync as readdirSync31, realpathSync as realpathSync6, statSync as statSync33 } from "node:fs";
-import path79 from "node:path";
+import { readdirSync as readdirSync31, realpathSync as realpathSync7, statSync as statSync34 } from "node:fs";
+import path80 from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // src/cli/args.ts
@@ -16763,6 +16763,7 @@ function parseScanLikeArgs(argv, kind) {
   let cyclonedx = false;
   let noWaivers = false;
   let lockfilePath;
+  let archivePath;
   let allLockfiles = false;
   let policyPath;
   let offline = false;
@@ -16908,6 +16909,15 @@ function parseScanLikeArgs(argv, kind) {
         index += 1;
         break;
       }
+      case "--archive": {
+        const value = readRequiredOptionValue(argv, index, "--archive");
+        if (isErr(value)) {
+          return value;
+        }
+        archivePath = value.value;
+        index += 1;
+        break;
+      }
       case "--workspace-root": {
         const value = readRequiredOptionValue(argv, index, "--workspace-root");
         if (isErr(value)) {
@@ -17048,6 +17058,22 @@ function parseScanLikeArgs(argv, kind) {
       details: { supportedOptions: supportedOptionsFor(kind) }
     }));
   }
+  if (archivePath && lockfilePath) {
+    return err(createError({
+      code: "INVALID_ARGUMENT",
+      category: "invalid_input",
+      message: "--archive cannot be combined with --lockfile.",
+      details: { supportedOptions: supportedOptionsFor(kind) }
+    }));
+  }
+  if (archivePath && workspaceRootPath) {
+    return err(createError({
+      code: "INVALID_ARGUMENT",
+      category: "invalid_input",
+      message: "--archive cannot be combined with --workspace-root.",
+      details: { supportedOptions: supportedOptionsFor(kind) }
+    }));
+  }
   if (kind === "ci" && noWaivers && strictWaivers) {
     return err(createError({
       code: "INVALID_ARGUMENT",
@@ -17090,6 +17116,7 @@ function parseScanLikeArgs(argv, kind) {
       cyclonedx,
       noWaivers,
       ...lockfilePath ? { lockfilePath } : {},
+      ...archivePath ? { archivePath } : {},
       ...allLockfiles ? { allLockfiles: true } : {},
       ...policyPath ? { policyPath } : {},
       ...offline ? { offline: true } : {},
@@ -17118,6 +17145,7 @@ function parseScanLikeArgs(argv, kind) {
     cyclonedx,
     noWaivers,
     ...lockfilePath ? { lockfilePath } : {},
+    ...archivePath ? { archivePath } : {},
     ...allLockfiles ? { allLockfiles: true } : {},
     ...policyPath ? { policyPath } : {},
     ...offline ? { offline: true } : {},
@@ -17246,6 +17274,7 @@ function supportedOptionsFor(kind) {
     "--cyclonedx",
     "--no-waivers",
     "--lockfile",
+    "--archive",
     "--workspace-root",
     "--output",
     "--open",
@@ -17282,6 +17311,8 @@ function outputFormatConflict(option, supportedOutputOptions) {
 function parseExplainArgs(argv) {
   let profile = "saas";
   let json = false;
+  let policyPath;
+  let workspaceRootPath;
   let outputPath;
   const expressionParts = [];
   for (let index = 0;index < argv.length; index += 1) {
@@ -17314,6 +17345,25 @@ function parseExplainArgs(argv) {
       case "--json":
         json = true;
         break;
+      case "--policy":
+      case "--config": {
+        const value = readRequiredOptionValue(argv, index, arg);
+        if (isErr(value)) {
+          return value;
+        }
+        policyPath = value.value;
+        index += 1;
+        break;
+      }
+      case "--workspace-root": {
+        const value = readRequiredOptionValue(argv, index, arg);
+        if (isErr(value)) {
+          return value;
+        }
+        workspaceRootPath = value.value;
+        index += 1;
+        break;
+      }
       case "--output": {
         const value = readRequiredOptionValue(argv, index, "--output");
         if (isErr(value)) {
@@ -17333,7 +17383,15 @@ function parseExplainArgs(argv) {
             category: "invalid_input",
             message: `Unknown explain option "${arg}".`,
             details: {
-              supportedOptions: ["--profile", "--json", "--output", "--help", "-h"]
+              supportedOptions: [
+                "--profile",
+                "--policy",
+                "--workspace-root",
+                "--json",
+                "--output",
+                "--help",
+                "-h"
+              ]
             }
           }));
         }
@@ -17357,6 +17415,8 @@ function parseExplainArgs(argv) {
     expression,
     profile,
     json,
+    ...policyPath ? { policyPath } : {},
+    ...workspaceRootPath ? { workspaceRootPath } : {},
     ...outputPath ? { outputPath } : {}
   });
 }
@@ -17673,5575 +17733,10 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.2.1";
+var OHRISK_VERSION = "1.4.0";
 
-// src/diff/compare.ts
-function diffRiskFindings(input) {
-  const baselineKeys = new Set(input.baselineFindings.map(findingKey));
-  return {
-    baselineFindings: input.baselineFindings,
-    currentFindings: input.currentFindings,
-    newFindings: input.currentFindings.filter((finding) => !baselineKeys.has(findingKey(finding)))
-  };
-}
-function findingKey(finding) {
-  return finding.fingerprint;
-}
-
-// src/evidence/cache.ts
-import { createHash } from "node:crypto";
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync
-} from "node:fs";
-import os from "node:os";
-import path from "node:path";
-var CACHE_FORMAT_VERSION = 3;
-var LEGACY_CACHE_FORMAT_VERSION = 2;
-var CACHE_INDEX_MAX_BYTES = 32 * 1024;
-var CACHE_MARKER_FILENAME = ".ohrisk-artifact-cache";
-var CACHE_MARKER_CONTENT = `ohrisk artifact cache v3
-`;
-var DEFAULT_ARTIFACT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-var DEFAULT_ARTIFACT_CACHE_MAX_BYTES = 2 * 1024 * 1024 * 1024;
-var MAX_HTTP_CACHE_TTL_MS = 365 * 24 * 60 * 60 * 1000;
-var MAX_VALIDATOR_LENGTH = 4 * 1024;
-function defaultArtifactCacheDirectory(env = process.env, homeDirectory = os.homedir(), platform = process.platform) {
-  const xdgCacheHome = env.XDG_CACHE_HOME?.trim();
-  if (xdgCacheHome) {
-    return path.resolve(xdgCacheHome, "ohrisk", "artifacts");
-  }
-  if (platform === "win32") {
-    const localAppData = env.LOCALAPPDATA?.trim();
-    if (localAppData) {
-      return path.resolve(localAppData, "Ohrisk", "Cache", "artifacts");
-    }
-  }
-  return path.resolve(homeDirectory, ".cache", "ohrisk", "artifacts");
-}
-function createArtifactCache(rootDir, options = {}) {
-  const resolvedRoot = path.resolve(rootDir);
-  const now = options.now ?? Date.now;
-  const defaultTtlMs = normalizeTtl(options.defaultTtlMs, DEFAULT_ARTIFACT_CACHE_TTL_MS);
-  const maxSizeBytes = normalizeMaxSize(options.maxSizeBytes, DEFAULT_ARTIFACT_CACHE_MAX_BYTES);
-  ensureCacheMarker(resolvedRoot);
-  return {
-    rootDir: resolvedRoot,
-    read: (url, maxBytes) => readArtifactCacheEntry({
-      rootDir: resolvedRoot,
-      url,
-      maxBytes,
-      now: now(),
-      defaultTtlMs
-    }),
-    write: (url, bytes, metadata) => {
-      writeArtifactCacheEntry({
-        rootDir: resolvedRoot,
-        url,
-        bytes,
-        now: now(),
-        defaultTtlMs,
-        metadata
-      });
-      pruneArtifactCache(resolvedRoot, {
-        maxSizeBytes,
-        removeExpired: false
-      }, now());
-    },
-    revalidate: (url, metadata) => revalidateArtifactCacheEntry({
-      rootDir: resolvedRoot,
-      url,
-      now: now(),
-      defaultTtlMs,
-      metadata
-    }),
-    remove: (url) => removeArtifactCacheEntry(resolvedRoot, url, now()),
-    status: () => artifactCacheStatus(resolvedRoot, now()),
-    prune: (pruneOptions = {}) => pruneArtifactCache(resolvedRoot, pruneOptions, now()),
-    clear: () => clearArtifactCache(resolvedRoot, now())
-  };
-}
-function artifactCacheMetadataFromHeaders(headers, options = {}) {
-  const now = options.now ?? Date.now();
-  const defaultTtlMs = normalizeTtl(options.defaultTtlMs, DEFAULT_ARTIFACT_CACHE_TTL_MS);
-  const cacheControl = headers?.get("cache-control")?.trim() ?? "";
-  const directives = parseCacheControl(cacheControl);
-  const cacheable = !directives.has("no-store");
-  let expiresAt = now + defaultTtlMs;
-  if (directives.has("no-cache")) {
-    expiresAt = now;
-  } else {
-    const maxAge = directives.get("max-age");
-    if (typeof maxAge === "string" && /^\d+$/.test(maxAge)) {
-      const seconds = Number(maxAge);
-      if (Number.isSafeInteger(seconds)) {
-        expiresAt = now + Math.min(seconds * 1000, MAX_HTTP_CACHE_TTL_MS);
-      }
-    } else {
-      const expires = headers?.get("expires")?.trim();
-      const parsedExpires = expires ? Date.parse(expires) : Number.NaN;
-      if (Number.isFinite(parsedExpires)) {
-        expiresAt = Math.max(now, Math.min(parsedExpires, now + MAX_HTTP_CACHE_TTL_MS));
-      }
-    }
-  }
-  const etag = normalizeValidator(headers?.get("etag"));
-  const lastModified = normalizeHttpDateValidator(headers?.get("last-modified"));
-  return {
-    cacheable,
-    fetchedAt: now,
-    expiresAt,
-    ...etag ? { etag } : {},
-    ...lastModified ? { lastModified } : {}
-  };
-}
-function readArtifactCacheEntry(input) {
-  if (!Number.isSafeInteger(input.maxBytes) || input.maxBytes < 0) {
-    return;
-  }
-  const indexPath = cacheIndexPath(input.rootDir, input.url);
-  const loaded = readIndexFile(indexPath, cacheUrlKey(input.url), input.now, input.defaultTtlMs);
-  if (!loaded) {
-    return;
-  }
-  const index = loaded.index;
-  if (index.size > input.maxBytes) {
-    return;
-  }
-  const objectPath = cacheObjectPath(input.rootDir, index.sha256);
-  try {
-    if (!isRegularFile(objectPath)) {
-      removeQuietly(indexPath);
-      return;
-    }
-    const bytes = readFileSync(objectPath);
-    if (bytes.byteLength !== index.size) {
-      removeQuietly(indexPath);
-      return;
-    }
-    const digest = sha256(bytes);
-    if (digest !== index.sha256) {
-      removeQuietly(indexPath);
-      removeQuietly(objectPath);
-      return;
-    }
-    const touched = {
-      ...index,
-      lastAccessedAt: input.now
-    };
-    replaceAtomicBestEffort(indexPath, Buffer.from(`${JSON.stringify(touched)}
-`, "utf8"));
-    return {
-      bytes,
-      digest,
-      fetchedAt: touched.fetchedAt,
-      lastAccessedAt: touched.lastAccessedAt,
-      expiresAt: touched.expiresAt,
-      stale: input.now >= touched.expiresAt,
-      ...touched.etag ? { etag: touched.etag } : {},
-      ...touched.lastModified ? { lastModified: touched.lastModified } : {}
-    };
-  } catch {
-    removeQuietly(indexPath);
-    return;
-  }
-}
-function writeArtifactCacheEntry(input) {
-  const digest = sha256(input.bytes);
-  const objectPath = cacheObjectPath(input.rootDir, digest);
-  const indexPath = cacheIndexPath(input.rootDir, input.url);
-  const metadata = normalizeWriteMetadata(input.metadata, input.now, input.defaultTtlMs);
-  const index = {
-    version: CACHE_FORMAT_VERSION,
-    key: cacheUrlKey(input.url),
-    sha256: digest,
-    size: input.bytes.byteLength,
-    fetchedAt: metadata.fetchedAt,
-    lastAccessedAt: input.now,
-    expiresAt: metadata.expiresAt,
-    ...metadata.etag ? { etag: metadata.etag } : {},
-    ...metadata.lastModified ? { lastModified: metadata.lastModified } : {}
-  };
-  try {
-    ensureCacheMarker(input.rootDir);
-    writeIfAbsent(objectPath, input.bytes);
-    replaceAtomic(indexPath, Buffer.from(`${JSON.stringify(index)}
-`, "utf8"));
-  } catch {}
-}
-function revalidateArtifactCacheEntry(input) {
-  const indexPath = cacheIndexPath(input.rootDir, input.url);
-  const loaded = readIndexFile(indexPath, cacheUrlKey(input.url), input.now, input.defaultTtlMs);
-  if (!loaded) {
-    return;
-  }
-  const metadata = normalizeWriteMetadata(input.metadata, input.now, input.defaultTtlMs);
-  const updated = {
-    ...loaded.index,
-    fetchedAt: metadata.fetchedAt,
-    lastAccessedAt: input.now,
-    expiresAt: metadata.expiresAt,
-    ...metadata.etag ? { etag: metadata.etag } : loaded.index.etag ? { etag: loaded.index.etag } : {},
-    ...metadata.lastModified ? { lastModified: metadata.lastModified } : loaded.index.lastModified ? { lastModified: loaded.index.lastModified } : {}
-  };
-  replaceAtomicBestEffort(indexPath, Buffer.from(`${JSON.stringify(updated)}
-`, "utf8"));
-}
-function removeArtifactCacheEntry(rootDir, url, now) {
-  const indexPath = cacheIndexPath(rootDir, url);
-  const loaded = readIndexFile(indexPath, cacheUrlKey(url), now, 0);
-  removeQuietly(indexPath);
-  if (!loaded) {
-    return;
-  }
-  removeObjectWhenUnreferenced(rootDir, loaded.index.sha256, now);
-}
-function artifactCacheStatus(rootDir, now) {
-  try {
-    return ok(statusFromInventory(scanCacheInventory(rootDir, now), now));
-  } catch (cause) {
-    return err(cacheOperationError("Failed to inspect the artifact cache.", rootDir, cause));
-  }
-}
-function pruneArtifactCache(rootDir, options, now) {
-  try {
-    const inventory = scanCacheInventory(rootDir, now);
-    const before = statusFromInventory(inventory, now);
-    const maxSizeBytes = normalizeMaxSize(options.maxSizeBytes, Number.MAX_SAFE_INTEGER);
-    const maxAgeMs = options.maxAgeMs === undefined ? undefined : normalizeTtl(options.maxAgeMs, 0);
-    const removeExpired = options.removeExpired ?? true;
-    const entriesToRemove = new Set;
-    for (const entry of inventory.entries) {
-      if (removeExpired && entry.index.expiresAt <= now || maxAgeMs !== undefined && now - entry.index.lastAccessedAt >= maxAgeMs) {
-        entriesToRemove.add(entry.path);
-      }
-    }
-    const remainingEntries = inventory.entries.filter((entry) => !entriesToRemove.has(entry.path)).sort((left, right) => left.index.lastAccessedAt - right.index.lastAccessedAt || left.path.localeCompare(right.path));
-    let remainingBytes = uniqueReferencedBytes(remainingEntries, inventory.objectSizes);
-    for (const entry of remainingEntries) {
-      if (remainingBytes <= maxSizeBytes) {
-        break;
-      }
-      entriesToRemove.add(entry.path);
-      const stillReferenced = remainingEntries.some((candidate) => candidate.path !== entry.path && !entriesToRemove.has(candidate.path) && candidate.index.sha256 === entry.index.sha256);
-      if (!stillReferenced) {
-        remainingBytes -= inventory.objectSizes.get(entry.index.sha256) ?? entry.index.size;
-      }
-    }
-    for (const indexPath of entriesToRemove) {
-      removeQuietly(indexPath);
-    }
-    const objectCleanup = removeOrphanedObjects(rootDir, now);
-    removeEmptyCacheDirectories(rootDir);
-    const afterInventory = scanCacheInventory(rootDir, now);
-    const after = statusFromInventory(afterInventory, now);
-    return ok({
-      before,
-      after,
-      removedEntryCount: Math.max(0, before.entryCount - after.entryCount),
-      removedObjectCount: objectCleanup.removedObjectCount,
-      removedBytes: objectCleanup.removedBytes
-    });
-  } catch (cause) {
-    return err(cacheOperationError("Failed to prune the artifact cache.", rootDir, cause));
-  }
-}
-function clearArtifactCache(rootDir, now) {
-  const before = artifactCacheStatus(rootDir, now);
-  if (!before.ok) {
-    return err(before.error);
-  }
-  try {
-    removeCacheChild(rootDir, "index");
-    removeCacheChild(rootDir, "objects");
-    removeCacheChild(rootDir, CACHE_MARKER_FILENAME);
-    ensureCacheMarker(rootDir);
-    return ok({
-      removedEntryCount: before.value.entryCount,
-      removedObjectCount: before.value.objectCount,
-      removedBytes: before.value.totalBytes
-    });
-  } catch (cause) {
-    return err(cacheOperationError("Failed to clear the artifact cache.", rootDir, cause));
-  }
-}
-function scanCacheInventory(rootDir, now) {
-  const objectSizes = new Map;
-  for (const objectPath of listRegularFiles(path.join(rootDir, "objects", "sha256"))) {
-    const digest = path.basename(objectPath);
-    if (!/^[a-f0-9]{64}$/.test(digest)) {
-      continue;
-    }
-    try {
-      objectSizes.set(digest, statSync(objectPath).size);
-    } catch {}
-  }
-  const entries = [];
-  let corruptEntryCount = 0;
-  for (const indexPath of listRegularFiles(path.join(rootDir, "index"))) {
-    const loaded = readIndexFile(indexPath, undefined, now, DEFAULT_ARTIFACT_CACHE_TTL_MS);
-    if (!loaded) {
-      corruptEntryCount += 1;
-      continue;
-    }
-    const expectedFilename = `${loaded.index.key}.json`;
-    if (path.basename(indexPath) !== expectedFilename) {
-      corruptEntryCount += 1;
-      removeQuietly(indexPath);
-      continue;
-    }
-    const objectSize = objectSizes.get(loaded.index.sha256);
-    if (objectSize === undefined || objectSize !== loaded.index.size) {
-      corruptEntryCount += 1;
-      removeQuietly(indexPath);
-      continue;
-    }
-    entries.push({ path: indexPath, index: loaded.index });
-  }
-  return { entries, objectSizes, corruptEntryCount };
-}
-function statusFromInventory(inventory, now) {
-  const referencedDigests = new Set(inventory.entries.map((entry) => entry.index.sha256));
-  const orphanDigests = [...inventory.objectSizes.keys()].filter((digest) => !referencedDigests.has(digest));
-  const accessedAt = inventory.entries.map((entry) => entry.index.lastAccessedAt);
-  return {
-    entryCount: inventory.entries.length,
-    objectCount: inventory.objectSizes.size,
-    totalBytes: [...inventory.objectSizes.values()].reduce((total, size) => total + size, 0),
-    orphanObjectCount: orphanDigests.length,
-    orphanBytes: orphanDigests.reduce((total, digest) => total + (inventory.objectSizes.get(digest) ?? 0), 0),
-    staleEntryCount: inventory.entries.filter((entry) => entry.index.expiresAt <= now).length,
-    corruptEntryCount: inventory.corruptEntryCount,
-    ...accessedAt.length > 0 ? { oldestAccessedAt: Math.min(...accessedAt) } : {},
-    ...accessedAt.length > 0 ? { newestAccessedAt: Math.max(...accessedAt) } : {}
-  };
-}
-function removeOrphanedObjects(rootDir, now) {
-  const inventory = scanCacheInventory(rootDir, now);
-  const referencedDigests = new Set(inventory.entries.map((entry) => entry.index.sha256));
-  let removedObjectCount = 0;
-  let removedBytes = 0;
-  for (const objectPath of listRegularFiles(path.join(rootDir, "objects", "sha256"))) {
-    const digest = path.basename(objectPath);
-    if (referencedDigests.has(digest)) {
-      continue;
-    }
-    try {
-      const size = statSync(objectPath).size;
-      rmSync(objectPath, { force: true });
-      removedObjectCount += 1;
-      removedBytes += size;
-    } catch {}
-  }
-  return { removedObjectCount, removedBytes };
-}
-function removeObjectWhenUnreferenced(rootDir, digest, now) {
-  const referenced = listRegularFiles(path.join(rootDir, "index")).some((indexPath) => {
-    const loaded = readIndexFile(indexPath, undefined, now, DEFAULT_ARTIFACT_CACHE_TTL_MS);
-    return loaded?.index.sha256 === digest;
-  });
-  if (!referenced) {
-    removeQuietly(cacheObjectPath(rootDir, digest));
-  }
-}
-function uniqueReferencedBytes(entries, objectSizes) {
-  const digests = new Set(entries.map((entry) => entry.index.sha256));
-  return [...digests].reduce((total, digest) => total + (objectSizes.get(digest) ?? 0), 0);
-}
-function readIndexFile(indexPath, expectedKey, now, defaultTtlMs) {
-  if (!isRegularFile(indexPath)) {
-    return;
-  }
-  try {
-    const raw = readFileSync(indexPath);
-    if (raw.byteLength > CACHE_INDEX_MAX_BYTES) {
-      removeQuietly(indexPath);
-      return;
-    }
-    const parsed = JSON.parse(raw.toString("utf8"));
-    if (!isArtifactCacheIndex(parsed, expectedKey)) {
-      removeQuietly(indexPath);
-      return;
-    }
-    if (parsed.version === CACHE_FORMAT_VERSION) {
-      return { index: parsed, migrated: false };
-    }
-    const mtime = Math.trunc(statSync(indexPath).mtimeMs);
-    const migrated = {
-      ...parsed,
-      version: CACHE_FORMAT_VERSION,
-      fetchedAt: mtime,
-      lastAccessedAt: now,
-      expiresAt: Math.min(now, mtime + defaultTtlMs)
-    };
-    replaceAtomicBestEffort(indexPath, Buffer.from(`${JSON.stringify(migrated)}
-`, "utf8"));
-    return { index: migrated, migrated: true };
-  } catch {
-    removeQuietly(indexPath);
-    return;
-  }
-}
-function isArtifactCacheIndex(value, expectedKey) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const record = value;
-  if (record.version !== CACHE_FORMAT_VERSION && record.version !== LEGACY_CACHE_FORMAT_VERSION || typeof record.key !== "string" || !/^[a-f0-9]{64}$/.test(record.key) || expectedKey !== undefined && record.key !== expectedKey || typeof record.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(record.sha256) || !isNonNegativeSafeInteger(record.size)) {
-    return false;
-  }
-  if (record.version === LEGACY_CACHE_FORMAT_VERSION) {
-    return true;
-  }
-  return isNonNegativeSafeInteger(record.fetchedAt) && isNonNegativeSafeInteger(record.lastAccessedAt) && isNonNegativeSafeInteger(record.expiresAt) && isOptionalValidator(record.etag) && isOptionalValidator(record.lastModified);
-}
-function normalizeWriteMetadata(metadata, now, defaultTtlMs) {
-  const fetchedAt = isNonNegativeSafeInteger(metadata?.fetchedAt) ? metadata.fetchedAt : now;
-  const expiresAt = isNonNegativeSafeInteger(metadata?.expiresAt) ? metadata.expiresAt : fetchedAt + defaultTtlMs;
-  const etag = normalizeValidator(metadata?.etag);
-  const lastModified = normalizeHttpDateValidator(metadata?.lastModified);
-  return {
-    fetchedAt,
-    expiresAt,
-    ...etag ? { etag } : {},
-    ...lastModified ? { lastModified } : {}
-  };
-}
-function parseCacheControl(value) {
-  const directives = new Map;
-  for (const item of value.split(",")) {
-    const [rawName, ...rawValue] = item.trim().split("=");
-    const name = rawName?.trim().toLowerCase();
-    if (!name) {
-      continue;
-    }
-    const joined = rawValue.join("=").trim().replace(/^"|"$/g, "");
-    directives.set(name, joined === "" ? true : joined);
-  }
-  return directives;
-}
-function normalizeValidator(value) {
-  const normalized = value?.trim();
-  if (!normalized || normalized.length > MAX_VALIDATOR_LENGTH || normalized.includes("\r") || normalized.includes(`
-`)) {
-    return;
-  }
-  return normalized;
-}
-function normalizeHttpDateValidator(value) {
-  const normalized = normalizeValidator(value);
-  return normalized && Number.isFinite(Date.parse(normalized)) ? normalized : undefined;
-}
-function isOptionalValidator(value) {
-  return value === undefined || typeof value === "string" && value.length > 0 && value.length <= MAX_VALIDATOR_LENGTH && !value.includes("\r") && !value.includes(`
-`);
-}
-function normalizeTtl(value, fallback) {
-  return Number.isSafeInteger(value) && (value ?? -1) >= 0 ? value : fallback;
-}
-function normalizeMaxSize(value, fallback) {
-  return Number.isSafeInteger(value) && (value ?? -1) >= 0 ? value : fallback;
-}
-function isNonNegativeSafeInteger(value) {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
-}
-function writeIfAbsent(filePath, bytes) {
-  mkdirSync(path.dirname(filePath), { recursive: true });
-  if (isRegularFile(filePath)) {
-    return;
-  }
-  const temporaryPath = temporaryCachePath(filePath);
-  try {
-    writeFileSync(temporaryPath, bytes, { flag: "wx", mode: 384 });
-    try {
-      renameSync(temporaryPath, filePath);
-    } catch {
-      if (!isRegularFile(filePath)) {
-        throw new Error("Could not atomically publish cache object.");
-      }
-    }
-  } finally {
-    removeQuietly(temporaryPath);
-  }
-}
-function replaceAtomic(filePath, bytes) {
-  mkdirSync(path.dirname(filePath), { recursive: true });
-  const temporaryPath = temporaryCachePath(filePath);
-  try {
-    writeFileSync(temporaryPath, bytes, { flag: "wx", mode: 384 });
-    renameSync(temporaryPath, filePath);
-  } finally {
-    removeQuietly(temporaryPath);
-  }
-}
-function replaceAtomicBestEffort(filePath, bytes) {
-  try {
-    replaceAtomic(filePath, bytes);
-  } catch {}
-}
-function temporaryCachePath(filePath) {
-  return `${filePath}.${process.pid}.${randomSuffix()}.tmp`;
-}
-function cacheIndexPath(rootDir, url) {
-  const key = cacheUrlKey(url);
-  return path.join(rootDir, "index", key.slice(0, 2), `${key}.json`);
-}
-function cacheUrlKey(url) {
-  return sha256(Buffer.from(url, "utf8"));
-}
-function cacheObjectPath(rootDir, digest) {
-  return path.join(rootDir, "objects", "sha256", digest.slice(0, 2), digest);
-}
-function ensureCacheMarker(rootDir) {
-  try {
-    mkdirSync(rootDir, { recursive: true });
-    const markerPath = path.join(rootDir, CACHE_MARKER_FILENAME);
-    if (!existsSync(markerPath)) {
-      writeFileSync(markerPath, CACHE_MARKER_CONTENT, { flag: "wx", mode: 384 });
-    }
-  } catch {}
-}
-function removeCacheChild(rootDir, childName) {
-  const childPath = path.join(path.resolve(rootDir), childName);
-  const relative = path.relative(path.resolve(rootDir), childPath);
-  if (relative !== childName || relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error("Unsafe cache child path.");
-  }
-  rmSync(childPath, { force: true, recursive: true });
-}
-function listRegularFiles(rootDir) {
-  const files = [];
-  const visit = (directory) => {
-    let entries;
-    try {
-      entries = readdirSync(directory, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      const entryPath = path.join(directory, entry.name);
-      if (entry.isFile()) {
-        files.push(entryPath);
-      } else if (entry.isDirectory()) {
-        visit(entryPath);
-      }
-    }
-  };
-  visit(rootDir);
-  return files;
-}
-function removeEmptyCacheDirectories(rootDir) {
-  for (const topLevel of [path.join(rootDir, "index"), path.join(rootDir, "objects")]) {
-    removeEmptyDirectories(topLevel, false);
-  }
-}
-function removeEmptyDirectories(directory, removeSelf) {
-  let entries;
-  try {
-    entries = readdirSync(directory, { withFileTypes: true });
-  } catch {
-    return true;
-  }
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      removeEmptyDirectories(path.join(directory, entry.name), true);
-    }
-  }
-  try {
-    if (removeSelf && readdirSync(directory).length === 0) {
-      rmSync(directory, { force: true });
-      return true;
-    }
-  } catch {
-    return false;
-  }
-  return false;
-}
-function isRegularFile(filePath) {
-  try {
-    return lstatSync(filePath).isFile();
-  } catch {
-    return false;
-  }
-}
-function sha256(bytes) {
-  return createHash("sha256").update(bytes).digest("hex");
-}
-function removeQuietly(filePath) {
-  try {
-    rmSync(filePath, { force: true });
-  } catch {}
-}
-function randomSuffix() {
-  return Math.random().toString(16).slice(2);
-}
-function cacheOperationError(message, rootDir, cause) {
-  return createError({
-    code: "CACHE_OPERATION_FAILED",
-    category: "filesystem",
-    message,
-    details: {
-      cacheDir: rootDir,
-      cause: cause instanceof Error ? cause.message : String(cause)
-    }
-  });
-}
-
-// src/evidence/collect.ts
-import { createHash as createHash2, timingSafeEqual } from "node:crypto";
-import { lookup } from "node:dns/promises";
-import {
-  closeSync as closeSync3,
-  existsSync as existsSync44,
-  openSync as openSync3,
-  readdirSync as readdirSync30,
-  readSync as readSync3,
-  realpathSync as realpathSync2,
-  statSync as statSync31
-} from "node:fs";
-import { request as httpsRequest } from "node:https";
-import { isIP as isIP2 } from "node:net";
-import path71 from "node:path";
-import { Readable } from "node:stream";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
-
-// src/shared/object.ts
-function omitUndefined(value) {
-  const entries = Object.entries(value).filter(([, entryValue]) => entryValue !== undefined);
-  return Object.fromEntries(entries);
-}
-
-// src/evidence/bazel-module.ts
-import { existsSync as existsSync2, readdirSync as readdirSync2, statSync as statSync3 } from "node:fs";
-import path2 from "node:path";
-import { fileURLToPath } from "node:url";
-
-// src/shared/read-text-file.ts
-import { closeSync, openSync, readSync, statSync as statSync2 } from "node:fs";
-var TEXT_FILE_READ_CHUNK_BYTES = 64 * 1024;
-function readTextFileWithLimit(input) {
-  try {
-    const stats = statSync2(input.filePath);
-    if (stats.size > input.maxBytes) {
-      return err({
-        kind: "too_large",
-        maxBytes: input.maxBytes,
-        observedBytes: stats.size
-      });
-    }
-    return readOpenTextFileWithLimit(input);
-  } catch (cause) {
-    return err({
-      kind: "filesystem",
-      cause: cause instanceof Error ? cause.message : String(cause)
-    });
-  }
-}
-function textFileReadErrorCategory(error) {
-  return error.kind === "too_large" ? "unsupported_input" : "filesystem";
-}
-function textFileReadErrorDetails(error) {
-  return error.kind === "too_large" ? {
-    maxBytes: error.maxBytes,
-    observedBytes: error.observedBytes
-  } : {
-    cause: error.cause
-  };
-}
-function readOpenTextFileWithLimit(input) {
-  const chunks = [];
-  let observedBytes = 0;
-  let fileDescriptor;
-  try {
-    fileDescriptor = openSync(input.filePath, "r");
-    while (true) {
-      const readSize = Math.min(TEXT_FILE_READ_CHUNK_BYTES, Math.max(1, input.maxBytes + 1 - observedBytes));
-      const chunk = Buffer.alloc(readSize);
-      const bytesRead = readSync(fileDescriptor, chunk, 0, chunk.length, null);
-      if (bytesRead === 0) {
-        return ok(Buffer.concat(chunks, observedBytes).toString("utf8"));
-      }
-      observedBytes += bytesRead;
-      if (observedBytes > input.maxBytes) {
-        return err({
-          kind: "too_large",
-          maxBytes: input.maxBytes,
-          observedBytes
-        });
-      }
-      chunks.push(bytesRead === chunk.length ? chunk : chunk.subarray(0, bytesRead));
-    }
-  } finally {
-    if (fileDescriptor !== undefined) {
-      try {
-        closeSync(fileDescriptor);
-      } catch {}
-    }
-  }
-}
-
-// src/evidence/license-files.ts
-function classifyEvidenceFile(path2) {
-  const normalized = path2.replace(/\\/g, "/").split("/").pop()?.toLowerCase();
-  if (!normalized) {
-    return;
-  }
-  if (hasEvidenceName(normalized, "notice")) {
-    return "notice";
-  }
-  if (hasEvidenceName(normalized, "copying")) {
-    return "copying";
-  }
-  if (hasEvidenceName(normalized, "unlicense") || hasEvidenceName(normalized, "license") || hasEvidenceName(normalized, "licence")) {
-    return "license";
-  }
-  return;
-}
-function hasEvidenceName(normalized, baseName) {
-  return normalized === baseName || normalized.startsWith(`${baseName}.`) || normalized.startsWith(`${baseName}-`) || normalized.startsWith(`${baseName}_`);
-}
-
-// src/evidence/bazel-module.ts
-var BAZEL_REGISTRY_JSON_MAX_BYTES = 64 * 1024;
-var BAZEL_SOURCE_JSON_MAX_BYTES = 64 * 1024;
-var BAZEL_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-var BAZEL_LICENSE_FILE_LIMIT = 50;
-function collectBazelModuleEvidence(input) {
-  const sourceDir = findBazelLocalPathSourceDir({
-    packageId: input.packageId,
-    packageName: input.packageName,
-    version: input.version,
-    projectRoot: input.projectRoot,
-    registryJsonMaxBytes: input.registryJsonMaxBytes ?? BAZEL_REGISTRY_JSON_MAX_BYTES,
-    sourceJsonMaxBytes: input.sourceJsonMaxBytes ?? BAZEL_SOURCE_JSON_MAX_BYTES
-  });
-  if (!sourceDir.ok) {
-    return err(sourceDir.error);
-  }
-  if (sourceDir.value) {
-    const warnings = [];
-    const files = readBazelEvidenceFiles({
-      sourceDir: sourceDir.value,
-      maxBytes: input.evidenceFileMaxBytes ?? BAZEL_EVIDENCE_FILE_MAX_BYTES,
-      warnings
-    });
-    if (files.length === 0) {
-      warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Bazel module source.");
-    }
-    return ok({
-      packageId: input.packageId,
-      files,
-      source: "local",
-      warnings
-    });
-  }
-  return ok({
-    packageId: input.packageId,
-    files: [],
-    source: "unavailable",
-    warnings: [
-      "Bazel module license evidence was not found in local Bazel registry local_path sources. Remote Bazel registry metadata fetching is not supported yet."
-    ]
-  });
-}
-function findBazelLocalPathSourceDir(input) {
-  for (const registryRoot of findLocalBazelRegistryRoots(input.projectRoot)) {
-    const sourceJsonPath = path2.join(registryRoot, "modules", input.packageName, input.version, "source.json");
-    if (!existsSync2(sourceJsonPath)) {
-      continue;
-    }
-    const sourceJson = readJsonFile({
-      packageId: input.packageId,
-      filePath: sourceJsonPath,
-      maxBytes: input.sourceJsonMaxBytes,
-      label: "Bazel source metadata"
-    });
-    if (!sourceJson.ok) {
-      return err(sourceJson.error);
-    }
-    if (!isRecord(sourceJson.value) || sourceJson.value.type !== "local_path" || typeof sourceJson.value.path !== "string") {
-      continue;
-    }
-    const registryJson = readBazelRegistryJson({
-      packageId: input.packageId,
-      registryRoot,
-      maxBytes: input.registryJsonMaxBytes
-    });
-    if (!registryJson.ok) {
-      return err(registryJson.error);
-    }
-    const sourceDir = resolveBazelLocalPathSourceDir({
-      registryRoot,
-      moduleBasePath: registryJson.value,
-      sourcePath: sourceJson.value.path
-    });
-    if (sourceDir && isReadableDirectory(sourceDir)) {
-      return ok(sourceDir);
-    }
-  }
-  return ok(undefined);
-}
-function findLocalBazelRegistryRoots(projectRoot) {
-  const roots = new Set;
-  const projectRegistry = path2.resolve(projectRoot);
-  if (isReadableDirectory(path2.join(projectRegistry, "modules"))) {
-    roots.add(projectRegistry);
-  }
-  for (const registry of readBazelrcRegistries(path2.join(projectRoot, ".bazelrc"))) {
-    if (registry.startsWith("file://")) {
-      try {
-        const registryRoot = path2.resolve(fileURLToPath(registry));
-        if (isReadableDirectory(path2.join(registryRoot, "modules"))) {
-          roots.add(registryRoot);
-        }
-      } catch {
-        continue;
-      }
-    }
-  }
-  return [...roots];
-}
-function readBazelrcRegistries(bazelrcPath) {
-  if (!existsSync2(bazelrcPath)) {
-    return [];
-  }
-  const text3 = readTextFileWithLimit({
-    filePath: bazelrcPath,
-    maxBytes: BAZEL_SOURCE_JSON_MAX_BYTES
-  });
-  if (!text3.ok) {
-    return [];
-  }
-  return [...text3.value.matchAll(/(?:^|\s)--registry=("[^"]+"|'[^']+'|\S+)/gm)].map((match) => (match[1] ?? "").replace(/^["']|["']$/g, "")).filter((value) => value !== "");
-}
-function readBazelRegistryJson(input) {
-  const registryJsonPath = path2.join(input.registryRoot, "bazel_registry.json");
-  if (!existsSync2(registryJsonPath)) {
-    return ok(undefined);
-  }
-  const registryJson = readJsonFile({
-    packageId: input.packageId,
-    filePath: registryJsonPath,
-    maxBytes: input.maxBytes,
-    label: "Bazel registry metadata"
-  });
-  if (!registryJson.ok) {
-    return err(registryJson.error);
-  }
-  return ok(isRecord(registryJson.value) && typeof registryJson.value.module_base_path === "string" ? registryJson.value.module_base_path : undefined);
-}
-function resolveBazelLocalPathSourceDir(input) {
-  if (path2.isAbsolute(input.sourcePath)) {
-    return path2.resolve(input.sourcePath);
-  }
-  const moduleBasePath = input.moduleBasePath ?? "";
-  if (moduleBasePath !== "" && path2.isAbsolute(moduleBasePath)) {
-    return path2.resolve(moduleBasePath, input.sourcePath);
-  }
-  return path2.resolve(input.registryRoot, moduleBasePath, input.sourcePath);
-}
-function readBazelEvidenceFiles(input) {
-  const files = [];
-  for (const entry of readDirectoryEntries(input.sourceDir)) {
-    if (!entry.isFile()) {
-      continue;
-    }
-    const kind = classifyEvidenceFile(entry.name);
-    if (!kind) {
-      continue;
-    }
-    if (files.length >= BAZEL_LICENSE_FILE_LIMIT) {
-      input.warnings.push(`Bazel module evidence file limit reached at ${BAZEL_LICENSE_FILE_LIMIT} files.`);
-      break;
-    }
-    const text3 = readTextFileWithLimit({
-      filePath: path2.join(input.sourceDir, entry.name),
-      maxBytes: input.maxBytes
-    });
-    if (!text3.ok) {
-      input.warnings.push(`Skipped Bazel evidence file ${entry.name}: ${evidenceReadError(text3.error)}.`);
-      continue;
-    }
-    files.push({
-      path: entry.name,
-      kind,
-      text: text3.value
-    });
-  }
-  return files.sort((left, right) => left.path.localeCompare(right.path));
-}
-function readJsonFile(input) {
-  const text3 = readTextFileWithLimit({
-    filePath: input.filePath,
-    maxBytes: input.maxBytes
-  });
-  if (!text3.ok) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: textFileReadErrorCategory(text3.error),
-      message: text3.error.kind === "too_large" ? `${input.label} exceeded the maximum supported size.` : `Failed to read ${input.label}.`,
-      details: {
-        packageId: input.packageId,
-        metadataPath: input.filePath,
-        ...textFileReadErrorDetails(text3.error)
-      }
-    }));
-  }
-  try {
-    return ok(JSON.parse(text3.value));
-  } catch (cause) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: "unsupported_input",
-      message: `Failed to parse ${input.label}.`,
-      details: {
-        packageId: input.packageId,
-        metadataPath: input.filePath,
-        cause: cause instanceof Error ? cause.message : String(cause)
-      }
-    }));
-  }
-}
-function readDirectoryEntries(dir) {
-  try {
-    return readdirSync2(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-}
-function evidenceReadError(error) {
-  switch (error.kind) {
-    case "too_large":
-      return `file exceeded ${error.maxBytes} bytes`;
-    case "filesystem":
-      return error.cause;
-  }
-}
-function isReadableDirectory(pathname) {
-  try {
-    return statSync3(pathname).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function isRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// src/evidence/cargo-package.ts
-import { existsSync as existsSync3, readdirSync as readdirSync3, statSync as statSync4 } from "node:fs";
-import path3 from "node:path";
-var CARGO_MANIFEST_MAX_BYTES = 1024 * 1024;
-var CARGO_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-var CARGO_LICENSE_FILE_LIMIT = 50;
-function collectCargoPackageEvidence(input) {
-  const packageDir = findCargoPackageDir({
-    projectRoot: input.projectRoot,
-    packageName: input.packageName,
-    version: input.version
-  });
-  if (!packageDir) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: [
-        "Cargo package source was not found in a local Cargo registry cache."
-      ]
-    });
-  }
-  const manifest = readCargoManifestMetadata({
-    packageId: input.packageId,
-    manifestPath: path3.join(packageDir, "Cargo.toml"),
-    maxBytes: input.manifestMaxBytes ?? CARGO_MANIFEST_MAX_BYTES
-  });
-  if (!manifest.ok) {
-    return err(manifest.error);
-  }
-  const warnings = [];
-  const files = readCargoEvidenceFiles({
-    packageDir,
-    manifest: manifest.value,
-    maxBytes: input.evidenceFileMaxBytes ?? CARGO_EVIDENCE_FILE_MAX_BYTES,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Cargo package source.");
-  }
-  if (!manifest.value.license) {
-    warnings.push("Cargo.toml did not declare a package license.");
-  }
-  return ok({
-    packageId: input.packageId,
-    ...manifest.value.license ? {
-      metadataLicense: manifest.value.license,
-      metadataSource: "Cargo.toml"
-    } : {},
-    files,
-    source: "local",
-    warnings
-  });
-}
-function findCargoPackageDir(input) {
-  const crateDirName = `${input.packageName}-${input.version}`;
-  for (const registrySourceRoot of cargoRegistrySourceRoots(input.projectRoot)) {
-    if (!existsSync3(registrySourceRoot) || !isReadableDirectory2(registrySourceRoot)) {
-      continue;
-    }
-    let registryDirs;
-    try {
-      registryDirs = readdirSync3(registrySourceRoot, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const registryDir of registryDirs) {
-      if (!registryDir.isDirectory()) {
-        continue;
-      }
-      const candidate = path3.join(registrySourceRoot, registryDir.name, crateDirName);
-      if (existsSync3(candidate) && isReadableDirectory2(candidate)) {
-        return candidate;
-      }
-    }
-  }
-  const vendoredCandidate = path3.join(input.projectRoot, "vendor", input.packageName);
-  if (existsSync3(vendoredCandidate) && isReadableDirectory2(vendoredCandidate)) {
-    return vendoredCandidate;
-  }
-  return;
-}
-function cargoRegistrySourceRoots(projectRoot) {
-  const roots = [
-    path3.join(projectRoot, ".cargo", "registry", "src")
-  ];
-  const cargoHome = process.env.CARGO_HOME;
-  if (cargoHome) {
-    roots.push(path3.join(cargoHome, "registry", "src"));
-  }
-  const home = process.env.USERPROFILE ?? process.env.HOME;
-  if (home) {
-    roots.push(path3.join(home, ".cargo", "registry", "src"));
-  }
-  return [...new Set(roots.map((root) => path3.resolve(root)))];
-}
-function readCargoManifestMetadata(input) {
-  if (!existsSync3(input.manifestPath)) {
-    return ok({});
-  }
-  const text3 = readTextFileWithLimit({
-    filePath: input.manifestPath,
-    maxBytes: input.maxBytes
-  });
-  if (!text3.ok) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: textFileReadErrorCategory(text3.error),
-      message: manifestReadFailedMessage(text3.error),
-      details: {
-        packageId: input.packageId,
-        manifestPath: input.manifestPath,
-        ...textFileReadErrorDetails(text3.error)
-      }
-    }));
-  }
-  return ok(parseCargoManifestMetadata(text3.value));
-}
-function parseCargoManifestMetadata(text3) {
-  let section = "";
-  const metadata = {};
-  for (const rawLine of text3.split(/\r?\n/)) {
-    const line = stripTomlComment(rawLine).trim();
-    if (line === "") {
-      continue;
-    }
-    if (line.startsWith("[") && line.endsWith("]")) {
-      section = line.slice(1, -1);
-      continue;
-    }
-    if (section !== "package") {
-      continue;
-    }
-    const license = readStringAssignment(line, "license");
-    if (license !== undefined) {
-      metadata.license = license;
-      continue;
-    }
-    const licenseFile = readStringAssignment(line, "license-file");
-    if (licenseFile !== undefined) {
-      metadata.licenseFile = licenseFile;
-    }
-  }
-  return metadata;
-}
-function readCargoEvidenceFiles(input) {
-  const candidates = evidenceFileCandidates(input.packageDir);
-  if (input.manifest.licenseFile) {
-    candidates.unshift({
-      absolutePath: path3.resolve(input.packageDir, input.manifest.licenseFile),
-      relativePath: input.manifest.licenseFile
-    });
-  }
-  const files = [];
-  const seen = new Set;
-  const packageRoot = path3.resolve(input.packageDir);
-  for (const candidate of candidates.slice(0, CARGO_LICENSE_FILE_LIMIT)) {
-    if (seen.has(candidate.absolutePath)) {
-      continue;
-    }
-    seen.add(candidate.absolutePath);
-    const kind = classifyEvidenceFile(candidate.relativePath);
-    if (!kind || !isPathInside(packageRoot, candidate.absolutePath)) {
-      continue;
-    }
-    const text3 = readTextFileWithLimit({
-      filePath: candidate.absolutePath,
-      maxBytes: input.maxBytes
-    });
-    if (!text3.ok) {
-      input.warnings.push(evidenceFileReadWarning(candidate.relativePath, text3.error));
-      continue;
-    }
-    files.push({
-      path: candidate.relativePath,
-      kind,
-      text: text3.value
-    });
-  }
-  return files.sort((left, right) => left.path.localeCompare(right.path));
-}
-function evidenceFileCandidates(dir) {
-  if (!existsSync3(dir) || !isReadableDirectory2(dir)) {
-    return [];
-  }
-  try {
-    return readdirSync3(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path3.join(dir, entry.name),
-      relativePath: entry.name
-    }));
-  } catch {
-    return [];
-  }
-}
-function readStringAssignment(line, key) {
-  const match = new RegExp(`^${escapeRegExp(key)}\\s*=\\s*"([^"]*)"`).exec(line);
-  return match?.[1];
-}
-function stripTomlComment(line) {
-  let inString = false;
-  let escaped = false;
-  for (let index = 0;index < line.length; index += 1) {
-    const char = line[index];
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (char === "\\") {
-      escaped = true;
-      continue;
-    }
-    if (char === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (char === "#" && !inString) {
-      return line.slice(0, index);
-    }
-  }
-  return line;
-}
-function isReadableDirectory2(dir) {
-  try {
-    return statSync4(dir).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function isPathInside(parent, child) {
-  const relative = path3.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path3.isAbsolute(relative);
-}
-function manifestReadFailedMessage(error) {
-  return error.kind === "too_large" ? "Cargo.toml metadata exceeded the maximum supported size." : "Failed to read Cargo.toml metadata.";
-}
-function evidenceFileReadWarning(fileName, error) {
-  return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
-}
-function escapeRegExp(input) {
-  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-// src/evidence/carthage-package.ts
-import { existsSync as existsSync4, readdirSync as readdirSync4, statSync as statSync5 } from "node:fs";
-import path4 from "node:path";
-var CARTHAGE_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-var CARTHAGE_LICENSE_FILE_LIMIT = 50;
-function collectCarthagePackageEvidence(input) {
-  const packageDir = findCarthageCheckoutDir({
-    packageName: input.packageName,
-    projectRoot: input.projectRoot
-  });
-  if (!packageDir) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: ["Carthage package source was not found in Carthage/Checkouts."]
-    });
-  }
-  const warnings = [];
-  const files = readCarthageEvidenceFiles({
-    packageDir,
-    maxBytes: input.evidenceFileMaxBytes ?? CARTHAGE_EVIDENCE_FILE_MAX_BYTES,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Carthage checkout.");
-  }
-  return ok({
-    packageId: input.packageId,
-    files,
-    source: "local",
-    warnings
-  });
-}
-function findCarthageCheckoutDir(input) {
-  const checkoutName = checkoutNameForCarthagePackage(input.packageName);
-  if (!checkoutName) {
-    return;
-  }
-  const checkoutsRoot = path4.resolve(input.projectRoot, "Carthage", "Checkouts");
-  const exactCandidate = path4.resolve(checkoutsRoot, checkoutName);
-  if (isPathInside2(checkoutsRoot, exactCandidate) && existsSync4(exactCandidate) && isReadableDirectory3(exactCandidate)) {
-    return exactCandidate;
-  }
-  return findCaseInsensitiveChildDirectory({
-    parent: checkoutsRoot,
-    childName: checkoutName
-  });
-}
-function checkoutNameForCarthagePackage(packageName) {
-  const normalized = packageName.trim().replace(/\\/g, "/").replace(/\/+$/g, "");
-  const slashIndex = normalized.lastIndexOf("/");
-  const basename = slashIndex >= 0 ? normalized.slice(slashIndex + 1) : normalized;
-  const checkoutName = basename.endsWith(".git") ? basename.slice(0, -4) : basename;
-  return checkoutName.trim() === "" ? undefined : checkoutName.trim();
-}
-function findCaseInsensitiveChildDirectory(input) {
-  if (!existsSync4(input.parent) || !isReadableDirectory3(input.parent)) {
-    return;
-  }
-  let entries;
-  try {
-    entries = readdirSync4(input.parent, { withFileTypes: true });
-  } catch {
-    return;
-  }
-  const normalizedName = input.childName.toLowerCase();
-  for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name.toLowerCase() !== normalizedName) {
-      continue;
-    }
-    const candidate = path4.resolve(input.parent, entry.name);
-    if (isPathInside2(input.parent, candidate) && isReadableDirectory3(candidate)) {
-      return candidate;
-    }
-  }
-  return;
-}
-function readCarthageEvidenceFiles(input) {
-  const files = [];
-  for (const candidate of evidenceFileCandidates2(input.packageDir)) {
-    const kind = classifyEvidenceFile(candidate.relativePath);
-    if (!kind) {
-      continue;
-    }
-    if (files.length >= CARTHAGE_LICENSE_FILE_LIMIT) {
-      input.warnings.push(`Carthage package evidence file limit reached at ${CARTHAGE_LICENSE_FILE_LIMIT} files.`);
-      break;
-    }
-    const text3 = readTextFileWithLimit({
-      filePath: candidate.absolutePath,
-      maxBytes: input.maxBytes
-    });
-    if (!text3.ok) {
-      input.warnings.push(`Skipped Carthage evidence file ${candidate.relativePath}: ${evidenceReadError2(text3.error)}.`);
-      continue;
-    }
-    files.push({
-      path: candidate.relativePath,
-      kind,
-      text: text3.value
-    });
-  }
-  return files.sort((left, right) => left.path.localeCompare(right.path));
-}
-function evidenceFileCandidates2(dir) {
-  try {
-    return readdirSync4(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path4.join(dir, entry.name),
-      relativePath: entry.name
-    }));
-  } catch {
-    return [];
-  }
-}
-function evidenceReadError2(error) {
-  switch (error.kind) {
-    case "too_large":
-      return `file exceeded ${error.maxBytes} bytes`;
-    case "filesystem":
-      return error.cause;
-  }
-}
-function isReadableDirectory3(pathname) {
-  try {
-    return statSync5(pathname).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function isPathInside2(parent, child) {
-  const relative = path4.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path4.isAbsolute(relative);
-}
-
-// src/evidence/cocoapods-package.ts
-import { existsSync as existsSync5, readdirSync as readdirSync5, statSync as statSync6 } from "node:fs";
-import path5 from "node:path";
-var COCOAPODS_PODSPEC_MAX_BYTES = 1024 * 1024;
-var COCOAPODS_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-var COCOAPODS_LICENSE_FILE_LIMIT = 50;
-function collectCocoapodsPackageEvidence(input) {
-  const packageDir = findCocoapodsPackageDir({
-    packageName: input.packageName,
-    projectRoot: input.projectRoot
-  });
-  if (!packageDir) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: ["CocoaPods package source was not found in the local Pods directory."]
-    });
-  }
-  const podspecLicense = readPodspecLicense({
-    packageId: input.packageId,
-    packageName: input.packageName,
-    projectRoot: input.projectRoot,
-    maxBytes: input.podspecMaxBytes ?? COCOAPODS_PODSPEC_MAX_BYTES
-  });
-  if (!podspecLicense.ok) {
-    return err(podspecLicense.error);
-  }
-  const warnings = [];
-  const files = readCocoapodsEvidenceFiles({
-    packageDir,
-    maxBytes: input.evidenceFileMaxBytes ?? COCOAPODS_EVIDENCE_FILE_MAX_BYTES,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in CocoaPods package source.");
-  }
-  if (!podspecLicense.value) {
-    warnings.push("CocoaPods podspec did not declare license metadata.");
-  }
-  return ok({
-    packageId: input.packageId,
-    ...podspecLicense.value ? {
-      metadataLicense: podspecLicense.value,
-      metadataSource: "podspec"
-    } : {},
-    files,
-    source: "local",
-    warnings
-  });
-}
-function findCocoapodsPackageDir(input) {
-  const podsRoot = path5.resolve(input.projectRoot, "Pods");
-  const exactCandidate = path5.resolve(podsRoot, input.packageName);
-  if (isPathInside3(podsRoot, exactCandidate) && existsSync5(exactCandidate) && isReadableDirectory4(exactCandidate)) {
-    return exactCandidate;
-  }
-  return findCaseInsensitiveChildDirectory2({
-    parent: podsRoot,
-    childName: input.packageName
-  });
-}
-function findCaseInsensitiveChildDirectory2(input) {
-  if (!existsSync5(input.parent) || !isReadableDirectory4(input.parent)) {
-    return;
-  }
-  let entries;
-  try {
-    entries = readdirSync5(input.parent, { withFileTypes: true });
-  } catch {
-    return;
-  }
-  const normalizedName = input.childName.toLowerCase();
-  for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name.toLowerCase() !== normalizedName) {
-      continue;
-    }
-    const candidate = path5.resolve(input.parent, entry.name);
-    if (isPathInside3(input.parent, candidate) && isReadableDirectory4(candidate)) {
-      return candidate;
-    }
-  }
-  return;
-}
-function readPodspecLicense(input) {
-  const podspecPath = path5.resolve(input.projectRoot, "Pods", "Local Podspecs", `${input.packageName}.podspec.json`);
-  if (!existsSync5(podspecPath)) {
-    return ok(undefined);
-  }
-  const text3 = readTextFileWithLimit({
-    filePath: podspecPath,
-    maxBytes: input.maxBytes
-  });
-  if (!text3.ok) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: textFileReadErrorCategory(text3.error),
-      message: text3.error.kind === "too_large" ? "CocoaPods podspec metadata exceeded the maximum supported size." : "Failed to read CocoaPods podspec metadata.",
-      details: {
-        packageId: input.packageId,
-        podspecPath,
-        ...textFileReadErrorDetails(text3.error)
-      }
-    }));
-  }
-  try {
-    return ok(podspecLicenseFromJson(JSON.parse(text3.value)));
-  } catch (cause) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: "unsupported_input",
-      message: "CocoaPods podspec metadata was not valid JSON.",
-      details: {
-        packageId: input.packageId,
-        podspecPath,
-        cause: cause instanceof Error ? cause.message : String(cause)
-      }
-    }));
-  }
-}
-function podspecLicenseFromJson(parsed) {
-  if (!isRecord2(parsed)) {
-    return;
-  }
-  if (typeof parsed.license === "string" && parsed.license.trim() !== "") {
-    return parsed.license.trim();
-  }
-  if (isRecord2(parsed.license)) {
-    const type = parsed.license.type;
-    if (typeof type === "string" && type.trim() !== "") {
-      return type.trim();
-    }
-  }
-  return;
-}
-function readCocoapodsEvidenceFiles(input) {
-  const files = [];
-  for (const candidate of evidenceFileCandidates3(input.packageDir)) {
-    const kind = classifyEvidenceFile(candidate.relativePath);
-    if (!kind) {
-      continue;
-    }
-    if (files.length >= COCOAPODS_LICENSE_FILE_LIMIT) {
-      input.warnings.push(`CocoaPods package evidence file limit reached at ${COCOAPODS_LICENSE_FILE_LIMIT} files.`);
-      break;
-    }
-    const text3 = readTextFileWithLimit({
-      filePath: candidate.absolutePath,
-      maxBytes: input.maxBytes
-    });
-    if (!text3.ok) {
-      input.warnings.push(`Skipped CocoaPods evidence file ${candidate.relativePath}: ${evidenceReadError3(text3.error)}.`);
-      continue;
-    }
-    files.push({
-      path: candidate.relativePath,
-      kind,
-      text: text3.value
-    });
-  }
-  return files.sort((left, right) => left.path.localeCompare(right.path));
-}
-function evidenceFileCandidates3(dir) {
-  try {
-    return readdirSync5(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path5.join(dir, entry.name),
-      relativePath: entry.name
-    }));
-  } catch {
-    return [];
-  }
-}
-function evidenceReadError3(error) {
-  switch (error.kind) {
-    case "too_large":
-      return `file exceeded ${error.maxBytes} bytes`;
-    case "filesystem":
-      return error.cause;
-  }
-}
-function isReadableDirectory4(pathname) {
-  try {
-    return statSync6(pathname).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function isPathInside3(parent, child) {
-  const relative = path5.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path5.isAbsolute(relative);
-}
-function isRecord2(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// src/evidence/conda-package.ts
-import { existsSync as existsSync6, readdirSync as readdirSync6, statSync as statSync7 } from "node:fs";
-import path6 from "node:path";
-var CONDA_INDEX_MAX_BYTES = 1024 * 1024;
-var CONDA_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-var CONDA_EVIDENCE_FILE_LIMIT = 50;
-function collectCondaPackageEvidence(input) {
-  const packageDir = findCondaPackageDir(omitUndefined({
-    packageName: input.packageName,
-    version: input.version,
-    resolved: input.resolved,
-    projectRoot: input.projectRoot
-  }));
-  if (!packageDir) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: ["Conda package source was not found in local conda package cache directories."]
-    });
-  }
-  const packageIndex = readCondaPackageIndex({
-    indexPath: path6.join(packageDir, "info", "index.json"),
-    packageId: input.packageId,
-    maxBytes: input.indexMaxBytes ?? CONDA_INDEX_MAX_BYTES
-  });
-  if (!packageIndex.ok) {
-    return err(packageIndex.error);
-  }
-  const warnings = [];
-  const files = readCondaEvidenceFiles({
-    packageDir,
-    maxBytes: input.evidenceFileMaxBytes ?? CONDA_EVIDENCE_FILE_MAX_BYTES,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Conda package source.");
-  }
-  const metadataLicense = readCondaMetadataLicense(packageIndex.value);
-  if (!metadataLicense) {
-    warnings.push("Conda info/index.json did not declare license metadata.");
-  }
-  return ok({
-    packageId: input.packageId,
-    ...metadataLicense ? { metadataLicense, metadataSource: "info/index.json" } : {},
-    files,
-    source: "local",
-    warnings
-  });
-}
-function findCondaPackageDir(input) {
-  const exactDirName = condaPackageDirNameFromUrl(input.resolved);
-  for (const cacheRoot of condaPackageCacheRoots(input.projectRoot)) {
-    if (exactDirName) {
-      const exactCandidate = path6.join(cacheRoot, exactDirName);
-      if (isReadableDirectory5(exactCandidate)) {
-        return exactCandidate;
-      }
-    }
-    const prefix = `${input.packageName}-${input.version}-`;
-    for (const entry of readDirectoryEntries2(cacheRoot)) {
-      if (entry.isDirectory() && entry.name.startsWith(prefix) && isReadableDirectory5(path6.join(cacheRoot, entry.name))) {
-        return path6.join(cacheRoot, entry.name);
-      }
-    }
-  }
-  return;
-}
-function condaPackageCacheRoots(projectRoot) {
-  const roots = [
-    path6.join(projectRoot, ".conda", "pkgs"),
-    path6.join(projectRoot, "pkgs")
-  ];
-  const explicitCacheRoots = process.env.CONDA_PKGS_DIRS;
-  if (explicitCacheRoots) {
-    roots.push(...explicitCacheRoots.split(path6.delimiter));
-  }
-  const condaPrefix = process.env.CONDA_PREFIX;
-  if (condaPrefix) {
-    roots.push(path6.resolve(condaPrefix, "..", "pkgs"));
-  }
-  const home = process.env.USERPROFILE ?? process.env.HOME;
-  if (home) {
-    roots.push(path6.join(home, ".conda", "pkgs"));
-    roots.push(path6.join(home, "miniconda3", "pkgs"));
-    roots.push(path6.join(home, "anaconda3", "pkgs"));
-    roots.push(path6.join(home, "mambaforge", "pkgs"));
-    roots.push(path6.join(home, "miniforge3", "pkgs"));
-  }
-  const localAppData = process.env.LOCALAPPDATA;
-  if (localAppData) {
-    roots.push(path6.join(localAppData, "conda", "conda", "pkgs"));
-  }
-  return [...new Set(roots.filter((root) => root.trim() !== "").map((root) => path6.resolve(root)))].filter(isReadableDirectory5);
-}
-function condaPackageDirNameFromUrl(value) {
-  if (!value) {
-    return;
-  }
-  let basename = value;
-  try {
-    basename = path6.posix.basename(new URL(value).pathname);
-  } catch {
-    basename = path6.basename(value);
-  }
-  const withoutExtension = basename.endsWith(".tar.bz2") ? basename.slice(0, -".tar.bz2".length) : basename.endsWith(".conda") ? basename.slice(0, -".conda".length) : undefined;
-  return withoutExtension && withoutExtension.includes("-") ? withoutExtension : undefined;
-}
-function readCondaPackageIndex(input) {
-  if (!existsSync6(input.indexPath)) {
-    return ok(undefined);
-  }
-  const text3 = readTextFileWithLimit({
-    filePath: input.indexPath,
-    maxBytes: input.maxBytes
-  });
-  if (!text3.ok) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: textFileReadErrorCategory(text3.error),
-      message: condaIndexReadFailedMessage(text3.error),
-      details: {
-        packageId: input.packageId,
-        indexPath: input.indexPath,
-        ...textFileReadErrorDetails(text3.error)
-      }
-    }));
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(text3.value);
-  } catch {
-    return ok(undefined);
-  }
-  if (!isRecord3(parsed)) {
-    return ok(undefined);
-  }
-  return ok(omitUndefined({
-    name: readString(parsed.name),
-    version: readString(parsed.version),
-    license: readString(parsed.license),
-    licenseFamily: readString(parsed.license_family)
-  }));
-}
-function readCondaEvidenceFiles(input) {
-  const files = [];
-  for (const candidate of evidenceFileCandidates4(input.packageDir)) {
-    const kind = classifyEvidenceFile(candidate.relativePath);
-    if (!kind) {
-      continue;
-    }
-    if (files.length >= CONDA_EVIDENCE_FILE_LIMIT) {
-      input.warnings.push(`Conda package evidence file limit reached at ${CONDA_EVIDENCE_FILE_LIMIT} files.`);
-      break;
-    }
-    const text3 = readTextFileWithLimit({
-      filePath: candidate.absolutePath,
-      maxBytes: input.maxBytes
-    });
-    if (!text3.ok) {
-      input.warnings.push(`Skipped Conda evidence file ${candidate.relativePath}: ${condaEvidenceReadError(text3.error)}.`);
-      continue;
-    }
-    files.push({
-      path: candidate.relativePath,
-      kind,
-      text: text3.value
-    });
-  }
-  return files;
-}
-function evidenceFileCandidates4(packageDir) {
-  const candidates = [];
-  const roots = [packageDir, path6.join(packageDir, "info"), path6.join(packageDir, "info", "licenses")];
-  for (const root of roots) {
-    for (const entry of readDirectoryEntries2(root)) {
-      if (!entry.isFile()) {
-        continue;
-      }
-      const absolutePath = path6.join(root, entry.name);
-      candidates.push({
-        absolutePath,
-        relativePath: path6.relative(packageDir, absolutePath).replace(/\\/g, "/")
-      });
-    }
-  }
-  return candidates.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
-}
-function readCondaMetadataLicense(index) {
-  return index?.license ?? index?.licenseFamily;
-}
-function condaIndexReadFailedMessage(error) {
-  return error.kind === "too_large" ? "Conda info/index.json metadata exceeded the maximum supported size." : "Failed to read Conda info/index.json metadata.";
-}
-function condaEvidenceReadError(error) {
-  switch (error.kind) {
-    case "too_large":
-      return `file exceeded ${error.maxBytes} bytes`;
-    case "filesystem":
-      return error.cause;
-  }
-}
-function readDirectoryEntries2(pathname) {
-  try {
-    return readdirSync6(pathname, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-}
-function isReadableDirectory5(pathname) {
-  try {
-    return statSync7(pathname).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function readString(value) {
-  return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
-}
-function isRecord3(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// src/evidence/conan-package.ts
-import { existsSync as existsSync7, readdirSync as readdirSync7, statSync as statSync8 } from "node:fs";
-import os2 from "node:os";
-import path7 from "node:path";
-var CONANFILE_PY_MAX_BYTES = 1024 * 1024;
-var CONAN_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-var CONAN_LICENSE_FILE_LIMIT = 50;
-var CONAN_SOURCE_ROOT_LIMIT = 20;
-function collectConanPackageEvidence(input) {
-  const sourceRoots = findConanPackageSourceRoots({
-    packageName: input.packageName,
-    version: input.version,
-    projectRoot: input.projectRoot
-  });
-  if (sourceRoots.length === 0) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: ["Conan package source was not found in local Conan cache directories."]
-    });
-  }
-  const conanfileLicenses = readFirstConanfileLicenses({
-    packageId: input.packageId,
-    sourceRoots,
-    maxBytes: input.conanfileMaxBytes ?? CONANFILE_PY_MAX_BYTES
-  });
-  if (!conanfileLicenses.ok) {
-    return err(conanfileLicenses.error);
-  }
-  const warnings = [];
-  const files = readConanEvidenceFiles({
-    sourceRoots,
-    maxBytes: input.evidenceFileMaxBytes ?? CONAN_EVIDENCE_FILE_MAX_BYTES,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Conan package source.");
-  }
-  if (!conanfileLicenses.value || conanfileLicenses.value.length === 0) {
-    warnings.push("Conan package conanfile.py did not declare license metadata.");
-  }
-  return ok({
-    packageId: input.packageId,
-    ...conanfileLicenses.value && conanfileLicenses.value.length === 1 ? {
-      metadataLicense: conanfileLicenses.value[0],
-      metadataSource: "conanfile.py"
-    } : {},
-    ...conanfileLicenses.value && conanfileLicenses.value.length > 1 ? {
-      metadataLicenses: conanfileLicenses.value,
-      metadataSource: "conanfile.py"
-    } : {},
-    files,
-    source: "local",
-    warnings
-  });
-}
-function findConanPackageSourceRoots(input) {
-  const roots = [];
-  for (const cacheRoot of conanDataRoots(input.projectRoot)) {
-    for (const sourceRoot of sourceRootsForConanDataRoot({
-      cacheRoot,
-      packageName: input.packageName,
-      version: input.version
-    })) {
-      if (!roots.includes(sourceRoot)) {
-        roots.push(sourceRoot);
-      }
-      if (roots.length >= CONAN_SOURCE_ROOT_LIMIT) {
-        return roots;
-      }
-    }
-  }
-  return roots;
-}
-function conanDataRoots(projectRoot) {
-  const candidates = [
-    path7.resolve(projectRoot, ".conan", "data"),
-    path7.resolve(os2.homedir(), ".conan", "data")
-  ];
-  return [...new Set(candidates)].filter((candidate) => isReadableDirectory6(candidate));
-}
-function sourceRootsForConanDataRoot(input) {
-  const packageName = conanCachePackageName(input.packageName);
-  if (!packageName) {
-    return [];
-  }
-  const packageDir = path7.resolve(input.cacheRoot, packageName, input.version);
-  if (!isPathInside4(input.cacheRoot, packageDir) || !isReadableDirectory6(packageDir)) {
-    return [];
-  }
-  const roots = [];
-  for (const userDir of childDirectories(packageDir)) {
-    for (const channelDir of childDirectories(userDir)) {
-      for (const childName of ["export", "source"]) {
-        const sourceRoot = path7.resolve(channelDir, childName);
-        if (isPathInside4(input.cacheRoot, sourceRoot) && isReadableDirectory6(sourceRoot)) {
-          roots.push(sourceRoot);
-        }
-      }
-    }
-  }
-  return roots.sort();
-}
-function conanCachePackageName(packageName) {
-  const normalized = packageName.trim().replace(/\\/g, "/").replace(/\/+$/g, "");
-  const slashIndex = normalized.lastIndexOf("/");
-  const basename = slashIndex >= 0 ? normalized.slice(slashIndex + 1) : normalized;
-  return /^[A-Za-z0-9_.+~-]+$/.test(basename) ? basename : undefined;
-}
-function childDirectories(parent) {
-  try {
-    return readdirSync7(parent, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path7.resolve(parent, entry.name)).filter((candidate) => isPathInside4(parent, candidate) && isReadableDirectory6(candidate)).sort();
-  } catch {
-    return [];
-  }
-}
-function readFirstConanfileLicenses(input) {
-  for (const sourceRoot of input.sourceRoots) {
-    const conanfilePath = path7.join(sourceRoot, "conanfile.py");
-    if (!existsSync7(conanfilePath)) {
-      continue;
-    }
-    const text3 = readTextFileWithLimit({
-      filePath: conanfilePath,
-      maxBytes: input.maxBytes
-    });
-    if (!text3.ok) {
-      return err(createError({
-        code: "PACKAGE_EVIDENCE_READ_FAILED",
-        category: textFileReadErrorCategory(text3.error),
-        message: text3.error.kind === "too_large" ? "Conan conanfile.py metadata exceeded the maximum supported size." : "Failed to read Conan conanfile.py metadata.",
-        details: {
-          packageId: input.packageId,
-          conanfilePath,
-          ...textFileReadErrorDetails(text3.error)
-        }
-      }));
-    }
-    const licenses = parseConanfilePyLicenses(text3.value);
-    if (licenses && licenses.length > 0) {
-      return ok(licenses);
-    }
-  }
-  return ok(undefined);
-}
-function parseConanfilePyLicenses(text3) {
-  const singleMatch = text3.match(/^\s*license\s*=\s*["']([^"']+)["']/m);
-  if (singleMatch?.[1]) {
-    return [singleMatch[1].trim()].filter((value) => value !== "");
-  }
-  const listMatch = text3.match(/^\s*license\s*=\s*[\[(]([\s\S]*?)[\])]/m);
-  if (!listMatch?.[1]) {
-    return;
-  }
-  const values = [...listMatch[1].matchAll(/["']([^"']+)["']/g)].map((match) => match[1]?.trim()).filter((item) => item !== undefined && item !== "");
-  return values.length > 0 ? values : undefined;
-}
-function readConanEvidenceFiles(input) {
-  const files = new Map;
-  for (const sourceRoot of input.sourceRoots) {
-    for (const candidate of evidenceFileCandidates5(sourceRoot)) {
-      const kind = classifyEvidenceFile(candidate.relativePath);
-      if (!kind || files.has(candidate.relativePath)) {
-        continue;
-      }
-      if (files.size >= CONAN_LICENSE_FILE_LIMIT) {
-        input.warnings.push(`Conan package evidence file limit reached at ${CONAN_LICENSE_FILE_LIMIT} files.`);
-        return [...files.values()].sort((left, right) => left.path.localeCompare(right.path));
-      }
-      const text3 = readTextFileWithLimit({
-        filePath: candidate.absolutePath,
-        maxBytes: input.maxBytes
-      });
-      if (!text3.ok) {
-        input.warnings.push(`Skipped Conan evidence file ${candidate.relativePath}: ${evidenceReadError4(text3.error)}.`);
-        continue;
-      }
-      files.set(candidate.relativePath, {
-        path: candidate.relativePath,
-        kind,
-        text: text3.value
-      });
-    }
-  }
-  return [...files.values()].sort((left, right) => left.path.localeCompare(right.path));
-}
-function evidenceFileCandidates5(dir) {
-  try {
-    return readdirSync7(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path7.join(dir, entry.name),
-      relativePath: entry.name
-    }));
-  } catch {
-    return [];
-  }
-}
-function evidenceReadError4(error) {
-  switch (error.kind) {
-    case "too_large":
-      return `file exceeded ${error.maxBytes} bytes`;
-    case "filesystem":
-      return error.cause;
-  }
-}
-function isReadableDirectory6(pathname) {
-  try {
-    return statSync8(pathname).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function isPathInside4(parent, child) {
-  const relative = path7.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path7.isAbsolute(relative);
-}
-
-// src/evidence/composer-package.ts
-import { existsSync as existsSync8, readdirSync as readdirSync8, statSync as statSync9 } from "node:fs";
-import path8 from "node:path";
-var COMPOSER_JSON_MAX_BYTES = 1024 * 1024;
-var COMPOSER_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-function collectComposerPackageEvidence(input) {
-  const vendorRoot = path8.resolve(input.projectRoot, "vendor");
-  const packageDir = composerPackageDir({
-    vendorRoot,
-    packageName: input.packageName
-  });
-  if (!existsSync8(packageDir) || !isReadableDirectory7(packageDir)) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: ["Composer package source was not found in the local vendor directory."]
-    });
-  }
-  const packageJson = readComposerPackageJson({
-    packageId: input.packageId,
-    composerJsonPath: path8.join(packageDir, "composer.json"),
-    maxBytes: input.composerJsonMaxBytes ?? COMPOSER_JSON_MAX_BYTES
-  });
-  if (!packageJson.ok) {
-    return err(packageJson.error);
-  }
-  const warnings = [];
-  const files = readComposerEvidenceFiles({
-    packageDir,
-    maxBytes: input.evidenceFileMaxBytes ?? COMPOSER_EVIDENCE_FILE_MAX_BYTES,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Composer package source.");
-  }
-  if (packageJson.value.license === undefined) {
-    warnings.push("Composer package composer.json did not declare license metadata.");
-  }
-  return ok({
-    packageId: input.packageId,
-    ...typeof packageJson.value.license === "string" ? {
-      metadataLicense: packageJson.value.license,
-      metadataSource: "composer.json"
-    } : {},
-    ...Array.isArray(packageJson.value.license) ? {
-      metadataLicenses: packageJson.value.license,
-      metadataSource: "composer.json"
-    } : {},
-    files,
-    source: "local",
-    warnings
-  });
-}
-function composerPackageDir(input) {
-  const segments = input.packageName.split("/");
-  if (segments.length !== 2 || segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
-    return path8.join(input.vendorRoot, ".ohrisk-invalid-composer-package");
-  }
-  const packageDir = path8.resolve(input.vendorRoot, ...segments);
-  return isPathInside5(input.vendorRoot, packageDir) ? packageDir : path8.join(input.vendorRoot, ".ohrisk-invalid-composer-package");
-}
-function readComposerPackageJson(input) {
-  if (!existsSync8(input.composerJsonPath)) {
-    return ok({});
-  }
-  const text3 = readTextFileWithLimit({
-    filePath: input.composerJsonPath,
-    maxBytes: input.maxBytes
-  });
-  if (!text3.ok) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: textFileReadErrorCategory(text3.error),
-      message: text3.error.kind === "too_large" ? "Composer package metadata exceeded the maximum supported size." : "Failed to read Composer package metadata.",
-      details: {
-        packageId: input.packageId,
-        composerJsonPath: input.composerJsonPath,
-        ...textFileReadErrorDetails(text3.error)
-      }
-    }));
-  }
-  try {
-    const parsed = JSON.parse(text3.value);
-    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) && "license" in parsed) {
-      return ok({ license: parsed.license });
-    }
-    return ok({});
-  } catch (cause) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: "unsupported_input",
-      message: "Composer package metadata was not valid JSON.",
-      details: {
-        packageId: input.packageId,
-        composerJsonPath: input.composerJsonPath,
-        cause: cause instanceof Error ? cause.message : String(cause)
-      }
-    }));
-  }
-}
-function readComposerEvidenceFiles(input) {
-  const files = [];
-  for (const candidate of evidenceFileCandidates6(input.packageDir)) {
-    const kind = classifyEvidenceFile(candidate.relativePath);
-    if (!kind) {
-      continue;
-    }
-    const text3 = readTextFileWithLimit({
-      filePath: candidate.absolutePath,
-      maxBytes: input.maxBytes
-    });
-    if (!text3.ok) {
-      input.warnings.push(evidenceFileReadWarning2(candidate.relativePath, text3.error));
-      continue;
-    }
-    files.push({
-      path: candidate.relativePath,
-      kind,
-      text: text3.value
-    });
-  }
-  return files.sort((left, right) => left.path.localeCompare(right.path));
-}
-function evidenceFileCandidates6(dir) {
-  if (!existsSync8(dir) || !isReadableDirectory7(dir)) {
-    return [];
-  }
-  try {
-    return readdirSync8(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path8.join(dir, entry.name),
-      relativePath: entry.name
-    }));
-  } catch {
-    return [];
-  }
-}
-function isReadableDirectory7(dir) {
-  try {
-    return statSync9(dir).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function isPathInside5(parent, child) {
-  const relative = path8.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path8.isAbsolute(relative);
-}
-function evidenceFileReadWarning2(fileName, error) {
-  return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
-}
-
-// src/evidence/cpan-package.ts
-import { existsSync as existsSync9, readFileSync as readFileSync2, statSync as statSync10 } from "node:fs";
-import path9 from "node:path";
-import { gunzipSync } from "node:zlib";
-
-// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/index.js
-var composer = require_composer();
-var Document = require_Document();
-var Schema = require_Schema();
-var errors = require_errors();
-var Alias = require_Alias();
-var identity = require_identity();
-var Pair = require_Pair();
-var Scalar = require_Scalar();
-var YAMLMap = require_YAMLMap();
-var YAMLSeq = require_YAMLSeq();
-var cst = require_cst();
-var lexer = require_lexer();
-var lineCounter = require_line_counter();
-var parser = require_parser();
-var publicApi = require_public_api();
-var visit = require_visit();
-var $Composer = composer.Composer;
-var $Document = Document.Document;
-var $Schema = Schema.Schema;
-var $YAMLError = errors.YAMLError;
-var $YAMLParseError = errors.YAMLParseError;
-var $YAMLWarning = errors.YAMLWarning;
-var $Alias = Alias.Alias;
-var $isAlias = identity.isAlias;
-var $isCollection = identity.isCollection;
-var $isDocument = identity.isDocument;
-var $isMap = identity.isMap;
-var $isNode = identity.isNode;
-var $isPair = identity.isPair;
-var $isScalar = identity.isScalar;
-var $isSeq = identity.isSeq;
-var $Pair = Pair.Pair;
-var $Scalar = Scalar.Scalar;
-var $YAMLMap = YAMLMap.YAMLMap;
-var $YAMLSeq = YAMLSeq.YAMLSeq;
-var $Lexer = lexer.Lexer;
-var $LineCounter = lineCounter.LineCounter;
-var $Parser = parser.Parser;
-var $parse = publicApi.parse;
-var $parseAllDocuments = publicApi.parseAllDocuments;
-var $parseDocument = publicApi.parseDocument;
-var $stringify = publicApi.stringify;
-var $visit = visit.visit;
-var $visitAsync = visit.visitAsync;
-
-// src/evidence/cpan-package.ts
-var CPAN_ARCHIVE_MAX_BYTES = 50 * 1024 * 1024;
-var CPAN_ARCHIVE_UNPACKED_MAX_BYTES = 100 * 1024 * 1024;
-var CPAN_ARCHIVE_MAX_ENTRIES = 50000;
-function collectCpanPackageEvidence(input) {
-  const archivePath = cpanArchivePath(omitUndefined({
-    projectRoot: input.projectRoot,
-    pathname: input.resolved
-  }));
-  if (!archivePath || !existsSync9(archivePath)) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: ["CPAN distribution archive was not found in the local Carton cache."]
-    });
-  }
-  const metadata = readCpanArchiveMetadata({
-    packageId: input.packageId,
-    archivePath,
-    maxBytes: input.archiveMaxBytes ?? CPAN_ARCHIVE_MAX_BYTES
-  });
-  if (!metadata.ok) {
-    return err(metadata.error);
-  }
-  if (metadata.value.name && metadata.value.version && (metadata.value.name !== input.packageName || metadata.value.version !== input.version)) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: ["CPAN distribution archive metadata did not match the locked distribution identity."]
-    });
-  }
-  return ok({
-    packageId: input.packageId,
-    ...metadata.value.licenses.length === 1 ? {
-      metadataLicense: metadata.value.licenses[0],
-      metadataSource: "CPAN META"
-    } : {},
-    ...metadata.value.licenses.length > 1 ? {
-      metadataLicenses: metadata.value.licenses,
-      metadataSource: "CPAN META"
-    } : {},
-    files: [],
-    source: "local",
-    warnings: metadata.value.licenses.length > 0 ? [] : ["CPAN distribution archive metadata did not declare license metadata."]
-  });
-}
-function cpanArchivePath(input) {
-  if (!input.pathname) {
-    return;
-  }
-  const segments = input.pathname.split(/[\\/]+/).filter((segment) => segment !== "");
-  if (segments.length === 0 || !segments.every((segment) => /^[A-Za-z0-9_.-]+$/.test(segment)) || !/\.(?:tar\.gz|tgz)$/i.test(segments[segments.length - 1] ?? "")) {
-    return;
-  }
-  const cacheRoot = path9.resolve(input.projectRoot, "local", "cache", "authors", "id");
-  const candidate = path9.resolve(cacheRoot, ...segments);
-  return isPathInside6(cacheRoot, candidate) ? candidate : undefined;
-}
-function readCpanArchiveMetadata(input) {
-  const archive = readArchiveWithLimit(input);
-  if (!archive.ok) {
-    return err(archive.error);
-  }
-  try {
-    const unpacked = gunzipSync(archive.value, {
-      maxOutputLength: CPAN_ARCHIVE_UNPACKED_MAX_BYTES
-    });
-    const entries = parseTarEntries({
-      tarball: unpacked,
-      maxEntries: CPAN_ARCHIVE_MAX_ENTRIES
-    });
-    return ok(readCpanMeta(entries));
-  } catch (cause) {
-    return err(createError({
-      code: "TARBALL_PARSE_FAILED",
-      category: "unsupported_input",
-      message: "Failed to parse CPAN distribution archive metadata.",
-      details: {
-        packageId: input.packageId,
-        archivePath: input.archivePath,
-        cause: cause instanceof Error ? cause.message : String(cause)
-      }
-    }));
-  }
-}
-function readArchiveWithLimit(input) {
-  try {
-    const stats = statSync10(input.archivePath);
-    if (stats.size > input.maxBytes) {
-      return err(createError({
-        code: "PACKAGE_EVIDENCE_READ_FAILED",
-        category: "unsupported_input",
-        message: "CPAN distribution archive exceeded the maximum supported size.",
-        details: {
-          packageId: input.packageId,
-          archivePath: input.archivePath,
-          maxBytes: input.maxBytes,
-          observedBytes: stats.size
-        }
-      }));
-    }
-    return ok(readFileSync2(input.archivePath));
-  } catch (cause) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: "filesystem",
-      message: "Failed to read CPAN distribution archive.",
-      details: {
-        packageId: input.packageId,
-        archivePath: input.archivePath,
-        cause: cause instanceof Error ? cause.message : String(cause)
-      }
-    }));
-  }
-}
-function readCpanMeta(entries) {
-  const metaJson = findMetaEntry(entries, "META.json");
-  if (metaJson) {
-    return parseCpanMetaObject(JSON.parse(metaJson.data.toString("utf8")));
-  }
-  const metaYml = findMetaEntry(entries, "META.yml");
-  if (metaYml) {
-    return parseCpanMetaObject($parse(metaYml.data.toString("utf8")));
-  }
-  return { licenses: [] };
-}
-function findMetaEntry(entries, fileName) {
-  return entries.find((entry) => entry.path === fileName || entry.path.endsWith(`/${fileName}`));
-}
-function parseCpanMetaObject(value) {
-  if (!isRecord4(value)) {
-    return { licenses: [] };
-  }
-  return omitUndefined({
-    name: readString2(value.name),
-    version: readString2(value.version),
-    licenses: readCpanLicenses(value.license)
-  });
-}
-function readCpanLicenses(value) {
-  const values = Array.isArray(value) ? value : [value];
-  return values.map((item) => typeof item === "string" ? normalizeCpanLicenseId(item) : undefined).filter((item) => item !== undefined && item !== "");
-}
-function normalizeCpanLicenseId(value) {
-  const normalized = value.trim().toLowerCase();
-  const known = new Map([
-    ["mit", "MIT"],
-    ["apache_2_0", "Apache-2.0"],
-    ["artistic_2", "Artistic-2.0"],
-    ["agpl_3", "AGPL-3.0-only"],
-    ["gpl_2", "GPL-2.0-only"],
-    ["gpl_3", "GPL-3.0-only"],
-    ["lgpl_2_1", "LGPL-2.1-only"],
-    ["lgpl_3_0", "LGPL-3.0-only"],
-    ["bsd", "BSD-2-Clause"],
-    ["open_source", "NOASSERTION"],
-    ["unrestricted", "NOASSERTION"],
-    ["unknown", "NOASSERTION"]
-  ]);
-  return known.get(normalized) ?? value.trim();
-}
-function parseTarEntries(input) {
-  const entries = [];
-  let offset = 0;
-  let observedEntries = 0;
-  while (offset + 512 <= input.tarball.length) {
-    const header = input.tarball.subarray(offset, offset + 512);
-    if (isZeroBlock(header)) {
-      break;
-    }
-    observedEntries += 1;
-    if (observedEntries > input.maxEntries) {
-      throw new Error(`CPAN distribution archive exceeded the maximum entry count (${input.maxEntries}).`);
-    }
-    const name = readNullTerminated(header, 0, 100);
-    const prefix = readNullTerminated(header, 345, 155);
-    const type = readNullTerminated(header, 156, 1) || "0";
-    const fullPath = prefix ? `${prefix}/${name}` : name;
-    const size = parseOctal(readNullTerminated(header, 124, 12));
-    const dataStart = offset + 512;
-    const dataEnd = dataStart + size;
-    if (!Number.isSafeInteger(dataEnd) || dataEnd < dataStart || dataEnd > input.tarball.length) {
-      throw new Error(`Tar entry ${fullPath || "(unnamed)"} extends beyond archive data.`);
-    }
-    if (type === "0" || type === "") {
-      entries.push({
-        path: fullPath,
-        data: input.tarball.subarray(dataStart, dataEnd)
-      });
-    }
-    offset = dataStart + roundUpToBlock(size);
-  }
-  return entries;
-}
-function readString2(value) {
-  return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
-}
-function isRecord4(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function isPathInside6(root, candidate) {
-  const relative = path9.relative(root, candidate);
-  return relative === "" || !relative.startsWith("..") && !path9.isAbsolute(relative);
-}
-function isZeroBlock(buffer) {
-  return buffer.every((byte) => byte === 0);
-}
-function readNullTerminated(buffer, start, length) {
-  const slice = buffer.subarray(start, start + length);
-  const end = slice.indexOf(0);
-  return slice.subarray(0, end === -1 ? slice.length : end).toString("utf8").trim();
-}
-function parseOctal(value) {
-  const trimmed = value.trim();
-  if (!/^[0-7]+$/.test(trimmed)) {
-    throw new Error(`Invalid tar octal value: ${value}`);
-  }
-  return Number.parseInt(trimmed, 8);
-}
-function roundUpToBlock(size) {
-  return Math.ceil(size / 512) * 512;
-}
-
-// src/evidence/go-module.ts
-import { existsSync as existsSync10, readdirSync as readdirSync9, realpathSync, statSync as statSync11 } from "node:fs";
-import path10 from "node:path";
-var GO_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-var GO_LICENSE_FILE_LIMIT = 50;
-function collectGoModuleEvidence(input) {
-  const replacement = parseGoReplacementResolved(input.resolved);
-  const warnings = replacement.warnings;
-  const evidenceModulePath = replacement.modulePath ?? input.modulePath;
-  const evidenceVersion = replacement.version ?? input.version;
-  const moduleDir = findGoModuleDir(omitUndefined({
-    projectRoot: input.projectRoot,
-    modulePath: evidenceModulePath,
-    version: evidenceVersion,
-    localPath: replacement.localPath
-  }));
-  if (!moduleDir) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: [
-        ...warnings,
-        replacement.localPath ? "Go local replacement source was not found or was outside the project root." : "Go module source was not found in a local Go module cache."
-      ]
-    });
-  }
-  const files = readGoEvidenceFiles({
-    moduleDir,
-    maxBytes: input.evidenceFileMaxBytes ?? GO_EVIDENCE_FILE_MAX_BYTES,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Go module source.");
-  }
-  return ok({
-    packageId: input.packageId,
-    files,
-    source: "local",
-    warnings
-  });
-}
-function findGoModuleDir(input) {
-  if (input.localPath) {
-    return resolveLocalReplacementModuleDir({
-      projectRoot: input.projectRoot,
-      localPath: input.localPath
-    });
-  }
-  const escapedModulePath = encodeGoModuleCachePath(input.modulePath);
-  const relativeModulePath = `${escapedModulePath}@${input.version}`;
-  for (const moduleCacheRoot of goModuleCacheRoots(input.projectRoot)) {
-    const candidate = path10.join(moduleCacheRoot, ...relativeModulePath.split("/"));
-    if (existsSync10(candidate) && isReadableDirectory8(candidate)) {
-      return candidate;
-    }
-  }
-  const vendorCandidate = path10.join(input.projectRoot, "vendor", ...input.modulePath.split("/"));
-  if (existsSync10(vendorCandidate) && isReadableDirectory8(vendorCandidate)) {
-    return vendorCandidate;
-  }
-  return;
-}
-function parseGoReplacementResolved(resolved) {
-  if (!resolved) {
-    return { warnings: [] };
-  }
-  if (resolved.startsWith("go-module:")) {
-    const specifier = resolved.slice("go-module:".length);
-    const versionSeparator = specifier.lastIndexOf("@");
-    if (versionSeparator <= 0 || versionSeparator === specifier.length - 1) {
-      return {
-        warnings: [`Go module replacement specifier was malformed: ${resolved}`]
-      };
-    }
-    const modulePath = specifier.slice(0, versionSeparator);
-    const version = specifier.slice(versionSeparator + 1);
-    return {
-      modulePath,
-      version,
-      warnings: [`Go replacement evidence was read from ${modulePath}@${version}.`]
-    };
-  }
-  return {
-    localPath: resolved,
-    warnings: [`Go module uses local replacement path: ${resolved}.`]
-  };
-}
-function resolveLocalReplacementModuleDir(input) {
-  const candidate = path10.resolve(input.projectRoot, input.localPath);
-  const projectRoot = resolveRealPathIfPossible(input.projectRoot);
-  const moduleDir = resolveRealPathIfPossible(candidate);
-  if (!isPathInsideOrEqual(moduleDir, projectRoot)) {
-    return;
-  }
-  if (!existsSync10(moduleDir) || !isReadableDirectory8(moduleDir)) {
-    return;
-  }
-  return moduleDir;
-}
-function goModuleCacheRoots(projectRoot) {
-  const roots = [
-    path10.join(projectRoot, "pkg", "mod")
-  ];
-  const goModCache = process.env.GOMODCACHE;
-  if (goModCache) {
-    roots.push(goModCache);
-  }
-  for (const goPathRoot of goPathRoots()) {
-    roots.push(path10.join(goPathRoot, "pkg", "mod"));
-  }
-  return [...new Set(roots.map((root) => path10.resolve(root)))];
-}
-function goPathRoots() {
-  const goPath = process.env.GOPATH;
-  if (goPath) {
-    return goPath.split(path10.delimiter).filter((entry) => entry.trim() !== "");
-  }
-  const home = process.env.USERPROFILE ?? process.env.HOME;
-  return home ? [path10.join(home, "go")] : [];
-}
-function readGoEvidenceFiles(input) {
-  const files = [];
-  for (const candidate of evidenceFileCandidates7(input.moduleDir).slice(0, GO_LICENSE_FILE_LIMIT)) {
-    const kind = classifyEvidenceFile(candidate.relativePath);
-    if (!kind) {
-      continue;
-    }
-    const text3 = readTextFileWithLimit({
-      filePath: candidate.absolutePath,
-      maxBytes: input.maxBytes
-    });
-    if (!text3.ok) {
-      input.warnings.push(evidenceFileReadWarning3(candidate.relativePath, text3.error));
-      continue;
-    }
-    files.push({
-      path: candidate.relativePath,
-      kind,
-      text: text3.value
-    });
-  }
-  return files.sort((left, right) => left.path.localeCompare(right.path));
-}
-function evidenceFileCandidates7(dir) {
-  if (!existsSync10(dir) || !isReadableDirectory8(dir)) {
-    return [];
-  }
-  try {
-    return readdirSync9(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path10.join(dir, entry.name),
-      relativePath: entry.name
-    }));
-  } catch {
-    return [];
-  }
-}
-function encodeGoModuleCachePath(modulePath) {
-  return modulePath.replace(/[A-Z]/g, (char) => `!${char.toLowerCase()}`);
-}
-function isReadableDirectory8(dir) {
-  try {
-    return statSync11(dir).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function resolveRealPathIfPossible(targetPath) {
-  try {
-    return realpathSync(targetPath);
-  } catch {
-    return path10.resolve(targetPath);
-  }
-}
-function isPathInsideOrEqual(candidate, root) {
-  const relativePath = path10.relative(root, candidate);
-  return relativePath === "" || relativePath !== ".." && !relativePath.startsWith(`..${path10.sep}`) && !path10.isAbsolute(relativePath);
-}
-function evidenceFileReadWarning3(fileName, error) {
-  return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
-}
-
-// src/evidence/hackage-package.ts
-import { existsSync as existsSync11, readdirSync as readdirSync10, statSync as statSync12 } from "node:fs";
-import path11 from "node:path";
-var HACKAGE_PACKAGE_CONF_MAX_BYTES = 1024 * 1024;
-var HACKAGE_PACKAGE_DB_SEARCH_MAX_DEPTH = 8;
-var HACKAGE_PACKAGE_DB_SEARCH_MAX_DIRS = 4000;
-function collectHackagePackageEvidence(input) {
-  const packageConfPath = findHackagePackageConf({
-    packageName: input.packageName,
-    version: input.version,
-    projectRoot: input.projectRoot,
-    packageConfMaxBytes: input.packageConfMaxBytes ?? HACKAGE_PACKAGE_CONF_MAX_BYTES
-  });
-  if (!packageConfPath.ok) {
-    return err(packageConfPath.error);
-  }
-  if (!packageConfPath.value) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: ["Hackage package metadata was not found in the local Stack package database."]
-    });
-  }
-  const packageConf = readHackagePackageConf({
-    packageId: input.packageId,
-    packageConfPath: packageConfPath.value,
-    maxBytes: input.packageConfMaxBytes ?? HACKAGE_PACKAGE_CONF_MAX_BYTES
-  });
-  if (!packageConf.ok) {
-    return err(packageConf.error);
-  }
-  return ok({
-    packageId: input.packageId,
-    ...packageConf.value.license ? {
-      metadataLicense: packageConf.value.license,
-      metadataSource: "ghc-pkg"
-    } : {},
-    files: [],
-    source: "local",
-    warnings: packageConf.value.license ? [] : ["Hackage package metadata did not declare license metadata."]
-  });
-}
-function findHackagePackageConf(input) {
-  const root = path11.join(input.projectRoot, ".stack-work", "install");
-  if (!isReadableDirectory9(root)) {
-    return ok(undefined);
-  }
-  const queue = [{ dir: root, depth: 0 }];
-  let visited = 0;
-  while (queue.length > 0 && visited < HACKAGE_PACKAGE_DB_SEARCH_MAX_DIRS) {
-    const item = queue.shift();
-    if (!item) {
-      continue;
-    }
-    visited += 1;
-    if (path11.basename(item.dir) === "pkgdb") {
-      const found = findHackagePackageConfInDb(input, item.dir);
-      if (!found.ok || found.value) {
-        return found;
-      }
-    }
-    if (item.depth >= HACKAGE_PACKAGE_DB_SEARCH_MAX_DEPTH) {
-      continue;
-    }
-    for (const child of childDirectories2(item.dir)) {
-      queue.push({ dir: child, depth: item.depth + 1 });
-    }
-  }
-  return ok(undefined);
-}
-function findHackagePackageConfInDb(input, packageDbDir) {
-  const prefix = `${input.packageName}-${input.version}`;
-  for (const entry of readDirectoryEntries3(packageDbDir)) {
-    if (!entry.isFile() || !entry.name.endsWith(".conf") || !entry.name.startsWith(prefix)) {
-      continue;
-    }
-    const packageConfPath = path11.join(packageDbDir, entry.name);
-    const packageConf = readHackagePackageConf({
-      packageId: `${input.packageName}@${input.version}`,
-      packageConfPath,
-      maxBytes: input.packageConfMaxBytes
-    });
-    if (!packageConf.ok) {
-      return err(packageConf.error);
-    }
-    if (packageConf.value.name === input.packageName && packageConf.value.version === input.version) {
-      return ok(packageConfPath);
-    }
-  }
-  return ok(undefined);
-}
-function readHackagePackageConf(input) {
-  const text3 = readTextFileWithLimit({ filePath: input.packageConfPath, maxBytes: input.maxBytes });
-  if (!text3.ok) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: textFileReadErrorCategory(text3.error),
-      message: hackagePackageConfReadFailedMessage(text3.error),
-      details: {
-        packageId: input.packageId,
-        packageConfPath: input.packageConfPath,
-        ...textFileReadErrorDetails(text3.error)
-      }
-    }));
-  }
-  const fields = parsePackageConfFields(text3.value);
-  return ok(omitUndefined({
-    name: fields.get("name"),
-    version: fields.get("version"),
-    license: fields.get("license")
-  }));
-}
-function parsePackageConfFields(text3) {
-  const fields = new Map;
-  let currentKey;
-  for (const line of text3.split(/\r?\n/)) {
-    if (line.trim() === "") {
-      currentKey = undefined;
-      continue;
-    }
-    if (/^\s/.test(line) && currentKey) {
-      fields.set(currentKey, `${fields.get(currentKey) ?? ""} ${line.trim()}`.trim());
-      continue;
-    }
-    const separatorIndex = line.indexOf(":");
-    if (separatorIndex <= 0) {
-      currentKey = undefined;
-      continue;
-    }
-    currentKey = line.slice(0, separatorIndex).trim().toLowerCase();
-    fields.set(currentKey, line.slice(separatorIndex + 1).trim());
-  }
-  return fields;
-}
-function childDirectories2(dir) {
-  return readDirectoryEntries3(dir).filter((entry) => entry.isDirectory()).map((entry) => path11.join(dir, entry.name));
-}
-function readDirectoryEntries3(dir) {
-  try {
-    return readdirSync10(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-}
-function isReadableDirectory9(pathname) {
-  try {
-    return existsSync11(pathname) && statSync12(pathname).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function hackagePackageConfReadFailedMessage(error) {
-  return error.kind === "too_large" ? "Hackage package metadata exceeded the maximum supported size." : "Failed to read Hackage package metadata.";
-}
-
-// src/evidence/helm-chart.ts
-import { existsSync as existsSync12, readdirSync as readdirSync11, statSync as statSync13 } from "node:fs";
-import path12 from "node:path";
-var HELM_CHART_YAML_MAX_BYTES = 1024 * 1024;
-var HELM_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-var HELM_EVIDENCE_FILE_LIMIT = 50;
-function collectHelmChartEvidence(input) {
-  const chartRoot = findLocalChartRoot({
-    chartName: input.chartName,
-    version: input.version,
-    projectRoot: input.projectRoot
-  });
-  if (!chartRoot) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: ["Helm chart source was not found in the local charts/ directory."]
-    });
-  }
-  const warnings = [];
-  const metadataLicense = readChartYamlLicense({
-    chartRoot,
-    maxBytes: input.chartYamlMaxBytes ?? HELM_CHART_YAML_MAX_BYTES,
-    warnings
-  });
-  const files = readEvidenceFiles({
-    chartRoot,
-    maxBytes: input.evidenceFileMaxBytes ?? HELM_EVIDENCE_FILE_MAX_BYTES,
-    limit: HELM_EVIDENCE_FILE_LIMIT,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Helm chart source.");
-  }
-  if (!metadataLicense) {
-    warnings.push("Helm Chart.yaml did not declare license metadata.");
-  }
-  return ok({
-    packageId: input.packageId,
-    ...metadataLicense ? {
-      metadataLicense,
-      metadataSource: "Chart.yaml"
-    } : {},
-    files,
-    source: "local",
-    warnings
-  });
-}
-function findLocalChartRoot(input) {
-  const chartsDir = path12.resolve(input.projectRoot, "charts");
-  const candidates = [
-    path12.join(chartsDir, input.chartName),
-    path12.join(chartsDir, `${input.chartName}-${input.version}`)
-  ];
-  return candidates.find(isReadableDirectory10);
-}
-function readChartYamlLicense(input) {
-  const chartYamlPath = path12.join(input.chartRoot, "Chart.yaml");
-  if (!existsSync12(chartYamlPath)) {
-    input.warnings.push("Local Helm chart source is missing Chart.yaml.");
-    return;
-  }
-  const text3 = readTextFileWithLimit({
-    filePath: chartYamlPath,
-    maxBytes: input.maxBytes
-  });
-  if (!text3.ok) {
-    input.warnings.push(`Skipped Helm Chart.yaml metadata: ${evidenceReadError5(text3.error)}.`);
-    return;
-  }
-  try {
-    const parsed = $parse(text3.value);
-    if (!isRecord5(parsed)) {
-      return;
-    }
-    if (typeof parsed.license === "string" && parsed.license.trim() !== "") {
-      return parsed.license.trim();
-    }
-    const annotations = parsed.annotations;
-    if (!isRecord5(annotations)) {
-      return;
-    }
-    for (const key of ["artifacthub.io/license", "license", "licenses"]) {
-      const value = annotations[key];
-      if (typeof value === "string" && value.trim() !== "") {
-        return value.trim();
-      }
-    }
-  } catch (cause) {
-    input.warnings.push(`Failed to parse local Helm Chart.yaml metadata: ${cause instanceof Error ? cause.message : String(cause)}.`);
-  }
-  return;
-}
-function readEvidenceFiles(input) {
-  const files = new Map;
-  for (const entry of directoryEntries(input.chartRoot)) {
-    if (!entry.isFile()) {
-      continue;
-    }
-    const kind = classifyEvidenceFile(entry.name);
-    if (!kind) {
-      continue;
-    }
-    if (files.size >= input.limit) {
-      input.warnings.push(`Helm chart evidence file limit reached at ${input.limit} files.`);
-      break;
-    }
-    const absolutePath = path12.join(input.chartRoot, entry.name);
-    const text3 = readTextFileWithLimit({
-      filePath: absolutePath,
-      maxBytes: input.maxBytes
-    });
-    if (!text3.ok) {
-      input.warnings.push(`Skipped Helm evidence file ${entry.name}: ${evidenceReadError5(text3.error)}.`);
-      continue;
-    }
-    files.set(entry.name, {
-      path: entry.name,
-      kind,
-      text: text3.value
-    });
-  }
-  return [...files.values()].sort((left, right) => left.path.localeCompare(right.path));
-}
-function directoryEntries(dir) {
-  try {
-    return readdirSync11(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-}
-function evidenceReadError5(error) {
-  switch (error.kind) {
-    case "too_large":
-      return `file exceeded ${error.maxBytes} bytes`;
-    case "filesystem":
-      return error.cause;
-  }
-}
-function isReadableDirectory10(pathname) {
-  try {
-    return statSync13(pathname).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function isRecord5(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// src/evidence/hex-package.ts
-import { existsSync as existsSync13, readdirSync as readdirSync12, statSync as statSync14 } from "node:fs";
-import path13 from "node:path";
-var MIX_EXS_MAX_BYTES = 1024 * 1024;
-var REBAR_CONFIG_MAX_BYTES = 1024 * 1024;
-var HEX_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-var HEX_LICENSE_FILE_LIMIT = 50;
-function collectHexPackageEvidence(input) {
-  const packageDir = findHexPackageDir({
-    packageName: input.packageName,
-    projectRoot: input.projectRoot
-  });
-  if (!packageDir) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: ["Hex package source was not found in the local deps directory."]
-    });
-  }
-  const metadataLicenses = readHexMetadataLicenses({
-    packageId: input.packageId,
-    packageDir,
-    mixExsMaxBytes: input.mixExsMaxBytes ?? MIX_EXS_MAX_BYTES,
-    rebarConfigMaxBytes: input.rebarConfigMaxBytes ?? REBAR_CONFIG_MAX_BYTES
-  });
-  if (!metadataLicenses.ok) {
-    return err(metadataLicenses.error);
-  }
-  const warnings = [];
-  const files = readHexEvidenceFiles({
-    packageDir,
-    maxBytes: input.evidenceFileMaxBytes ?? HEX_EVIDENCE_FILE_MAX_BYTES,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Hex package source.");
-  }
-  if (!metadataLicenses.value || metadataLicenses.value.licenses.length === 0) {
-    warnings.push("Hex package mix.exs or rebar.config did not declare license metadata.");
-  }
-  return ok({
-    packageId: input.packageId,
-    ...metadataLicenses.value && metadataLicenses.value.licenses.length === 1 ? {
-      metadataLicense: metadataLicenses.value.licenses[0],
-      metadataSource: metadataLicenses.value.source
-    } : {},
-    ...metadataLicenses.value && metadataLicenses.value.licenses.length > 1 ? {
-      metadataLicenses: metadataLicenses.value.licenses,
-      metadataSource: metadataLicenses.value.source
-    } : {},
-    files,
-    source: "local",
-    warnings
-  });
-}
-function findHexPackageDir(input) {
-  const packageDirName = hexPackageDirectoryName(input.packageName);
-  if (!packageDirName) {
-    return;
-  }
-  const depsRoot = path13.resolve(input.projectRoot, "deps");
-  const exactCandidate = path13.resolve(depsRoot, packageDirName);
-  if (isPathInside7(depsRoot, exactCandidate) && existsSync13(exactCandidate) && isReadableDirectory11(exactCandidate)) {
-    return exactCandidate;
-  }
-  return findCaseInsensitiveChildDirectory3({
-    parent: depsRoot,
-    childName: packageDirName
-  });
-}
-function hexPackageDirectoryName(packageName) {
-  const normalized = packageName.trim().replace(/\\/g, "/").replace(/\/+$/g, "");
-  const slashIndex = normalized.lastIndexOf("/");
-  const basename = slashIndex >= 0 ? normalized.slice(slashIndex + 1) : normalized;
-  return basename.trim() === "" ? undefined : basename.trim();
-}
-function findCaseInsensitiveChildDirectory3(input) {
-  if (!existsSync13(input.parent) || !isReadableDirectory11(input.parent)) {
-    return;
-  }
-  let entries;
-  try {
-    entries = readdirSync12(input.parent, { withFileTypes: true });
-  } catch {
-    return;
-  }
-  const normalizedName = input.childName.toLowerCase();
-  for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name.toLowerCase() !== normalizedName) {
-      continue;
-    }
-    const candidate = path13.resolve(input.parent, entry.name);
-    if (isPathInside7(input.parent, candidate) && isReadableDirectory11(candidate)) {
-      return candidate;
-    }
-  }
-  return;
-}
-function readHexMetadataLicenses(input) {
-  const mixExsLicenses = readMixExsLicenses({
-    packageId: input.packageId,
-    mixExsPath: path13.join(input.packageDir, "mix.exs"),
-    maxBytes: input.mixExsMaxBytes
-  });
-  if (!mixExsLicenses.ok) {
-    return err(mixExsLicenses.error);
-  }
-  if (mixExsLicenses.value && mixExsLicenses.value.length > 0) {
-    return ok({
-      licenses: mixExsLicenses.value,
-      source: "mix.exs"
-    });
-  }
-  const rebarConfigLicenses = readRebarConfigLicenses({
-    packageId: input.packageId,
-    rebarConfigPath: path13.join(input.packageDir, "rebar.config"),
-    maxBytes: input.rebarConfigMaxBytes
-  });
-  if (!rebarConfigLicenses.ok) {
-    return err(rebarConfigLicenses.error);
-  }
-  if (rebarConfigLicenses.value && rebarConfigLicenses.value.length > 0) {
-    return ok({
-      licenses: rebarConfigLicenses.value,
-      source: "rebar.config"
-    });
-  }
-  return ok(undefined);
-}
-function readMixExsLicenses(input) {
-  if (!existsSync13(input.mixExsPath)) {
-    return ok(undefined);
-  }
-  const text3 = readTextFileWithLimit({
-    filePath: input.mixExsPath,
-    maxBytes: input.maxBytes
-  });
-  if (!text3.ok) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: textFileReadErrorCategory(text3.error),
-      message: text3.error.kind === "too_large" ? "Hex mix.exs metadata exceeded the maximum supported size." : "Failed to read Hex mix.exs metadata.",
-      details: {
-        packageId: input.packageId,
-        mixExsPath: input.mixExsPath,
-        ...textFileReadErrorDetails(text3.error)
-      }
-    }));
-  }
-  return ok(parseMixExsLicenses(text3.value));
-}
-function readRebarConfigLicenses(input) {
-  if (!existsSync13(input.rebarConfigPath)) {
-    return ok(undefined);
-  }
-  const text3 = readTextFileWithLimit({
-    filePath: input.rebarConfigPath,
-    maxBytes: input.maxBytes
-  });
-  if (!text3.ok) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: textFileReadErrorCategory(text3.error),
-      message: text3.error.kind === "too_large" ? "Hex rebar.config metadata exceeded the maximum supported size." : "Failed to read Hex rebar.config metadata.",
-      details: {
-        packageId: input.packageId,
-        rebarConfigPath: input.rebarConfigPath,
-        ...textFileReadErrorDetails(text3.error)
-      }
-    }));
-  }
-  return ok(parseRebarConfigLicenses(text3.value));
-}
-function parseMixExsLicenses(text3) {
-  const listMatch = text3.match(/licenses:\s*\[([^\]]*)\]/m);
-  if (!listMatch?.[1]) {
-    return;
-  }
-  const values = parseLicenseList(listMatch[1]);
-  return values.length > 0 ? values : undefined;
-}
-function parseRebarConfigLicenses(text3) {
-  const listMatch = text3.match(/\{licenses\s*,\s*\[([^\]]*)\]\s*\}/m);
-  if (!listMatch?.[1]) {
-    return;
-  }
-  const values = parseLicenseList(listMatch[1]);
-  return values.length > 0 ? values : undefined;
-}
-function parseLicenseList(text3) {
-  return [...text3.matchAll(/<<"([^"]+)">>|"([^"]+)"|'([^']+)'/g)].map((match) => match[1] ?? match[2] ?? match[3]).filter((item) => item !== undefined && item.trim() !== "").map((item) => item.trim());
-}
-function readHexEvidenceFiles(input) {
-  const files = [];
-  for (const candidate of evidenceFileCandidates8(input.packageDir)) {
-    const kind = classifyEvidenceFile(candidate.relativePath);
-    if (!kind) {
-      continue;
-    }
-    if (files.length >= HEX_LICENSE_FILE_LIMIT) {
-      input.warnings.push(`Hex package evidence file limit reached at ${HEX_LICENSE_FILE_LIMIT} files.`);
-      break;
-    }
-    const text3 = readTextFileWithLimit({
-      filePath: candidate.absolutePath,
-      maxBytes: input.maxBytes
-    });
-    if (!text3.ok) {
-      input.warnings.push(`Skipped Hex evidence file ${candidate.relativePath}: ${evidenceReadError6(text3.error)}.`);
-      continue;
-    }
-    files.push({
-      path: candidate.relativePath,
-      kind,
-      text: text3.value
-    });
-  }
-  return files.sort((left, right) => left.path.localeCompare(right.path));
-}
-function evidenceFileCandidates8(dir) {
-  try {
-    return readdirSync12(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path13.join(dir, entry.name),
-      relativePath: entry.name
-    }));
-  } catch {
-    return [];
-  }
-}
-function evidenceReadError6(error) {
-  switch (error.kind) {
-    case "too_large":
-      return `file exceeded ${error.maxBytes} bytes`;
-    case "filesystem":
-      return error.cause;
-  }
-}
-function isReadableDirectory11(pathname) {
-  try {
-    return statSync14(pathname).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function isPathInside7(parent, child) {
-  const relative = path13.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path13.isAbsolute(relative);
-}
-
-// src/evidence/julia-package.ts
-import { existsSync as existsSync14, readdirSync as readdirSync13, statSync as statSync15 } from "node:fs";
-import path14 from "node:path";
-var JULIA_PROJECT_TOML_MAX_BYTES = 1024 * 1024;
-var JULIA_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-function collectJuliaPackageEvidence(input) {
-  const packageDir = findJuliaPackageDir({
-    packageName: input.packageName,
-    version: input.version,
-    projectRoot: input.projectRoot,
-    projectTomlMaxBytes: input.projectTomlMaxBytes ?? JULIA_PROJECT_TOML_MAX_BYTES
-  });
-  if (!packageDir.ok) {
-    return err(packageDir.error);
-  }
-  if (!packageDir.value) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: ["Julia package source was not found in local Julia depot package paths."]
-    });
-  }
-  const projectToml = readJuliaProjectToml({
-    packageId: input.packageId,
-    projectTomlPath: path14.join(packageDir.value, "Project.toml"),
-    maxBytes: input.projectTomlMaxBytes ?? JULIA_PROJECT_TOML_MAX_BYTES
-  });
-  if (!projectToml.ok) {
-    return err(projectToml.error);
-  }
-  const warnings = [];
-  const files = readJuliaEvidenceFiles({
-    packageDir: packageDir.value,
-    maxBytes: input.evidenceFileMaxBytes ?? JULIA_EVIDENCE_FILE_MAX_BYTES,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Julia package source.");
-  }
-  if (!projectToml.value?.license) {
-    warnings.push("Julia Project.toml did not declare license metadata.");
-  }
-  return ok({
-    packageId: input.packageId,
-    ...projectToml.value?.license ? {
-      metadataLicense: projectToml.value.license,
-      metadataSource: "Project.toml"
-    } : {},
-    files,
-    source: "local",
-    warnings
-  });
-}
-function findJuliaPackageDir(input) {
-  for (const depotRoot of juliaDepotRoots(input.projectRoot)) {
-    const packageRoot = path14.resolve(depotRoot, "packages", input.packageName);
-    if (!isPathInside8(path14.resolve(depotRoot, "packages"), packageRoot)) {
-      continue;
-    }
-    if (!existsSync14(packageRoot) || !isReadableDirectory12(packageRoot)) {
-      continue;
-    }
-    for (const candidate of childDirectories3(packageRoot)) {
-      const projectToml = readJuliaProjectToml({
-        packageId: `${input.packageName}@${input.version}`,
-        projectTomlPath: path14.join(candidate, "Project.toml"),
-        maxBytes: input.projectTomlMaxBytes
-      });
-      if (!projectToml.ok) {
-        return err(projectToml.error);
-      }
-      if (projectToml.value?.name === input.packageName && projectToml.value.version === input.version) {
-        return ok(candidate);
-      }
-    }
-  }
-  return ok(undefined);
-}
-function juliaDepotRoots(projectRoot) {
-  const roots = [path14.join(projectRoot, ".julia")];
-  const juliaDepotPath = process.env.JULIA_DEPOT_PATH;
-  if (juliaDepotPath) {
-    roots.push(...juliaDepotPath.split(path14.delimiter).filter((item) => item.trim() !== ""));
-  }
-  const home = process.env.USERPROFILE ?? process.env.HOME;
-  if (home) {
-    roots.push(path14.join(home, ".julia"));
-  }
-  return [...new Set(roots.map((root) => path14.resolve(root)))];
-}
-function readJuliaProjectToml(input) {
-  if (!existsSync14(input.projectTomlPath)) {
-    return ok(undefined);
-  }
-  const text3 = readTextFileWithLimit({
-    filePath: input.projectTomlPath,
-    maxBytes: input.maxBytes
-  });
-  if (!text3.ok) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: textFileReadErrorCategory(text3.error),
-      message: text3.error.kind === "too_large" ? "Julia Project.toml metadata exceeded the maximum supported size." : "Failed to read Julia Project.toml metadata.",
-      details: {
-        packageId: input.packageId,
-        projectTomlPath: input.projectTomlPath,
-        ...textFileReadErrorDetails(text3.error)
-      }
-    }));
-  }
-  return ok(parseJuliaProjectToml(text3.value));
-}
-function parseJuliaProjectToml(text3) {
-  const fields = {};
-  for (const rawLine of text3.split(/\r?\n/)) {
-    const line = stripTomlComment2(rawLine).trim();
-    const match = line.match(/^([A-Za-z0-9_-]+)\s*=\s*"((?:\\"|[^"])*)"$/);
-    if (!match?.[1] || match[2] === undefined) {
-      continue;
-    }
-    const value = match[2].replace(/\\"/g, '"');
-    if (match[1] === "name") {
-      fields.name = value;
-    } else if (match[1] === "version") {
-      fields.version = value;
-    } else if (match[1] === "license") {
-      fields.license = value;
-    }
-  }
-  return fields;
-}
-function readJuliaEvidenceFiles(input) {
-  const files = [];
-  for (const candidate of evidenceFileCandidates9(input.packageDir)) {
-    const kind = classifyEvidenceFile(candidate.relativePath);
-    if (!kind) {
-      continue;
-    }
-    const text3 = readTextFileWithLimit({
-      filePath: candidate.absolutePath,
-      maxBytes: input.maxBytes
-    });
-    if (!text3.ok) {
-      input.warnings.push(evidenceFileReadWarning4(candidate.relativePath, text3.error));
-      continue;
-    }
-    files.push({
-      path: candidate.relativePath,
-      kind,
-      text: text3.value
-    });
-  }
-  return files.sort((left, right) => left.path.localeCompare(right.path));
-}
-function evidenceFileCandidates9(dir) {
-  try {
-    return readdirSync13(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path14.join(dir, entry.name),
-      relativePath: entry.name
-    }));
-  } catch {
-    return [];
-  }
-}
-function childDirectories3(dir) {
-  try {
-    return readdirSync13(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path14.join(dir, entry.name));
-  } catch {
-    return [];
-  }
-}
-function stripTomlComment2(line) {
-  let inString = false;
-  let escaped = false;
-  for (let index = 0;index < line.length; index += 1) {
-    const char = line[index];
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (char === "\\") {
-      escaped = true;
-      continue;
-    }
-    if (char === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (char === "#" && !inString) {
-      return line.slice(0, index);
-    }
-  }
-  return line;
-}
-function evidenceFileReadWarning4(fileName, error) {
-  return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
-}
-function isReadableDirectory12(pathname) {
-  try {
-    return statSync15(pathname).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function isPathInside8(parent, child) {
-  const relative = path14.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path14.isAbsolute(relative);
-}
-
-// src/evidence/luarocks-package.ts
-import { existsSync as existsSync15 } from "node:fs";
-import path15 from "node:path";
-var LUAROCKS_ROCKSPEC_MAX_BYTES = 1024 * 1024;
-function collectLuarocksPackageEvidence(input) {
-  const rockspecPath = findLuarocksRockspec({
-    projectRoot: input.projectRoot,
-    packageName: input.packageName,
-    version: input.version
-  });
-  if (!rockspecPath) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: ["LuaRocks package rockspec was not found in the project root or local rocks tree."]
-    });
-  }
-  const rockspec = readRockspecMetadata({
-    packageId: input.packageId,
-    rockspecPath,
-    maxBytes: input.rockspecMaxBytes ?? LUAROCKS_ROCKSPEC_MAX_BYTES
-  });
-  if (!rockspec.ok) {
-    return err(rockspec.error);
-  }
-  return ok({
-    packageId: input.packageId,
-    ...rockspec.value.license ? {
-      metadataLicense: rockspec.value.license,
-      metadataSource: "rockspec"
-    } : {},
-    ...rockspec.value.licenses && rockspec.value.licenses.length > 0 ? {
-      metadataLicenses: rockspec.value.licenses,
-      metadataSource: "rockspec"
-    } : {},
-    files: [],
-    source: "local",
-    warnings: rockspec.value.license || rockspec.value.licenses ? [] : ["LuaRocks rockspec did not declare license metadata."]
-  });
-}
-function findLuarocksRockspec(input) {
-  if (!isSafeRockspecSegment(input.packageName) || !isSafeRockspecSegment(input.version)) {
-    return;
-  }
-  const fileName = `${input.packageName}-${input.version}.rockspec`;
-  const candidates = [
-    path15.join(input.projectRoot, fileName),
-    path15.join(input.projectRoot, "rocks", input.packageName, input.version, fileName),
-    path15.join(input.projectRoot, "lua_modules", "lib", "luarocks", "rocks-5.1", input.packageName, input.version, fileName),
-    path15.join(input.projectRoot, "lua_modules", "lib", "luarocks", "rocks-5.2", input.packageName, input.version, fileName),
-    path15.join(input.projectRoot, "lua_modules", "lib", "luarocks", "rocks-5.3", input.packageName, input.version, fileName),
-    path15.join(input.projectRoot, "lua_modules", "lib", "luarocks", "rocks-5.4", input.packageName, input.version, fileName),
-    path15.join(input.projectRoot, ".luarocks", "lib", "luarocks", "rocks-5.1", input.packageName, input.version, fileName),
-    path15.join(input.projectRoot, ".luarocks", "lib", "luarocks", "rocks-5.2", input.packageName, input.version, fileName),
-    path15.join(input.projectRoot, ".luarocks", "lib", "luarocks", "rocks-5.3", input.packageName, input.version, fileName),
-    path15.join(input.projectRoot, ".luarocks", "lib", "luarocks", "rocks-5.4", input.packageName, input.version, fileName)
-  ];
-  return candidates.find((candidate) => existsSync15(candidate));
-}
-function readRockspecMetadata(input) {
-  const text3 = readTextFileWithLimit({
-    filePath: input.rockspecPath,
-    maxBytes: input.maxBytes
-  });
-  if (!text3.ok) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: textFileReadErrorCategory(text3.error),
-      message: rockspecReadFailedMessage(text3.error),
-      details: {
-        packageId: input.packageId,
-        rockspecPath: input.rockspecPath,
-        ...textFileReadErrorDetails(text3.error)
-      }
-    }));
-  }
-  return ok(parseRockspecLicenseMetadata(text3.value));
-}
-function parseRockspecLicenseMetadata(text3) {
-  const descriptionMatch = text3.match(/\bdescription\s*=\s*{[\s\S]*?\blicense\s*=\s*(["'])([^"'\r\n]+)\1[\s\S]*?}/);
-  if (descriptionMatch?.[2]) {
-    return { license: descriptionMatch[2].trim() };
-  }
-  const topLevelMatch = text3.match(/(?:^|\n)\s*license\s*=\s*(["'])([^"'\r\n]+)\1/);
-  if (topLevelMatch?.[2]) {
-    return { license: topLevelMatch[2].trim() };
-  }
-  const tableMatch = text3.match(/\blicense\s*=\s*{([\s\S]*?)}/);
-  if (!tableMatch?.[1]) {
-    return {};
-  }
-  const licenses = [...tableMatch[1].matchAll(/(["'])([^"'\r\n]+)\1/g)].map((match) => match[2]?.trim()).filter((value) => value !== undefined && value !== "");
-  return licenses.length > 0 ? { licenses } : {};
-}
-function isSafeRockspecSegment(value) {
-  return /^[A-Za-z0-9_.-]+$/.test(value);
-}
-function rockspecReadFailedMessage(error) {
-  return error.kind === "too_large" ? "LuaRocks rockspec metadata exceeded the maximum supported size." : "Failed to read LuaRocks rockspec metadata.";
-}
-
-// src/shared/maven-repository.ts
-import { existsSync as existsSync16 } from "node:fs";
-import path16 from "node:path";
-var MAVEN_GROUP_SEGMENT_PATTERN = /^[A-Za-z0-9_-]+$/;
-var MAVEN_ARTIFACT_SEGMENT_PATTERN = /^[A-Za-z0-9_.+-]+$/;
-function mavenRepositoryRoots(projectRoot, extraRoots = []) {
-  const roots = [
-    ...extraRoots,
-    path16.join(projectRoot, ".m2", "repository")
-  ];
-  const home = process.env.USERPROFILE ?? process.env.HOME;
-  if (home) {
-    roots.push(path16.join(home, ".m2", "repository"));
-  }
-  return [...new Set(roots.map((root) => path16.resolve(root)))];
-}
-function findMavenPomInRepository(input) {
-  const relativePomPath = mavenPomRelativePath(input);
-  if (!relativePomPath) {
-    return;
-  }
-  for (const repositoryRoot of input.repositoryRoots) {
-    const root = path16.resolve(repositoryRoot);
-    const candidate = path16.resolve(root, relativePomPath);
-    if (!isPathInside9(root, candidate)) {
-      continue;
-    }
-    if (existsSync16(candidate)) {
-      return candidate;
-    }
-  }
-  return;
-}
-function mavenPomRelativePath(input) {
-  const groupSegments = input.groupId.split(".");
-  if (groupSegments.some((segment) => !isSafeMavenPathSegment(segment, MAVEN_GROUP_SEGMENT_PATTERN)) || !isSafeMavenPathSegment(input.artifactId, MAVEN_ARTIFACT_SEGMENT_PATTERN) || !isSafeMavenPathSegment(input.version, MAVEN_ARTIFACT_SEGMENT_PATTERN)) {
-    return;
-  }
-  const relativePomPath = path16.join(...groupSegments, input.artifactId, input.version, `${input.artifactId}-${input.version}.pom`);
-  return relativePomPath;
-}
-function isSafeMavenPathSegment(segment, pattern) {
-  return segment.length > 0 && segment !== "." && segment !== ".." && !segment.includes("..") && !segment.includes("/") && !segment.includes("\\") && !segment.includes("\x00") && !path16.isAbsolute(segment) && !/^[A-Za-z]:/.test(segment) && pattern.test(segment);
-}
-function isPathInside9(root, candidate) {
-  const relative = path16.relative(root, candidate);
-  return relative.length > 0 && !relative.startsWith("..") && !path16.isAbsolute(relative);
-}
-
-// src/evidence/maven-package.ts
-var MAVEN_POM_MAX_BYTES = 2 * 1024 * 1024;
-function collectMavenPackageEvidence(input) {
-  const coordinates = parseMavenCoordinates(input.coordinates);
-  if (!coordinates) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: [`Maven coordinates were not parseable: ${input.coordinates}`]
-    });
-  }
-  const pomPath = findMavenPom({
-    projectRoot: input.projectRoot,
-    groupId: coordinates.groupId,
-    artifactId: coordinates.artifactId,
-    version: input.version
-  });
-  if (!pomPath) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: [
-        `Maven POM metadata for ${input.coordinates}@${input.version} was not found in local .m2/repository caches; run Maven/Gradle dependency resolution first or provide a project .m2/repository cache.`
-      ]
-    });
-  }
-  const pomText = readTextFileWithLimit({
-    filePath: pomPath,
-    maxBytes: input.pomMaxBytes ?? MAVEN_POM_MAX_BYTES
-  });
-  if (!pomText.ok) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: textFileReadErrorCategory(pomText.error),
-      message: pomReadFailedMessage(pomText.error),
-      details: {
-        packageId: input.packageId,
-        pomPath,
-        ...textFileReadErrorDetails(pomText.error)
-      }
-    }));
-  }
-  const licenses = readPomLicenseNames(pomText.value);
-  const warnings = licenses.length === 0 ? ["Maven POM did not declare license names."] : [];
-  return ok({
-    packageId: input.packageId,
-    ...licenses.length > 0 ? {
-      metadataLicense: [...new Set(licenses)].join(" OR "),
-      metadataSource: "pom.xml"
-    } : {},
-    files: [],
-    source: "local",
-    warnings
-  });
-}
-function parseMavenCoordinates(coordinates) {
-  const [groupId, artifactId, extra] = coordinates.split(":");
-  if (!groupId || !artifactId || extra !== undefined) {
-    return;
-  }
-  return { groupId, artifactId };
-}
-function findMavenPom(input) {
-  return findMavenPomInRepository({
-    repositoryRoots: mavenRepositoryRoots(input.projectRoot),
-    groupId: input.groupId,
-    artifactId: input.artifactId,
-    version: input.version
-  });
-}
-function readPomLicenseNames(text3) {
-  const licensesSection = text3.match(/<licenses\b[^>]*>([\s\S]*?)<\/licenses>/i)?.[1];
-  if (!licensesSection) {
-    return [];
-  }
-  const names = [];
-  const licenseBlocks = licensesSection.matchAll(/<license\b[^>]*>([\s\S]*?)<\/license>/gi);
-  for (const block of licenseBlocks) {
-    const name = block[1]?.match(/<name\b[^>]*>([\s\S]*?)<\/name>/i)?.[1];
-    if (!name) {
-      continue;
-    }
-    const normalized = normalizePomText(name);
-    if (normalized) {
-      names.push(normalized);
-    }
-  }
-  return names;
-}
-function normalizePomText(text3) {
-  return decodeXmlEntities(text3.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
-}
-function decodeXmlEntities(text3) {
-  return text3.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
-}
-function pomReadFailedMessage(error) {
-  return error.kind === "too_large" ? "Maven POM metadata exceeded the maximum supported size." : "Failed to read Maven POM metadata.";
-}
-
-// src/evidence/nix-package.ts
-import { existsSync as existsSync17, readdirSync as readdirSync14, statSync as statSync16 } from "node:fs";
-import path17 from "node:path";
-var NIX_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-var NIX_EVIDENCE_FILE_LIMIT = 50;
-function collectNixPackageEvidence(input) {
-  const sourceRoot = localNixSourceRoot({
-    resolved: input.resolved,
-    projectRoot: input.projectRoot
-  });
-  if (!sourceRoot) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: ["Nix flake input source was not found as a local path."]
-    });
-  }
-  const warnings = [];
-  const files = readEvidenceFiles2({
-    sourceRoot,
-    maxBytes: input.evidenceFileMaxBytes ?? NIX_EVIDENCE_FILE_MAX_BYTES,
-    limit: NIX_EVIDENCE_FILE_LIMIT,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in local Nix flake input source.");
-  }
-  return ok({
-    packageId: input.packageId,
-    files,
-    source: "local",
-    warnings
-  });
-}
-function localNixSourceRoot(input) {
-  if (!input.resolved || looksRemote(input.resolved)) {
-    return;
-  }
-  const candidate = path17.resolve(input.projectRoot, input.resolved);
-  if (!isPathInside10(input.projectRoot, candidate) || !isReadableDirectory13(candidate)) {
-    return;
-  }
-  return candidate;
-}
-function readEvidenceFiles2(input) {
-  const files = new Map;
-  for (const entry of directoryEntries2(input.sourceRoot)) {
-    if (!entry.isFile()) {
-      continue;
-    }
-    const kind = classifyEvidenceFile(entry.name);
-    if (!kind) {
-      continue;
-    }
-    if (files.size >= input.limit) {
-      input.warnings.push(`Nix flake input evidence file limit reached at ${input.limit} files.`);
-      break;
-    }
-    const absolutePath = path17.join(input.sourceRoot, entry.name);
-    const text3 = readTextFileWithLimit({
-      filePath: absolutePath,
-      maxBytes: input.maxBytes
-    });
-    if (!text3.ok) {
-      input.warnings.push(`Skipped Nix evidence file ${entry.name}: ${evidenceReadError7(text3.error)}.`);
-      continue;
-    }
-    files.set(entry.name, {
-      path: entry.name,
-      kind,
-      text: text3.value
-    });
-  }
-  return [...files.values()].sort((left, right) => left.path.localeCompare(right.path));
-}
-function directoryEntries2(dir) {
-  try {
-    return readdirSync14(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-}
-function evidenceReadError7(error) {
-  switch (error.kind) {
-    case "too_large":
-      return `file exceeded ${error.maxBytes} bytes`;
-    case "filesystem":
-      return error.cause;
-  }
-}
-function looksRemote(value) {
-  return /^[a-z][a-z0-9+.-]*:/i.test(value);
-}
-function isReadableDirectory13(pathname) {
-  try {
-    return existsSync17(pathname) && statSync16(pathname).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function isPathInside10(parent, child) {
-  const relative = path17.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path17.isAbsolute(relative);
-}
-
-// src/evidence/nuget-package.ts
-import { existsSync as existsSync18, readdirSync as readdirSync15, statSync as statSync17 } from "node:fs";
-import path18 from "node:path";
-var NUGET_NUSPEC_MAX_BYTES = 1024 * 1024;
-var NUGET_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-var NUGET_LICENSE_FILE_LIMIT = 50;
-function collectNugetPackageEvidence(input) {
-  const packageDir = findNugetPackageDir({
-    packageName: input.packageName,
-    version: input.version,
-    projectRoot: input.projectRoot
-  });
-  if (!packageDir) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: ["NuGet package metadata was not found in a local NuGet package cache."]
-    });
-  }
-  const nuspecPath = findNuspecPath(packageDir, input.packageName, input.version);
-  const metadata = nuspecPath ? readNuspecMetadata({
-    packageId: input.packageId,
-    nuspecPath,
-    maxBytes: input.nuspecMaxBytes ?? NUGET_NUSPEC_MAX_BYTES
-  }) : ok({});
-  if (!metadata.ok) {
-    return err(metadata.error);
-  }
-  const warnings = [];
-  const files = readNugetEvidenceFiles({
-    packageDir,
-    metadata: metadata.value,
-    maxBytes: input.evidenceFileMaxBytes ?? NUGET_EVIDENCE_FILE_MAX_BYTES,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in NuGet package source.");
-  }
-  if (!metadata.value.license && metadata.value.licenseUrl) {
-    warnings.push(`NuGet nuspec declared only a licenseUrl: ${metadata.value.licenseUrl}`);
-  }
-  if (!metadata.value.license && !metadata.value.licenseUrl) {
-    warnings.push("NuGet nuspec did not declare a package license.");
-  }
-  return ok({
-    packageId: input.packageId,
-    ...metadata.value.license && metadata.value.licenseType !== "file" ? {
-      metadataLicense: metadata.value.license,
-      metadataSource: "nuspec"
-    } : {},
-    files,
-    source: "local",
-    warnings
-  });
-}
-function findNugetPackageDir(input) {
-  const normalizedName = input.packageName.toLowerCase();
-  const normalizedVersion = input.version.toLowerCase();
-  for (const root of nugetPackageRoots(input.projectRoot)) {
-    const packageRoot = path18.resolve(root);
-    const globalCandidate = path18.resolve(root, normalizedName, normalizedVersion);
-    if (isPathInside11(packageRoot, globalCandidate) && existsSync18(globalCandidate) && isReadableDirectory14(globalCandidate)) {
-      return globalCandidate;
-    }
-    const packagesCandidate = path18.resolve(root, `${input.packageName}.${input.version}`);
-    if (isPathInside11(packageRoot, packagesCandidate) && existsSync18(packagesCandidate) && isReadableDirectory14(packagesCandidate)) {
-      return packagesCandidate;
-    }
-  }
-  return;
-}
-function nugetPackageRoots(projectRoot) {
-  const roots = [
-    path18.join(projectRoot, ".nuget", "packages"),
-    path18.join(projectRoot, "packages")
-  ];
-  const nugetPackages = process.env.NUGET_PACKAGES;
-  if (nugetPackages) {
-    roots.push(nugetPackages);
-  }
-  const home = process.env.USERPROFILE ?? process.env.HOME;
-  if (home) {
-    roots.push(path18.join(home, ".nuget", "packages"));
-  }
-  return [...new Set(roots.map((root) => path18.resolve(root)))];
-}
-function findNuspecPath(packageDir, packageName, version) {
-  const expected = path18.join(packageDir, `${packageName}.nuspec`);
-  if (existsSync18(expected)) {
-    return expected;
-  }
-  const expectedWithVersion = path18.join(packageDir, `${packageName}.${version}.nuspec`);
-  if (existsSync18(expectedWithVersion)) {
-    return expectedWithVersion;
-  }
-  try {
-    const nuspec = readdirSync15(packageDir).find((entry) => entry.toLowerCase().endsWith(".nuspec"));
-    return nuspec ? path18.join(packageDir, nuspec) : undefined;
-  } catch {
-    return;
-  }
-}
-function readNuspecMetadata(input) {
-  const text3 = readTextFileWithLimit({
-    filePath: input.nuspecPath,
-    maxBytes: input.maxBytes
-  });
-  if (!text3.ok) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: textFileReadErrorCategory(text3.error),
-      message: text3.error.kind === "too_large" ? "NuGet nuspec metadata exceeded the maximum supported size." : "Failed to read NuGet nuspec metadata.",
-      details: {
-        packageId: input.packageId,
-        nuspecPath: input.nuspecPath,
-        ...textFileReadErrorDetails(text3.error)
-      }
-    }));
-  }
-  return ok(parseNuspecMetadata(text3.value));
-}
-function parseNuspecMetadata(text3) {
-  const licenseMatch = text3.match(/<license\b([^>]*)>([\s\S]*?)<\/license>/i);
-  const license = licenseMatch?.[2] ? normalizeXmlText(licenseMatch[2]) : undefined;
-  const licenseType = licenseMatch?.[1]?.match(/\btype\s*=\s*"([^"]+)"/i)?.[1]?.toLowerCase();
-  const licenseUrl = text3.match(/<licenseUrl\b[^>]*>([\s\S]*?)<\/licenseUrl>/i)?.[1];
-  return {
-    ...license ? { license } : {},
-    ...licenseType ? { licenseType } : {},
-    ...licenseUrl ? { licenseUrl: normalizeXmlText(licenseUrl) } : {}
-  };
-}
-function readNugetEvidenceFiles(input) {
-  const candidates = evidenceFileCandidates10(input.packageDir);
-  if (input.metadata.license && input.metadata.licenseType === "file") {
-    candidates.unshift({
-      absolutePath: path18.resolve(input.packageDir, input.metadata.license),
-      relativePath: input.metadata.license
-    });
-  }
-  return readEvidenceFiles3({
-    packageDir: input.packageDir,
-    candidates,
-    maxBytes: input.maxBytes,
-    warnings: input.warnings
-  });
-}
-function readEvidenceFiles3(input) {
-  const files = [];
-  const seen = new Set;
-  const packageRoot = path18.resolve(input.packageDir);
-  for (const candidate of input.candidates.slice(0, NUGET_LICENSE_FILE_LIMIT)) {
-    if (seen.has(candidate.absolutePath)) {
-      continue;
-    }
-    seen.add(candidate.absolutePath);
-    const kind = classifyEvidenceFile(candidate.relativePath);
-    if (!kind || !isPathInside11(packageRoot, candidate.absolutePath)) {
-      continue;
-    }
-    const text3 = readTextFileWithLimit({
-      filePath: candidate.absolutePath,
-      maxBytes: input.maxBytes
-    });
-    if (!text3.ok) {
-      input.warnings.push(evidenceFileReadWarning5(candidate.relativePath, text3.error));
-      continue;
-    }
-    files.push({
-      path: candidate.relativePath,
-      kind,
-      text: text3.value
-    });
-  }
-  return files.sort((left, right) => left.path.localeCompare(right.path));
-}
-function evidenceFileCandidates10(dir) {
-  if (!existsSync18(dir) || !isReadableDirectory14(dir)) {
-    return [];
-  }
-  try {
-    return readdirSync15(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path18.join(dir, entry.name),
-      relativePath: entry.name
-    }));
-  } catch {
-    return [];
-  }
-}
-function normalizeXmlText(text3) {
-  return decodeXmlEntities2(text3.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
-}
-function decodeXmlEntities2(text3) {
-  return text3.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
-}
-function isReadableDirectory14(dir) {
-  try {
-    return statSync17(dir).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function isPathInside11(parent, child) {
-  const relative = path18.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path18.isAbsolute(relative);
-}
-function evidenceFileReadWarning5(fileName, error) {
-  return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
-}
-
-// src/evidence/pub-package.ts
-import { existsSync as existsSync19, readdirSync as readdirSync16, statSync as statSync18 } from "node:fs";
-import path19 from "node:path";
-import { fileURLToPath as fileURLToPath2 } from "node:url";
-var PUBSPEC_MAX_BYTES = 1024 * 1024;
-var PUB_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-var PUB_LICENSE_FILE_LIMIT = 50;
-function collectPubPackageEvidence(input) {
-  const packageDir = findPubPackageDir({
-    packageName: input.packageName,
-    version: input.version,
-    projectRoot: input.projectRoot
-  });
-  if (!packageDir) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: ["Dart pub package source was not found in .dart_tool/package_config.json or a local Pub cache."]
-    });
-  }
-  const pubspec = readPubspec({
-    pubspecPath: path19.join(packageDir, "pubspec.yaml"),
-    packageId: input.packageId,
-    maxBytes: input.pubspecMaxBytes ?? PUBSPEC_MAX_BYTES
-  });
-  if (!pubspec.ok) {
-    return err(pubspec.error);
-  }
-  const warnings = [];
-  const files = readPubEvidenceFiles({
-    packageDir,
-    maxBytes: input.evidenceFileMaxBytes ?? PUB_EVIDENCE_FILE_MAX_BYTES,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Dart pub package source.");
-  }
-  const metadataLicense = pubspec.value?.license;
-  if (!metadataLicense) {
-    warnings.push("Dart pubspec.yaml did not declare license metadata.");
-  }
-  return ok({
-    packageId: input.packageId,
-    ...metadataLicense ? { metadataLicense, metadataSource: "pubspec.yaml" } : {},
-    files,
-    source: "local",
-    warnings
-  });
-}
-function findPubPackageDir(input) {
-  const packageConfigDir = findPackageConfigPackageDir(input);
-  if (packageConfigDir) {
-    return packageConfigDir;
-  }
-  const packageDirName = `${input.packageName}-${input.version}`;
-  for (const cacheRoot of pubCacheRoots(input.projectRoot)) {
-    for (const hostedRoot of ["pub.dev", "pub.dartlang.org"]) {
-      const candidate = path19.resolve(cacheRoot, "hosted", hostedRoot, packageDirName);
-      const hostedDir = path19.resolve(cacheRoot, "hosted", hostedRoot);
-      if (isPathInside12(hostedDir, candidate) && existsSync19(candidate) && isReadableDirectory15(candidate)) {
-        return candidate;
-      }
-    }
-  }
-  return;
-}
-function findPackageConfigPackageDir(input) {
-  const packageConfigPath = path19.join(input.projectRoot, ".dart_tool", "package_config.json");
-  if (!existsSync19(packageConfigPath)) {
-    return;
-  }
-  const text3 = readTextFileWithLimit({
-    filePath: packageConfigPath,
-    maxBytes: PUBSPEC_MAX_BYTES
-  });
-  if (!text3.ok) {
-    return;
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(text3.value);
-  } catch {
-    return;
-  }
-  if (!isRecord6(parsed) || !Array.isArray(parsed.packages)) {
-    return;
-  }
-  for (const item of parsed.packages) {
-    if (!isRecord6(item) || item.name !== input.packageName || typeof item.rootUri !== "string") {
-      continue;
-    }
-    const candidate = resolvePackageConfigRootUri({
-      rootUri: item.rootUri,
-      projectRoot: input.projectRoot
-    });
-    if (candidate && path19.basename(candidate) === `${input.packageName}-${input.version}` && existsSync19(candidate) && isReadableDirectory15(candidate)) {
-      return candidate;
-    }
-  }
-  return;
-}
-function resolvePackageConfigRootUri(input) {
-  try {
-    if (input.rootUri.startsWith("file:")) {
-      return fileURLToPath2(input.rootUri);
-    }
-  } catch {
-    return;
-  }
-  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(input.rootUri)) {
-    return;
-  }
-  return path19.resolve(input.projectRoot, ".dart_tool", input.rootUri);
-}
-function pubCacheRoots(projectRoot) {
-  const roots = [
-    path19.join(projectRoot, ".pub-cache")
-  ];
-  const pubCache = process.env.PUB_CACHE;
-  if (pubCache) {
-    roots.push(pubCache);
-  }
-  const home = process.env.USERPROFILE ?? process.env.HOME;
-  if (home) {
-    roots.push(path19.join(home, ".pub-cache"));
-  }
-  const localAppData = process.env.LOCALAPPDATA;
-  if (localAppData) {
-    roots.push(path19.join(localAppData, "Pub", "Cache"));
-  }
-  return [...new Set(roots.map((root) => path19.resolve(root)))];
-}
-function readPubspec(input) {
-  if (!existsSync19(input.pubspecPath)) {
-    return ok(undefined);
-  }
-  const text3 = readTextFileWithLimit({
-    filePath: input.pubspecPath,
-    maxBytes: input.maxBytes
-  });
-  if (!text3.ok) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: textFileReadErrorCategory(text3.error),
-      message: pubspecReadFailedMessage(text3.error),
-      details: {
-        packageId: input.packageId,
-        pubspecPath: input.pubspecPath,
-        ...textFileReadErrorDetails(text3.error)
-      }
-    }));
-  }
-  let parsed;
-  try {
-    parsed = $parse(text3.value);
-  } catch {
-    return ok(undefined);
-  }
-  if (!isRecord6(parsed) || typeof parsed.license !== "string" || parsed.license.trim() === "") {
-    return ok(undefined);
-  }
-  return ok({
-    license: parsed.license.trim()
-  });
-}
-function readPubEvidenceFiles(input) {
-  const files = [];
-  for (const candidate of evidenceFileCandidates11(input.packageDir)) {
-    const kind = classifyEvidenceFile(candidate.relativePath);
-    if (!kind) {
-      continue;
-    }
-    if (files.length >= PUB_LICENSE_FILE_LIMIT) {
-      input.warnings.push(`Dart pub package evidence file limit reached at ${PUB_LICENSE_FILE_LIMIT} files.`);
-      break;
-    }
-    const text3 = readTextFileWithLimit({
-      filePath: candidate.absolutePath,
-      maxBytes: input.maxBytes
-    });
-    if (!text3.ok) {
-      input.warnings.push(`Skipped Dart pub evidence file ${candidate.relativePath}: ${pubEvidenceReadError(text3.error)}.`);
-      continue;
-    }
-    files.push({
-      path: candidate.relativePath,
-      kind,
-      text: text3.value
-    });
-  }
-  return files;
-}
-function evidenceFileCandidates11(packageDir) {
-  try {
-    return readdirSync16(packageDir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path19.join(packageDir, entry.name),
-      relativePath: entry.name
-    }));
-  } catch {
-    return [];
-  }
-}
-function pubspecReadFailedMessage(error) {
-  return error.kind === "too_large" ? "Dart pubspec.yaml metadata exceeded the maximum supported size." : "Failed to read Dart pubspec.yaml metadata.";
-}
-function pubEvidenceReadError(error) {
-  switch (error.kind) {
-    case "too_large":
-      return `file exceeded ${error.maxBytes} bytes`;
-    case "filesystem":
-      return error.cause;
-  }
-}
-function isReadableDirectory15(pathname) {
-  try {
-    return statSync18(pathname).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function isPathInside12(parent, child) {
-  const relative = path19.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path19.isAbsolute(relative);
-}
-function isRecord6(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// src/evidence/python-package.ts
-import { existsSync as existsSync20, readdirSync as readdirSync17, statSync as statSync19 } from "node:fs";
-import path20 from "node:path";
-var PYTHON_METADATA_MAX_BYTES = 1024 * 1024;
-var PYTHON_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-var PYTHON_LICENSE_FILE_LIMIT = 50;
-var LICENSE_CLASSIFIER_ALIASES = new Map([
-  ["License :: OSI Approved :: Apache Software License", "Apache-2.0"],
-  ["License :: OSI Approved :: BSD License", "BSD-3-Clause"],
-  ["License :: OSI Approved :: GNU Affero General Public License v3", "AGPL-3.0-only"],
-  ["License :: OSI Approved :: GNU General Public License v2 (GPLv2)", "GPL-2.0-only"],
-  ["License :: OSI Approved :: GNU General Public License v3 (GPLv3)", "GPL-3.0-only"],
-  ["License :: OSI Approved :: GNU Lesser General Public License v2 (LGPLv2)", "LGPL-2.0-only"],
-  ["License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)", "LGPL-3.0-only"],
-  ["License :: OSI Approved :: ISC License (ISCL)", "ISC"],
-  ["License :: OSI Approved :: MIT License", "MIT"],
-  ["License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)", "MPL-2.0"],
-  ["License :: Public Domain", "Unlicense"]
-]);
-function collectPythonPackageEvidence(input) {
-  const metadataMaxBytes = input.metadataMaxBytes ?? PYTHON_METADATA_MAX_BYTES;
-  const evidenceFileMaxBytes = input.evidenceFileMaxBytes ?? PYTHON_EVIDENCE_FILE_MAX_BYTES;
-  const sitePackageDirs = findPythonSitePackageDirs(input.projectRoot);
-  for (const sitePackageDir of sitePackageDirs) {
-    const distInfo = findMatchingDistInfo({
-      sitePackageDir,
-      packageName: input.packageName,
-      version: input.version,
-      metadataMaxBytes
-    });
-    if (!distInfo.ok) {
-      return err(distInfo.error);
-    }
-    if (!distInfo.value) {
-      continue;
-    }
-    return collectDistInfoEvidence({
-      packageId: input.packageId,
-      distInfo: distInfo.value,
-      evidenceFileMaxBytes
-    });
-  }
-  return ok({
-    packageId: input.packageId,
-    files: [],
-    source: "unavailable",
-    warnings: [
-      "Python package metadata was not found in a local .venv or venv site-packages directory."
-    ]
-  });
-}
-function findPythonSitePackageDirs(projectRoot) {
-  const candidates = [
-    path20.join(projectRoot, ".venv", "Lib", "site-packages"),
-    path20.join(projectRoot, "venv", "Lib", "site-packages"),
-    ...sitePackageDirsUnder(path20.join(projectRoot, ".venv", "lib")),
-    ...sitePackageDirsUnder(path20.join(projectRoot, "venv", "lib")),
-    ...sitePackageDirsUnder(path20.join(projectRoot, ".venv", "lib64")),
-    ...sitePackageDirsUnder(path20.join(projectRoot, "venv", "lib64"))
-  ];
-  return [...new Set(candidates.map((candidate) => path20.resolve(candidate)))].filter((candidate) => existsSync20(candidate) && isReadableDirectory16(candidate));
-}
-function sitePackageDirsUnder(libDir) {
-  if (!existsSync20(libDir) || !isReadableDirectory16(libDir)) {
-    return [];
-  }
-  try {
-    return readdirSync17(libDir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name.startsWith("python")).map((entry) => path20.join(libDir, entry.name, "site-packages")).filter((candidate) => existsSync20(candidate) && isReadableDirectory16(candidate));
-  } catch {
-    return [];
-  }
-}
-function findMatchingDistInfo(input) {
-  let entries;
-  try {
-    entries = readdirSync17(input.sitePackageDir, { withFileTypes: true });
-  } catch (cause) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: "filesystem",
-      message: "Failed to inspect Python site-packages evidence directory.",
-      details: {
-        sitePackageDir: input.sitePackageDir,
-        cause: cause instanceof Error ? cause.message : String(cause)
-      }
-    }));
-  }
-  for (const entry of entries) {
-    if (!entry.isDirectory() || !entry.name.endsWith(".dist-info")) {
-      continue;
-    }
-    const distInfoPath = path20.join(input.sitePackageDir, entry.name);
-    const metadata = readPythonMetadata({
-      metadataPath: path20.join(distInfoPath, "METADATA"),
-      packageId: `${input.packageName}@${input.version}`,
-      maxBytes: input.metadataMaxBytes
-    });
-    if (!metadata.ok) {
-      return err(metadata.error);
-    }
-    if (!metadata.value) {
-      continue;
-    }
-    if (normalizePythonPackageName(metadata.value.name ?? "") === normalizePythonPackageName(input.packageName) && metadata.value.version === input.version) {
-      return ok({
-        path: distInfoPath,
-        metadata: metadata.value
-      });
-    }
-  }
-  return ok(undefined);
-}
-function collectDistInfoEvidence(input) {
-  const warnings = [];
-  const files = readPythonEvidenceFiles({
-    distInfoPath: input.distInfo.path,
-    maxBytes: input.evidenceFileMaxBytes,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Python dist-info metadata.");
-  }
-  const metadataLicense = readPythonMetadataLicense(input.distInfo.metadata);
-  if (!metadataLicense) {
-    warnings.push("Python METADATA did not declare License-Expression, License, or a recognized license classifier.");
-  }
-  return ok({
-    packageId: input.packageId,
-    ...metadataLicense ? { metadataLicense, metadataSource: "METADATA" } : {},
-    files,
-    source: "local",
-    warnings
-  });
-}
-function readPythonMetadata(input) {
-  if (!existsSync20(input.metadataPath)) {
-    return ok(undefined);
-  }
-  const text3 = readTextFileWithLimit({
-    filePath: input.metadataPath,
-    maxBytes: input.maxBytes
-  });
-  if (!text3.ok) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: textFileReadErrorCategory(text3.error),
-      message: metadataReadFailedMessage(text3.error),
-      details: {
-        packageId: input.packageId,
-        metadataPath: input.metadataPath,
-        ...textFileReadErrorDetails(text3.error)
-      }
-    }));
-  }
-  const headers = parseEmailStyleHeaders(text3.value);
-  return ok(omitUndefined({
-    name: firstHeader(headers, "Name"),
-    version: firstHeader(headers, "Version"),
-    licenseExpression: firstHeader(headers, "License-Expression"),
-    license: firstHeader(headers, "License"),
-    classifiers: headers.get("Classifier") ?? []
-  }));
-}
-function parseEmailStyleHeaders(text3) {
-  const headers = new Map;
-  let currentKey;
-  for (const line of text3.split(/\r?\n/)) {
-    if (line.trim() === "") {
-      break;
-    }
-    if (/^\s/.test(line) && currentKey) {
-      const values2 = headers.get(currentKey);
-      if (values2 && values2.length > 0) {
-        values2[values2.length - 1] = `${values2[values2.length - 1]} ${line.trim()}`.trim();
-      }
-      continue;
-    }
-    const separatorIndex = line.indexOf(":");
-    if (separatorIndex <= 0) {
-      currentKey = undefined;
-      continue;
-    }
-    currentKey = line.slice(0, separatorIndex);
-    const value = line.slice(separatorIndex + 1).trim();
-    const values = headers.get(currentKey) ?? [];
-    values.push(value);
-    headers.set(currentKey, values);
-  }
-  return headers;
-}
-function firstHeader(headers, key) {
-  const value = headers.get(key)?.find((item) => item.trim() !== "")?.trim();
-  return value && value.length > 0 ? value : undefined;
-}
-function readPythonMetadataLicense(metadata) {
-  if (metadata.licenseExpression) {
-    return metadata.licenseExpression;
-  }
-  if (metadata.license && metadata.license.length <= 200 && !metadata.license.includes(`
-`)) {
-    return metadata.license;
-  }
-  const classifierLicenses = metadata.classifiers.map((classifier) => LICENSE_CLASSIFIER_ALIASES.get(classifier)).filter((license) => license !== undefined);
-  if (classifierLicenses.length > 0) {
-    return [...new Set(classifierLicenses)].join(" OR ");
-  }
-  return;
-}
-function readPythonEvidenceFiles(input) {
-  const files = [];
-  const candidates = [
-    ...evidenceFileCandidates12(input.distInfoPath, ""),
-    ...evidenceFileCandidates12(path20.join(input.distInfoPath, "licenses"), "licenses")
-  ];
-  for (const candidate of candidates.slice(0, PYTHON_LICENSE_FILE_LIMIT)) {
-    const kind = classifyEvidenceFile(candidate.relativePath);
-    if (!kind) {
-      continue;
-    }
-    try {
-      const text3 = readTextFileWithLimit({
-        filePath: candidate.absolutePath,
-        maxBytes: input.maxBytes
-      });
-      if (!text3.ok) {
-        input.warnings.push(evidenceFileReadWarning6(candidate.relativePath, text3.error));
-        continue;
-      }
-      files.push({
-        path: candidate.relativePath,
-        kind,
-        text: text3.value
-      });
-    } catch (cause) {
-      input.warnings.push(`Failed to read ${candidate.relativePath}: ${cause instanceof Error ? cause.message : String(cause)}`);
-    }
-  }
-  return files.sort((left, right) => left.path.localeCompare(right.path));
-}
-function evidenceFileCandidates12(dir, relativePrefix) {
-  if (!existsSync20(dir) || !isReadableDirectory16(dir)) {
-    return [];
-  }
-  try {
-    return readdirSync17(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path20.join(dir, entry.name),
-      relativePath: relativePrefix ? `${relativePrefix}/${entry.name}` : entry.name
-    }));
-  } catch {
-    return [];
-  }
-}
-function normalizePythonPackageName(name) {
-  return name.toLowerCase().replace(/[-_.]+/g, "-");
-}
-function isReadableDirectory16(dir) {
-  try {
-    return statSync19(dir).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function metadataReadFailedMessage(error) {
-  return error.kind === "too_large" ? "Python package METADATA exceeded the maximum supported size." : "Failed to read Python package METADATA.";
-}
-function evidenceFileReadWarning6(fileName, error) {
-  return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
-}
-
-// src/evidence/r-package.ts
-import { existsSync as existsSync21, readdirSync as readdirSync18, statSync as statSync20 } from "node:fs";
-import path21 from "node:path";
-var R_DESCRIPTION_MAX_BYTES = 1024 * 1024;
-var R_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-var R_PACKAGE_SEARCH_MAX_DEPTH = 6;
-var R_PACKAGE_SEARCH_MAX_DIRS = 4000;
-function collectRPackageEvidence(input) {
-  const packageDir = findRPackageDir({
-    packageName: input.packageName,
-    version: input.version,
-    projectRoot: input.projectRoot,
-    descriptionMaxBytes: input.descriptionMaxBytes ?? R_DESCRIPTION_MAX_BYTES
-  });
-  if (!packageDir.ok) {
-    return err(packageDir.error);
-  }
-  if (!packageDir.value) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: ["R package source was not found in local renv/library or project library paths."]
-    });
-  }
-  const description = readRDescription({
-    packageId: input.packageId,
-    descriptionPath: path21.join(packageDir.value, "DESCRIPTION"),
-    maxBytes: input.descriptionMaxBytes ?? R_DESCRIPTION_MAX_BYTES
-  });
-  if (!description.ok) {
-    return err(description.error);
-  }
-  const warnings = [];
-  const files = readRPackageEvidenceFiles({
-    packageDir: packageDir.value,
-    maxBytes: input.evidenceFileMaxBytes ?? R_EVIDENCE_FILE_MAX_BYTES,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in R package source.");
-  }
-  if (!description.value?.license) {
-    warnings.push("R package DESCRIPTION did not declare License metadata.");
-  }
-  return ok({
-    packageId: input.packageId,
-    ...description.value?.license ? {
-      metadataLicense: description.value.license,
-      metadataSource: "DESCRIPTION"
-    } : {},
-    files,
-    source: "local",
-    warnings
-  });
-}
-function findRPackageDir(input) {
-  for (const root of rPackageSearchRoots(input.projectRoot)) {
-    const found = findRPackageDirUnderRoot({
-      root,
-      packageName: input.packageName,
-      version: input.version,
-      descriptionMaxBytes: input.descriptionMaxBytes
-    });
-    if (!found.ok) {
-      return found;
-    }
-    if (found.value) {
-      return ok(found.value);
-    }
-  }
-  return ok(undefined);
-}
-function rPackageSearchRoots(projectRoot) {
-  return [
-    path21.join(projectRoot, "renv", "library"),
-    path21.join(projectRoot, "library")
-  ].map((root) => path21.resolve(root));
-}
-function findRPackageDirUnderRoot(input) {
-  if (!existsSync21(input.root) || !isReadableDirectory17(input.root)) {
-    return ok(undefined);
-  }
-  const queue = [{ dir: input.root, depth: 0 }];
-  let visited = 0;
-  while (queue.length > 0 && visited < R_PACKAGE_SEARCH_MAX_DIRS) {
-    const item = queue.shift();
-    if (!item) {
-      continue;
-    }
-    visited += 1;
-    if (path21.basename(item.dir) === input.packageName) {
-      const description = readRDescription({
-        packageId: `${input.packageName}@${input.version}`,
-        descriptionPath: path21.join(item.dir, "DESCRIPTION"),
-        maxBytes: input.descriptionMaxBytes
-      });
-      if (!description.ok) {
-        return err(description.error);
-      }
-      if (description.value?.packageName === input.packageName && description.value.version === input.version) {
-        return ok(item.dir);
-      }
-    }
-    if (item.depth >= R_PACKAGE_SEARCH_MAX_DEPTH) {
-      continue;
-    }
-    for (const child of childDirectories4(item.dir)) {
-      queue.push({
-        dir: child,
-        depth: item.depth + 1
-      });
-    }
-  }
-  return ok(undefined);
-}
-function readRDescription(input) {
-  if (!existsSync21(input.descriptionPath)) {
-    return ok(undefined);
-  }
-  const text3 = readTextFileWithLimit({
-    filePath: input.descriptionPath,
-    maxBytes: input.maxBytes
-  });
-  if (!text3.ok) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: textFileReadErrorCategory(text3.error),
-      message: text3.error.kind === "too_large" ? "R package DESCRIPTION metadata exceeded the maximum supported size." : "Failed to read R package DESCRIPTION metadata.",
-      details: {
-        packageId: input.packageId,
-        descriptionPath: input.descriptionPath,
-        ...textFileReadErrorDetails(text3.error)
-      }
-    }));
-  }
-  const fields = parseDcfFields(text3.value);
-  return ok(omitUndefined({
-    packageName: fields.get("Package"),
-    version: fields.get("Version"),
-    license: fields.get("License")
-  }));
-}
-function parseDcfFields(text3) {
-  const fields = new Map;
-  let currentKey;
-  for (const line of text3.split(/\r?\n/)) {
-    if (line.trim() === "") {
-      currentKey = undefined;
-      continue;
-    }
-    if (/^\s/.test(line) && currentKey) {
-      fields.set(currentKey, `${fields.get(currentKey) ?? ""} ${line.trim()}`.trim());
-      continue;
-    }
-    const separatorIndex = line.indexOf(":");
-    if (separatorIndex <= 0) {
-      currentKey = undefined;
-      continue;
-    }
-    currentKey = line.slice(0, separatorIndex);
-    fields.set(currentKey, line.slice(separatorIndex + 1).trim());
-  }
-  return fields;
-}
-function readRPackageEvidenceFiles(input) {
-  const files = [];
-  for (const candidate of evidenceFileCandidates13(input.packageDir)) {
-    const kind = classifyEvidenceFile(candidate.relativePath);
-    if (!kind) {
-      continue;
-    }
-    const text3 = readTextFileWithLimit({
-      filePath: candidate.absolutePath,
-      maxBytes: input.maxBytes
-    });
-    if (!text3.ok) {
-      input.warnings.push(evidenceFileReadWarning7(candidate.relativePath, text3.error));
-      continue;
-    }
-    files.push({
-      path: candidate.relativePath,
-      kind,
-      text: text3.value
-    });
-  }
-  return files.sort((left, right) => left.path.localeCompare(right.path));
-}
-function evidenceFileCandidates13(dir) {
-  try {
-    return readdirSync18(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path21.join(dir, entry.name),
-      relativePath: entry.name
-    }));
-  } catch {
-    return [];
-  }
-}
-function childDirectories4(dir) {
-  try {
-    return readdirSync18(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path21.join(dir, entry.name));
-  } catch {
-    return [];
-  }
-}
-function evidenceFileReadWarning7(fileName, error) {
-  return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
-}
-function isReadableDirectory17(pathname) {
-  try {
-    return statSync20(pathname).isDirectory();
-  } catch {
-    return false;
-  }
-}
-
-// src/evidence/ruby-gem.ts
-import { existsSync as existsSync22, readdirSync as readdirSync19, statSync as statSync21 } from "node:fs";
-import path22 from "node:path";
-var GEMSPEC_MAX_BYTES = 1024 * 1024;
-var GEM_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-function collectRubyGemEvidence(input) {
-  const location = findRubyGemLocation({
-    gemName: input.gemName,
-    version: input.version,
-    projectRoot: input.projectRoot
-  });
-  if (!location) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: ["Ruby gem source was not found in a local Bundler or RubyGems install path."]
-    });
-  }
-  const gemspec = location.gemspecPath ? readGemSpecLicenses({
-    packageId: input.packageId,
-    gemspecPath: location.gemspecPath,
-    maxBytes: input.gemspecMaxBytes ?? GEMSPEC_MAX_BYTES
-  }) : ok(undefined);
-  if (!gemspec.ok) {
-    return err(gemspec.error);
-  }
-  const warnings = [];
-  const files = readRubyGemEvidenceFiles({
-    packageDir: location.packageDir,
-    maxBytes: input.evidenceFileMaxBytes ?? GEM_EVIDENCE_FILE_MAX_BYTES,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Ruby gem source.");
-  }
-  if (!gemspec.value || gemspec.value.length === 0) {
-    warnings.push("Ruby gemspec did not declare license metadata.");
-  }
-  return ok({
-    packageId: input.packageId,
-    ...gemspec.value && gemspec.value.length === 1 ? {
-      metadataLicense: gemspec.value[0],
-      metadataSource: "gemspec"
-    } : {},
-    ...gemspec.value && gemspec.value.length > 1 ? {
-      metadataLicenses: gemspec.value,
-      metadataSource: "gemspec"
-    } : {},
-    files,
-    source: "local",
-    warnings
-  });
-}
-function findRubyGemLocation(input) {
-  const gemDirName = `${input.gemName}-${input.version}`;
-  for (const root of rubyGemInstallRoots(input.projectRoot)) {
-    const gemsRoot = path22.resolve(root, "gems");
-    const packageDir = path22.resolve(gemsRoot, gemDirName);
-    if (!isPathInside13(gemsRoot, packageDir) || !existsSync22(packageDir) || !isReadableDirectory18(packageDir)) {
-      continue;
-    }
-    const specificationsRoot = path22.resolve(root, "specifications");
-    const gemspecPath = path22.resolve(specificationsRoot, `${gemDirName}.gemspec`);
-    return {
-      packageDir,
-      ...isPathInside13(specificationsRoot, gemspecPath) && existsSync22(gemspecPath) ? { gemspecPath } : {}
-    };
-  }
-  return;
-}
-function rubyGemInstallRoots(projectRoot) {
-  const roots = [];
-  for (const vendorRoot of globRubyVersionRoots(path22.join(projectRoot, "vendor", "bundle", "ruby"))) {
-    roots.push(vendorRoot);
-  }
-  const gemHome = process.env.GEM_HOME;
-  if (gemHome) {
-    roots.push(gemHome);
-  }
-  const gemPath = process.env.GEM_PATH;
-  if (gemPath) {
-    roots.push(...gemPath.split(path22.delimiter).filter((entry) => entry.trim() !== ""));
-  }
-  const home = process.env.USERPROFILE ?? process.env.HOME;
-  if (home) {
-    for (const userGemRoot of globRubyVersionRoots(path22.join(home, ".gem", "ruby"))) {
-      roots.push(userGemRoot);
-    }
-  }
-  return [...new Set(roots.map((root) => path22.resolve(root)))];
-}
-function globRubyVersionRoots(root) {
-  if (!existsSync22(root) || !isReadableDirectory18(root)) {
-    return [];
-  }
-  try {
-    return readdirSync19(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path22.join(root, entry.name));
-  } catch {
-    return [];
-  }
-}
-function readGemSpecLicenses(input) {
-  const text3 = readTextFileWithLimit({
-    filePath: input.gemspecPath,
-    maxBytes: input.maxBytes
-  });
-  if (!text3.ok) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: textFileReadErrorCategory(text3.error),
-      message: text3.error.kind === "too_large" ? "Ruby gemspec metadata exceeded the maximum supported size." : "Failed to read Ruby gemspec metadata.",
-      details: {
-        packageId: input.packageId,
-        gemspecPath: input.gemspecPath,
-        ...textFileReadErrorDetails(text3.error)
-      }
-    }));
-  }
-  return ok(parseGemSpecLicenses(text3.value));
-}
-function parseGemSpecLicenses(text3) {
-  const listMatch = text3.match(/\.licenses\s*=\s*\[([^\]]*)\]/);
-  if (listMatch?.[1]) {
-    const values = [...listMatch[1].matchAll(/["']([^"']+)["']/g)].map((match) => match[1]).filter((item) => item !== undefined && item.trim() !== "");
-    if (values.length > 0) {
-      return values;
-    }
-  }
-  const scalarMatch = text3.match(/\.license\s*=\s*["']([^"']+)["']/);
-  return scalarMatch?.[1] ? [scalarMatch[1]] : undefined;
-}
-function readRubyGemEvidenceFiles(input) {
-  const files = [];
-  for (const candidate of evidenceFileCandidates14(input.packageDir)) {
-    const kind = classifyEvidenceFile(candidate.relativePath);
-    if (!kind) {
-      continue;
-    }
-    const text3 = readTextFileWithLimit({
-      filePath: candidate.absolutePath,
-      maxBytes: input.maxBytes
-    });
-    if (!text3.ok) {
-      input.warnings.push(evidenceFileReadWarning8(candidate.relativePath, text3.error));
-      continue;
-    }
-    files.push({
-      path: candidate.relativePath,
-      kind,
-      text: text3.value
-    });
-  }
-  return files.sort((left, right) => left.path.localeCompare(right.path));
-}
-function evidenceFileCandidates14(dir) {
-  if (!existsSync22(dir) || !isReadableDirectory18(dir)) {
-    return [];
-  }
-  try {
-    return readdirSync19(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path22.join(dir, entry.name),
-      relativePath: entry.name
-    }));
-  } catch {
-    return [];
-  }
-}
-function isReadableDirectory18(dir) {
-  try {
-    return statSync21(dir).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function isPathInside13(parent, child) {
-  const relative = path22.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path22.isAbsolute(relative);
-}
-function evidenceFileReadWarning8(fileName, error) {
-  return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
-}
-
-// src/evidence/swift-package.ts
-import { existsSync as existsSync23, readdirSync as readdirSync20, statSync as statSync22 } from "node:fs";
-import path23 from "node:path";
-var SWIFT_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-var SWIFT_LICENSE_FILE_LIMIT = 50;
-function collectSwiftPackageEvidence(input) {
-  const packageDir = findSwiftPackageDir({
-    packageName: input.packageName,
-    projectRoot: input.projectRoot
-  });
-  if (!packageDir) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: [
-        "Swift package source was not found in .build/checkouts or SourcePackages/checkouts."
-      ]
-    });
-  }
-  const warnings = [];
-  const files = readSwiftEvidenceFiles({
-    packageDir,
-    maxBytes: input.evidenceFileMaxBytes ?? SWIFT_EVIDENCE_FILE_MAX_BYTES,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Swift package checkout.");
-  }
-  return ok({
-    packageId: input.packageId,
-    files,
-    source: "local",
-    warnings
-  });
-}
-function findSwiftPackageDir(input) {
-  for (const checkoutsRoot of swiftCheckoutsRoots(input.projectRoot)) {
-    if (!existsSync23(checkoutsRoot) || !isReadableDirectory19(checkoutsRoot)) {
-      continue;
-    }
-    const exactCandidate = path23.resolve(checkoutsRoot, input.packageName);
-    if (isPathInside14(checkoutsRoot, exactCandidate) && existsSync23(exactCandidate) && isReadableDirectory19(exactCandidate)) {
-      return exactCandidate;
-    }
-    const caseInsensitiveCandidate = findCaseInsensitiveChildDirectory4({
-      parent: checkoutsRoot,
-      childName: input.packageName
-    });
-    if (caseInsensitiveCandidate) {
-      return caseInsensitiveCandidate;
-    }
-  }
-  return;
-}
-function swiftCheckoutsRoots(projectRoot) {
-  return [...new Set([
-    path23.resolve(projectRoot, ".build", "checkouts"),
-    path23.resolve(projectRoot, "SourcePackages", "checkouts")
-  ])];
-}
-function findCaseInsensitiveChildDirectory4(input) {
-  let entries;
-  try {
-    entries = readdirSync20(input.parent, { withFileTypes: true });
-  } catch {
-    return;
-  }
-  const normalizedName = input.childName.toLowerCase();
-  for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name.toLowerCase() !== normalizedName) {
-      continue;
-    }
-    const candidate = path23.resolve(input.parent, entry.name);
-    if (isPathInside14(input.parent, candidate) && isReadableDirectory19(candidate)) {
-      return candidate;
-    }
-  }
-  return;
-}
-function readSwiftEvidenceFiles(input) {
-  const files = [];
-  for (const candidate of evidenceFileCandidates15(input.packageDir)) {
-    const kind = classifyEvidenceFile(candidate.relativePath);
-    if (!kind) {
-      continue;
-    }
-    if (files.length >= SWIFT_LICENSE_FILE_LIMIT) {
-      input.warnings.push(`Swift package evidence file limit reached at ${SWIFT_LICENSE_FILE_LIMIT} files.`);
-      break;
-    }
-    const text3 = readTextFileWithLimit({
-      filePath: candidate.absolutePath,
-      maxBytes: input.maxBytes
-    });
-    if (!text3.ok) {
-      input.warnings.push(`Skipped Swift package evidence file ${candidate.relativePath}: ${evidenceReadError8(text3.error)}.`);
-      continue;
-    }
-    files.push({
-      path: candidate.relativePath,
-      kind,
-      text: text3.value
-    });
-  }
-  return files.sort((left, right) => left.path.localeCompare(right.path));
-}
-function evidenceFileCandidates15(dir) {
-  try {
-    return readdirSync20(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path23.join(dir, entry.name),
-      relativePath: entry.name
-    }));
-  } catch {
-    return [];
-  }
-}
-function evidenceReadError8(error) {
-  switch (error.kind) {
-    case "too_large":
-      return `file exceeded ${error.maxBytes} bytes`;
-    case "filesystem":
-      return error.cause;
-  }
-}
-function isReadableDirectory19(pathname) {
-  try {
-    return statSync22(pathname).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function isPathInside14(parent, child) {
-  const relative = path23.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path23.isAbsolute(relative);
-}
-
-// src/evidence/terraform-provider.ts
-import { existsSync as existsSync24, readdirSync as readdirSync21, statSync as statSync23 } from "node:fs";
-import path24 from "node:path";
-var TERRAFORM_PROVIDER_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-var TERRAFORM_PROVIDER_EVIDENCE_FILE_LIMIT = 50;
-function collectTerraformProviderEvidence(input) {
-  const providerRoot = findTerraformProviderRoot({
-    sourceAddress: input.sourceAddress,
-    version: input.version,
-    projectRoot: input.projectRoot
-  });
-  if (!providerRoot) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: ["Terraform provider package was not found in the local .terraform/providers cache."]
-    });
-  }
-  const warnings = [];
-  const files = readEvidenceFilesRecursively({
-    rootDir: providerRoot,
-    maxBytes: input.evidenceFileMaxBytes ?? TERRAFORM_PROVIDER_EVIDENCE_FILE_MAX_BYTES,
-    limit: TERRAFORM_PROVIDER_EVIDENCE_FILE_LIMIT,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Terraform provider cache.");
-  }
-  return ok({
-    packageId: input.packageId,
-    files,
-    source: "local",
-    warnings
-  });
-}
-function findTerraformProviderRoot(input) {
-  const providerRoot = path24.resolve(input.projectRoot, ".terraform", "providers", ...input.sourceAddress.split("/"), input.version);
-  return isReadableDirectory20(providerRoot) ? providerRoot : undefined;
-}
-function readEvidenceFilesRecursively(input) {
-  const files = new Map;
-  const queue = [input.rootDir];
-  while (queue.length > 0) {
-    const currentDir = queue.shift();
-    for (const entry of directoryEntries3(currentDir)) {
-      const absolutePath = path24.join(currentDir, entry.name);
-      const relativePath = path24.relative(input.rootDir, absolutePath).replace(/\\/g, "/");
-      if (entry.isDirectory()) {
-        queue.push(absolutePath);
-        continue;
-      }
-      if (!entry.isFile()) {
-        continue;
-      }
-      const kind = classifyEvidenceFile(relativePath);
-      if (!kind || files.has(relativePath)) {
-        continue;
-      }
-      if (files.size >= input.limit) {
-        input.warnings.push(`Terraform provider evidence file limit reached at ${input.limit} files.`);
-        return [...files.values()].sort((left, right) => left.path.localeCompare(right.path));
-      }
-      const text3 = readTextFileWithLimit({
-        filePath: absolutePath,
-        maxBytes: input.maxBytes
-      });
-      if (!text3.ok) {
-        input.warnings.push(`Skipped Terraform provider evidence file ${relativePath}: ${evidenceReadError9(text3.error)}.`);
-        continue;
-      }
-      files.set(relativePath, {
-        path: relativePath,
-        kind,
-        text: text3.value
-      });
-    }
-  }
-  return [...files.values()].sort((left, right) => left.path.localeCompare(right.path));
-}
-function directoryEntries3(dir) {
-  try {
-    return readdirSync21(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-}
-function evidenceReadError9(error) {
-  switch (error.kind) {
-    case "too_large":
-      return `file exceeded ${error.maxBytes} bytes`;
-    case "filesystem":
-      return error.cause;
-  }
-}
-function isReadableDirectory20(pathname) {
-  try {
-    return existsSync24(pathname) && statSync23(pathname).isDirectory();
-  } catch {
-    return false;
-  }
-}
-
-// src/evidence/unity-package.ts
-import { existsSync as existsSync26, readdirSync as readdirSync23, statSync as statSync25 } from "node:fs";
-import path26 from "node:path";
-
-// src/evidence/local-package.ts
-import { existsSync as existsSync25, readdirSync as readdirSync22, statSync as statSync24 } from "node:fs";
-import path25 from "node:path";
-var LOCAL_PACKAGE_JSON_MAX_BYTES = 1024 * 1024;
-var LOCAL_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-function collectLocalPackageEvidence(input) {
-  const warnings = [];
-  const packageJsonPath = path25.join(input.packageDir, "package.json");
-  const packageJsonMaxBytes = input.packageJsonMaxBytes ?? LOCAL_PACKAGE_JSON_MAX_BYTES;
-  const evidenceFileMaxBytes = input.evidenceFileMaxBytes ?? LOCAL_EVIDENCE_FILE_MAX_BYTES;
-  try {
-    if (!existsSync25(input.packageDir) || !statSync24(input.packageDir).isDirectory()) {
-      return err(createError({
-        code: "PACKAGE_EVIDENCE_READ_FAILED",
-        category: "filesystem",
-        message: "Package evidence path is not a readable directory.",
-        details: {
-          packageId: input.packageId,
-          packageDir: input.packageDir
-        }
-      }));
-    }
-    const packageJson = readPackageJson({
-      packageJsonPath,
-      packageId: input.packageId,
-      maxBytes: packageJsonMaxBytes
-    });
-    if (!packageJson.ok) {
-      return packageJson;
-    }
-    const evidenceFiles = readEvidenceFiles4({
-      packageDir: input.packageDir,
-      maxBytes: evidenceFileMaxBytes,
-      warnings
-    });
-    if (!evidenceFiles.foundEvidenceFile) {
-      warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found.");
-    }
-    return ok({
-      packageId: input.packageId,
-      ...readPackagePrivateField(packageJson.value),
-      ...readLicenseFields(packageJson.value),
-      files: evidenceFiles.files,
-      source: "local",
-      warnings
-    });
-  } catch (cause) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: "filesystem",
-      message: "Failed to read local package evidence.",
-      details: {
-        packageId: input.packageId,
-        packageDir: input.packageDir,
-        cause: cause instanceof Error ? cause.message : String(cause)
-      }
-    }));
-  }
-}
-function readPackageJson(input) {
-  const { packageJsonPath, packageId } = input;
-  if (!existsSync25(packageJsonPath)) {
-    return err(createError({
-      code: "PACKAGE_JSON_PARSE_FAILED",
-      category: "unsupported_input",
-      message: "Package artifact is missing package.json.",
-      details: {
-        packageId,
-        packageJsonPath
-      }
-    }));
-  }
-  try {
-    const packageJsonText = readTextFileWithLimit({
-      filePath: packageJsonPath,
-      maxBytes: input.maxBytes
-    });
-    if (!packageJsonText.ok) {
-      return err(createError({
-        code: "PACKAGE_EVIDENCE_READ_FAILED",
-        category: textFileReadErrorCategory(packageJsonText.error),
-        message: packageJsonReadFailedMessage(packageJsonText.error),
-        details: {
-          packageId,
-          packageJsonPath,
-          ...textFileReadErrorDetails(packageJsonText.error)
-        }
-      }));
-    }
-    const packageJson = JSON.parse(packageJsonText.value);
-    if (!isObjectRecord(packageJson)) {
-      throw new Error("Expected package.json to contain an object.");
-    }
-    return ok(packageJson);
-  } catch (cause) {
-    return err(createError({
-      code: "PACKAGE_JSON_PARSE_FAILED",
-      category: "unsupported_input",
-      message: "Failed to parse package.json from package artifact.",
-      details: {
-        packageId,
-        packageJsonPath,
-        cause: cause instanceof Error ? cause.message : String(cause)
-      }
-    }));
-  }
-}
-function readPackagePrivateField(packageJson) {
-  return packageJson.private === true ? { packageJsonPrivate: true } : {};
-}
-function readLicenseFields(packageJson) {
-  const license = packageJson.license;
-  const licenses = packageJson.licenses;
-  const legacyLicenseObject = isObjectRecord(license) ? license : undefined;
-  return {
-    ...typeof license === "string" ? { packageJsonLicense: license } : {},
-    ...legacyLicenseObject !== undefined ? { packageJsonLicenses: legacyLicenseObject } : {},
-    ...licenses !== undefined ? { packageJsonLicenses: licenses } : {}
-  };
-}
-function isObjectRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function readEvidenceFiles4(input) {
-  const files = [];
-  let foundEvidenceFile = false;
-  for (const entry of readdirSync22(input.packageDir, { withFileTypes: true })) {
-    if (!entry.isFile()) {
-      continue;
-    }
-    const kind = classifyEvidenceFile(entry.name);
-    if (!kind) {
-      continue;
-    }
-    foundEvidenceFile = true;
-    const filePath = path25.join(input.packageDir, entry.name);
-    try {
-      const text3 = readTextFileWithLimit({
-        filePath,
-        maxBytes: input.maxBytes
-      });
-      if (!text3.ok) {
-        input.warnings.push(evidenceFileReadWarning9(entry.name, text3.error));
-        continue;
-      }
-      files.push({
-        path: entry.name,
-        kind,
-        text: text3.value
-      });
-    } catch (cause) {
-      input.warnings.push(`Failed to read ${entry.name}: ${cause instanceof Error ? cause.message : String(cause)}`);
-    }
-  }
-  return {
-    files: files.sort((left, right) => left.path.localeCompare(right.path)),
-    foundEvidenceFile
-  };
-}
-function packageJsonReadFailedMessage(error) {
-  return error.kind === "too_large" ? "Package artifact package.json exceeded the maximum supported size." : "Failed to read package artifact package.json.";
-}
-function evidenceFileReadWarning9(fileName, error) {
-  return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
-}
-
-// src/evidence/unity-package.ts
-function collectUnityPackageEvidence(input) {
-  const packageDir = findUnityPackageDir(input);
-  if (!packageDir) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: [
-        "Unity package source was not found in Packages/ or Library/PackageCache. Run Unity package restore before scanning for local license evidence."
-      ]
-    });
-  }
-  return collectLocalPackageEvidence({
-    packageId: input.packageId,
-    packageDir
-  });
-}
-function findUnityPackageDir(input) {
-  const embeddedPackage = path26.resolve(input.projectRoot, "Packages", input.packageName);
-  const embeddedRoot = path26.resolve(input.projectRoot, "Packages");
-  if (isPathInside15(embeddedRoot, embeddedPackage) && existsSync26(embeddedPackage) && isReadableDirectory21(embeddedPackage)) {
-    return embeddedPackage;
-  }
-  const packageCacheRoot = path26.resolve(input.projectRoot, "Library", "PackageCache");
-  const exactCachePackage = path26.resolve(packageCacheRoot, `${input.packageName}@${input.version}`);
-  if (isPathInside15(packageCacheRoot, exactCachePackage) && existsSync26(exactCachePackage) && isReadableDirectory21(exactCachePackage)) {
-    return exactCachePackage;
-  }
-  for (const candidate of packageCacheCandidates({
-    packageCacheRoot,
-    packageName: input.packageName,
-    version: input.version
-  })) {
-    return candidate;
-  }
-  return;
-}
-function packageCacheCandidates(input) {
-  let entries;
-  try {
-    entries = readdirSync23(input.packageCacheRoot);
-  } catch {
-    return [];
-  }
-  const prefix = `${input.packageName}@${input.version}`;
-  return entries.filter((entry) => entry === prefix || entry.startsWith(`${prefix}-`)).map((entry) => path26.resolve(input.packageCacheRoot, entry)).filter((candidate) => isPathInside15(input.packageCacheRoot, candidate) && existsSync26(candidate) && isReadableDirectory21(candidate)).sort();
-}
-function isReadableDirectory21(pathname) {
-  try {
-    return statSync25(pathname).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function isPathInside15(parent, child) {
-  const relative = path26.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path26.isAbsolute(relative);
-}
-
-// src/evidence/vcpkg-package.ts
-import { existsSync as existsSync27, readdirSync as readdirSync24, statSync as statSync26 } from "node:fs";
-import path27 from "node:path";
-var VCPKG_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-var VCPKG_EVIDENCE_FILE_LIMIT = 20;
-var VCPKG_INSTALL_ROOT_LIMIT = 8;
-function collectVcpkgPackageEvidence(input) {
-  const warnings = [];
-  const files = readVcpkgEvidenceFiles({
-    packageName: input.packageName,
-    projectRoot: input.projectRoot,
-    maxBytes: input.evidenceFileMaxBytes ?? VCPKG_EVIDENCE_FILE_MAX_BYTES,
-    warnings
-  });
-  if (files.length === 0) {
-    warnings.push("vcpkg package copyright file was not found in local vcpkg_installed directories.");
-  }
-  return ok({
-    packageId: input.packageId,
-    files,
-    source: files.length > 0 ? "local" : "unavailable",
-    warnings
-  });
-}
-function readVcpkgEvidenceFiles(input) {
-  const files = new Map;
-  for (const installRoot of findVcpkgInstallRoots(input.projectRoot)) {
-    for (const candidate of vcpkgCopyrightCandidates({
-      installRoot,
-      packageName: input.packageName
-    })) {
-      if (files.size >= VCPKG_EVIDENCE_FILE_LIMIT) {
-        input.warnings.push(`vcpkg evidence file limit reached at ${VCPKG_EVIDENCE_FILE_LIMIT} files.`);
-        return [...files.values()].sort((left, right) => left.path.localeCompare(right.path));
-      }
-      if (files.has(candidate.relativePath)) {
-        continue;
-      }
-      const text3 = readTextFileWithLimit({
-        filePath: candidate.absolutePath,
-        maxBytes: input.maxBytes
-      });
-      if (!text3.ok) {
-        input.warnings.push(`Skipped vcpkg evidence file ${candidate.relativePath}: ${evidenceReadError10(text3.error)}.`);
-        continue;
-      }
-      files.set(candidate.relativePath, {
-        path: candidate.relativePath,
-        kind: "license",
-        text: text3.value
-      });
-    }
-  }
-  return [...files.values()].sort((left, right) => left.path.localeCompare(right.path));
-}
-function findVcpkgInstallRoots(projectRoot) {
-  const roots = [];
-  const direct = path27.join(projectRoot, "vcpkg_installed");
-  if (isReadableDirectory22(direct)) {
-    roots.push(direct);
-  }
-  try {
-    for (const entry of readdirSync24(projectRoot, { withFileTypes: true })) {
-      if (!entry.isDirectory()) {
-        continue;
-      }
-      const candidate = path27.join(projectRoot, entry.name, "vcpkg_installed");
-      if (isReadableDirectory22(candidate) && !roots.includes(candidate)) {
-        roots.push(candidate);
-      }
-      if (roots.length >= VCPKG_INSTALL_ROOT_LIMIT) {
-        break;
-      }
-    }
-  } catch {
-    return roots;
-  }
-  return roots;
-}
-function vcpkgCopyrightCandidates(input) {
-  const candidates = [];
-  for (const tripletDir of childDirectories5(input.installRoot)) {
-    if (path27.basename(tripletDir) === "vcpkg") {
-      continue;
-    }
-    const copyrightPath = path27.join(tripletDir, "share", input.packageName, "copyright");
-    if (!isFile(copyrightPath)) {
-      continue;
-    }
-    candidates.push({
-      absolutePath: copyrightPath,
-      relativePath: path27.relative(input.installRoot, copyrightPath).replace(/\\/g, "/")
-    });
-  }
-  return candidates.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
-}
-function childDirectories5(parent) {
-  try {
-    return readdirSync24(parent, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path27.join(parent, entry.name)).filter(isReadableDirectory22).sort();
-  } catch {
-    return [];
-  }
-}
-function evidenceReadError10(error) {
-  switch (error.kind) {
-    case "too_large":
-      return `file exceeded ${error.maxBytes} bytes`;
-    case "filesystem":
-      return error.cause;
-  }
-}
-function isReadableDirectory22(pathname) {
-  try {
-    return statSync26(pathname).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function isFile(pathname) {
-  if (!existsSync27(pathname)) {
-    return false;
-  }
-  try {
-    return statSync26(pathname).isFile();
-  } catch {
-    return false;
-  }
-}
-
-// src/evidence/ecosystem-collectors.ts
-var DEFAULT_ECOSYSTEM_EVIDENCE_COLLECTORS = {
-  bazel: ({ node, projectRoot }) => collectBazelModuleEvidence({
-    packageId: node.id,
-    packageName: node.name,
-    version: node.version,
-    projectRoot
-  }),
-  cargo: ({ node, projectRoot }) => collectCargoPackageEvidence({
-    packageId: node.id,
-    packageName: node.name,
-    version: node.version,
-    projectRoot
-  }),
-  carthage: ({ node, projectRoot }) => collectCarthagePackageEvidence({
-    packageId: node.id,
-    packageName: node.name,
-    projectRoot
-  }),
-  cocoapods: ({ node, projectRoot }) => collectCocoapodsPackageEvidence({
-    packageId: node.id,
-    packageName: node.name,
-    projectRoot
-  }),
-  composer: ({ node, projectRoot }) => collectComposerPackageEvidence({
-    packageId: node.id,
-    packageName: node.name,
-    projectRoot
-  }),
-  conan: ({ node, projectRoot }) => collectConanPackageEvidence({
-    packageId: node.id,
-    packageName: node.name,
-    version: node.version,
-    projectRoot
-  }),
-  conda: ({ node, projectRoot }) => collectCondaPackageEvidence(omitUndefined({
-    packageId: node.id,
-    packageName: node.name,
-    version: node.version,
-    resolved: node.resolved,
-    projectRoot
-  })),
-  cpan: ({ node, projectRoot }) => collectCpanPackageEvidence(omitUndefined({
-    packageId: node.id,
-    packageName: node.name,
-    version: node.version,
-    resolved: node.resolved,
-    projectRoot
-  })),
-  cran: ({ node, projectRoot }) => collectRPackageEvidence({
-    packageId: node.id,
-    packageName: node.name,
-    version: node.version,
-    projectRoot
-  }),
-  gem: ({ node, projectRoot }) => collectRubyGemEvidence({
-    packageId: node.id,
-    gemName: node.name,
-    version: node.version,
-    projectRoot
-  }),
-  go: ({ node, projectRoot }) => collectGoModuleEvidence(omitUndefined({
-    packageId: node.id,
-    modulePath: node.name,
-    version: node.version,
-    resolved: node.resolved,
-    projectRoot
-  })),
-  hackage: ({ node, projectRoot }) => collectHackagePackageEvidence({
-    packageId: node.id,
-    packageName: node.name,
-    version: node.version,
-    projectRoot
-  }),
-  helm: ({ node, projectRoot }) => collectHelmChartEvidence({
-    packageId: node.id,
-    chartName: node.installNames?.[0] ?? node.name,
-    version: node.version,
-    projectRoot
-  }),
-  hex: ({ node, projectRoot }) => collectHexPackageEvidence({
-    packageId: node.id,
-    packageName: node.name,
-    projectRoot
-  }),
-  julia: ({ node, projectRoot }) => collectJuliaPackageEvidence({
-    packageId: node.id,
-    packageName: node.name,
-    version: node.version,
-    projectRoot
-  }),
-  luarocks: ({ node, projectRoot }) => collectLuarocksPackageEvidence({
-    packageId: node.id,
-    packageName: node.name,
-    version: node.version,
-    projectRoot
-  }),
-  maven: ({ node, projectRoot }) => collectMavenPackageEvidence({
-    packageId: node.id,
-    coordinates: node.name,
-    version: node.version,
-    projectRoot
-  }),
-  nix: ({ node, projectRoot }) => collectNixPackageEvidence({
-    packageId: node.id,
-    resolved: node.resolved,
-    projectRoot
-  }),
-  nuget: ({ node, projectRoot }) => collectNugetPackageEvidence({
-    packageId: node.id,
-    packageName: node.name,
-    version: node.version,
-    projectRoot
-  }),
-  pub: ({ node, projectRoot }) => collectPubPackageEvidence({
-    packageId: node.id,
-    packageName: node.name,
-    version: node.version,
-    projectRoot
-  }),
-  pypi: ({ node, projectRoot }) => collectPythonPackageEvidence({
-    packageId: node.id,
-    packageName: node.name,
-    version: node.version,
-    projectRoot
-  }),
-  swift: ({ node, projectRoot }) => collectSwiftPackageEvidence({
-    packageId: node.id,
-    packageName: node.name,
-    projectRoot
-  }),
-  terraform: ({ node, projectRoot }) => collectTerraformProviderEvidence({
-    packageId: node.id,
-    sourceAddress: node.name,
-    version: node.version,
-    projectRoot
-  }),
-  unity: ({ node, projectRoot }) => collectUnityPackageEvidence({
-    packageId: node.id,
-    packageName: node.name,
-    version: node.version,
-    projectRoot
-  }),
-  vcpkg: ({ node, projectRoot }) => collectVcpkgPackageEvidence({
-    packageId: node.id,
-    packageName: node.name,
-    projectRoot
-  })
-};
-var ecosystemEvidenceCollectors = new Map(Object.entries(DEFAULT_ECOSYSTEM_EVIDENCE_COLLECTORS));
-function collectEcosystemEvidence(input) {
-  return ecosystemEvidenceCollectors.get(input.node.ecosystem)?.(input);
-}
+// src/archive/archive-project.ts
+import path45 from "node:path";
 
 // src/graph/package-url.ts
 function parsePackageUrl(input) {
@@ -23509,13 +18004,13 @@ function helmPackageUrl(node) {
   return `pkg:generic/helm/${encodePurlPath(node.name)}@${encodeURIComponent(node.version)}`;
 }
 function mavenPackageUrl(node) {
-  const coordinates = parseMavenCoordinates2(node.name);
+  const coordinates = parseMavenCoordinates(node.name);
   if (!coordinates) {
     return `pkg:maven/${encodePurlPath(node.name)}@${encodeURIComponent(node.version)}`;
   }
   return `pkg:maven/${encodePurlPath(coordinates.namespace)}/${encodeURIComponent(coordinates.name)}@${encodeURIComponent(node.version)}`;
 }
-function parseMavenCoordinates2(name) {
+function parseMavenCoordinates(name) {
   const colonIndex = name.indexOf(":");
   if (colonIndex > 0 && colonIndex < name.length - 1) {
     return {
@@ -23535,8 +18030,8 @@ function parseMavenCoordinates2(name) {
 function normalizePypiName(name) {
   return name.toLowerCase().replace(/[._-]+/g, "-");
 }
-function encodePurlPath(path28) {
-  return path28.split("/").map((part) => encodeURIComponent(part)).join("/");
+function encodePurlPath(path) {
+  return path.split("/").map((part) => encodeURIComponent(part)).join("/");
 }
 
 // src/graph/merge.ts
@@ -23549,6 +18044,7 @@ function mergeDependencyGraphs(graphs) {
   const canonicalIdByPurl = new Map;
   const evidenceByPackageId = new Map;
   const warnings = [];
+  const diagnostics = [];
   for (const item of graphs) {
     for (const node of item.graph.nodes) {
       const purl = packageUrl(node);
@@ -23583,6 +18079,7 @@ function mergeDependencyGraphs(graphs) {
       evidenceByPackageId.set(packageId, existing ? mergeLicenseEvidence(existing, remapped) : remapped);
     }
     warnings.push(...item.graph.warnings ?? []);
+    diagnostics.push(...item.graph.diagnostics ?? []);
   }
   const lockfilePaths = unique(graphs.map((item) => item.source.lockfilePath));
   const rootNames = unique(graphs.flatMap((item) => item.graph.rootName ? [item.graph.rootName] : []));
@@ -23592,8 +18089,21 @@ function mergeDependencyGraphs(graphs) {
     lockfilePaths,
     nodes: [...nodesByPurl.values()].sort((left, right) => left.id.localeCompare(right.id)),
     ...evidenceByPackageId.size > 0 ? { embeddedEvidence: [...evidenceByPackageId.values()] } : {},
-    ...warnings.length > 0 ? { warnings: unique(warnings) } : {}
+    ...warnings.length > 0 ? { warnings: unique(warnings) } : {},
+    ...diagnostics.length > 0 ? { diagnostics: mergeGraphDiagnostics(diagnostics) } : {}
   };
+}
+function mergeGraphDiagnostics(diagnostics) {
+  const byKey = new Map;
+  for (const diagnostic of diagnostics) {
+    const key = `${diagnostic.code}\x00${diagnostic.limit}\x00${diagnostic.message}`;
+    const existing = byKey.get(key);
+    byKey.set(key, existing ? {
+      ...existing,
+      affectedNodeCount: existing.affectedNodeCount + diagnostic.affectedNodeCount
+    } : diagnostic);
+  }
+  return [...byKey.values()].sort((left, right) => left.code.localeCompare(right.code));
 }
 function remapNode(node, canonicalId, idMap, origin) {
   return {
@@ -23683,8 +18193,78 @@ function uniqueEvidenceFiles(files) {
   return [...byKey.values()];
 }
 
+// src/shared/object.ts
+function omitUndefined(value) {
+  const entries = Object.entries(value).filter(([, entryValue]) => entryValue !== undefined);
+  return Object.fromEntries(entries);
+}
+
 // src/graph/bazel-module.ts
-import path28 from "node:path";
+import path from "node:path";
+
+// src/shared/read-text-file.ts
+import { closeSync, openSync, readSync, statSync } from "node:fs";
+var TEXT_FILE_READ_CHUNK_BYTES = 64 * 1024;
+function readTextFileWithLimit(input) {
+  try {
+    const stats = statSync(input.filePath);
+    if (stats.size > input.maxBytes) {
+      return err({
+        kind: "too_large",
+        maxBytes: input.maxBytes,
+        observedBytes: stats.size
+      });
+    }
+    return readOpenTextFileWithLimit(input);
+  } catch (cause) {
+    return err({
+      kind: "filesystem",
+      cause: cause instanceof Error ? cause.message : String(cause)
+    });
+  }
+}
+function textFileReadErrorCategory(error) {
+  return error.kind === "too_large" ? "unsupported_input" : "filesystem";
+}
+function textFileReadErrorDetails(error) {
+  return error.kind === "too_large" ? {
+    maxBytes: error.maxBytes,
+    observedBytes: error.observedBytes
+  } : {
+    cause: error.cause
+  };
+}
+function readOpenTextFileWithLimit(input) {
+  const chunks = [];
+  let observedBytes = 0;
+  let fileDescriptor;
+  try {
+    fileDescriptor = openSync(input.filePath, "r");
+    while (true) {
+      const readSize = Math.min(TEXT_FILE_READ_CHUNK_BYTES, Math.max(1, input.maxBytes + 1 - observedBytes));
+      const chunk = Buffer.alloc(readSize);
+      const bytesRead = readSync(fileDescriptor, chunk, 0, chunk.length, null);
+      if (bytesRead === 0) {
+        return ok(Buffer.concat(chunks, observedBytes).toString("utf8"));
+      }
+      observedBytes += bytesRead;
+      if (observedBytes > input.maxBytes) {
+        return err({
+          kind: "too_large",
+          maxBytes: input.maxBytes,
+          observedBytes
+        });
+      }
+      chunks.push(bytesRead === chunk.length ? chunk : chunk.subarray(0, bytesRead));
+    }
+  } finally {
+    if (fileDescriptor !== undefined) {
+      try {
+        closeSync(fileDescriptor);
+      } catch {}
+    }
+  }
+}
 
 // src/graph/read-input-file.ts
 var LOCKFILE_MAX_BYTES = 50 * 1024 * 1024;
@@ -24200,7 +18780,7 @@ function isSupportedBazelModuleName(name) {
   return /^[a-z][a-z0-9._-]*[a-z0-9]$/.test(name) || /^[a-z]$/.test(name);
 }
 function bazelModuleRootName(modulePath) {
-  return path28.basename(path28.dirname(modulePath)) || "<bazel-module>";
+  return path.basename(path.dirname(modulePath)) || "<bazel-module>";
 }
 function bazelModuleParseError(input) {
   return err(createError({
@@ -24212,7 +18792,7 @@ function bazelModuleParseError(input) {
 }
 
 // src/graph/carthage-cartfile-resolved.ts
-import path29 from "node:path";
+import path2 from "node:path";
 function parseCartfileResolvedFile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -24236,7 +18816,7 @@ function parseCartfileResolvedText(input, lockfilePath = "Cartfile.resolved") {
   if (!records.ok) {
     return records;
   }
-  const rootName = path29.basename(path29.dirname(lockfilePath)) || "<carthage-project>";
+  const rootName = path2.basename(path2.dirname(lockfilePath)) || "<carthage-project>";
   return ok({
     rootName,
     lockfilePath,
@@ -24373,7 +18953,7 @@ function cartfileResolvedParseError(input) {
 }
 
 // src/graph/cocoapods-podfile-lock.ts
-import path30 from "node:path";
+import path3 from "node:path";
 function parsePodfileLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -24397,7 +18977,7 @@ function parsePodfileLockText(input, lockfilePath = "Podfile.lock") {
   if (!parsed.ok) {
     return parsed;
   }
-  const rootName = path30.basename(path30.dirname(lockfilePath)) || "<cocoapods-project>";
+  const rootName = path3.basename(path3.dirname(lockfilePath)) || "<cocoapods-project>";
   const records = [...parsed.value.records.values()].sort((left, right) => left.id.localeCompare(right.id));
   const recordIdsByName = new Map(records.map((record) => [record.name, record.id]));
   const directNames = parsed.value.directNames.size > 0 ? parsed.value.directNames : new Set(records.map((record) => record.name));
@@ -24606,7 +19186,55 @@ function resolvedPodVersion(version) {
 }
 
 // src/graph/conda-environment.ts
-import path31 from "node:path";
+import path4 from "node:path";
+
+// node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/index.js
+var composer = require_composer();
+var Document = require_Document();
+var Schema = require_Schema();
+var errors = require_errors();
+var Alias = require_Alias();
+var identity = require_identity();
+var Pair = require_Pair();
+var Scalar = require_Scalar();
+var YAMLMap = require_YAMLMap();
+var YAMLSeq = require_YAMLSeq();
+var cst = require_cst();
+var lexer = require_lexer();
+var lineCounter = require_line_counter();
+var parser = require_parser();
+var publicApi = require_public_api();
+var visit = require_visit();
+var $Composer = composer.Composer;
+var $Document = Document.Document;
+var $Schema = Schema.Schema;
+var $YAMLError = errors.YAMLError;
+var $YAMLParseError = errors.YAMLParseError;
+var $YAMLWarning = errors.YAMLWarning;
+var $Alias = Alias.Alias;
+var $isAlias = identity.isAlias;
+var $isCollection = identity.isCollection;
+var $isDocument = identity.isDocument;
+var $isMap = identity.isMap;
+var $isNode = identity.isNode;
+var $isPair = identity.isPair;
+var $isScalar = identity.isScalar;
+var $isSeq = identity.isSeq;
+var $Pair = Pair.Pair;
+var $Scalar = Scalar.Scalar;
+var $YAMLMap = YAMLMap.YAMLMap;
+var $YAMLSeq = YAMLSeq.YAMLSeq;
+var $Lexer = lexer.Lexer;
+var $LineCounter = lineCounter.LineCounter;
+var $Parser = parser.Parser;
+var $parse = publicApi.parse;
+var $parseAllDocuments = publicApi.parseAllDocuments;
+var $parseDocument = publicApi.parseDocument;
+var $stringify = publicApi.stringify;
+var $visit = visit.visit;
+var $visitAsync = visit.visitAsync;
+
+// src/graph/conda-environment.ts
 function parseCondaEnvironmentFile(environmentPath, options = {}) {
   const environmentText = readInputTextFile({
     filePath: environmentPath,
@@ -24660,7 +19288,7 @@ function parseCondaEnvironmentText(input, environmentPath = "environment.yml") {
   });
 }
 function readCondaEnvironmentRecords(parsed, environmentPath) {
-  if (!isRecord7(parsed) || !Array.isArray(parsed.dependencies)) {
+  if (!isRecord(parsed) || !Array.isArray(parsed.dependencies)) {
     return err(createError({
       code: "CONDA_ENVIRONMENT_PARSE_FAILED",
       category: "unsupported_input",
@@ -24709,7 +19337,7 @@ function parseCondaEnvironmentDependency(input) {
     }
     return ok([record]);
   }
-  if (isRecord7(input.dependency) && Array.isArray(input.dependency.pip)) {
+  if (isRecord(input.dependency) && Array.isArray(input.dependency.pip)) {
     const records = [];
     for (const [pipIndex, pipDependency] of input.dependency.pip.entries()) {
       if (typeof pipDependency !== "string") {
@@ -24777,10 +19405,10 @@ function stripCondaChannel(input) {
   return separatorIndex >= 0 ? input.slice(separatorIndex + "::".length) : input;
 }
 function readRootName(parsed, environmentPath) {
-  if (isRecord7(parsed) && typeof parsed.name === "string" && parsed.name.trim() !== "") {
+  if (isRecord(parsed) && typeof parsed.name === "string" && parsed.name.trim() !== "") {
     return parsed.name.trim();
   }
-  return path31.basename(path31.dirname(environmentPath)) || "<conda-environment>";
+  return path4.basename(path4.dirname(environmentPath)) || "<conda-environment>";
 }
 function condaEnvironmentParseError(input) {
   return err(createError({
@@ -24790,12 +19418,12 @@ function condaEnvironmentParseError(input) {
     details: input
   }));
 }
-function isRecord7(value) {
+function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/graph/conda-lock.ts
-import path32 from "node:path";
+import path5 from "node:path";
 function parseCondaLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -24844,7 +19472,7 @@ function parseCondaLockText(input, lockfilePath = "conda-lock.yml") {
   });
 }
 function readCondaPackageRecords(parsed, lockfilePath) {
-  if (!isRecord8(parsed) || !Array.isArray(parsed.package)) {
+  if (!isRecord2(parsed) || !Array.isArray(parsed.package)) {
     return err(createError({
       code: "CONDA_LOCK_PARSE_FAILED",
       category: "unsupported_input",
@@ -24856,7 +19484,7 @@ function readCondaPackageRecords(parsed, lockfilePath) {
   }
   const records = [];
   for (const [index, item] of parsed.package.entries()) {
-    if (!isRecord8(item)) {
+    if (!isRecord2(item)) {
       return condaPackageParseError({ lockfilePath, index, reason: "package_not_object" });
     }
     const name = readRequiredString(item.name);
@@ -24975,7 +19603,7 @@ function resolveCondaDependency(input) {
   return candidates.find((candidate) => candidate.manager === input.record.manager) ?? candidates[0];
 }
 function readDependencyNames(value) {
-  if (!isRecord8(value)) {
+  if (!isRecord2(value)) {
     return [];
   }
   return Object.keys(value).map((name) => name.trim()).filter((name) => name !== "" && !name.startsWith("__")).sort((left, right) => left.localeCompare(right));
@@ -25000,13 +19628,13 @@ function rootLabel(rootName, record) {
   return record.platform ? `${rootName}:${record.platform}` : rootName;
 }
 function readRootName2(parsed, lockfilePath) {
-  if (isRecord8(parsed) && isRecord8(parsed.metadata) && Array.isArray(parsed.metadata.sources)) {
+  if (isRecord2(parsed) && isRecord2(parsed.metadata) && Array.isArray(parsed.metadata.sources)) {
     const firstSource = parsed.metadata.sources.find((source) => typeof source === "string" && source.trim() !== "");
     if (typeof firstSource === "string") {
-      return path32.basename(firstSource, path32.extname(firstSource)) || "<conda-project>";
+      return path5.basename(firstSource, path5.extname(firstSource)) || "<conda-project>";
     }
   }
-  return path32.basename(path32.dirname(lockfilePath)) || "<conda-project>";
+  return path5.basename(path5.dirname(lockfilePath)) || "<conda-project>";
 }
 function readManager(value) {
   if (typeof value !== "string") {
@@ -25055,12 +19683,12 @@ function condaPackageParseError(input) {
     details: input
   }));
 }
-function isRecord8(value) {
+function isRecord2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/graph/conan-lock.ts
-import path33 from "node:path";
+import path6 from "node:path";
 var CONAN_LOCK_FIELDS = [
   {
     field: "requires",
@@ -25108,7 +19736,7 @@ function parseConanLockText(input, lockfilePath = "conan.lock") {
       }
     }));
   }
-  if (!isRecord9(parsed)) {
+  if (!isRecord3(parsed)) {
     return conanLockShapeError({
       lockfilePath,
       reason: "root_not_object"
@@ -25121,7 +19749,7 @@ function parseConanLockText(input, lockfilePath = "conan.lock") {
   if (!records.ok) {
     return records;
   }
-  const rootName = path33.basename(path33.dirname(lockfilePath)) || "<conan-project>";
+  const rootName = path6.basename(path6.dirname(lockfilePath)) || "<conan-project>";
   return ok({
     rootName,
     lockfilePath,
@@ -25245,11 +19873,14 @@ function conanLockShapeError(input) {
     details: input
   }));
 }
-function isRecord9(value) {
+function isRecord3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/graph/cyclonedx-json.ts
+var CYCLONEDX_MAX_PATHS_PER_COMPONENT = 64;
+var CYCLONEDX_MAX_DEPENDENCY_DEPTH = 256;
+var CYCLONEDX_TRUNCATED_PATH_SEGMENT = "<cyclonedx-path-truncated>";
 function parseCycloneDxJsonFile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -25276,7 +19907,7 @@ function parseCycloneDxJsonText(input, lockfilePath = "cyclonedx.json") {
   return parseCycloneDxDocument(parsed.value, lockfilePath);
 }
 function parseCycloneDxDocument(bom, lockfilePath) {
-  if (!isRecord10(bom) || bom.bomFormat !== "CycloneDX") {
+  if (!isRecord4(bom) || bom.bomFormat !== "CycloneDX") {
     return cycloneDxShapeError(lockfilePath);
   }
   const components = readCycloneDxComponentRecords(bom.components);
@@ -25295,30 +19926,21 @@ function parseCycloneDxDocument(bom, lockfilePath) {
     aliases,
     dependencyMap: dependencyMap.value
   });
-  const nodeMap = new Map;
-  for (const rootRef of rootRefs) {
-    const record = components.find((component) => component.ref === rootRef);
-    if (!record) {
-      continue;
-    }
-    walkCycloneDxDependency({
-      record,
-      dependencyType: record.dependencyType,
-      direct: true,
-      path: [rootName],
-      components,
-      dependencyMap: dependencyMap.value,
-      nodeMap,
-      seen: new Set
-    });
-  }
+  const traversal = traverseCycloneDxDependencies({
+    rootName,
+    rootRefs,
+    components,
+    dependencyMap: dependencyMap.value
+  });
+  const nodeMap = traversal.nodeMap;
   const nodes = [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id));
   const nodeIds = new Set(nodes.map((node) => node.id));
   return ok({
     rootName,
     lockfilePath,
     nodes,
-    embeddedEvidence: components.filter((component) => nodeIds.has(component.id)).map(cycloneDxComponentEvidence)
+    embeddedEvidence: components.filter((component) => nodeIds.has(component.id)).map(cycloneDxComponentEvidence),
+    ...traversal.diagnostics.length > 0 ? { diagnostics: traversal.diagnostics } : {}
   });
 }
 function parseCycloneDxJson(input, lockfilePath) {
@@ -25342,7 +19964,7 @@ function readCycloneDxComponentRecords(value) {
   }
   const records = [];
   for (const component of value) {
-    if (!isRecord10(component)) {
+    if (!isRecord4(component)) {
       continue;
     }
     const purl = typeof component.purl === "string" ? parsePackageUrl(component.purl) : undefined;
@@ -25385,8 +20007,8 @@ function readOhriskEcosystem(properties) {
   if (!Array.isArray(properties)) {
     return;
   }
-  const property = properties.find((item) => isRecord10(item) && item.name === "ohrisk:ecosystem" && typeof item.value === "string");
-  if (!isRecord10(property) || typeof property.value !== "string") {
+  const property = properties.find((item) => isRecord4(item) && item.name === "ohrisk:ecosystem" && typeof item.value === "string");
+  if (!isRecord4(property) || typeof property.value !== "string") {
     return;
   }
   switch (property.value) {
@@ -25437,8 +20059,8 @@ function readOhriskDependencyType(properties) {
   if (!Array.isArray(properties)) {
     return;
   }
-  const property = properties.find((item) => isRecord10(item) && item.name === "ohrisk:dependencyType" && typeof item.value === "string");
-  if (!isRecord10(property) || typeof property.value !== "string") {
+  const property = properties.find((item) => isRecord4(item) && item.name === "ohrisk:dependencyType" && typeof item.value === "string");
+  if (!isRecord4(property) || typeof property.value !== "string") {
     return;
   }
   return isDependencyType(property.value) ? property.value : undefined;
@@ -25449,14 +20071,14 @@ function readCycloneDxLicenseExpressions(value) {
   }
   const expressions = [];
   for (const entry of value) {
-    if (!isRecord10(entry)) {
+    if (!isRecord4(entry)) {
       continue;
     }
     if (typeof entry.expression === "string" && entry.expression.trim() !== "") {
       expressions.push(entry.expression.trim());
       continue;
     }
-    if (!isRecord10(entry.license)) {
+    if (!isRecord4(entry.license)) {
       continue;
     }
     if (typeof entry.license.id === "string" && entry.license.id.trim() !== "") {
@@ -25493,7 +20115,7 @@ function readCycloneDxDependencyMap(value, aliases) {
   const unsupportedFields = new Set;
   const unsupportedValueKinds = new Set;
   for (const [index, entry] of value.entries()) {
-    if (!isRecord10(entry)) {
+    if (!isRecord4(entry)) {
       unsupportedEntryIndexes.add(index);
       unsupportedFields.add("entry");
       continue;
@@ -25577,58 +20199,153 @@ function readCycloneDxRootRefs(input) {
   return inferredRoots.length > 0 ? inferredRoots : input.components.map((component) => component.ref).sort();
 }
 function readCycloneDxMetadataComponentRef(bom) {
-  if (!isRecord10(bom.metadata) || !isRecord10(bom.metadata.component)) {
+  if (!isRecord4(bom.metadata) || !isRecord4(bom.metadata.component)) {
     return;
   }
   const component = bom.metadata.component;
   return typeof component["bom-ref"] === "string" ? component["bom-ref"] : typeof component.purl === "string" ? component.purl : undefined;
 }
 function readCycloneDxRootName(bom) {
-  if (!isRecord10(bom.metadata) || !isRecord10(bom.metadata.component)) {
+  if (!isRecord4(bom.metadata) || !isRecord4(bom.metadata.component)) {
     return;
   }
   const component = bom.metadata.component;
   return typeof component.name === "string" && component.name !== "" ? component.name : undefined;
 }
-function walkCycloneDxDependency(input) {
-  if (input.seen.has(input.record.ref)) {
-    return;
-  }
-  const nextSeen = new Set(input.seen);
-  nextSeen.add(input.record.ref);
-  const nextPath = [...input.path, input.record.id];
-  const existing = input.nodeMap.get(input.record.id);
-  if (existing) {
-    existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType3(existing.dependencyType, input.dependencyType);
-    existing.paths.push(nextPath);
-  } else {
-    input.nodeMap.set(input.record.id, {
-      id: input.record.id,
-      name: input.record.name,
-      version: input.record.version,
-      ecosystem: input.record.ecosystem,
-      dependencyType: input.dependencyType,
-      direct: input.direct,
-      paths: [nextPath]
-    });
-  }
-  for (const childRef of input.dependencyMap.get(input.record.ref) ?? []) {
-    const child = input.components.find((component) => component.ref === childRef);
-    if (!child) {
+function traverseCycloneDxDependencies(input) {
+  const componentsByRef = new Map(input.components.map((component) => [component.ref, component]));
+  const directRefs = new Set(input.rootRefs);
+  const dependencyTypesByRef = resolveCycloneDxDependencyTypes({
+    rootRefs: input.rootRefs,
+    componentsByRef,
+    dependencyMap: input.dependencyMap
+  });
+  const nodeMap = new Map;
+  for (const [ref, dependencyType] of dependencyTypesByRef) {
+    const record = componentsByRef.get(ref);
+    if (!record) {
       continue;
     }
-    walkCycloneDxDependency({
-      record: child,
-      dependencyType: dependencyTypeForChildEdge(input.dependencyType, child.dependencyType),
-      direct: false,
-      path: nextPath,
-      components: input.components,
-      dependencyMap: input.dependencyMap,
-      nodeMap: input.nodeMap,
-      seen: nextSeen
+    const existing = nodeMap.get(record.id);
+    if (existing) {
+      existing.direct = existing.direct || directRefs.has(ref);
+      existing.dependencyType = mergeDependencyType3(existing.dependencyType, dependencyType);
+      continue;
+    }
+    nodeMap.set(record.id, {
+      id: record.id,
+      name: record.name,
+      version: record.version,
+      ecosystem: record.ecosystem,
+      dependencyType,
+      direct: directRefs.has(ref),
+      paths: []
     });
   }
+  const pathLimitAffected = new Set;
+  const depthLimitAffected = new Set;
+  const pathKeysByNodeId = new Map;
+  for (const rootRef of input.rootRefs) {
+    const stack = [{ ref: rootRef, pathIds: [input.rootName], pathRefs: [] }];
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (!current || current.pathRefs.includes(current.ref)) {
+        continue;
+      }
+      const record = componentsByRef.get(current.ref);
+      if (!record) {
+        continue;
+      }
+      const componentDepth = current.pathRefs.length + 1;
+      if (componentDepth > CYCLONEDX_MAX_DEPENDENCY_DEPTH) {
+        depthLimitAffected.add(record.id);
+        continue;
+      }
+      const nextPath = [...current.pathIds, record.id];
+      const pathKey = nextPath.join("\x00");
+      const pathKeys = pathKeysByNodeId.get(record.id) ?? new Set;
+      if (pathKeys.has(pathKey)) {
+        continue;
+      }
+      if (pathKeys.size >= CYCLONEDX_MAX_PATHS_PER_COMPONENT) {
+        pathLimitAffected.add(record.id);
+        continue;
+      }
+      pathKeys.add(pathKey);
+      pathKeysByNodeId.set(record.id, pathKeys);
+      nodeMap.get(record.id)?.paths.push(nextPath);
+      const nextPathRefs = [...current.pathRefs, current.ref];
+      const childRefs = input.dependencyMap.get(current.ref) ?? [];
+      for (let index = childRefs.length - 1;index >= 0; index -= 1) {
+        const childRef = childRefs[index];
+        if (!childRef) {
+          continue;
+        }
+        stack.push({
+          ref: childRef,
+          pathIds: nextPath,
+          pathRefs: nextPathRefs
+        });
+      }
+    }
+  }
+  for (const node of nodeMap.values()) {
+    if (node.paths.length > 0) {
+      continue;
+    }
+    node.paths.push([input.rootName, CYCLONEDX_TRUNCATED_PATH_SEGMENT, node.id]);
+    depthLimitAffected.add(node.id);
+  }
+  const diagnostics = [];
+  if (pathLimitAffected.size > 0) {
+    diagnostics.push({
+      code: "dependency_paths_truncated",
+      affectedNodeCount: pathLimitAffected.size,
+      limit: CYCLONEDX_MAX_PATHS_PER_COMPONENT,
+      message: `CycloneDX dependency paths were limited to ${CYCLONEDX_MAX_PATHS_PER_COMPONENT} paths per component.`
+    });
+  }
+  if (depthLimitAffected.size > 0) {
+    diagnostics.push({
+      code: "dependency_path_depth_summarized",
+      affectedNodeCount: depthLimitAffected.size,
+      limit: CYCLONEDX_MAX_DEPENDENCY_DEPTH,
+      message: `CycloneDX dependency paths deeper than ${CYCLONEDX_MAX_DEPENDENCY_DEPTH} components were summarized.`
+    });
+  }
+  return { nodeMap, diagnostics };
+}
+function resolveCycloneDxDependencyTypes(input) {
+  const resolved = new Map;
+  const queue = input.rootRefs.map((ref) => {
+    const record = input.componentsByRef.get(ref);
+    return record ? { ref, dependencyType: record.dependencyType } : undefined;
+  }).filter((item) => item !== undefined);
+  let head = 0;
+  while (head < queue.length) {
+    const current = queue[head];
+    head += 1;
+    if (!current) {
+      continue;
+    }
+    const previous = resolved.get(current.ref);
+    const dependencyType = previous ? mergeDependencyType3(previous, current.dependencyType) : current.dependencyType;
+    if (previous === dependencyType) {
+      continue;
+    }
+    resolved.set(current.ref, dependencyType);
+    for (const childRef of input.dependencyMap.get(current.ref) ?? []) {
+      const child = input.componentsByRef.get(childRef);
+      if (!child) {
+        continue;
+      }
+      queue.push({
+        ref: childRef,
+        dependencyType: dependencyTypeForChildEdge(dependencyType, child.dependencyType)
+      });
+    }
+  }
+  return resolved;
 }
 function cycloneDxComponentEvidence(record) {
   return {
@@ -25718,7 +20435,7 @@ function dependencyTypeRank3(type) {
 function isDependencyType(value) {
   return value === "production" || value === "development" || value === "optional" || value === "peer" || value === "unknown";
 }
-function isRecord10(value) {
+function isRecord4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -25954,17 +20671,9 @@ function decodeXmlText(input, lockfilePath, parseError) {
       case "apos":
         return "'";
       default:
-        if (entity.startsWith("#x")) {
-          const codePoint = Number.parseInt(entity.slice(2), 16);
-          if (Number.isFinite(codePoint)) {
-            return String.fromCodePoint(codePoint);
-          }
-        }
-        if (entity.startsWith("#")) {
-          const codePoint = Number.parseInt(entity.slice(1), 10);
-          if (Number.isFinite(codePoint)) {
-            return String.fromCodePoint(codePoint);
-          }
+        const codePoint = parseXmlNumericEntity(entity);
+        if (codePoint !== undefined) {
+          return String.fromCodePoint(codePoint);
         }
         failedEntity = match;
         return match;
@@ -25974,6 +20683,19 @@ function decodeXmlText(input, lockfilePath, parseError) {
     return parseError(lockfilePath, `Unsupported XML entity ${failedEntity}.`);
   }
   return ok(decoded);
+}
+function parseXmlNumericEntity(entity) {
+  const hexadecimal = entity.match(/^#x([0-9A-Fa-f]+)$/);
+  const decimal = entity.match(/^#([0-9]+)$/);
+  const digits = hexadecimal?.[1] ?? decimal?.[1];
+  if (!digits) {
+    return;
+  }
+  const codePoint = Number.parseInt(digits, hexadecimal ? 16 : 10);
+  return isXml10CodePoint(codePoint) ? codePoint : undefined;
+}
+function isXml10CodePoint(codePoint) {
+  return codePoint === 9 || codePoint === 10 || codePoint === 13 || codePoint >= 32 && codePoint <= 55295 || codePoint >= 57344 && codePoint <= 65533 || codePoint >= 65536 && codePoint <= 1114111;
 }
 
 // src/graph/cyclonedx-xml.ts
@@ -26163,7 +20885,7 @@ function unsupportedCycloneDxXmlDependencyError(lockfilePath, details) {
 }
 
 // src/graph/dart-pubspec-lock.ts
-import path34 from "node:path";
+import path7 from "node:path";
 function parsePubspecLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -26201,7 +20923,7 @@ function parsePubspecLockText(input, lockfilePath = "pubspec.lock") {
   if (!records.ok) {
     return records;
   }
-  const rootName = path34.basename(path34.dirname(lockfilePath)) || "<dart-project>";
+  const rootName = path7.basename(path7.dirname(lockfilePath)) || "<dart-project>";
   return ok({
     rootName,
     lockfilePath,
@@ -26217,7 +20939,7 @@ function parsePubspecLockText(input, lockfilePath = "pubspec.lock") {
   });
 }
 function readPubPackageRecords(parsed, lockfilePath) {
-  if (!isRecord11(parsed) || !isRecord11(parsed.packages)) {
+  if (!isRecord5(parsed) || !isRecord5(parsed.packages)) {
     return err(createError({
       code: "PUBSPEC_LOCK_PARSE_FAILED",
       category: "unsupported_input",
@@ -26229,7 +20951,7 @@ function readPubPackageRecords(parsed, lockfilePath) {
   }
   const records = [];
   for (const [packageName, value] of Object.entries(parsed.packages)) {
-    if (!isRecord11(value)) {
+    if (!isRecord5(value)) {
       return pubPackageParseError(lockfilePath, packageName);
     }
     const source = typeof value.source === "string" ? value.source.toLowerCase() : "";
@@ -26306,12 +21028,12 @@ function pubPackageParseError(lockfilePath, packageName) {
     }
   }));
 }
-function isRecord11(value) {
+function isRecord5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/graph/deno-lock.ts
-import path35 from "node:path";
+import path8 from "node:path";
 
 // src/graph/npm-spec.ts
 function resolveNpmDependencyReference(requestedName, range) {
@@ -26451,7 +21173,7 @@ function parseDenoLockText(input, lockfilePath = "deno.lock") {
 function parseLockfileJson(input, lockfilePath) {
   try {
     const parsed = JSON.parse(input);
-    if (!isObjectRecord2(parsed)) {
+    if (!isObjectRecord(parsed)) {
       return denoParseFailed(lockfilePath, "deno.lock root must be a JSON object.");
     }
     return ok(parsed);
@@ -26479,18 +21201,18 @@ function denoParseFailed(lockfilePath, cause) {
   }));
 }
 function readNpmPackageMap(lockfile) {
-  if (isObjectRecord2(lockfile.npm)) {
+  if (isObjectRecord(lockfile.npm)) {
     return lockfile.npm;
   }
-  const packages = isObjectRecord2(lockfile.packages) ? lockfile.packages : undefined;
-  return isObjectRecord2(packages?.npm) ? packages.npm : {};
+  const packages = isObjectRecord(lockfile.packages) ? lockfile.packages : undefined;
+  return isObjectRecord(packages?.npm) ? packages.npm : {};
 }
 function readSpecifierMap(lockfile) {
-  if (isObjectRecord2(lockfile.specifiers)) {
+  if (isObjectRecord(lockfile.specifiers)) {
     return readStringMap(lockfile.specifiers);
   }
-  const packages = isObjectRecord2(lockfile.packages) ? lockfile.packages : undefined;
-  return isObjectRecord2(packages?.specifiers) ? readStringMap(packages.specifiers) : {};
+  const packages = isObjectRecord(lockfile.packages) ? lockfile.packages : undefined;
+  return isObjectRecord(packages?.specifiers) ? readStringMap(packages.specifiers) : {};
 }
 function collectRootDependencies(lockfile, specifiers) {
   const rootSpecifiers = readDenoRootSpecifiers(lockfile, specifiers).filter((specifier) => specifier.startsWith("npm:"));
@@ -26525,7 +21247,7 @@ function readDenoRootSpecifiers(lockfile, specifiers) {
   return workspaceDependencies.length > 0 ? workspaceDependencies : Object.keys(specifiers);
 }
 function readWorkspaceDependencies(lockfile) {
-  const workspace = isObjectRecord2(lockfile.workspace) ? lockfile.workspace : isObjectRecord2(lockfile.packages) && isObjectRecord2(lockfile.packages.workspace) ? lockfile.packages.workspace : undefined;
+  const workspace = isObjectRecord(lockfile.workspace) ? lockfile.workspace : isObjectRecord(lockfile.packages) && isObjectRecord(lockfile.packages.workspace) ? lockfile.packages.workspace : undefined;
   if (!workspace || !Array.isArray(workspace.dependencies)) {
     return [];
   }
@@ -26535,7 +21257,7 @@ function parseNpmRecords(packages) {
   const records = [];
   for (const [key, rawPackage] of Object.entries(packages)) {
     const packageKey = parseDenoNpmPackageKey(key);
-    if (!packageKey || !isObjectRecord2(rawPackage)) {
+    if (!packageKey || !isObjectRecord(rawPackage)) {
       continue;
     }
     const pkg = rawPackage;
@@ -26582,7 +21304,7 @@ function readDependencyEdges(value, type) {
       return parsed ? [{ name: parsed.name, range: parsed.version, type }] : [];
     });
   }
-  if (!isObjectRecord2(value)) {
+  if (!isObjectRecord(value)) {
     return [];
   }
   const edges = [];
@@ -26832,19 +21554,19 @@ function rootNameForLockfile(lockfilePath) {
   if (isGitRefSyntheticPath(lockfilePath)) {
     return;
   }
-  const parent = path35.basename(path35.dirname(path35.resolve(lockfilePath)));
+  const parent = path8.basename(path8.dirname(path8.resolve(lockfilePath)));
   return parent && parent !== "." ? parent : undefined;
 }
 function isGitRefSyntheticPath(lockfilePath) {
   return lockfilePath.includes(":") && !/^[A-Za-z]:[\\/]/.test(lockfilePath);
 }
-function isObjectRecord2(value) {
+function isObjectRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/graph/dotnet-nuget-lock.ts
-import { existsSync as existsSync28 } from "node:fs";
-import path36 from "node:path";
+import { existsSync } from "node:fs";
+import path9 from "node:path";
 function parseNugetLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -26931,7 +21653,7 @@ function parseNugetLockText(input, lockfilePath = "packages.lock.json") {
   if (!parsed.ok) {
     return parsed;
   }
-  const rootName = path36.basename(path36.dirname(lockfilePath)) || "<dotnet-project>";
+  const rootName = path9.basename(path9.dirname(lockfilePath)) || "<dotnet-project>";
   return ok(graphFromNugetRecords({
     rootName,
     lockfilePath,
@@ -26955,7 +21677,7 @@ function parseDotnetProjectText(input, projectFilePath = "project.csproj", optio
     return parsed;
   }
   return ok(graphFromNugetRecords({
-    rootName: options.rootName ?? (path36.basename(projectFilePath, path36.extname(projectFilePath)) || "<dotnet-project>"),
+    rootName: options.rootName ?? (path9.basename(projectFilePath, path9.extname(projectFilePath)) || "<dotnet-project>"),
     lockfilePath: projectFilePath,
     records: parsed.value
   }));
@@ -26977,7 +21699,7 @@ function parseNugetPackagesConfigText(input, packagesConfigPath = "packages.conf
     return parsed;
   }
   return ok(graphFromNugetRecords({
-    rootName: path36.basename(path36.dirname(packagesConfigPath)) || "<dotnet-project>",
+    rootName: path9.basename(path9.dirname(packagesConfigPath)) || "<dotnet-project>",
     lockfilePath: packagesConfigPath,
     records: parsed.value
   }));
@@ -26997,7 +21719,7 @@ function parseNugetLockJson(input, lockfilePath) {
       }
     }));
   }
-  if (!isRecord12(parsed) || !isRecord12(parsed.dependencies)) {
+  if (!isRecord6(parsed) || !isRecord6(parsed.dependencies)) {
     return err(createError({
       code: "NUGET_LOCK_PARSE_FAILED",
       category: "unsupported_input",
@@ -27009,11 +21731,11 @@ function parseNugetLockJson(input, lockfilePath) {
   }
   const records = new Map;
   for (const [targetName, targetDependencies] of Object.entries(parsed.dependencies)) {
-    if (!isRecord12(targetDependencies)) {
+    if (!isRecord6(targetDependencies)) {
       continue;
     }
     for (const [packageName, value] of Object.entries(targetDependencies)) {
-      if (!isRecord12(value)) {
+      if (!isRecord6(value)) {
         return nugetDependencyParseError(lockfilePath, targetName, packageName);
       }
       const type = typeof value.type === "string" ? value.type.toLowerCase() : "";
@@ -27106,7 +21828,7 @@ function parseNugetProjectAssetsJson(input, assetsPath) {
       }
     }));
   }
-  if (!isRecord12(parsed)) {
+  if (!isRecord6(parsed)) {
     return err(createError({
       code: "NUGET_ASSETS_PARSE_FAILED",
       category: "unsupported_input",
@@ -27118,13 +21840,13 @@ function parseNugetProjectAssetsJson(input, assetsPath) {
   }
   const directNames = readNugetProjectFileDependencyNames(parsed.projectFileDependencyGroups);
   const records = new Map;
-  if (isRecord12(parsed.targets)) {
+  if (isRecord6(parsed.targets)) {
     for (const targetPackages of Object.values(parsed.targets)) {
-      if (!isRecord12(targetPackages)) {
+      if (!isRecord6(targetPackages)) {
         continue;
       }
       for (const [packageKey, value] of Object.entries(targetPackages)) {
-        if (!isRecord12(value)) {
+        if (!isRecord6(value)) {
           return nugetAssetsEntryParseError(assetsPath, packageKey);
         }
         const type = typeof value.type === "string" ? value.type.toLowerCase() : "";
@@ -27146,9 +21868,9 @@ function parseNugetProjectAssetsJson(input, assetsPath) {
       }
     }
   }
-  if (isRecord12(parsed.libraries)) {
+  if (isRecord6(parsed.libraries)) {
     for (const [packageKey, value] of Object.entries(parsed.libraries)) {
-      if (!isRecord12(value)) {
+      if (!isRecord6(value)) {
         return nugetAssetsEntryParseError(assetsPath, packageKey);
       }
       const type = typeof value.type === "string" ? value.type.toLowerCase() : "";
@@ -27257,13 +21979,13 @@ function readNearestDirectoryPackagesProps(input) {
   return parseDirectoryPackagesPropsText(propsText.value, propsPath);
 }
 function findNearestDirectoryPackagesPropsPath(projectFilePath) {
-  let current = path36.dirname(path36.resolve(projectFilePath));
+  let current = path9.dirname(path9.resolve(projectFilePath));
   while (true) {
-    const candidate = path36.join(current, "Directory.Packages.props");
-    if (existsSync28(candidate)) {
+    const candidate = path9.join(current, "Directory.Packages.props");
+    if (existsSync(candidate)) {
       return candidate;
     }
-    const parent = path36.dirname(current);
+    const parent = path9.dirname(current);
     if (parent === current) {
       return;
     }
@@ -27329,14 +22051,14 @@ function upsertNugetPackageRecord(records, record) {
   } : record);
 }
 function readNugetDependencyNames(value) {
-  if (!isRecord12(value)) {
+  if (!isRecord6(value)) {
     return [];
   }
   return Object.keys(value).sort();
 }
 function readNugetProjectFileDependencyNames(value) {
   const names = new Set;
-  if (!isRecord12(value)) {
+  if (!isRecord6(value)) {
     return names;
   }
   for (const dependencies of Object.values(value)) {
@@ -27414,10 +22136,10 @@ function decodeXmlText2(text3) {
   return text3.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 }
 function nugetProjectRootName(filePath, fallback) {
-  const fileName = path36.basename(filePath).toLowerCase();
-  const dir = path36.dirname(filePath);
-  const rootDir = fileName === "project.assets.json" && path36.basename(dir).toLowerCase() === "obj" ? path36.dirname(dir) : dir;
-  return path36.basename(rootDir) || fallback;
+  const fileName = path9.basename(filePath).toLowerCase();
+  const dir = path9.dirname(filePath);
+  const rootDir = fileName === "project.assets.json" && path9.basename(dir).toLowerCase() === "obj" ? path9.dirname(dir) : dir;
+  return path9.basename(rootDir) || fallback;
 }
 function normalizeXmlSnippet(text3) {
   return text3.replace(/\s+/g, " ").trim();
@@ -27516,13 +22238,13 @@ function dependencyTypeRank6(type) {
       return 0;
   }
 }
-function isRecord12(value) {
+function isRecord6(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/graph/elixir-mix-lock.ts
-import { existsSync as existsSync29 } from "node:fs";
-import path37 from "node:path";
+import { existsSync as existsSync2 } from "node:fs";
+import path10 from "node:path";
 function parseMixLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -27562,7 +22284,7 @@ function parseMixLockText(input, lockfilePath = "mix.lock", options = {}) {
       }
     }));
   }
-  const rootName = path37.basename(path37.dirname(lockfilePath)) || "<elixir-project>";
+  const rootName = path10.basename(path10.dirname(lockfilePath)) || "<elixir-project>";
   const rootTypes = options.mixExsText ? readMixRootTypes(options.mixExsText, records) : new Map;
   return ok({
     rootName,
@@ -27579,8 +22301,8 @@ function parseMixLockText(input, lockfilePath = "mix.lock", options = {}) {
   });
 }
 function readOptionalMixExs(input) {
-  const mixExsPath = path37.join(path37.dirname(input.lockfilePath), "mix.exs");
-  if (!existsSync29(mixExsPath)) {
+  const mixExsPath = path10.join(path10.dirname(input.lockfilePath), "mix.exs");
+  if (!existsSync2(mixExsPath)) {
     return ok(undefined);
   }
   const mixExsText = readInputTextFile({
@@ -27694,7 +22416,7 @@ function mergeDependencyType7(left, right) {
 }
 
 // src/graph/erlang-rebar-lock.ts
-import path38 from "node:path";
+import path11 from "node:path";
 function parseRebarLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -27731,7 +22453,7 @@ function parseRebarLockText(input, lockfilePath = "rebar.lock") {
       }
     }));
   }
-  const rootName = path38.basename(path38.dirname(lockfilePath)) || "<erlang-project>";
+  const rootName = path11.basename(path11.dirname(lockfilePath)) || "<erlang-project>";
   return ok({
     rootName,
     lockfilePath,
@@ -27823,8 +22545,8 @@ function uniqueSorted(values) {
 }
 
 // src/graph/go-mod.ts
-import { existsSync as existsSync30 } from "node:fs";
-import path39 from "node:path";
+import { existsSync as existsSync3 } from "node:fs";
+import path12 from "node:path";
 function parseGoModFile(goModPath, options = {}) {
   const goModText = readInputTextFile({
     filePath: goModPath,
@@ -27880,7 +22602,7 @@ function parseGoModText(input, goModPath = "go.mod", options = {}) {
         } : record);
       }
     }
-    const rootName = goMod.value.modulePath ?? path39.basename(path39.dirname(goModPath)) ?? "<go-module>";
+    const rootName = goMod.value.modulePath ?? path12.basename(path12.dirname(goModPath)) ?? "<go-module>";
     return ok({
       rootName,
       lockfilePath: goModPath,
@@ -27911,8 +22633,8 @@ function parseGoModText(input, goModPath = "go.mod", options = {}) {
   }
 }
 function readOptionalGoSum(input) {
-  const goSumPath = path39.join(path39.dirname(input.goModPath), "go.sum");
-  if (!existsSync30(goSumPath)) {
+  const goSumPath = path12.join(path12.dirname(input.goModPath), "go.sum");
+  if (!existsSync3(goSumPath)) {
     return ok(undefined);
   }
   const goSumText = readInputTextFile({
@@ -28188,9 +22910,9 @@ function normalizeGoReplacementTarget(target, baseDir, rootDir) {
   if (target.kind !== "local") {
     return target;
   }
-  const absolutePath = path39.resolve(baseDir, target.path);
-  const relativePath = path39.relative(rootDir, absolutePath);
-  if (relativePath === "" || relativePath !== ".." && !relativePath.startsWith(`..${path39.sep}`) && !path39.isAbsolute(relativePath)) {
+  const absolutePath = path12.resolve(baseDir, target.path);
+  const relativePath = path12.relative(rootDir, absolutePath);
+  if (relativePath === "" || relativePath !== ".." && !relativePath.startsWith(`..${path12.sep}`) && !path12.isAbsolute(relativePath)) {
     const normalized = relativePath === "" ? "." : relativePath.replace(/\\/g, "/");
     return {
       kind: "local",
@@ -28282,7 +23004,7 @@ function splitGoDirectiveFields(line) {
   return fields;
 }
 function isGoLocalReplacementPath(value) {
-  return value.startsWith("./") || value.startsWith("../") || value === "." || value === ".." || path39.isAbsolute(value);
+  return value.startsWith("./") || value.startsWith("../") || value === "." || value === ".." || path12.isAbsolute(value);
 }
 function goRecordId(record) {
   return `${record.modulePath}@${record.version}`;
@@ -28306,8 +23028,8 @@ function dependencyTypeRank7(type) {
 }
 
 // src/graph/go-work.ts
-import { existsSync as existsSync31 } from "node:fs";
-import path40 from "node:path";
+import { existsSync as existsSync4 } from "node:fs";
+import path13 from "node:path";
 function parseGoWorkFile(goWorkPath, options = {}) {
   const goWorkText = readInputTextFile({
     filePath: goWorkPath,
@@ -28324,7 +23046,7 @@ function parseGoWorkFile(goWorkPath, options = {}) {
       }
     }));
   }
-  const workspaceRootDir = path40.dirname(goWorkPath);
+  const workspaceRootDir = path13.dirname(goWorkPath);
   const moduleInputs = readGoWorkModuleInputs({
     goWorkText: goWorkText.value,
     goWorkPath,
@@ -28338,7 +23060,7 @@ function parseGoWorkFile(goWorkPath, options = {}) {
   return parseGoWorkText(goWorkText.value, goWorkPath, {
     moduleInputs: moduleInputs.value,
     workspaceRootDir,
-    goWorkDir: path40.dirname(goWorkPath)
+    goWorkDir: path13.dirname(goWorkPath)
   });
 }
 function parseGoWorkText(input, goWorkPath = "go.work", options = {}) {
@@ -28354,8 +23076,8 @@ function parseGoWorkText(input, goWorkPath = "go.work", options = {}) {
       message: "Failed to parse go.work. Ohrisk requires readable go.mod files for every workspace module."
     });
   }
-  const workspaceRootDir = options.workspaceRootDir ?? path40.dirname(goWorkPath);
-  const goWorkDir = options.goWorkDir ?? path40.dirname(goWorkPath);
+  const workspaceRootDir = options.workspaceRootDir ?? path13.dirname(goWorkPath);
+  const goWorkDir = options.goWorkDir ?? path13.dirname(goWorkPath);
   const workspaceReplacements = normalizeGoReplacementDirectives(directives.value.replacements, goWorkDir, workspaceRootDir);
   const workspaceReplacementGroup = dedupeReplacementGroup({
     replacements: workspaceReplacements,
@@ -28374,7 +23096,7 @@ function parseGoWorkText(input, goWorkPath = "go.work", options = {}) {
   if (!moduleReplacementGroup.ok) {
     return moduleReplacementGroup;
   }
-  const workspaceRootName = path40.basename(workspaceRootDir) || "<go-workspace>";
+  const workspaceRootName = path13.basename(workspaceRootDir) || "<go-workspace>";
   const mergedNodes = new Map;
   for (const moduleInput of [...moduleInputs].sort((left, right) => left.goModPath.localeCompare(right.goModPath))) {
     const graph = parseGoModText(moduleInput.goModText, moduleInput.goModPath, omitUndefined({
@@ -28419,9 +23141,9 @@ function findGoWorkModulePaths(input) {
   }
   const paths = [];
   const seen = new Set;
-  const goWorkDir = path40.dirname(input.goWorkPath);
+  const goWorkDir = path13.dirname(input.goWorkPath);
   for (const usePath of directives.value.usePaths) {
-    const moduleRootDir = path40.resolve(goWorkDir, usePath);
+    const moduleRootDir = path13.resolve(goWorkDir, usePath);
     const relativeModuleRoot = normalizeProjectRelativePath(input.projectRoot, moduleRootDir);
     if (!relativeModuleRoot) {
       return goWorkParseError({
@@ -28431,8 +23153,8 @@ function findGoWorkModulePaths(input) {
         message: "Failed to parse go.work. Workspace module paths must stay inside the project root."
       });
     }
-    const goModPath = path40.join(moduleRootDir, "go.mod");
-    const goSumPath = path40.join(moduleRootDir, "go.sum");
+    const goModPath = path13.join(moduleRootDir, "go.mod");
+    const goSumPath = path13.join(moduleRootDir, "go.sum");
     const goModRelativePath = normalizeProjectRelativePath(input.projectRoot, goModPath);
     const goSumRelativePath = normalizeProjectRelativePath(input.projectRoot, goSumPath);
     if (!goModRelativePath || !goSumRelativePath) {
@@ -28511,7 +23233,7 @@ function readGoWorkModuleInputs(input) {
   return ok(modules);
 }
 function readOptionalGoWorkModuleGoSum(input) {
-  if (!existsSync31(input.goSumPath)) {
+  if (!existsSync4(input.goSumPath)) {
     return ok(undefined);
   }
   const goSumText = readInputTextFile({
@@ -28728,8 +23450,8 @@ function dependencyTypeRank8(type) {
   }
 }
 function normalizeProjectRelativePath(projectRoot, targetPath) {
-  const relativePath = path40.relative(projectRoot, targetPath);
-  if (relativePath === ".." || relativePath.startsWith(`..${path40.sep}`) || path40.isAbsolute(relativePath)) {
+  const relativePath = path13.relative(projectRoot, targetPath);
+  if (relativePath === ".." || relativePath.startsWith(`..${path13.sep}`) || path13.isAbsolute(relativePath)) {
     return;
   }
   return relativePath === "" ? "." : relativePath.replace(/\\/g, "/");
@@ -28750,7 +23472,7 @@ function goWorkParseError(input) {
 }
 
 // src/graph/helm-chart.ts
-import path41 from "node:path";
+import path14 from "node:path";
 function parseHelmChartFile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -28760,7 +23482,7 @@ function parseHelmChartFile(lockfilePath, options = {}) {
     return err(createError({
       code: "HELM_CHART_READ_FAILED",
       category: inputFileReadErrorCategory(lockfileText.error),
-      message: lockfileText.error.kind === "too_large" ? `${path41.basename(lockfilePath)} exceeded the maximum supported size.` : `Failed to read ${path41.basename(lockfilePath)}.`,
+      message: lockfileText.error.kind === "too_large" ? `${path14.basename(lockfilePath)} exceeded the maximum supported size.` : `Failed to read ${path14.basename(lockfilePath)}.`,
       details: {
         lockfilePath,
         ...inputFileReadErrorDetails(lockfileText.error)
@@ -28777,7 +23499,7 @@ function parseHelmChartText(input, lockfilePath = "Chart.lock") {
     return err(createError({
       code: "HELM_CHART_PARSE_FAILED",
       category: "unsupported_input",
-      message: `Failed to parse ${path41.basename(lockfilePath)}.`,
+      message: `Failed to parse ${path14.basename(lockfilePath)}.`,
       details: {
         lockfilePath,
         cause: cause instanceof Error ? cause.message : String(cause)
@@ -28788,7 +23510,7 @@ function parseHelmChartText(input, lockfilePath = "Chart.lock") {
   if (!records.ok) {
     return records;
   }
-  const rootName = path41.basename(path41.dirname(lockfilePath)) || "<helm-chart>";
+  const rootName = path14.basename(path14.dirname(lockfilePath)) || "<helm-chart>";
   return ok({
     rootName,
     lockfilePath,
@@ -28807,7 +23529,7 @@ function parseHelmChartText(input, lockfilePath = "Chart.lock") {
   });
 }
 function readHelmDependencyRecords(parsed, lockfilePath) {
-  if (!isRecord13(parsed)) {
+  if (!isRecord7(parsed)) {
     return helmChartShapeError({
       lockfilePath,
       reason: "root_not_object"
@@ -28824,7 +23546,7 @@ function readHelmDependencyRecords(parsed, lockfilePath) {
   }
   const records = new Map;
   for (const [index, dependency] of parsed.dependencies.entries()) {
-    if (!isRecord13(dependency)) {
+    if (!isRecord7(dependency)) {
       return helmChartShapeError({
         lockfilePath,
         index,
@@ -28863,12 +23585,12 @@ function helmChartShapeError(input) {
     details: input
   }));
 }
-function isRecord13(value) {
+function isRecord7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/graph/haskell-stack-lock.ts
-import path42 from "node:path";
+import path15 from "node:path";
 function parseStackLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -28906,7 +23628,7 @@ function parseStackLockText(input, lockfilePath = "stack.yaml.lock") {
   if (!records.ok) {
     return records;
   }
-  const rootName = path42.basename(path42.dirname(lockfilePath)) || "<haskell-stack-project>";
+  const rootName = path15.basename(path15.dirname(lockfilePath)) || "<haskell-stack-project>";
   return ok({
     rootName,
     lockfilePath,
@@ -28922,13 +23644,13 @@ function parseStackLockText(input, lockfilePath = "stack.yaml.lock") {
   });
 }
 function readStackLockRecords(parsed, lockfilePath) {
-  if (!isRecord14(parsed) || !Array.isArray(parsed.packages)) {
+  if (!isRecord8(parsed) || !Array.isArray(parsed.packages)) {
     return stackLockShapeError(lockfilePath, "packages_not_array");
   }
   const records = new Map;
   const unsupportedDependencies = [];
   for (const [index, entry] of parsed.packages.entries()) {
-    if (!isRecord14(entry) || !isRecord14(entry.completed)) {
+    if (!isRecord8(entry) || !isRecord8(entry.completed)) {
       return stackLockShapeError(lockfilePath, "package_completed_not_object", index);
     }
     const hackage = typeof entry.completed.hackage === "string" ? entry.completed.hackage : undefined;
@@ -29000,7 +23722,7 @@ function unsupportedStackDependencyError(lockfilePath, dependencies) {
     }
   }));
 }
-function isRecord14(value) {
+function isRecord8(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function uniqueSorted2(values) {
@@ -29011,8 +23733,8 @@ function uniqueSortedNumbers(values) {
 }
 
 // src/graph/java-gradle-lock.ts
-import { readdirSync as readdirSync25, statSync as statSync27 } from "node:fs";
-import path43 from "node:path";
+import { readdirSync, statSync as statSync2 } from "node:fs";
+import path16 from "node:path";
 function parseGradleLockfile(lockfilePath, options = {}) {
   if (isDirectory(lockfilePath)) {
     return parseGradleDependencyLocksDirectory(lockfilePath, options);
@@ -29037,7 +23759,7 @@ function parseGradleLockfile(lockfilePath, options = {}) {
 function parseGradleDependencyLocksDirectory(lockfilePath, options) {
   let entries;
   try {
-    entries = readdirSync25(lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile2(path43.join(lockfilePath, entry))).sort();
+    entries = readdirSync(lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile(path16.join(lockfilePath, entry))).sort();
   } catch (cause) {
     return err(createError({
       code: "GRADLE_LOCK_READ_FAILED",
@@ -29062,7 +23784,7 @@ function parseGradleDependencyLocksDirectory(lockfilePath, options) {
   }
   const nodeMap = new Map;
   for (const entry of entries) {
-    const filePath = path43.join(lockfilePath, entry);
+    const filePath = path16.join(lockfilePath, entry);
     const graph = parseGradleLockfile(filePath, options);
     if (!graph.ok) {
       return graph;
@@ -29131,7 +23853,7 @@ function parseGradleLockText(input, lockfilePath = "gradle.lockfile") {
   });
 }
 function rootNameForGradleLockfile(lockfilePath) {
-  const segments = path43.normalize(lockfilePath).split(path43.sep);
+  const segments = path16.normalize(lockfilePath).split(path16.sep);
   const isDependencyLockDirectory = segments.length >= 2 && segments[segments.length - 1] === "dependency-locks" && segments[segments.length - 2] === "gradle";
   const isDependencyLockfile = segments.length >= 3 && segments[segments.length - 1]?.toLowerCase().endsWith(".lockfile") === true && segments[segments.length - 2] === "dependency-locks" && segments[segments.length - 3] === "gradle";
   if (isDependencyLockDirectory) {
@@ -29142,7 +23864,7 @@ function rootNameForGradleLockfile(lockfilePath) {
     const projectDir = segments[segments.length - 4];
     return projectDir && projectDir !== "" ? projectDir : "<root>";
   }
-  return path43.basename(path43.dirname(lockfilePath)) || "<root>";
+  return path16.basename(path16.dirname(lockfilePath)) || "<root>";
 }
 function mergeGradleGraphNodes(nodeMap, nodes) {
   for (const node of nodes) {
@@ -29224,23 +23946,23 @@ function dependencyTypeRank9(type) {
       return 0;
   }
 }
-function isFile2(pathname) {
+function isFile(pathname) {
   try {
-    return statSync27(pathname).isFile();
+    return statSync2(pathname).isFile();
   } catch {
     return false;
   }
 }
 function isDirectory(pathname) {
   try {
-    return statSync27(pathname).isDirectory();
+    return statSync2(pathname).isDirectory();
   } catch {
     return false;
   }
 }
 
 // src/graph/java-gradle-version-catalog.ts
-import path44 from "node:path";
+import path17 from "node:path";
 function parseGradleVersionCatalogFile(catalogPath, options = {}) {
   const catalogText = readInputTextFile({
     filePath: catalogPath,
@@ -29259,7 +23981,7 @@ function parseGradleVersionCatalogFile(catalogPath, options = {}) {
   }
   return parseGradleVersionCatalogText(catalogText.value, catalogPath);
 }
-function parseGradleVersionCatalogText(input, catalogPath = path44.join("gradle", "libs.versions.toml")) {
+function parseGradleVersionCatalogText(input, catalogPath = path17.join("gradle", "libs.versions.toml")) {
   const parsed = readGradleVersionCatalogRecords(input, catalogPath);
   if (!parsed.ok) {
     return parsed;
@@ -29297,7 +24019,7 @@ function readGradleVersionCatalogRecords(input, catalogPath) {
   const records = [];
   let currentTable = "other";
   for (const [index, rawLine] of input.split(/\r?\n/).entries()) {
-    const line = stripTomlComment3(rawLine).trim();
+    const line = stripTomlComment(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -29347,7 +24069,7 @@ function readGradleVersionCatalogRecords(input, catalogPath) {
 function readGradleCatalogLibraryRecord(input) {
   const compactNotation = readTomlString(input.value);
   if (compactNotation) {
-    const coordinates = parseMavenCoordinates3(compactNotation);
+    const coordinates = parseMavenCoordinates2(compactNotation);
     if (coordinates) {
       return ok(gradleCatalogRecord({
         alias: input.alias,
@@ -29402,7 +24124,7 @@ function gradleCatalogRecord(input) {
     id
   };
 }
-function parseMavenCoordinates3(value) {
+function parseMavenCoordinates2(value) {
   const [groupId, artifactId, version, extra] = value.split(":");
   if (!groupId || !artifactId || !version || extra !== undefined) {
     return;
@@ -29461,7 +24183,7 @@ function unescapeBasicTomlString(value) {
   return value.replace(/\\b/g, "\b").replace(/\\t/g, "\t").replace(/\\n/g, `
 `).replace(/\\f/g, "\f").replace(/\\r/g, "\r").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
 }
-function stripTomlComment3(line) {
+function stripTomlComment(line) {
   let quote;
   let escaped = false;
   for (let index = 0;index < line.length; index += 1) {
@@ -29561,9 +24283,9 @@ function normalizeTomlKey(key) {
   return /^[A-Za-z0-9_.-]+$/.test(trimmed) ? trimmed : undefined;
 }
 function gradleCatalogRootName(catalogPath) {
-  const dir = path44.dirname(catalogPath);
-  const rootDir = path44.basename(dir) === "gradle" ? path44.dirname(dir) : dir;
-  return path44.basename(rootDir) || "<gradle-project>";
+  const dir = path17.dirname(catalogPath);
+  const rootDir = path17.basename(dir) === "gradle" ? path17.dirname(dir) : dir;
+  return path17.basename(rootDir) || "<gradle-project>";
 }
 function gradleCatalogParseError(input) {
   return err(createError({
@@ -29575,7 +24297,58 @@ function gradleCatalogParseError(input) {
 }
 
 // src/graph/java-maven-pom.ts
-import path45 from "node:path";
+import path19 from "node:path";
+
+// src/shared/maven-repository.ts
+import { existsSync as existsSync5 } from "node:fs";
+import path18 from "node:path";
+var MAVEN_GROUP_SEGMENT_PATTERN = /^[A-Za-z0-9_-]+$/;
+var MAVEN_ARTIFACT_SEGMENT_PATTERN = /^[A-Za-z0-9_.+-]+$/;
+function mavenRepositoryRoots(projectRoot, extraRoots = []) {
+  const roots = [
+    ...extraRoots,
+    path18.join(projectRoot, ".m2", "repository")
+  ];
+  const home = process.env.USERPROFILE ?? process.env.HOME;
+  if (home) {
+    roots.push(path18.join(home, ".m2", "repository"));
+  }
+  return [...new Set(roots.map((root) => path18.resolve(root)))];
+}
+function findMavenPomInRepository(input) {
+  const relativePomPath = mavenPomRelativePath(input);
+  if (!relativePomPath) {
+    return;
+  }
+  for (const repositoryRoot of input.repositoryRoots) {
+    const root = path18.resolve(repositoryRoot);
+    const candidate = path18.resolve(root, relativePomPath);
+    if (!isPathInside(root, candidate)) {
+      continue;
+    }
+    if (existsSync5(candidate)) {
+      return candidate;
+    }
+  }
+  return;
+}
+function mavenPomRelativePath(input) {
+  const groupSegments = input.groupId.split(".");
+  if (groupSegments.some((segment) => !isSafeMavenPathSegment(segment, MAVEN_GROUP_SEGMENT_PATTERN)) || !isSafeMavenPathSegment(input.artifactId, MAVEN_ARTIFACT_SEGMENT_PATTERN) || !isSafeMavenPathSegment(input.version, MAVEN_ARTIFACT_SEGMENT_PATTERN)) {
+    return;
+  }
+  const relativePomPath = path18.join(...groupSegments, input.artifactId, input.version, `${input.artifactId}-${input.version}.pom`);
+  return relativePomPath;
+}
+function isSafeMavenPathSegment(segment, pattern) {
+  return segment.length > 0 && segment !== "." && segment !== ".." && !segment.includes("..") && !segment.includes("/") && !segment.includes("\\") && !segment.includes("\x00") && !path18.isAbsolute(segment) && !/^[A-Za-z]:/.test(segment) && pattern.test(segment);
+}
+function isPathInside(root, candidate) {
+  const relative = path18.relative(root, candidate);
+  return relative.length > 0 && !relative.startsWith("..") && !path18.isAbsolute(relative);
+}
+
+// src/graph/java-maven-pom.ts
 function parseMavenPomFile(pomPath, options = {}) {
   const pomText = readInputTextFile({
     filePath: pomPath,
@@ -29594,7 +24367,7 @@ function parseMavenPomFile(pomPath, options = {}) {
   }
   return parseMavenPomText(pomText.value, pomPath, {
     ...options,
-    projectRoot: options.projectRoot ?? path45.dirname(pomPath)
+    projectRoot: options.projectRoot ?? path19.dirname(pomPath)
   });
 }
 function parseMavenPomText(input, pomPath = "pom.xml", options = {}) {
@@ -29786,7 +24559,7 @@ function readMavenPomDependencies(text3, model, pomPath, context) {
           message: "Failed to parse pom.xml dependency entry. Ohrisk requires groupId and artifactId.",
           details: {
             lockfilePath: pomPath,
-            dependency: normalizePomText2(dependencyText)
+            dependency: normalizePomText(dependencyText)
           }
         }));
       }
@@ -29900,14 +24673,14 @@ function readPomProperties(text3) {
     const key = match[1];
     const value = match[2];
     if (key && value !== undefined) {
-      properties.set(key, normalizePomText2(value));
+      properties.set(key, normalizePomText(value));
     }
   }
   return properties;
 }
 function readXmlTagText2(text3, tag) {
   const value = text3.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"))?.[1];
-  const normalized = value === undefined ? undefined : normalizePomText2(value);
+  const normalized = value === undefined ? undefined : normalizePomText(value);
   return normalized && normalized.length > 0 ? normalized : undefined;
 }
 function readMavenParentCoordinates(text3) {
@@ -29941,7 +24714,7 @@ function mavenProjectRootFromPomPath(pomPath) {
   if (pomPath.includes(":")) {
     return process.cwd();
   }
-  return path45.dirname(path45.resolve(pomPath));
+  return path19.dirname(path19.resolve(pomPath));
 }
 function mavenCoordinateKey(groupId, artifactId) {
   return `${groupId}:${artifactId}`;
@@ -30022,16 +24795,16 @@ function dependencyTypeRank10(type) {
       return 0;
   }
 }
-function normalizePomText2(text3) {
-  return decodeXmlEntities3(text3.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+function normalizePomText(text3) {
+  return decodeXmlEntities(text3.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
 }
-function decodeXmlEntities3(text3) {
+function decodeXmlEntities(text3) {
   return text3.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
 }
 
 // src/graph/julia-manifest.ts
-import { existsSync as existsSync32 } from "node:fs";
-import path46 from "node:path";
+import { existsSync as existsSync6 } from "node:fs";
+import path20 from "node:path";
 function parseJuliaManifestFile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -30064,7 +24837,7 @@ function parseJuliaManifestText(input, lockfilePath = "Manifest.toml", options =
   if (!records.ok) {
     return records;
   }
-  const rootName = path46.basename(path46.dirname(lockfilePath)) || "<julia-project>";
+  const rootName = path20.basename(path20.dirname(lockfilePath)) || "<julia-project>";
   const referencedNames = new Set(records.value.flatMap((record) => record.dependencies));
   const projectRootTypes = options.projectText ? readJuliaProjectRootTypes(options.projectText, records.value) : new Map;
   const projectRootNames = projectRootTypes.size > 0 ? new Set(projectRootTypes.keys()) : undefined;
@@ -30089,8 +24862,8 @@ function parseJuliaManifestText(input, lockfilePath = "Manifest.toml", options =
   });
 }
 function readOptionalJuliaProject(input) {
-  const projectTomlPath = path46.join(path46.dirname(input.lockfilePath), "Project.toml");
-  if (!existsSync32(projectTomlPath)) {
+  const projectTomlPath = path20.join(path20.dirname(input.lockfilePath), "Project.toml");
+  if (!existsSync6(projectTomlPath)) {
     return ok(undefined);
   }
   const projectText = readInputTextFile({
@@ -30114,7 +24887,7 @@ function readJuliaManifestRecords(input, lockfilePath) {
   const records = new Map;
   let current;
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment4(rawLine).trim();
+    const line = stripTomlComment2(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -30191,7 +24964,7 @@ function readJuliaProjectRootTypes(input, records) {
   const testTargets = new Set;
   let section = "";
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment4(rawLine).trim();
+    const line = stripTomlComment2(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -30317,7 +25090,7 @@ function readUnsupportedTomlArrayKinds(input) {
   }
   return [...kinds].sort();
 }
-function stripTomlComment4(line) {
+function stripTomlComment2(line) {
   let inString = false;
   let escaped = false;
   for (let index = 0;index < line.length; index += 1) {
@@ -30364,7 +25137,7 @@ function unsupportedJuliaDependencyError(lockfilePath, packageName, valueKinds) 
 }
 
 // src/graph/lua-luarocks-lock.ts
-import path47 from "node:path";
+import path21 from "node:path";
 function parseLuarocksLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -30396,7 +25169,7 @@ function parseLuarocksLockText(input, lockfilePath = "luarocks.lock") {
   if (records.length === 0) {
     return luarocksLockShapeError(lockfilePath, "no_dependencies");
   }
-  const rootName = path47.basename(path47.dirname(lockfilePath)) || "<lua-project>";
+  const rootName = path21.basename(path21.dirname(lockfilePath)) || "<lua-project>";
   return ok({
     rootName,
     lockfilePath,
@@ -30529,7 +25302,7 @@ function uniqueSorted3(values) {
 }
 
 // src/graph/nix-flake-lock.ts
-import path48 from "node:path";
+import path22 from "node:path";
 function parseNixFlakeLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -30563,7 +25336,7 @@ function parseNixFlakeLockText(input, lockfilePath = "flake.lock") {
       }
     }));
   }
-  if (!isRecord15(parsed) || !isRecord15(parsed.nodes)) {
+  if (!isRecord9(parsed) || !isRecord9(parsed.nodes)) {
     return nixLockShapeError({
       lockfilePath,
       reason: "missing_nodes_object"
@@ -30571,7 +25344,7 @@ function parseNixFlakeLockText(input, lockfilePath = "flake.lock") {
   }
   const rootNodeKey = typeof parsed.root === "string" ? parsed.root : "root";
   const rootNode = parsed.nodes[rootNodeKey];
-  if (!isRecord15(rootNode)) {
+  if (!isRecord9(rootNode)) {
     return nixLockShapeError({
       lockfilePath,
       reason: "missing_root_node",
@@ -30592,7 +25365,7 @@ function parseNixFlakeLockText(input, lockfilePath = "flake.lock") {
       continue;
     }
     const node = parsed.nodes[nodeKey];
-    if (!isRecord15(node) || !isRecord15(node.locked)) {
+    if (!isRecord9(node) || !isRecord9(node.locked)) {
       continue;
     }
     const identity2 = nixNodeIdentity({
@@ -30642,7 +25415,7 @@ function collectReachableNixPaths(input) {
     existing.push(currentPath);
     pathsByNode.set(currentNodeKey, existing);
     const node = input.nodes[currentNodeKey];
-    if (!isRecord15(node) || !isRecord15(node.inputs)) {
+    if (!isRecord9(node) || !isRecord9(node.inputs)) {
       continue;
     }
     for (const target of Object.values(node.inputs).flatMap(nixInputTargets)) {
@@ -30725,7 +25498,7 @@ function stringField(record, field) {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 }
 function rootProjectName(lockfilePath) {
-  return path48.basename(path48.dirname(lockfilePath)) || "<nix-flake>";
+  return path22.basename(path22.dirname(lockfilePath)) || "<nix-flake>";
 }
 function samePath(left, right) {
   return left.length === right.length && left.every((item, index) => item === right[index]);
@@ -30738,12 +25511,12 @@ function nixLockShapeError(input) {
     details: input
   }));
 }
-function isRecord15(value) {
+function isRecord9(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/graph/npm-bun-lock.ts
-import path49 from "node:path";
+import path23 from "node:path";
 function parseBunLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -30861,7 +25634,7 @@ function readPackageTupleFields(input) {
     const resolved2 = registryOrMetadata !== "" ? registryOrMetadata : undefined;
     const parsedIntegrity2 = typeof integrity === "string" && integrity !== "" ? integrity : undefined;
     return {
-      metadata: isObjectRecord3(metadataOrIntegrity) ? metadataOrIntegrity : {},
+      metadata: isObjectRecord2(metadataOrIntegrity) ? metadataOrIntegrity : {},
       ...resolved2 ? { resolved: resolved2 } : {},
       ...parsedIntegrity2 ? { integrity: parsedIntegrity2 } : {}
     };
@@ -30869,7 +25642,7 @@ function readPackageTupleFields(input) {
   const resolved = isLocalArtifactReference(input.identity.version) ? input.identity.version : undefined;
   const parsedIntegrity = typeof metadataOrIntegrity === "string" && metadataOrIntegrity !== "" ? metadataOrIntegrity : undefined;
   return {
-    metadata: isObjectRecord3(registryOrMetadata) ? registryOrMetadata : {},
+    metadata: isObjectRecord2(registryOrMetadata) ? registryOrMetadata : {},
     ...resolved ? { resolved } : {},
     ...parsedIntegrity ? { integrity: parsedIntegrity } : {}
   };
@@ -30883,7 +25656,7 @@ function parsePackageIdentity(input) {
   return { name: parsed.name, version: parsed.reference };
 }
 function isLocalArtifactReference(value) {
-  return value.startsWith("file:") || isWorkspaceLocalArtifactReference(value) || value.startsWith(".") || path49.isAbsolute(value) || /^[A-Za-z]:[\\/]/.test(value);
+  return value.startsWith("file:") || isWorkspaceLocalArtifactReference(value) || value.startsWith(".") || path23.isAbsolute(value) || /^[A-Za-z]:[\\/]/.test(value);
 }
 function isWorkspaceLocalArtifactReference(value) {
   if (!value.startsWith("workspace:")) {
@@ -30905,10 +25678,10 @@ function readWorkspaceEntries(workspaces) {
   if (!workspaces) {
     return [];
   }
-  const rootWorkspace = isObjectRecord3(workspaces[""]) ? workspaces[""] : undefined;
+  const rootWorkspace = isObjectRecord2(workspaces[""]) ? workspaces[""] : undefined;
   const rootName = readWorkspaceName(rootWorkspace);
   return Object.entries(workspaces).flatMap(([key, workspace]) => {
-    if (!isObjectRecord3(workspace)) {
+    if (!isObjectRecord2(workspace)) {
       return [];
     }
     return [{
@@ -30964,7 +25737,7 @@ function dependencyEntries(value, type) {
   }));
 }
 function readDependencyMap(value) {
-  if (!isObjectRecord3(value)) {
+  if (!isObjectRecord2(value)) {
     return {};
   }
   const dependencies = {};
@@ -31065,12 +25838,12 @@ function dependencyTypeRank11(type) {
       return 0;
   }
 }
-function isObjectRecord3(value) {
+function isObjectRecord2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/graph/npm-package-json.ts
-import path50 from "node:path";
+import path24 from "node:path";
 var DEPENDENCY_FIELDS = [
   "dependencies",
   "devDependencies",
@@ -31113,7 +25886,7 @@ function parsePackageJsonManifestText(text3, packageJsonPath = "package.json") {
       }
     }));
   }
-  if (!isRecord16(parsed)) {
+  if (!isRecord10(parsed)) {
     return err(createError({
       code: "PACKAGE_JSON_PARSE_FAILED",
       category: "unsupported_input",
@@ -31148,7 +25921,7 @@ function hasManifestEntries(value) {
   if (Array.isArray(value)) {
     return value.length > 0;
   }
-  if (isRecord16(value)) {
+  if (isRecord10(value)) {
     return Object.keys(value).length > 0;
   }
   return true;
@@ -31157,10 +25930,10 @@ function packageNameOrDirectory(value, packageJsonPath) {
   if (typeof value === "string" && value.trim() !== "") {
     return value;
   }
-  const parent = path50.basename(path50.dirname(packageJsonPath));
+  const parent = path24.basename(path24.dirname(packageJsonPath));
   return parent === "" ? "." : parent;
 }
-function isRecord16(value) {
+function isRecord10(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -31191,14 +25964,14 @@ function parsePackageLockText(input, lockfilePath = "package-lock.json") {
     return parsed;
   }
   const lockfile = parsed.value;
-  if (!isObjectRecord4(lockfile.packages) && isObjectRecord4(lockfile.dependencies)) {
+  if (!isObjectRecord3(lockfile.packages) && isObjectRecord3(lockfile.dependencies)) {
     return parsePackageLockV1({
       lockfile,
       lockfilePath,
       dependencies: lockfile.dependencies
     });
   }
-  if (!isObjectRecord4(lockfile.packages)) {
+  if (!isObjectRecord3(lockfile.packages)) {
     return err(createError({
       code: "PACKAGE_LOCK_PARSE_FAILED",
       category: "unsupported_input",
@@ -31551,13 +26324,13 @@ function dependencyTypeRank12(type) {
   }
 }
 function readPackage(value) {
-  return isObjectRecord4(value) ? value : undefined;
+  return isObjectRecord3(value) ? value : undefined;
 }
 function readV1Dependency(value) {
-  return isObjectRecord4(value) ? value : undefined;
+  return isObjectRecord3(value) ? value : undefined;
 }
 function readV1DependencyMap(value) {
-  if (!isObjectRecord4(value)) {
+  if (!isObjectRecord3(value)) {
     return {};
   }
   const dependencies = {};
@@ -31579,7 +26352,7 @@ function dependencyTypeForV1Dependency(dependency) {
   return "production";
 }
 function readDependencyMap2(value) {
-  if (!isObjectRecord4(value)) {
+  if (!isObjectRecord3(value)) {
     return {};
   }
   const dependencies = {};
@@ -31590,13 +26363,13 @@ function readDependencyMap2(value) {
   }
   return dependencies;
 }
-function isObjectRecord4(value) {
+function isObjectRecord3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/graph/npm-pnpm-lock.ts
-import { existsSync as existsSync33 } from "node:fs";
-import path51 from "node:path";
+import { existsSync as existsSync7 } from "node:fs";
+import path25 from "node:path";
 function parsePnpmLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -31690,7 +26463,7 @@ function parsePnpmLockText(input, lockfilePath = "pnpm-lock.yaml", options = {})
 function parseLockfileYaml(input, lockfilePath) {
   try {
     const parsed = $parse(input);
-    if (!isObjectRecord5(parsed)) {
+    if (!isObjectRecord4(parsed)) {
       throw new Error("Expected a YAML mapping at the document root.");
     }
     return ok(parsed);
@@ -31707,8 +26480,8 @@ function parseLockfileYaml(input, lockfilePath) {
   }
 }
 function readPnpmWorkspaceCatalogs(input) {
-  const workspacePath = path51.join(path51.dirname(input.lockfilePath), "pnpm-workspace.yaml");
-  if (!existsSync33(workspacePath)) {
+  const workspacePath = path25.join(path25.dirname(input.lockfilePath), "pnpm-workspace.yaml");
+  if (!existsSync7(workspacePath)) {
     return ok(emptyPnpmCatalogs());
   }
   const workspaceText = readInputTextFile({
@@ -31743,7 +26516,7 @@ function parsePnpmWorkspaceCatalogsText(input, workspacePath) {
     if (parsed === null || parsed === undefined) {
       return ok(emptyPnpmCatalogs());
     }
-    if (!isObjectRecord5(parsed)) {
+    if (!isObjectRecord4(parsed)) {
       throw new Error("Expected a YAML mapping at the document root.");
     }
     const workspace = parsed;
@@ -32090,18 +26863,18 @@ function dependencyTypeRank13(type) {
   }
 }
 function readRecord(value) {
-  return isObjectRecord5(value) ? value : undefined;
+  return isObjectRecord4(value) ? value : undefined;
 }
-function isObjectRecord5(value) {
+function isObjectRecord4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/graph/npm-yarn-lock.ts
 var yarnLockfileModule = __toESM(require_lockfile(), 1);
-import { existsSync as existsSync34, readdirSync as readdirSync26, statSync as statSync28 } from "node:fs";
-import path52 from "node:path";
+import { existsSync as existsSync8, readdirSync as readdirSync2, statSync as statSync3 } from "node:fs";
+import path26 from "node:path";
 var yarnLockfile = yarnLockfileModule;
-function parseYarnLockfile(lockfilePath, packageJsonPath = path52.join(path52.dirname(lockfilePath), "package.json"), options = {}) {
+function parseYarnLockfile(lockfilePath, packageJsonPath = path26.join(path26.dirname(lockfilePath), "package.json"), options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
     maxBytes: options.lockfileMaxBytes ?? LOCKFILE_MAX_BYTES
@@ -32138,7 +26911,7 @@ function parseYarnLockfile(lockfilePath, packageJsonPath = path52.join(path52.di
     return parsedRootPackageJson;
   }
   const workspacePackageJsonTexts = readWorkspacePackageJsonTexts({
-    projectRoot: path52.dirname(packageJsonPath),
+    projectRoot: path26.dirname(packageJsonPath),
     rootPackageJson: parsedRootPackageJson.value,
     lockfilePath,
     packageJsonMaxBytes: options.packageJsonMaxBytes ?? PACKAGE_JSON_MAX_BYTES
@@ -32214,7 +26987,7 @@ function parseYarnLockText(input) {
 function parsePackageJson(input, packageJsonPath) {
   try {
     const parsed = JSON.parse(input);
-    if (!isObjectRecord6(parsed)) {
+    if (!isObjectRecord5(parsed)) {
       throw new Error("Expected package.json to contain an object.");
     }
     return ok(parsed);
@@ -32278,7 +27051,7 @@ function readWorkspacePackageJsonTexts(input) {
   return ok(packageJsons);
 }
 function findYarnWorkspacePackageJsonPathsFromRelativePaths(input) {
-  const projectRoot = path52.resolve(input.projectRoot);
+  const projectRoot = path26.resolve(input.projectRoot);
   const patterns = readWorkspacePatterns(input.workspaces);
   const includedPatterns = patterns.filter((pattern) => !pattern.startsWith("!"));
   const excludedPatterns = patterns.filter((pattern) => pattern.startsWith("!")).map((pattern) => pattern.slice(1));
@@ -32296,7 +27069,7 @@ function findYarnWorkspacePackageJsonPathsFromRelativePaths(input) {
       continue;
     }
     locations.set(relativePackageJsonPath, {
-      packageJsonPath: path52.join(projectRoot, ...relativePackageJsonPath.split("/")),
+      packageJsonPath: path26.join(projectRoot, ...relativePackageJsonPath.split("/")),
       relativePackageJsonPath,
       workspacePath
     });
@@ -32306,9 +27079,9 @@ function findYarnWorkspacePackageJsonPathsFromRelativePaths(input) {
 function findYarnWorkspacePackageJsonPaths(input) {
   const locations = [];
   const seen = new Set;
-  const projectRoot = path52.resolve(input.projectRoot);
+  const projectRoot = path26.resolve(input.projectRoot);
   const patterns = readWorkspacePatterns(input.workspaces);
-  const excludedWorkspacePaths = new Set(patterns.filter((pattern) => pattern.startsWith("!")).flatMap((pattern) => expandWorkspacePattern(projectRoot, pattern.slice(1))).filter((workspacePath) => isInsideDirectory(projectRoot, workspacePath)).map((workspacePath) => path52.resolve(workspacePath)));
+  const excludedWorkspacePaths = new Set(patterns.filter((pattern) => pattern.startsWith("!")).flatMap((pattern) => expandWorkspacePattern(projectRoot, pattern.slice(1))).filter((workspacePath) => isInsideDirectory(projectRoot, workspacePath)).map((workspacePath) => path26.resolve(workspacePath)));
   for (const pattern of patterns) {
     if (pattern.startsWith("!")) {
       continue;
@@ -32317,15 +27090,15 @@ function findYarnWorkspacePackageJsonPaths(input) {
       if (!isInsideDirectory(projectRoot, workspacePath)) {
         continue;
       }
-      const packageJsonPath = path52.join(workspacePath, "package.json");
-      const relativePackageJsonPath = path52.relative(projectRoot, packageJsonPath).replace(/\\/g, "/");
-      if (seen.has(relativePackageJsonPath) || excludedWorkspacePaths.has(path52.resolve(workspacePath)) || !existsSync34(packageJsonPath)) {
+      const packageJsonPath = path26.join(workspacePath, "package.json");
+      const relativePackageJsonPath = path26.relative(projectRoot, packageJsonPath).replace(/\\/g, "/");
+      if (seen.has(relativePackageJsonPath) || excludedWorkspacePaths.has(path26.resolve(workspacePath)) || !existsSync8(packageJsonPath)) {
         continue;
       }
       locations.push({
         packageJsonPath,
         relativePackageJsonPath,
-        workspacePath: path52.relative(projectRoot, workspacePath).replace(/\\/g, "/")
+        workspacePath: path26.relative(projectRoot, workspacePath).replace(/\\/g, "/")
       });
       seen.add(relativePackageJsonPath);
     }
@@ -32336,7 +27109,7 @@ function readWorkspacePatterns(value) {
   if (Array.isArray(value)) {
     return value.filter((item) => typeof item === "string");
   }
-  if (isObjectRecord6(value) && Array.isArray(value.packages)) {
+  if (isObjectRecord5(value) && Array.isArray(value.packages)) {
     return value.packages.filter((item) => typeof item === "string");
   }
   return [];
@@ -32365,12 +27138,12 @@ function expandWorkspaceSegments(currentPath, segments) {
   }
   if (segment.includes("*")) {
     const matcher = wildcardSegmentMatcher(segment);
-    return listChildDirectories(currentPath).filter((childPath) => matcher.test(path52.basename(childPath))).flatMap((childPath) => expandWorkspaceSegments(childPath, rest));
+    return listChildDirectories(currentPath).filter((childPath) => matcher.test(path26.basename(childPath))).flatMap((childPath) => expandWorkspaceSegments(childPath, rest));
   }
-  return expandWorkspaceSegments(path52.join(currentPath, segment), rest);
+  return expandWorkspaceSegments(path26.join(currentPath, segment), rest);
 }
 function normalizeWorkspaceRelativePath(value) {
-  const normalized = path52.posix.normalize(value.replace(/\\/g, "/"));
+  const normalized = path26.posix.normalize(value.replace(/\\/g, "/"));
   if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/")) {
     return;
   }
@@ -32397,12 +27170,12 @@ function matchesWorkspaceSegments(pathSegments, patternSegments, pathIndex, patt
   return matcher.test(pathSegments[pathIndex] ?? "") && matchesWorkspaceSegments(pathSegments, patternSegments, pathIndex + 1, patternIndex + 1);
 }
 function isInsideDirectory(rootPath, candidatePath) {
-  const relativePath = path52.relative(rootPath, path52.resolve(candidatePath));
-  return relativePath === "" || relativePath !== ".." && !relativePath.startsWith(`..${path52.sep}`) && !path52.isAbsolute(relativePath);
+  const relativePath = path26.relative(rootPath, path26.resolve(candidatePath));
+  return relativePath === "" || relativePath !== ".." && !relativePath.startsWith(`..${path26.sep}`) && !path26.isAbsolute(relativePath);
 }
 function listChildDirectories(parentPath) {
   try {
-    return readdirSync26(parentPath, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name !== "node_modules").map((entry) => path52.join(parentPath, entry.name));
+    return readdirSync2(parentPath, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name !== "node_modules").map((entry) => path26.join(parentPath, entry.name));
   } catch {
     return [];
   }
@@ -32413,7 +27186,7 @@ function wildcardSegmentMatcher(segment) {
 }
 function isDirectory2(targetPath) {
   try {
-    return statSync28(targetPath).isDirectory();
+    return statSync3(targetPath).isDirectory();
   } catch {
     return false;
   }
@@ -32469,12 +27242,12 @@ function isYarnBerryLockfile(input) {
 function parseBerryLockfile(input, lockfilePath) {
   try {
     const parsed = $parse(input);
-    if (!isObjectRecord6(parsed)) {
+    if (!isObjectRecord5(parsed)) {
       throw new Error("Expected a YAML mapping at the document root.");
     }
     const entries = {};
     for (const [key, value] of Object.entries(parsed)) {
-      if (key === "__metadata" || !isObjectRecord6(value)) {
+      if (key === "__metadata" || !isObjectRecord5(value)) {
         continue;
       }
       entries[key] = value;
@@ -32670,7 +27443,7 @@ function dependencyEntries4(value, type) {
   }));
 }
 function readDependencyMap3(value) {
-  if (!isObjectRecord6(value)) {
+  if (!isObjectRecord5(value)) {
     return {};
   }
   const dependencies = {};
@@ -32811,12 +27584,12 @@ function dependencyTypeRank14(type) {
       return 0;
   }
 }
-function isObjectRecord6(value) {
+function isObjectRecord5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/graph/perl-cpanfile-snapshot.ts
-import path53 from "node:path";
+import path27 from "node:path";
 function parseCpanfileSnapshotFile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -32840,7 +27613,7 @@ function parseCpanfileSnapshotText(input, lockfilePath = "cpanfile.snapshot") {
   if (!records.ok) {
     return records;
   }
-  const rootName = path53.basename(path53.dirname(lockfilePath)) || "<perl-project>";
+  const rootName = path27.basename(path27.dirname(lockfilePath)) || "<perl-project>";
   return ok({
     rootName,
     lockfilePath,
@@ -33031,8 +27804,8 @@ function cpanfileSnapshotShapeError(lockfilePath, reason, entry) {
 }
 
 // src/graph/php-composer-lock.ts
-import { existsSync as existsSync35 } from "node:fs";
-import path54 from "node:path";
+import { existsSync as existsSync9 } from "node:fs";
+import path28 from "node:path";
 function parseComposerLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -33065,7 +27838,7 @@ function parseComposerLockText(input, lockfilePath = "composer.lock", options = 
   if (!parsed.ok) {
     return parsed;
   }
-  const rootName = readComposerProjectName(options.composerJsonText) ?? path54.basename(path54.dirname(lockfilePath)) ?? "<composer-project>";
+  const rootName = readComposerProjectName(options.composerJsonText) ?? path28.basename(path28.dirname(lockfilePath)) ?? "<composer-project>";
   const rootDependencies = readComposerRootDependencies(omitUndefined({
     composerJsonText: options.composerJsonText,
     records: parsed.value
@@ -33093,8 +27866,8 @@ function parseComposerLockText(input, lockfilePath = "composer.lock", options = 
   });
 }
 function readOptionalComposerJson(input) {
-  const composerJsonPath = path54.join(path54.dirname(input.lockfilePath), "composer.json");
-  if (!existsSync35(composerJsonPath)) {
+  const composerJsonPath = path28.join(path28.dirname(input.lockfilePath), "composer.json");
+  if (!existsSync9(composerJsonPath)) {
     return ok(undefined);
   }
   const composerJsonText = readInputTextFile({
@@ -33129,7 +27902,7 @@ function parseComposerLockJson(input, lockfilePath) {
       }
     }));
   }
-  if (!isRecord17(parsed)) {
+  if (!isRecord11(parsed)) {
     return composerLockShapeError(lockfilePath);
   }
   let records;
@@ -33162,7 +27935,7 @@ function readComposerPackageRecords(value, dependencyType, lockfilePath) {
     throw new Error(`Invalid composer package list in ${lockfilePath}.`);
   }
   return value.map((item) => {
-    if (!isRecord17(item) || typeof item.name !== "string" || typeof item.version !== "string") {
+    if (!isRecord11(item) || typeof item.name !== "string" || typeof item.version !== "string") {
       throw new Error(`Invalid composer package entry in ${lockfilePath}.`);
     }
     return {
@@ -33186,7 +27959,7 @@ function readComposerRootDependencies(input) {
 function parseComposerJsonRootDependencies(input) {
   try {
     const parsed = JSON.parse(input);
-    if (!isRecord17(parsed)) {
+    if (!isRecord11(parsed)) {
       return [];
     }
     return [
@@ -33203,19 +27976,19 @@ function readComposerProjectName(input) {
   }
   try {
     const parsed = JSON.parse(input);
-    return isRecord17(parsed) && typeof parsed.name === "string" ? parsed.name : undefined;
+    return isRecord11(parsed) && typeof parsed.name === "string" ? parsed.name : undefined;
   } catch {
     return;
   }
 }
 function readComposerRootDependencyObject(value, type) {
-  if (!isRecord17(value)) {
+  if (!isRecord11(value)) {
     return [];
   }
   return Object.keys(value).filter((name) => isComposerPackageName(name)).map((name) => ({ name, type }));
 }
 function readComposerDependencyNames(value) {
-  if (!isRecord17(value)) {
+  if (!isRecord11(value)) {
     return [];
   }
   return Object.keys(value).filter(isComposerPackageName).sort();
@@ -33320,17 +28093,40 @@ function dependencyTypeRank15(type) {
       return 0;
   }
 }
-function isRecord17(value) {
+function isRecord11(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/graph/python-pdm-lock.ts
-import { existsSync as existsSync37 } from "node:fs";
-import path56 from "node:path";
+import { existsSync as existsSync11 } from "node:fs";
+import path30 from "node:path";
 
 // src/graph/python-local-source.ts
-import { existsSync as existsSync36 } from "node:fs";
-import path55 from "node:path";
+import { existsSync as existsSync10 } from "node:fs";
+import path29 from "node:path";
+
+// src/evidence/license-files.ts
+function classifyEvidenceFile(path29) {
+  const normalized = path29.replace(/\\/g, "/").split("/").pop()?.toLowerCase();
+  if (!normalized) {
+    return;
+  }
+  if (hasEvidenceName(normalized, "notice")) {
+    return "notice";
+  }
+  if (hasEvidenceName(normalized, "copying")) {
+    return "copying";
+  }
+  if (hasEvidenceName(normalized, "unlicense") || hasEvidenceName(normalized, "license") || hasEvidenceName(normalized, "licence")) {
+    return "license";
+  }
+  return;
+}
+function hasEvidenceName(normalized, baseName) {
+  return normalized === baseName || normalized.startsWith(`${baseName}.`) || normalized.startsWith(`${baseName}-`) || normalized.startsWith(`${baseName}_`);
+}
+
+// src/graph/python-local-source.ts
 var LOCAL_SOURCE_METADATA_FILES = ["pyproject.toml", "setup.cfg", "PKG-INFO"];
 var LOCAL_SOURCE_EVIDENCE_FILE_CANDIDATES = [
   "LICENSE",
@@ -33394,7 +28190,7 @@ function readPythonLocalSourcePackage(input) {
       message: `Failed to parse ${input.errors.displayName}. Local source package entries must declare package name and version metadata.`
     }));
   }
-  if (input.source.expectedName && normalizePythonPackageName2(input.source.expectedName) !== normalizePythonPackageName2(metadata.value.name)) {
+  if (input.source.expectedName && normalizePythonPackageName(input.source.expectedName) !== normalizePythonPackageName(metadata.value.name)) {
     return err(createError({
       code: input.errors.parseCode,
       category: "unsupported_input",
@@ -33428,7 +28224,7 @@ function readPythonLocalSourcePackage(input) {
   });
 }
 function createDiskPythonLocalSourceFileReader(input) {
-  const rootDir = path55.resolve(input.rootDir);
+  const rootDir = path29.resolve(input.rootDir);
   return ({ sourcePath, relativeFilePath, fromFilePath }) => {
     const resolvedSource = resolveDiskLocalSourcePath({
       sourcePath,
@@ -33439,8 +28235,8 @@ function createDiskPythonLocalSourceFileReader(input) {
     if (!resolvedSource.ok) {
       return resolvedSource;
     }
-    const resolvedFilePath = path55.resolve(resolvedSource.value, relativeFilePath);
-    if (!isPathInsideOrEqual2(resolvedFilePath, resolvedSource.value)) {
+    const resolvedFilePath = path29.resolve(resolvedSource.value, relativeFilePath);
+    if (!isPathInsideOrEqual(resolvedFilePath, resolvedSource.value)) {
       return err(createError({
         code: input.errors.parseCode,
         category: "unsupported_input",
@@ -33452,7 +28248,7 @@ function createDiskPythonLocalSourceFileReader(input) {
         }
       }));
     }
-    if (!existsSync36(resolvedFilePath)) {
+    if (!existsSync10(resolvedFilePath)) {
       return ok(undefined);
     }
     const sourceText = readInputTextFile({
@@ -33518,7 +28314,7 @@ function parseLocalSourcePyproject(input) {
   const poetry = {};
   let section = "other";
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment5(rawLine).trim();
+    const line = stripTomlComment3(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -33628,7 +28424,7 @@ function readLocalSourceEvidence(input) {
       continue;
     }
     files.push({
-      path: path55.posix.join(input.sourcePath.replace(/\\/g, "/"), relativeFilePath),
+      path: path29.posix.join(input.sourcePath.replace(/\\/g, "/"), relativeFilePath),
       kind,
       text: sourceFile.value.text
     });
@@ -33651,7 +28447,7 @@ function readLocalSourceEvidence(input) {
   });
 }
 function resolveDiskLocalSourcePath(input) {
-  if (path55.isAbsolute(input.sourcePath)) {
+  if (path29.isAbsolute(input.sourcePath)) {
     return err(createError({
       code: input.errors.parseCode,
       category: "unsupported_input",
@@ -33662,8 +28458,8 @@ function resolveDiskLocalSourcePath(input) {
       }
     }));
   }
-  const resolved = path55.resolve(path55.dirname(input.fromFilePath), input.sourcePath);
-  if (!isPathInsideOrEqual2(resolved, input.rootDir)) {
+  const resolved = path29.resolve(path29.dirname(input.fromFilePath), input.sourcePath);
+  if (!isPathInsideOrEqual(resolved, input.rootDir)) {
     return err(createError({
       code: input.errors.parseCode,
       category: "unsupported_input",
@@ -33704,7 +28500,7 @@ function isRelativeLocalPath(value) {
   const normalized = value.replace(/\\/g, "/");
   return normalized === "." || normalized === ".." || normalized.startsWith("./") || normalized.startsWith("../");
 }
-function normalizePythonPackageName2(name) {
+function normalizePythonPackageName(name) {
   return name.toLowerCase().replace(/[-_.]+/g, "-");
 }
 function unquotePythonLocalSourcePath(input) {
@@ -33715,14 +28511,14 @@ function unquotePythonLocalSourcePath(input) {
   return value;
 }
 function readTomlStringAssignment(line, key) {
-  const match = new RegExp(`^${escapeRegExp2(key)}\\s*=\\s*(["'])(.*?)\\1\\s*$`).exec(line);
+  const match = new RegExp(`^${escapeRegExp(key)}\\s*=\\s*(["'])(.*?)\\1\\s*$`).exec(line);
   return match?.[2];
 }
 function readTomlInlineTextLicense(line, key) {
-  const match = new RegExp(`^${escapeRegExp2(key)}\\s*=\\s*\\{\\s*text\\s*=\\s*(["'])(.*?)\\1\\s*\\}\\s*$`).exec(line);
+  const match = new RegExp(`^${escapeRegExp(key)}\\s*=\\s*\\{\\s*text\\s*=\\s*(["'])(.*?)\\1\\s*\\}\\s*$`).exec(line);
   return match?.[2];
 }
-function stripTomlComment5(line) {
+function stripTomlComment3(line) {
   return stripInlineComment(line, "#");
 }
 function stripIniComment(line) {
@@ -33751,12 +28547,12 @@ function stripInlineComment(line, marker) {
   }
   return line;
 }
-function escapeRegExp2(input) {
+function escapeRegExp(input) {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-function isPathInsideOrEqual2(candidate, root) {
-  const relative = path55.relative(root, candidate);
-  return relative === "" || !relative.startsWith("..") && !path55.isAbsolute(relative);
+function isPathInsideOrEqual(candidate, root) {
+  const relative = path29.relative(root, candidate);
+  return relative === "" || !relative.startsWith("..") && !path29.isAbsolute(relative);
 }
 
 // src/graph/python-pdm-lock.ts
@@ -33791,7 +28587,7 @@ function parsePdmLockfile(lockfilePath, options = {}) {
   return parsePdmLockText(lockfileText.value, lockfilePath, omitUndefined({
     pyprojectText: pyproject.value,
     readLocalSourceFile: createDiskPythonLocalSourceFileReader({
-      rootDir: path56.dirname(lockfilePath),
+      rootDir: path30.dirname(lockfilePath),
       maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES,
       errors: PDM_LOCK_LOCAL_SOURCE_ERRORS
     })
@@ -33817,7 +28613,7 @@ function parsePdmLockText(input, lockfilePath = "pdm.lock", options = {}) {
         }
       }));
     }
-    const rootName = readPyprojectName(options.pyprojectText) ?? path56.basename(path56.dirname(lockfilePath)) ?? "<root>";
+    const rootName = readPyprojectName(options.pyprojectText) ?? path30.basename(path30.dirname(lockfilePath)) ?? "<root>";
     const rootDependencies = readPdmRootDependencies(omitUndefined({
       pyprojectText: options.pyprojectText,
       records
@@ -33857,8 +28653,8 @@ function parsePdmLockText(input, lockfilePath = "pdm.lock", options = {}) {
   }
 }
 function readOptionalPyproject(input) {
-  const pyprojectPath = path56.join(path56.dirname(input.lockfilePath), "pyproject.toml");
-  if (!existsSync37(pyprojectPath)) {
+  const pyprojectPath = path30.join(path30.dirname(input.lockfilePath), "pyproject.toml");
+  if (!existsSync11(pyprojectPath)) {
     return ok(undefined);
   }
   const pyprojectText = readInputTextFile({
@@ -33893,7 +28689,7 @@ function parsePdmPackageRecords(input, options) {
     if (activeArray.key === "dependencies") {
       for (const value of values) {
         const name = dependencyNameFromRequirement(value);
-        if (name && normalizePythonPackageName3(name) !== "python") {
+        if (name && normalizePythonPackageName2(name) !== "python") {
           current.dependencies.push(name);
         }
       }
@@ -33964,7 +28760,7 @@ function parsePdmPackageRecords(input, options) {
   };
   try {
     for (const rawLine of input.split(/\r?\n/)) {
-      const line = stripTomlComment6(rawLine).trim();
+      const line = stripTomlComment4(rawLine).trim();
       if (line === "") {
         continue;
       }
@@ -33997,12 +28793,12 @@ function parsePdmPackageRecords(input, options) {
       if (currentTable !== "package") {
         continue;
       }
-      const name = readStringAssignment2(line, "name");
+      const name = readStringAssignment(line, "name");
       if (name !== undefined) {
         current.name = name;
         continue;
       }
-      const version = readStringAssignment2(line, "version");
+      const version = readStringAssignment(line, "version");
       if (version !== undefined) {
         current.version = version;
         continue;
@@ -34025,7 +28821,7 @@ function parsePdmPackageRecords(input, options) {
       if (inlineDependencies !== undefined) {
         for (const dependency of inlineDependencies) {
           const dependencyName = dependencyNameFromRequirement(dependency);
-          if (dependencyName && normalizePythonPackageName3(dependencyName) !== "python") {
+          if (dependencyName && normalizePythonPackageName2(dependencyName) !== "python") {
             current.dependencies.push(dependencyName);
           }
         }
@@ -34087,7 +28883,7 @@ function parsePyprojectRootDependencies(input) {
     activeArray = undefined;
   };
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment6(rawLine).trim();
+    const line = stripTomlComment4(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -34133,10 +28929,10 @@ function inferPdmRootDependencies(records) {
   const referenced = new Set;
   for (const record of records) {
     for (const dependency of record.dependencies) {
-      referenced.add(normalizePythonPackageName3(dependency));
+      referenced.add(normalizePythonPackageName2(dependency));
     }
   }
-  return records.filter((record) => !referenced.has(normalizePythonPackageName3(record.name))).sort((left, right) => left.id.localeCompare(right.id)).map((record) => ({
+  return records.filter((record) => !referenced.has(normalizePythonPackageName2(record.name))).sort((left, right) => left.id.localeCompare(right.id)).map((record) => ({
     name: record.name,
     type: record.dependencyType
   }));
@@ -34181,8 +28977,8 @@ function walkPdmDependency(input) {
   }
 }
 function resolvePdmPackageRecord(records, name) {
-  const normalized = normalizePythonPackageName3(name);
-  const matches = records.filter((record) => normalizePythonPackageName3(record.name) === normalized);
+  const normalized = normalizePythonPackageName2(name);
+  const matches = records.filter((record) => normalizePythonPackageName2(record.name) === normalized);
   return matches.length === 1 ? matches[0] : undefined;
 }
 function readPyprojectName(text3) {
@@ -34191,13 +28987,13 @@ function readPyprojectName(text3) {
   }
   let section = "";
   for (const rawLine of text3.split(/\r?\n/)) {
-    const line = stripTomlComment6(rawLine).trim();
+    const line = stripTomlComment4(rawLine).trim();
     if (line.startsWith("[") && line.endsWith("]")) {
       section = line.slice(1, -1);
       continue;
     }
     if (section === "project") {
-      const name = readStringAssignment2(line, "name");
+      const name = readStringAssignment(line, "name");
       if (name) {
         return name;
       }
@@ -34215,12 +29011,12 @@ function dependencyTypeForPdmRecord(record) {
   }
   return "unknown";
 }
-function readStringAssignment2(line, key) {
-  const match = new RegExp(`^${escapeRegExp3(key)}\\s*=\\s*"([^"]*)"`).exec(line);
+function readStringAssignment(line, key) {
+  const match = new RegExp(`^${escapeRegExp2(key)}\\s*=\\s*"([^"]*)"`).exec(line);
   return match?.[1];
 }
 function readPdmSourceAssignment(line) {
-  const pathSource = readStringAssignment2(line, "path");
+  const pathSource = readStringAssignment(line, "path");
   if (pathSource !== undefined) {
     const sourcePath = normalizePythonLocalSourcePathSpec(pathSource);
     return sourcePath ? { sourcePath } : {
@@ -34230,7 +29026,7 @@ function readPdmSourceAssignment(line) {
       }
     };
   }
-  const remoteSource = readStringAssignment2(line, "git") ?? readStringAssignment2(line, "url");
+  const remoteSource = readStringAssignment(line, "git") ?? readStringAssignment(line, "url");
   if (remoteSource === undefined) {
     return;
   }
@@ -34242,7 +29038,7 @@ function readPdmSourceAssignment(line) {
   };
 }
 function readInlineStringArrayAssignment(line, key) {
-  const match = new RegExp(`^${escapeRegExp3(key)}\\s*=\\s*\\[(.*)\\]\\s*$`).exec(line);
+  const match = new RegExp(`^${escapeRegExp2(key)}\\s*=\\s*\\[(.*)\\]\\s*$`).exec(line);
   if (!match?.[1]) {
     return;
   }
@@ -34256,7 +29052,7 @@ function dependencyNamesFromArray(value) {
   const names = [];
   for (const requirement of readStringArrayValues(value)) {
     const name = dependencyNameFromRequirement(requirement);
-    if (name && normalizePythonPackageName3(name) !== "python") {
+    if (name && normalizePythonPackageName2(name) !== "python") {
       names.push(name);
     }
   }
@@ -34281,7 +29077,7 @@ function mergeRootDependency(roots, rawName, type) {
   const existing = roots.get(name);
   roots.set(name, existing ? mergeDependencyType17(existing, type) : type);
 }
-function stripTomlComment6(line) {
+function stripTomlComment4(line) {
   let inString = false;
   let escaped = false;
   for (let index = 0;index < line.length; index += 1) {
@@ -34304,7 +29100,7 @@ function stripTomlComment6(line) {
   }
   return line;
 }
-function normalizePythonPackageName3(name) {
+function normalizePythonPackageName2(name) {
   return name.toLowerCase().replace(/[-_.]+/g, "-");
 }
 function dependencyTypeForChildEdge8(parentType, childType) {
@@ -34327,7 +29123,7 @@ function dependencyTypeRank16(type) {
       return 0;
   }
 }
-function escapeRegExp3(input) {
+function escapeRegExp2(input) {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 function classifyUnsupportedPythonSource(value, sourceKey) {
@@ -34335,7 +29131,7 @@ function classifyUnsupportedPythonSource(value, sourceKey) {
   if (sourceKey === "git" || /^(?:git|hg|svn|bzr)\+(?:https?|ssh|git):\/\//i.test(source)) {
     return "unsupported_remote_vcs_source";
   }
-  if (path56.isAbsolute(source) || source.startsWith("file://")) {
+  if (path30.isAbsolute(source) || source.startsWith("file://")) {
     return "unsupported_absolute_source_path";
   }
   if (/^(?:https?|ssh|git):\/\//i.test(source)) {
@@ -34345,7 +29141,7 @@ function classifyUnsupportedPythonSource(value, sourceKey) {
 }
 
 // src/graph/python-pipfile-lock.ts
-import path57 from "node:path";
+import path31 from "node:path";
 var PIPFILE_LOCK_LOCAL_SOURCE_ERRORS = {
   parseCode: "PIPFILE_LOCK_PARSE_FAILED",
   readCode: "PIPFILE_LOCK_READ_FAILED",
@@ -34369,7 +29165,7 @@ function parsePipfileLockfile(lockfilePath, options = {}) {
   }
   return parsePipfileLockText(lockfileText.value, lockfilePath, {
     readLocalSourceFile: createDiskPythonLocalSourceFileReader({
-      rootDir: path57.dirname(lockfilePath),
+      rootDir: path31.dirname(lockfilePath),
       maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES,
       errors: PIPFILE_LOCK_LOCAL_SOURCE_ERRORS
     })
@@ -34411,7 +29207,7 @@ function parsePipfileLockText(input, lockfilePath = "Pipfile.lock", options = {}
       }
     }));
   }
-  const rootName = options.rootName ?? (path57.basename(path57.dirname(lockfilePath)) || "<pipfile-project>");
+  const rootName = options.rootName ?? (path31.basename(path31.dirname(lockfilePath)) || "<pipfile-project>");
   const deduplicatedRecords = deduplicatePipfileLockRecords(records).sort((left, right) => left.id.localeCompare(right.id));
   const embeddedEvidence = deduplicatedRecords.map((record) => record.evidence).filter((evidence) => evidence !== undefined);
   return ok({
@@ -34432,7 +29228,7 @@ function parsePipfileLockText(input, lockfilePath = "Pipfile.lock", options = {}
 function parsePipfileLockJson(input, lockfilePath) {
   try {
     const parsed = JSON.parse(input);
-    if (isRecord18(parsed)) {
+    if (isRecord12(parsed)) {
       return ok(parsed);
     }
   } catch (cause) {
@@ -34459,12 +29255,12 @@ function readPipfileLockSection(input) {
   if (input.value === undefined) {
     return ok([]);
   }
-  if (!isRecord18(input.value)) {
+  if (!isRecord12(input.value)) {
     return pipfileLockSectionError(input);
   }
   const records = [];
   for (const [rawName, rawEntry] of Object.entries(input.value)) {
-    if (!isRecord18(rawEntry)) {
+    if (!isRecord12(rawEntry)) {
       return pipfileLockEntryError({
         ...input,
         packageName: rawName
@@ -34631,7 +29427,7 @@ function dependencyTypeRank17(type) {
       return 0;
   }
 }
-function isRecord18(value) {
+function isRecord12(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function classifyUnsupportedPipfileSource(value) {
@@ -34639,7 +29435,7 @@ function classifyUnsupportedPipfileSource(value) {
   if (/^(?:git|hg|svn|bzr)\+(?:https?|ssh|git):\/\//i.test(source)) {
     return "unsupported_remote_vcs_source";
   }
-  if (path57.isAbsolute(source) || source.startsWith("file://")) {
+  if (path31.isAbsolute(source) || source.startsWith("file://")) {
     return "unsupported_absolute_source_path";
   }
   if (/^(?:https?|ssh|git):\/\//i.test(source)) {
@@ -34649,8 +29445,8 @@ function classifyUnsupportedPipfileSource(value) {
 }
 
 // src/graph/python-poetry-lock.ts
-import { existsSync as existsSync38 } from "node:fs";
-import path58 from "node:path";
+import { existsSync as existsSync12 } from "node:fs";
+import path32 from "node:path";
 function parsePoetryLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -34691,7 +29487,7 @@ function parsePoetryLockText(input, lockfilePath = "poetry.lock", options = {}) 
         }
       }));
     }
-    const rootName = readPyprojectName2(options.pyprojectText) ?? path58.basename(path58.dirname(lockfilePath)) ?? "<root>";
+    const rootName = readPyprojectName2(options.pyprojectText) ?? path32.basename(path32.dirname(lockfilePath)) ?? "<root>";
     const rootDependencies = readPoetryRootDependencies(omitUndefined({
       pyprojectText: options.pyprojectText,
       records
@@ -34730,8 +29526,8 @@ function parsePoetryLockText(input, lockfilePath = "poetry.lock", options = {}) 
   }
 }
 function readOptionalPyproject2(input) {
-  const pyprojectPath = path58.join(path58.dirname(input.lockfilePath), "pyproject.toml");
-  if (!existsSync38(pyprojectPath)) {
+  const pyprojectPath = path32.join(path32.dirname(input.lockfilePath), "pyproject.toml");
+  if (!existsSync12(pyprojectPath)) {
     return ok(undefined);
   }
   const pyprojectText = readInputTextFile({
@@ -34771,7 +29567,7 @@ function parsePoetryPackageRecords(input) {
     });
   };
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment7(rawLine).trim();
+    const line = stripTomlComment5(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -34797,17 +29593,17 @@ function parsePoetryPackageRecords(input) {
       continue;
     }
     if (currentTable === "package") {
-      const name = readStringAssignment3(line, "name");
+      const name = readStringAssignment2(line, "name");
       if (name !== undefined) {
         current.name = name;
         continue;
       }
-      const version = readStringAssignment3(line, "version");
+      const version = readStringAssignment2(line, "version");
       if (version !== undefined) {
         current.version = version;
         continue;
       }
-      const category = readStringAssignment3(line, "category");
+      const category = readStringAssignment2(line, "category");
       if (category !== undefined) {
         current.category = category;
         continue;
@@ -34825,7 +29621,7 @@ function parsePoetryPackageRecords(input) {
     }
     if (currentTable === "package.dependencies") {
       const dependencyName = readDependencyKey(line);
-      if (dependencyName && normalizePythonPackageName4(dependencyName) !== "python") {
+      if (dependencyName && normalizePythonPackageName3(dependencyName) !== "python") {
         current.dependencies.push(dependencyName);
       }
     }
@@ -34857,7 +29653,7 @@ function parsePyprojectRootDependencies2(input) {
     activeArray = undefined;
   };
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment7(rawLine).trim();
+    const line = stripTomlComment5(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -34875,14 +29671,14 @@ function parsePyprojectRootDependencies2(input) {
     }
     if (section === "tool.poetry.dependencies") {
       const dependencyName = readDependencyKey(line);
-      if (dependencyName && normalizePythonPackageName4(dependencyName) !== "python") {
+      if (dependencyName && normalizePythonPackageName3(dependencyName) !== "python") {
         mergeRootDependency2(roots, dependencyName, "production");
       }
       continue;
     }
     if (section === "tool.poetry.dev-dependencies" || /^tool\.poetry\.group\.[^.]+\.dependencies$/.test(section)) {
       const dependencyName = readDependencyKey(line);
-      if (dependencyName && normalizePythonPackageName4(dependencyName) !== "python") {
+      if (dependencyName && normalizePythonPackageName3(dependencyName) !== "python") {
         mergeRootDependency2(roots, dependencyName, "development");
       }
       continue;
@@ -34916,10 +29712,10 @@ function inferPoetryRootDependencies(records) {
   const referenced = new Set;
   for (const record of records) {
     for (const dependency of record.dependencies) {
-      referenced.add(normalizePythonPackageName4(dependency));
+      referenced.add(normalizePythonPackageName3(dependency));
     }
   }
-  return records.filter((record) => !referenced.has(normalizePythonPackageName4(record.name))).sort((left, right) => left.id.localeCompare(right.id)).map((record) => ({
+  return records.filter((record) => !referenced.has(normalizePythonPackageName3(record.name))).sort((left, right) => left.id.localeCompare(right.id)).map((record) => ({
     name: record.name,
     type: record.dependencyType
   }));
@@ -34964,8 +29760,8 @@ function walkPoetryDependency(input) {
   }
 }
 function resolvePoetryPackageRecord(records, name) {
-  const normalized = normalizePythonPackageName4(name);
-  const matches = records.filter((record) => normalizePythonPackageName4(record.name) === normalized);
+  const normalized = normalizePythonPackageName3(name);
+  const matches = records.filter((record) => normalizePythonPackageName3(record.name) === normalized);
   return matches.length === 1 ? matches[0] : undefined;
 }
 function readPyprojectName2(text3) {
@@ -34974,13 +29770,13 @@ function readPyprojectName2(text3) {
   }
   let section = "";
   for (const rawLine of text3.split(/\r?\n/)) {
-    const line = stripTomlComment7(rawLine).trim();
+    const line = stripTomlComment5(rawLine).trim();
     if (line.startsWith("[") && line.endsWith("]")) {
       section = line.slice(1, -1);
       continue;
     }
     if (section === "tool.poetry" || section === "project") {
-      const name = readStringAssignment3(line, "name");
+      const name = readStringAssignment2(line, "name");
       if (name) {
         return name;
       }
@@ -35004,16 +29800,16 @@ function dependencyTypeForPoetryRecord(record) {
   }
   return "unknown";
 }
-function readStringAssignment3(line, key) {
-  const match = new RegExp(`^${escapeRegExp4(key)}\\s*=\\s*"([^"]*)"`).exec(line);
+function readStringAssignment2(line, key) {
+  const match = new RegExp(`^${escapeRegExp3(key)}\\s*=\\s*"([^"]*)"`).exec(line);
   return match?.[1];
 }
 function readBooleanAssignment(line, key) {
-  const match = new RegExp(`^${escapeRegExp4(key)}\\s*=\\s*(true|false)\\b`).exec(line);
+  const match = new RegExp(`^${escapeRegExp3(key)}\\s*=\\s*(true|false)\\b`).exec(line);
   return match ? match[1] === "true" : undefined;
 }
 function readStringArrayAssignment(line, key) {
-  const match = new RegExp(`^${escapeRegExp4(key)}\\s*=\\s*\\[([^\\]]*)\\]`).exec(line);
+  const match = new RegExp(`^${escapeRegExp3(key)}\\s*=\\s*\\[([^\\]]*)\\]`).exec(line);
   if (!match?.[1]) {
     return;
   }
@@ -35030,7 +29826,7 @@ function dependencyNamesFromArray2(value) {
   const names = [];
   for (const match of value.matchAll(/"([^"]+)"/g)) {
     const name = dependencyNameFromRequirement2(match[1] ?? "");
-    if (name && normalizePythonPackageName4(name) !== "python") {
+    if (name && normalizePythonPackageName3(name) !== "python") {
       names.push(name);
     }
   }
@@ -35051,7 +29847,7 @@ function unquoteTomlKey(key) {
   }
   return key;
 }
-function stripTomlComment7(line) {
+function stripTomlComment5(line) {
   let inString = false;
   let escaped = false;
   for (let index = 0;index < line.length; index += 1) {
@@ -35074,7 +29870,7 @@ function stripTomlComment7(line) {
   }
   return line;
 }
-function normalizePythonPackageName4(name) {
+function normalizePythonPackageName3(name) {
   return name.toLowerCase().replace(/[-_.]+/g, "-");
 }
 function dependencyTypeForChildEdge9(parentType, childType) {
@@ -35097,12 +29893,12 @@ function dependencyTypeRank18(type) {
       return 0;
   }
 }
-function escapeRegExp4(input) {
+function escapeRegExp3(input) {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // src/graph/python-pylock.ts
-import path59 from "node:path";
+import path33 from "node:path";
 var PYLOCK_LOCAL_SOURCE_ERRORS = {
   parseCode: "PYLOCK_PARSE_FAILED",
   readCode: "PYLOCK_READ_FAILED",
@@ -35126,7 +29922,7 @@ function parsePylockFile(lockfilePath, options = {}) {
   }
   return parsePylockText(lockfileText.value, lockfilePath, {
     readLocalSourceFile: createDiskPythonLocalSourceFileReader({
-      rootDir: path59.dirname(lockfilePath),
+      rootDir: path33.dirname(lockfilePath),
       maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES,
       errors: PYLOCK_LOCAL_SOURCE_ERRORS
     })
@@ -35153,7 +29949,7 @@ function parsePylockText(input, lockfilePath = "pylock.toml", options = {}) {
             lockfilePath,
             reason: "unsupported_unversioned_source_tree_record",
             unsupportedSourceTreePackages: parsed.unsupportedSourceTreeRecords.map((record) => record.name).filter((name) => name !== undefined),
-            unsupportedSourceTreePaths: parsed.unsupportedSourceTreeRecords.map((record) => record.path).filter((path60) => path60 !== undefined)
+            unsupportedSourceTreePaths: parsed.unsupportedSourceTreeRecords.map((record) => record.path).filter((path34) => path34 !== undefined)
           }
         }));
       }
@@ -35282,7 +30078,7 @@ function parsePylockPackageRecords(input, options) {
     }
   };
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment8(rawLine).trim();
+    const line = stripTomlComment6(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -35327,12 +30123,12 @@ function parsePylockPackageRecords(input, options) {
       continue;
     }
     if (currentTable === "packages") {
-      const name = readStringAssignment4(line, "name");
+      const name = readStringAssignment3(line, "name");
       if (name !== undefined) {
         current.name = name;
         continue;
       }
-      const version = readStringAssignment4(line, "version");
+      const version = readStringAssignment3(line, "version");
       if (version !== undefined) {
         current.version = version;
         continue;
@@ -35348,14 +30144,14 @@ function parsePylockPackageRecords(input, options) {
       }
     }
     if (currentTable === "packages.dependencies") {
-      const name = readStringAssignment4(line, "name");
+      const name = readStringAssignment3(line, "name");
       if (name !== undefined) {
         currentDependency = {
           ...currentDependency,
           name
         };
       }
-      const version = readStringAssignment4(line, "version");
+      const version = readStringAssignment3(line, "version");
       if (version !== undefined) {
         currentDependency = {
           ...currentDependency,
@@ -35364,9 +30160,9 @@ function parsePylockPackageRecords(input, options) {
       }
     }
     if (currentTable === "packages.directory") {
-      const path60 = readStringAssignment4(line, "path");
-      if (path60 !== undefined) {
-        current.directoryPath = path60;
+      const path34 = readStringAssignment3(line, "path");
+      if (path34 !== undefined) {
+        current.directoryPath = path34;
       }
     }
   }
@@ -35383,13 +30179,13 @@ function readDependencyRefsFromInlineTableArray(value) {
   const refs = [];
   for (const match of value.matchAll(/\{([^}]*)\}/g)) {
     const table = match[1] ?? "";
-    const name = readStringAssignment4(table.trim(), "name");
+    const name = readStringAssignment3(table.trim(), "name");
     if (!name) {
       continue;
     }
     refs.push(omitUndefined({
       name,
-      version: readStringAssignment4(table.trim(), "version")
+      version: readStringAssignment3(table.trim(), "version")
     }));
   }
   return refs;
@@ -35432,8 +30228,8 @@ function walkPylockDependency(input) {
   }
 }
 function resolvePylockPackageRecord(records, dependency) {
-  const normalized = normalizePythonPackageName5(dependency.name);
-  const matches = records.filter((record) => normalizePythonPackageName5(record.name) === normalized && (dependency.version === undefined || record.version === dependency.version));
+  const normalized = normalizePythonPackageName4(dependency.name);
+  const matches = records.filter((record) => normalizePythonPackageName4(record.name) === normalized && (dependency.version === undefined || record.version === dependency.version));
   return matches.length === 1 ? matches[0] : undefined;
 }
 function embeddedEvidenceFromPylockRecords(records) {
@@ -35447,11 +30243,11 @@ function readPylockRootName(lockfilePath) {
   }
   return;
 }
-function readStringAssignment4(line, key) {
-  const match = new RegExp(`(?:^|[,\\s])${escapeRegExp5(key)}\\s*=\\s*("([^"]*)"|'([^']*)')`).exec(line);
+function readStringAssignment3(line, key) {
+  const match = new RegExp(`(?:^|[,\\s])${escapeRegExp4(key)}\\s*=\\s*("([^"]*)"|'([^']*)')`).exec(line);
   return match?.[2] ?? match?.[3];
 }
-function stripTomlComment8(line) {
+function stripTomlComment6(line) {
   let inString = false;
   let escaped = false;
   let quote;
@@ -35476,15 +30272,15 @@ function stripTomlComment8(line) {
   }
   return line;
 }
-function normalizePythonPackageName5(name) {
+function normalizePythonPackageName4(name) {
   return name.toLowerCase().replace(/[-_.]+/g, "-");
 }
-function escapeRegExp5(input) {
+function escapeRegExp4(input) {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // src/graph/python-pyproject.ts
-import path60 from "node:path";
+import path34 from "node:path";
 function parsePyprojectFile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -35504,7 +30300,7 @@ function parsePyprojectFile(lockfilePath, options = {}) {
   return parsePyprojectText(lockfileText.value, lockfilePath);
 }
 function parsePyprojectText(input, lockfilePath = "pyproject.toml") {
-  const rootName = readProjectName(input) ?? path60.basename(path60.dirname(lockfilePath)) ?? "<root>";
+  const rootName = readProjectName(input) ?? path34.basename(path34.dirname(lockfilePath)) ?? "<root>";
   const dependencies = readPyprojectDependencies(input, lockfilePath);
   if (!dependencies.ok) {
     return dependencies;
@@ -35564,7 +30360,7 @@ function readPyprojectDependencies(input, lockfilePath) {
     return ok(undefined);
   };
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment9(rawLine).trim();
+    const line = stripTomlComment7(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -35629,7 +30425,7 @@ function parseExactDependency(entry) {
 function readProjectName(input) {
   let section = "";
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment9(rawLine).trim();
+    const line = stripTomlComment7(rawLine).trim();
     if (line.startsWith("[") && line.endsWith("]")) {
       section = line.slice(1, -1);
       continue;
@@ -35653,7 +30449,7 @@ function readStringArrayValues2(value) {
   }
   return values.filter((item) => item.length > 0);
 }
-function stripTomlComment9(line) {
+function stripTomlComment7(line) {
   let inString = false;
   let escaped = false;
   for (let index = 0;index < line.length; index += 1) {
@@ -35678,7 +30474,7 @@ function stripTomlComment9(line) {
 }
 
 // src/graph/python-requirements.ts
-import path61 from "node:path";
+import path35 from "node:path";
 var MAX_REQUIREMENTS_INCLUDE_DEPTH = 32;
 var REQUIREMENTS_LOCAL_SOURCE_ERRORS = {
   parseCode: "REQUIREMENTS_PARSE_FAILED",
@@ -35703,17 +30499,17 @@ function parseRequirementsFile(lockfilePath, options = {}) {
   }
   return parseRequirementsText(lockfileText.value, lockfilePath, {
     readIncludedFile: createDiskRequirementsIncludedFileReader({
-      rootDir: path61.dirname(lockfilePath),
+      rootDir: path35.dirname(lockfilePath),
       maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES
     }),
     readLocalSourceFile: createDiskRequirementsLocalSourceFileReader({
-      rootDir: path61.dirname(lockfilePath),
+      rootDir: path35.dirname(lockfilePath),
       maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES
     })
   });
 }
 function parseRequirementsText(input, lockfilePath = "requirements.txt", options = {}) {
-  const rootName = options.rootName ?? (path61.basename(path61.dirname(lockfilePath)) || "<root>");
+  const rootName = options.rootName ?? (path35.basename(path35.dirname(lockfilePath)) || "<root>");
   const constraints = new Map;
   const records = parseRequirementsDocument({
     text: input,
@@ -35941,7 +30737,7 @@ function parseRequirementsDocument(input) {
       }));
     }
     if (input.mode === "constraints") {
-      input.constraints.set(normalizePythonPackageName6(parsed.name), parsed);
+      input.constraints.set(normalizePythonPackageName5(parsed.name), parsed);
     } else {
       records.set(parsed.id, parsed);
     }
@@ -35990,7 +30786,7 @@ function parseConstrainedRequirement(line, constraints) {
   if (!match?.[1]) {
     return;
   }
-  const constrained = constraints.get(normalizePythonPackageName6(match[1]));
+  const constrained = constraints.get(normalizePythonPackageName5(match[1]));
   if (!constrained) {
     return;
   }
@@ -36084,9 +30880,9 @@ function isUnsupportedRequirementDirective(line) {
   return line.startsWith("-e ") || line.startsWith("--editable ") || line.startsWith("git+") || line.startsWith("http://") || line.startsWith("https://") || line.startsWith("file:");
 }
 function createDiskRequirementsIncludedFileReader(input) {
-  const rootDir = path61.resolve(input.rootDir);
+  const rootDir = path35.resolve(input.rootDir);
   return ({ includePath, fromFilePath }) => {
-    if (path61.isAbsolute(includePath)) {
+    if (path35.isAbsolute(includePath)) {
       return err(createError({
         code: "REQUIREMENTS_PARSE_FAILED",
         category: "unsupported_input",
@@ -36097,8 +30893,8 @@ function createDiskRequirementsIncludedFileReader(input) {
         }
       }));
     }
-    const resolved = path61.resolve(path61.dirname(fromFilePath), includePath);
-    if (!isPathInsideOrEqual3(resolved, rootDir)) {
+    const resolved = path35.resolve(path35.dirname(fromFilePath), includePath);
+    if (!isPathInsideOrEqual2(resolved, rootDir)) {
       return err(createError({
         code: "REQUIREMENTS_PARSE_FAILED",
         category: "unsupported_input",
@@ -36144,7 +30940,7 @@ function mergeRequirementsRecords(target, source) {
     target.set(id, record);
   }
 }
-function normalizePythonPackageName6(name) {
+function normalizePythonPackageName5(name) {
   return name.toLowerCase().replace(/[-_.]+/g, "-");
 }
 function normalizeRequirementsPathKey(filePath) {
@@ -36157,9 +30953,9 @@ function unquoteRequirementPath(input) {
   }
   return value;
 }
-function isPathInsideOrEqual3(candidate, root) {
-  const relative = path61.relative(root, candidate);
-  return relative === "" || !relative.startsWith("..") && !path61.isAbsolute(relative);
+function isPathInsideOrEqual2(candidate, root) {
+  const relative = path35.relative(root, candidate);
+  return relative === "" || !relative.startsWith("..") && !path35.isAbsolute(relative);
 }
 function stripRequirementComment(line) {
   let quote;
@@ -36186,7 +30982,7 @@ function stripRequirementComment(line) {
 }
 
 // src/graph/python-uv-lock.ts
-import path62 from "node:path";
+import path36 from "node:path";
 var UV_LOCK_LOCAL_SOURCE_ERRORS = {
   parseCode: "UV_LOCK_PARSE_FAILED",
   readCode: "UV_LOCK_READ_FAILED",
@@ -36210,7 +31006,7 @@ function parseUvLockfile(lockfilePath, options = {}) {
   }
   return parseUvLockText(lockfileText.value, lockfilePath, {
     readLocalSourceFile: createDiskPythonLocalSourceFileReader({
-      rootDir: path62.dirname(lockfilePath),
+      rootDir: path36.dirname(lockfilePath),
       maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES,
       errors: UV_LOCK_LOCAL_SOURCE_ERRORS
     })
@@ -36365,7 +31161,7 @@ function parseUvPackageRecords(input, options) {
   };
   try {
     for (const rawLine of input.split(/\r?\n/)) {
-      const line = stripTomlComment10(rawLine).trim();
+      const line = stripTomlComment8(rawLine).trim();
       if (line === "") {
         continue;
       }
@@ -36404,12 +31200,12 @@ function parseUvPackageRecords(input, options) {
         continue;
       }
       if (currentTable === "package") {
-        const name = readStringAssignment5(line, "name");
+        const name = readStringAssignment4(line, "name");
         if (name !== undefined) {
           current.name = name;
           continue;
         }
-        const version = readStringAssignment5(line, "version");
+        const version = readStringAssignment4(line, "version");
         if (version !== undefined) {
           current.version = version;
           continue;
@@ -36494,7 +31290,7 @@ function readDependencyNamesFromArray(value) {
   }
   return names;
 }
-function readStringAssignment5(line, key) {
+function readStringAssignment4(line, key) {
   const match = new RegExp(`^${key}\\s*=\\s*"([^"]*)"`).exec(line);
   return match?.[1];
 }
@@ -36546,7 +31342,7 @@ function classifyUnsupportedPythonSource2(value, sourceKey) {
   if (sourceKey === "git" || /^(?:git|hg|svn|bzr)\+(?:https?|ssh|git):\/\//i.test(source)) {
     return "unsupported_remote_vcs_source";
   }
-  if (path62.isAbsolute(source) || source.startsWith("file://")) {
+  if (path36.isAbsolute(source) || source.startsWith("file://")) {
     return "unsupported_absolute_source_path";
   }
   if (/^(?:https?|ssh|git):\/\//i.test(source)) {
@@ -36554,7 +31350,7 @@ function classifyUnsupportedPythonSource2(value, sourceKey) {
   }
   return "unsupported_source_entry";
 }
-function stripTomlComment10(line) {
+function stripTomlComment8(line) {
   let inString = false;
   let escaped = false;
   for (let index = 0;index < line.length; index += 1) {
@@ -36617,15 +31413,15 @@ function walkUvDependency(input) {
   }
 }
 function resolveUvPackageRecord(records, name) {
-  const normalized = normalizePythonPackageName7(name);
-  const matches = records.filter((record) => !record.virtual && normalizePythonPackageName7(record.name) === normalized);
+  const normalized = normalizePythonPackageName6(name);
+  const matches = records.filter((record) => !record.virtual && normalizePythonPackageName6(record.name) === normalized);
   return matches.length === 1 ? matches[0] : undefined;
 }
 function embeddedEvidenceFromUvRecords(records) {
   const embeddedEvidence = records.map((record) => record.evidence).filter((evidence) => evidence !== undefined).sort((left, right) => left.packageId.localeCompare(right.packageId));
   return embeddedEvidence.length > 0 ? { embeddedEvidence } : {};
 }
-function normalizePythonPackageName7(name) {
+function normalizePythonPackageName6(name) {
   return name.toLowerCase().replace(/[-_.]+/g, "-");
 }
 function dependencyTypeForChildEdge10(parentType, childEdgeType) {
@@ -36650,8 +31446,8 @@ function dependencyTypeRank19(type) {
 }
 
 // src/graph/r-renv-lock.ts
-import { existsSync as existsSync39 } from "node:fs";
-import path63 from "node:path";
+import { existsSync as existsSync13 } from "node:fs";
+import path37 from "node:path";
 function parseRenvLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -36698,7 +31494,7 @@ function parseRenvLockText(input, lockfilePath = "renv.lock", options = {}) {
   if (!records.ok) {
     return records;
   }
-  const rootName = path63.basename(path63.dirname(lockfilePath)) || "<r-project>";
+  const rootName = path37.basename(path37.dirname(lockfilePath)) || "<r-project>";
   const rootTypes = options.descriptionText ? readDescriptionRootTypes(options.descriptionText, records.value) : new Map;
   return ok({
     rootName,
@@ -36716,8 +31512,8 @@ function parseRenvLockText(input, lockfilePath = "renv.lock", options = {}) {
   });
 }
 function readOptionalDescription(input) {
-  const descriptionPath = path63.join(path63.dirname(input.lockfilePath), "DESCRIPTION");
-  if (!existsSync39(descriptionPath)) {
+  const descriptionPath = path37.join(path37.dirname(input.lockfilePath), "DESCRIPTION");
+  if (!existsSync13(descriptionPath)) {
     return ok(undefined);
   }
   const descriptionText = readInputTextFile({
@@ -36738,7 +31534,7 @@ function readOptionalDescription(input) {
   return ok(descriptionText.value);
 }
 function readRPackageRecords(parsed, lockfilePath) {
-  if (!isRecord19(parsed) || !isRecord19(parsed.Packages)) {
+  if (!isRecord13(parsed) || !isRecord13(parsed.Packages)) {
     return renvLockShapeError({
       lockfilePath,
       reason: "missing_packages_object"
@@ -36746,7 +31542,7 @@ function readRPackageRecords(parsed, lockfilePath) {
   }
   const records = new Map;
   for (const [lockfileName, value] of Object.entries(parsed.Packages)) {
-    if (!isRecord19(value)) {
+    if (!isRecord13(value)) {
       return renvLockShapeError({
         lockfilePath,
         packageName: lockfileName,
@@ -36836,13 +31632,13 @@ function renvLockShapeError(input) {
     details: input
   }));
 }
-function isRecord19(value) {
+function isRecord13(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/graph/ruby-gemfile-lock.ts
-import { existsSync as existsSync40 } from "node:fs";
-import path64 from "node:path";
+import { existsSync as existsSync14 } from "node:fs";
+import path38 from "node:path";
 function parseGemfileLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -36883,7 +31679,7 @@ function parseGemfileLockText(input, lockfilePath = "Gemfile.lock", options = {}
         }
       }));
     }
-    const rootName = path64.basename(path64.dirname(lockfilePath)) || "<ruby-project>";
+    const rootName = path38.basename(path38.dirname(lockfilePath)) || "<ruby-project>";
     const roots = readGemRootDependencies(omitUndefined({
       gemfileText: options.gemfileText,
       lockfileDependencies: parsed.dependencies,
@@ -36923,8 +31719,8 @@ function parseGemfileLockText(input, lockfilePath = "Gemfile.lock", options = {}
   }
 }
 function readOptionalGemfile(input) {
-  const gemfilePath = path64.join(path64.dirname(input.lockfilePath), "Gemfile");
-  if (!existsSync40(gemfilePath)) {
+  const gemfilePath = path38.join(path38.dirname(input.lockfilePath), "Gemfile");
+  if (!existsSync14(gemfilePath)) {
     return ok(undefined);
   }
   const gemfileText = readInputTextFile({
@@ -37163,8 +31959,8 @@ function mergeDependencyType21(left, right) {
 }
 
 // src/graph/rust-cargo-lock.ts
-import { existsSync as existsSync41, readdirSync as readdirSync27 } from "node:fs";
-import path65 from "node:path";
+import { existsSync as existsSync15, readdirSync as readdirSync3 } from "node:fs";
+import path39 from "node:path";
 function parseCargoLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -37214,7 +32010,7 @@ function parseCargoLockText(input, lockfilePath = "Cargo.lock", options = {}) {
         }
       }));
     }
-    const rootName = options.rootName ?? readCargoPackageName(options.manifestText) ?? path65.basename(path65.dirname(lockfilePath)) ?? "<cargo-project>";
+    const rootName = options.rootName ?? readCargoPackageName(options.manifestText) ?? path39.basename(path39.dirname(lockfilePath)) ?? "<cargo-project>";
     const rootDependencies = readCargoRootDependencies(omitUndefined({
       manifestText: options.manifestText,
       memberManifestTexts: options.memberManifestTexts,
@@ -37257,8 +32053,8 @@ function parseCargoLockText(input, lockfilePath = "Cargo.lock", options = {}) {
   }
 }
 function readOptionalCargoManifest(input) {
-  const manifestPath = path65.join(path65.dirname(input.lockfilePath), "Cargo.toml");
-  if (!existsSync41(manifestPath)) {
+  const manifestPath = path39.join(path39.dirname(input.lockfilePath), "Cargo.toml");
+  if (!existsSync15(manifestPath)) {
     return ok(undefined);
   }
   const manifestText = readInputTextFile({
@@ -37279,14 +32075,14 @@ function readOptionalCargoManifest(input) {
   return ok(manifestText.value);
 }
 function readCargoWorkspaceMemberManifests(input) {
-  const rootDir = path65.dirname(input.lockfilePath);
+  const rootDir = path39.dirname(input.lockfilePath);
   const manifestTexts = [];
   for (const memberManifest of findCargoWorkspaceMemberManifestPaths({
     rootManifestText: input.rootManifestText,
     lockfilePath: input.lockfilePath,
     projectRoot: rootDir
   })) {
-    if (!existsSync41(memberManifest.manifestPath)) {
+    if (!existsSync15(memberManifest.manifestPath)) {
       continue;
     }
     const manifestText = readInputTextFile({
@@ -37309,21 +32105,21 @@ function readCargoWorkspaceMemberManifests(input) {
   return ok(manifestTexts);
 }
 function findCargoWorkspaceMemberManifestPathsFromRelativePaths(input) {
-  const projectRoot = path65.resolve(input.projectRoot);
-  const lockfileRoot = path65.dirname(path65.resolve(input.lockfilePath));
+  const projectRoot = path39.resolve(input.projectRoot);
+  const lockfileRoot = path39.dirname(path39.resolve(input.lockfilePath));
   const members = readCargoWorkspaceMembers(input.rootManifestText);
   const excludes = readCargoWorkspaceExcludes(input.rootManifestText);
   const paths = new Map;
   for (const rawRelativeManifestPath of input.relativePaths) {
     const relativeManifestPath = normalizeProjectRelativeManifestPath(rawRelativeManifestPath);
-    if (!relativeManifestPath || path65.posix.basename(relativeManifestPath) !== "Cargo.toml") {
+    if (!relativeManifestPath || path39.posix.basename(relativeManifestPath) !== "Cargo.toml") {
       continue;
     }
-    const manifestPath = path65.resolve(projectRoot, ...relativeManifestPath.split("/"));
-    if (!isInsideDirectory2(projectRoot, manifestPath) || manifestPath === path65.join(lockfileRoot, "Cargo.toml")) {
+    const manifestPath = path39.resolve(projectRoot, ...relativeManifestPath.split("/"));
+    if (!isInsideDirectory2(projectRoot, manifestPath) || manifestPath === path39.join(lockfileRoot, "Cargo.toml")) {
       continue;
     }
-    const memberPath = normalizeCargoWorkspaceMemberPath(path65.relative(lockfileRoot, path65.dirname(manifestPath)));
+    const memberPath = normalizeCargoWorkspaceMemberPath(path39.relative(lockfileRoot, path39.dirname(manifestPath)));
     if (!memberPath) {
       continue;
     }
@@ -37339,11 +32135,11 @@ function findCargoWorkspaceMemberManifestPathsFromRelativePaths(input) {
   return [...paths.values()].sort((left, right) => left.relativeManifestPath.localeCompare(right.relativeManifestPath));
 }
 function findCargoWorkspaceMemberManifestPaths(input) {
-  const rootDir = path65.dirname(input.lockfilePath);
+  const rootDir = path39.dirname(input.lockfilePath);
   const paths = new Map;
   const excludedMemberPaths = new Set;
   for (const excludePath of readCargoWorkspaceExcludes(input.rootManifestText)) {
-    if (path65.isAbsolute(excludePath)) {
+    if (path39.isAbsolute(excludePath)) {
       continue;
     }
     for (const resolvedExcludePath of expandCargoWorkspaceMemberPath({
@@ -37358,7 +32154,7 @@ function findCargoWorkspaceMemberManifestPaths(input) {
     }
   }
   for (const memberPath of readCargoWorkspaceMembers(input.rootManifestText)) {
-    if (path65.isAbsolute(memberPath)) {
+    if (path39.isAbsolute(memberPath)) {
       continue;
     }
     for (const resolvedMemberPath of expandCargoWorkspaceMemberPath({
@@ -37370,11 +32166,11 @@ function findCargoWorkspaceMemberManifestPaths(input) {
       if (!normalizedMemberPath || excludedMemberPaths.has(normalizedMemberPath)) {
         continue;
       }
-      const manifestPath = path65.resolve(rootDir, normalizedMemberPath, "Cargo.toml");
+      const manifestPath = path39.resolve(rootDir, normalizedMemberPath, "Cargo.toml");
       if (!isInsideDirectory2(input.projectRoot, manifestPath)) {
         continue;
       }
-      const relativeManifestPath = normalizeRelativePath(path65.relative(input.projectRoot, manifestPath));
+      const relativeManifestPath = normalizeRelativePath(path39.relative(input.projectRoot, manifestPath));
       if (!relativeManifestPath) {
         continue;
       }
@@ -37388,7 +32184,7 @@ function findCargoWorkspaceMemberManifestPaths(input) {
   return [...paths.values()].sort((left, right) => left.relativeManifestPath.localeCompare(right.relativeManifestPath));
 }
 function normalizeProjectRelativeManifestPath(value) {
-  const normalized = path65.posix.normalize(value.replace(/\\/g, "/"));
+  const normalized = path39.posix.normalize(value.replace(/\\/g, "/"));
   if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/")) {
     return;
   }
@@ -37416,7 +32212,7 @@ function expandCargoWorkspaceMemberPath(input) {
     relativeSegments: [],
     projectRoot: input.projectRoot
   });
-  return expandedPaths.filter((memberPath) => existsSync41(path65.resolve(input.rootDir, memberPath, "Cargo.toml"))).sort((left, right) => left.localeCompare(right));
+  return expandedPaths.filter((memberPath) => existsSync15(path39.resolve(input.rootDir, memberPath, "Cargo.toml"))).sort((left, right) => left.localeCompare(right));
 }
 function expandCargoWorkspaceMemberSegments(input) {
   if (input.index >= input.segments.length) {
@@ -37427,7 +32223,7 @@ function expandCargoWorkspaceMemberSegments(input) {
     return [];
   }
   if (!hasCargoWorkspaceGlob(segment)) {
-    const nextPath = path65.resolve(input.currentPath, segment);
+    const nextPath = path39.resolve(input.currentPath, segment);
     if (!isInsideDirectory2(input.projectRoot, nextPath)) {
       return [];
     }
@@ -37441,13 +32237,13 @@ function expandCargoWorkspaceMemberSegments(input) {
   }
   let entries;
   try {
-    entries = readdirSync27(input.currentPath, { withFileTypes: true });
+    entries = readdirSync3(input.currentPath, { withFileTypes: true });
   } catch {
     return [];
   }
   const globPattern = cargoWorkspaceGlobSegmentPattern(segment);
   return entries.filter((entry) => entry.isDirectory()).filter((entry) => globPattern.test(entry.name)).flatMap((entry) => {
-    const nextPath = path65.resolve(input.currentPath, entry.name);
+    const nextPath = path39.resolve(input.currentPath, entry.name);
     if (!isInsideDirectory2(input.projectRoot, nextPath)) {
       return [];
     }
@@ -37479,7 +32275,7 @@ function readCargoWorkspaceStringArray(input, key) {
   let section = "";
   let activeMembersArray;
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment11(rawLine).trim();
+    const line = stripTomlComment9(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -37539,7 +32335,7 @@ function parseCargoPackageRecords(input) {
     });
   };
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment11(rawLine).trim();
+    const line = stripTomlComment9(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -37560,17 +32356,17 @@ function parseCargoPackageRecords(input) {
     if (!current) {
       continue;
     }
-    const name = readStringAssignment6(line, "name");
+    const name = readStringAssignment5(line, "name");
     if (name !== undefined) {
       current.name = name;
       continue;
     }
-    const version = readStringAssignment6(line, "version");
+    const version = readStringAssignment5(line, "version");
     if (version !== undefined) {
       current.version = version;
       continue;
     }
-    const source = readStringAssignment6(line, "source");
+    const source = readStringAssignment5(line, "source");
     if (source !== undefined) {
       current.source = source;
       continue;
@@ -37631,7 +32427,7 @@ function parseCargoManifestRootDependencies(input, records, workspacePackageAlia
     activeDependencyTable = undefined;
   };
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment11(rawLine).trim();
+    const line = stripTomlComment9(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -37642,7 +32438,7 @@ function parseCargoManifestRootDependencies(input, records, workspacePackageAlia
       continue;
     }
     if (activeDependencyTable) {
-      const packageName = readStringAssignment6(line, "package");
+      const packageName = readStringAssignment5(line, "package");
       if (packageName) {
         activeDependencyTable.packageName = packageName;
       }
@@ -37837,13 +32633,13 @@ function readCargoPackageName(text3) {
   }
   let section = "";
   for (const rawLine of text3.split(/\r?\n/)) {
-    const line = stripTomlComment11(rawLine).trim();
+    const line = stripTomlComment9(rawLine).trim();
     if (line.startsWith("[") && line.endsWith("]")) {
       section = line.slice(1, -1);
       continue;
     }
     if (section === "package") {
-      const name = readStringAssignment6(line, "name");
+      const name = readStringAssignment5(line, "name");
       if (name) {
         return name;
       }
@@ -37851,23 +32647,23 @@ function readCargoPackageName(text3) {
   }
   return;
 }
-function readStringAssignment6(line, key) {
-  const match = new RegExp(`^${escapeRegExp6(key)}\\s*=\\s*"([^"]*)"`).exec(line);
+function readStringAssignment5(line, key) {
+  const match = new RegExp(`^${escapeRegExp5(key)}\\s*=\\s*"([^"]*)"`).exec(line);
   return match?.[1];
 }
 function readBooleanAssignment2(line, key) {
-  const match = new RegExp(`^${escapeRegExp6(key)}\\s*=\\s*(true|false)\\b`).exec(line);
+  const match = new RegExp(`^${escapeRegExp5(key)}\\s*=\\s*(true|false)\\b`).exec(line);
   if (!match) {
     return;
   }
   return match[1] === "true";
 }
 function readInlineTableString(value, key) {
-  const match = new RegExp(`\\b${escapeRegExp6(key)}\\s*=\\s*"([^"]*)"`).exec(value);
+  const match = new RegExp(`\\b${escapeRegExp5(key)}\\s*=\\s*"([^"]*)"`).exec(value);
   return match?.[1];
 }
 function readInlineTableBoolean(value, key) {
-  const match = new RegExp(`\\b${escapeRegExp6(key)}\\s*=\\s*(true|false)\\b`).exec(value);
+  const match = new RegExp(`\\b${escapeRegExp5(key)}\\s*=\\s*(true|false)\\b`).exec(value);
   if (!match) {
     return;
   }
@@ -37889,7 +32685,7 @@ function readCargoWorkspaceDependencyPackageAliases(input) {
   const aliases = new Map;
   let section = "";
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment11(rawLine).trim();
+    const line = stripTomlComment9(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -37971,7 +32767,7 @@ function unquoteTomlKey2(key) {
   }
   return key;
 }
-function stripTomlComment11(line) {
+function stripTomlComment9(line) {
   let inString = false;
   let escaped = false;
   for (let index = 0;index < line.length; index += 1) {
@@ -38012,24 +32808,24 @@ function dependencyTypeRank20(type) {
   }
 }
 function isInsideDirectory2(rootPath, candidatePath) {
-  const relativePath = path65.relative(rootPath, candidatePath);
-  return relativePath === "" || relativePath !== ".." && !relativePath.startsWith(`..${path65.sep}`) && !path65.isAbsolute(relativePath);
+  const relativePath = path39.relative(rootPath, candidatePath);
+  return relativePath === "" || relativePath !== ".." && !relativePath.startsWith(`..${path39.sep}`) && !path39.isAbsolute(relativePath);
 }
 function normalizeRelativePath(relativePath) {
-  const normalized = path65.normalize(relativePath).replace(/\\/g, "/");
-  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || path65.isAbsolute(normalized)) {
+  const normalized = path39.normalize(relativePath).replace(/\\/g, "/");
+  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || path39.isAbsolute(normalized)) {
     return;
   }
   return normalized;
 }
 function normalizeCargoWorkspaceMemberPath(memberPath) {
-  const normalized = path65.normalize(memberPath).replace(/\\/g, "/");
-  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || path65.isAbsolute(normalized)) {
+  const normalized = path39.normalize(memberPath).replace(/\\/g, "/");
+  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || path39.isAbsolute(normalized)) {
     return;
   }
   return normalized;
 }
-function escapeRegExp6(input) {
+function escapeRegExp5(input) {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
@@ -38060,7 +32856,7 @@ function parseSpdxJsonText(input, lockfilePath = "spdx.json") {
   return parseSpdxDocument(parsed.value, lockfilePath);
 }
 function parseSpdxDocument(document2, lockfilePath) {
-  if (!isRecord20(document2) || !Array.isArray(document2.packages)) {
+  if (!isRecord14(document2) || !Array.isArray(document2.packages)) {
     return spdxShapeError(lockfilePath);
   }
   const packages = readSpdxPackageRecords(document2.packages);
@@ -38121,7 +32917,7 @@ function parseSpdxJson(input, lockfilePath) {
 function readSpdxPackageRecords(value) {
   const records = [];
   for (const pkg of value) {
-    if (!isRecord20(pkg) || typeof pkg.SPDXID !== "string") {
+    if (!isRecord14(pkg) || typeof pkg.SPDXID !== "string") {
       continue;
     }
     const purl = readSpdxPackageUrl(pkg.externalRefs);
@@ -38146,7 +32942,7 @@ function readSpdxPackageUrl(value) {
     return;
   }
   for (const ref of value) {
-    if (!isRecord20(ref) || ref.referenceCategory !== "PACKAGE-MANAGER" || ref.referenceType !== "purl" || typeof ref.referenceLocator !== "string") {
+    if (!isRecord14(ref) || ref.referenceCategory !== "PACKAGE-MANAGER" || ref.referenceType !== "purl" || typeof ref.referenceLocator !== "string") {
       continue;
     }
     const purl = parsePackageUrl(ref.referenceLocator);
@@ -38198,7 +32994,7 @@ function readSpdxDependencyMap(value, packages) {
   const unsupportedFields = new Set;
   const unsupportedReasons = new Set;
   for (const [index, relationship] of value.entries()) {
-    if (isRecord20(relationship) && (relationship.relationshipType === "DEPENDS_ON" || relationship.relationshipType === "DEPENDENCY_OF")) {
+    if (isRecord14(relationship) && (relationship.relationshipType === "DEPENDS_ON" || relationship.relationshipType === "DEPENDENCY_OF")) {
       if (typeof relationship.spdxElementId !== "string") {
         unsupportedIndexes.add(index);
         unsupportedFields.add("spdxElementId");
@@ -38211,7 +33007,7 @@ function readSpdxDependencyMap(value, packages) {
         unsupportedReasons.add("unsupported_spdx_dependency_relationships");
       }
     }
-    if (isRecord20(relationship) && relationship.relationshipType === "DESCRIBES") {
+    if (isRecord14(relationship) && relationship.relationshipType === "DESCRIBES") {
       if (typeof relationship.spdxElementId !== "string") {
         unsupportedIndexes.add(index);
         unsupportedFields.add("spdxElementId");
@@ -38224,7 +33020,7 @@ function readSpdxDependencyMap(value, packages) {
         unsupportedReasons.add("unsupported_spdx_describes_relationships");
       }
     }
-    if (!isRecord20(relationship) || typeof relationship.spdxElementId !== "string" || typeof relationship.relatedSpdxElement !== "string" || typeof relationship.relationshipType !== "string") {
+    if (!isRecord14(relationship) || typeof relationship.spdxElementId !== "string" || typeof relationship.relatedSpdxElement !== "string" || typeof relationship.relationshipType !== "string") {
       continue;
     }
     if (relationship.relationshipType === "DEPENDS_ON") {
@@ -38255,7 +33051,7 @@ function readSpdxRootRefs(input) {
   }
   if (Array.isArray(input.document.relationships)) {
     for (const relationship of input.document.relationships) {
-      if (isRecord20(relationship) && relationship.relationshipType === "DESCRIBES" && typeof relationship.relatedSpdxElement === "string" && packageIds.has(relationship.relatedSpdxElement)) {
+      if (isRecord14(relationship) && relationship.relationshipType === "DESCRIBES" && typeof relationship.relatedSpdxElement === "string" && packageIds.has(relationship.relatedSpdxElement)) {
         roots.add(relationship.relatedSpdxElement);
       }
     }
@@ -38376,7 +33172,7 @@ function dependencyTypeRank21(type) {
       return 0;
   }
 }
-function isRecord20(value) {
+function isRecord14(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -38849,7 +33645,7 @@ function spdxTagValueParseError(input) {
 }
 
 // src/graph/swift-package-resolved.ts
-import path66 from "node:path";
+import path40 from "node:path";
 function parseSwiftPackageResolvedFile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -38916,11 +33712,11 @@ function readSwiftPackagePins(parsed, lockfilePath) {
   }
   const pins = [];
   for (const [index, value] of rawPins.entries()) {
-    if (!isRecord21(value)) {
+    if (!isRecord15(value)) {
       return swiftPinParseError(lockfilePath, index);
     }
     const name = swiftPinName(value);
-    const version = isRecord21(value.state) ? swiftPinVersion(value.state) : undefined;
+    const version = isRecord15(value.state) ? swiftPinVersion(value.state) : undefined;
     if (!name || !version) {
       return swiftPinParseError(lockfilePath, index, name);
     }
@@ -38943,13 +33739,13 @@ function readSwiftPackagePins(parsed, lockfilePath) {
   return ok(deduplicateSwiftPins(pins));
 }
 function swiftResolvedPins(parsed) {
-  if (!isRecord21(parsed)) {
+  if (!isRecord15(parsed)) {
     return;
   }
   if (Array.isArray(parsed.pins)) {
     return parsed.pins;
   }
-  return isRecord21(parsed.object) && Array.isArray(parsed.object.pins) ? parsed.object.pins : undefined;
+  return isRecord15(parsed.object) && Array.isArray(parsed.object.pins) ? parsed.object.pins : undefined;
 }
 function swiftPinName(pin) {
   for (const field of ["identity", "package"]) {
@@ -38989,12 +33785,12 @@ function deduplicateSwiftPins(pins) {
   return [...merged.values()];
 }
 function rootNameForPackageResolved(lockfilePath) {
-  const segments = path66.normalize(lockfilePath).split(path66.sep);
+  const segments = path40.normalize(lockfilePath).split(path40.sep);
   const xcodeContainerIndex = segments.findIndex((segment) => segment.endsWith(".xcodeproj") || segment.endsWith(".xcworkspace"));
   if (xcodeContainerIndex > 0) {
     return segments[xcodeContainerIndex - 1] || "<swift-project>";
   }
-  return path66.basename(path66.dirname(lockfilePath)) || "<swift-project>";
+  return path40.basename(path40.dirname(lockfilePath)) || "<swift-project>";
 }
 function swiftPinParseError(lockfilePath, index, packageName) {
   return err(createError({
@@ -39008,12 +33804,12 @@ function swiftPinParseError(lockfilePath, index, packageName) {
     }
   }));
 }
-function isRecord21(value) {
+function isRecord15(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/graph/terraform-lock.ts
-import path67 from "node:path";
+import path41 from "node:path";
 function parseTerraformLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -39047,7 +33843,7 @@ function parseTerraformLockText(input, lockfilePath = ".terraform.lock.hcl") {
   }
   const records = new Map;
   for (const block of providerBlocks.value) {
-    const version = readStringAssignment7(block.body, "version");
+    const version = readStringAssignment6(block.body, "version");
     if (!version) {
       return err(createError({
         code: "TERRAFORM_LOCK_PARSE_FAILED",
@@ -39079,7 +33875,7 @@ function parseTerraformLockText(input, lockfilePath = ".terraform.lock.hcl") {
       id: `${sourceAddress}@${version}`
     });
   }
-  const rootName = path67.basename(path67.dirname(lockfilePath)) || "<terraform-project>";
+  const rootName = path41.basename(path41.dirname(lockfilePath)) || "<terraform-project>";
   return ok({
     rootName,
     lockfilePath,
@@ -39186,8 +33982,8 @@ function findMatchingBrace(input, openBraceIndex) {
   }
   return;
 }
-function readStringAssignment7(body, key) {
-  const pattern = new RegExp(`^\\s*${escapeRegExp7(key)}\\s*=\\s*"([^"]+)"\\s*$`, "m");
+function readStringAssignment6(body, key) {
+  const pattern = new RegExp(`^\\s*${escapeRegExp6(key)}\\s*=\\s*"([^"]+)"\\s*$`, "m");
   return pattern.exec(body)?.[1]?.trim();
 }
 function normalizeTerraformProviderAddress(value) {
@@ -39198,12 +33994,12 @@ function normalizeTerraformProviderAddress(value) {
   }
   return parts.join("/");
 }
-function escapeRegExp7(value) {
+function escapeRegExp6(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // src/graph/unity-packages-lock.ts
-import path68 from "node:path";
+import path42 from "node:path";
 function parseUnityPackagesLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -39222,7 +34018,7 @@ function parseUnityPackagesLockfile(lockfilePath, options = {}) {
   }
   return parseUnityPackagesLockText(lockfileText.value, lockfilePath);
 }
-function parseUnityPackagesLockText(input, lockfilePath = path68.join("Packages", "packages-lock.json")) {
+function parseUnityPackagesLockText(input, lockfilePath = path42.join("Packages", "packages-lock.json")) {
   let parsed;
   try {
     parsed = JSON.parse(input);
@@ -39262,7 +34058,7 @@ function parseUnityPackagesLockText(input, lockfilePath = path68.join("Packages"
   });
 }
 function readUnityPackageRecords(parsed, lockfilePath) {
-  if (!isRecord22(parsed) || !isRecord22(parsed.dependencies)) {
+  if (!isRecord16(parsed) || !isRecord16(parsed.dependencies)) {
     return unityPackagesLockShapeError({
       lockfilePath,
       reason: "missing_dependencies_object"
@@ -39270,7 +34066,7 @@ function readUnityPackageRecords(parsed, lockfilePath) {
   }
   const records = new Map;
   for (const [packageName, value] of Object.entries(parsed.dependencies)) {
-    if (!isUnityPackageName(packageName) || !isRecord22(value)) {
+    if (!isUnityPackageName(packageName) || !isRecord16(value)) {
       return unityPackagesLockShapeError({
         lockfilePath,
         packageName,
@@ -39318,7 +34114,7 @@ function unityDependencyNames(value, lockfilePath, packageName) {
   if (value === undefined) {
     return ok([]);
   }
-  if (!isRecord22(value)) {
+  if (!isRecord16(value)) {
     return unityPackagesLockShapeError({
       lockfilePath,
       packageName,
@@ -39371,11 +34167,11 @@ function deduplicatePaths3(paths) {
   return deduped.sort((left, right) => left.join("\x00").localeCompare(right.join("\x00")));
 }
 function unityProjectName(lockfilePath) {
-  const lockfileDir = path68.dirname(lockfilePath);
-  if (path68.basename(lockfileDir).toLowerCase() === "packages") {
-    return path68.basename(path68.dirname(lockfileDir)) || "<unity-project>";
+  const lockfileDir = path42.dirname(lockfilePath);
+  if (path42.basename(lockfileDir).toLowerCase() === "packages") {
+    return path42.basename(path42.dirname(lockfileDir)) || "<unity-project>";
   }
-  return path68.basename(lockfileDir) || "<unity-project>";
+  return path42.basename(lockfileDir) || "<unity-project>";
 }
 function isUnityPackageName(value) {
   return value.trim() !== "" && !/[\\/]/.test(value);
@@ -39388,14 +34184,14 @@ function unityPackagesLockShapeError(input) {
     details: input
   }));
 }
-function isRecord22(value) {
+function isRecord16(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/graph/vcpkg-json.ts
-import { existsSync as existsSync42, readdirSync as readdirSync28, statSync as statSync29 } from "node:fs";
-import path69 from "node:path";
-var VCPKG_STATUS_RELATIVE_PATH = path69.join("vcpkg_installed", "vcpkg", "status");
+import { existsSync as existsSync16, readdirSync as readdirSync4, statSync as statSync4 } from "node:fs";
+import path43 from "node:path";
+var VCPKG_STATUS_RELATIVE_PATH = path43.join("vcpkg_installed", "vcpkg", "status");
 function parseVcpkgJsonFile(manifestPath, options = {}) {
   const manifestText = readInputTextFile({
     filePath: manifestPath,
@@ -39412,7 +34208,7 @@ function parseVcpkgJsonFile(manifestPath, options = {}) {
       }
     }));
   }
-  const statusPath = findVcpkgStatusPath(path69.dirname(manifestPath));
+  const statusPath = findVcpkgStatusPath(path43.dirname(manifestPath));
   if (!statusPath) {
     return parseVcpkgJsonText(manifestText.value, manifestPath);
   }
@@ -39452,7 +34248,7 @@ function parseVcpkgJsonText(input, manifestPath = "vcpkg.json", options = {}) {
       }
     }));
   }
-  if (!isRecord23(parsed)) {
+  if (!isRecord17(parsed)) {
     return vcpkgManifestShapeError({
       manifestPath,
       reason: "root_not_object"
@@ -39501,17 +34297,17 @@ function parseVcpkgJsonText(input, manifestPath = "vcpkg.json", options = {}) {
   });
 }
 function findVcpkgStatusPath(projectRoot) {
-  const direct = path69.join(projectRoot, VCPKG_STATUS_RELATIVE_PATH);
-  if (isFile3(direct)) {
+  const direct = path43.join(projectRoot, VCPKG_STATUS_RELATIVE_PATH);
+  if (isFile2(direct)) {
     return direct;
   }
   try {
-    for (const entry of readdirSync28(projectRoot, { withFileTypes: true })) {
+    for (const entry of readdirSync4(projectRoot, { withFileTypes: true })) {
       if (!entry.isDirectory()) {
         continue;
       }
-      const candidate = path69.join(projectRoot, entry.name, VCPKG_STATUS_RELATIVE_PATH);
-      if (isFile3(candidate)) {
+      const candidate = path43.join(projectRoot, entry.name, VCPKG_STATUS_RELATIVE_PATH);
+      if (isFile2(candidate)) {
         return candidate;
       }
     }
@@ -39521,7 +34317,7 @@ function findVcpkgStatusPath(projectRoot) {
   return;
 }
 function readVcpkgRootName(manifest, manifestPath) {
-  return typeof manifest.name === "string" && manifest.name.trim() !== "" ? manifest.name.trim() : path69.basename(path69.dirname(manifestPath)) || "<vcpkg-project>";
+  return typeof manifest.name === "string" && manifest.name.trim() !== "" ? manifest.name.trim() : path43.basename(path43.dirname(manifestPath)) || "<vcpkg-project>";
 }
 function readVcpkgManifestDependencies(manifest, manifestPath) {
   if (manifest.dependencies === undefined) {
@@ -39569,7 +34365,7 @@ function readVcpkgManifestDependency(input) {
       dependencyType: "production"
     });
   }
-  if (!isRecord23(input.dependency)) {
+  if (!isRecord17(input.dependency)) {
     return vcpkgManifestShapeError({
       manifestPath: input.manifestPath,
       field: "dependencies",
@@ -39605,7 +34401,7 @@ function readVcpkgOverrides(manifest, manifestPath) {
   }
   const overrides = new Map;
   for (const [index, override] of manifest.overrides.entries()) {
-    if (!isRecord23(override)) {
+    if (!isRecord17(override)) {
       return vcpkgManifestShapeError({
         manifestPath,
         field: "overrides",
@@ -39858,17 +34654,17 @@ function dependencyTypeRank22(type) {
 function samePath2(left, right) {
   return left.length === right.length && left.every((item, index) => item === right[index]);
 }
-function isFile3(pathname) {
-  if (!existsSync42(pathname)) {
+function isFile2(pathname) {
+  if (!existsSync16(pathname)) {
     return false;
   }
   try {
-    return statSync29(pathname).isFile();
+    return statSync4(pathname).isFile();
   } catch {
     return false;
   }
 }
-function isRecord23(value) {
+function isRecord17(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -40140,13 +34936,13 @@ function parseLockfileTextForKind(input) {
 }
 
 // src/project/discover.ts
-import { closeSync as closeSync2, existsSync as existsSync43, openSync as openSync2, readSync as readSync2, readdirSync as readdirSync29, statSync as statSync30 } from "node:fs";
-import path70 from "node:path";
+import { closeSync as closeSync2, existsSync as existsSync17, openSync as openSync2, readSync as readSync2, readdirSync as readdirSync5, statSync as statSync5 } from "node:fs";
+import path44 from "node:path";
 function projectLockfiles(project) {
   return project.lockfiles ?? [project.lockfile];
 }
 function projectLockfilesFromRelativePaths(input) {
-  const rootDir = path70.resolve(input.rootDir);
+  const rootDir = path44.resolve(input.rootDir);
   const files = new Set([...input.relativePaths].map(normalizeListedProjectPath).filter((value) => value !== undefined));
   const candidates = [];
   for (const lockfile of KNOWN_LOCKFILES) {
@@ -40184,7 +34980,7 @@ function projectLockfilesFromRelativePaths(input) {
     }
     return [{
       kind,
-      path: path70.join(rootDir, ...relativePath.replace(/\\/g, "/").split("/"))
+      path: path44.join(rootDir, ...relativePath.replace(/\\/g, "/").split("/"))
     }];
   });
 }
@@ -40313,11 +35109,11 @@ var KNOWN_LOCKFILES = [
   "yarn.lock"
 ];
 var KNOWN_NESTED_LOCKFILES = [
-  path70.join("gradle", "libs.versions.toml"),
+  path44.join("gradle", "libs.versions.toml"),
   "obj/project.assets.json",
-  path70.join("Packages", "packages-lock.json")
+  path44.join("Packages", "packages-lock.json")
 ];
-var GRADLE_DEPENDENCY_LOCKS_DIR = path70.join("gradle", "dependency-locks");
+var GRADLE_DEPENDENCY_LOCKS_DIR = path44.join("gradle", "dependency-locks");
 var SBOM_SNIFF_MAX_BYTES = 64 * 1024;
 var KNOWN_PROJECT_MANIFESTS = [
   "package.json",
@@ -40329,7 +35125,7 @@ var KNOWN_PROJECT_MANIFESTS = [
   "pyproject.toml",
   "build.gradle",
   "build.gradle.kts",
-  path70.join("gradle", "libs.versions.toml"),
+  path44.join("gradle", "libs.versions.toml"),
   "MODULE.bazel",
   "conanfile.py",
   "conanfile.txt",
@@ -40340,7 +35136,7 @@ var KNOWN_PROJECT_MANIFESTS = [
   "versions.tf",
   "Chart.yaml",
   "flake.nix",
-  path70.join("Packages", "manifest.json"),
+  path44.join("Packages", "manifest.json"),
   "renv.lock",
   "Project.toml",
   "stack.yaml",
@@ -40370,7 +35166,7 @@ var KNOWN_PROJECT_MANIFESTS = [
 ];
 var SUPPORTED_LOCKFILE_MESSAGE = "Ohrisk currently supports dependency-free package.json manifests, bun.lock, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml, deno.lock, Cargo.lock, go.work, go.mod, Pipfile.lock, pdm.lock, poetry.lock, pyproject.toml, requirements.txt, uv.lock, pylock.toml, pylock.<name>.toml, gradle.lockfile, gradle/dependency-locks, gradle/dependency-locks/*.lockfile, gradle/libs.versions.toml, MODULE.bazel, pom.xml, packages.lock.json, obj/project.assets.json, packages.config, *.csproj, conan.lock, environment.yml, environment.yaml, conda-lock.yml, conda-lock.yaml, vcpkg.json, .terraform.lock.hcl, Chart.lock, Chart.yaml, flake.lock, Packages/packages-lock.json, renv.lock, Manifest.toml, stack.yaml.lock, cpanfile.snapshot, luarocks.lock, pubspec.lock, Package.resolved, Cartfile.resolved, Podfile.lock, mix.lock, rebar.lock, Gemfile.lock, composer.lock, CycloneDX JSON/XML, SPDX JSON/RDF, SPDX tag-value .spdx, and Yarn classic/Berry yarn.lock.";
 function discoverProject(options = {}) {
-  const startDir = path70.resolve(options.cwd ?? process.cwd());
+  const startDir = path44.resolve(options.cwd ?? process.cwd());
   try {
     if (options.lockfilePath) {
       return discoverExplicitLockfile({
@@ -40390,7 +35186,7 @@ function discoverProject(options = {}) {
             rootDir: dir,
             lockfile: {
               kind: "package-json",
-              path: path70.join(dir, packageJsonManifest)
+              path: path44.join(dir, packageJsonManifest)
             }
           });
         }
@@ -40413,7 +35209,7 @@ function discoverProject(options = {}) {
       const selectedLockfiles = options.allLockfiles ? lockfiles : lockfiles.slice(0, 1);
       const projectLockfileEntries = selectedLockfiles.flatMap((lockfileName) => {
         const kind = supportedKindForLockfilePath(lockfileName);
-        return kind ? [{ kind, path: path70.join(dir, lockfileName) }] : [];
+        return kind ? [{ kind, path: path44.join(dir, lockfileName) }] : [];
       });
       if (projectLockfileEntries.length !== selectedLockfiles.length) {
         return err(createError({
@@ -40470,9 +35266,9 @@ function discoverProject(options = {}) {
   }));
 }
 function discoverExplicitLockfile(input) {
-  const lockfilePath = path70.resolve(input.cwd, input.lockfilePath);
+  const lockfilePath = path44.resolve(input.cwd, input.lockfilePath);
   const pathKind = supportedKindForLockfilePath(lockfilePath);
-  if (!existsSync43(lockfilePath)) {
+  if (!existsSync17(lockfilePath)) {
     if (!pathKind) {
       return err(createError({
         code: "UNSUPPORTED_LOCKFILE",
@@ -40493,7 +35289,7 @@ function discoverExplicitLockfile(input) {
       }
     }));
   }
-  if (!isFile4(lockfilePath) && !isGradleDependencyLockfileDirectory(lockfilePath)) {
+  if (!isFile3(lockfilePath) && !isGradleDependencyLockfileDirectory(lockfilePath)) {
     return err(createError({
       code: "LOCKFILE_NOT_FILE",
       category: "invalid_input",
@@ -40524,7 +35320,7 @@ function discoverExplicitLockfile(input) {
   });
 }
 function sniffExplicitSbomKind(lockfilePath) {
-  if (!isFile4(lockfilePath)) {
+  if (!isFile3(lockfilePath)) {
     return;
   }
   const text3 = readFilePrefix(lockfilePath);
@@ -40568,7 +35364,7 @@ function readFilePrefix(filePath) {
   }
 }
 function normalizeListedProjectPath(value) {
-  const normalized = path70.posix.normalize(value.replace(/\\/g, "/"));
+  const normalized = path44.posix.normalize(value.replace(/\\/g, "/"));
   if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/")) {
     return;
   }
@@ -40579,8 +35375,8 @@ function isListedXcodePackageResolvedPath(relativePath) {
   return segments.length === 5 && segments[0]?.endsWith(".xcodeproj") && segments.slice(1).join("/") === "project.xcworkspace/xcshareddata/swiftpm/Package.resolved" || segments.length === 4 && segments[0]?.endsWith(".xcworkspace") && segments.slice(1).join("/") === "xcshareddata/swiftpm/Package.resolved";
 }
 function findKnownLockfiles(dir) {
-  const directLockfiles = KNOWN_LOCKFILES.filter((lockfile) => isFile4(path70.join(dir, lockfile)));
-  const nestedLockfiles = KNOWN_NESTED_LOCKFILES.filter((lockfile) => isFile4(path70.join(dir, lockfile)));
+  const directLockfiles = KNOWN_LOCKFILES.filter((lockfile) => isFile3(path44.join(dir, lockfile)));
+  const nestedLockfiles = KNOWN_NESTED_LOCKFILES.filter((lockfile) => isFile3(path44.join(dir, lockfile)));
   const gradleDependencyLockfiles = findGradleDependencyLockfiles(dir);
   const dotnetProjects = findDotnetProjectFiles(dir);
   const xcodeSwiftPackageResolvedFiles = findXcodeSwiftPackageResolvedFiles(dir);
@@ -40595,19 +35391,19 @@ function findKnownLockfiles(dir) {
   ]).sort();
 }
 function hasKnownProjectManifest(dir) {
-  return KNOWN_PROJECT_MANIFESTS.some((manifest) => existsSync43(path70.join(dir, manifest))) || findDotnetProjectFiles(dir).length > 0;
+  return KNOWN_PROJECT_MANIFESTS.some((manifest) => existsSync17(path44.join(dir, manifest))) || findDotnetProjectFiles(dir).length > 0;
 }
 function findDotnetProjectFiles(dir) {
   try {
-    return readdirSync29(dir).filter((entry) => entry.toLowerCase().endsWith(".csproj")).filter((entry) => isFile4(path70.join(dir, entry))).sort();
+    return readdirSync5(dir).filter((entry) => entry.toLowerCase().endsWith(".csproj")).filter((entry) => isFile3(path44.join(dir, entry))).sort();
   } catch {
     return [];
   }
 }
 function findGradleDependencyLockfiles(dir) {
-  const lockDir = path70.join(dir, GRADLE_DEPENDENCY_LOCKS_DIR);
+  const lockDir = path44.join(dir, GRADLE_DEPENDENCY_LOCKS_DIR);
   try {
-    const lockfiles = readdirSync29(lockDir).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile4(path70.join(lockDir, entry))).sort();
+    const lockfiles = readdirSync5(lockDir).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile3(path44.join(lockDir, entry))).sort();
     return lockfiles.length > 0 ? [GRADLE_DEPENDENCY_LOCKS_DIR] : [];
   } catch {
     return [];
@@ -40623,9 +35419,9 @@ function normalizeCompanionLockfiles(lockfiles) {
     normalized = normalized.filter((lockfile) => lockfile !== "pyproject.toml");
   }
   if (normalized.includes("gradle.lockfile")) {
-    normalized = normalized.filter((lockfile) => lockfile !== path70.join("gradle", "libs.versions.toml") && !isGradleDependencyLockInputPath(lockfile));
+    normalized = normalized.filter((lockfile) => lockfile !== path44.join("gradle", "libs.versions.toml") && !isGradleDependencyLockInputPath(lockfile));
   } else if (normalized.includes(GRADLE_DEPENDENCY_LOCKS_DIR)) {
-    normalized = normalized.filter((lockfile) => lockfile !== path70.join("gradle", "libs.versions.toml"));
+    normalized = normalized.filter((lockfile) => lockfile !== path44.join("gradle", "libs.versions.toml"));
   }
   if (normalized.includes("Chart.lock")) {
     normalized = normalized.filter((lockfile) => lockfile !== "Chart.yaml");
@@ -40638,7 +35434,7 @@ function normalizeCompanionLockfiles(lockfiles) {
 }
 function findXcodeSwiftPackageResolvedFiles(dir) {
   try {
-    return readdirSync29(dir).flatMap((entry) => xcodePackageResolvedCandidates(entry)).filter((candidate) => isFile4(path70.join(dir, candidate))).sort();
+    return readdirSync5(dir).flatMap((entry) => xcodePackageResolvedCandidates(entry)).filter((candidate) => isFile3(path44.join(dir, candidate))).sort();
   } catch {
     return [];
   }
@@ -40646,18 +35442,18 @@ function findXcodeSwiftPackageResolvedFiles(dir) {
 function xcodePackageResolvedCandidates(entry) {
   if (entry.endsWith(".xcodeproj")) {
     return [
-      path70.join(entry, "project.xcworkspace", "xcshareddata", "swiftpm", "Package.resolved")
+      path44.join(entry, "project.xcworkspace", "xcshareddata", "swiftpm", "Package.resolved")
     ];
   }
   if (entry.endsWith(".xcworkspace")) {
     return [
-      path70.join(entry, "xcshareddata", "swiftpm", "Package.resolved")
+      path44.join(entry, "xcshareddata", "swiftpm", "Package.resolved")
     ];
   }
   return [];
 }
 function supportedKindForLockfilePath(lockfilePath) {
-  const lockfileName = path70.basename(lockfilePath);
+  const lockfileName = path44.basename(lockfilePath);
   if (lockfileName === "package.json") {
     return "package-json";
   }
@@ -40691,29 +35487,29 @@ function supportedKindForLockfilePath(lockfilePath) {
   return SUPPORTED_LOCKFILES[lockfileName];
 }
 function rootDirForLockfilePath(lockfilePath, kind) {
-  if (kind === "gradle-version-catalog" && path70.basename(path70.dirname(lockfilePath)) === "gradle") {
-    return path70.dirname(path70.dirname(lockfilePath));
+  if (kind === "gradle-version-catalog" && path44.basename(path44.dirname(lockfilePath)) === "gradle") {
+    return path44.dirname(path44.dirname(lockfilePath));
   }
   if (kind === "gradle-lock" && isGradleDependencyLockInputPath(lockfilePath)) {
     return rootDirForGradleDependencyLockInput(lockfilePath);
   }
-  if (kind === "nuget-assets" && path70.basename(path70.dirname(lockfilePath)).toLowerCase() === "obj") {
-    return path70.dirname(path70.dirname(lockfilePath));
+  if (kind === "nuget-assets" && path44.basename(path44.dirname(lockfilePath)).toLowerCase() === "obj") {
+    return path44.dirname(path44.dirname(lockfilePath));
   }
   if (kind === "swift-package-resolved") {
     return swiftProjectRootForPackageResolved(lockfilePath);
   }
-  if (kind === "unity-packages-lock" && path70.basename(path70.dirname(lockfilePath)).toLowerCase() === "packages") {
-    return path70.dirname(path70.dirname(lockfilePath));
+  if (kind === "unity-packages-lock" && path44.basename(path44.dirname(lockfilePath)).toLowerCase() === "packages") {
+    return path44.dirname(path44.dirname(lockfilePath));
   }
-  return path70.dirname(lockfilePath);
+  return path44.dirname(lockfilePath);
 }
 function supportedLockfileNames() {
-  return ["package.json (dependency-free)", ...Object.keys(SUPPORTED_LOCKFILES), "pylock.<name>.toml", ...KNOWN_NESTED_LOCKFILES, GRADLE_DEPENDENCY_LOCKS_DIR, path70.join(GRADLE_DEPENDENCY_LOCKS_DIR, "*.lockfile"), "*.csproj", "*.cdx.json", "*.spdx.json", "*.spdx", "*.spdx.rdf", "*.spdx.rdf.xml", "*.cdx.xml"];
+  return ["package.json (dependency-free)", ...Object.keys(SUPPORTED_LOCKFILES), "pylock.<name>.toml", ...KNOWN_NESTED_LOCKFILES, GRADLE_DEPENDENCY_LOCKS_DIR, path44.join(GRADLE_DEPENDENCY_LOCKS_DIR, "*.lockfile"), "*.csproj", "*.cdx.json", "*.spdx.json", "*.spdx", "*.spdx.rdf", "*.spdx.rdf.xml", "*.cdx.xml"];
 }
 function findDependencyFreePackageJsonManifest(dir) {
-  const packageJsonPath = path70.join(dir, "package.json");
-  if (!isFile4(packageJsonPath)) {
+  const packageJsonPath = path44.join(dir, "package.json");
+  if (!isFile3(packageJsonPath)) {
     return;
   }
   const parsed = parsePackageJsonManifestFile(packageJsonPath);
@@ -40721,28 +35517,28 @@ function findDependencyFreePackageJsonManifest(dir) {
 }
 function hasKnownLockfileDirectoryPath(dir) {
   return KNOWN_LOCKFILES.some((lockfile) => {
-    const lockfilePath = path70.join(dir, lockfile);
-    return existsSync43(lockfilePath) && isDirectory3(lockfilePath);
+    const lockfilePath = path44.join(dir, lockfile);
+    return existsSync17(lockfilePath) && isDirectory3(lockfilePath);
   });
 }
 function swiftProjectRootForPackageResolved(lockfilePath) {
-  const segments = path70.normalize(lockfilePath).split(path70.sep);
+  const segments = path44.normalize(lockfilePath).split(path44.sep);
   const xcodeContainerIndex = segments.findIndex((segment) => segment.endsWith(".xcodeproj") || segment.endsWith(".xcworkspace"));
   if (xcodeContainerIndex > 0) {
-    return segments.slice(0, xcodeContainerIndex).join(path70.sep);
+    return segments.slice(0, xcodeContainerIndex).join(path44.sep);
   }
-  return path70.dirname(lockfilePath);
+  return path44.dirname(lockfilePath);
 }
 function isUnityPackagesLockPath(lockfilePath) {
-  const segments = path70.normalize(lockfilePath).split(path70.sep);
+  const segments = path44.normalize(lockfilePath).split(path44.sep);
   return segments.length >= 2 && segments[segments.length - 1] === "packages-lock.json" && segments[segments.length - 2] === "Packages";
 }
 function isGradleDependencyLockInputPath(lockfilePath) {
-  const segments = path70.normalize(lockfilePath).split(path70.sep);
+  const segments = path44.normalize(lockfilePath).split(path44.sep);
   return isGradleDependencyLockDirectorySegments(segments) || isGradleDependencyLockfileSegments(segments);
 }
 function isGradleDependencyLockfileDirectory(lockfilePath) {
-  return isGradleDependencyLockDirectorySegments(path70.normalize(lockfilePath).split(path70.sep)) && isDirectory3(lockfilePath);
+  return isGradleDependencyLockDirectorySegments(path44.normalize(lockfilePath).split(path44.sep)) && isDirectory3(lockfilePath);
 }
 function isGradleDependencyLockDirectorySegments(segments) {
   return segments.length >= 2 && segments[segments.length - 1] === "dependency-locks" && segments[segments.length - 2] === "gradle";
@@ -40751,12 +35547,12 @@ function isGradleDependencyLockfileSegments(segments) {
   return segments.length >= 3 && segments[segments.length - 1]?.toLowerCase().endsWith(".lockfile") === true && segments[segments.length - 2] === "dependency-locks" && segments[segments.length - 3] === "gradle";
 }
 function rootDirForGradleDependencyLockInput(lockfilePath) {
-  const segments = path70.normalize(lockfilePath).split(path70.sep);
-  return isGradleDependencyLockDirectorySegments(segments) ? path70.dirname(path70.dirname(lockfilePath)) : path70.dirname(path70.dirname(path70.dirname(lockfilePath)));
+  const segments = path44.normalize(lockfilePath).split(path44.sep);
+  return isGradleDependencyLockDirectorySegments(segments) ? path44.dirname(path44.dirname(lockfilePath)) : path44.dirname(path44.dirname(path44.dirname(lockfilePath)));
 }
 function findNamedPylockTomlFiles(dir) {
   try {
-    return readdirSync29(dir).filter((entry) => entry !== "pylock.toml" && isPylockTomlFile(entry)).filter((entry) => isFile4(path70.join(dir, entry))).sort();
+    return readdirSync5(dir).filter((entry) => entry !== "pylock.toml" && isPylockTomlFile(entry)).filter((entry) => isFile3(path44.join(dir, entry))).sort();
   } catch {
     return [];
   }
@@ -40768,16 +35564,16 @@ function isSpdxRdfFile(filename) {
   const lower = filename.toLowerCase();
   return lower.endsWith(".spdx.rdf") || lower.endsWith(".spdx.rdf.xml");
 }
-function isFile4(pathname) {
+function isFile3(pathname) {
   try {
-    return statSync30(pathname).isFile();
+    return statSync5(pathname).isFile();
   } catch {
     return false;
   }
 }
 function isDirectory3(pathname) {
   try {
-    return statSync30(pathname).isDirectory();
+    return statSync5(pathname).isDirectory();
   } catch {
     return false;
   }
@@ -40787,12 +35583,6840 @@ function ancestorsFrom(startDir) {
   let current = startDir;
   while (true) {
     dirs.push(current);
-    const parent = path70.dirname(current);
+    const parent = path44.dirname(current);
     if (parent === current) {
       return dirs;
     }
     current = parent;
   }
+}
+
+// src/archive/archive-project.ts
+var codeUnitCompare = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+function loadArchiveProject(input) {
+  const work = input.source.beginWork();
+  const filePaths = [];
+  for (const entry of input.source.entries) {
+    const checkpoint = work.checkpoint(entry.path);
+    if (!checkpoint.ok)
+      return checkpoint;
+    if (entry.type === "file") {
+      filePaths.push(entry.path);
+    }
+  }
+  const candidate = selectCandidate(input.source, filePaths, work);
+  if (!candidate.ok) {
+    return candidate;
+  }
+  if (candidate.value.lockfiles.length > 1 && !input.allLockfiles) {
+    return err(createError({
+      code: "MULTIPLE_LOCKFILES",
+      category: "unsupported_input",
+      message: "Multiple lockfiles found in the same archive project root. Scan all with --all.",
+      details: {
+        archive: input.source.displayPath,
+        entryPath: candidate.value.entryRoot || ".",
+        lockfiles: candidate.value.lockfiles.map((lockfile) => syntheticRelativePath(lockfile.path))
+      }
+    }));
+  }
+  const selected = input.allLockfiles ? candidate.value.lockfiles : candidate.value.lockfiles.slice(0, 1);
+  const primary = selected[0];
+  if (!primary) {
+    return noProjectError(input.source);
+  }
+  const syntheticRoot = syntheticArchiveRoot(input.source);
+  const archiveLockfiles = selected.map((lockfile) => ({
+    ...lockfile,
+    path: path45.join(syntheticRoot, ...syntheticRelativePath(lockfile.path).split("/"))
+  }));
+  const project = {
+    rootDir: syntheticRoot,
+    lockfile: archiveLockfiles[0],
+    ...archiveLockfiles.length > 1 ? { lockfiles: archiveLockfiles } : {},
+    source: {
+      kind: "archive",
+      displayPath: input.source.displayPath,
+      format: input.source.format,
+      sha256: input.source.sha256,
+      entryRoot: candidate.value.entryRoot || "."
+    }
+  };
+  const graphs = [];
+  for (let index = 0;index < selected.length; index += 1) {
+    const archiveLockfile = selected[index];
+    const projectLockfile = archiveLockfiles[index];
+    const entryPath = joinArchivePath(candidate.value.entryRoot, syntheticRelativePath(archiveLockfile.path));
+    const text3 = input.source.readText(entryPath, LOCKFILE_MAX_BYTES);
+    if (!text3.ok) {
+      return text3;
+    }
+    const parseInput = buildParseInput({
+      source: input.source,
+      entryRoot: candidate.value.entryRoot,
+      entryPath,
+      projectRoot: syntheticRoot,
+      lockfile: projectLockfile,
+      text: text3.value
+    });
+    if (!parseInput.ok) {
+      return parseInput;
+    }
+    const parsed = parseLockfileTextForKind(parseInput.value);
+    if (!parsed.ok) {
+      return err(sanitizeArchiveParserError({
+        error: parsed.error,
+        source: input.source,
+        entryRoot: candidate.value.entryRoot,
+        syntheticRoot
+      }));
+    }
+    graphs.push({
+      graph: parsed.value,
+      source: {
+        lockfileKind: projectLockfile.kind,
+        lockfilePath: projectLockfile.path
+      }
+    });
+  }
+  const graph = graphs.length === 1 ? graphs[0].graph : mergeDependencyGraphs(graphs);
+  return ok({ project, graph });
+}
+function selectCandidate(source, filePaths, work) {
+  const indexed = indexCandidateFiles(filePaths, work);
+  if (!indexed.ok)
+    return indexed;
+  const candidates = [];
+  for (const [entryRoot, relativePaths] of indexed.value) {
+    const checkpoint = work.checkpoint(entryRoot || undefined);
+    if (!checkpoint.ok)
+      return checkpoint;
+    const syntheticRoot = syntheticArchiveRoot(source);
+    const lockfiles = projectLockfilesFromRelativePaths({
+      rootDir: syntheticRoot,
+      relativePaths
+    });
+    if (lockfiles.length === 0 && relativePaths.has("package.json")) {
+      lockfiles.push({
+        kind: "package-json",
+        path: path45.join(syntheticRoot, "package.json")
+      });
+    }
+    if (lockfiles.length > 0) {
+      candidates.push({ entryRoot, lockfiles });
+    }
+  }
+  const archiveRoot = candidates.find((candidate) => candidate.entryRoot === "");
+  if (archiveRoot) {
+    return ok(archiveRoot);
+  }
+  const candidateRoots = new Set(candidates.map((candidate) => candidate.entryRoot));
+  const minimal = [];
+  for (const candidate of candidates) {
+    const checkpoint = work.checkpoint(candidate.entryRoot || undefined);
+    if (!checkpoint.ok)
+      return checkpoint;
+    if (!hasCandidateAncestor(candidate.entryRoot, candidateRoots)) {
+      minimal.push(candidate);
+    }
+  }
+  if (minimal.length === 0) {
+    return noProjectError(source);
+  }
+  if (minimal.length > 1) {
+    return err(createError({
+      code: "ARCHIVE_MULTIPLE_PROJECTS",
+      category: "unsupported_input",
+      message: "The archive contains multiple independent supported projects.",
+      details: {
+        archive: source.displayPath,
+        entryPath: minimal.map((candidate) => candidate.entryRoot).sort(codeUnitCompare).join(",")
+      }
+    }));
+  }
+  return ok(minimal[0]);
+}
+function indexCandidateFiles(filePaths, work) {
+  const indexed = new Map;
+  for (const filePath of filePaths) {
+    const checkpoint = work.checkpoint(filePath);
+    if (!checkpoint.ok)
+      return checkpoint;
+    const segments = filePath.split("/");
+    const fileName = segments.at(-1);
+    if (!fileName)
+      continue;
+    addIndexedCandidate(indexed, segments.slice(0, -1).join("/"), fileName);
+    addFixedSuffixCandidate(indexed, segments, ["gradle", "libs.versions.toml"]);
+    addFixedSuffixCandidate(indexed, segments, ["obj", "project.assets.json"]);
+    addFixedSuffixCandidate(indexed, segments, ["Packages", "packages-lock.json"]);
+    if (segments.length >= 3 && segments.at(-3) === "gradle" && segments.at(-2) === "dependency-locks" && fileName.toLowerCase().endsWith(".lockfile")) {
+      addSuffixCandidate(indexed, segments, 3);
+    }
+    if (segments.length >= 5 && segments.at(-5)?.endsWith(".xcodeproj") === true && segments.slice(-4).join("/") === "project.xcworkspace/xcshareddata/swiftpm/Package.resolved") {
+      addSuffixCandidate(indexed, segments, 5);
+    }
+    if (segments.length >= 4 && segments.at(-4)?.endsWith(".xcworkspace") === true && segments.slice(-3).join("/") === "xcshareddata/swiftpm/Package.resolved") {
+      addSuffixCandidate(indexed, segments, 4);
+    }
+  }
+  return ok(indexed);
+}
+function addFixedSuffixCandidate(indexed, segments, suffix) {
+  if (segments.length >= suffix.length && suffix.every((part, index) => segments[segments.length - suffix.length + index] === part)) {
+    addSuffixCandidate(indexed, segments, suffix.length);
+  }
+}
+function addSuffixCandidate(indexed, segments, suffixLength) {
+  addIndexedCandidate(indexed, segments.slice(0, -suffixLength).join("/"), segments.slice(-suffixLength).join("/"));
+}
+function addIndexedCandidate(indexed, entryRoot, relativePath) {
+  const existing = indexed.get(entryRoot);
+  if (existing) {
+    existing.add(relativePath);
+    return;
+  }
+  indexed.set(entryRoot, new Set([relativePath]));
+}
+function hasCandidateAncestor(entryRoot, candidateRoots) {
+  let separator = entryRoot.lastIndexOf("/");
+  while (separator >= 0) {
+    const ancestor = entryRoot.slice(0, separator);
+    if (candidateRoots.has(ancestor)) {
+      return true;
+    }
+    separator = ancestor.lastIndexOf("/");
+  }
+  return candidateRoots.has("");
+}
+function buildParseInput(input) {
+  const directory = archiveDirname(input.entryPath);
+  const fileEntries = new Set(input.source.entries.filter((entry) => entry.type === "file").map((entry) => entry.path));
+  const optionalText = (name, maxBytes = PACKAGE_JSON_MAX_BYTES) => readOptionalArchiveText(input.source, fileEntries, joinArchivePath(directory, name), maxBytes);
+  const packageJson = optionalText("package.json");
+  if (!packageJson.ok)
+    return packageJson;
+  const pnpmWorkspace = optionalText("pnpm-workspace.yaml");
+  if (!pnpmWorkspace.ok)
+    return pnpmWorkspace;
+  const pyproject = optionalText("pyproject.toml");
+  if (!pyproject.ok)
+    return pyproject;
+  const cargoManifest = optionalText("Cargo.toml");
+  if (!cargoManifest.ok)
+    return cargoManifest;
+  const goSum = optionalText("go.sum", LOCKFILE_MAX_BYTES);
+  if (!goSum.ok)
+    return goSum;
+  const composerJson = optionalText("composer.json");
+  if (!composerJson.ok)
+    return composerJson;
+  const packageJsonPath = joinArchivePath(directory, "package.json");
+  const directoryPackagesProps = findDirectoryPackagesProps(input.source, fileEntries, directory, input.entryRoot);
+  if (!directoryPackagesProps.ok)
+    return directoryPackagesProps;
+  return ok({
+    kind: input.lockfile.kind,
+    text: input.text,
+    lockfilePath: input.lockfile.path,
+    projectRoot: input.projectRoot,
+    packageJsonText: packageJson.value,
+    packageJsonPath: syntheticCompanionPath(input.projectRoot, input.entryRoot, packageJsonPath),
+    pnpmWorkspaceText: pnpmWorkspace.value,
+    pnpmWorkspacePath: syntheticCompanionPath(input.projectRoot, input.entryRoot, joinArchivePath(directory, "pnpm-workspace.yaml")),
+    pyprojectText: pyproject.value,
+    cargoManifestText: cargoManifest.value,
+    cargoRootName: archiveBasename(input.entryRoot) || "archive-project",
+    goSumText: goSum.value,
+    goWorkDir: path45.dirname(input.lockfile.path),
+    composerJsonText: composerJson.value,
+    ...directoryPackagesProps.value ? {
+      directoryPackagesPropsText: directoryPackagesProps.value.text,
+      directoryPackagesPropsPath: syntheticCompanionPath(input.projectRoot, input.entryRoot, directoryPackagesProps.value.path)
+    } : {},
+    dotnetProjectRootName: archiveBasename(input.entryRoot) || "archive-project",
+    requirementsRootName: archiveBasename(input.entryRoot) || "archive-project",
+    requirementsIncludedFileReader: ({ includePath, fromFilePath }) => {
+      const fromEntry = syntheticToEntryPath(input.projectRoot, input.entryRoot, fromFilePath);
+      const includedPath = normalizeArchiveRelativePath(archiveDirname(fromEntry), includePath);
+      if (!includedPath || !isWithinArchiveRoot(includedPath, input.entryRoot)) {
+        return err(createError({
+          code: "REQUIREMENTS_READ_FAILED",
+          category: "invalid_input",
+          message: "A requirements include points outside the archive project root.",
+          details: { includePath, fromFilePath }
+        }));
+      }
+      const included = input.source.readText(includedPath, LOCKFILE_MAX_BYTES);
+      return included.ok ? ok({ path: syntheticCompanionPath(input.projectRoot, input.entryRoot, includedPath), text: included.value }) : included;
+    }
+  });
+}
+function findDirectoryPackagesProps(source, fileEntries, startDir, entryRoot) {
+  let directory = startDir;
+  while (isWithinArchiveRoot(directory, entryRoot)) {
+    const candidate = joinArchivePath(directory, "Directory.Packages.props");
+    if (fileEntries.has(candidate)) {
+      const text3 = source.readText(candidate, PACKAGE_JSON_MAX_BYTES);
+      if (!text3.ok)
+        return text3;
+      return ok({ path: candidate, text: text3.value });
+    }
+    if (directory === entryRoot) {
+      break;
+    }
+    directory = archiveDirname(directory);
+  }
+  return ok(undefined);
+}
+function readOptionalArchiveText(source, fileEntries, entryPath, maxBytes) {
+  if (!fileEntries.has(entryPath)) {
+    return ok(undefined);
+  }
+  return source.readText(entryPath, maxBytes);
+}
+function syntheticArchiveRoot(source) {
+  return path45.resolve(path45.parse(process.cwd()).root, "__ohrisk_archive__", source.sha256);
+}
+function syntheticRelativePath(syntheticPath) {
+  const marker = `${path45.sep}__ohrisk_archive__${path45.sep}`;
+  const markerIndex = syntheticPath.indexOf(marker);
+  if (markerIndex < 0) {
+    return syntheticPath.replace(/\\/g, "/");
+  }
+  const afterHash = syntheticPath.slice(markerIndex + marker.length).split(path45.sep).slice(1);
+  return afterHash.join("/");
+}
+function syntheticCompanionPath(root, entryRoot, entryPath) {
+  const relative = entryRoot === "" ? entryPath : entryPath.slice(entryRoot.length + 1);
+  return path45.join(root, ...relative.split("/"));
+}
+function syntheticToEntryPath(root, entryRoot, filePath) {
+  const relative = path45.relative(root, filePath).replace(/\\/g, "/");
+  return joinArchivePath(entryRoot, relative);
+}
+function joinArchivePath(left, right) {
+  return left === "" ? right : right === "" ? left : `${left}/${right}`;
+}
+function archiveDirname(entryPath) {
+  const index = entryPath.lastIndexOf("/");
+  return index < 0 ? "" : entryPath.slice(0, index);
+}
+function archiveBasename(entryPath) {
+  const index = entryPath.lastIndexOf("/");
+  return index < 0 ? entryPath : entryPath.slice(index + 1);
+}
+function normalizeArchiveRelativePath(fromDirectory, requestedPath) {
+  const parts = [...fromDirectory ? fromDirectory.split("/") : [], ...requestedPath.replace(/\\/g, "/").split("/")];
+  const normalized = [];
+  for (const part of parts) {
+    if (part === "" || part === ".")
+      continue;
+    if (part === "..") {
+      if (normalized.length === 0)
+        return;
+      normalized.pop();
+    } else {
+      normalized.push(part);
+    }
+  }
+  return normalized.join("/");
+}
+function isWithinArchiveRoot(entryPath, entryRoot) {
+  return entryRoot === "" || entryPath === entryRoot || entryPath.startsWith(`${entryRoot}/`);
+}
+function sanitizeArchiveParserError(input) {
+  const displayRoot = input.entryRoot === "" ? `${input.source.displayPath}!` : `${input.source.displayPath}!/${input.entryRoot}`;
+  const replacements = [
+    input.syntheticRoot,
+    input.syntheticRoot.replace(/\\/g, "/"),
+    input.syntheticRoot.replace(/\\/g, "\\\\")
+  ];
+  const sanitizeString = (value) => {
+    let sanitized = value;
+    for (const syntheticPath of replacements) {
+      sanitized = replaceLiteral(sanitized, syntheticPath, displayRoot);
+    }
+    sanitized = replaceLiteral(sanitized, input.source.sha256, input.source.displayPath);
+    return sanitized.replaceAll(`${displayRoot}\\`, `${displayRoot}/`).replaceAll(`${displayRoot}\\\\`, `${displayRoot}/`);
+  };
+  return createError({
+    ...input.error,
+    message: sanitizeString(input.error.message),
+    ...input.error.details ? {
+      details: sanitizeArchiveErrorValue(input.error.details, sanitizeString)
+    } : {}
+  });
+}
+function sanitizeArchiveErrorValue(value, sanitizeString) {
+  if (typeof value === "string") {
+    return sanitizeString(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeArchiveErrorValue(item, sanitizeString));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+      sanitizeString(key),
+      sanitizeArchiveErrorValue(item, sanitizeString)
+    ]));
+  }
+  return value;
+}
+function replaceLiteral(value, search, replacement) {
+  if (search === "")
+    return value;
+  return value.replace(new RegExp(escapeRegExp7(search), "gi"), replacement);
+}
+function escapeRegExp7(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function noProjectError(source) {
+  return err(createError({
+    code: "ARCHIVE_NO_SUPPORTED_PROJECT",
+    category: "unsupported_input",
+    message: "The archive does not contain a supported project lockfile.",
+    details: { archive: source.displayPath }
+  }));
+}
+
+// src/archive/archive-reader.ts
+import { createHash } from "node:crypto";
+import { closeSync as closeSync3, fstatSync, openSync as openSync3, readSync as readSync3, realpathSync, statSync as statSync6 } from "node:fs";
+import { basename, isAbsolute, relative, resolve, sep } from "node:path";
+import { gunzipSync, inflateRawSync } from "node:zlib";
+var BLOCK_BYTES = 512;
+var ZIP_EOCD_SIGNATURE = 101010256;
+var ZIP_CENTRAL_SIGNATURE = 33639248;
+var ZIP_LOCAL_SIGNATURE = 67324752;
+var ZIP64_EOCD_SIGNATURE = 101075792;
+var ZIP64_LOCATOR_SIGNATURE = 117853008;
+var ZIP_EOCD_BYTES = 22;
+var ZIP_MAX_COMMENT_BYTES = 65535;
+var ZIP64_UINT16 = 65535;
+var ZIP64_UINT32 = 4294967295;
+var DEFAULT_ARCHIVE_LIMITS = Object.freeze({
+  inputBytes: 256 * 1024 * 1024,
+  entries: 50000,
+  pathBytes: 4096,
+  pathSegments: 64,
+  segmentBytes: 255,
+  entryBytes: 50 * 1024 * 1024,
+  expandedBytes: 512 * 1024 * 1024,
+  materializedBytes: 128 * 1024 * 1024,
+  compressionRatio: 200,
+  compressionRatioMinBytes: 1024 * 1024,
+  workDeadlineMs: 30000
+});
+
+class ArchiveFailure extends Error {
+  code;
+  category;
+  details;
+  constructor(input) {
+    super(input.message);
+    this.name = "ArchiveFailure";
+    this.code = input.code;
+    this.category = input.category;
+    this.details = input.details;
+  }
+}
+var CRC32_TABLE = buildCrc32Table();
+function readArchiveFile(input) {
+  const safeName = safeBasename(input.archivePath);
+  try {
+    const limits = resolveLimits(input.limits);
+    const cwd = realpathSync(resolve(input.cwd));
+    const filePath = realpathSync(resolve(cwd, input.archivePath));
+    const relativePath = relative(cwd, filePath);
+    if (relativePath === "" || isAbsolute(relativePath) || relativePath === ".." || relativePath.startsWith(`..${sep}`)) {
+      fail("ARCHIVE_READ_FAILED", "invalid_input", "Archive path is outside the working directory.", {
+        basename: safeName
+      });
+    }
+    const bytes = readFileBytesWithLimit(filePath, limits.inputBytes, safeName);
+    return readOwnedArchiveBuffer({
+      displayName: relativePath.split(sep).join("/"),
+      bytes,
+      limits,
+      ...input.now ? { now: input.now } : {}
+    });
+  } catch (cause) {
+    return err(toOhriskError(cause, "ARCHIVE_READ_FAILED", "filesystem", safeName));
+  }
+}
+function readOwnedArchiveBuffer(input) {
+  const safeName = safeBasename(input.displayName);
+  try {
+    const limits = resolveLimits(input.limits);
+    enforceLimit("inputBytes", limits.inputBytes, input.bytes.byteLength, safeName);
+    const budget = createBudget(limits, input.now);
+    checkDeadline(budget, safeName);
+    const format = detectFormat(input.bytes, input.formatHint, safeName);
+    const indexed = format === "zip" ? parseZip(input.bytes, budget, safeName) : parseTarContainer(input.bytes, format, budget, safeName);
+    const sha256 = createHash("sha256").update(input.bytes).digest("hex");
+    checkDeadline(budget, safeName);
+    const source = createArchiveSource({
+      format,
+      displayPath: safeDisplayPath(input.displayName),
+      sha256,
+      indexed,
+      budget,
+      basename: safeName
+    });
+    return ok(source);
+  } catch (cause) {
+    return err(toOhriskError(cause, "ARCHIVE_MALFORMED", "invalid_input", safeName));
+  }
+}
+function createArchiveSource(input) {
+  const sorted = [...input.indexed].sort((left, right) => comparePaths(left.path, right.path));
+  const publicEntries = Object.freeze(sorted.map(({ path: path46, type, size, compressedSize }) => Object.freeze({ path: path46, type, size, compressedSize })));
+  const byPath = new Map(sorted.map((entry) => [entry.path, entry]));
+  const paths = Object.freeze(publicEntries.map((entry) => entry.path));
+  const beginWork = () => {
+    const startedAt = input.budget.now();
+    return Object.freeze({
+      checkpoint: (entryPath) => {
+        try {
+          checkDeadlineSince(input.budget, startedAt, input.basename, entryPath);
+          return ok(undefined);
+        } catch (cause) {
+          return err(toOhriskError(cause, "ARCHIVE_LIMIT_EXCEEDED", "unsupported_input", input.basename));
+        }
+      }
+    });
+  };
+  const readEntry = (entryPath) => {
+    try {
+      const startedAt = input.budget.now();
+      checkDeadlineSince(input.budget, startedAt, input.basename);
+      const normalized = validateEntryPath(entryPath, input.budget.limits, false, input.basename);
+      const entry = byPath.get(normalized);
+      if (!entry || entry.type !== "file") {
+        fail("ARCHIVE_READ_FAILED", "invalid_input", "Archive file entry was not found.", {
+          basename: input.basename,
+          entryPath: normalized
+        });
+      }
+      chargeMaterialization(input.budget, entry.size, input.basename, entry.path);
+      const data = entry.materialize(startedAt);
+      checkDeadlineSince(input.budget, startedAt, input.basename, entry.path);
+      return ok(data);
+    } catch (cause) {
+      return err(toOhriskError(cause, "ARCHIVE_READ_FAILED", "invalid_input", input.basename));
+    }
+  };
+  return Object.freeze({
+    format: input.format,
+    displayPath: input.displayPath,
+    sha256: input.sha256,
+    entries: publicEntries,
+    listPaths: () => paths,
+    beginWork,
+    readEntry,
+    readText: (entryPath, maxBytes) => {
+      if (maxBytes !== undefined) {
+        if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
+          return err(createError({
+            code: "ARCHIVE_LIMIT_EXCEEDED",
+            category: "invalid_input",
+            message: "Archive text read limit is invalid.",
+            details: {
+              basename: input.basename,
+              entryPath: safeEntryPathForError(entryPath),
+              limit: "readTextBytes",
+              max: maxBytes,
+              observed: maxBytes
+            }
+          }));
+        }
+        const candidate = byPath.get(entryPath);
+        if (candidate && candidate.type === "file" && candidate.size > maxBytes) {
+          return err(createError({
+            code: "ARCHIVE_LIMIT_EXCEEDED",
+            category: "unsupported_input",
+            message: "Archive text entry exceeds the caller limit.",
+            details: {
+              basename: input.basename,
+              entryPath: candidate.path,
+              limit: "readTextBytes",
+              max: maxBytes,
+              observed: candidate.size
+            }
+          }));
+        }
+      }
+      const data = readEntry(entryPath);
+      if (!data.ok) {
+        return data;
+      }
+      try {
+        return ok(decodeUtf8(data.value, entryPath, input.basename));
+      } catch (cause) {
+        return err(toOhriskError(cause, "ARCHIVE_INTEGRITY_FAILED", "invalid_input", input.basename));
+      }
+    }
+  });
+}
+function parseZip(bytes, budget, archiveName) {
+  const eocd = findZipEocd(bytes, archiveName);
+  const diskNumber = readU16(bytes, eocd + 4, archiveName);
+  const centralDisk = readU16(bytes, eocd + 6, archiveName);
+  const entriesOnDisk = readU16(bytes, eocd + 8, archiveName);
+  const totalEntries = readU16(bytes, eocd + 10, archiveName);
+  const centralSize = readU32(bytes, eocd + 12, archiveName);
+  const centralOffset = readU32(bytes, eocd + 16, archiveName);
+  if (diskNumber !== 0 || centralDisk !== 0 || entriesOnDisk !== totalEntries) {
+    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Multi-disk ZIP archives are not supported.", {
+      basename: archiveName,
+      format: "zip"
+    });
+  }
+  if (entriesOnDisk === ZIP64_UINT16 || totalEntries === ZIP64_UINT16 || centralSize === ZIP64_UINT32 || centralOffset === ZIP64_UINT32 || hasSignatureAt(bytes, eocd - 20, ZIP64_LOCATOR_SIGNATURE) || hasSignatureAt(bytes, eocd - 56, ZIP64_EOCD_SIGNATURE)) {
+    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "ZIP64 archives are not supported.", {
+      basename: archiveName,
+      format: "zip"
+    });
+  }
+  enforceLimit("entries", budget.limits.entries, totalEntries, archiveName);
+  const centralEnd = safeAdd(centralOffset, centralSize, archiveName);
+  if (centralEnd !== eocd || centralEnd > bytes.length) {
+    malformed(archiveName, "ZIP central directory bounds are invalid.", "zip");
+  }
+  const entries = [];
+  const registry = new EntryRegistry(archiveName);
+  let expanded = 0;
+  let offset = centralOffset;
+  for (let index = 0;index < totalEntries; index += 1) {
+    checkDeadline(budget, archiveName);
+    if (readU32(bytes, offset, archiveName) !== ZIP_CENTRAL_SIGNATURE) {
+      malformed(archiveName, "ZIP central directory entry has an invalid signature.", "zip");
+    }
+    requireRange(bytes, offset, 46, archiveName);
+    const flags = readU16(bytes, offset + 8, archiveName);
+    const method = readU16(bytes, offset + 10, archiveName);
+    const crc = readU32(bytes, offset + 16, archiveName);
+    const compressedSize = readU32(bytes, offset + 20, archiveName);
+    const size = readU32(bytes, offset + 24, archiveName);
+    const nameLength = readU16(bytes, offset + 28, archiveName);
+    const extraLength = readU16(bytes, offset + 30, archiveName);
+    const commentLength = readU16(bytes, offset + 32, archiveName);
+    const diskStart = readU16(bytes, offset + 34, archiveName);
+    const externalAttributes = readU32(bytes, offset + 38, archiveName);
+    const localOffset = readU32(bytes, offset + 42, archiveName);
+    const recordLength = 46 + nameLength + extraLength + commentLength;
+    requireRange(bytes, offset, recordLength, archiveName);
+    if (offset + recordLength > centralEnd) {
+      malformed(archiveName, "ZIP central directory entry metadata is truncated.", "zip");
+    }
+    if ((flags & 1) !== 0 || (flags & 64) !== 0 || (flags & 8192) !== 0) {
+      fail("ARCHIVE_ENCRYPTED", "unsupported_input", "Encrypted ZIP entries are not supported.", {
+        basename: archiveName,
+        format: "zip"
+      });
+    }
+    if ((flags & 8) !== 0) {
+      fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "ZIP data descriptors are not supported.", {
+        basename: archiveName,
+        format: "zip"
+      });
+    }
+    if ((flags & ~2054) !== 0) {
+      fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "ZIP entry flags are not supported.", {
+        basename: archiveName,
+        format: "zip"
+      });
+    }
+    if (diskStart !== 0) {
+      fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Multi-disk ZIP entries are not supported.", {
+        basename: archiveName,
+        format: "zip"
+      });
+    }
+    if (compressedSize === ZIP64_UINT32 || size === ZIP64_UINT32 || localOffset === ZIP64_UINT32) {
+      fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "ZIP64 entries are not supported.", {
+        basename: archiveName,
+        format: "zip"
+      });
+    }
+    if (method !== 0 && method !== 8) {
+      fail("ARCHIVE_COMPRESSION_UNSUPPORTED", "unsupported_input", "ZIP compression method is not supported.", {
+        basename: archiveName,
+        format: "zip",
+        method
+      });
+    }
+    const rawName = bytes.subarray(offset + 46, offset + 46 + nameLength);
+    const decodedName = decodeUtf8(rawName, undefined, archiveName);
+    const directoryByName = decodedName.endsWith("/");
+    const entryPath = validateEntryPath(decodedName, budget.limits, directoryByName, archiveName);
+    const unixMode = externalAttributes >>> 16;
+    const unixType = unixMode & 61440;
+    const directoryByDos = (externalAttributes & 16) !== 0;
+    if (unixType !== 0 && unixType !== 32768 && unixType !== 16384) {
+      unsupportedType(archiveName, entryPath, "zip");
+    }
+    if ((directoryByName || directoryByDos) && unixType === 32768) {
+      malformed(archiveName, "ZIP entry type metadata is inconsistent.", "zip", entryPath);
+    }
+    const type = directoryByName || directoryByDos || unixType === 16384 ? "directory" : "file";
+    if (type === "directory" && (size !== 0 || compressedSize !== 0) || type === "file" && directoryByName) {
+      malformed(archiveName, "ZIP entry type metadata is inconsistent.", "zip", entryPath);
+    }
+    enforceEntryLimits({ size, compressedSize, budget, archiveName, entryPath });
+    expanded = safeAdd(expanded, size, archiveName);
+    enforceLimit("expandedBytes", budget.limits.expandedBytes, expanded, archiveName, entryPath);
+    const local = parseZipLocalHeader({
+      bytes,
+      localOffset,
+      centralOffset,
+      centralName: rawName,
+      flags,
+      method,
+      crc,
+      compressedSize,
+      size,
+      archiveName,
+      entryPath
+    });
+    registry.add(entryPath, type);
+    entries.push({
+      path: entryPath,
+      type,
+      size,
+      compressedSize,
+      crc32: crc,
+      flags,
+      method,
+      dataStart: local.dataStart,
+      dataEnd: local.dataEnd
+    });
+    offset += recordLength;
+  }
+  if (offset !== centralEnd) {
+    malformed(archiveName, "ZIP central directory entry count does not match its size.", "zip");
+  }
+  return entries.map((entry) => ({
+    path: entry.path,
+    type: entry.type,
+    size: entry.size,
+    compressedSize: entry.compressedSize,
+    materialize: (startedAt) => materializeZipEntry(bytes, entry, archiveName, budget, startedAt)
+  }));
+}
+function parseZipLocalHeader(input) {
+  requireRange(input.bytes, input.localOffset, 30, input.archiveName, input.entryPath);
+  if (readU32(input.bytes, input.localOffset, input.archiveName) !== ZIP_LOCAL_SIGNATURE) {
+    integrity(input.archiveName, input.entryPath, "ZIP local header signature does not match.", "zip");
+  }
+  const localFlags = readU16(input.bytes, input.localOffset + 6, input.archiveName);
+  const localMethod = readU16(input.bytes, input.localOffset + 8, input.archiveName);
+  const localCrc = readU32(input.bytes, input.localOffset + 14, input.archiveName);
+  const localCompressedSize = readU32(input.bytes, input.localOffset + 18, input.archiveName);
+  const localSize = readU32(input.bytes, input.localOffset + 22, input.archiveName);
+  const nameLength = readU16(input.bytes, input.localOffset + 26, input.archiveName);
+  const extraLength = readU16(input.bytes, input.localOffset + 28, input.archiveName);
+  requireRange(input.bytes, input.localOffset + 30, nameLength + extraLength, input.archiveName, input.entryPath);
+  const localName2 = input.bytes.subarray(input.localOffset + 30, input.localOffset + 30 + nameLength);
+  if (!localName2.equals(input.centralName) || localFlags !== input.flags || localMethod !== input.method) {
+    integrity(input.archiveName, input.entryPath, "ZIP central and local headers do not match.", "zip");
+  }
+  const usesDescriptor = (input.flags & 8) !== 0;
+  if (!usesDescriptor && (localCrc !== input.crc || localCompressedSize !== input.compressedSize || localSize !== input.size) || usesDescriptor && !((localCrc === 0 || localCrc === input.crc) && (localCompressedSize === 0 || localCompressedSize === input.compressedSize) && (localSize === 0 || localSize === input.size))) {
+    integrity(input.archiveName, input.entryPath, "ZIP central and local size or CRC metadata do not match.", "zip");
+  }
+  const dataStart = safeAdd(input.localOffset + 30, nameLength + extraLength, input.archiveName);
+  const dataEnd = safeAdd(dataStart, input.compressedSize, input.archiveName);
+  if (dataEnd > input.centralOffset || dataEnd > input.bytes.length) {
+    malformed(input.archiveName, "ZIP entry data extends beyond its data area.", "zip", input.entryPath);
+  }
+  return { dataStart, dataEnd };
+}
+function materializeZipEntry(bytes, entry, archiveName, budget, startedAt) {
+  try {
+    const compressed = bytes.subarray(entry.dataStart, entry.dataEnd);
+    const output = entry.method === 0 ? Buffer.from(compressed) : inflateRawSync(compressed, { maxOutputLength: entry.size });
+    if (output.length !== entry.size) {
+      integrity(archiveName, entry.path, "ZIP entry expanded size does not match metadata.", "zip");
+    }
+    if (crc32(output, budget, startedAt, archiveName, entry.path) !== entry.crc32) {
+      integrity(archiveName, entry.path, "ZIP entry CRC32 does not match metadata.", "zip");
+    }
+    return output;
+  } catch (cause) {
+    if (cause instanceof ArchiveFailure) {
+      throw cause;
+    }
+    integrity(archiveName, entry.path, "ZIP entry decompression failed.", "zip");
+  }
+}
+function parseTarContainer(inputBytes, format, budget, archiveName) {
+  let tar = inputBytes;
+  if (format === "tar.gz") {
+    const outputLimit = Math.min(budget.limits.expandedBytes, budget.limits.materializedBytes);
+    const outputLimitName = budget.limits.materializedBytes <= budget.limits.expandedBytes ? "materializedBytes" : "expandedBytes";
+    const observedLimit = Math.min(Number.MAX_SAFE_INTEGER, outputLimit + 1);
+    try {
+      tar = gunzipSync(inputBytes, { maxOutputLength: observedLimit });
+    } catch (cause) {
+      if (cause instanceof ArchiveFailure) {
+        throw cause;
+      }
+      if (isZlibOutputLimitError(cause)) {
+        limitFailure(outputLimitName, outputLimit, observedLimit, archiveName);
+      }
+      malformed(archiveName, "Gzip-compressed TAR data is malformed or exceeds its expansion limit.", format);
+    }
+    enforceLimit(outputLimitName, outputLimit, tar.length, archiveName);
+    enforceLimit("expandedBytes", budget.limits.expandedBytes, tar.length, archiveName);
+    enforceRatio(tar.length, inputBytes.length, budget.limits, archiveName);
+    chargeMaterialization(budget, tar.length, archiveName);
+  }
+  checkDeadline(budget, archiveName);
+  return parseTar(tar, format, budget, archiveName);
+}
+function parseTar(tar, format, budget, archiveName) {
+  if (tar.length < BLOCK_BYTES * 2 || tar.length % BLOCK_BYTES !== 0) {
+    malformed(archiveName, "TAR length or end padding is invalid.", format);
+  }
+  const entries = [];
+  const registry = new EntryRegistry(archiveName);
+  let offset = 0;
+  let headerCount = 0;
+  let expanded = 0;
+  let pendingPax;
+  let pendingLongName;
+  let sawEnd = false;
+  while (offset + BLOCK_BYTES <= tar.length) {
+    checkDeadline(budget, archiveName);
+    const header = tar.subarray(offset, offset + BLOCK_BYTES);
+    if (isZeroBlock(header)) {
+      requireRange(tar, offset, BLOCK_BYTES * 2, archiveName);
+      if (!isZeroBlock(tar.subarray(offset + BLOCK_BYTES, offset + BLOCK_BYTES * 2))) {
+        malformed(archiveName, "TAR end marker must contain two zero blocks.", format);
+      }
+      if (!isZeroBlock(tar.subarray(offset + BLOCK_BYTES * 2))) {
+        malformed(archiveName, "TAR trailing padding contains non-zero bytes.", format);
+      }
+      sawEnd = true;
+      break;
+    }
+    headerCount += 1;
+    enforceLimit("entries", budget.limits.entries, headerCount, archiveName);
+    validateTarHeader(header, archiveName, format);
+    const typeByte = header[156] ?? 0;
+    const type = typeByte === 0 ? "0" : String.fromCharCode(typeByte);
+    const headerSize = parseTarNumber(header.subarray(124, 136), archiveName, format, "size");
+    const extension = type === "x" || type === "g" || type === "L";
+    const effectiveSize = extension ? headerSize : pendingPax?.size ?? headerSize;
+    enforceLimit("entryBytes", budget.limits.entryBytes, effectiveSize, archiveName);
+    const dataStart = offset + BLOCK_BYTES;
+    const dataEnd = safeAdd(dataStart, effectiveSize, archiveName);
+    const paddedEnd = safeAdd(dataStart, roundToTarBlock(effectiveSize), archiveName);
+    if (dataEnd > tar.length || paddedEnd > tar.length) {
+      malformed(archiveName, "TAR entry extends beyond archive data.", format);
+    }
+    if (!isZeroBlock(tar.subarray(dataEnd, paddedEnd))) {
+      malformed(archiveName, "TAR entry padding contains non-zero bytes.", format);
+    }
+    const headerPath = readTarHeaderPath(header, archiveName, format);
+    if (type === "x" || type === "g") {
+      const pax = parsePax(tar.subarray(dataStart, dataEnd), archiveName, format, type === "g", budget);
+      if (type === "x") {
+        if (pendingPax !== undefined) {
+          malformed(archiveName, "PAX extended headers cannot replace an unconsumed header.", format);
+        }
+        pendingPax = pax;
+      }
+      offset = paddedEnd;
+      continue;
+    }
+    if (type === "L") {
+      if (pendingLongName !== undefined) {
+        malformed(archiveName, "GNU TAR longname headers cannot replace an unconsumed header.", format);
+      }
+      pendingLongName = parseGnuLongName(tar.subarray(dataStart, dataEnd), archiveName, format);
+      offset = paddedEnd;
+      continue;
+    }
+    if (pendingPax?.path !== undefined && pendingLongName !== undefined) {
+      malformed(archiveName, "TAR path extension headers are ambiguous.", format);
+    }
+    const rawPath = pendingPax?.path ?? pendingLongName ?? headerPath;
+    pendingPax = undefined;
+    pendingLongName = undefined;
+    const directory = type === "5";
+    const regular = type === "0" || type === "\x00";
+    if (!directory && !regular) {
+      unsupportedType(archiveName, safeEntryPathForError(rawPath), format);
+    }
+    const entryPath = validateEntryPath(rawPath, budget.limits, directory || rawPath.endsWith("/"), archiveName);
+    if (directory && effectiveSize !== 0) {
+      malformed(archiveName, "TAR directory entry has non-zero data size.", format, entryPath);
+    }
+    enforceLimit("entryBytes", budget.limits.entryBytes, effectiveSize, archiveName, entryPath);
+    expanded = safeAdd(expanded, effectiveSize, archiveName);
+    enforceLimit("expandedBytes", budget.limits.expandedBytes, expanded, archiveName, entryPath);
+    registry.add(entryPath, directory ? "directory" : "file");
+    const capturedStart = dataStart;
+    const capturedEnd = dataEnd;
+    entries.push({
+      path: entryPath,
+      type: directory ? "directory" : "file",
+      size: effectiveSize,
+      compressedSize: format === "tar" ? effectiveSize : 0,
+      materialize: () => Buffer.from(tar.subarray(capturedStart, capturedEnd))
+    });
+    offset = paddedEnd;
+  }
+  if (!sawEnd || pendingPax || pendingLongName) {
+    malformed(archiveName, "TAR archive is missing a complete end marker or extension target.", format);
+  }
+  return entries;
+}
+function validateTarHeader(header, archiveName, format) {
+  const expected = parseTarNumber(header.subarray(148, 156), archiveName, format, "checksum");
+  let unsigned = 0;
+  let signed = 0;
+  for (let index = 0;index < header.length; index += 1) {
+    const byte = index >= 148 && index < 156 ? 32 : header[index] ?? 0;
+    unsigned += byte;
+    signed += byte > 127 ? byte - 256 : byte;
+  }
+  if (expected !== unsigned && expected !== signed) {
+    integrity(archiveName, undefined, "TAR header checksum does not match.", format);
+  }
+  const magic = header.subarray(257, 263);
+  const version = header.subarray(263, 265);
+  const v7 = isZeroBlock(magic) && isZeroBlock(version);
+  const ustar = magic.equals(Buffer.from("ustar\x00", "ascii")) && version.equals(Buffer.from("00", "ascii"));
+  const gnu = magic.equals(Buffer.from("ustar ", "ascii"));
+  if (!v7 && !ustar && !gnu) {
+    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "TAR dialect is not supported.", {
+      basename: archiveName,
+      format
+    });
+  }
+}
+function readTarHeaderPath(header, archiveName, format) {
+  const name = decodeTarField(header.subarray(0, 100), archiveName, format);
+  const prefix = decodeTarField(header.subarray(345, 500), archiveName, format);
+  return prefix === "" ? name : `${prefix}/${name}`;
+}
+function decodeTarField(bytes, archiveName, format) {
+  const nul = bytes.indexOf(0);
+  const content = bytes.subarray(0, nul === -1 ? bytes.length : nul);
+  if (nul !== -1 && !isZeroBlock(bytes.subarray(nul))) {
+    malformed(archiveName, "TAR string field contains data after NUL.", format);
+  }
+  return decodeUtf8(content, undefined, archiveName);
+}
+function parseGnuLongName(bytes, archiveName, format) {
+  const nul = bytes.indexOf(0);
+  const content = bytes.subarray(0, nul === -1 ? bytes.length : nul);
+  if (content.length === 0 || nul !== -1 && !isZeroBlock(bytes.subarray(nul))) {
+    malformed(archiveName, "GNU TAR longname record is malformed.", format);
+  }
+  return decodeUtf8(content, undefined, archiveName);
+}
+function parsePax(bytes, archiveName, format, global, budget) {
+  let offset = 0;
+  const values = new Map;
+  while (offset < bytes.length) {
+    checkDeadline(budget, archiveName);
+    const space = bytes.indexOf(32, offset);
+    if (space === -1) {
+      malformed(archiveName, "PAX record length is malformed.", format);
+    }
+    const lengthText = bytes.subarray(offset, space).toString("ascii");
+    if (!/^[1-9][0-9]*$/.test(lengthText)) {
+      malformed(archiveName, "PAX record length is malformed.", format);
+    }
+    const length = Number(lengthText);
+    if (!Number.isSafeInteger(length) || length <= space - offset + 2 || offset + length > bytes.length) {
+      malformed(archiveName, "PAX record extends beyond metadata data.", format);
+    }
+    const record = bytes.subarray(space + 1, offset + length);
+    if (record[record.length - 1] !== 10) {
+      malformed(archiveName, "PAX record is missing its newline terminator.", format);
+    }
+    const body = record.subarray(0, -1);
+    const equals = body.indexOf(61);
+    if (equals <= 0) {
+      malformed(archiveName, "PAX record key/value is malformed.", format);
+    }
+    const key = body.subarray(0, equals).toString("ascii");
+    if (!/^[A-Za-z0-9_.-]+$/.test(key) || values.has(key)) {
+      malformed(archiveName, "PAX record key is invalid or duplicated.", format);
+    }
+    if (key === "linkpath" || key.startsWith("GNU.sparse") || key.startsWith("SCHILY.dev") || key === "SCHILY.filetype" || key === "SCHILY.realsize") {
+      unsupportedType(archiveName, undefined, format);
+    }
+    values.set(key, decodeUtf8(body.subarray(equals + 1), undefined, archiveName));
+    offset += length;
+  }
+  const pathValue = values.get("path");
+  const sizeValue = values.get("size");
+  if (global && (pathValue !== undefined || sizeValue !== undefined)) {
+    malformed(archiveName, "Global PAX path or size metadata is not safe to apply.", format);
+  }
+  let size;
+  if (sizeValue !== undefined) {
+    if (!/^(0|[1-9][0-9]*)$/.test(sizeValue)) {
+      malformed(archiveName, "PAX size metadata is invalid.", format);
+    }
+    size = Number(sizeValue);
+    if (!Number.isSafeInteger(size)) {
+      malformed(archiveName, "PAX size metadata exceeds the safe integer range.", format);
+    }
+  }
+  return {
+    ...pathValue !== undefined ? { path: pathValue } : {},
+    ...size !== undefined ? { size } : {}
+  };
+}
+
+class EntryRegistry {
+  entries = new Map;
+  foldedEntries = new Map;
+  parentPrefixes = new Set;
+  foldedParentPrefixes = new Set;
+  archiveName;
+  constructor(archiveName) {
+    this.archiveName = archiveName;
+  }
+  add(entryPath, type) {
+    const foldedPath = foldEntryPath(entryPath);
+    if (this.entries.has(entryPath) || this.foldedEntries.has(foldedPath)) {
+      duplicate(this.archiveName, entryPath);
+    }
+    const segments = entryPath.split("/");
+    const foldedSegments = foldedPath.split("/");
+    const prefixes = [];
+    const foldedPrefixes = [];
+    let prefix = "";
+    let foldedPrefix = "";
+    for (let index = 1;index < segments.length; index += 1) {
+      prefix = prefix === "" ? segments[index - 1] ?? "" : `${prefix}/${segments[index - 1]}`;
+      foldedPrefix = foldedPrefix === "" ? foldedSegments[index - 1] ?? "" : `${foldedPrefix}/${foldedSegments[index - 1]}`;
+      if (this.entries.get(prefix) === "file" || this.foldedEntries.get(foldedPrefix) === "file") {
+        duplicate(this.archiveName, entryPath);
+      }
+      prefixes.push(prefix);
+      foldedPrefixes.push(foldedPrefix);
+    }
+    if (type === "file" && (this.parentPrefixes.has(entryPath) || this.foldedParentPrefixes.has(foldedPath))) {
+      duplicate(this.archiveName, entryPath);
+    }
+    this.entries.set(entryPath, type);
+    this.foldedEntries.set(foldedPath, type);
+    for (const value of prefixes) {
+      this.parentPrefixes.add(value);
+    }
+    for (const value of foldedPrefixes) {
+      this.foldedParentPrefixes.add(value);
+    }
+  }
+}
+function validateEntryPath(rawPath, limits, allowDirectorySlash, archiveName) {
+  const path46 = allowDirectorySlash && rawPath.endsWith("/") ? rawPath.slice(0, -1) : rawPath;
+  const invalidRoot = path46 === "" || rawPath.includes("\\") || rawPath.startsWith("/") || rawPath.startsWith("//") || /^[A-Za-z]:/u.test(rawPath) || /[\u0000-\u001f\u007f-\u009f]/u.test(rawPath) || rawPath !== rawPath.normalize("NFC");
+  if (invalidRoot || !allowDirectorySlash && rawPath.endsWith("/")) {
+    invalidPath(archiveName, safeEntryPathForError(rawPath));
+  }
+  const segments = path46.split("/");
+  const encodedPathBytes = Buffer.byteLength(path46, "utf8");
+  if (encodedPathBytes > limits.pathBytes) {
+    limitFailure("pathBytes", limits.pathBytes, encodedPathBytes, archiveName, safeEntryPathForError(path46));
+  }
+  if (segments.length > limits.pathSegments) {
+    limitFailure("pathSegments", limits.pathSegments, segments.length, archiveName, safeEntryPathForError(path46));
+  }
+  for (const segment of segments) {
+    const base = segment.split(".", 1)[0]?.toUpperCase() ?? "";
+    if (segment === "" || segment === "." || segment === ".." || segment.includes(":") || /[. ]$/u.test(segment) || /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/u.test(base)) {
+      invalidPath(archiveName, safeEntryPathForError(path46));
+    }
+    const segmentBytes = Buffer.byteLength(segment, "utf8");
+    if (segmentBytes > limits.segmentBytes) {
+      limitFailure("segmentBytes", limits.segmentBytes, segmentBytes, archiveName, safeEntryPathForError(path46));
+    }
+  }
+  return path46;
+}
+function resolveLimits(overrides) {
+  const resolved = { ...DEFAULT_ARCHIVE_LIMITS, ...overrides };
+  for (const [name, value] of Object.entries(resolved)) {
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      fail("ARCHIVE_LIMIT_EXCEEDED", "invalid_input", "Archive limit configuration is invalid.", {
+        limit: name,
+        max: value,
+        observed: value
+      });
+    }
+  }
+  return resolved;
+}
+function readFileBytesWithLimit(filePath, maxBytes, archiveName) {
+  let descriptor;
+  try {
+    descriptor = openSync3(filePath, "r");
+    const initial = fstatSync(descriptor, { bigint: true });
+    if (!initial.isFile()) {
+      fail("ARCHIVE_READ_FAILED", "filesystem", "Archive path is not a regular file.", {
+        basename: archiveName
+      });
+    }
+    if (initial.size > BigInt(maxBytes)) {
+      limitFailure("inputBytes", maxBytes, maxBytes + 1, archiveName);
+    }
+    const expectedBytes = Number(initial.size);
+    const bytes = Buffer.allocUnsafe(expectedBytes);
+    let offset = 0;
+    while (offset < expectedBytes) {
+      const bytesRead = readSync3(descriptor, bytes, offset, expectedBytes - offset, offset);
+      if (bytesRead === 0) {
+        archiveFileChanged(archiveName);
+      }
+      offset += bytesRead;
+    }
+    const growthProbe = Buffer.allocUnsafe(1);
+    const additionalBytes = readSync3(descriptor, growthProbe, 0, 1, expectedBytes);
+    const final = fstatSync(descriptor, { bigint: true });
+    const currentPath = statSync6(filePath, { bigint: true });
+    if (final.size > BigInt(maxBytes) || currentPath.size > BigInt(maxBytes)) {
+      limitFailure("inputBytes", maxBytes, maxBytes + 1, archiveName);
+    }
+    if (additionalBytes !== 0 || initial.dev !== final.dev || initial.ino !== final.ino || initial.size !== final.size || initial.mtimeNs !== final.mtimeNs || initial.ctimeNs !== final.ctimeNs || final.dev !== currentPath.dev || final.ino !== currentPath.ino || final.size !== currentPath.size || final.mtimeNs !== currentPath.mtimeNs || final.ctimeNs !== currentPath.ctimeNs || final.birthtimeNs !== currentPath.birthtimeNs) {
+      archiveFileChanged(archiveName);
+    }
+    return bytes;
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        closeSync3(descriptor);
+      } catch {}
+    }
+  }
+}
+function archiveFileChanged(archiveName) {
+  fail("ARCHIVE_READ_FAILED", "filesystem", "Archive file changed while it was being read.", {
+    basename: archiveName
+  });
+}
+function createBudget(limits, now) {
+  const clock = now ?? Date.now;
+  return {
+    limits,
+    now: clock,
+    startedAt: clock(),
+    materializedBytes: 0
+  };
+}
+function checkDeadline(budget, archiveName, entryPath) {
+  checkDeadlineSince(budget, budget.startedAt, archiveName, entryPath);
+}
+function checkDeadlineSince(budget, startedAt, archiveName, entryPath) {
+  const observed = Math.max(0, budget.now() - startedAt);
+  if (observed > budget.limits.workDeadlineMs) {
+    limitFailure("workDeadlineMs", budget.limits.workDeadlineMs, observed, archiveName, entryPath);
+  }
+}
+function chargeMaterialization(budget, amount, archiveName, entryPath) {
+  const observed = safeAdd(budget.materializedBytes, amount, archiveName);
+  enforceLimit("materializedBytes", budget.limits.materializedBytes, observed, archiveName, entryPath);
+  budget.materializedBytes = observed;
+}
+function enforceEntryLimits(input) {
+  enforceLimit("entryBytes", input.budget.limits.entryBytes, input.size, input.archiveName, input.entryPath);
+  if (input.size >= input.budget.limits.compressionRatioMinBytes) {
+    const ratio = input.size / Math.max(1, input.compressedSize);
+    if (ratio > input.budget.limits.compressionRatio) {
+      limitFailure("compressionRatio", input.budget.limits.compressionRatio, ratio, input.archiveName, input.entryPath);
+    }
+  }
+}
+function enforceRatio(size, compressed, limits, archiveName) {
+  if (size >= limits.compressionRatioMinBytes) {
+    const ratio = size / Math.max(1, compressed);
+    if (ratio > limits.compressionRatio) {
+      limitFailure("compressionRatio", limits.compressionRatio, ratio, archiveName);
+    }
+  }
+}
+function enforceLimit(limit, max, observed, archiveName, entryPath) {
+  if (observed > max) {
+    limitFailure(limit, max, observed, archiveName, entryPath);
+  }
+}
+function limitFailure(limit, max, observed, archiveName, entryPath) {
+  fail("ARCHIVE_LIMIT_EXCEEDED", "unsupported_input", "Archive resource limit was exceeded.", {
+    basename: archiveName,
+    ...entryPath !== undefined ? { entryPath } : {},
+    limit,
+    max,
+    observed
+  });
+}
+function detectFormat(bytes, hint, archiveName) {
+  const detected = bytes.length >= 2 && bytes[0] === 31 && bytes[1] === 139 ? "tar.gz" : bytes.length >= 4 && (bytes.readUInt32LE(0) === ZIP_LOCAL_SIGNATURE || bytes.readUInt32LE(0) === ZIP_EOCD_SIGNATURE) ? "zip" : looksLikeTar(bytes) ? "tar" : undefined;
+  if (hint !== undefined) {
+    if (detected !== undefined && detected !== hint) {
+      fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Archive format hint does not match its bytes.", {
+        basename: archiveName,
+        format: hint
+      });
+    }
+    return hint;
+  }
+  if (detected === undefined) {
+    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Archive format is not supported.", {
+      basename: archiveName
+    });
+  }
+  return detected;
+}
+function looksLikeTar(bytes) {
+  if (bytes.length < BLOCK_BYTES * 2 || bytes.length % BLOCK_BYTES !== 0) {
+    return false;
+  }
+  if (isZeroBlock(bytes.subarray(0, BLOCK_BYTES))) {
+    return true;
+  }
+  const magic = bytes.subarray(257, 263);
+  return magic.equals(Buffer.from("ustar\x00", "ascii")) || magic.equals(Buffer.from("ustar ", "ascii")) || isZeroBlock(magic);
+}
+function findZipEocd(bytes, archiveName) {
+  if (bytes.length < ZIP_EOCD_BYTES) {
+    malformed(archiveName, "ZIP end of central directory is missing.", "zip");
+  }
+  const minimum = Math.max(0, bytes.length - ZIP_EOCD_BYTES - ZIP_MAX_COMMENT_BYTES);
+  for (let offset = bytes.length - ZIP_EOCD_BYTES;offset >= minimum; offset -= 1) {
+    if (bytes.readUInt32LE(offset) === ZIP_EOCD_SIGNATURE) {
+      const commentLength = bytes.readUInt16LE(offset + 20);
+      if (offset + ZIP_EOCD_BYTES + commentLength === bytes.length) {
+        return offset;
+      }
+    }
+  }
+  malformed(archiveName, "ZIP end of central directory is missing or malformed.", "zip");
+}
+function parseTarNumber(bytes, archiveName, format, field) {
+  if ((bytes[0] ?? 0) & 128) {
+    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Base-256 TAR numeric fields are not supported.", {
+      basename: archiveName,
+      format
+    });
+  }
+  const text3 = bytes.toString("ascii").replace(/\0.*$/u, "").trim();
+  if (text3 === "") {
+    return 0;
+  }
+  if (!/^[0-7]+$/u.test(text3)) {
+    malformed(archiveName, `TAR ${field} field is malformed.`, format);
+  }
+  const value = Number.parseInt(text3, 8);
+  if (!Number.isSafeInteger(value)) {
+    malformed(archiveName, `TAR ${field} field exceeds the safe integer range.`, format);
+  }
+  return value;
+}
+function decodeUtf8(bytes, entryPath, archiveName) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    fail("ARCHIVE_INTEGRITY_FAILED", "invalid_input", "Archive text is not valid UTF-8.", {
+      basename: archiveName,
+      ...entryPath !== undefined ? { entryPath: safeEntryPathForError(entryPath) } : {}
+    });
+  }
+}
+function readU16(bytes, offset, archiveName) {
+  requireRange(bytes, offset, 2, archiveName);
+  return bytes.readUInt16LE(offset);
+}
+function readU32(bytes, offset, archiveName) {
+  requireRange(bytes, offset, 4, archiveName);
+  return bytes.readUInt32LE(offset);
+}
+function requireRange(bytes, offset, length, archiveName, entryPath) {
+  if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || offset < 0 || length < 0 || offset + length > bytes.length) {
+    malformed(archiveName, "Archive structure is truncated.", undefined, entryPath);
+  }
+}
+function safeAdd(left, right, archiveName) {
+  const value = left + right;
+  if (!Number.isSafeInteger(value) || value < left) {
+    malformed(archiveName, "Archive numeric field overflows the safe integer range.");
+  }
+  return value;
+}
+function roundToTarBlock(size) {
+  return Math.ceil(size / BLOCK_BYTES) * BLOCK_BYTES;
+}
+function isZeroBlock(bytes) {
+  return bytes.every((byte) => byte === 0);
+}
+function hasSignatureAt(bytes, offset, signature) {
+  return offset >= 0 && offset + 4 <= bytes.length && bytes.readUInt32LE(offset) === signature;
+}
+function isZlibOutputLimitError(cause) {
+  if (!(cause instanceof Error)) {
+    return false;
+  }
+  const code = "code" in cause && typeof cause.code === "string" ? cause.code : "";
+  return code === "ERR_BUFFER_TOO_LARGE" || cause.message.includes("maxOutputLength") || cause.message.includes("larger than");
+}
+function foldEntryPath(entryPath) {
+  return entryPath.normalize("NFC").toLowerCase();
+}
+function comparePaths(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+function buildCrc32Table() {
+  const table = new Uint32Array(256);
+  for (let index = 0;index < table.length; index += 1) {
+    let value = index;
+    for (let bit = 0;bit < 8; bit += 1) {
+      value = (value & 1) !== 0 ? value >>> 1 ^ 3988292384 : value >>> 1;
+    }
+    table[index] = value >>> 0;
+  }
+  return table;
+}
+function crc32(bytes, budget, startedAt, archiveName, entryPath) {
+  let crc = 4294967295;
+  for (let index = 0;index < bytes.length; index += 1) {
+    if ((index & 65535) === 0) {
+      checkDeadlineSince(budget, startedAt, archiveName, entryPath);
+    }
+    const byte = bytes[index] ?? 0;
+    crc = crc >>> 8 ^ (CRC32_TABLE[(crc ^ byte) & 255] ?? 0);
+  }
+  return (crc ^ 4294967295) >>> 0;
+}
+function safeBasename(value) {
+  const normalized = value.replace(/\\/g, "/");
+  let name = basename(normalized).normalize("NFC").replace(/[\u0000-\u001f\u007f-\u009f:]/gu, "_").replace(/[. ]+$/u, "");
+  if (name === "" || name === "." || name === "/" || isWindowsDeviceName(name)) {
+    name = "archive";
+  }
+  while (Buffer.byteLength(name, "utf8") > 255) {
+    name = name.slice(0, -1);
+  }
+  return name || "archive";
+}
+function safeDisplayPath(value) {
+  const normalized = value.replace(/\\/g, "/");
+  const segments = normalized.split("/");
+  if (normalized.startsWith("/") || /^[A-Za-z]:/u.test(normalized) || normalized.startsWith("//") || normalized !== normalized.normalize("NFC") || Buffer.byteLength(normalized, "utf8") > 4096 || /[\u0000-\u001f\u007f-\u009f:]/u.test(normalized) || segments.some((segment) => segment === "" || segment === "." || segment === ".." || /[. ]$/u.test(segment) || Buffer.byteLength(segment, "utf8") > 255 || isWindowsDeviceName(segment))) {
+    return safeBasename(normalized);
+  }
+  return normalized;
+}
+function isWindowsDeviceName(segment) {
+  const base = segment.split(".", 1)[0]?.toUpperCase() ?? "";
+  return /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/u.test(base);
+}
+function safeEntryPathForError(value) {
+  if (value === undefined) {
+    return;
+  }
+  const withoutControls = value.replace(/[\u0000-\u001f\u007f-\u009f]/gu, "?");
+  return withoutControls.slice(0, 4096);
+}
+function invalidPath(archiveName, entryPath) {
+  fail("ARCHIVE_ENTRY_PATH_INVALID", "invalid_input", "Archive entry path is invalid.", {
+    basename: archiveName,
+    ...entryPath !== undefined ? { entryPath } : {}
+  });
+}
+function unsupportedType(archiveName, entryPath, format) {
+  fail("ARCHIVE_ENTRY_TYPE_UNSUPPORTED", "unsupported_input", "Archive entry type is not supported.", {
+    basename: archiveName,
+    ...entryPath !== undefined ? { entryPath } : {},
+    format
+  });
+}
+function duplicate(archiveName, entryPath) {
+  fail("ARCHIVE_DUPLICATE_ENTRY", "invalid_input", "Archive entries duplicate or collide by path.", {
+    basename: archiveName,
+    entryPath
+  });
+}
+function integrity(archiveName, entryPath, message, format) {
+  fail("ARCHIVE_INTEGRITY_FAILED", "invalid_input", message, {
+    basename: archiveName,
+    ...entryPath !== undefined ? { entryPath } : {},
+    ...format !== undefined ? { format } : {}
+  });
+}
+function malformed(archiveName, message, format, entryPath) {
+  fail("ARCHIVE_MALFORMED", "invalid_input", message, {
+    basename: archiveName,
+    ...entryPath !== undefined ? { entryPath } : {},
+    ...format !== undefined ? { format } : {}
+  });
+}
+function fail(code, category, message, details) {
+  throw new ArchiveFailure({ code, category, message, ...details ? { details } : {} });
+}
+function toOhriskError(cause, fallbackCode, fallbackCategory, archiveName) {
+  if (cause instanceof ArchiveFailure) {
+    return createError({
+      code: cause.code,
+      category: cause.category,
+      message: cause.message,
+      ...cause.details ? { details: cause.details } : {}
+    });
+  }
+  return createError({
+    code: fallbackCode,
+    category: fallbackCategory,
+    message: "Archive operation failed.",
+    details: { basename: archiveName }
+  });
+}
+
+// src/diff/compare.ts
+function diffRiskFindings(input) {
+  const baselineById = new Map(input.baselineFindings.map((finding) => [finding.id, finding]));
+  const currentIds = new Set(input.currentFindings.map((finding) => finding.id));
+  const newFindings = [];
+  const changedFindings = [];
+  for (const finding of input.currentFindings) {
+    const baseline = baselineById.get(finding.id);
+    if (!baseline) {
+      newFindings.push(finding);
+      continue;
+    }
+    if (findingKey(baseline) !== findingKey(finding)) {
+      changedFindings.push(finding);
+    }
+  }
+  const resolvedFindings = input.baselineFindings.filter((finding) => !currentIds.has(finding.id));
+  return {
+    baselineFindings: input.baselineFindings,
+    currentFindings: input.currentFindings,
+    newFindings,
+    changedFindings,
+    resolvedFindings,
+    introducedFindings: [...newFindings, ...changedFindings]
+  };
+}
+function findingKey(finding) {
+  return finding.fingerprint;
+}
+
+// src/evidence/cache.ts
+import { createHash as createHash2 } from "node:crypto";
+import {
+  existsSync as existsSync18,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync as readdirSync6,
+  renameSync,
+  rmSync,
+  statSync as statSync7,
+  writeFileSync
+} from "node:fs";
+import os from "node:os";
+import path46 from "node:path";
+var CACHE_FORMAT_VERSION = 3;
+var LEGACY_CACHE_FORMAT_VERSION = 2;
+var CACHE_INDEX_MAX_BYTES = 32 * 1024;
+var CACHE_MARKER_FILENAME = ".ohrisk-artifact-cache";
+var CACHE_MARKER_CONTENT = `ohrisk artifact cache v3
+`;
+var DEFAULT_ARTIFACT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+var DEFAULT_ARTIFACT_CACHE_MAX_BYTES = 2 * 1024 * 1024 * 1024;
+var MAX_HTTP_CACHE_TTL_MS = 365 * 24 * 60 * 60 * 1000;
+var MAX_VALIDATOR_LENGTH = 4 * 1024;
+function defaultArtifactCacheDirectory(env = process.env, homeDirectory = os.homedir(), platform = process.platform) {
+  const xdgCacheHome = env.XDG_CACHE_HOME?.trim();
+  if (xdgCacheHome) {
+    return path46.resolve(xdgCacheHome, "ohrisk", "artifacts");
+  }
+  if (platform === "win32") {
+    const localAppData = env.LOCALAPPDATA?.trim();
+    if (localAppData) {
+      return path46.resolve(localAppData, "Ohrisk", "Cache", "artifacts");
+    }
+  }
+  return path46.resolve(homeDirectory, ".cache", "ohrisk", "artifacts");
+}
+function createArtifactCache(rootDir, options = {}) {
+  return createArtifactCacheHandle(rootDir, options, true);
+}
+function openArtifactCacheForManagement(rootDir, options = {}) {
+  return createArtifactCacheHandle(rootDir, options, false);
+}
+function createArtifactCacheHandle(rootDir, options, initializeOwnership) {
+  const resolvedRoot = path46.resolve(rootDir);
+  const now = options.now ?? Date.now;
+  const defaultTtlMs = normalizeTtl(options.defaultTtlMs, DEFAULT_ARTIFACT_CACHE_TTL_MS);
+  const maxSizeBytes = normalizeMaxSize(options.maxSizeBytes, DEFAULT_ARTIFACT_CACHE_MAX_BYTES);
+  if (initializeOwnership) {
+    ensureCacheMarker(resolvedRoot);
+  }
+  return {
+    rootDir: resolvedRoot,
+    read: (url, maxBytes) => readArtifactCacheEntry({
+      rootDir: resolvedRoot,
+      url,
+      maxBytes,
+      now: now(),
+      defaultTtlMs
+    }),
+    write: (url, bytes, metadata) => {
+      writeArtifactCacheEntry({
+        rootDir: resolvedRoot,
+        url,
+        bytes,
+        now: now(),
+        defaultTtlMs,
+        metadata
+      });
+      pruneArtifactCache(resolvedRoot, {
+        maxSizeBytes,
+        removeExpired: false
+      }, now());
+    },
+    revalidate: (url, metadata) => revalidateArtifactCacheEntry({
+      rootDir: resolvedRoot,
+      url,
+      now: now(),
+      defaultTtlMs,
+      metadata
+    }),
+    remove: (url) => removeArtifactCacheEntry(resolvedRoot, url, now()),
+    status: () => artifactCacheStatus(resolvedRoot, now()),
+    prune: (pruneOptions = {}) => pruneArtifactCache(resolvedRoot, pruneOptions, now()),
+    clear: () => clearArtifactCache(resolvedRoot, now())
+  };
+}
+function artifactCacheMetadataFromHeaders(headers, options = {}) {
+  const now = options.now ?? Date.now();
+  const defaultTtlMs = normalizeTtl(options.defaultTtlMs, DEFAULT_ARTIFACT_CACHE_TTL_MS);
+  const cacheControl = headers?.get("cache-control")?.trim() ?? "";
+  const directives = parseCacheControl(cacheControl);
+  const cacheable = !directives.has("no-store");
+  let expiresAt = now + defaultTtlMs;
+  if (directives.has("no-cache")) {
+    expiresAt = now;
+  } else {
+    const maxAge = directives.get("max-age");
+    if (typeof maxAge === "string" && /^\d+$/.test(maxAge)) {
+      const seconds = Number(maxAge);
+      if (Number.isSafeInteger(seconds)) {
+        expiresAt = now + Math.min(seconds * 1000, MAX_HTTP_CACHE_TTL_MS);
+      }
+    } else {
+      const expires = headers?.get("expires")?.trim();
+      const parsedExpires = expires ? Date.parse(expires) : Number.NaN;
+      if (Number.isFinite(parsedExpires)) {
+        expiresAt = Math.max(now, Math.min(parsedExpires, now + MAX_HTTP_CACHE_TTL_MS));
+      }
+    }
+  }
+  const etag = normalizeValidator(headers?.get("etag"));
+  const lastModified = normalizeHttpDateValidator(headers?.get("last-modified"));
+  return {
+    cacheable,
+    fetchedAt: now,
+    expiresAt,
+    ...etag ? { etag } : {},
+    ...lastModified ? { lastModified } : {}
+  };
+}
+function readArtifactCacheEntry(input) {
+  if (!Number.isSafeInteger(input.maxBytes) || input.maxBytes < 0) {
+    return;
+  }
+  if (!hasValidCacheMarker(input.rootDir)) {
+    return;
+  }
+  const indexPath = cacheIndexPath(input.rootDir, input.url);
+  const loaded = readIndexFile(indexPath, cacheUrlKey(input.url), input.now, input.defaultTtlMs);
+  if (!loaded) {
+    return;
+  }
+  const index = loaded.index;
+  if (index.size > input.maxBytes) {
+    return;
+  }
+  const objectPath = cacheObjectPath(input.rootDir, index.sha256);
+  try {
+    if (!isRegularFile(objectPath)) {
+      removeQuietly(indexPath);
+      return;
+    }
+    const bytes = readFileSync(objectPath);
+    if (bytes.byteLength !== index.size) {
+      removeQuietly(indexPath);
+      return;
+    }
+    const digest = sha256(bytes);
+    if (digest !== index.sha256) {
+      removeQuietly(indexPath);
+      removeQuietly(objectPath);
+      return;
+    }
+    const touched = {
+      ...index,
+      lastAccessedAt: input.now
+    };
+    replaceAtomicBestEffort(indexPath, Buffer.from(`${JSON.stringify(touched)}
+`, "utf8"));
+    return {
+      bytes,
+      digest,
+      fetchedAt: touched.fetchedAt,
+      lastAccessedAt: touched.lastAccessedAt,
+      expiresAt: touched.expiresAt,
+      stale: input.now >= touched.expiresAt,
+      ...touched.etag ? { etag: touched.etag } : {},
+      ...touched.lastModified ? { lastModified: touched.lastModified } : {}
+    };
+  } catch {
+    removeQuietly(indexPath);
+    return;
+  }
+}
+function writeArtifactCacheEntry(input) {
+  const digest = sha256(input.bytes);
+  const objectPath = cacheObjectPath(input.rootDir, digest);
+  const indexPath = cacheIndexPath(input.rootDir, input.url);
+  const metadata = normalizeWriteMetadata(input.metadata, input.now, input.defaultTtlMs);
+  const index = {
+    version: CACHE_FORMAT_VERSION,
+    key: cacheUrlKey(input.url),
+    sha256: digest,
+    size: input.bytes.byteLength,
+    fetchedAt: metadata.fetchedAt,
+    lastAccessedAt: input.now,
+    expiresAt: metadata.expiresAt,
+    ...metadata.etag ? { etag: metadata.etag } : {},
+    ...metadata.lastModified ? { lastModified: metadata.lastModified } : {}
+  };
+  try {
+    if (!ensureCacheMarker(input.rootDir)) {
+      return;
+    }
+    writeIfAbsent(objectPath, input.bytes);
+    replaceAtomic(indexPath, Buffer.from(`${JSON.stringify(index)}
+`, "utf8"));
+  } catch {}
+}
+function revalidateArtifactCacheEntry(input) {
+  if (!hasValidCacheMarker(input.rootDir)) {
+    return;
+  }
+  const indexPath = cacheIndexPath(input.rootDir, input.url);
+  const loaded = readIndexFile(indexPath, cacheUrlKey(input.url), input.now, input.defaultTtlMs);
+  if (!loaded) {
+    return;
+  }
+  const metadata = normalizeWriteMetadata(input.metadata, input.now, input.defaultTtlMs);
+  const updated = {
+    ...loaded.index,
+    fetchedAt: metadata.fetchedAt,
+    lastAccessedAt: input.now,
+    expiresAt: metadata.expiresAt,
+    ...metadata.etag ? { etag: metadata.etag } : loaded.index.etag ? { etag: loaded.index.etag } : {},
+    ...metadata.lastModified ? { lastModified: metadata.lastModified } : loaded.index.lastModified ? { lastModified: loaded.index.lastModified } : {}
+  };
+  replaceAtomicBestEffort(indexPath, Buffer.from(`${JSON.stringify(updated)}
+`, "utf8"));
+}
+function removeArtifactCacheEntry(rootDir, url, now) {
+  if (!hasValidCacheMarker(rootDir)) {
+    return;
+  }
+  const indexPath = cacheIndexPath(rootDir, url);
+  const loaded = readIndexFile(indexPath, cacheUrlKey(url), now, 0);
+  removeQuietly(indexPath);
+  if (!loaded) {
+    return;
+  }
+  removeObjectWhenUnreferenced(rootDir, loaded.index.sha256, now);
+}
+function artifactCacheStatus(rootDir, now) {
+  try {
+    return ok(statusFromInventory(scanCacheInventory(rootDir, now), now));
+  } catch (cause) {
+    return err(cacheOperationError("Failed to inspect the artifact cache.", rootDir, cause));
+  }
+}
+function pruneArtifactCache(rootDir, options, now) {
+  try {
+    requireValidCacheMarker(rootDir);
+    const inventory = scanCacheInventory(rootDir, now);
+    const before = statusFromInventory(inventory, now);
+    const maxSizeBytes = normalizeMaxSize(options.maxSizeBytes, Number.MAX_SAFE_INTEGER);
+    const maxAgeMs = options.maxAgeMs === undefined ? undefined : normalizeTtl(options.maxAgeMs, 0);
+    const removeExpired = options.removeExpired ?? true;
+    const entriesToRemove = new Set;
+    for (const entry of inventory.entries) {
+      if (removeExpired && entry.index.expiresAt <= now || maxAgeMs !== undefined && now - entry.index.lastAccessedAt >= maxAgeMs) {
+        entriesToRemove.add(entry.path);
+      }
+    }
+    const remainingEntries = inventory.entries.filter((entry) => !entriesToRemove.has(entry.path)).sort((left, right) => left.index.lastAccessedAt - right.index.lastAccessedAt || left.path.localeCompare(right.path));
+    let remainingBytes = uniqueReferencedBytes(remainingEntries, inventory.objectSizes);
+    for (const entry of remainingEntries) {
+      if (remainingBytes <= maxSizeBytes) {
+        break;
+      }
+      entriesToRemove.add(entry.path);
+      const stillReferenced = remainingEntries.some((candidate) => candidate.path !== entry.path && !entriesToRemove.has(candidate.path) && candidate.index.sha256 === entry.index.sha256);
+      if (!stillReferenced) {
+        remainingBytes -= inventory.objectSizes.get(entry.index.sha256) ?? entry.index.size;
+      }
+    }
+    for (const indexPath of entriesToRemove) {
+      removeQuietly(indexPath);
+    }
+    const objectCleanup = removeOrphanedObjects(rootDir, now);
+    removeEmptyCacheDirectories(rootDir);
+    const afterInventory = scanCacheInventory(rootDir, now);
+    const after = statusFromInventory(afterInventory, now);
+    return ok({
+      before,
+      after,
+      removedEntryCount: Math.max(0, before.entryCount - after.entryCount),
+      removedObjectCount: objectCleanup.removedObjectCount,
+      removedBytes: objectCleanup.removedBytes
+    });
+  } catch (cause) {
+    return err(cacheOperationError("Failed to prune the artifact cache.", rootDir, cause));
+  }
+}
+function clearArtifactCache(rootDir, now) {
+  try {
+    requireValidCacheMarker(rootDir);
+    const before = artifactCacheStatus(rootDir, now);
+    if (!before.ok) {
+      return err(before.error);
+    }
+    removeCacheChild(rootDir, "index");
+    removeCacheChild(rootDir, "objects");
+    return ok({
+      removedEntryCount: before.value.entryCount,
+      removedObjectCount: before.value.objectCount,
+      removedBytes: before.value.totalBytes
+    });
+  } catch (cause) {
+    return err(cacheOperationError("Failed to clear the artifact cache.", rootDir, cause));
+  }
+}
+function scanCacheInventory(rootDir, now) {
+  const objectSizes = new Map;
+  for (const objectPath of listRegularFiles(path46.join(rootDir, "objects", "sha256"))) {
+    const digest = path46.basename(objectPath);
+    if (!/^[a-f0-9]{64}$/.test(digest)) {
+      continue;
+    }
+    try {
+      objectSizes.set(digest, statSync7(objectPath).size);
+    } catch {}
+  }
+  const entries = [];
+  let corruptEntryCount = 0;
+  for (const indexPath of listRegularFiles(path46.join(rootDir, "index"))) {
+    const loaded = readIndexFile(indexPath, undefined, now, DEFAULT_ARTIFACT_CACHE_TTL_MS);
+    if (!loaded) {
+      corruptEntryCount += 1;
+      continue;
+    }
+    const expectedFilename = `${loaded.index.key}.json`;
+    if (path46.basename(indexPath) !== expectedFilename) {
+      corruptEntryCount += 1;
+      removeQuietly(indexPath);
+      continue;
+    }
+    const objectSize = objectSizes.get(loaded.index.sha256);
+    if (objectSize === undefined || objectSize !== loaded.index.size) {
+      corruptEntryCount += 1;
+      removeQuietly(indexPath);
+      continue;
+    }
+    entries.push({ path: indexPath, index: loaded.index });
+  }
+  return { entries, objectSizes, corruptEntryCount };
+}
+function statusFromInventory(inventory, now) {
+  const referencedDigests = new Set(inventory.entries.map((entry) => entry.index.sha256));
+  const orphanDigests = [...inventory.objectSizes.keys()].filter((digest) => !referencedDigests.has(digest));
+  const accessedAt = inventory.entries.map((entry) => entry.index.lastAccessedAt);
+  return {
+    entryCount: inventory.entries.length,
+    objectCount: inventory.objectSizes.size,
+    totalBytes: [...inventory.objectSizes.values()].reduce((total, size) => total + size, 0),
+    orphanObjectCount: orphanDigests.length,
+    orphanBytes: orphanDigests.reduce((total, digest) => total + (inventory.objectSizes.get(digest) ?? 0), 0),
+    staleEntryCount: inventory.entries.filter((entry) => entry.index.expiresAt <= now).length,
+    corruptEntryCount: inventory.corruptEntryCount,
+    ...accessedAt.length > 0 ? { oldestAccessedAt: Math.min(...accessedAt) } : {},
+    ...accessedAt.length > 0 ? { newestAccessedAt: Math.max(...accessedAt) } : {}
+  };
+}
+function removeOrphanedObjects(rootDir, now) {
+  const inventory = scanCacheInventory(rootDir, now);
+  const referencedDigests = new Set(inventory.entries.map((entry) => entry.index.sha256));
+  let removedObjectCount = 0;
+  let removedBytes = 0;
+  for (const objectPath of listRegularFiles(path46.join(rootDir, "objects", "sha256"))) {
+    const digest = path46.basename(objectPath);
+    if (referencedDigests.has(digest)) {
+      continue;
+    }
+    try {
+      const size = statSync7(objectPath).size;
+      rmSync(objectPath, { force: true });
+      removedObjectCount += 1;
+      removedBytes += size;
+    } catch {}
+  }
+  return { removedObjectCount, removedBytes };
+}
+function removeObjectWhenUnreferenced(rootDir, digest, now) {
+  const referenced = listRegularFiles(path46.join(rootDir, "index")).some((indexPath) => {
+    const loaded = readIndexFile(indexPath, undefined, now, DEFAULT_ARTIFACT_CACHE_TTL_MS);
+    return loaded?.index.sha256 === digest;
+  });
+  if (!referenced) {
+    removeQuietly(cacheObjectPath(rootDir, digest));
+  }
+}
+function uniqueReferencedBytes(entries, objectSizes) {
+  const digests = new Set(entries.map((entry) => entry.index.sha256));
+  return [...digests].reduce((total, digest) => total + (objectSizes.get(digest) ?? 0), 0);
+}
+function readIndexFile(indexPath, expectedKey, now, defaultTtlMs) {
+  if (!isRegularFile(indexPath)) {
+    return;
+  }
+  try {
+    const raw = readFileSync(indexPath);
+    if (raw.byteLength > CACHE_INDEX_MAX_BYTES) {
+      removeQuietly(indexPath);
+      return;
+    }
+    const parsed = JSON.parse(raw.toString("utf8"));
+    if (!isArtifactCacheIndex(parsed, expectedKey)) {
+      removeQuietly(indexPath);
+      return;
+    }
+    if (parsed.version === CACHE_FORMAT_VERSION) {
+      return { index: parsed, migrated: false };
+    }
+    const mtime = Math.trunc(statSync7(indexPath).mtimeMs);
+    const migrated = {
+      ...parsed,
+      version: CACHE_FORMAT_VERSION,
+      fetchedAt: mtime,
+      lastAccessedAt: now,
+      expiresAt: Math.min(now, mtime + defaultTtlMs)
+    };
+    replaceAtomicBestEffort(indexPath, Buffer.from(`${JSON.stringify(migrated)}
+`, "utf8"));
+    return { index: migrated, migrated: true };
+  } catch {
+    removeQuietly(indexPath);
+    return;
+  }
+}
+function isArtifactCacheIndex(value, expectedKey) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const record = value;
+  if (record.version !== CACHE_FORMAT_VERSION && record.version !== LEGACY_CACHE_FORMAT_VERSION || typeof record.key !== "string" || !/^[a-f0-9]{64}$/.test(record.key) || expectedKey !== undefined && record.key !== expectedKey || typeof record.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(record.sha256) || !isNonNegativeSafeInteger(record.size)) {
+    return false;
+  }
+  if (record.version === LEGACY_CACHE_FORMAT_VERSION) {
+    return true;
+  }
+  return isNonNegativeSafeInteger(record.fetchedAt) && isNonNegativeSafeInteger(record.lastAccessedAt) && isNonNegativeSafeInteger(record.expiresAt) && isOptionalValidator(record.etag) && isOptionalValidator(record.lastModified);
+}
+function normalizeWriteMetadata(metadata, now, defaultTtlMs) {
+  const fetchedAt = isNonNegativeSafeInteger(metadata?.fetchedAt) ? metadata.fetchedAt : now;
+  const expiresAt = isNonNegativeSafeInteger(metadata?.expiresAt) ? metadata.expiresAt : fetchedAt + defaultTtlMs;
+  const etag = normalizeValidator(metadata?.etag);
+  const lastModified = normalizeHttpDateValidator(metadata?.lastModified);
+  return {
+    fetchedAt,
+    expiresAt,
+    ...etag ? { etag } : {},
+    ...lastModified ? { lastModified } : {}
+  };
+}
+function parseCacheControl(value) {
+  const directives = new Map;
+  for (const item of value.split(",")) {
+    const [rawName, ...rawValue] = item.trim().split("=");
+    const name = rawName?.trim().toLowerCase();
+    if (!name) {
+      continue;
+    }
+    const joined = rawValue.join("=").trim().replace(/^"|"$/g, "");
+    directives.set(name, joined === "" ? true : joined);
+  }
+  return directives;
+}
+function normalizeValidator(value) {
+  const normalized = value?.trim();
+  if (!normalized || normalized.length > MAX_VALIDATOR_LENGTH || normalized.includes("\r") || normalized.includes(`
+`)) {
+    return;
+  }
+  return normalized;
+}
+function normalizeHttpDateValidator(value) {
+  const normalized = normalizeValidator(value);
+  return normalized && Number.isFinite(Date.parse(normalized)) ? normalized : undefined;
+}
+function isOptionalValidator(value) {
+  return value === undefined || typeof value === "string" && value.length > 0 && value.length <= MAX_VALIDATOR_LENGTH && !value.includes("\r") && !value.includes(`
+`);
+}
+function normalizeTtl(value, fallback) {
+  return Number.isSafeInteger(value) && (value ?? -1) >= 0 ? value : fallback;
+}
+function normalizeMaxSize(value, fallback) {
+  return Number.isSafeInteger(value) && (value ?? -1) >= 0 ? value : fallback;
+}
+function isNonNegativeSafeInteger(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+function writeIfAbsent(filePath, bytes) {
+  mkdirSync(path46.dirname(filePath), { recursive: true });
+  if (isRegularFile(filePath)) {
+    return;
+  }
+  const temporaryPath = temporaryCachePath(filePath);
+  try {
+    writeFileSync(temporaryPath, bytes, { flag: "wx", mode: 384 });
+    try {
+      renameSync(temporaryPath, filePath);
+    } catch {
+      if (!isRegularFile(filePath)) {
+        throw new Error("Could not atomically publish cache object.");
+      }
+    }
+  } finally {
+    removeQuietly(temporaryPath);
+  }
+}
+function replaceAtomic(filePath, bytes) {
+  mkdirSync(path46.dirname(filePath), { recursive: true });
+  const temporaryPath = temporaryCachePath(filePath);
+  try {
+    writeFileSync(temporaryPath, bytes, { flag: "wx", mode: 384 });
+    renameSync(temporaryPath, filePath);
+  } finally {
+    removeQuietly(temporaryPath);
+  }
+}
+function replaceAtomicBestEffort(filePath, bytes) {
+  try {
+    replaceAtomic(filePath, bytes);
+  } catch {}
+}
+function temporaryCachePath(filePath) {
+  return `${filePath}.${process.pid}.${randomSuffix()}.tmp`;
+}
+function cacheIndexPath(rootDir, url) {
+  const key = cacheUrlKey(url);
+  return path46.join(rootDir, "index", key.slice(0, 2), `${key}.json`);
+}
+function cacheUrlKey(url) {
+  return sha256(Buffer.from(url, "utf8"));
+}
+function cacheObjectPath(rootDir, digest) {
+  return path46.join(rootDir, "objects", "sha256", digest.slice(0, 2), digest);
+}
+function ensureCacheMarker(rootDir) {
+  try {
+    const rootExisted = existsSync18(rootDir);
+    mkdirSync(rootDir, { recursive: true });
+    const markerPath = path46.join(rootDir, CACHE_MARKER_FILENAME);
+    if (existsSync18(markerPath)) {
+      requireValidCacheMarker(rootDir);
+    } else {
+      if (rootExisted && readdirSync6(rootDir).length > 0) {
+        throw new Error("Artifact cache directory is not empty and has no ownership marker.");
+      }
+      writeFileSync(markerPath, CACHE_MARKER_CONTENT, { flag: "wx", mode: 384 });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+function hasValidCacheMarker(rootDir) {
+  try {
+    requireValidCacheMarker(rootDir);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function requireValidCacheMarker(rootDir) {
+  const markerPath = path46.join(rootDir, CACHE_MARKER_FILENAME);
+  if (!lstatSync(markerPath).isFile()) {
+    throw new Error("Artifact cache ownership marker is not a regular file.");
+  }
+  if (readFileSync(markerPath, "utf8") !== CACHE_MARKER_CONTENT) {
+    throw new Error("Artifact cache ownership marker does not match this cache format.");
+  }
+}
+function removeCacheChild(rootDir, childName) {
+  const childPath = path46.join(path46.resolve(rootDir), childName);
+  const relative2 = path46.relative(path46.resolve(rootDir), childPath);
+  if (relative2 !== childName || relative2.startsWith("..") || path46.isAbsolute(relative2)) {
+    throw new Error("Unsafe cache child path.");
+  }
+  rmSync(childPath, { force: true, recursive: true });
+}
+function listRegularFiles(rootDir) {
+  const files = [];
+  const visit2 = (directory) => {
+    let entries;
+    try {
+      entries = readdirSync6(directory, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const entryPath = path46.join(directory, entry.name);
+      if (entry.isFile()) {
+        files.push(entryPath);
+      } else if (entry.isDirectory()) {
+        visit2(entryPath);
+      }
+    }
+  };
+  visit2(rootDir);
+  return files;
+}
+function removeEmptyCacheDirectories(rootDir) {
+  for (const topLevel of [path46.join(rootDir, "index"), path46.join(rootDir, "objects")]) {
+    removeEmptyDirectories(topLevel, false);
+  }
+}
+function removeEmptyDirectories(directory, removeSelf) {
+  let entries;
+  try {
+    entries = readdirSync6(directory, { withFileTypes: true });
+  } catch {
+    return true;
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      removeEmptyDirectories(path46.join(directory, entry.name), true);
+    }
+  }
+  try {
+    if (removeSelf && readdirSync6(directory).length === 0) {
+      rmSync(directory, { force: true });
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+function isRegularFile(filePath) {
+  try {
+    return lstatSync(filePath).isFile();
+  } catch {
+    return false;
+  }
+}
+function sha256(bytes) {
+  return createHash2("sha256").update(bytes).digest("hex");
+}
+function removeQuietly(filePath) {
+  try {
+    rmSync(filePath, { force: true });
+  } catch {}
+}
+function randomSuffix() {
+  return Math.random().toString(16).slice(2);
+}
+function cacheOperationError(message, rootDir, cause) {
+  return createError({
+    code: "CACHE_OPERATION_FAILED",
+    category: "filesystem",
+    message,
+    details: {
+      cacheDir: rootDir,
+      cause: cause instanceof Error ? cause.message : String(cause)
+    }
+  });
+}
+
+// src/evidence/collect.ts
+import { createHash as createHash3, timingSafeEqual } from "node:crypto";
+import { lookup } from "node:dns/promises";
+import {
+  closeSync as closeSync4,
+  existsSync as existsSync44,
+  openSync as openSync4,
+  readdirSync as readdirSync30,
+  readSync as readSync4,
+  realpathSync as realpathSync3,
+  statSync as statSync32
+} from "node:fs";
+import { request as httpsRequest } from "node:https";
+import { isIP as isIP2 } from "node:net";
+import path72 from "node:path";
+import { Readable } from "node:stream";
+import { fileURLToPath as fileURLToPath3 } from "node:url";
+
+// src/evidence/bazel-module.ts
+import { existsSync as existsSync19, readdirSync as readdirSync7, statSync as statSync8 } from "node:fs";
+import path47 from "node:path";
+import { fileURLToPath } from "node:url";
+var BAZEL_REGISTRY_JSON_MAX_BYTES = 64 * 1024;
+var BAZEL_SOURCE_JSON_MAX_BYTES = 64 * 1024;
+var BAZEL_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var BAZEL_LICENSE_FILE_LIMIT = 50;
+function collectBazelModuleEvidence(input) {
+  const sourceDir = findBazelLocalPathSourceDir({
+    packageId: input.packageId,
+    packageName: input.packageName,
+    version: input.version,
+    projectRoot: input.projectRoot,
+    registryJsonMaxBytes: input.registryJsonMaxBytes ?? BAZEL_REGISTRY_JSON_MAX_BYTES,
+    sourceJsonMaxBytes: input.sourceJsonMaxBytes ?? BAZEL_SOURCE_JSON_MAX_BYTES
+  });
+  if (!sourceDir.ok) {
+    return err(sourceDir.error);
+  }
+  if (sourceDir.value) {
+    const warnings = [];
+    const files = readBazelEvidenceFiles({
+      sourceDir: sourceDir.value,
+      maxBytes: input.evidenceFileMaxBytes ?? BAZEL_EVIDENCE_FILE_MAX_BYTES,
+      warnings
+    });
+    if (files.length === 0) {
+      warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Bazel module source.");
+    }
+    return ok({
+      packageId: input.packageId,
+      files,
+      source: "local",
+      warnings
+    });
+  }
+  return ok({
+    packageId: input.packageId,
+    files: [],
+    source: "unavailable",
+    warnings: [
+      "Bazel module license evidence was not found in local Bazel registry local_path sources. Remote Bazel registry metadata fetching is not supported yet."
+    ]
+  });
+}
+function findBazelLocalPathSourceDir(input) {
+  for (const registryRoot of findLocalBazelRegistryRoots(input.projectRoot)) {
+    const sourceJsonPath = path47.join(registryRoot, "modules", input.packageName, input.version, "source.json");
+    if (!existsSync19(sourceJsonPath)) {
+      continue;
+    }
+    const sourceJson = readJsonFile({
+      packageId: input.packageId,
+      filePath: sourceJsonPath,
+      maxBytes: input.sourceJsonMaxBytes,
+      label: "Bazel source metadata"
+    });
+    if (!sourceJson.ok) {
+      return err(sourceJson.error);
+    }
+    if (!isRecord18(sourceJson.value) || sourceJson.value.type !== "local_path" || typeof sourceJson.value.path !== "string") {
+      continue;
+    }
+    const registryJson = readBazelRegistryJson({
+      packageId: input.packageId,
+      registryRoot,
+      maxBytes: input.registryJsonMaxBytes
+    });
+    if (!registryJson.ok) {
+      return err(registryJson.error);
+    }
+    const sourceDir = resolveBazelLocalPathSourceDir({
+      registryRoot,
+      moduleBasePath: registryJson.value,
+      sourcePath: sourceJson.value.path
+    });
+    if (sourceDir && isReadableDirectory(sourceDir)) {
+      return ok(sourceDir);
+    }
+  }
+  return ok(undefined);
+}
+function findLocalBazelRegistryRoots(projectRoot) {
+  const roots = new Set;
+  const projectRegistry = path47.resolve(projectRoot);
+  if (isReadableDirectory(path47.join(projectRegistry, "modules"))) {
+    roots.add(projectRegistry);
+  }
+  for (const registry of readBazelrcRegistries(path47.join(projectRoot, ".bazelrc"))) {
+    if (registry.startsWith("file://")) {
+      try {
+        const registryRoot = path47.resolve(fileURLToPath(registry));
+        if (isReadableDirectory(path47.join(registryRoot, "modules"))) {
+          roots.add(registryRoot);
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+  return [...roots];
+}
+function readBazelrcRegistries(bazelrcPath) {
+  if (!existsSync19(bazelrcPath)) {
+    return [];
+  }
+  const text3 = readTextFileWithLimit({
+    filePath: bazelrcPath,
+    maxBytes: BAZEL_SOURCE_JSON_MAX_BYTES
+  });
+  if (!text3.ok) {
+    return [];
+  }
+  return [...text3.value.matchAll(/(?:^|\s)--registry=("[^"]+"|'[^']+'|\S+)/gm)].map((match) => (match[1] ?? "").replace(/^["']|["']$/g, "")).filter((value) => value !== "");
+}
+function readBazelRegistryJson(input) {
+  const registryJsonPath = path47.join(input.registryRoot, "bazel_registry.json");
+  if (!existsSync19(registryJsonPath)) {
+    return ok(undefined);
+  }
+  const registryJson = readJsonFile({
+    packageId: input.packageId,
+    filePath: registryJsonPath,
+    maxBytes: input.maxBytes,
+    label: "Bazel registry metadata"
+  });
+  if (!registryJson.ok) {
+    return err(registryJson.error);
+  }
+  return ok(isRecord18(registryJson.value) && typeof registryJson.value.module_base_path === "string" ? registryJson.value.module_base_path : undefined);
+}
+function resolveBazelLocalPathSourceDir(input) {
+  if (path47.isAbsolute(input.sourcePath)) {
+    return path47.resolve(input.sourcePath);
+  }
+  const moduleBasePath = input.moduleBasePath ?? "";
+  if (moduleBasePath !== "" && path47.isAbsolute(moduleBasePath)) {
+    return path47.resolve(moduleBasePath, input.sourcePath);
+  }
+  return path47.resolve(input.registryRoot, moduleBasePath, input.sourcePath);
+}
+function readBazelEvidenceFiles(input) {
+  const files = [];
+  for (const entry of readDirectoryEntries(input.sourceDir)) {
+    if (!entry.isFile()) {
+      continue;
+    }
+    const kind = classifyEvidenceFile(entry.name);
+    if (!kind) {
+      continue;
+    }
+    if (files.length >= BAZEL_LICENSE_FILE_LIMIT) {
+      input.warnings.push(`Bazel module evidence file limit reached at ${BAZEL_LICENSE_FILE_LIMIT} files.`);
+      break;
+    }
+    const text3 = readTextFileWithLimit({
+      filePath: path47.join(input.sourceDir, entry.name),
+      maxBytes: input.maxBytes
+    });
+    if (!text3.ok) {
+      input.warnings.push(`Skipped Bazel evidence file ${entry.name}: ${evidenceReadError(text3.error)}.`);
+      continue;
+    }
+    files.push({
+      path: entry.name,
+      kind,
+      text: text3.value
+    });
+  }
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+function readJsonFile(input) {
+  const text3 = readTextFileWithLimit({
+    filePath: input.filePath,
+    maxBytes: input.maxBytes
+  });
+  if (!text3.ok) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: textFileReadErrorCategory(text3.error),
+      message: text3.error.kind === "too_large" ? `${input.label} exceeded the maximum supported size.` : `Failed to read ${input.label}.`,
+      details: {
+        packageId: input.packageId,
+        metadataPath: input.filePath,
+        ...textFileReadErrorDetails(text3.error)
+      }
+    }));
+  }
+  try {
+    return ok(JSON.parse(text3.value));
+  } catch (cause) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "unsupported_input",
+      message: `Failed to parse ${input.label}.`,
+      details: {
+        packageId: input.packageId,
+        metadataPath: input.filePath,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
+function readDirectoryEntries(dir) {
+  try {
+    return readdirSync7(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+function evidenceReadError(error) {
+  switch (error.kind) {
+    case "too_large":
+      return `file exceeded ${error.maxBytes} bytes`;
+    case "filesystem":
+      return error.cause;
+  }
+}
+function isReadableDirectory(pathname) {
+  try {
+    return statSync8(pathname).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function isRecord18(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// src/evidence/cargo-package.ts
+import { existsSync as existsSync20, readdirSync as readdirSync8, statSync as statSync9 } from "node:fs";
+import path48 from "node:path";
+var CARGO_MANIFEST_MAX_BYTES = 1024 * 1024;
+var CARGO_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var CARGO_LICENSE_FILE_LIMIT = 50;
+function collectCargoPackageEvidence(input) {
+  const packageDir = findCargoPackageDir({
+    projectRoot: input.projectRoot,
+    packageName: input.packageName,
+    version: input.version
+  });
+  if (!packageDir) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: [
+        "Cargo package source was not found in a local Cargo registry cache."
+      ]
+    });
+  }
+  const manifest = readCargoManifestMetadata({
+    packageId: input.packageId,
+    manifestPath: path48.join(packageDir, "Cargo.toml"),
+    maxBytes: input.manifestMaxBytes ?? CARGO_MANIFEST_MAX_BYTES
+  });
+  if (!manifest.ok) {
+    return err(manifest.error);
+  }
+  const warnings = [];
+  const files = readCargoEvidenceFiles({
+    packageDir,
+    manifest: manifest.value,
+    maxBytes: input.evidenceFileMaxBytes ?? CARGO_EVIDENCE_FILE_MAX_BYTES,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Cargo package source.");
+  }
+  if (!manifest.value.license) {
+    warnings.push("Cargo.toml did not declare a package license.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...manifest.value.license ? {
+      metadataLicense: manifest.value.license,
+      metadataSource: "Cargo.toml"
+    } : {},
+    files,
+    source: "local",
+    warnings
+  });
+}
+function findCargoPackageDir(input) {
+  const crateDirName = `${input.packageName}-${input.version}`;
+  for (const registrySourceRoot of cargoRegistrySourceRoots(input.projectRoot)) {
+    if (!existsSync20(registrySourceRoot) || !isReadableDirectory2(registrySourceRoot)) {
+      continue;
+    }
+    let registryDirs;
+    try {
+      registryDirs = readdirSync8(registrySourceRoot, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const registryDir of registryDirs) {
+      if (!registryDir.isDirectory()) {
+        continue;
+      }
+      const candidate = path48.join(registrySourceRoot, registryDir.name, crateDirName);
+      if (existsSync20(candidate) && isReadableDirectory2(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  const vendoredCandidate = path48.join(input.projectRoot, "vendor", input.packageName);
+  if (existsSync20(vendoredCandidate) && isReadableDirectory2(vendoredCandidate)) {
+    return vendoredCandidate;
+  }
+  return;
+}
+function cargoRegistrySourceRoots(projectRoot) {
+  const roots = [
+    path48.join(projectRoot, ".cargo", "registry", "src")
+  ];
+  const cargoHome = process.env.CARGO_HOME;
+  if (cargoHome) {
+    roots.push(path48.join(cargoHome, "registry", "src"));
+  }
+  const home = process.env.USERPROFILE ?? process.env.HOME;
+  if (home) {
+    roots.push(path48.join(home, ".cargo", "registry", "src"));
+  }
+  return [...new Set(roots.map((root) => path48.resolve(root)))];
+}
+function readCargoManifestMetadata(input) {
+  if (!existsSync20(input.manifestPath)) {
+    return ok({});
+  }
+  const text3 = readTextFileWithLimit({
+    filePath: input.manifestPath,
+    maxBytes: input.maxBytes
+  });
+  if (!text3.ok) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: textFileReadErrorCategory(text3.error),
+      message: manifestReadFailedMessage(text3.error),
+      details: {
+        packageId: input.packageId,
+        manifestPath: input.manifestPath,
+        ...textFileReadErrorDetails(text3.error)
+      }
+    }));
+  }
+  return ok(parseCargoManifestMetadata(text3.value));
+}
+function parseCargoManifestMetadata(text3) {
+  let section = "";
+  const metadata = {};
+  for (const rawLine of text3.split(/\r?\n/)) {
+    const line = stripTomlComment10(rawLine).trim();
+    if (line === "") {
+      continue;
+    }
+    if (line.startsWith("[") && line.endsWith("]")) {
+      section = line.slice(1, -1);
+      continue;
+    }
+    if (section !== "package") {
+      continue;
+    }
+    const license = readStringAssignment7(line, "license");
+    if (license !== undefined) {
+      metadata.license = license;
+      continue;
+    }
+    const licenseFile = readStringAssignment7(line, "license-file");
+    if (licenseFile !== undefined) {
+      metadata.licenseFile = licenseFile;
+    }
+  }
+  return metadata;
+}
+function readCargoEvidenceFiles(input) {
+  const candidates = evidenceFileCandidates(input.packageDir);
+  if (input.manifest.licenseFile) {
+    candidates.unshift({
+      absolutePath: path48.resolve(input.packageDir, input.manifest.licenseFile),
+      relativePath: input.manifest.licenseFile
+    });
+  }
+  const files = [];
+  const seen = new Set;
+  const packageRoot = path48.resolve(input.packageDir);
+  for (const candidate of candidates.slice(0, CARGO_LICENSE_FILE_LIMIT)) {
+    if (seen.has(candidate.absolutePath)) {
+      continue;
+    }
+    seen.add(candidate.absolutePath);
+    const kind = classifyEvidenceFile(candidate.relativePath);
+    if (!kind || !isPathInside2(packageRoot, candidate.absolutePath)) {
+      continue;
+    }
+    const text3 = readTextFileWithLimit({
+      filePath: candidate.absolutePath,
+      maxBytes: input.maxBytes
+    });
+    if (!text3.ok) {
+      input.warnings.push(evidenceFileReadWarning(candidate.relativePath, text3.error));
+      continue;
+    }
+    files.push({
+      path: candidate.relativePath,
+      kind,
+      text: text3.value
+    });
+  }
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+function evidenceFileCandidates(dir) {
+  if (!existsSync20(dir) || !isReadableDirectory2(dir)) {
+    return [];
+  }
+  try {
+    return readdirSync8(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path48.join(dir, entry.name),
+      relativePath: entry.name
+    }));
+  } catch {
+    return [];
+  }
+}
+function readStringAssignment7(line, key) {
+  const match = new RegExp(`^${escapeRegExp8(key)}\\s*=\\s*"([^"]*)"`).exec(line);
+  return match?.[1];
+}
+function stripTomlComment10(line) {
+  let inString = false;
+  let escaped = false;
+  for (let index = 0;index < line.length; index += 1) {
+    const char = line[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (char === "#" && !inString) {
+      return line.slice(0, index);
+    }
+  }
+  return line;
+}
+function isReadableDirectory2(dir) {
+  try {
+    return statSync9(dir).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function isPathInside2(parent, child) {
+  const relative2 = path48.relative(parent, child);
+  return relative2 === "" || !relative2.startsWith("..") && !path48.isAbsolute(relative2);
+}
+function manifestReadFailedMessage(error) {
+  return error.kind === "too_large" ? "Cargo.toml metadata exceeded the maximum supported size." : "Failed to read Cargo.toml metadata.";
+}
+function evidenceFileReadWarning(fileName, error) {
+  return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
+}
+function escapeRegExp8(input) {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// src/evidence/carthage-package.ts
+import { existsSync as existsSync21, readdirSync as readdirSync9, statSync as statSync10 } from "node:fs";
+import path49 from "node:path";
+var CARTHAGE_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var CARTHAGE_LICENSE_FILE_LIMIT = 50;
+function collectCarthagePackageEvidence(input) {
+  const packageDir = findCarthageCheckoutDir({
+    packageName: input.packageName,
+    projectRoot: input.projectRoot
+  });
+  if (!packageDir) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["Carthage package source was not found in Carthage/Checkouts."]
+    });
+  }
+  const warnings = [];
+  const files = readCarthageEvidenceFiles({
+    packageDir,
+    maxBytes: input.evidenceFileMaxBytes ?? CARTHAGE_EVIDENCE_FILE_MAX_BYTES,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Carthage checkout.");
+  }
+  return ok({
+    packageId: input.packageId,
+    files,
+    source: "local",
+    warnings
+  });
+}
+function findCarthageCheckoutDir(input) {
+  const checkoutName = checkoutNameForCarthagePackage(input.packageName);
+  if (!checkoutName) {
+    return;
+  }
+  const checkoutsRoot = path49.resolve(input.projectRoot, "Carthage", "Checkouts");
+  const exactCandidate = path49.resolve(checkoutsRoot, checkoutName);
+  if (isPathInside3(checkoutsRoot, exactCandidate) && existsSync21(exactCandidate) && isReadableDirectory3(exactCandidate)) {
+    return exactCandidate;
+  }
+  return findCaseInsensitiveChildDirectory({
+    parent: checkoutsRoot,
+    childName: checkoutName
+  });
+}
+function checkoutNameForCarthagePackage(packageName) {
+  const normalized = packageName.trim().replace(/\\/g, "/").replace(/\/+$/g, "");
+  const slashIndex = normalized.lastIndexOf("/");
+  const basename2 = slashIndex >= 0 ? normalized.slice(slashIndex + 1) : normalized;
+  const checkoutName = basename2.endsWith(".git") ? basename2.slice(0, -4) : basename2;
+  return checkoutName.trim() === "" ? undefined : checkoutName.trim();
+}
+function findCaseInsensitiveChildDirectory(input) {
+  if (!existsSync21(input.parent) || !isReadableDirectory3(input.parent)) {
+    return;
+  }
+  let entries;
+  try {
+    entries = readdirSync9(input.parent, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  const normalizedName = input.childName.toLowerCase();
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.toLowerCase() !== normalizedName) {
+      continue;
+    }
+    const candidate = path49.resolve(input.parent, entry.name);
+    if (isPathInside3(input.parent, candidate) && isReadableDirectory3(candidate)) {
+      return candidate;
+    }
+  }
+  return;
+}
+function readCarthageEvidenceFiles(input) {
+  const files = [];
+  for (const candidate of evidenceFileCandidates2(input.packageDir)) {
+    const kind = classifyEvidenceFile(candidate.relativePath);
+    if (!kind) {
+      continue;
+    }
+    if (files.length >= CARTHAGE_LICENSE_FILE_LIMIT) {
+      input.warnings.push(`Carthage package evidence file limit reached at ${CARTHAGE_LICENSE_FILE_LIMIT} files.`);
+      break;
+    }
+    const text3 = readTextFileWithLimit({
+      filePath: candidate.absolutePath,
+      maxBytes: input.maxBytes
+    });
+    if (!text3.ok) {
+      input.warnings.push(`Skipped Carthage evidence file ${candidate.relativePath}: ${evidenceReadError2(text3.error)}.`);
+      continue;
+    }
+    files.push({
+      path: candidate.relativePath,
+      kind,
+      text: text3.value
+    });
+  }
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+function evidenceFileCandidates2(dir) {
+  try {
+    return readdirSync9(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path49.join(dir, entry.name),
+      relativePath: entry.name
+    }));
+  } catch {
+    return [];
+  }
+}
+function evidenceReadError2(error) {
+  switch (error.kind) {
+    case "too_large":
+      return `file exceeded ${error.maxBytes} bytes`;
+    case "filesystem":
+      return error.cause;
+  }
+}
+function isReadableDirectory3(pathname) {
+  try {
+    return statSync10(pathname).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function isPathInside3(parent, child) {
+  const relative2 = path49.relative(parent, child);
+  return relative2 === "" || !relative2.startsWith("..") && !path49.isAbsolute(relative2);
+}
+
+// src/evidence/cocoapods-package.ts
+import { existsSync as existsSync22, readdirSync as readdirSync10, statSync as statSync11 } from "node:fs";
+import path50 from "node:path";
+var COCOAPODS_PODSPEC_MAX_BYTES = 1024 * 1024;
+var COCOAPODS_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var COCOAPODS_LICENSE_FILE_LIMIT = 50;
+function collectCocoapodsPackageEvidence(input) {
+  const packageDir = findCocoapodsPackageDir({
+    packageName: input.packageName,
+    projectRoot: input.projectRoot
+  });
+  if (!packageDir) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["CocoaPods package source was not found in the local Pods directory."]
+    });
+  }
+  const podspecLicense = readPodspecLicense({
+    packageId: input.packageId,
+    packageName: input.packageName,
+    projectRoot: input.projectRoot,
+    maxBytes: input.podspecMaxBytes ?? COCOAPODS_PODSPEC_MAX_BYTES
+  });
+  if (!podspecLicense.ok) {
+    return err(podspecLicense.error);
+  }
+  const warnings = [];
+  const files = readCocoapodsEvidenceFiles({
+    packageDir,
+    maxBytes: input.evidenceFileMaxBytes ?? COCOAPODS_EVIDENCE_FILE_MAX_BYTES,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in CocoaPods package source.");
+  }
+  if (!podspecLicense.value) {
+    warnings.push("CocoaPods podspec did not declare license metadata.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...podspecLicense.value ? {
+      metadataLicense: podspecLicense.value,
+      metadataSource: "podspec"
+    } : {},
+    files,
+    source: "local",
+    warnings
+  });
+}
+function findCocoapodsPackageDir(input) {
+  const podsRoot = path50.resolve(input.projectRoot, "Pods");
+  const exactCandidate = path50.resolve(podsRoot, input.packageName);
+  if (isPathInside4(podsRoot, exactCandidate) && existsSync22(exactCandidate) && isReadableDirectory4(exactCandidate)) {
+    return exactCandidate;
+  }
+  return findCaseInsensitiveChildDirectory2({
+    parent: podsRoot,
+    childName: input.packageName
+  });
+}
+function findCaseInsensitiveChildDirectory2(input) {
+  if (!existsSync22(input.parent) || !isReadableDirectory4(input.parent)) {
+    return;
+  }
+  let entries;
+  try {
+    entries = readdirSync10(input.parent, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  const normalizedName = input.childName.toLowerCase();
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.toLowerCase() !== normalizedName) {
+      continue;
+    }
+    const candidate = path50.resolve(input.parent, entry.name);
+    if (isPathInside4(input.parent, candidate) && isReadableDirectory4(candidate)) {
+      return candidate;
+    }
+  }
+  return;
+}
+function readPodspecLicense(input) {
+  const podspecPath = path50.resolve(input.projectRoot, "Pods", "Local Podspecs", `${input.packageName}.podspec.json`);
+  if (!existsSync22(podspecPath)) {
+    return ok(undefined);
+  }
+  const text3 = readTextFileWithLimit({
+    filePath: podspecPath,
+    maxBytes: input.maxBytes
+  });
+  if (!text3.ok) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: textFileReadErrorCategory(text3.error),
+      message: text3.error.kind === "too_large" ? "CocoaPods podspec metadata exceeded the maximum supported size." : "Failed to read CocoaPods podspec metadata.",
+      details: {
+        packageId: input.packageId,
+        podspecPath,
+        ...textFileReadErrorDetails(text3.error)
+      }
+    }));
+  }
+  try {
+    return ok(podspecLicenseFromJson(JSON.parse(text3.value)));
+  } catch (cause) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "unsupported_input",
+      message: "CocoaPods podspec metadata was not valid JSON.",
+      details: {
+        packageId: input.packageId,
+        podspecPath,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
+function podspecLicenseFromJson(parsed) {
+  if (!isRecord19(parsed)) {
+    return;
+  }
+  if (typeof parsed.license === "string" && parsed.license.trim() !== "") {
+    return parsed.license.trim();
+  }
+  if (isRecord19(parsed.license)) {
+    const type = parsed.license.type;
+    if (typeof type === "string" && type.trim() !== "") {
+      return type.trim();
+    }
+  }
+  return;
+}
+function readCocoapodsEvidenceFiles(input) {
+  const files = [];
+  for (const candidate of evidenceFileCandidates3(input.packageDir)) {
+    const kind = classifyEvidenceFile(candidate.relativePath);
+    if (!kind) {
+      continue;
+    }
+    if (files.length >= COCOAPODS_LICENSE_FILE_LIMIT) {
+      input.warnings.push(`CocoaPods package evidence file limit reached at ${COCOAPODS_LICENSE_FILE_LIMIT} files.`);
+      break;
+    }
+    const text3 = readTextFileWithLimit({
+      filePath: candidate.absolutePath,
+      maxBytes: input.maxBytes
+    });
+    if (!text3.ok) {
+      input.warnings.push(`Skipped CocoaPods evidence file ${candidate.relativePath}: ${evidenceReadError3(text3.error)}.`);
+      continue;
+    }
+    files.push({
+      path: candidate.relativePath,
+      kind,
+      text: text3.value
+    });
+  }
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+function evidenceFileCandidates3(dir) {
+  try {
+    return readdirSync10(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path50.join(dir, entry.name),
+      relativePath: entry.name
+    }));
+  } catch {
+    return [];
+  }
+}
+function evidenceReadError3(error) {
+  switch (error.kind) {
+    case "too_large":
+      return `file exceeded ${error.maxBytes} bytes`;
+    case "filesystem":
+      return error.cause;
+  }
+}
+function isReadableDirectory4(pathname) {
+  try {
+    return statSync11(pathname).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function isPathInside4(parent, child) {
+  const relative2 = path50.relative(parent, child);
+  return relative2 === "" || !relative2.startsWith("..") && !path50.isAbsolute(relative2);
+}
+function isRecord19(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// src/evidence/conda-package.ts
+import { existsSync as existsSync23, readdirSync as readdirSync11, statSync as statSync12 } from "node:fs";
+import path51 from "node:path";
+var CONDA_INDEX_MAX_BYTES = 1024 * 1024;
+var CONDA_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var CONDA_EVIDENCE_FILE_LIMIT = 50;
+function collectCondaPackageEvidence(input) {
+  const packageDir = findCondaPackageDir(omitUndefined({
+    packageName: input.packageName,
+    version: input.version,
+    resolved: input.resolved,
+    projectRoot: input.projectRoot
+  }));
+  if (!packageDir) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["Conda package source was not found in local conda package cache directories."]
+    });
+  }
+  const packageIndex = readCondaPackageIndex({
+    indexPath: path51.join(packageDir, "info", "index.json"),
+    packageId: input.packageId,
+    maxBytes: input.indexMaxBytes ?? CONDA_INDEX_MAX_BYTES
+  });
+  if (!packageIndex.ok) {
+    return err(packageIndex.error);
+  }
+  const warnings = [];
+  const files = readCondaEvidenceFiles({
+    packageDir,
+    maxBytes: input.evidenceFileMaxBytes ?? CONDA_EVIDENCE_FILE_MAX_BYTES,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Conda package source.");
+  }
+  const metadataLicense = readCondaMetadataLicense(packageIndex.value);
+  if (!metadataLicense) {
+    warnings.push("Conda info/index.json did not declare license metadata.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...metadataLicense ? { metadataLicense, metadataSource: "info/index.json" } : {},
+    files,
+    source: "local",
+    warnings
+  });
+}
+function findCondaPackageDir(input) {
+  const exactDirName = condaPackageDirNameFromUrl(input.resolved);
+  for (const cacheRoot of condaPackageCacheRoots(input.projectRoot)) {
+    if (exactDirName) {
+      const exactCandidate = path51.join(cacheRoot, exactDirName);
+      if (isReadableDirectory5(exactCandidate)) {
+        return exactCandidate;
+      }
+    }
+    const prefix = `${input.packageName}-${input.version}-`;
+    for (const entry of readDirectoryEntries2(cacheRoot)) {
+      if (entry.isDirectory() && entry.name.startsWith(prefix) && isReadableDirectory5(path51.join(cacheRoot, entry.name))) {
+        return path51.join(cacheRoot, entry.name);
+      }
+    }
+  }
+  return;
+}
+function condaPackageCacheRoots(projectRoot) {
+  const roots = [
+    path51.join(projectRoot, ".conda", "pkgs"),
+    path51.join(projectRoot, "pkgs")
+  ];
+  const explicitCacheRoots = process.env.CONDA_PKGS_DIRS;
+  if (explicitCacheRoots) {
+    roots.push(...explicitCacheRoots.split(path51.delimiter));
+  }
+  const condaPrefix = process.env.CONDA_PREFIX;
+  if (condaPrefix) {
+    roots.push(path51.resolve(condaPrefix, "..", "pkgs"));
+  }
+  const home = process.env.USERPROFILE ?? process.env.HOME;
+  if (home) {
+    roots.push(path51.join(home, ".conda", "pkgs"));
+    roots.push(path51.join(home, "miniconda3", "pkgs"));
+    roots.push(path51.join(home, "anaconda3", "pkgs"));
+    roots.push(path51.join(home, "mambaforge", "pkgs"));
+    roots.push(path51.join(home, "miniforge3", "pkgs"));
+  }
+  const localAppData = process.env.LOCALAPPDATA;
+  if (localAppData) {
+    roots.push(path51.join(localAppData, "conda", "conda", "pkgs"));
+  }
+  return [...new Set(roots.filter((root) => root.trim() !== "").map((root) => path51.resolve(root)))].filter(isReadableDirectory5);
+}
+function condaPackageDirNameFromUrl(value) {
+  if (!value) {
+    return;
+  }
+  let basename2 = value;
+  try {
+    basename2 = path51.posix.basename(new URL(value).pathname);
+  } catch {
+    basename2 = path51.basename(value);
+  }
+  const withoutExtension = basename2.endsWith(".tar.bz2") ? basename2.slice(0, -".tar.bz2".length) : basename2.endsWith(".conda") ? basename2.slice(0, -".conda".length) : undefined;
+  return withoutExtension && withoutExtension.includes("-") ? withoutExtension : undefined;
+}
+function readCondaPackageIndex(input) {
+  if (!existsSync23(input.indexPath)) {
+    return ok(undefined);
+  }
+  const text3 = readTextFileWithLimit({
+    filePath: input.indexPath,
+    maxBytes: input.maxBytes
+  });
+  if (!text3.ok) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: textFileReadErrorCategory(text3.error),
+      message: condaIndexReadFailedMessage(text3.error),
+      details: {
+        packageId: input.packageId,
+        indexPath: input.indexPath,
+        ...textFileReadErrorDetails(text3.error)
+      }
+    }));
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(text3.value);
+  } catch {
+    return ok(undefined);
+  }
+  if (!isRecord20(parsed)) {
+    return ok(undefined);
+  }
+  return ok(omitUndefined({
+    name: readString(parsed.name),
+    version: readString(parsed.version),
+    license: readString(parsed.license),
+    licenseFamily: readString(parsed.license_family)
+  }));
+}
+function readCondaEvidenceFiles(input) {
+  const files = [];
+  for (const candidate of evidenceFileCandidates4(input.packageDir)) {
+    const kind = classifyEvidenceFile(candidate.relativePath);
+    if (!kind) {
+      continue;
+    }
+    if (files.length >= CONDA_EVIDENCE_FILE_LIMIT) {
+      input.warnings.push(`Conda package evidence file limit reached at ${CONDA_EVIDENCE_FILE_LIMIT} files.`);
+      break;
+    }
+    const text3 = readTextFileWithLimit({
+      filePath: candidate.absolutePath,
+      maxBytes: input.maxBytes
+    });
+    if (!text3.ok) {
+      input.warnings.push(`Skipped Conda evidence file ${candidate.relativePath}: ${condaEvidenceReadError(text3.error)}.`);
+      continue;
+    }
+    files.push({
+      path: candidate.relativePath,
+      kind,
+      text: text3.value
+    });
+  }
+  return files;
+}
+function evidenceFileCandidates4(packageDir) {
+  const candidates = [];
+  const roots = [packageDir, path51.join(packageDir, "info"), path51.join(packageDir, "info", "licenses")];
+  for (const root of roots) {
+    for (const entry of readDirectoryEntries2(root)) {
+      if (!entry.isFile()) {
+        continue;
+      }
+      const absolutePath = path51.join(root, entry.name);
+      candidates.push({
+        absolutePath,
+        relativePath: path51.relative(packageDir, absolutePath).replace(/\\/g, "/")
+      });
+    }
+  }
+  return candidates.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+}
+function readCondaMetadataLicense(index) {
+  return index?.license ?? index?.licenseFamily;
+}
+function condaIndexReadFailedMessage(error) {
+  return error.kind === "too_large" ? "Conda info/index.json metadata exceeded the maximum supported size." : "Failed to read Conda info/index.json metadata.";
+}
+function condaEvidenceReadError(error) {
+  switch (error.kind) {
+    case "too_large":
+      return `file exceeded ${error.maxBytes} bytes`;
+    case "filesystem":
+      return error.cause;
+  }
+}
+function readDirectoryEntries2(pathname) {
+  try {
+    return readdirSync11(pathname, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+function isReadableDirectory5(pathname) {
+  try {
+    return statSync12(pathname).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function readString(value) {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+}
+function isRecord20(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// src/evidence/conan-package.ts
+import { existsSync as existsSync24, readdirSync as readdirSync12, statSync as statSync13 } from "node:fs";
+import os2 from "node:os";
+import path52 from "node:path";
+var CONANFILE_PY_MAX_BYTES = 1024 * 1024;
+var CONAN_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var CONAN_LICENSE_FILE_LIMIT = 50;
+var CONAN_SOURCE_ROOT_LIMIT = 20;
+function collectConanPackageEvidence(input) {
+  const sourceRoots = findConanPackageSourceRoots({
+    packageName: input.packageName,
+    version: input.version,
+    projectRoot: input.projectRoot
+  });
+  if (sourceRoots.length === 0) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["Conan package source was not found in local Conan cache directories."]
+    });
+  }
+  const conanfileLicenses = readFirstConanfileLicenses({
+    packageId: input.packageId,
+    sourceRoots,
+    maxBytes: input.conanfileMaxBytes ?? CONANFILE_PY_MAX_BYTES
+  });
+  if (!conanfileLicenses.ok) {
+    return err(conanfileLicenses.error);
+  }
+  const warnings = [];
+  const files = readConanEvidenceFiles({
+    sourceRoots,
+    maxBytes: input.evidenceFileMaxBytes ?? CONAN_EVIDENCE_FILE_MAX_BYTES,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Conan package source.");
+  }
+  if (!conanfileLicenses.value || conanfileLicenses.value.length === 0) {
+    warnings.push("Conan package conanfile.py did not declare license metadata.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...conanfileLicenses.value && conanfileLicenses.value.length === 1 ? {
+      metadataLicense: conanfileLicenses.value[0],
+      metadataSource: "conanfile.py"
+    } : {},
+    ...conanfileLicenses.value && conanfileLicenses.value.length > 1 ? {
+      metadataLicenses: conanfileLicenses.value,
+      metadataSource: "conanfile.py"
+    } : {},
+    files,
+    source: "local",
+    warnings
+  });
+}
+function findConanPackageSourceRoots(input) {
+  const roots = [];
+  for (const cacheRoot of conanDataRoots(input.projectRoot)) {
+    for (const sourceRoot of sourceRootsForConanDataRoot({
+      cacheRoot,
+      packageName: input.packageName,
+      version: input.version
+    })) {
+      if (!roots.includes(sourceRoot)) {
+        roots.push(sourceRoot);
+      }
+      if (roots.length >= CONAN_SOURCE_ROOT_LIMIT) {
+        return roots;
+      }
+    }
+  }
+  return roots;
+}
+function conanDataRoots(projectRoot) {
+  const candidates = [
+    path52.resolve(projectRoot, ".conan", "data"),
+    path52.resolve(os2.homedir(), ".conan", "data")
+  ];
+  return [...new Set(candidates)].filter((candidate) => isReadableDirectory6(candidate));
+}
+function sourceRootsForConanDataRoot(input) {
+  const packageName = conanCachePackageName(input.packageName);
+  if (!packageName) {
+    return [];
+  }
+  const packageDir = path52.resolve(input.cacheRoot, packageName, input.version);
+  if (!isPathInside5(input.cacheRoot, packageDir) || !isReadableDirectory6(packageDir)) {
+    return [];
+  }
+  const roots = [];
+  for (const userDir of childDirectories(packageDir)) {
+    for (const channelDir of childDirectories(userDir)) {
+      for (const childName of ["export", "source"]) {
+        const sourceRoot = path52.resolve(channelDir, childName);
+        if (isPathInside5(input.cacheRoot, sourceRoot) && isReadableDirectory6(sourceRoot)) {
+          roots.push(sourceRoot);
+        }
+      }
+    }
+  }
+  return roots.sort();
+}
+function conanCachePackageName(packageName) {
+  const normalized = packageName.trim().replace(/\\/g, "/").replace(/\/+$/g, "");
+  const slashIndex = normalized.lastIndexOf("/");
+  const basename2 = slashIndex >= 0 ? normalized.slice(slashIndex + 1) : normalized;
+  return /^[A-Za-z0-9_.+~-]+$/.test(basename2) ? basename2 : undefined;
+}
+function childDirectories(parent) {
+  try {
+    return readdirSync12(parent, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path52.resolve(parent, entry.name)).filter((candidate) => isPathInside5(parent, candidate) && isReadableDirectory6(candidate)).sort();
+  } catch {
+    return [];
+  }
+}
+function readFirstConanfileLicenses(input) {
+  for (const sourceRoot of input.sourceRoots) {
+    const conanfilePath = path52.join(sourceRoot, "conanfile.py");
+    if (!existsSync24(conanfilePath)) {
+      continue;
+    }
+    const text3 = readTextFileWithLimit({
+      filePath: conanfilePath,
+      maxBytes: input.maxBytes
+    });
+    if (!text3.ok) {
+      return err(createError({
+        code: "PACKAGE_EVIDENCE_READ_FAILED",
+        category: textFileReadErrorCategory(text3.error),
+        message: text3.error.kind === "too_large" ? "Conan conanfile.py metadata exceeded the maximum supported size." : "Failed to read Conan conanfile.py metadata.",
+        details: {
+          packageId: input.packageId,
+          conanfilePath,
+          ...textFileReadErrorDetails(text3.error)
+        }
+      }));
+    }
+    const licenses = parseConanfilePyLicenses(text3.value);
+    if (licenses && licenses.length > 0) {
+      return ok(licenses);
+    }
+  }
+  return ok(undefined);
+}
+function parseConanfilePyLicenses(text3) {
+  const singleMatch = text3.match(/^\s*license\s*=\s*["']([^"']+)["']/m);
+  if (singleMatch?.[1]) {
+    return [singleMatch[1].trim()].filter((value) => value !== "");
+  }
+  const listMatch = text3.match(/^\s*license\s*=\s*[\[(]([\s\S]*?)[\])]/m);
+  if (!listMatch?.[1]) {
+    return;
+  }
+  const values = [...listMatch[1].matchAll(/["']([^"']+)["']/g)].map((match) => match[1]?.trim()).filter((item) => item !== undefined && item !== "");
+  return values.length > 0 ? values : undefined;
+}
+function readConanEvidenceFiles(input) {
+  const files = new Map;
+  for (const sourceRoot of input.sourceRoots) {
+    for (const candidate of evidenceFileCandidates5(sourceRoot)) {
+      const kind = classifyEvidenceFile(candidate.relativePath);
+      if (!kind || files.has(candidate.relativePath)) {
+        continue;
+      }
+      if (files.size >= CONAN_LICENSE_FILE_LIMIT) {
+        input.warnings.push(`Conan package evidence file limit reached at ${CONAN_LICENSE_FILE_LIMIT} files.`);
+        return [...files.values()].sort((left, right) => left.path.localeCompare(right.path));
+      }
+      const text3 = readTextFileWithLimit({
+        filePath: candidate.absolutePath,
+        maxBytes: input.maxBytes
+      });
+      if (!text3.ok) {
+        input.warnings.push(`Skipped Conan evidence file ${candidate.relativePath}: ${evidenceReadError4(text3.error)}.`);
+        continue;
+      }
+      files.set(candidate.relativePath, {
+        path: candidate.relativePath,
+        kind,
+        text: text3.value
+      });
+    }
+  }
+  return [...files.values()].sort((left, right) => left.path.localeCompare(right.path));
+}
+function evidenceFileCandidates5(dir) {
+  try {
+    return readdirSync12(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path52.join(dir, entry.name),
+      relativePath: entry.name
+    }));
+  } catch {
+    return [];
+  }
+}
+function evidenceReadError4(error) {
+  switch (error.kind) {
+    case "too_large":
+      return `file exceeded ${error.maxBytes} bytes`;
+    case "filesystem":
+      return error.cause;
+  }
+}
+function isReadableDirectory6(pathname) {
+  try {
+    return statSync13(pathname).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function isPathInside5(parent, child) {
+  const relative2 = path52.relative(parent, child);
+  return relative2 === "" || !relative2.startsWith("..") && !path52.isAbsolute(relative2);
+}
+
+// src/evidence/composer-package.ts
+import { existsSync as existsSync25, readdirSync as readdirSync13, statSync as statSync14 } from "node:fs";
+import path53 from "node:path";
+var COMPOSER_JSON_MAX_BYTES = 1024 * 1024;
+var COMPOSER_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+function collectComposerPackageEvidence(input) {
+  const vendorRoot = path53.resolve(input.projectRoot, "vendor");
+  const packageDir = composerPackageDir({
+    vendorRoot,
+    packageName: input.packageName
+  });
+  if (!existsSync25(packageDir) || !isReadableDirectory7(packageDir)) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["Composer package source was not found in the local vendor directory."]
+    });
+  }
+  const packageJson = readComposerPackageJson({
+    packageId: input.packageId,
+    composerJsonPath: path53.join(packageDir, "composer.json"),
+    maxBytes: input.composerJsonMaxBytes ?? COMPOSER_JSON_MAX_BYTES
+  });
+  if (!packageJson.ok) {
+    return err(packageJson.error);
+  }
+  const warnings = [];
+  const files = readComposerEvidenceFiles({
+    packageDir,
+    maxBytes: input.evidenceFileMaxBytes ?? COMPOSER_EVIDENCE_FILE_MAX_BYTES,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Composer package source.");
+  }
+  if (packageJson.value.license === undefined) {
+    warnings.push("Composer package composer.json did not declare license metadata.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...typeof packageJson.value.license === "string" ? {
+      metadataLicense: packageJson.value.license,
+      metadataSource: "composer.json"
+    } : {},
+    ...Array.isArray(packageJson.value.license) ? {
+      metadataLicenses: packageJson.value.license,
+      metadataSource: "composer.json"
+    } : {},
+    files,
+    source: "local",
+    warnings
+  });
+}
+function composerPackageDir(input) {
+  const segments = input.packageName.split("/");
+  if (segments.length !== 2 || segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+    return path53.join(input.vendorRoot, ".ohrisk-invalid-composer-package");
+  }
+  const packageDir = path53.resolve(input.vendorRoot, ...segments);
+  return isPathInside6(input.vendorRoot, packageDir) ? packageDir : path53.join(input.vendorRoot, ".ohrisk-invalid-composer-package");
+}
+function readComposerPackageJson(input) {
+  if (!existsSync25(input.composerJsonPath)) {
+    return ok({});
+  }
+  const text3 = readTextFileWithLimit({
+    filePath: input.composerJsonPath,
+    maxBytes: input.maxBytes
+  });
+  if (!text3.ok) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: textFileReadErrorCategory(text3.error),
+      message: text3.error.kind === "too_large" ? "Composer package metadata exceeded the maximum supported size." : "Failed to read Composer package metadata.",
+      details: {
+        packageId: input.packageId,
+        composerJsonPath: input.composerJsonPath,
+        ...textFileReadErrorDetails(text3.error)
+      }
+    }));
+  }
+  try {
+    const parsed = JSON.parse(text3.value);
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) && "license" in parsed) {
+      return ok({ license: parsed.license });
+    }
+    return ok({});
+  } catch (cause) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "unsupported_input",
+      message: "Composer package metadata was not valid JSON.",
+      details: {
+        packageId: input.packageId,
+        composerJsonPath: input.composerJsonPath,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
+function readComposerEvidenceFiles(input) {
+  const files = [];
+  for (const candidate of evidenceFileCandidates6(input.packageDir)) {
+    const kind = classifyEvidenceFile(candidate.relativePath);
+    if (!kind) {
+      continue;
+    }
+    const text3 = readTextFileWithLimit({
+      filePath: candidate.absolutePath,
+      maxBytes: input.maxBytes
+    });
+    if (!text3.ok) {
+      input.warnings.push(evidenceFileReadWarning2(candidate.relativePath, text3.error));
+      continue;
+    }
+    files.push({
+      path: candidate.relativePath,
+      kind,
+      text: text3.value
+    });
+  }
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+function evidenceFileCandidates6(dir) {
+  if (!existsSync25(dir) || !isReadableDirectory7(dir)) {
+    return [];
+  }
+  try {
+    return readdirSync13(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path53.join(dir, entry.name),
+      relativePath: entry.name
+    }));
+  } catch {
+    return [];
+  }
+}
+function isReadableDirectory7(dir) {
+  try {
+    return statSync14(dir).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function isPathInside6(parent, child) {
+  const relative2 = path53.relative(parent, child);
+  return relative2 === "" || !relative2.startsWith("..") && !path53.isAbsolute(relative2);
+}
+function evidenceFileReadWarning2(fileName, error) {
+  return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
+}
+
+// src/evidence/cpan-package.ts
+import { existsSync as existsSync26, readFileSync as readFileSync2, statSync as statSync15 } from "node:fs";
+import path54 from "node:path";
+import { gunzipSync as gunzipSync2 } from "node:zlib";
+var CPAN_ARCHIVE_MAX_BYTES = 50 * 1024 * 1024;
+var CPAN_ARCHIVE_UNPACKED_MAX_BYTES = 100 * 1024 * 1024;
+var CPAN_ARCHIVE_MAX_ENTRIES = 50000;
+function collectCpanPackageEvidence(input) {
+  const archivePath = cpanArchivePath(omitUndefined({
+    projectRoot: input.projectRoot,
+    pathname: input.resolved
+  }));
+  if (!archivePath || !existsSync26(archivePath)) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["CPAN distribution archive was not found in the local Carton cache."]
+    });
+  }
+  const metadata = readCpanArchiveMetadata({
+    packageId: input.packageId,
+    archivePath,
+    maxBytes: input.archiveMaxBytes ?? CPAN_ARCHIVE_MAX_BYTES
+  });
+  if (!metadata.ok) {
+    return err(metadata.error);
+  }
+  if (metadata.value.name && metadata.value.version && (metadata.value.name !== input.packageName || metadata.value.version !== input.version)) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["CPAN distribution archive metadata did not match the locked distribution identity."]
+    });
+  }
+  return ok({
+    packageId: input.packageId,
+    ...metadata.value.licenses.length === 1 ? {
+      metadataLicense: metadata.value.licenses[0],
+      metadataSource: "CPAN META"
+    } : {},
+    ...metadata.value.licenses.length > 1 ? {
+      metadataLicenses: metadata.value.licenses,
+      metadataSource: "CPAN META"
+    } : {},
+    files: [],
+    source: "local",
+    warnings: metadata.value.licenses.length > 0 ? [] : ["CPAN distribution archive metadata did not declare license metadata."]
+  });
+}
+function cpanArchivePath(input) {
+  if (!input.pathname) {
+    return;
+  }
+  const segments = input.pathname.split(/[\\/]+/).filter((segment) => segment !== "");
+  if (segments.length === 0 || !segments.every((segment) => /^[A-Za-z0-9_.-]+$/.test(segment)) || !/\.(?:tar\.gz|tgz)$/i.test(segments[segments.length - 1] ?? "")) {
+    return;
+  }
+  const cacheRoot = path54.resolve(input.projectRoot, "local", "cache", "authors", "id");
+  const candidate = path54.resolve(cacheRoot, ...segments);
+  return isPathInside7(cacheRoot, candidate) ? candidate : undefined;
+}
+function readCpanArchiveMetadata(input) {
+  const archive = readArchiveWithLimit(input);
+  if (!archive.ok) {
+    return err(archive.error);
+  }
+  try {
+    const unpacked = gunzipSync2(archive.value, {
+      maxOutputLength: CPAN_ARCHIVE_UNPACKED_MAX_BYTES
+    });
+    const entries = parseTarEntries({
+      tarball: unpacked,
+      maxEntries: CPAN_ARCHIVE_MAX_ENTRIES
+    });
+    return ok(readCpanMeta(entries));
+  } catch (cause) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse CPAN distribution archive metadata.",
+      details: {
+        packageId: input.packageId,
+        archivePath: input.archivePath,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
+function readArchiveWithLimit(input) {
+  try {
+    const stats = statSync15(input.archivePath);
+    if (stats.size > input.maxBytes) {
+      return err(createError({
+        code: "PACKAGE_EVIDENCE_READ_FAILED",
+        category: "unsupported_input",
+        message: "CPAN distribution archive exceeded the maximum supported size.",
+        details: {
+          packageId: input.packageId,
+          archivePath: input.archivePath,
+          maxBytes: input.maxBytes,
+          observedBytes: stats.size
+        }
+      }));
+    }
+    return ok(readFileSync2(input.archivePath));
+  } catch (cause) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "filesystem",
+      message: "Failed to read CPAN distribution archive.",
+      details: {
+        packageId: input.packageId,
+        archivePath: input.archivePath,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
+function readCpanMeta(entries) {
+  const metaJson = findMetaEntry(entries, "META.json");
+  if (metaJson) {
+    return parseCpanMetaObject(JSON.parse(metaJson.data.toString("utf8")));
+  }
+  const metaYml = findMetaEntry(entries, "META.yml");
+  if (metaYml) {
+    return parseCpanMetaObject($parse(metaYml.data.toString("utf8")));
+  }
+  return { licenses: [] };
+}
+function findMetaEntry(entries, fileName) {
+  return entries.find((entry) => entry.path === fileName || entry.path.endsWith(`/${fileName}`));
+}
+function parseCpanMetaObject(value) {
+  if (!isRecord21(value)) {
+    return { licenses: [] };
+  }
+  return omitUndefined({
+    name: readString2(value.name),
+    version: readString2(value.version),
+    licenses: readCpanLicenses(value.license)
+  });
+}
+function readCpanLicenses(value) {
+  const values = Array.isArray(value) ? value : [value];
+  return values.map((item) => typeof item === "string" ? normalizeCpanLicenseId(item) : undefined).filter((item) => item !== undefined && item !== "");
+}
+function normalizeCpanLicenseId(value) {
+  const normalized = value.trim().toLowerCase();
+  const known = new Map([
+    ["mit", "MIT"],
+    ["apache_2_0", "Apache-2.0"],
+    ["artistic_2", "Artistic-2.0"],
+    ["agpl_3", "AGPL-3.0-only"],
+    ["gpl_2", "GPL-2.0-only"],
+    ["gpl_3", "GPL-3.0-only"],
+    ["lgpl_2_1", "LGPL-2.1-only"],
+    ["lgpl_3_0", "LGPL-3.0-only"],
+    ["bsd", "BSD-2-Clause"],
+    ["open_source", "NOASSERTION"],
+    ["unrestricted", "NOASSERTION"],
+    ["unknown", "NOASSERTION"]
+  ]);
+  return known.get(normalized) ?? value.trim();
+}
+function parseTarEntries(input) {
+  const entries = [];
+  let offset = 0;
+  let observedEntries = 0;
+  while (offset + 512 <= input.tarball.length) {
+    const header = input.tarball.subarray(offset, offset + 512);
+    if (isZeroBlock2(header)) {
+      break;
+    }
+    observedEntries += 1;
+    if (observedEntries > input.maxEntries) {
+      throw new Error(`CPAN distribution archive exceeded the maximum entry count (${input.maxEntries}).`);
+    }
+    const name = readNullTerminated(header, 0, 100);
+    const prefix = readNullTerminated(header, 345, 155);
+    const type = readNullTerminated(header, 156, 1) || "0";
+    const fullPath = prefix ? `${prefix}/${name}` : name;
+    const size = parseOctal(readNullTerminated(header, 124, 12));
+    const dataStart = offset + 512;
+    const dataEnd = dataStart + size;
+    if (!Number.isSafeInteger(dataEnd) || dataEnd < dataStart || dataEnd > input.tarball.length) {
+      throw new Error(`Tar entry ${fullPath || "(unnamed)"} extends beyond archive data.`);
+    }
+    if (type === "0" || type === "") {
+      entries.push({
+        path: fullPath,
+        data: input.tarball.subarray(dataStart, dataEnd)
+      });
+    }
+    offset = dataStart + roundUpToBlock(size);
+  }
+  return entries;
+}
+function readString2(value) {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+}
+function isRecord21(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function isPathInside7(root, candidate) {
+  const relative2 = path54.relative(root, candidate);
+  return relative2 === "" || !relative2.startsWith("..") && !path54.isAbsolute(relative2);
+}
+function isZeroBlock2(buffer) {
+  return buffer.every((byte) => byte === 0);
+}
+function readNullTerminated(buffer, start, length) {
+  const slice = buffer.subarray(start, start + length);
+  const end = slice.indexOf(0);
+  return slice.subarray(0, end === -1 ? slice.length : end).toString("utf8").trim();
+}
+function parseOctal(value) {
+  const trimmed = value.trim();
+  if (!/^[0-7]+$/.test(trimmed)) {
+    throw new Error(`Invalid tar octal value: ${value}`);
+  }
+  return Number.parseInt(trimmed, 8);
+}
+function roundUpToBlock(size) {
+  return Math.ceil(size / 512) * 512;
+}
+
+// src/evidence/go-module.ts
+import { existsSync as existsSync27, readdirSync as readdirSync14, realpathSync as realpathSync2, statSync as statSync16 } from "node:fs";
+import path55 from "node:path";
+var GO_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var GO_LICENSE_FILE_LIMIT = 50;
+function collectGoModuleEvidence(input) {
+  const replacement = parseGoReplacementResolved(input.resolved);
+  const warnings = replacement.warnings;
+  const evidenceModulePath = replacement.modulePath ?? input.modulePath;
+  const evidenceVersion = replacement.version ?? input.version;
+  const moduleDir = findGoModuleDir(omitUndefined({
+    projectRoot: input.projectRoot,
+    modulePath: evidenceModulePath,
+    version: evidenceVersion,
+    localPath: replacement.localPath
+  }));
+  if (!moduleDir) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: [
+        ...warnings,
+        replacement.localPath ? "Go local replacement source was not found or was outside the project root." : "Go module source was not found in a local Go module cache."
+      ]
+    });
+  }
+  const files = readGoEvidenceFiles({
+    moduleDir,
+    maxBytes: input.evidenceFileMaxBytes ?? GO_EVIDENCE_FILE_MAX_BYTES,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Go module source.");
+  }
+  return ok({
+    packageId: input.packageId,
+    files,
+    source: "local",
+    warnings
+  });
+}
+function findGoModuleDir(input) {
+  if (input.localPath) {
+    return resolveLocalReplacementModuleDir({
+      projectRoot: input.projectRoot,
+      localPath: input.localPath
+    });
+  }
+  const escapedModulePath = encodeGoModuleCachePath(input.modulePath);
+  const relativeModulePath = `${escapedModulePath}@${input.version}`;
+  for (const moduleCacheRoot of goModuleCacheRoots(input.projectRoot)) {
+    const candidate = path55.join(moduleCacheRoot, ...relativeModulePath.split("/"));
+    if (existsSync27(candidate) && isReadableDirectory8(candidate)) {
+      return candidate;
+    }
+  }
+  const vendorCandidate = path55.join(input.projectRoot, "vendor", ...input.modulePath.split("/"));
+  if (existsSync27(vendorCandidate) && isReadableDirectory8(vendorCandidate)) {
+    return vendorCandidate;
+  }
+  return;
+}
+function parseGoReplacementResolved(resolved) {
+  if (!resolved) {
+    return { warnings: [] };
+  }
+  if (resolved.startsWith("go-module:")) {
+    const specifier = resolved.slice("go-module:".length);
+    const versionSeparator = specifier.lastIndexOf("@");
+    if (versionSeparator <= 0 || versionSeparator === specifier.length - 1) {
+      return {
+        warnings: [`Go module replacement specifier was malformed: ${resolved}`]
+      };
+    }
+    const modulePath = specifier.slice(0, versionSeparator);
+    const version = specifier.slice(versionSeparator + 1);
+    return {
+      modulePath,
+      version,
+      warnings: [`Go replacement evidence was read from ${modulePath}@${version}.`]
+    };
+  }
+  return {
+    localPath: resolved,
+    warnings: [`Go module uses local replacement path: ${resolved}.`]
+  };
+}
+function resolveLocalReplacementModuleDir(input) {
+  const candidate = path55.resolve(input.projectRoot, input.localPath);
+  const projectRoot = resolveRealPathIfPossible(input.projectRoot);
+  const moduleDir = resolveRealPathIfPossible(candidate);
+  if (!isPathInsideOrEqual3(moduleDir, projectRoot)) {
+    return;
+  }
+  if (!existsSync27(moduleDir) || !isReadableDirectory8(moduleDir)) {
+    return;
+  }
+  return moduleDir;
+}
+function goModuleCacheRoots(projectRoot) {
+  const roots = [
+    path55.join(projectRoot, "pkg", "mod")
+  ];
+  const goModCache = process.env.GOMODCACHE;
+  if (goModCache) {
+    roots.push(goModCache);
+  }
+  for (const goPathRoot of goPathRoots()) {
+    roots.push(path55.join(goPathRoot, "pkg", "mod"));
+  }
+  return [...new Set(roots.map((root) => path55.resolve(root)))];
+}
+function goPathRoots() {
+  const goPath = process.env.GOPATH;
+  if (goPath) {
+    return goPath.split(path55.delimiter).filter((entry) => entry.trim() !== "");
+  }
+  const home = process.env.USERPROFILE ?? process.env.HOME;
+  return home ? [path55.join(home, "go")] : [];
+}
+function readGoEvidenceFiles(input) {
+  const files = [];
+  for (const candidate of evidenceFileCandidates7(input.moduleDir).slice(0, GO_LICENSE_FILE_LIMIT)) {
+    const kind = classifyEvidenceFile(candidate.relativePath);
+    if (!kind) {
+      continue;
+    }
+    const text3 = readTextFileWithLimit({
+      filePath: candidate.absolutePath,
+      maxBytes: input.maxBytes
+    });
+    if (!text3.ok) {
+      input.warnings.push(evidenceFileReadWarning3(candidate.relativePath, text3.error));
+      continue;
+    }
+    files.push({
+      path: candidate.relativePath,
+      kind,
+      text: text3.value
+    });
+  }
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+function evidenceFileCandidates7(dir) {
+  if (!existsSync27(dir) || !isReadableDirectory8(dir)) {
+    return [];
+  }
+  try {
+    return readdirSync14(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path55.join(dir, entry.name),
+      relativePath: entry.name
+    }));
+  } catch {
+    return [];
+  }
+}
+function encodeGoModuleCachePath(modulePath) {
+  return modulePath.replace(/[A-Z]/g, (char) => `!${char.toLowerCase()}`);
+}
+function isReadableDirectory8(dir) {
+  try {
+    return statSync16(dir).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function resolveRealPathIfPossible(targetPath) {
+  try {
+    return realpathSync2(targetPath);
+  } catch {
+    return path55.resolve(targetPath);
+  }
+}
+function isPathInsideOrEqual3(candidate, root) {
+  const relativePath = path55.relative(root, candidate);
+  return relativePath === "" || relativePath !== ".." && !relativePath.startsWith(`..${path55.sep}`) && !path55.isAbsolute(relativePath);
+}
+function evidenceFileReadWarning3(fileName, error) {
+  return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
+}
+
+// src/evidence/hackage-package.ts
+import { existsSync as existsSync28, readdirSync as readdirSync15, statSync as statSync17 } from "node:fs";
+import path56 from "node:path";
+var HACKAGE_PACKAGE_CONF_MAX_BYTES = 1024 * 1024;
+var HACKAGE_PACKAGE_DB_SEARCH_MAX_DEPTH = 8;
+var HACKAGE_PACKAGE_DB_SEARCH_MAX_DIRS = 4000;
+function collectHackagePackageEvidence(input) {
+  const packageConfPath = findHackagePackageConf({
+    packageName: input.packageName,
+    version: input.version,
+    projectRoot: input.projectRoot,
+    packageConfMaxBytes: input.packageConfMaxBytes ?? HACKAGE_PACKAGE_CONF_MAX_BYTES
+  });
+  if (!packageConfPath.ok) {
+    return err(packageConfPath.error);
+  }
+  if (!packageConfPath.value) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["Hackage package metadata was not found in the local Stack package database."]
+    });
+  }
+  const packageConf = readHackagePackageConf({
+    packageId: input.packageId,
+    packageConfPath: packageConfPath.value,
+    maxBytes: input.packageConfMaxBytes ?? HACKAGE_PACKAGE_CONF_MAX_BYTES
+  });
+  if (!packageConf.ok) {
+    return err(packageConf.error);
+  }
+  return ok({
+    packageId: input.packageId,
+    ...packageConf.value.license ? {
+      metadataLicense: packageConf.value.license,
+      metadataSource: "ghc-pkg"
+    } : {},
+    files: [],
+    source: "local",
+    warnings: packageConf.value.license ? [] : ["Hackage package metadata did not declare license metadata."]
+  });
+}
+function findHackagePackageConf(input) {
+  const root = path56.join(input.projectRoot, ".stack-work", "install");
+  if (!isReadableDirectory9(root)) {
+    return ok(undefined);
+  }
+  const queue = [{ dir: root, depth: 0 }];
+  let visited = 0;
+  while (queue.length > 0 && visited < HACKAGE_PACKAGE_DB_SEARCH_MAX_DIRS) {
+    const item = queue.shift();
+    if (!item) {
+      continue;
+    }
+    visited += 1;
+    if (path56.basename(item.dir) === "pkgdb") {
+      const found = findHackagePackageConfInDb(input, item.dir);
+      if (!found.ok || found.value) {
+        return found;
+      }
+    }
+    if (item.depth >= HACKAGE_PACKAGE_DB_SEARCH_MAX_DEPTH) {
+      continue;
+    }
+    for (const child of childDirectories2(item.dir)) {
+      queue.push({ dir: child, depth: item.depth + 1 });
+    }
+  }
+  return ok(undefined);
+}
+function findHackagePackageConfInDb(input, packageDbDir) {
+  const prefix = `${input.packageName}-${input.version}`;
+  for (const entry of readDirectoryEntries3(packageDbDir)) {
+    if (!entry.isFile() || !entry.name.endsWith(".conf") || !entry.name.startsWith(prefix)) {
+      continue;
+    }
+    const packageConfPath = path56.join(packageDbDir, entry.name);
+    const packageConf = readHackagePackageConf({
+      packageId: `${input.packageName}@${input.version}`,
+      packageConfPath,
+      maxBytes: input.packageConfMaxBytes
+    });
+    if (!packageConf.ok) {
+      return err(packageConf.error);
+    }
+    if (packageConf.value.name === input.packageName && packageConf.value.version === input.version) {
+      return ok(packageConfPath);
+    }
+  }
+  return ok(undefined);
+}
+function readHackagePackageConf(input) {
+  const text3 = readTextFileWithLimit({ filePath: input.packageConfPath, maxBytes: input.maxBytes });
+  if (!text3.ok) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: textFileReadErrorCategory(text3.error),
+      message: hackagePackageConfReadFailedMessage(text3.error),
+      details: {
+        packageId: input.packageId,
+        packageConfPath: input.packageConfPath,
+        ...textFileReadErrorDetails(text3.error)
+      }
+    }));
+  }
+  const fields = parsePackageConfFields(text3.value);
+  return ok(omitUndefined({
+    name: fields.get("name"),
+    version: fields.get("version"),
+    license: fields.get("license")
+  }));
+}
+function parsePackageConfFields(text3) {
+  const fields = new Map;
+  let currentKey;
+  for (const line of text3.split(/\r?\n/)) {
+    if (line.trim() === "") {
+      currentKey = undefined;
+      continue;
+    }
+    if (/^\s/.test(line) && currentKey) {
+      fields.set(currentKey, `${fields.get(currentKey) ?? ""} ${line.trim()}`.trim());
+      continue;
+    }
+    const separatorIndex = line.indexOf(":");
+    if (separatorIndex <= 0) {
+      currentKey = undefined;
+      continue;
+    }
+    currentKey = line.slice(0, separatorIndex).trim().toLowerCase();
+    fields.set(currentKey, line.slice(separatorIndex + 1).trim());
+  }
+  return fields;
+}
+function childDirectories2(dir) {
+  return readDirectoryEntries3(dir).filter((entry) => entry.isDirectory()).map((entry) => path56.join(dir, entry.name));
+}
+function readDirectoryEntries3(dir) {
+  try {
+    return readdirSync15(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+function isReadableDirectory9(pathname) {
+  try {
+    return existsSync28(pathname) && statSync17(pathname).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function hackagePackageConfReadFailedMessage(error) {
+  return error.kind === "too_large" ? "Hackage package metadata exceeded the maximum supported size." : "Failed to read Hackage package metadata.";
+}
+
+// src/evidence/helm-chart.ts
+import { existsSync as existsSync29, readdirSync as readdirSync16, statSync as statSync18 } from "node:fs";
+import path57 from "node:path";
+var HELM_CHART_YAML_MAX_BYTES = 1024 * 1024;
+var HELM_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var HELM_EVIDENCE_FILE_LIMIT = 50;
+function collectHelmChartEvidence(input) {
+  const chartRoot = findLocalChartRoot({
+    chartName: input.chartName,
+    version: input.version,
+    projectRoot: input.projectRoot
+  });
+  if (!chartRoot) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["Helm chart source was not found in the local charts/ directory."]
+    });
+  }
+  const warnings = [];
+  const metadataLicense = readChartYamlLicense({
+    chartRoot,
+    maxBytes: input.chartYamlMaxBytes ?? HELM_CHART_YAML_MAX_BYTES,
+    warnings
+  });
+  const files = readEvidenceFiles({
+    chartRoot,
+    maxBytes: input.evidenceFileMaxBytes ?? HELM_EVIDENCE_FILE_MAX_BYTES,
+    limit: HELM_EVIDENCE_FILE_LIMIT,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Helm chart source.");
+  }
+  if (!metadataLicense) {
+    warnings.push("Helm Chart.yaml did not declare license metadata.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...metadataLicense ? {
+      metadataLicense,
+      metadataSource: "Chart.yaml"
+    } : {},
+    files,
+    source: "local",
+    warnings
+  });
+}
+function findLocalChartRoot(input) {
+  const chartsDir = path57.resolve(input.projectRoot, "charts");
+  const candidates = [
+    path57.join(chartsDir, input.chartName),
+    path57.join(chartsDir, `${input.chartName}-${input.version}`)
+  ];
+  return candidates.find(isReadableDirectory10);
+}
+function readChartYamlLicense(input) {
+  const chartYamlPath = path57.join(input.chartRoot, "Chart.yaml");
+  if (!existsSync29(chartYamlPath)) {
+    input.warnings.push("Local Helm chart source is missing Chart.yaml.");
+    return;
+  }
+  const text3 = readTextFileWithLimit({
+    filePath: chartYamlPath,
+    maxBytes: input.maxBytes
+  });
+  if (!text3.ok) {
+    input.warnings.push(`Skipped Helm Chart.yaml metadata: ${evidenceReadError5(text3.error)}.`);
+    return;
+  }
+  try {
+    const parsed = $parse(text3.value);
+    if (!isRecord22(parsed)) {
+      return;
+    }
+    if (typeof parsed.license === "string" && parsed.license.trim() !== "") {
+      return parsed.license.trim();
+    }
+    const annotations = parsed.annotations;
+    if (!isRecord22(annotations)) {
+      return;
+    }
+    for (const key of ["artifacthub.io/license", "license", "licenses"]) {
+      const value = annotations[key];
+      if (typeof value === "string" && value.trim() !== "") {
+        return value.trim();
+      }
+    }
+  } catch (cause) {
+    input.warnings.push(`Failed to parse local Helm Chart.yaml metadata: ${cause instanceof Error ? cause.message : String(cause)}.`);
+  }
+  return;
+}
+function readEvidenceFiles(input) {
+  const files = new Map;
+  for (const entry of directoryEntries(input.chartRoot)) {
+    if (!entry.isFile()) {
+      continue;
+    }
+    const kind = classifyEvidenceFile(entry.name);
+    if (!kind) {
+      continue;
+    }
+    if (files.size >= input.limit) {
+      input.warnings.push(`Helm chart evidence file limit reached at ${input.limit} files.`);
+      break;
+    }
+    const absolutePath = path57.join(input.chartRoot, entry.name);
+    const text3 = readTextFileWithLimit({
+      filePath: absolutePath,
+      maxBytes: input.maxBytes
+    });
+    if (!text3.ok) {
+      input.warnings.push(`Skipped Helm evidence file ${entry.name}: ${evidenceReadError5(text3.error)}.`);
+      continue;
+    }
+    files.set(entry.name, {
+      path: entry.name,
+      kind,
+      text: text3.value
+    });
+  }
+  return [...files.values()].sort((left, right) => left.path.localeCompare(right.path));
+}
+function directoryEntries(dir) {
+  try {
+    return readdirSync16(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+function evidenceReadError5(error) {
+  switch (error.kind) {
+    case "too_large":
+      return `file exceeded ${error.maxBytes} bytes`;
+    case "filesystem":
+      return error.cause;
+  }
+}
+function isReadableDirectory10(pathname) {
+  try {
+    return statSync18(pathname).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function isRecord22(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// src/evidence/hex-package.ts
+import { existsSync as existsSync30, readdirSync as readdirSync17, statSync as statSync19 } from "node:fs";
+import path58 from "node:path";
+var MIX_EXS_MAX_BYTES = 1024 * 1024;
+var REBAR_CONFIG_MAX_BYTES = 1024 * 1024;
+var HEX_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var HEX_LICENSE_FILE_LIMIT = 50;
+function collectHexPackageEvidence(input) {
+  const packageDir = findHexPackageDir({
+    packageName: input.packageName,
+    projectRoot: input.projectRoot
+  });
+  if (!packageDir) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["Hex package source was not found in the local deps directory."]
+    });
+  }
+  const metadataLicenses = readHexMetadataLicenses({
+    packageId: input.packageId,
+    packageDir,
+    mixExsMaxBytes: input.mixExsMaxBytes ?? MIX_EXS_MAX_BYTES,
+    rebarConfigMaxBytes: input.rebarConfigMaxBytes ?? REBAR_CONFIG_MAX_BYTES
+  });
+  if (!metadataLicenses.ok) {
+    return err(metadataLicenses.error);
+  }
+  const warnings = [];
+  const files = readHexEvidenceFiles({
+    packageDir,
+    maxBytes: input.evidenceFileMaxBytes ?? HEX_EVIDENCE_FILE_MAX_BYTES,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Hex package source.");
+  }
+  if (!metadataLicenses.value || metadataLicenses.value.licenses.length === 0) {
+    warnings.push("Hex package mix.exs or rebar.config did not declare license metadata.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...metadataLicenses.value && metadataLicenses.value.licenses.length === 1 ? {
+      metadataLicense: metadataLicenses.value.licenses[0],
+      metadataSource: metadataLicenses.value.source
+    } : {},
+    ...metadataLicenses.value && metadataLicenses.value.licenses.length > 1 ? {
+      metadataLicenses: metadataLicenses.value.licenses,
+      metadataSource: metadataLicenses.value.source
+    } : {},
+    files,
+    source: "local",
+    warnings
+  });
+}
+function findHexPackageDir(input) {
+  const packageDirName = hexPackageDirectoryName(input.packageName);
+  if (!packageDirName) {
+    return;
+  }
+  const depsRoot = path58.resolve(input.projectRoot, "deps");
+  const exactCandidate = path58.resolve(depsRoot, packageDirName);
+  if (isPathInside8(depsRoot, exactCandidate) && existsSync30(exactCandidate) && isReadableDirectory11(exactCandidate)) {
+    return exactCandidate;
+  }
+  return findCaseInsensitiveChildDirectory3({
+    parent: depsRoot,
+    childName: packageDirName
+  });
+}
+function hexPackageDirectoryName(packageName) {
+  const normalized = packageName.trim().replace(/\\/g, "/").replace(/\/+$/g, "");
+  const slashIndex = normalized.lastIndexOf("/");
+  const basename2 = slashIndex >= 0 ? normalized.slice(slashIndex + 1) : normalized;
+  return basename2.trim() === "" ? undefined : basename2.trim();
+}
+function findCaseInsensitiveChildDirectory3(input) {
+  if (!existsSync30(input.parent) || !isReadableDirectory11(input.parent)) {
+    return;
+  }
+  let entries;
+  try {
+    entries = readdirSync17(input.parent, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  const normalizedName = input.childName.toLowerCase();
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.toLowerCase() !== normalizedName) {
+      continue;
+    }
+    const candidate = path58.resolve(input.parent, entry.name);
+    if (isPathInside8(input.parent, candidate) && isReadableDirectory11(candidate)) {
+      return candidate;
+    }
+  }
+  return;
+}
+function readHexMetadataLicenses(input) {
+  const mixExsLicenses = readMixExsLicenses({
+    packageId: input.packageId,
+    mixExsPath: path58.join(input.packageDir, "mix.exs"),
+    maxBytes: input.mixExsMaxBytes
+  });
+  if (!mixExsLicenses.ok) {
+    return err(mixExsLicenses.error);
+  }
+  if (mixExsLicenses.value && mixExsLicenses.value.length > 0) {
+    return ok({
+      licenses: mixExsLicenses.value,
+      source: "mix.exs"
+    });
+  }
+  const rebarConfigLicenses = readRebarConfigLicenses({
+    packageId: input.packageId,
+    rebarConfigPath: path58.join(input.packageDir, "rebar.config"),
+    maxBytes: input.rebarConfigMaxBytes
+  });
+  if (!rebarConfigLicenses.ok) {
+    return err(rebarConfigLicenses.error);
+  }
+  if (rebarConfigLicenses.value && rebarConfigLicenses.value.length > 0) {
+    return ok({
+      licenses: rebarConfigLicenses.value,
+      source: "rebar.config"
+    });
+  }
+  return ok(undefined);
+}
+function readMixExsLicenses(input) {
+  if (!existsSync30(input.mixExsPath)) {
+    return ok(undefined);
+  }
+  const text3 = readTextFileWithLimit({
+    filePath: input.mixExsPath,
+    maxBytes: input.maxBytes
+  });
+  if (!text3.ok) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: textFileReadErrorCategory(text3.error),
+      message: text3.error.kind === "too_large" ? "Hex mix.exs metadata exceeded the maximum supported size." : "Failed to read Hex mix.exs metadata.",
+      details: {
+        packageId: input.packageId,
+        mixExsPath: input.mixExsPath,
+        ...textFileReadErrorDetails(text3.error)
+      }
+    }));
+  }
+  return ok(parseMixExsLicenses(text3.value));
+}
+function readRebarConfigLicenses(input) {
+  if (!existsSync30(input.rebarConfigPath)) {
+    return ok(undefined);
+  }
+  const text3 = readTextFileWithLimit({
+    filePath: input.rebarConfigPath,
+    maxBytes: input.maxBytes
+  });
+  if (!text3.ok) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: textFileReadErrorCategory(text3.error),
+      message: text3.error.kind === "too_large" ? "Hex rebar.config metadata exceeded the maximum supported size." : "Failed to read Hex rebar.config metadata.",
+      details: {
+        packageId: input.packageId,
+        rebarConfigPath: input.rebarConfigPath,
+        ...textFileReadErrorDetails(text3.error)
+      }
+    }));
+  }
+  return ok(parseRebarConfigLicenses(text3.value));
+}
+function parseMixExsLicenses(text3) {
+  const listMatch = text3.match(/licenses:\s*\[([^\]]*)\]/m);
+  if (!listMatch?.[1]) {
+    return;
+  }
+  const values = parseLicenseList(listMatch[1]);
+  return values.length > 0 ? values : undefined;
+}
+function parseRebarConfigLicenses(text3) {
+  const listMatch = text3.match(/\{licenses\s*,\s*\[([^\]]*)\]\s*\}/m);
+  if (!listMatch?.[1]) {
+    return;
+  }
+  const values = parseLicenseList(listMatch[1]);
+  return values.length > 0 ? values : undefined;
+}
+function parseLicenseList(text3) {
+  return [...text3.matchAll(/<<"([^"]+)">>|"([^"]+)"|'([^']+)'/g)].map((match) => match[1] ?? match[2] ?? match[3]).filter((item) => item !== undefined && item.trim() !== "").map((item) => item.trim());
+}
+function readHexEvidenceFiles(input) {
+  const files = [];
+  for (const candidate of evidenceFileCandidates8(input.packageDir)) {
+    const kind = classifyEvidenceFile(candidate.relativePath);
+    if (!kind) {
+      continue;
+    }
+    if (files.length >= HEX_LICENSE_FILE_LIMIT) {
+      input.warnings.push(`Hex package evidence file limit reached at ${HEX_LICENSE_FILE_LIMIT} files.`);
+      break;
+    }
+    const text3 = readTextFileWithLimit({
+      filePath: candidate.absolutePath,
+      maxBytes: input.maxBytes
+    });
+    if (!text3.ok) {
+      input.warnings.push(`Skipped Hex evidence file ${candidate.relativePath}: ${evidenceReadError6(text3.error)}.`);
+      continue;
+    }
+    files.push({
+      path: candidate.relativePath,
+      kind,
+      text: text3.value
+    });
+  }
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+function evidenceFileCandidates8(dir) {
+  try {
+    return readdirSync17(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path58.join(dir, entry.name),
+      relativePath: entry.name
+    }));
+  } catch {
+    return [];
+  }
+}
+function evidenceReadError6(error) {
+  switch (error.kind) {
+    case "too_large":
+      return `file exceeded ${error.maxBytes} bytes`;
+    case "filesystem":
+      return error.cause;
+  }
+}
+function isReadableDirectory11(pathname) {
+  try {
+    return statSync19(pathname).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function isPathInside8(parent, child) {
+  const relative2 = path58.relative(parent, child);
+  return relative2 === "" || !relative2.startsWith("..") && !path58.isAbsolute(relative2);
+}
+
+// src/evidence/julia-package.ts
+import { existsSync as existsSync31, readdirSync as readdirSync18, statSync as statSync20 } from "node:fs";
+import path59 from "node:path";
+var JULIA_PROJECT_TOML_MAX_BYTES = 1024 * 1024;
+var JULIA_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+function collectJuliaPackageEvidence(input) {
+  const packageDir = findJuliaPackageDir({
+    packageName: input.packageName,
+    version: input.version,
+    projectRoot: input.projectRoot,
+    projectTomlMaxBytes: input.projectTomlMaxBytes ?? JULIA_PROJECT_TOML_MAX_BYTES
+  });
+  if (!packageDir.ok) {
+    return err(packageDir.error);
+  }
+  if (!packageDir.value) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["Julia package source was not found in local Julia depot package paths."]
+    });
+  }
+  const projectToml = readJuliaProjectToml({
+    packageId: input.packageId,
+    projectTomlPath: path59.join(packageDir.value, "Project.toml"),
+    maxBytes: input.projectTomlMaxBytes ?? JULIA_PROJECT_TOML_MAX_BYTES
+  });
+  if (!projectToml.ok) {
+    return err(projectToml.error);
+  }
+  const warnings = [];
+  const files = readJuliaEvidenceFiles({
+    packageDir: packageDir.value,
+    maxBytes: input.evidenceFileMaxBytes ?? JULIA_EVIDENCE_FILE_MAX_BYTES,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Julia package source.");
+  }
+  if (!projectToml.value?.license) {
+    warnings.push("Julia Project.toml did not declare license metadata.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...projectToml.value?.license ? {
+      metadataLicense: projectToml.value.license,
+      metadataSource: "Project.toml"
+    } : {},
+    files,
+    source: "local",
+    warnings
+  });
+}
+function findJuliaPackageDir(input) {
+  for (const depotRoot of juliaDepotRoots(input.projectRoot)) {
+    const packageRoot = path59.resolve(depotRoot, "packages", input.packageName);
+    if (!isPathInside9(path59.resolve(depotRoot, "packages"), packageRoot)) {
+      continue;
+    }
+    if (!existsSync31(packageRoot) || !isReadableDirectory12(packageRoot)) {
+      continue;
+    }
+    for (const candidate of childDirectories3(packageRoot)) {
+      const projectToml = readJuliaProjectToml({
+        packageId: `${input.packageName}@${input.version}`,
+        projectTomlPath: path59.join(candidate, "Project.toml"),
+        maxBytes: input.projectTomlMaxBytes
+      });
+      if (!projectToml.ok) {
+        return err(projectToml.error);
+      }
+      if (projectToml.value?.name === input.packageName && projectToml.value.version === input.version) {
+        return ok(candidate);
+      }
+    }
+  }
+  return ok(undefined);
+}
+function juliaDepotRoots(projectRoot) {
+  const roots = [path59.join(projectRoot, ".julia")];
+  const juliaDepotPath = process.env.JULIA_DEPOT_PATH;
+  if (juliaDepotPath) {
+    roots.push(...juliaDepotPath.split(path59.delimiter).filter((item) => item.trim() !== ""));
+  }
+  const home = process.env.USERPROFILE ?? process.env.HOME;
+  if (home) {
+    roots.push(path59.join(home, ".julia"));
+  }
+  return [...new Set(roots.map((root) => path59.resolve(root)))];
+}
+function readJuliaProjectToml(input) {
+  if (!existsSync31(input.projectTomlPath)) {
+    return ok(undefined);
+  }
+  const text3 = readTextFileWithLimit({
+    filePath: input.projectTomlPath,
+    maxBytes: input.maxBytes
+  });
+  if (!text3.ok) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: textFileReadErrorCategory(text3.error),
+      message: text3.error.kind === "too_large" ? "Julia Project.toml metadata exceeded the maximum supported size." : "Failed to read Julia Project.toml metadata.",
+      details: {
+        packageId: input.packageId,
+        projectTomlPath: input.projectTomlPath,
+        ...textFileReadErrorDetails(text3.error)
+      }
+    }));
+  }
+  return ok(parseJuliaProjectToml(text3.value));
+}
+function parseJuliaProjectToml(text3) {
+  const fields = {};
+  for (const rawLine of text3.split(/\r?\n/)) {
+    const line = stripTomlComment11(rawLine).trim();
+    const match = line.match(/^([A-Za-z0-9_-]+)\s*=\s*"((?:\\"|[^"])*)"$/);
+    if (!match?.[1] || match[2] === undefined) {
+      continue;
+    }
+    const value = match[2].replace(/\\"/g, '"');
+    if (match[1] === "name") {
+      fields.name = value;
+    } else if (match[1] === "version") {
+      fields.version = value;
+    } else if (match[1] === "license") {
+      fields.license = value;
+    }
+  }
+  return fields;
+}
+function readJuliaEvidenceFiles(input) {
+  const files = [];
+  for (const candidate of evidenceFileCandidates9(input.packageDir)) {
+    const kind = classifyEvidenceFile(candidate.relativePath);
+    if (!kind) {
+      continue;
+    }
+    const text3 = readTextFileWithLimit({
+      filePath: candidate.absolutePath,
+      maxBytes: input.maxBytes
+    });
+    if (!text3.ok) {
+      input.warnings.push(evidenceFileReadWarning4(candidate.relativePath, text3.error));
+      continue;
+    }
+    files.push({
+      path: candidate.relativePath,
+      kind,
+      text: text3.value
+    });
+  }
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+function evidenceFileCandidates9(dir) {
+  try {
+    return readdirSync18(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path59.join(dir, entry.name),
+      relativePath: entry.name
+    }));
+  } catch {
+    return [];
+  }
+}
+function childDirectories3(dir) {
+  try {
+    return readdirSync18(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path59.join(dir, entry.name));
+  } catch {
+    return [];
+  }
+}
+function stripTomlComment11(line) {
+  let inString = false;
+  let escaped = false;
+  for (let index = 0;index < line.length; index += 1) {
+    const char = line[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (char === "#" && !inString) {
+      return line.slice(0, index);
+    }
+  }
+  return line;
+}
+function evidenceFileReadWarning4(fileName, error) {
+  return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
+}
+function isReadableDirectory12(pathname) {
+  try {
+    return statSync20(pathname).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function isPathInside9(parent, child) {
+  const relative2 = path59.relative(parent, child);
+  return relative2 === "" || !relative2.startsWith("..") && !path59.isAbsolute(relative2);
+}
+
+// src/evidence/luarocks-package.ts
+import { existsSync as existsSync32 } from "node:fs";
+import path60 from "node:path";
+var LUAROCKS_ROCKSPEC_MAX_BYTES = 1024 * 1024;
+function collectLuarocksPackageEvidence(input) {
+  const rockspecPath = findLuarocksRockspec({
+    projectRoot: input.projectRoot,
+    packageName: input.packageName,
+    version: input.version
+  });
+  if (!rockspecPath) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["LuaRocks package rockspec was not found in the project root or local rocks tree."]
+    });
+  }
+  const rockspec = readRockspecMetadata({
+    packageId: input.packageId,
+    rockspecPath,
+    maxBytes: input.rockspecMaxBytes ?? LUAROCKS_ROCKSPEC_MAX_BYTES
+  });
+  if (!rockspec.ok) {
+    return err(rockspec.error);
+  }
+  return ok({
+    packageId: input.packageId,
+    ...rockspec.value.license ? {
+      metadataLicense: rockspec.value.license,
+      metadataSource: "rockspec"
+    } : {},
+    ...rockspec.value.licenses && rockspec.value.licenses.length > 0 ? {
+      metadataLicenses: rockspec.value.licenses,
+      metadataSource: "rockspec"
+    } : {},
+    files: [],
+    source: "local",
+    warnings: rockspec.value.license || rockspec.value.licenses ? [] : ["LuaRocks rockspec did not declare license metadata."]
+  });
+}
+function findLuarocksRockspec(input) {
+  if (!isSafeRockspecSegment(input.packageName) || !isSafeRockspecSegment(input.version)) {
+    return;
+  }
+  const fileName = `${input.packageName}-${input.version}.rockspec`;
+  const candidates = [
+    path60.join(input.projectRoot, fileName),
+    path60.join(input.projectRoot, "rocks", input.packageName, input.version, fileName),
+    path60.join(input.projectRoot, "lua_modules", "lib", "luarocks", "rocks-5.1", input.packageName, input.version, fileName),
+    path60.join(input.projectRoot, "lua_modules", "lib", "luarocks", "rocks-5.2", input.packageName, input.version, fileName),
+    path60.join(input.projectRoot, "lua_modules", "lib", "luarocks", "rocks-5.3", input.packageName, input.version, fileName),
+    path60.join(input.projectRoot, "lua_modules", "lib", "luarocks", "rocks-5.4", input.packageName, input.version, fileName),
+    path60.join(input.projectRoot, ".luarocks", "lib", "luarocks", "rocks-5.1", input.packageName, input.version, fileName),
+    path60.join(input.projectRoot, ".luarocks", "lib", "luarocks", "rocks-5.2", input.packageName, input.version, fileName),
+    path60.join(input.projectRoot, ".luarocks", "lib", "luarocks", "rocks-5.3", input.packageName, input.version, fileName),
+    path60.join(input.projectRoot, ".luarocks", "lib", "luarocks", "rocks-5.4", input.packageName, input.version, fileName)
+  ];
+  return candidates.find((candidate) => existsSync32(candidate));
+}
+function readRockspecMetadata(input) {
+  const text3 = readTextFileWithLimit({
+    filePath: input.rockspecPath,
+    maxBytes: input.maxBytes
+  });
+  if (!text3.ok) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: textFileReadErrorCategory(text3.error),
+      message: rockspecReadFailedMessage(text3.error),
+      details: {
+        packageId: input.packageId,
+        rockspecPath: input.rockspecPath,
+        ...textFileReadErrorDetails(text3.error)
+      }
+    }));
+  }
+  return ok(parseRockspecLicenseMetadata(text3.value));
+}
+function parseRockspecLicenseMetadata(text3) {
+  const descriptionMatch = text3.match(/\bdescription\s*=\s*{[\s\S]*?\blicense\s*=\s*(["'])([^"'\r\n]+)\1[\s\S]*?}/);
+  if (descriptionMatch?.[2]) {
+    return { license: descriptionMatch[2].trim() };
+  }
+  const topLevelMatch = text3.match(/(?:^|\n)\s*license\s*=\s*(["'])([^"'\r\n]+)\1/);
+  if (topLevelMatch?.[2]) {
+    return { license: topLevelMatch[2].trim() };
+  }
+  const tableMatch = text3.match(/\blicense\s*=\s*{([\s\S]*?)}/);
+  if (!tableMatch?.[1]) {
+    return {};
+  }
+  const licenses = [...tableMatch[1].matchAll(/(["'])([^"'\r\n]+)\1/g)].map((match) => match[2]?.trim()).filter((value) => value !== undefined && value !== "");
+  return licenses.length > 0 ? { licenses } : {};
+}
+function isSafeRockspecSegment(value) {
+  return /^[A-Za-z0-9_.-]+$/.test(value);
+}
+function rockspecReadFailedMessage(error) {
+  return error.kind === "too_large" ? "LuaRocks rockspec metadata exceeded the maximum supported size." : "Failed to read LuaRocks rockspec metadata.";
+}
+
+// src/evidence/maven-package.ts
+var MAVEN_POM_MAX_BYTES = 2 * 1024 * 1024;
+function collectMavenPackageEvidence(input) {
+  const coordinates = parseMavenCoordinates3(input.coordinates);
+  if (!coordinates) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: [`Maven coordinates were not parseable: ${input.coordinates}`]
+    });
+  }
+  const pomPath = findMavenPom({
+    projectRoot: input.projectRoot,
+    groupId: coordinates.groupId,
+    artifactId: coordinates.artifactId,
+    version: input.version
+  });
+  if (!pomPath) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: [
+        `Maven POM metadata for ${input.coordinates}@${input.version} was not found in local .m2/repository caches; run Maven/Gradle dependency resolution first or provide a project .m2/repository cache.`
+      ]
+    });
+  }
+  const pomText = readTextFileWithLimit({
+    filePath: pomPath,
+    maxBytes: input.pomMaxBytes ?? MAVEN_POM_MAX_BYTES
+  });
+  if (!pomText.ok) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: textFileReadErrorCategory(pomText.error),
+      message: pomReadFailedMessage(pomText.error),
+      details: {
+        packageId: input.packageId,
+        pomPath,
+        ...textFileReadErrorDetails(pomText.error)
+      }
+    }));
+  }
+  const licenses = readPomLicenseNames(pomText.value);
+  const warnings = licenses.length === 0 ? ["Maven POM did not declare license names."] : [];
+  return ok({
+    packageId: input.packageId,
+    ...licenses.length > 0 ? {
+      metadataLicense: [...new Set(licenses)].join(" OR "),
+      metadataSource: "pom.xml"
+    } : {},
+    files: [],
+    source: "local",
+    warnings
+  });
+}
+function parseMavenCoordinates3(coordinates) {
+  const [groupId, artifactId, extra] = coordinates.split(":");
+  if (!groupId || !artifactId || extra !== undefined) {
+    return;
+  }
+  return { groupId, artifactId };
+}
+function findMavenPom(input) {
+  return findMavenPomInRepository({
+    repositoryRoots: mavenRepositoryRoots(input.projectRoot),
+    groupId: input.groupId,
+    artifactId: input.artifactId,
+    version: input.version
+  });
+}
+function readPomLicenseNames(text3) {
+  const licensesSection = text3.match(/<licenses\b[^>]*>([\s\S]*?)<\/licenses>/i)?.[1];
+  if (!licensesSection) {
+    return [];
+  }
+  const names = [];
+  const licenseBlocks = licensesSection.matchAll(/<license\b[^>]*>([\s\S]*?)<\/license>/gi);
+  for (const block of licenseBlocks) {
+    const name = block[1]?.match(/<name\b[^>]*>([\s\S]*?)<\/name>/i)?.[1];
+    if (!name) {
+      continue;
+    }
+    const normalized = normalizePomText2(name);
+    if (normalized) {
+      names.push(normalized);
+    }
+  }
+  return names;
+}
+function normalizePomText2(text3) {
+  return decodeXmlEntities2(text3.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+}
+function decodeXmlEntities2(text3) {
+  return text3.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+}
+function pomReadFailedMessage(error) {
+  return error.kind === "too_large" ? "Maven POM metadata exceeded the maximum supported size." : "Failed to read Maven POM metadata.";
+}
+
+// src/evidence/nix-package.ts
+import { existsSync as existsSync33, readdirSync as readdirSync19, statSync as statSync21 } from "node:fs";
+import path61 from "node:path";
+var NIX_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var NIX_EVIDENCE_FILE_LIMIT = 50;
+function collectNixPackageEvidence(input) {
+  const sourceRoot = localNixSourceRoot({
+    resolved: input.resolved,
+    projectRoot: input.projectRoot
+  });
+  if (!sourceRoot) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["Nix flake input source was not found as a local path."]
+    });
+  }
+  const warnings = [];
+  const files = readEvidenceFiles2({
+    sourceRoot,
+    maxBytes: input.evidenceFileMaxBytes ?? NIX_EVIDENCE_FILE_MAX_BYTES,
+    limit: NIX_EVIDENCE_FILE_LIMIT,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in local Nix flake input source.");
+  }
+  return ok({
+    packageId: input.packageId,
+    files,
+    source: "local",
+    warnings
+  });
+}
+function localNixSourceRoot(input) {
+  if (!input.resolved || looksRemote(input.resolved)) {
+    return;
+  }
+  const candidate = path61.resolve(input.projectRoot, input.resolved);
+  if (!isPathInside10(input.projectRoot, candidate) || !isReadableDirectory13(candidate)) {
+    return;
+  }
+  return candidate;
+}
+function readEvidenceFiles2(input) {
+  const files = new Map;
+  for (const entry of directoryEntries2(input.sourceRoot)) {
+    if (!entry.isFile()) {
+      continue;
+    }
+    const kind = classifyEvidenceFile(entry.name);
+    if (!kind) {
+      continue;
+    }
+    if (files.size >= input.limit) {
+      input.warnings.push(`Nix flake input evidence file limit reached at ${input.limit} files.`);
+      break;
+    }
+    const absolutePath = path61.join(input.sourceRoot, entry.name);
+    const text3 = readTextFileWithLimit({
+      filePath: absolutePath,
+      maxBytes: input.maxBytes
+    });
+    if (!text3.ok) {
+      input.warnings.push(`Skipped Nix evidence file ${entry.name}: ${evidenceReadError7(text3.error)}.`);
+      continue;
+    }
+    files.set(entry.name, {
+      path: entry.name,
+      kind,
+      text: text3.value
+    });
+  }
+  return [...files.values()].sort((left, right) => left.path.localeCompare(right.path));
+}
+function directoryEntries2(dir) {
+  try {
+    return readdirSync19(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+function evidenceReadError7(error) {
+  switch (error.kind) {
+    case "too_large":
+      return `file exceeded ${error.maxBytes} bytes`;
+    case "filesystem":
+      return error.cause;
+  }
+}
+function looksRemote(value) {
+  return /^[a-z][a-z0-9+.-]*:/i.test(value);
+}
+function isReadableDirectory13(pathname) {
+  try {
+    return existsSync33(pathname) && statSync21(pathname).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function isPathInside10(parent, child) {
+  const relative2 = path61.relative(parent, child);
+  return relative2 === "" || !relative2.startsWith("..") && !path61.isAbsolute(relative2);
+}
+
+// src/evidence/nuget-package.ts
+import { existsSync as existsSync34, readdirSync as readdirSync20, statSync as statSync22 } from "node:fs";
+import path62 from "node:path";
+var NUGET_NUSPEC_MAX_BYTES = 1024 * 1024;
+var NUGET_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var NUGET_LICENSE_FILE_LIMIT = 50;
+function collectNugetPackageEvidence(input) {
+  const packageDir = findNugetPackageDir({
+    packageName: input.packageName,
+    version: input.version,
+    projectRoot: input.projectRoot
+  });
+  if (!packageDir) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["NuGet package metadata was not found in a local NuGet package cache."]
+    });
+  }
+  const nuspecPath = findNuspecPath(packageDir, input.packageName, input.version);
+  const metadata = nuspecPath ? readNuspecMetadata({
+    packageId: input.packageId,
+    nuspecPath,
+    maxBytes: input.nuspecMaxBytes ?? NUGET_NUSPEC_MAX_BYTES
+  }) : ok({});
+  if (!metadata.ok) {
+    return err(metadata.error);
+  }
+  const warnings = [];
+  const files = readNugetEvidenceFiles({
+    packageDir,
+    metadata: metadata.value,
+    maxBytes: input.evidenceFileMaxBytes ?? NUGET_EVIDENCE_FILE_MAX_BYTES,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in NuGet package source.");
+  }
+  if (!metadata.value.license && metadata.value.licenseUrl) {
+    warnings.push(`NuGet nuspec declared only a licenseUrl: ${metadata.value.licenseUrl}`);
+  }
+  if (!metadata.value.license && !metadata.value.licenseUrl) {
+    warnings.push("NuGet nuspec did not declare a package license.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...metadata.value.license && metadata.value.licenseType !== "file" ? {
+      metadataLicense: metadata.value.license,
+      metadataSource: "nuspec"
+    } : {},
+    files,
+    source: "local",
+    warnings
+  });
+}
+function findNugetPackageDir(input) {
+  const normalizedName = input.packageName.toLowerCase();
+  const normalizedVersion = input.version.toLowerCase();
+  for (const root of nugetPackageRoots(input.projectRoot)) {
+    const packageRoot = path62.resolve(root);
+    const globalCandidate = path62.resolve(root, normalizedName, normalizedVersion);
+    if (isPathInside11(packageRoot, globalCandidate) && existsSync34(globalCandidate) && isReadableDirectory14(globalCandidate)) {
+      return globalCandidate;
+    }
+    const packagesCandidate = path62.resolve(root, `${input.packageName}.${input.version}`);
+    if (isPathInside11(packageRoot, packagesCandidate) && existsSync34(packagesCandidate) && isReadableDirectory14(packagesCandidate)) {
+      return packagesCandidate;
+    }
+  }
+  return;
+}
+function nugetPackageRoots(projectRoot) {
+  const roots = [
+    path62.join(projectRoot, ".nuget", "packages"),
+    path62.join(projectRoot, "packages")
+  ];
+  const nugetPackages = process.env.NUGET_PACKAGES;
+  if (nugetPackages) {
+    roots.push(nugetPackages);
+  }
+  const home = process.env.USERPROFILE ?? process.env.HOME;
+  if (home) {
+    roots.push(path62.join(home, ".nuget", "packages"));
+  }
+  return [...new Set(roots.map((root) => path62.resolve(root)))];
+}
+function findNuspecPath(packageDir, packageName, version) {
+  const expected = path62.join(packageDir, `${packageName}.nuspec`);
+  if (existsSync34(expected)) {
+    return expected;
+  }
+  const expectedWithVersion = path62.join(packageDir, `${packageName}.${version}.nuspec`);
+  if (existsSync34(expectedWithVersion)) {
+    return expectedWithVersion;
+  }
+  try {
+    const nuspec = readdirSync20(packageDir).find((entry) => entry.toLowerCase().endsWith(".nuspec"));
+    return nuspec ? path62.join(packageDir, nuspec) : undefined;
+  } catch {
+    return;
+  }
+}
+function readNuspecMetadata(input) {
+  const text3 = readTextFileWithLimit({
+    filePath: input.nuspecPath,
+    maxBytes: input.maxBytes
+  });
+  if (!text3.ok) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: textFileReadErrorCategory(text3.error),
+      message: text3.error.kind === "too_large" ? "NuGet nuspec metadata exceeded the maximum supported size." : "Failed to read NuGet nuspec metadata.",
+      details: {
+        packageId: input.packageId,
+        nuspecPath: input.nuspecPath,
+        ...textFileReadErrorDetails(text3.error)
+      }
+    }));
+  }
+  return ok(parseNuspecMetadata(text3.value));
+}
+function parseNuspecMetadata(text3) {
+  const licenseMatch = text3.match(/<license\b([^>]*)>([\s\S]*?)<\/license>/i);
+  const license = licenseMatch?.[2] ? normalizeXmlText(licenseMatch[2]) : undefined;
+  const licenseType = licenseMatch?.[1]?.match(/\btype\s*=\s*"([^"]+)"/i)?.[1]?.toLowerCase();
+  const licenseUrl = text3.match(/<licenseUrl\b[^>]*>([\s\S]*?)<\/licenseUrl>/i)?.[1];
+  return {
+    ...license ? { license } : {},
+    ...licenseType ? { licenseType } : {},
+    ...licenseUrl ? { licenseUrl: normalizeXmlText(licenseUrl) } : {}
+  };
+}
+function readNugetEvidenceFiles(input) {
+  const candidates = evidenceFileCandidates10(input.packageDir);
+  if (input.metadata.license && input.metadata.licenseType === "file") {
+    candidates.unshift({
+      absolutePath: path62.resolve(input.packageDir, input.metadata.license),
+      relativePath: input.metadata.license
+    });
+  }
+  return readEvidenceFiles3({
+    packageDir: input.packageDir,
+    candidates,
+    maxBytes: input.maxBytes,
+    warnings: input.warnings
+  });
+}
+function readEvidenceFiles3(input) {
+  const files = [];
+  const seen = new Set;
+  const packageRoot = path62.resolve(input.packageDir);
+  for (const candidate of input.candidates.slice(0, NUGET_LICENSE_FILE_LIMIT)) {
+    if (seen.has(candidate.absolutePath)) {
+      continue;
+    }
+    seen.add(candidate.absolutePath);
+    const kind = classifyEvidenceFile(candidate.relativePath);
+    if (!kind || !isPathInside11(packageRoot, candidate.absolutePath)) {
+      continue;
+    }
+    const text3 = readTextFileWithLimit({
+      filePath: candidate.absolutePath,
+      maxBytes: input.maxBytes
+    });
+    if (!text3.ok) {
+      input.warnings.push(evidenceFileReadWarning5(candidate.relativePath, text3.error));
+      continue;
+    }
+    files.push({
+      path: candidate.relativePath,
+      kind,
+      text: text3.value
+    });
+  }
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+function evidenceFileCandidates10(dir) {
+  if (!existsSync34(dir) || !isReadableDirectory14(dir)) {
+    return [];
+  }
+  try {
+    return readdirSync20(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path62.join(dir, entry.name),
+      relativePath: entry.name
+    }));
+  } catch {
+    return [];
+  }
+}
+function normalizeXmlText(text3) {
+  return decodeXmlEntities3(text3.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+}
+function decodeXmlEntities3(text3) {
+  return text3.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+}
+function isReadableDirectory14(dir) {
+  try {
+    return statSync22(dir).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function isPathInside11(parent, child) {
+  const relative2 = path62.relative(parent, child);
+  return relative2 === "" || !relative2.startsWith("..") && !path62.isAbsolute(relative2);
+}
+function evidenceFileReadWarning5(fileName, error) {
+  return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
+}
+
+// src/evidence/pub-package.ts
+import { existsSync as existsSync35, readdirSync as readdirSync21, statSync as statSync23 } from "node:fs";
+import path63 from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+var PUBSPEC_MAX_BYTES = 1024 * 1024;
+var PUB_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var PUB_LICENSE_FILE_LIMIT = 50;
+function collectPubPackageEvidence(input) {
+  const packageDir = findPubPackageDir({
+    packageName: input.packageName,
+    version: input.version,
+    projectRoot: input.projectRoot
+  });
+  if (!packageDir) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["Dart pub package source was not found in .dart_tool/package_config.json or a local Pub cache."]
+    });
+  }
+  const pubspec = readPubspec({
+    pubspecPath: path63.join(packageDir, "pubspec.yaml"),
+    packageId: input.packageId,
+    maxBytes: input.pubspecMaxBytes ?? PUBSPEC_MAX_BYTES
+  });
+  if (!pubspec.ok) {
+    return err(pubspec.error);
+  }
+  const warnings = [];
+  const files = readPubEvidenceFiles({
+    packageDir,
+    maxBytes: input.evidenceFileMaxBytes ?? PUB_EVIDENCE_FILE_MAX_BYTES,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Dart pub package source.");
+  }
+  const metadataLicense = pubspec.value?.license;
+  if (!metadataLicense) {
+    warnings.push("Dart pubspec.yaml did not declare license metadata.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...metadataLicense ? { metadataLicense, metadataSource: "pubspec.yaml" } : {},
+    files,
+    source: "local",
+    warnings
+  });
+}
+function findPubPackageDir(input) {
+  const packageConfigDir = findPackageConfigPackageDir(input);
+  if (packageConfigDir) {
+    return packageConfigDir;
+  }
+  const packageDirName = `${input.packageName}-${input.version}`;
+  for (const cacheRoot of pubCacheRoots(input.projectRoot)) {
+    for (const hostedRoot of ["pub.dev", "pub.dartlang.org"]) {
+      const candidate = path63.resolve(cacheRoot, "hosted", hostedRoot, packageDirName);
+      const hostedDir = path63.resolve(cacheRoot, "hosted", hostedRoot);
+      if (isPathInside12(hostedDir, candidate) && existsSync35(candidate) && isReadableDirectory15(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return;
+}
+function findPackageConfigPackageDir(input) {
+  const packageConfigPath = path63.join(input.projectRoot, ".dart_tool", "package_config.json");
+  if (!existsSync35(packageConfigPath)) {
+    return;
+  }
+  const text3 = readTextFileWithLimit({
+    filePath: packageConfigPath,
+    maxBytes: PUBSPEC_MAX_BYTES
+  });
+  if (!text3.ok) {
+    return;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(text3.value);
+  } catch {
+    return;
+  }
+  if (!isRecord23(parsed) || !Array.isArray(parsed.packages)) {
+    return;
+  }
+  for (const item of parsed.packages) {
+    if (!isRecord23(item) || item.name !== input.packageName || typeof item.rootUri !== "string") {
+      continue;
+    }
+    const candidate = resolvePackageConfigRootUri({
+      rootUri: item.rootUri,
+      projectRoot: input.projectRoot
+    });
+    if (candidate && path63.basename(candidate) === `${input.packageName}-${input.version}` && existsSync35(candidate) && isReadableDirectory15(candidate)) {
+      return candidate;
+    }
+  }
+  return;
+}
+function resolvePackageConfigRootUri(input) {
+  try {
+    if (input.rootUri.startsWith("file:")) {
+      return fileURLToPath2(input.rootUri);
+    }
+  } catch {
+    return;
+  }
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(input.rootUri)) {
+    return;
+  }
+  return path63.resolve(input.projectRoot, ".dart_tool", input.rootUri);
+}
+function pubCacheRoots(projectRoot) {
+  const roots = [
+    path63.join(projectRoot, ".pub-cache")
+  ];
+  const pubCache = process.env.PUB_CACHE;
+  if (pubCache) {
+    roots.push(pubCache);
+  }
+  const home = process.env.USERPROFILE ?? process.env.HOME;
+  if (home) {
+    roots.push(path63.join(home, ".pub-cache"));
+  }
+  const localAppData = process.env.LOCALAPPDATA;
+  if (localAppData) {
+    roots.push(path63.join(localAppData, "Pub", "Cache"));
+  }
+  return [...new Set(roots.map((root) => path63.resolve(root)))];
+}
+function readPubspec(input) {
+  if (!existsSync35(input.pubspecPath)) {
+    return ok(undefined);
+  }
+  const text3 = readTextFileWithLimit({
+    filePath: input.pubspecPath,
+    maxBytes: input.maxBytes
+  });
+  if (!text3.ok) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: textFileReadErrorCategory(text3.error),
+      message: pubspecReadFailedMessage(text3.error),
+      details: {
+        packageId: input.packageId,
+        pubspecPath: input.pubspecPath,
+        ...textFileReadErrorDetails(text3.error)
+      }
+    }));
+  }
+  let parsed;
+  try {
+    parsed = $parse(text3.value);
+  } catch {
+    return ok(undefined);
+  }
+  if (!isRecord23(parsed) || typeof parsed.license !== "string" || parsed.license.trim() === "") {
+    return ok(undefined);
+  }
+  return ok({
+    license: parsed.license.trim()
+  });
+}
+function readPubEvidenceFiles(input) {
+  const files = [];
+  for (const candidate of evidenceFileCandidates11(input.packageDir)) {
+    const kind = classifyEvidenceFile(candidate.relativePath);
+    if (!kind) {
+      continue;
+    }
+    if (files.length >= PUB_LICENSE_FILE_LIMIT) {
+      input.warnings.push(`Dart pub package evidence file limit reached at ${PUB_LICENSE_FILE_LIMIT} files.`);
+      break;
+    }
+    const text3 = readTextFileWithLimit({
+      filePath: candidate.absolutePath,
+      maxBytes: input.maxBytes
+    });
+    if (!text3.ok) {
+      input.warnings.push(`Skipped Dart pub evidence file ${candidate.relativePath}: ${pubEvidenceReadError(text3.error)}.`);
+      continue;
+    }
+    files.push({
+      path: candidate.relativePath,
+      kind,
+      text: text3.value
+    });
+  }
+  return files;
+}
+function evidenceFileCandidates11(packageDir) {
+  try {
+    return readdirSync21(packageDir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path63.join(packageDir, entry.name),
+      relativePath: entry.name
+    }));
+  } catch {
+    return [];
+  }
+}
+function pubspecReadFailedMessage(error) {
+  return error.kind === "too_large" ? "Dart pubspec.yaml metadata exceeded the maximum supported size." : "Failed to read Dart pubspec.yaml metadata.";
+}
+function pubEvidenceReadError(error) {
+  switch (error.kind) {
+    case "too_large":
+      return `file exceeded ${error.maxBytes} bytes`;
+    case "filesystem":
+      return error.cause;
+  }
+}
+function isReadableDirectory15(pathname) {
+  try {
+    return statSync23(pathname).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function isPathInside12(parent, child) {
+  const relative2 = path63.relative(parent, child);
+  return relative2 === "" || !relative2.startsWith("..") && !path63.isAbsolute(relative2);
+}
+function isRecord23(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// src/evidence/python-package.ts
+import { existsSync as existsSync36, readdirSync as readdirSync22, statSync as statSync24 } from "node:fs";
+import path64 from "node:path";
+var PYTHON_METADATA_MAX_BYTES = 1024 * 1024;
+var PYTHON_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var PYTHON_LICENSE_FILE_LIMIT = 50;
+var LICENSE_CLASSIFIER_ALIASES = new Map([
+  ["License :: OSI Approved :: Apache Software License", "Apache-2.0"],
+  ["License :: OSI Approved :: BSD License", "BSD-3-Clause"],
+  ["License :: OSI Approved :: GNU Affero General Public License v3", "AGPL-3.0-only"],
+  ["License :: OSI Approved :: GNU General Public License v2 (GPLv2)", "GPL-2.0-only"],
+  ["License :: OSI Approved :: GNU General Public License v3 (GPLv3)", "GPL-3.0-only"],
+  ["License :: OSI Approved :: GNU Lesser General Public License v2 (LGPLv2)", "LGPL-2.0-only"],
+  ["License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)", "LGPL-3.0-only"],
+  ["License :: OSI Approved :: ISC License (ISCL)", "ISC"],
+  ["License :: OSI Approved :: MIT License", "MIT"],
+  ["License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)", "MPL-2.0"],
+  ["License :: Public Domain", "Unlicense"]
+]);
+function collectPythonPackageEvidence(input) {
+  const metadataMaxBytes = input.metadataMaxBytes ?? PYTHON_METADATA_MAX_BYTES;
+  const evidenceFileMaxBytes = input.evidenceFileMaxBytes ?? PYTHON_EVIDENCE_FILE_MAX_BYTES;
+  const sitePackageDirs = findPythonSitePackageDirs(input.projectRoot);
+  for (const sitePackageDir of sitePackageDirs) {
+    const distInfo = findMatchingDistInfo({
+      sitePackageDir,
+      packageName: input.packageName,
+      version: input.version,
+      metadataMaxBytes
+    });
+    if (!distInfo.ok) {
+      return err(distInfo.error);
+    }
+    if (!distInfo.value) {
+      continue;
+    }
+    return collectDistInfoEvidence({
+      packageId: input.packageId,
+      distInfo: distInfo.value,
+      evidenceFileMaxBytes
+    });
+  }
+  return ok({
+    packageId: input.packageId,
+    files: [],
+    source: "unavailable",
+    warnings: [
+      "Python package metadata was not found in a local .venv or venv site-packages directory."
+    ]
+  });
+}
+function findPythonSitePackageDirs(projectRoot) {
+  const candidates = [
+    path64.join(projectRoot, ".venv", "Lib", "site-packages"),
+    path64.join(projectRoot, "venv", "Lib", "site-packages"),
+    ...sitePackageDirsUnder(path64.join(projectRoot, ".venv", "lib")),
+    ...sitePackageDirsUnder(path64.join(projectRoot, "venv", "lib")),
+    ...sitePackageDirsUnder(path64.join(projectRoot, ".venv", "lib64")),
+    ...sitePackageDirsUnder(path64.join(projectRoot, "venv", "lib64"))
+  ];
+  return [...new Set(candidates.map((candidate) => path64.resolve(candidate)))].filter((candidate) => existsSync36(candidate) && isReadableDirectory16(candidate));
+}
+function sitePackageDirsUnder(libDir) {
+  if (!existsSync36(libDir) || !isReadableDirectory16(libDir)) {
+    return [];
+  }
+  try {
+    return readdirSync22(libDir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name.startsWith("python")).map((entry) => path64.join(libDir, entry.name, "site-packages")).filter((candidate) => existsSync36(candidate) && isReadableDirectory16(candidate));
+  } catch {
+    return [];
+  }
+}
+function findMatchingDistInfo(input) {
+  let entries;
+  try {
+    entries = readdirSync22(input.sitePackageDir, { withFileTypes: true });
+  } catch (cause) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "filesystem",
+      message: "Failed to inspect Python site-packages evidence directory.",
+      details: {
+        sitePackageDir: input.sitePackageDir,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.endsWith(".dist-info")) {
+      continue;
+    }
+    const distInfoPath = path64.join(input.sitePackageDir, entry.name);
+    const metadata = readPythonMetadata({
+      metadataPath: path64.join(distInfoPath, "METADATA"),
+      packageId: `${input.packageName}@${input.version}`,
+      maxBytes: input.metadataMaxBytes
+    });
+    if (!metadata.ok) {
+      return err(metadata.error);
+    }
+    if (!metadata.value) {
+      continue;
+    }
+    if (normalizePythonPackageName7(metadata.value.name ?? "") === normalizePythonPackageName7(input.packageName) && metadata.value.version === input.version) {
+      return ok({
+        path: distInfoPath,
+        metadata: metadata.value
+      });
+    }
+  }
+  return ok(undefined);
+}
+function collectDistInfoEvidence(input) {
+  const warnings = [];
+  const files = readPythonEvidenceFiles({
+    distInfoPath: input.distInfo.path,
+    maxBytes: input.evidenceFileMaxBytes,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Python dist-info metadata.");
+  }
+  const metadataLicense = readPythonMetadataLicense(input.distInfo.metadata);
+  if (!metadataLicense) {
+    warnings.push("Python METADATA did not declare License-Expression, License, or a recognized license classifier.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...metadataLicense ? { metadataLicense, metadataSource: "METADATA" } : {},
+    files,
+    source: "local",
+    warnings
+  });
+}
+function readPythonMetadata(input) {
+  if (!existsSync36(input.metadataPath)) {
+    return ok(undefined);
+  }
+  const text3 = readTextFileWithLimit({
+    filePath: input.metadataPath,
+    maxBytes: input.maxBytes
+  });
+  if (!text3.ok) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: textFileReadErrorCategory(text3.error),
+      message: metadataReadFailedMessage(text3.error),
+      details: {
+        packageId: input.packageId,
+        metadataPath: input.metadataPath,
+        ...textFileReadErrorDetails(text3.error)
+      }
+    }));
+  }
+  const headers = parseEmailStyleHeaders(text3.value);
+  return ok(omitUndefined({
+    name: firstHeader(headers, "Name"),
+    version: firstHeader(headers, "Version"),
+    licenseExpression: firstHeader(headers, "License-Expression"),
+    license: firstHeader(headers, "License"),
+    classifiers: headers.get("Classifier") ?? []
+  }));
+}
+function parseEmailStyleHeaders(text3) {
+  const headers = new Map;
+  let currentKey;
+  for (const line of text3.split(/\r?\n/)) {
+    if (line.trim() === "") {
+      break;
+    }
+    if (/^\s/.test(line) && currentKey) {
+      const values2 = headers.get(currentKey);
+      if (values2 && values2.length > 0) {
+        values2[values2.length - 1] = `${values2[values2.length - 1]} ${line.trim()}`.trim();
+      }
+      continue;
+    }
+    const separatorIndex = line.indexOf(":");
+    if (separatorIndex <= 0) {
+      currentKey = undefined;
+      continue;
+    }
+    currentKey = line.slice(0, separatorIndex);
+    const value = line.slice(separatorIndex + 1).trim();
+    const values = headers.get(currentKey) ?? [];
+    values.push(value);
+    headers.set(currentKey, values);
+  }
+  return headers;
+}
+function firstHeader(headers, key) {
+  const value = headers.get(key)?.find((item) => item.trim() !== "")?.trim();
+  return value && value.length > 0 ? value : undefined;
+}
+function readPythonMetadataLicense(metadata) {
+  if (metadata.licenseExpression) {
+    return metadata.licenseExpression;
+  }
+  if (metadata.license && metadata.license.length <= 200 && !metadata.license.includes(`
+`)) {
+    return metadata.license;
+  }
+  const classifierLicenses = metadata.classifiers.map((classifier) => LICENSE_CLASSIFIER_ALIASES.get(classifier)).filter((license) => license !== undefined);
+  if (classifierLicenses.length > 0) {
+    return [...new Set(classifierLicenses)].join(" OR ");
+  }
+  return;
+}
+function readPythonEvidenceFiles(input) {
+  const files = [];
+  const candidates = [
+    ...evidenceFileCandidates12(input.distInfoPath, ""),
+    ...evidenceFileCandidates12(path64.join(input.distInfoPath, "licenses"), "licenses")
+  ];
+  for (const candidate of candidates.slice(0, PYTHON_LICENSE_FILE_LIMIT)) {
+    const kind = classifyEvidenceFile(candidate.relativePath);
+    if (!kind) {
+      continue;
+    }
+    try {
+      const text3 = readTextFileWithLimit({
+        filePath: candidate.absolutePath,
+        maxBytes: input.maxBytes
+      });
+      if (!text3.ok) {
+        input.warnings.push(evidenceFileReadWarning6(candidate.relativePath, text3.error));
+        continue;
+      }
+      files.push({
+        path: candidate.relativePath,
+        kind,
+        text: text3.value
+      });
+    } catch (cause) {
+      input.warnings.push(`Failed to read ${candidate.relativePath}: ${cause instanceof Error ? cause.message : String(cause)}`);
+    }
+  }
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+function evidenceFileCandidates12(dir, relativePrefix) {
+  if (!existsSync36(dir) || !isReadableDirectory16(dir)) {
+    return [];
+  }
+  try {
+    return readdirSync22(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path64.join(dir, entry.name),
+      relativePath: relativePrefix ? `${relativePrefix}/${entry.name}` : entry.name
+    }));
+  } catch {
+    return [];
+  }
+}
+function normalizePythonPackageName7(name) {
+  return name.toLowerCase().replace(/[-_.]+/g, "-");
+}
+function isReadableDirectory16(dir) {
+  try {
+    return statSync24(dir).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function metadataReadFailedMessage(error) {
+  return error.kind === "too_large" ? "Python package METADATA exceeded the maximum supported size." : "Failed to read Python package METADATA.";
+}
+function evidenceFileReadWarning6(fileName, error) {
+  return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
+}
+
+// src/evidence/r-package.ts
+import { existsSync as existsSync37, readdirSync as readdirSync23, statSync as statSync25 } from "node:fs";
+import path65 from "node:path";
+var R_DESCRIPTION_MAX_BYTES = 1024 * 1024;
+var R_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var R_PACKAGE_SEARCH_MAX_DEPTH = 6;
+var R_PACKAGE_SEARCH_MAX_DIRS = 4000;
+function collectRPackageEvidence(input) {
+  const packageDir = findRPackageDir({
+    packageName: input.packageName,
+    version: input.version,
+    projectRoot: input.projectRoot,
+    descriptionMaxBytes: input.descriptionMaxBytes ?? R_DESCRIPTION_MAX_BYTES
+  });
+  if (!packageDir.ok) {
+    return err(packageDir.error);
+  }
+  if (!packageDir.value) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["R package source was not found in local renv/library or project library paths."]
+    });
+  }
+  const description = readRDescription({
+    packageId: input.packageId,
+    descriptionPath: path65.join(packageDir.value, "DESCRIPTION"),
+    maxBytes: input.descriptionMaxBytes ?? R_DESCRIPTION_MAX_BYTES
+  });
+  if (!description.ok) {
+    return err(description.error);
+  }
+  const warnings = [];
+  const files = readRPackageEvidenceFiles({
+    packageDir: packageDir.value,
+    maxBytes: input.evidenceFileMaxBytes ?? R_EVIDENCE_FILE_MAX_BYTES,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in R package source.");
+  }
+  if (!description.value?.license) {
+    warnings.push("R package DESCRIPTION did not declare License metadata.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...description.value?.license ? {
+      metadataLicense: description.value.license,
+      metadataSource: "DESCRIPTION"
+    } : {},
+    files,
+    source: "local",
+    warnings
+  });
+}
+function findRPackageDir(input) {
+  for (const root of rPackageSearchRoots(input.projectRoot)) {
+    const found = findRPackageDirUnderRoot({
+      root,
+      packageName: input.packageName,
+      version: input.version,
+      descriptionMaxBytes: input.descriptionMaxBytes
+    });
+    if (!found.ok) {
+      return found;
+    }
+    if (found.value) {
+      return ok(found.value);
+    }
+  }
+  return ok(undefined);
+}
+function rPackageSearchRoots(projectRoot) {
+  return [
+    path65.join(projectRoot, "renv", "library"),
+    path65.join(projectRoot, "library")
+  ].map((root) => path65.resolve(root));
+}
+function findRPackageDirUnderRoot(input) {
+  if (!existsSync37(input.root) || !isReadableDirectory17(input.root)) {
+    return ok(undefined);
+  }
+  const queue = [{ dir: input.root, depth: 0 }];
+  let visited = 0;
+  while (queue.length > 0 && visited < R_PACKAGE_SEARCH_MAX_DIRS) {
+    const item = queue.shift();
+    if (!item) {
+      continue;
+    }
+    visited += 1;
+    if (path65.basename(item.dir) === input.packageName) {
+      const description = readRDescription({
+        packageId: `${input.packageName}@${input.version}`,
+        descriptionPath: path65.join(item.dir, "DESCRIPTION"),
+        maxBytes: input.descriptionMaxBytes
+      });
+      if (!description.ok) {
+        return err(description.error);
+      }
+      if (description.value?.packageName === input.packageName && description.value.version === input.version) {
+        return ok(item.dir);
+      }
+    }
+    if (item.depth >= R_PACKAGE_SEARCH_MAX_DEPTH) {
+      continue;
+    }
+    for (const child of childDirectories4(item.dir)) {
+      queue.push({
+        dir: child,
+        depth: item.depth + 1
+      });
+    }
+  }
+  return ok(undefined);
+}
+function readRDescription(input) {
+  if (!existsSync37(input.descriptionPath)) {
+    return ok(undefined);
+  }
+  const text3 = readTextFileWithLimit({
+    filePath: input.descriptionPath,
+    maxBytes: input.maxBytes
+  });
+  if (!text3.ok) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: textFileReadErrorCategory(text3.error),
+      message: text3.error.kind === "too_large" ? "R package DESCRIPTION metadata exceeded the maximum supported size." : "Failed to read R package DESCRIPTION metadata.",
+      details: {
+        packageId: input.packageId,
+        descriptionPath: input.descriptionPath,
+        ...textFileReadErrorDetails(text3.error)
+      }
+    }));
+  }
+  const fields = parseDcfFields(text3.value);
+  return ok(omitUndefined({
+    packageName: fields.get("Package"),
+    version: fields.get("Version"),
+    license: fields.get("License")
+  }));
+}
+function parseDcfFields(text3) {
+  const fields = new Map;
+  let currentKey;
+  for (const line of text3.split(/\r?\n/)) {
+    if (line.trim() === "") {
+      currentKey = undefined;
+      continue;
+    }
+    if (/^\s/.test(line) && currentKey) {
+      fields.set(currentKey, `${fields.get(currentKey) ?? ""} ${line.trim()}`.trim());
+      continue;
+    }
+    const separatorIndex = line.indexOf(":");
+    if (separatorIndex <= 0) {
+      currentKey = undefined;
+      continue;
+    }
+    currentKey = line.slice(0, separatorIndex);
+    fields.set(currentKey, line.slice(separatorIndex + 1).trim());
+  }
+  return fields;
+}
+function readRPackageEvidenceFiles(input) {
+  const files = [];
+  for (const candidate of evidenceFileCandidates13(input.packageDir)) {
+    const kind = classifyEvidenceFile(candidate.relativePath);
+    if (!kind) {
+      continue;
+    }
+    const text3 = readTextFileWithLimit({
+      filePath: candidate.absolutePath,
+      maxBytes: input.maxBytes
+    });
+    if (!text3.ok) {
+      input.warnings.push(evidenceFileReadWarning7(candidate.relativePath, text3.error));
+      continue;
+    }
+    files.push({
+      path: candidate.relativePath,
+      kind,
+      text: text3.value
+    });
+  }
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+function evidenceFileCandidates13(dir) {
+  try {
+    return readdirSync23(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path65.join(dir, entry.name),
+      relativePath: entry.name
+    }));
+  } catch {
+    return [];
+  }
+}
+function childDirectories4(dir) {
+  try {
+    return readdirSync23(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path65.join(dir, entry.name));
+  } catch {
+    return [];
+  }
+}
+function evidenceFileReadWarning7(fileName, error) {
+  return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
+}
+function isReadableDirectory17(pathname) {
+  try {
+    return statSync25(pathname).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+// src/evidence/ruby-gem.ts
+import { existsSync as existsSync38, readdirSync as readdirSync24, statSync as statSync26 } from "node:fs";
+import path66 from "node:path";
+var GEMSPEC_MAX_BYTES = 1024 * 1024;
+var GEM_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+function collectRubyGemEvidence(input) {
+  const location = findRubyGemLocation({
+    gemName: input.gemName,
+    version: input.version,
+    projectRoot: input.projectRoot
+  });
+  if (!location) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["Ruby gem source was not found in a local Bundler or RubyGems install path."]
+    });
+  }
+  const gemspec = location.gemspecPath ? readGemSpecLicenses({
+    packageId: input.packageId,
+    gemspecPath: location.gemspecPath,
+    maxBytes: input.gemspecMaxBytes ?? GEMSPEC_MAX_BYTES
+  }) : ok(undefined);
+  if (!gemspec.ok) {
+    return err(gemspec.error);
+  }
+  const warnings = [];
+  const files = readRubyGemEvidenceFiles({
+    packageDir: location.packageDir,
+    maxBytes: input.evidenceFileMaxBytes ?? GEM_EVIDENCE_FILE_MAX_BYTES,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Ruby gem source.");
+  }
+  if (!gemspec.value || gemspec.value.length === 0) {
+    warnings.push("Ruby gemspec did not declare license metadata.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...gemspec.value && gemspec.value.length === 1 ? {
+      metadataLicense: gemspec.value[0],
+      metadataSource: "gemspec"
+    } : {},
+    ...gemspec.value && gemspec.value.length > 1 ? {
+      metadataLicenses: gemspec.value,
+      metadataSource: "gemspec"
+    } : {},
+    files,
+    source: "local",
+    warnings
+  });
+}
+function findRubyGemLocation(input) {
+  const gemDirName = `${input.gemName}-${input.version}`;
+  for (const root of rubyGemInstallRoots(input.projectRoot)) {
+    const gemsRoot = path66.resolve(root, "gems");
+    const packageDir = path66.resolve(gemsRoot, gemDirName);
+    if (!isPathInside13(gemsRoot, packageDir) || !existsSync38(packageDir) || !isReadableDirectory18(packageDir)) {
+      continue;
+    }
+    const specificationsRoot = path66.resolve(root, "specifications");
+    const gemspecPath = path66.resolve(specificationsRoot, `${gemDirName}.gemspec`);
+    return {
+      packageDir,
+      ...isPathInside13(specificationsRoot, gemspecPath) && existsSync38(gemspecPath) ? { gemspecPath } : {}
+    };
+  }
+  return;
+}
+function rubyGemInstallRoots(projectRoot) {
+  const roots = [];
+  for (const vendorRoot of globRubyVersionRoots(path66.join(projectRoot, "vendor", "bundle", "ruby"))) {
+    roots.push(vendorRoot);
+  }
+  const gemHome = process.env.GEM_HOME;
+  if (gemHome) {
+    roots.push(gemHome);
+  }
+  const gemPath = process.env.GEM_PATH;
+  if (gemPath) {
+    roots.push(...gemPath.split(path66.delimiter).filter((entry) => entry.trim() !== ""));
+  }
+  const home = process.env.USERPROFILE ?? process.env.HOME;
+  if (home) {
+    for (const userGemRoot of globRubyVersionRoots(path66.join(home, ".gem", "ruby"))) {
+      roots.push(userGemRoot);
+    }
+  }
+  return [...new Set(roots.map((root) => path66.resolve(root)))];
+}
+function globRubyVersionRoots(root) {
+  if (!existsSync38(root) || !isReadableDirectory18(root)) {
+    return [];
+  }
+  try {
+    return readdirSync24(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path66.join(root, entry.name));
+  } catch {
+    return [];
+  }
+}
+function readGemSpecLicenses(input) {
+  const text3 = readTextFileWithLimit({
+    filePath: input.gemspecPath,
+    maxBytes: input.maxBytes
+  });
+  if (!text3.ok) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: textFileReadErrorCategory(text3.error),
+      message: text3.error.kind === "too_large" ? "Ruby gemspec metadata exceeded the maximum supported size." : "Failed to read Ruby gemspec metadata.",
+      details: {
+        packageId: input.packageId,
+        gemspecPath: input.gemspecPath,
+        ...textFileReadErrorDetails(text3.error)
+      }
+    }));
+  }
+  return ok(parseGemSpecLicenses(text3.value));
+}
+function parseGemSpecLicenses(text3) {
+  const listMatch = text3.match(/\.licenses\s*=\s*\[([^\]]*)\]/);
+  if (listMatch?.[1]) {
+    const values = [...listMatch[1].matchAll(/["']([^"']+)["']/g)].map((match) => match[1]).filter((item) => item !== undefined && item.trim() !== "");
+    if (values.length > 0) {
+      return values;
+    }
+  }
+  const scalarMatch = text3.match(/\.license\s*=\s*["']([^"']+)["']/);
+  return scalarMatch?.[1] ? [scalarMatch[1]] : undefined;
+}
+function readRubyGemEvidenceFiles(input) {
+  const files = [];
+  for (const candidate of evidenceFileCandidates14(input.packageDir)) {
+    const kind = classifyEvidenceFile(candidate.relativePath);
+    if (!kind) {
+      continue;
+    }
+    const text3 = readTextFileWithLimit({
+      filePath: candidate.absolutePath,
+      maxBytes: input.maxBytes
+    });
+    if (!text3.ok) {
+      input.warnings.push(evidenceFileReadWarning8(candidate.relativePath, text3.error));
+      continue;
+    }
+    files.push({
+      path: candidate.relativePath,
+      kind,
+      text: text3.value
+    });
+  }
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+function evidenceFileCandidates14(dir) {
+  if (!existsSync38(dir) || !isReadableDirectory18(dir)) {
+    return [];
+  }
+  try {
+    return readdirSync24(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path66.join(dir, entry.name),
+      relativePath: entry.name
+    }));
+  } catch {
+    return [];
+  }
+}
+function isReadableDirectory18(dir) {
+  try {
+    return statSync26(dir).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function isPathInside13(parent, child) {
+  const relative2 = path66.relative(parent, child);
+  return relative2 === "" || !relative2.startsWith("..") && !path66.isAbsolute(relative2);
+}
+function evidenceFileReadWarning8(fileName, error) {
+  return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
+}
+
+// src/evidence/swift-package.ts
+import { existsSync as existsSync39, readdirSync as readdirSync25, statSync as statSync27 } from "node:fs";
+import path67 from "node:path";
+var SWIFT_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var SWIFT_LICENSE_FILE_LIMIT = 50;
+function collectSwiftPackageEvidence(input) {
+  const packageDir = findSwiftPackageDir({
+    packageName: input.packageName,
+    projectRoot: input.projectRoot
+  });
+  if (!packageDir) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: [
+        "Swift package source was not found in .build/checkouts or SourcePackages/checkouts."
+      ]
+    });
+  }
+  const warnings = [];
+  const files = readSwiftEvidenceFiles({
+    packageDir,
+    maxBytes: input.evidenceFileMaxBytes ?? SWIFT_EVIDENCE_FILE_MAX_BYTES,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Swift package checkout.");
+  }
+  return ok({
+    packageId: input.packageId,
+    files,
+    source: "local",
+    warnings
+  });
+}
+function findSwiftPackageDir(input) {
+  for (const checkoutsRoot of swiftCheckoutsRoots(input.projectRoot)) {
+    if (!existsSync39(checkoutsRoot) || !isReadableDirectory19(checkoutsRoot)) {
+      continue;
+    }
+    const exactCandidate = path67.resolve(checkoutsRoot, input.packageName);
+    if (isPathInside14(checkoutsRoot, exactCandidate) && existsSync39(exactCandidate) && isReadableDirectory19(exactCandidate)) {
+      return exactCandidate;
+    }
+    const caseInsensitiveCandidate = findCaseInsensitiveChildDirectory4({
+      parent: checkoutsRoot,
+      childName: input.packageName
+    });
+    if (caseInsensitiveCandidate) {
+      return caseInsensitiveCandidate;
+    }
+  }
+  return;
+}
+function swiftCheckoutsRoots(projectRoot) {
+  return [...new Set([
+    path67.resolve(projectRoot, ".build", "checkouts"),
+    path67.resolve(projectRoot, "SourcePackages", "checkouts")
+  ])];
+}
+function findCaseInsensitiveChildDirectory4(input) {
+  let entries;
+  try {
+    entries = readdirSync25(input.parent, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  const normalizedName = input.childName.toLowerCase();
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.toLowerCase() !== normalizedName) {
+      continue;
+    }
+    const candidate = path67.resolve(input.parent, entry.name);
+    if (isPathInside14(input.parent, candidate) && isReadableDirectory19(candidate)) {
+      return candidate;
+    }
+  }
+  return;
+}
+function readSwiftEvidenceFiles(input) {
+  const files = [];
+  for (const candidate of evidenceFileCandidates15(input.packageDir)) {
+    const kind = classifyEvidenceFile(candidate.relativePath);
+    if (!kind) {
+      continue;
+    }
+    if (files.length >= SWIFT_LICENSE_FILE_LIMIT) {
+      input.warnings.push(`Swift package evidence file limit reached at ${SWIFT_LICENSE_FILE_LIMIT} files.`);
+      break;
+    }
+    const text3 = readTextFileWithLimit({
+      filePath: candidate.absolutePath,
+      maxBytes: input.maxBytes
+    });
+    if (!text3.ok) {
+      input.warnings.push(`Skipped Swift package evidence file ${candidate.relativePath}: ${evidenceReadError8(text3.error)}.`);
+      continue;
+    }
+    files.push({
+      path: candidate.relativePath,
+      kind,
+      text: text3.value
+    });
+  }
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+function evidenceFileCandidates15(dir) {
+  try {
+    return readdirSync25(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path67.join(dir, entry.name),
+      relativePath: entry.name
+    }));
+  } catch {
+    return [];
+  }
+}
+function evidenceReadError8(error) {
+  switch (error.kind) {
+    case "too_large":
+      return `file exceeded ${error.maxBytes} bytes`;
+    case "filesystem":
+      return error.cause;
+  }
+}
+function isReadableDirectory19(pathname) {
+  try {
+    return statSync27(pathname).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function isPathInside14(parent, child) {
+  const relative2 = path67.relative(parent, child);
+  return relative2 === "" || !relative2.startsWith("..") && !path67.isAbsolute(relative2);
+}
+
+// src/evidence/terraform-provider.ts
+import { existsSync as existsSync40, readdirSync as readdirSync26, statSync as statSync28 } from "node:fs";
+import path68 from "node:path";
+var TERRAFORM_PROVIDER_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var TERRAFORM_PROVIDER_EVIDENCE_FILE_LIMIT = 50;
+function collectTerraformProviderEvidence(input) {
+  const providerRoot = findTerraformProviderRoot({
+    sourceAddress: input.sourceAddress,
+    version: input.version,
+    projectRoot: input.projectRoot
+  });
+  if (!providerRoot) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["Terraform provider package was not found in the local .terraform/providers cache."]
+    });
+  }
+  const warnings = [];
+  const files = readEvidenceFilesRecursively({
+    rootDir: providerRoot,
+    maxBytes: input.evidenceFileMaxBytes ?? TERRAFORM_PROVIDER_EVIDENCE_FILE_MAX_BYTES,
+    limit: TERRAFORM_PROVIDER_EVIDENCE_FILE_LIMIT,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Terraform provider cache.");
+  }
+  return ok({
+    packageId: input.packageId,
+    files,
+    source: "local",
+    warnings
+  });
+}
+function findTerraformProviderRoot(input) {
+  const providerRoot = path68.resolve(input.projectRoot, ".terraform", "providers", ...input.sourceAddress.split("/"), input.version);
+  return isReadableDirectory20(providerRoot) ? providerRoot : undefined;
+}
+function readEvidenceFilesRecursively(input) {
+  const files = new Map;
+  const queue = [input.rootDir];
+  while (queue.length > 0) {
+    const currentDir = queue.shift();
+    for (const entry of directoryEntries3(currentDir)) {
+      const absolutePath = path68.join(currentDir, entry.name);
+      const relativePath = path68.relative(input.rootDir, absolutePath).replace(/\\/g, "/");
+      if (entry.isDirectory()) {
+        queue.push(absolutePath);
+        continue;
+      }
+      if (!entry.isFile()) {
+        continue;
+      }
+      const kind = classifyEvidenceFile(relativePath);
+      if (!kind || files.has(relativePath)) {
+        continue;
+      }
+      if (files.size >= input.limit) {
+        input.warnings.push(`Terraform provider evidence file limit reached at ${input.limit} files.`);
+        return [...files.values()].sort((left, right) => left.path.localeCompare(right.path));
+      }
+      const text3 = readTextFileWithLimit({
+        filePath: absolutePath,
+        maxBytes: input.maxBytes
+      });
+      if (!text3.ok) {
+        input.warnings.push(`Skipped Terraform provider evidence file ${relativePath}: ${evidenceReadError9(text3.error)}.`);
+        continue;
+      }
+      files.set(relativePath, {
+        path: relativePath,
+        kind,
+        text: text3.value
+      });
+    }
+  }
+  return [...files.values()].sort((left, right) => left.path.localeCompare(right.path));
+}
+function directoryEntries3(dir) {
+  try {
+    return readdirSync26(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+function evidenceReadError9(error) {
+  switch (error.kind) {
+    case "too_large":
+      return `file exceeded ${error.maxBytes} bytes`;
+    case "filesystem":
+      return error.cause;
+  }
+}
+function isReadableDirectory20(pathname) {
+  try {
+    return existsSync40(pathname) && statSync28(pathname).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+// src/evidence/unity-package.ts
+import { existsSync as existsSync42, readdirSync as readdirSync28, statSync as statSync30 } from "node:fs";
+import path70 from "node:path";
+
+// src/evidence/local-package.ts
+import { existsSync as existsSync41, readdirSync as readdirSync27, statSync as statSync29 } from "node:fs";
+import path69 from "node:path";
+var LOCAL_PACKAGE_JSON_MAX_BYTES = 1024 * 1024;
+var LOCAL_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+function collectLocalPackageEvidence(input) {
+  const warnings = [];
+  const packageJsonPath = path69.join(input.packageDir, "package.json");
+  const packageJsonMaxBytes = input.packageJsonMaxBytes ?? LOCAL_PACKAGE_JSON_MAX_BYTES;
+  const evidenceFileMaxBytes = input.evidenceFileMaxBytes ?? LOCAL_EVIDENCE_FILE_MAX_BYTES;
+  try {
+    if (!existsSync41(input.packageDir) || !statSync29(input.packageDir).isDirectory()) {
+      return err(createError({
+        code: "PACKAGE_EVIDENCE_READ_FAILED",
+        category: "filesystem",
+        message: "Package evidence path is not a readable directory.",
+        details: {
+          packageId: input.packageId,
+          packageDir: input.packageDir
+        }
+      }));
+    }
+    const packageJson = readPackageJson({
+      packageJsonPath,
+      packageId: input.packageId,
+      maxBytes: packageJsonMaxBytes
+    });
+    if (!packageJson.ok) {
+      return packageJson;
+    }
+    const evidenceFiles = readEvidenceFiles4({
+      packageDir: input.packageDir,
+      maxBytes: evidenceFileMaxBytes,
+      warnings
+    });
+    if (!evidenceFiles.foundEvidenceFile) {
+      warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found.");
+    }
+    return ok({
+      packageId: input.packageId,
+      ...readPackagePrivateField(packageJson.value),
+      ...readLicenseFields(packageJson.value),
+      files: evidenceFiles.files,
+      source: "local",
+      warnings
+    });
+  } catch (cause) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "filesystem",
+      message: "Failed to read local package evidence.",
+      details: {
+        packageId: input.packageId,
+        packageDir: input.packageDir,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
+function readPackageJson(input) {
+  const { packageJsonPath, packageId } = input;
+  if (!existsSync41(packageJsonPath)) {
+    return err(createError({
+      code: "PACKAGE_JSON_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Package artifact is missing package.json.",
+      details: {
+        packageId,
+        packageJsonPath
+      }
+    }));
+  }
+  try {
+    const packageJsonText = readTextFileWithLimit({
+      filePath: packageJsonPath,
+      maxBytes: input.maxBytes
+    });
+    if (!packageJsonText.ok) {
+      return err(createError({
+        code: "PACKAGE_EVIDENCE_READ_FAILED",
+        category: textFileReadErrorCategory(packageJsonText.error),
+        message: packageJsonReadFailedMessage(packageJsonText.error),
+        details: {
+          packageId,
+          packageJsonPath,
+          ...textFileReadErrorDetails(packageJsonText.error)
+        }
+      }));
+    }
+    const packageJson = JSON.parse(packageJsonText.value);
+    if (!isObjectRecord6(packageJson)) {
+      throw new Error("Expected package.json to contain an object.");
+    }
+    return ok(packageJson);
+  } catch (cause) {
+    return err(createError({
+      code: "PACKAGE_JSON_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse package.json from package artifact.",
+      details: {
+        packageId,
+        packageJsonPath,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
+function readPackagePrivateField(packageJson) {
+  return packageJson.private === true ? { packageJsonPrivate: true } : {};
+}
+function readLicenseFields(packageJson) {
+  const license = packageJson.license;
+  const licenses = packageJson.licenses;
+  const legacyLicenseObject = isObjectRecord6(license) ? license : undefined;
+  return {
+    ...typeof license === "string" ? { packageJsonLicense: license } : {},
+    ...legacyLicenseObject !== undefined ? { packageJsonLicenses: legacyLicenseObject } : {},
+    ...licenses !== undefined ? { packageJsonLicenses: licenses } : {}
+  };
+}
+function isObjectRecord6(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function readEvidenceFiles4(input) {
+  const files = [];
+  let foundEvidenceFile = false;
+  for (const entry of readdirSync27(input.packageDir, { withFileTypes: true })) {
+    if (!entry.isFile()) {
+      continue;
+    }
+    const kind = classifyEvidenceFile(entry.name);
+    if (!kind) {
+      continue;
+    }
+    foundEvidenceFile = true;
+    const filePath = path69.join(input.packageDir, entry.name);
+    try {
+      const text3 = readTextFileWithLimit({
+        filePath,
+        maxBytes: input.maxBytes
+      });
+      if (!text3.ok) {
+        input.warnings.push(evidenceFileReadWarning9(entry.name, text3.error));
+        continue;
+      }
+      files.push({
+        path: entry.name,
+        kind,
+        text: text3.value
+      });
+    } catch (cause) {
+      input.warnings.push(`Failed to read ${entry.name}: ${cause instanceof Error ? cause.message : String(cause)}`);
+    }
+  }
+  return {
+    files: files.sort((left, right) => left.path.localeCompare(right.path)),
+    foundEvidenceFile
+  };
+}
+function packageJsonReadFailedMessage(error) {
+  return error.kind === "too_large" ? "Package artifact package.json exceeded the maximum supported size." : "Failed to read package artifact package.json.";
+}
+function evidenceFileReadWarning9(fileName, error) {
+  return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
+}
+
+// src/evidence/unity-package.ts
+function collectUnityPackageEvidence(input) {
+  const packageDir = findUnityPackageDir(input);
+  if (!packageDir) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: [
+        "Unity package source was not found in Packages/ or Library/PackageCache. Run Unity package restore before scanning for local license evidence."
+      ]
+    });
+  }
+  return collectLocalPackageEvidence({
+    packageId: input.packageId,
+    packageDir
+  });
+}
+function findUnityPackageDir(input) {
+  const embeddedPackage = path70.resolve(input.projectRoot, "Packages", input.packageName);
+  const embeddedRoot = path70.resolve(input.projectRoot, "Packages");
+  if (isPathInside15(embeddedRoot, embeddedPackage) && existsSync42(embeddedPackage) && isReadableDirectory21(embeddedPackage)) {
+    return embeddedPackage;
+  }
+  const packageCacheRoot = path70.resolve(input.projectRoot, "Library", "PackageCache");
+  const exactCachePackage = path70.resolve(packageCacheRoot, `${input.packageName}@${input.version}`);
+  if (isPathInside15(packageCacheRoot, exactCachePackage) && existsSync42(exactCachePackage) && isReadableDirectory21(exactCachePackage)) {
+    return exactCachePackage;
+  }
+  for (const candidate of packageCacheCandidates({
+    packageCacheRoot,
+    packageName: input.packageName,
+    version: input.version
+  })) {
+    return candidate;
+  }
+  return;
+}
+function packageCacheCandidates(input) {
+  let entries;
+  try {
+    entries = readdirSync28(input.packageCacheRoot);
+  } catch {
+    return [];
+  }
+  const prefix = `${input.packageName}@${input.version}`;
+  return entries.filter((entry) => entry === prefix || entry.startsWith(`${prefix}-`)).map((entry) => path70.resolve(input.packageCacheRoot, entry)).filter((candidate) => isPathInside15(input.packageCacheRoot, candidate) && existsSync42(candidate) && isReadableDirectory21(candidate)).sort();
+}
+function isReadableDirectory21(pathname) {
+  try {
+    return statSync30(pathname).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function isPathInside15(parent, child) {
+  const relative2 = path70.relative(parent, child);
+  return relative2 === "" || !relative2.startsWith("..") && !path70.isAbsolute(relative2);
+}
+
+// src/evidence/vcpkg-package.ts
+import { existsSync as existsSync43, readdirSync as readdirSync29, statSync as statSync31 } from "node:fs";
+import path71 from "node:path";
+var VCPKG_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var VCPKG_EVIDENCE_FILE_LIMIT = 20;
+var VCPKG_INSTALL_ROOT_LIMIT = 8;
+function collectVcpkgPackageEvidence(input) {
+  const warnings = [];
+  const files = readVcpkgEvidenceFiles({
+    packageName: input.packageName,
+    projectRoot: input.projectRoot,
+    maxBytes: input.evidenceFileMaxBytes ?? VCPKG_EVIDENCE_FILE_MAX_BYTES,
+    warnings
+  });
+  if (files.length === 0) {
+    warnings.push("vcpkg package copyright file was not found in local vcpkg_installed directories.");
+  }
+  return ok({
+    packageId: input.packageId,
+    files,
+    source: files.length > 0 ? "local" : "unavailable",
+    warnings
+  });
+}
+function readVcpkgEvidenceFiles(input) {
+  const files = new Map;
+  for (const installRoot of findVcpkgInstallRoots(input.projectRoot)) {
+    for (const candidate of vcpkgCopyrightCandidates({
+      installRoot,
+      packageName: input.packageName
+    })) {
+      if (files.size >= VCPKG_EVIDENCE_FILE_LIMIT) {
+        input.warnings.push(`vcpkg evidence file limit reached at ${VCPKG_EVIDENCE_FILE_LIMIT} files.`);
+        return [...files.values()].sort((left, right) => left.path.localeCompare(right.path));
+      }
+      if (files.has(candidate.relativePath)) {
+        continue;
+      }
+      const text3 = readTextFileWithLimit({
+        filePath: candidate.absolutePath,
+        maxBytes: input.maxBytes
+      });
+      if (!text3.ok) {
+        input.warnings.push(`Skipped vcpkg evidence file ${candidate.relativePath}: ${evidenceReadError10(text3.error)}.`);
+        continue;
+      }
+      files.set(candidate.relativePath, {
+        path: candidate.relativePath,
+        kind: "license",
+        text: text3.value
+      });
+    }
+  }
+  return [...files.values()].sort((left, right) => left.path.localeCompare(right.path));
+}
+function findVcpkgInstallRoots(projectRoot) {
+  const roots = [];
+  const direct = path71.join(projectRoot, "vcpkg_installed");
+  if (isReadableDirectory22(direct)) {
+    roots.push(direct);
+  }
+  try {
+    for (const entry of readdirSync29(projectRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      const candidate = path71.join(projectRoot, entry.name, "vcpkg_installed");
+      if (isReadableDirectory22(candidate) && !roots.includes(candidate)) {
+        roots.push(candidate);
+      }
+      if (roots.length >= VCPKG_INSTALL_ROOT_LIMIT) {
+        break;
+      }
+    }
+  } catch {
+    return roots;
+  }
+  return roots;
+}
+function vcpkgCopyrightCandidates(input) {
+  const candidates = [];
+  for (const tripletDir of childDirectories5(input.installRoot)) {
+    if (path71.basename(tripletDir) === "vcpkg") {
+      continue;
+    }
+    const copyrightPath = path71.join(tripletDir, "share", input.packageName, "copyright");
+    if (!isFile4(copyrightPath)) {
+      continue;
+    }
+    candidates.push({
+      absolutePath: copyrightPath,
+      relativePath: path71.relative(input.installRoot, copyrightPath).replace(/\\/g, "/")
+    });
+  }
+  return candidates.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+}
+function childDirectories5(parent) {
+  try {
+    return readdirSync29(parent, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path71.join(parent, entry.name)).filter(isReadableDirectory22).sort();
+  } catch {
+    return [];
+  }
+}
+function evidenceReadError10(error) {
+  switch (error.kind) {
+    case "too_large":
+      return `file exceeded ${error.maxBytes} bytes`;
+    case "filesystem":
+      return error.cause;
+  }
+}
+function isReadableDirectory22(pathname) {
+  try {
+    return statSync31(pathname).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function isFile4(pathname) {
+  if (!existsSync43(pathname)) {
+    return false;
+  }
+  try {
+    return statSync31(pathname).isFile();
+  } catch {
+    return false;
+  }
+}
+
+// src/evidence/ecosystem-collectors.ts
+var DEFAULT_ECOSYSTEM_EVIDENCE_COLLECTORS = {
+  bazel: ({ node, projectRoot }) => collectBazelModuleEvidence({
+    packageId: node.id,
+    packageName: node.name,
+    version: node.version,
+    projectRoot
+  }),
+  cargo: ({ node, projectRoot }) => collectCargoPackageEvidence({
+    packageId: node.id,
+    packageName: node.name,
+    version: node.version,
+    projectRoot
+  }),
+  carthage: ({ node, projectRoot }) => collectCarthagePackageEvidence({
+    packageId: node.id,
+    packageName: node.name,
+    projectRoot
+  }),
+  cocoapods: ({ node, projectRoot }) => collectCocoapodsPackageEvidence({
+    packageId: node.id,
+    packageName: node.name,
+    projectRoot
+  }),
+  composer: ({ node, projectRoot }) => collectComposerPackageEvidence({
+    packageId: node.id,
+    packageName: node.name,
+    projectRoot
+  }),
+  conan: ({ node, projectRoot }) => collectConanPackageEvidence({
+    packageId: node.id,
+    packageName: node.name,
+    version: node.version,
+    projectRoot
+  }),
+  conda: ({ node, projectRoot }) => collectCondaPackageEvidence(omitUndefined({
+    packageId: node.id,
+    packageName: node.name,
+    version: node.version,
+    resolved: node.resolved,
+    projectRoot
+  })),
+  cpan: ({ node, projectRoot }) => collectCpanPackageEvidence(omitUndefined({
+    packageId: node.id,
+    packageName: node.name,
+    version: node.version,
+    resolved: node.resolved,
+    projectRoot
+  })),
+  cran: ({ node, projectRoot }) => collectRPackageEvidence({
+    packageId: node.id,
+    packageName: node.name,
+    version: node.version,
+    projectRoot
+  }),
+  gem: ({ node, projectRoot }) => collectRubyGemEvidence({
+    packageId: node.id,
+    gemName: node.name,
+    version: node.version,
+    projectRoot
+  }),
+  go: ({ node, projectRoot }) => collectGoModuleEvidence(omitUndefined({
+    packageId: node.id,
+    modulePath: node.name,
+    version: node.version,
+    resolved: node.resolved,
+    projectRoot
+  })),
+  hackage: ({ node, projectRoot }) => collectHackagePackageEvidence({
+    packageId: node.id,
+    packageName: node.name,
+    version: node.version,
+    projectRoot
+  }),
+  helm: ({ node, projectRoot }) => collectHelmChartEvidence({
+    packageId: node.id,
+    chartName: node.installNames?.[0] ?? node.name,
+    version: node.version,
+    projectRoot
+  }),
+  hex: ({ node, projectRoot }) => collectHexPackageEvidence({
+    packageId: node.id,
+    packageName: node.name,
+    projectRoot
+  }),
+  julia: ({ node, projectRoot }) => collectJuliaPackageEvidence({
+    packageId: node.id,
+    packageName: node.name,
+    version: node.version,
+    projectRoot
+  }),
+  luarocks: ({ node, projectRoot }) => collectLuarocksPackageEvidence({
+    packageId: node.id,
+    packageName: node.name,
+    version: node.version,
+    projectRoot
+  }),
+  maven: ({ node, projectRoot }) => collectMavenPackageEvidence({
+    packageId: node.id,
+    coordinates: node.name,
+    version: node.version,
+    projectRoot
+  }),
+  nix: ({ node, projectRoot }) => collectNixPackageEvidence({
+    packageId: node.id,
+    resolved: node.resolved,
+    projectRoot
+  }),
+  nuget: ({ node, projectRoot }) => collectNugetPackageEvidence({
+    packageId: node.id,
+    packageName: node.name,
+    version: node.version,
+    projectRoot
+  }),
+  pub: ({ node, projectRoot }) => collectPubPackageEvidence({
+    packageId: node.id,
+    packageName: node.name,
+    version: node.version,
+    projectRoot
+  }),
+  pypi: ({ node, projectRoot }) => collectPythonPackageEvidence({
+    packageId: node.id,
+    packageName: node.name,
+    version: node.version,
+    projectRoot
+  }),
+  swift: ({ node, projectRoot }) => collectSwiftPackageEvidence({
+    packageId: node.id,
+    packageName: node.name,
+    projectRoot
+  }),
+  terraform: ({ node, projectRoot }) => collectTerraformProviderEvidence({
+    packageId: node.id,
+    sourceAddress: node.name,
+    version: node.version,
+    projectRoot
+  }),
+  unity: ({ node, projectRoot }) => collectUnityPackageEvidence({
+    packageId: node.id,
+    packageName: node.name,
+    version: node.version,
+    projectRoot
+  }),
+  vcpkg: ({ node, projectRoot }) => collectVcpkgPackageEvidence({
+    packageId: node.id,
+    packageName: node.name,
+    projectRoot
+  })
+};
+var ecosystemEvidenceCollectors = new Map(Object.entries(DEFAULT_ECOSYSTEM_EVIDENCE_COLLECTORS));
+function collectEcosystemEvidence(input) {
+  return ecosystemEvidenceCollectors.get(input.node.ecosystem)?.(input);
 }
 
 // src/ecosystems/registry.ts
@@ -40957,7 +42581,7 @@ function adapter(id, lockfileKinds, packageEcosystems) {
 }
 
 // src/evidence/tarball.ts
-import { gunzipSync as gunzipSync2 } from "node:zlib";
+import { gunzipSync as gunzipSync3 } from "node:zlib";
 var PACKAGE_TARBALL_UNPACKED_MAX_BYTES = 100 * 1024 * 1024;
 var PACKAGE_TARBALL_MAX_ENTRIES = 50000;
 function collectTarballEvidence(input) {
@@ -41016,7 +42640,7 @@ function collectTarballEvidence(input) {
 }
 function gunzipTarballWithLimit(input) {
   try {
-    return ok(gunzipSync2(input.tarball, { maxOutputLength: input.maxBytes }));
+    return ok(gunzipSync3(input.tarball, { maxOutputLength: input.maxBytes }));
   } catch (cause) {
     return err(createError({
       code: "TARBALL_PARSE_FAILED",
@@ -41055,7 +42679,7 @@ function parseTarEntries2(input) {
   let observedEntries = 0;
   while (offset + 512 <= input.tarball.length) {
     const header = input.tarball.subarray(offset, offset + 512);
-    if (isZeroBlock2(header)) {
+    if (isZeroBlock3(header)) {
       break;
     }
     observedEntries += 1;
@@ -41130,11 +42754,11 @@ function readLicenseFields2(packageJson) {
 function isObjectRecord7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function normalizePackagePath(path71, packageRoot) {
+function normalizePackagePath(path72, packageRoot) {
   if (packageRoot === "") {
-    return path71;
+    return path72;
   }
-  return path71.startsWith(`${packageRoot}/`) ? path71.slice(packageRoot.length + 1) : path71;
+  return path72.startsWith(`${packageRoot}/`) ? path72.slice(packageRoot.length + 1) : path72;
 }
 function readNullTerminated2(buffer, start, length) {
   const slice = buffer.subarray(start, start + length);
@@ -41167,18 +42791,18 @@ function parseOctal2(value, fieldName) {
 function roundUpToBlock2(size) {
   return Math.ceil(size / 512) * 512;
 }
-function isZeroBlock2(buffer) {
+function isZeroBlock3(buffer) {
   return buffer.every((byte) => byte === 0);
 }
 
 // src/evidence/zip-package.ts
-import { inflateRawSync } from "node:zlib";
-var ZIP_EOCD_SIGNATURE = 101010256;
+import { inflateRawSync as inflateRawSync2 } from "node:zlib";
+var ZIP_EOCD_SIGNATURE2 = 101010256;
 var ZIP_CENTRAL_DIRECTORY_SIGNATURE = 33639248;
 var ZIP_LOCAL_FILE_SIGNATURE = 67324752;
 var ZIP64_SENTINEL = 4294967295;
 var ZIP_EOCD_MIN_BYTES = 22;
-var ZIP_MAX_COMMENT_BYTES = 65535;
+var ZIP_MAX_COMMENT_BYTES2 = 65535;
 var PACKAGE_ZIP_MAX_ENTRIES = 50000;
 var PACKAGE_ZIP_ENTRY_MAX_BYTES = 2 * 1024 * 1024;
 function collectZipPackageEvidence(input) {
@@ -41306,9 +42930,9 @@ function findEndOfCentralDirectory(zip) {
   if (zip.length < ZIP_EOCD_MIN_BYTES) {
     return;
   }
-  const minOffset = Math.max(0, zip.length - ZIP_EOCD_MIN_BYTES - ZIP_MAX_COMMENT_BYTES);
+  const minOffset = Math.max(0, zip.length - ZIP_EOCD_MIN_BYTES - ZIP_MAX_COMMENT_BYTES2);
   for (let offset = zip.length - ZIP_EOCD_MIN_BYTES;offset >= minOffset; offset -= 1) {
-    if (zip.readUInt32LE(offset) !== ZIP_EOCD_SIGNATURE) {
+    if (zip.readUInt32LE(offset) !== ZIP_EOCD_SIGNATURE2) {
       continue;
     }
     const commentLength = zip.readUInt16LE(offset + 20);
@@ -41414,7 +43038,7 @@ function readZipEntryData(input) {
     return compressedData;
   }
   if (input.entry.compressionMethod === 8) {
-    const inflated = inflateRawSync(compressedData, {
+    const inflated = inflateRawSync2(compressedData, {
       maxOutputLength: input.entry.uncompressedSize
     });
     if (inflated.length !== input.entry.uncompressedSize) {
@@ -41489,7 +43113,7 @@ async function collectGraphEvidence(input) {
   let failure;
   const workerCount = normalizeEvidenceConcurrency(input.evidenceConcurrency, total);
   const allowedHosts = normalizeAllowedArtifactHosts(input.allowedArtifactHosts);
-  const baseFetchArtifact = input.fetchArtifact ?? createDefaultArtifactFetcher(allowedHosts);
+  const baseFetchArtifact = input.fetchArtifact ?? createDefaultArtifactFetcher();
   const fetchArtifact = withRegistryAuthorization(baseFetchArtifact, input.registryAuthTokens);
   const resolveArtifactHost = input.resolveArtifactHost ?? (input.fetchArtifact ? undefined : defaultArtifactHostResolver);
   const artifactCache = input.cacheDir ? createArtifactCache(input.cacheDir) : undefined;
@@ -41497,6 +43121,8 @@ async function collectGraphEvidence(input) {
   const registryMetadataMaxBytes = input.registryMetadataMaxBytes ?? REGISTRY_METADATA_MAX_BYTES;
   const tarballMaxBytes = input.tarballMaxBytes ?? PACKAGE_TARBALL_MAX_BYTES;
   const installedPackageJsonMaxBytes = input.installedPackageJsonMaxBytes ?? INSTALLED_PACKAGE_JSON_MAX_BYTES;
+  const allowLocalProjectEvidence = input.allowLocalProjectEvidence ?? true;
+  const loadYarnCacheIndex = allowLocalProjectEvidence ? createYarnCacheIndexLoader(input.projectRoot) : () => ok(undefined);
   const collectNext = async () => {
     while (!failure) {
       const index = nextIndex;
@@ -41511,6 +43137,7 @@ async function collectGraphEvidence(input) {
       const collected = await collectNodeEvidence({
         node,
         projectRoot: input.projectRoot,
+        allowLocalProjectEvidence,
         ...workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {},
         fetchArtifact,
         resolveArtifactHost,
@@ -41521,7 +43148,8 @@ async function collectGraphEvidence(input) {
         offline: input.offline ?? false,
         artifactCache,
         npmRegistryUrl: input.npmRegistryUrl,
-        allowedHosts
+        allowedHosts,
+        loadYarnCacheIndex
       });
       if (!collected.ok) {
         if (isRecoverableRemoteEvidenceError(collected.error)) {
@@ -41586,14 +43214,14 @@ function normalizeEvidenceConcurrency(value, total) {
   return Math.min(Math.max(1, Math.trunc(value)), total);
 }
 async function collectNodeEvidence(input) {
-  const ecosystemEvidence = collectRegisteredEcosystemEvidence({
+  const ecosystemEvidence = input.allowLocalProjectEvidence ? collectRegisteredEcosystemEvidence({
     node: input.node,
     projectRoot: input.projectRoot
-  });
+  }) : undefined;
   if (ecosystemEvidence) {
     return ecosystemEvidence;
   }
-  const explicitLocalPath = input.node.resolved ? resolveLocalArtifact({
+  const explicitLocalPath = input.allowLocalProjectEvidence && input.node.resolved ? resolveLocalArtifact({
     packageId: input.node.id,
     resolved: input.node.resolved,
     integrity: input.node.integrity,
@@ -41612,22 +43240,22 @@ async function collectNodeEvidence(input) {
       tarballMaxBytes: input.tarballMaxBytes
     });
   }
-  const nodeModulesPath = findNodeModulesPackage({
+  const nodeModulesPath = input.allowLocalProjectEvidence ? findNodeModulesPackage({
     node: input.node,
     projectRoot: input.projectRoot,
     packageJsonMaxBytes: input.installedPackageJsonMaxBytes
-  });
+  }) : undefined;
   if (nodeModulesPath) {
     return collectLocalPackageEvidence({
       packageId: input.node.id,
       packageDir: nodeModulesPath
     });
   }
-  const yarnCacheEvidence = collectYarnCachePackageEvidence({
+  const yarnCacheEvidence = input.allowLocalProjectEvidence ? collectYarnCachePackageEvidence({
     node: input.node,
-    projectRoot: input.projectRoot,
+    loadYarnCacheIndex: input.loadYarnCacheIndex,
     zipMaxBytes: input.tarballMaxBytes
-  });
+  }) : ok(undefined);
   if (!yarnCacheEvidence.ok) {
     return err(yarnCacheEvidence.error);
   }
@@ -41748,7 +43376,7 @@ function collectLocalPathEvidence(input) {
 }
 function readLocalArtifactStats(input) {
   try {
-    return ok(statSync31(input.filePath));
+    return ok(statSync32(input.filePath));
   } catch (cause) {
     return err(createError({
       code: "PACKAGE_EVIDENCE_READ_FAILED",
@@ -41768,11 +43396,11 @@ function readLocalArtifactFileWithLimit(input) {
   let observedBytes = 0;
   let fileDescriptor;
   try {
-    fileDescriptor = openSync3(input.filePath, "r");
+    fileDescriptor = openSync4(input.filePath, "r");
     while (true) {
       const readSize = Math.min(LOCAL_ARTIFACT_READ_CHUNK_BYTES, Math.max(1, input.maxBytes + 1 - observedBytes));
       const chunk = Buffer.alloc(readSize);
-      const bytesRead = readSync3(fileDescriptor, chunk, 0, chunk.length, null);
+      const bytesRead = readSync4(fileDescriptor, chunk, 0, chunk.length, null);
       if (bytesRead === 0) {
         return ok(Buffer.concat(chunks, observedBytes));
       }
@@ -41803,7 +43431,7 @@ function readLocalArtifactFileWithLimit(input) {
   } finally {
     if (fileDescriptor !== undefined) {
       try {
-        closeSync3(fileDescriptor);
+        closeSync4(fileDescriptor);
       } catch {}
     }
   }
@@ -41919,21 +43547,21 @@ function resolveLocalArtifact(input) {
   }
   if (!localPath && input.resolved.startsWith("file:")) {
     const specifier = decodeFilePathSpecifier(input.resolved.slice("file:".length));
-    localPath = path71.resolve(input.projectRoot, specifier);
+    localPath = path72.resolve(input.projectRoot, specifier);
   }
   if (!localPath && input.resolved.startsWith("workspace:")) {
     const specifier = decodeFilePathSpecifier(input.resolved.slice("workspace:".length));
     if (isWorkspaceLocalPathSpecifier(specifier)) {
-      localPath = path71.resolve(input.projectRoot, specifier);
+      localPath = path72.resolve(input.projectRoot, specifier);
     }
   }
-  if (!localPath && (input.resolved.startsWith(".") || path71.isAbsolute(input.resolved))) {
-    localPath = path71.resolve(input.projectRoot, input.resolved);
+  if (!localPath && (input.resolved.startsWith(".") || path72.isAbsolute(input.resolved))) {
+    localPath = path72.resolve(input.projectRoot, input.resolved);
   }
   if (!localPath) {
     return ok(undefined);
   }
-  const artifactPath = path71.resolve(localPath);
+  const artifactPath = path72.resolve(localPath);
   return ok(artifactPath);
 }
 function resolveFileUrl(value) {
@@ -41977,10 +43605,10 @@ function resolveNodeModulesPackageCandidates(input) {
   if (!segments) {
     return [];
   }
-  const candidates = [path71.join(input.projectRoot, "node_modules", ...segments)];
+  const candidates = [path72.join(input.projectRoot, "node_modules", ...segments)];
   const bunStoreSegment = bunIsolatedStoreSegment(input.packageName, input.version);
   if (bunStoreSegment) {
-    candidates.push(path71.join(input.projectRoot, "node_modules", ".bun", bunStoreSegment, "node_modules", ...segments));
+    candidates.push(path72.join(input.projectRoot, "node_modules", ".bun", bunStoreSegment, "node_modules", ...segments));
   }
   return candidates;
 }
@@ -42012,7 +43640,7 @@ function isSafeNodeModulesSegment(segment) {
 }
 function isReadableDirectory23(filePath) {
   try {
-    return statSync31(filePath).isDirectory();
+    return statSync32(filePath).isDirectory();
   } catch {
     return false;
   }
@@ -42020,7 +43648,7 @@ function isReadableDirectory23(filePath) {
 function installedPackageMatchesNode(input) {
   try {
     const packageJsonText = readTextFileWithLimit({
-      filePath: path71.join(input.packagePath, "package.json"),
+      filePath: path72.join(input.packagePath, "package.json"),
       maxBytes: input.maxBytes
     });
     if (!packageJsonText.ok) {
@@ -42033,31 +43661,22 @@ function installedPackageMatchesNode(input) {
   }
 }
 function collectYarnCachePackageEvidence(input) {
-  const cacheDir = path71.join(input.projectRoot, ".yarn", "cache");
-  if (!existsSync44(cacheDir) || !isReadableDirectory23(cacheDir)) {
-    return ok(undefined);
-  }
   const filenamePrefix = yarnCacheFilenamePrefix(input.node);
   if (!filenamePrefix) {
     return ok(undefined);
   }
-  let entries;
-  try {
-    entries = readdirSync30(cacheDir, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.startsWith(filenamePrefix) && entry.name.endsWith(".zip")).sort((left, right) => left.name.localeCompare(right.name));
-  } catch (cause) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: "filesystem",
-      message: "Failed to read Yarn package cache directory.",
-      details: {
-        packageId: input.node.id,
-        cacheDir,
-        cause: safeUrlForErrorDetails(cause instanceof Error ? cause.message : String(cause))
-      }
-    }));
+  const loadedIndex = input.loadYarnCacheIndex();
+  if (!loadedIndex.ok) {
+    return err(loadedIndex.error);
   }
-  for (const entry of entries) {
-    const cachePath = path71.join(cacheDir, entry.name);
+  if (!loadedIndex.value) {
+    return ok(undefined);
+  }
+  for (const filename of loadedIndex.value.filenames) {
+    if (!filename.startsWith(filenamePrefix)) {
+      continue;
+    }
+    const cachePath = path72.join(loadedIndex.value.cacheDir, filename);
     const stats = readLocalArtifactStats({
       filePath: cachePath,
       packageId: input.node.id,
@@ -42098,6 +43717,36 @@ function collectYarnCachePackageEvidence(input) {
     }
   }
   return ok(undefined);
+}
+function createYarnCacheIndexLoader(projectRoot) {
+  let loaded;
+  return () => {
+    if (loaded) {
+      return loaded;
+    }
+    const cacheDir = path72.join(projectRoot, ".yarn", "cache");
+    if (!existsSync44(cacheDir) || !isReadableDirectory23(cacheDir)) {
+      loaded = ok(undefined);
+      return loaded;
+    }
+    try {
+      loaded = ok({
+        cacheDir,
+        filenames: readdirSync30(cacheDir, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".zip")).map((entry) => entry.name).sort((left, right) => left.localeCompare(right))
+      });
+    } catch (cause) {
+      loaded = err(createError({
+        code: "PACKAGE_EVIDENCE_READ_FAILED",
+        category: "filesystem",
+        message: "Failed to read Yarn package cache directory.",
+        details: {
+          cacheDir,
+          cause: safeUrlForErrorDetails(cause instanceof Error ? cause.message : String(cause))
+        }
+      }));
+    }
+    return loaded;
+  };
 }
 function yarnCacheFilenamePrefix(node) {
   const slug = yarnCachePackageSlug(node.name);
@@ -42237,20 +43886,18 @@ async function readRemoteArtifactBytes(input) {
       }
     }));
   }
-  if (!input.skipPreflight) {
-    const preflight = await preflightRemoteArtifactFetchTarget({
-      code: input.code,
-      packageId: input.packageId,
-      resolved: input.url,
-      message: input.blockedMessage,
-      resolveFailureMessage: input.resolveFailureMessage,
-      details: input.details,
-      resolveArtifactHost: input.resolveArtifactHost,
-      allowedHosts: input.allowedHosts
-    });
-    if (!preflight.ok) {
-      return err(preflight.error);
-    }
+  const preflight = await preflightRemoteArtifactFetchTarget({
+    code: input.code,
+    packageId: input.packageId,
+    resolved: input.url,
+    message: input.blockedMessage,
+    resolveFailureMessage: input.resolveFailureMessage,
+    details: input.details,
+    resolveArtifactHost: input.resolveArtifactHost,
+    allowedHosts: input.allowedHosts
+  });
+  if (!preflight.ok) {
+    return err(preflight.error);
   }
   const artifact = await readArtifactWithTimeout({
     fetchArtifact: input.fetchArtifact,
@@ -42368,7 +44015,7 @@ function resolveExistingLocalArtifactPath(input) {
   if (!allowedRoots.ok) {
     return err(allowedRoots.error);
   }
-  const artifactPath = realpathSync2(input.artifactPath);
+  const artifactPath = realpathSync3(input.artifactPath);
   if (!isPathInsideAnyRoot(artifactPath, allowedRoots.value) && !isVerifiableExternalLocalTarball({
     artifactPath,
     integrity: input.integrity
@@ -42401,10 +44048,10 @@ function isSupportedLocalTarballPath(artifactPath) {
   return normalizedPath.endsWith(".tgz") || normalizedPath.endsWith(".tar.gz");
 }
 function resolveTrustedWorkspaceRoot(workspaceRoot) {
-  const resolvedPath = path71.resolve(workspaceRoot);
+  const resolvedPath = path72.resolve(workspaceRoot);
   try {
-    const realPath = realpathSync2(resolvedPath);
-    if (!statSync31(realPath).isDirectory()) {
+    const realPath = realpathSync3(resolvedPath);
+    if (!statSync32(realPath).isDirectory()) {
       return err(workspaceRootInvalidError(workspaceRoot, resolvedPath));
     }
     return ok(realPath);
@@ -42429,20 +44076,20 @@ function realpathLocalArtifactRoots(input) {
     return err(workspaceRoot.error);
   }
   return ok([
-    realpathSync2(resolveLocalArtifactRoot(input.projectRoot)),
+    realpathSync3(resolveLocalArtifactRoot(input.projectRoot)),
     ...workspaceRoot.value ? [workspaceRoot.value] : []
   ]);
 }
 function resolveLocalArtifactRoot(projectRoot) {
-  return findNearestGitRoot(projectRoot) ?? path71.resolve(projectRoot);
+  return findNearestGitRoot(projectRoot) ?? path72.resolve(projectRoot);
 }
 function findNearestGitRoot(startPath) {
-  let currentPath = path71.resolve(startPath);
+  let currentPath = path72.resolve(startPath);
   while (true) {
-    if (existsSync44(path71.join(currentPath, ".git"))) {
+    if (existsSync44(path72.join(currentPath, ".git"))) {
       return currentPath;
     }
-    const parentPath = path71.dirname(currentPath);
+    const parentPath = path72.dirname(currentPath);
     if (parentPath === currentPath) {
       return;
     }
@@ -42450,8 +44097,8 @@ function findNearestGitRoot(startPath) {
   }
 }
 function isPathInsideOrEqual4(childPath, parentPath) {
-  const relativePath = path71.relative(parentPath, childPath);
-  return relativePath === "" || !relativePath.startsWith("..") && !path71.isAbsolute(relativePath);
+  const relativePath = path72.relative(parentPath, childPath);
+  return relativePath === "" || !relativePath.startsWith("..") && !path72.isAbsolute(relativePath);
 }
 function isPathInsideAnyRoot(childPath, parentPaths) {
   return parentPaths.some((parentPath) => isPathInsideOrEqual4(childPath, parentPath));
@@ -42784,10 +44431,6 @@ async function preflightRemoteArtifactFetchTarget(input) {
     return ok(undefined);
   }
   const artifactHost = normalizeUrlHostname(url.hostname);
-  const explicitlyAllowed = isExplicitlyAllowedArtifactHost(artifactHost, input.allowedHosts);
-  if (explicitlyAllowed) {
-    return ok(undefined);
-  }
   if (!shouldResolveRemoteArtifactHost(artifactHost)) {
     return ok(undefined);
   }
@@ -43111,7 +44754,7 @@ function verifyPackageIntegrity(input) {
   }
   const computed = [];
   for (const entry of supported) {
-    const actualDigest = createHash2(entry.algorithm).update(input.tarball).digest();
+    const actualDigest = createHash3(entry.algorithm).update(input.tarball).digest();
     const actual = `${entry.algorithm}-${actualDigest.toString("base64")}`;
     computed.push(actual);
     if (actualDigest.byteLength === entry.digest.byteLength && timingSafeEqual(actualDigest, entry.digest)) {
@@ -43130,8 +44773,8 @@ function verifyPackageIntegrity(input) {
     }
   }));
 }
-function parseSupportedIntegrityEntries(integrity) {
-  return integrity.split(/\s+/).map((entry) => {
+function parseSupportedIntegrityEntries(integrity2) {
+  return integrity2.split(/\s+/).map((entry) => {
     const separatorIndex = entry.indexOf("-");
     if (separatorIndex <= 0) {
       return;
@@ -43240,30 +44883,28 @@ function withRegistryAuthorization(fetchArtifact, tokens) {
     });
   };
 }
-function createDefaultArtifactFetcher(allowedHosts) {
-  return (url, options) => defaultArtifactFetcher(url, options, allowedHosts);
+function createDefaultArtifactFetcher() {
+  return defaultArtifactFetcher;
 }
-function defaultArtifactFetcher(url, options, allowedHosts) {
+function defaultArtifactFetcher(url, options) {
   const parsedUrl = parseHttpUrl(url);
   if (!parsedUrl || parsedUrl.protocol !== "https:") {
     return Promise.reject(new Error(`Unsupported artifact URL: ${safeUrlForErrorDetails(url)}`));
   }
-  return new Promise((resolve, reject) => {
-    const normalizedHost = normalizeUrlHostname(parsedUrl.hostname);
-    const explicitlyAllowed = allowedHosts.has(normalizedHost);
+  return new Promise((resolve2, reject) => {
     const req = httpsRequest(parsedUrl, {
       method: "GET",
       signal: options?.signal,
       headers: options?.headers,
-      ...explicitlyAllowed ? {} : { lookup: secureArtifactLookup }
+      lookup: secureArtifactLookup
     }, (response) => {
-      const socketAddress = explicitlyAllowed ? ok(undefined) : validateArtifactSocketRemoteAddress(parsedUrl.hostname, response.socket.remoteAddress, { allowMissingWhenLookupGuarded: true });
+      const socketAddress = validateArtifactSocketRemoteAddress(parsedUrl.hostname, response.socket.remoteAddress, { allowMissingWhenLookupGuarded: true });
       if (!socketAddress.ok) {
         response.destroy(socketAddress.error);
         reject(socketAddress.error);
         return;
       }
-      resolve({
+      resolve2({
         ok: (response.statusCode ?? 0) >= 200 && (response.statusCode ?? 0) < 300,
         status: response.statusCode ?? 0,
         statusText: response.statusMessage ?? "",
@@ -43395,8 +45036,8 @@ async function readIncomingMessageToBuffer(message) {
 // src/git/ref-file.ts
 import { Buffer as Buffer2 } from "node:buffer";
 import { execFileSync } from "node:child_process";
-import { realpathSync as realpathSync3 } from "node:fs";
-import path72 from "node:path";
+import { realpathSync as realpathSync4 } from "node:fs";
+import path73 from "node:path";
 var GIT_FILE_LIST_MAX_BYTES = 16 * 1024 * 1024;
 var GIT_FILE_LIST_MAX_ENTRIES = 1e5;
 var readGitRefFile = (input) => {
@@ -43433,7 +45074,7 @@ var listGitRefFiles = (input) => {
   if (!context.ok) {
     return context;
   }
-  const projectRelativePath = path72.relative(context.value.gitRoot, context.value.projectRoot);
+  const projectRelativePath = path73.relative(context.value.gitRoot, context.value.projectRoot);
   if (isOutsideRelativePath(projectRelativePath)) {
     return err(projectRootOutsideGitError(input.projectRoot));
   }
@@ -43485,7 +45126,7 @@ var listGitRefFiles = (input) => {
   }
 };
 function resolveGitProjectContext(projectRoot, ref) {
-  const resolvedProjectRoot = realpathSync3(path72.resolve(projectRoot));
+  const resolvedProjectRoot = realpathSync4(path73.resolve(projectRoot));
   let gitRoot;
   try {
     const gitRootRelativePath = execFileSync("git", [
@@ -43497,14 +45138,14 @@ function resolveGitProjectContext(projectRoot, ref) {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"]
     }).trim();
-    gitRoot = realpathSync3(path72.resolve(resolvedProjectRoot, gitRootRelativePath || "."));
+    gitRoot = realpathSync4(path73.resolve(resolvedProjectRoot, gitRootRelativePath || "."));
   } catch (cause) {
     return err(readFailedError({
       input: { ref, relativePath: "." },
       cause
     }));
   }
-  if (isOutsideRelativePath(path72.relative(gitRoot, resolvedProjectRoot))) {
+  if (isOutsideRelativePath(path73.relative(gitRoot, resolvedProjectRoot))) {
     return err(projectRootOutsideGitError(resolvedProjectRoot));
   }
   return ok({ gitRoot, projectRoot: resolvedProjectRoot });
@@ -43560,9 +45201,9 @@ function readProcessErrorText(cause) {
   return cause instanceof Error ? cause.message : String(cause);
 }
 function toGitObjectPath(input) {
-  const projectRelativePath = path72.relative(input.gitRoot, input.projectRoot);
-  const lockfileRelativePath = path72.normalize(input.relativePath);
-  if (isOutsideRelativePath(projectRelativePath) || isOutsideRelativePath(lockfileRelativePath) || path72.isAbsolute(input.relativePath)) {
+  const projectRelativePath = path73.relative(input.gitRoot, input.projectRoot);
+  const lockfileRelativePath = path73.normalize(input.relativePath);
+  if (isOutsideRelativePath(projectRelativePath) || isOutsideRelativePath(lockfileRelativePath) || path73.isAbsolute(input.relativePath)) {
     return err(createError({
       code: "GIT_REF_PATH_OUTSIDE_PROJECT",
       category: "invalid_input",
@@ -43572,10 +45213,10 @@ function toGitObjectPath(input) {
       }
     }));
   }
-  return ok(normalizeGitPath(path72.join(projectRelativePath, lockfileRelativePath)));
+  return ok(normalizeGitPath(path73.join(projectRelativePath, lockfileRelativePath)));
 }
 function normalizeGitRelativePath(value) {
-  const normalized = path72.posix.normalize(value.replace(/\\/g, "/"));
+  const normalized = path73.posix.normalize(value.replace(/\\/g, "/"));
   if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/")) {
     return;
   }
@@ -43586,7 +45227,7 @@ function normalizeGitPath(value) {
   return normalized === "." ? "" : normalized;
 }
 function isOutsideRelativePath(relativePath) {
-  return relativePath === ".." || relativePath.startsWith(`..${path72.sep}`) || path72.isAbsolute(relativePath);
+  return relativePath === ".." || relativePath.startsWith(`..${path73.sep}`) || path73.isAbsolute(relativePath);
 }
 function isObjectRecord9(value) {
   return typeof value === "object" && value !== null;
@@ -44331,9 +45972,9 @@ function encodeFindingComponent(value) {
 }
 
 // src/policy/config.ts
-import { existsSync as existsSync45, readFileSync as readFileSync3, realpathSync as realpathSync4, statSync as statSync32 } from "node:fs";
+import { existsSync as existsSync45, readFileSync as readFileSync3, realpathSync as realpathSync5, statSync as statSync33 } from "node:fs";
 import { isIP as isIP3 } from "node:net";
-import path73 from "node:path";
+import path74 from "node:path";
 var POLICY_FILENAME = ".ohrisk.yml";
 var POLICY_VERSION = 1;
 var POLICY_MAX_BYTES = 1024 * 1024;
@@ -44386,7 +46027,7 @@ function readPolicyConfig(input) {
   if (!boundaryRoot.ok) {
     return boundaryRoot;
   }
-  const requestedPath = input.policyPath ? path73.resolve(input.projectRoot, input.policyPath) : path73.join(input.projectRoot, POLICY_FILENAME);
+  const requestedPath = input.policyPath ? path74.resolve(input.projectRoot, input.policyPath) : path74.join(input.projectRoot, POLICY_FILENAME);
   if (!existsSync45(requestedPath)) {
     if (input.policyPath) {
       return err(policyReadError({
@@ -44403,12 +46044,12 @@ function readPolicyConfig(input) {
     depth: 0
   });
 }
-function matchPolicyPackageRule(packageIdentifiers, packageRules) {
+function matchPolicyPackageRuleWithProvenance(packageIdentifiers, packageRules) {
   const identifiers = typeof packageIdentifiers === "string" ? [packageIdentifiers] : [...packageIdentifiers];
   for (const identifier of identifiers) {
     const exact = packageRules.get(identifier);
     if (exact) {
-      return exact;
+      return { pattern: identifier, rule: exact };
     }
   }
   let bestMatch;
@@ -44423,7 +46064,7 @@ function matchPolicyPackageRule(packageIdentifiers, packageRules) {
       bestMatch = { pattern, rule };
     }
   }
-  return bestMatch?.rule;
+  return bestMatch ? { pattern: bestMatch.pattern, rule: bestMatch.rule } : undefined;
 }
 function readPolicyFile(input) {
   if (input.depth > POLICY_MAX_INHERITANCE_DEPTH) {
@@ -44473,7 +46114,7 @@ function readPolicyFile(input) {
       }));
     }
     const inherited = readPolicyFile({
-      filePath: path73.resolve(path73.dirname(trustedPath.value), inheritedPath),
+      filePath: path74.resolve(path74.dirname(trustedPath.value), inheritedPath),
       boundaryRoot: input.boundaryRoot,
       visited: nextVisited,
       depth: input.depth + 1
@@ -44675,7 +46316,7 @@ function policyEntryCount(policy) {
 }
 function readPolicyText(filePath) {
   try {
-    const stats = statSync32(filePath);
+    const stats = statSync33(filePath);
     if (!stats.isFile()) {
       return err(policyReadError({
         message: "Policy path must point to a regular file.",
@@ -44886,9 +46527,9 @@ function readStringList(value, field, filePath, allowSingle = false) {
 }
 function trustedPolicyPath(filePath, boundaryRoot) {
   try {
-    const realPath = realpathSync4(filePath);
-    const relative = path73.relative(boundaryRoot, realPath);
-    if (relative.startsWith("..") || path73.isAbsolute(relative)) {
+    const realPath = realpathSync5(filePath);
+    const relative2 = path74.relative(boundaryRoot, realPath);
+    if (relative2.startsWith("..") || path74.isAbsolute(relative2)) {
       return err(policyReadError({
         message: "Policy files and inherited policy files must stay inside the workspace root.",
         filePath: realPath,
@@ -44906,8 +46547,8 @@ function trustedPolicyPath(filePath, boundaryRoot) {
 }
 function realDirectory(directory) {
   try {
-    const realPath = realpathSync4(directory);
-    if (!statSync32(realPath).isDirectory()) {
+    const realPath = realpathSync5(directory);
+    if (!statSync33(realPath).isDirectory()) {
       throw new Error("Not a directory.");
     }
     return ok(realPath);
@@ -44942,8 +46583,8 @@ function policyParseError(input) {
   });
 }
 function safeRelativePath(root, filePath) {
-  const relative = path73.relative(root, filePath);
-  return relative === "" ? path73.basename(filePath) : relative.split(path73.sep).join("/");
+  const relative2 = path74.relative(root, filePath);
+  return relative2 === "" ? path74.basename(filePath) : relative2.split(path74.sep).join("/");
 }
 function normalizeHostname(host) {
   const trimmed = host.trim().toLowerCase().replace(/\.$/, "");
@@ -44961,10 +46602,10 @@ function isAllowedRegistryHostname2(host) {
   return isIP3(host) === 0 && host !== "localhost" && !host.endsWith(".localhost");
 }
 function globMatches(pattern, value) {
-  const source = pattern.split("*").map(escapeRegExp8).join(".*");
+  const source = pattern.split("*").map(escapeRegExp9).join(".*");
   return new RegExp(`^${source}$`).test(value);
 }
-function escapeRegExp8(value) {
+function escapeRegExp9(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 function unique2(values) {
@@ -45046,13 +46687,15 @@ var UNLICENSED_ACTION = "Do not ship this package until license permissions are 
 var NOTICE_ACTION = "Preserve required NOTICE or attribution files when distributing this package.";
 function evaluateLicenseRisk(input) {
   const effectivePolicy = input.policy ? evaluationPolicyForProfile(input.policy, input.profile) : undefined;
-  const policyRule = effectivePolicy ? matchPolicyPackageRule([input.license.packageId, packageUrl(input.dependency)], effectivePolicy.packageRules) : undefined;
+  const policyRuleMatch = effectivePolicy && input.includePackagePolicy !== false ? matchPolicyPackageRuleWithProvenance([input.license.packageId, packageUrl(input.dependency)], effectivePolicy.packageRules) : undefined;
+  const policyRule = policyRuleMatch?.rule;
   const classifiedSeverity = classifySeverity(input.license, input.profile, effectivePolicy);
   const severity = policyRule?.severity ?? classifiedSeverity;
   const recommendation = policyRule?.recommendation ?? recommendationFor(severity, input.dependency);
   const paths = input.dependency.paths;
   const packageId = input.license.packageId;
-  const reason = policyRule?.reason ?? explainSeverity(input.license, input.profile, severity, effectivePolicy);
+  const classificationReason = explainSeverity(input.license, input.profile, classifiedSeverity, effectivePolicy);
+  const reason = policyRuleMatch ? explainPackagePolicy(policyRuleMatch.pattern, policyRuleMatch.rule, classificationReason) : classificationReason;
   const action = policyRule?.action ?? actionFor(recommendation, input.license);
   const dependencyScope = dependencyScopeFor(input.dependency);
   const evidence = buildEvidence(input.license, input.dependency);
@@ -45081,6 +46724,15 @@ function evaluateLicenseRisk(input) {
     paths,
     recommendation
   };
+}
+function explainPackagePolicy(pattern, rule, classificationReason) {
+  const overrides = [
+    rule.severity ? `severity=${rule.severity}` : undefined,
+    rule.recommendation ? `recommendation=${rule.recommendation}` : undefined,
+    rule.action ? "action" : undefined
+  ].filter((value) => value !== undefined);
+  const provenance = `Package policy rule ${JSON.stringify(pattern)} applied${overrides.length > 0 ? ` (${overrides.join(", ")})` : ""}.`;
+  return rule.reason ? `${provenance} ${rule.reason}` : `${provenance} Base license classification: ${classificationReason}`;
 }
 function evaluateLicenseRisks(input) {
   const dependencyById = new Map(input.dependencies.map((dependency) => [dependency.id, dependency]));
@@ -45163,9 +46815,9 @@ function hasCommercialRestrictionChoice(license) {
   return license.choices.some((choice) => COMMERCIAL_RESTRICTION_LICENSES.has(choice));
 }
 function explainSeverity(license, profile, severity, policy) {
-  const policyMatchedTerms = license.choices.filter((choice) => policy?.allowLicenses.has(choice) || policy?.denyLicenses.has(choice) || policy?.severityOverrides.has(choice));
+  const policyMatchedTerms = policyTerms(license).filter((term) => policy?.allowLicenses.has(term) || policy?.denyLicenses.has(term) || policy?.severityOverrides.has(term));
   if (policyMatchedTerms.length > 0) {
-    return `Organization policy classified ${policyMatchedTerms.join(", ")} as ${severity} risk for ${profile}.`;
+    return `Organization policy matched license rule(s) ${policyMatchedTerms.join(", ")}; the effective expression is ${severity} risk for ${profile}.`;
   }
   switch (severity) {
     case "low":
@@ -45195,6 +46847,25 @@ function explainSeverity(license, profile, severity, policy) {
       }
       return "License expression is not recognized by Ohrisk.";
   }
+}
+function policyTerms(license) {
+  const terms = [];
+  if (license.spdxAst) {
+    collectPolicyTerms(license.spdxAst, terms);
+  }
+  terms.push(...license.choices);
+  return [...new Set(terms)];
+}
+function collectPolicyTerms(node, terms) {
+  if (node.type === "license") {
+    if (node.exception) {
+      terms.push(`${node.license} WITH ${node.exception}`);
+    }
+    terms.push(node.license);
+    return;
+  }
+  collectPolicyTerms(node.left, terms);
+  collectPolicyTerms(node.right, terms);
 }
 function buildEvidence(license, dependency) {
   const evidence = [
@@ -45300,11 +46971,13 @@ function severityRank2(severity) {
 
 // src/policy/waivers.ts
 import { existsSync as existsSync46 } from "node:fs";
-import path74 from "node:path";
+import path75 from "node:path";
 var DEFAULT_WAIVER_FILE_NAME = ".ohrisk-waivers.json";
 var WAIVER_FILE_MAX_BYTES = 1024 * 1024;
+var WAIVER_ROOT_KEYS = new Set(["waivers"]);
+var WAIVER_KEYS = new Set(["id", "fingerprint", "reason", "expiresOn"]);
 function readRiskWaivers(projectRoot, options) {
-  const waiverPath = path74.join(projectRoot, DEFAULT_WAIVER_FILE_NAME);
+  const waiverPath = path75.join(projectRoot, DEFAULT_WAIVER_FILE_NAME);
   if (!existsSync46(waiverPath)) {
     return ok([]);
   }
@@ -45384,6 +47057,10 @@ function parseWaivers(value) {
   if (!isRecord26(value)) {
     return err("Ohrisk waiver file must be an object with a waivers array.");
   }
+  const unknownRootKeys = unknownKeys(value, WAIVER_ROOT_KEYS);
+  if (unknownRootKeys.length > 0) {
+    return err(`Ohrisk waiver file contains unknown field(s): ${unknownRootKeys.join(", ")}.`);
+  }
   if (!Array.isArray(value.waivers)) {
     return err("Ohrisk waiver file must contain a waivers array.");
   }
@@ -45400,6 +47077,10 @@ function parseWaivers(value) {
 function parseWaiver(value, index) {
   if (!isRecord26(value)) {
     return err(`Waiver at index ${index} must be an object.`);
+  }
+  const unknownWaiverKeys = unknownKeys(value, WAIVER_KEYS);
+  if (unknownWaiverKeys.length > 0) {
+    return err(`Waiver at index ${index} contains unknown field(s): ${unknownWaiverKeys.join(", ")}.`);
   }
   const id = readOptionalString2(value.id);
   const fingerprint = readOptionalString2(value.fingerprint);
@@ -45420,6 +47101,9 @@ function parseWaiver(value, index) {
     reason,
     ...expiresOn ? { expiresOn } : {}
   });
+}
+function unknownKeys(value, allowed) {
+  return Object.keys(value).filter((key) => !allowed.has(key)).sort();
 }
 function matchesWaiver(waiver, finding) {
   return waiver.id === finding.id || waiver.fingerprint === finding.fingerprint;
@@ -45450,7 +47134,7 @@ function isRecord26(value) {
 }
 
 // src/report/cyclonedx-report.ts
-import path75 from "node:path";
+import path76 from "node:path";
 function renderCycloneDxReport(input) {
   const licensesByPackageId = new Map(input.normalizedLicenses.map((license) => [license.packageId, license]));
   const findingsByPackageId = new Map(input.riskFindings.map((finding) => [finding.packageId, finding]));
@@ -45481,12 +47165,13 @@ function renderCycloneDxReport(input) {
         },
         {
           name: "ohrisk:lockfilePath",
-          value: projectRelativePath(input.project.rootDir, input.project.lockfile.path)
+          value: projectInputPath(input.project, input.project.lockfile.path)
         },
         {
           name: "ohrisk:waiverMode",
           value: input.waiverMode
-        }
+        },
+        ...archiveProperties(input.project)
       ]
     },
     components,
@@ -45502,12 +47187,31 @@ function renderCycloneDxReport(input) {
     ]
   }, null, 2);
 }
+function projectInputPath(project, targetPath) {
+  const relativePath = projectRelativePath(project.rootDir, targetPath);
+  if (!project.source) {
+    return relativePath;
+  }
+  const root = project.source.entryRoot === "." ? "" : `${project.source.entryRoot}/`;
+  return `${project.source.displayPath}!/${root}${relativePath}`;
+}
+function archiveProperties(project) {
+  if (!project.source) {
+    return [];
+  }
+  return [
+    { name: "ohrisk:archiveName", value: project.source.displayPath },
+    { name: "ohrisk:archiveFormat", value: project.source.format },
+    { name: "ohrisk:archiveSha256", value: project.source.sha256 },
+    { name: "ohrisk:archiveRoot", value: project.source.entryRoot }
+  ];
+}
 function projectRelativePath(projectRoot, targetPath) {
-  const relativePath = path75.relative(projectRoot, targetPath);
-  if (relativePath && !relativePath.startsWith("..") && !path75.isAbsolute(relativePath)) {
+  const relativePath = path76.relative(projectRoot, targetPath);
+  if (relativePath && !relativePath.startsWith("..") && !path76.isAbsolute(relativePath)) {
     return relativePath.replace(/\\/g, "/");
   }
-  return path75.basename(targetPath);
+  return path76.basename(targetPath);
 }
 function renderComponent(input) {
   const licenses = input.license ? renderLicenses(input.license) : [];
@@ -45610,8 +47314,8 @@ function directChildRefsByNodeId(nodes) {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const childIdsByNodeId = new Map;
   for (const candidate of nodes) {
-    for (const path76 of candidate.paths) {
-      const packagePath = path76.map(packageIdFromPathSegment);
+    for (const path77 of candidate.paths) {
+      const packagePath = path77.map(packageIdFromPathSegment);
       for (let index = 0;index < packagePath.length - 1; index += 1) {
         const parentId = packagePath[index];
         const childId = packagePath[index + 1];
@@ -45696,7 +47400,7 @@ function formatThresholdSummary(summary) {
 }
 
 // src/report/schema.ts
-var OHRISK_REPORT_SCHEMA_VERSION = "2.0.0";
+var OHRISK_REPORT_SCHEMA_VERSION = "3.1.0";
 var OHRISK_COMMON_REPORT_SCHEMA = `urn:ohrisk:schema:common:${OHRISK_REPORT_SCHEMA_VERSION}`;
 var OHRISK_SCAN_REPORT_SCHEMA = `urn:ohrisk:schema:scan-report:${OHRISK_REPORT_SCHEMA_VERSION}`;
 var OHRISK_DIFF_REPORT_SCHEMA = `urn:ohrisk:schema:diff-report:${OHRISK_REPORT_SCHEMA_VERSION}`;
@@ -45705,8 +47409,11 @@ var OHRISK_EXPLAIN_REPORT_SCHEMA = `urn:ohrisk:schema:explain-report:${OHRISK_RE
 // src/report/diff-report.ts
 function renderDiffReport(input) {
   const summary = summarize(input.diff.newFindings);
-  const nextAction = nextActionFor(input.diff.newFindings);
-  const thresholdSummary = buildThresholdSummary(input.diff.newFindings, input.failOn);
+  const changedSummary = summarize(input.diff.changedFindings);
+  const resolvedSummary = summarize(input.diff.resolvedFindings);
+  const introducedSummary = summarize(input.diff.introducedFindings);
+  const nextAction = nextActionFor(input.diff.introducedFindings);
+  const thresholdSummary = buildThresholdSummary(input.diff.introducedFindings, input.failOn);
   if (input.json) {
     return JSON.stringify({
       $schema: OHRISK_DIFF_REPORT_SCHEMA,
@@ -45718,49 +47425,67 @@ function renderDiffReport(input) {
       baselineFindingCount: input.diff.baselineFindings.length,
       currentFindingCount: input.diff.currentFindings.length,
       newFindingCount: input.diff.newFindings.length,
+      changedFindingCount: input.diff.changedFindings.length,
+      resolvedFindingCount: input.diff.resolvedFindings.length,
+      introducedFindingCount: input.diff.introducedFindings.length,
       newRisks: summary,
+      changedRisks: changedSummary,
+      resolvedRisks: resolvedSummary,
+      introducedRisks: introducedSummary,
       lockfileChanges: input.lockfileChanges,
       nextAction,
       ...input.policy ? { policy: input.policy } : {},
       ...thresholdSummary,
-      findings: input.diff.newFindings
+      findings: input.diff.introducedFindings,
+      newFindings: input.diff.newFindings,
+      changedFindings: input.diff.changedFindings,
+      resolvedFindings: input.diff.resolvedFindings
     }, null, 2);
   }
   if (input.markdown) {
-    return renderMarkdownReport(input, summary);
+    return renderMarkdownReport(input);
   }
   return [
     "Ohrisk diff",
     `Baseline: ${input.baselineRef}`,
     `Profile: ${input.profile}`,
     `Production only: ${input.prodOnly ? "yes" : "no"}`,
-    `Findings: ${input.diff.currentFindings.length} current, ${input.diff.baselineFindings.length} baseline, ${input.diff.newFindings.length} new or changed`,
+    `Findings: ${input.diff.currentFindings.length} current, ${input.diff.baselineFindings.length} baseline, ${input.diff.newFindings.length} new, ${input.diff.changedFindings.length} changed, ${input.diff.resolvedFindings.length} resolved`,
     ...renderLockfileChangeLines(input.lockfileChanges),
-    `New or changed risks: ${summary.high} high, ${summary.review} review, ${summary.unknown} unknown, ${summary.low} low`,
+    `Introduced risks: ${introducedSummary.high} high, ${introducedSummary.review} review, ${introducedSummary.unknown} unknown, ${introducedSummary.low} low`,
     ...renderThresholdLines(thresholdSummary),
     "Status: profile-aware risk diff evaluated",
     "",
-    ...renderNewFindings(input.diff.newFindings),
+    ...renderFindings("New findings", input.diff.newFindings),
+    "",
+    ...renderFindings("Changed findings", input.diff.changedFindings),
+    "",
+    ...renderFindings("Resolved findings", input.diff.resolvedFindings),
     "",
     `Next: ${nextAction}`
   ].join(`
 `);
 }
-function renderMarkdownReport(input, summary) {
-  const nextAction = nextActionFor(input.diff.newFindings);
-  const thresholdSummary = buildThresholdSummary(input.diff.newFindings, input.failOn);
+function renderMarkdownReport(input) {
+  const introducedSummary = summarize(input.diff.introducedFindings);
+  const nextAction = nextActionFor(input.diff.introducedFindings);
+  const thresholdSummary = buildThresholdSummary(input.diff.introducedFindings, input.failOn);
   return [
     "# Ohrisk diff",
     "",
     `- Baseline: ${formatMarkdownInlineCode(input.baselineRef)}`,
     `- Profile: ${formatMarkdownInlineCode(input.profile)}`,
     `- Production only: ${formatMarkdownInlineCode(input.prodOnly ? "yes" : "no")}`,
-    `- Findings: ${formatMarkdownInlineCode(`${input.diff.currentFindings.length} current`)}, ${formatMarkdownInlineCode(`${input.diff.baselineFindings.length} baseline`)}, ${formatMarkdownInlineCode(`${input.diff.newFindings.length} new or changed`)}`,
+    `- Findings: ${formatMarkdownInlineCode(`${input.diff.currentFindings.length} current`)}, ${formatMarkdownInlineCode(`${input.diff.baselineFindings.length} baseline`)}, ${formatMarkdownInlineCode(`${input.diff.newFindings.length} new`)}, ${formatMarkdownInlineCode(`${input.diff.changedFindings.length} changed`)}, ${formatMarkdownInlineCode(`${input.diff.resolvedFindings.length} resolved`)}`,
     ...renderMarkdownLockfileChangeLines(input.lockfileChanges),
-    `- New or changed risks: ${formatMarkdownInlineCode(`${summary.high} high`)}, ${formatMarkdownInlineCode(`${summary.review} review`)}, ${formatMarkdownInlineCode(`${summary.unknown} unknown`)}, ${formatMarkdownInlineCode(`${summary.low} low`)}`,
+    `- Introduced risks: ${formatMarkdownInlineCode(`${introducedSummary.high} high`)}, ${formatMarkdownInlineCode(`${introducedSummary.review} review`)}, ${formatMarkdownInlineCode(`${introducedSummary.unknown} unknown`)}, ${formatMarkdownInlineCode(`${introducedSummary.low} low`)}`,
     ...renderMarkdownThresholdLines(thresholdSummary),
     "",
-    ...renderMarkdownNewFindings(input.diff.newFindings),
+    ...renderMarkdownFindings("New findings", input.diff.newFindings),
+    "",
+    ...renderMarkdownFindings("Changed findings", input.diff.changedFindings),
+    "",
+    ...renderMarkdownFindings("Resolved findings", input.diff.resolvedFindings),
     "",
     "## Next",
     "",
@@ -45804,12 +47529,12 @@ function renderMarkdownThresholdLines(thresholdSummary) {
   const thresholdLine = formatThresholdSummary(thresholdSummary);
   return thresholdLine ? [`- ${thresholdLine}`] : [];
 }
-function renderNewFindings(findings) {
+function renderFindings(label, findings) {
   if (findings.length === 0) {
-    return ["New or changed findings: none"];
+    return [`${label}: none`];
   }
   return [
-    "New or changed findings:",
+    `${label}:`,
     ...findings.flatMap((finding) => [
       `- [${finding.severity}] ${finding.packageId}`,
       `  id: ${finding.id}`,
@@ -45823,12 +47548,12 @@ function renderNewFindings(findings) {
     ])
   ];
 }
-function renderMarkdownNewFindings(findings) {
+function renderMarkdownFindings(label, findings) {
   if (findings.length === 0) {
-    return ["## New or changed findings", "", "No new or changed findings."];
+    return [`## ${label}`, "", `No ${label.toLowerCase()}.`];
   }
   return [
-    "## New or changed findings",
+    `## ${label}`,
     "",
     "| ID | Fingerprint | Severity | Package | Dependency | Reason | Recommendation | Action | Path |",
     "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
@@ -45869,6 +47594,8 @@ function renderExplainReport(input) {
       status: "license_explained",
       expression: input.expression,
       profile: input.profile,
+      policyScope: "license-only",
+      policy: input.policy,
       license: serializableNormalizedLicense(input.normalizedLicense),
       finding: input.finding
     }, null, 2);
@@ -45877,6 +47604,8 @@ function renderExplainReport(input) {
     "Ohrisk explain",
     `Expression: ${input.expression}`,
     `Profile: ${input.profile}`,
+    `Policy: ${formatPolicy(input.policy)}`,
+    "Policy scope: license rules only; package rules require a package ID or Package URL and were not evaluated.",
     `Severity: ${input.finding.severity}`,
     `Recommendation: ${input.finding.recommendation}`,
     `Action: ${input.finding.action}`,
@@ -45887,6 +47616,12 @@ function renderExplainReport(input) {
     "Note: Ohrisk reports profile-specific risk, not a legal safe or unsafe verdict."
   ].join(`
 `);
+}
+function formatPolicy(policy) {
+  if (!policy.enabled) {
+    return "none";
+  }
+  return `enabled (${policy.sourceFiles.join(", ")})`;
 }
 function serializableNormalizedLicense(license) {
   return {
@@ -45912,7 +47647,7 @@ function formatNormalizedExpression(license) {
 }
 
 // src/report/sarif-report.ts
-import path76 from "node:path";
+import path77 from "node:path";
 var SARIF_SCHEMA_URL = "https://json.schemastore.org/sarif-2.1.0.json";
 var RULES = [
   ruleFor("high", "High license risk", "A dependency has license evidence that is high risk for the selected profile."),
@@ -45922,7 +47657,7 @@ var RULES = [
 ];
 var RULE_INDEX_BY_ID = new Map(RULES.map((rule, index) => [rule.id, index]));
 function renderSarifReport(input) {
-  const lockfileUri = path76.relative(input.project.rootDir, input.project.lockfile.path).replace(/\\/g, "/") || path76.basename(input.project.lockfile.path);
+  const lockfileUri = sarifLockfileUri(input);
   return JSON.stringify({
     $schema: SARIF_SCHEMA_URL,
     version: "2.1.0",
@@ -45953,6 +47688,12 @@ function renderSarifReport(input) {
           ohriskWaivedFindingCount: input.waivedFindings.length,
           ohriskExpiredWaiverCount: input.expiredWaivers.length,
           ohriskUnmatchedWaiverCount: input.unmatchedWaivers.length,
+          ...input.project.source ? {
+            ohriskArchiveName: input.project.source.displayPath,
+            ohriskArchiveFormat: input.project.source.format,
+            ohriskArchiveSha256: input.project.source.sha256,
+            ohriskArchiveRoot: input.project.source.entryRoot
+          } : {},
           ...sarifWaiverDriftProperties(input)
         },
         results: [
@@ -45962,6 +47703,14 @@ function renderSarifReport(input) {
       }
     ]
   }, null, 2);
+}
+function sarifLockfileUri(input) {
+  const relativePath = path77.relative(input.project.rootDir, input.project.lockfile.path).replace(/\\/g, "/") || path77.basename(input.project.lockfile.path);
+  if (!input.project.source) {
+    return relativePath;
+  }
+  const root = input.project.source.entryRoot === "." ? "" : `${input.project.source.entryRoot}/`;
+  return `${input.project.source.displayPath}!/${root}${relativePath}`;
 }
 function sarifWaiverDriftProperties(input) {
   if (!input.strictWaivers) {
@@ -46101,7 +47850,7 @@ function securitySeverityFor(severity) {
 }
 
 // src/report/scan-report.ts
-import path77 from "node:path";
+import path78 from "node:path";
 
 // src/report/locales/en.ts
 var ENGLISH_TEXT = {
@@ -46164,7 +47913,7 @@ var ENGLISH_TEXT = {
     dependencies: (total, direct, transitive) => `${total} total, ${direct} direct, ${transitive} transitive`,
     evidence: (files, warnings) => `${files} files, ${warnings} warnings`,
     licenseConfidence: (high, medium, low) => `${high} high-confidence, ${medium} medium-confidence, ${low} low-confidence`,
-    licenseIssues: (missing, malformed) => `${missing} missing, ${malformed} malformed`,
+    licenseIssues: (missing, malformed2) => `${missing} missing, ${malformed2} malformed`,
     risks: (risks) => `${risks.high} high, ${risks.review} review, ${risks.unknown} unknown, ${risks.low} low`,
     waived: (applied, expired, unmatched) => `${applied} applied, ${expired} expired, ${unmatched} unmatched`,
     reviewStatus: (risks) => {
@@ -46325,7 +48074,7 @@ var KOREAN_TEXT = {
     dependencies: (total, direct, transitive) => `총 ${total}개, 직접 ${direct}개, 전이 ${transitive}개`,
     evidence: (files, warnings) => `파일 ${files}개, 경고 ${warnings}개`,
     licenseConfidence: (high, medium, low) => `높은 신뢰도 ${high}개, 중간 신뢰도 ${medium}개, 낮은 신뢰도 ${low}개`,
-    licenseIssues: (missing, malformed) => `누락 ${missing}개, 형식 오류 ${malformed}개`,
+    licenseIssues: (missing, malformed2) => `누락 ${missing}개, 형식 오류 ${malformed2}개`,
     risks: (risks) => `높음 ${risks.high}개, 검토 ${risks.review}개, 불명 ${risks.unknown}개, 낮음 ${risks.low}개`,
     waived: (applied, expired, unmatched) => `적용 ${applied}개, 만료 ${expired}개, 미매칭 ${unmatched}개`,
     reviewStatus: (risks) => {
@@ -46570,7 +48319,7 @@ var SPANISH_TEXT = {
     dependencies: (total, direct, transitive) => `${total} en total, ${direct} directas, ${transitive} transitivas`,
     evidence: (files, warnings) => `${files} archivos, ${warnings} advertencias`,
     licenseConfidence: (high, medium, low) => `${high} de alta confianza, ${medium} de confianza media, ${low} de baja confianza`,
-    licenseIssues: (missing, malformed) => `${missing} faltantes, ${malformed} mal formadas`,
+    licenseIssues: (missing, malformed2) => `${missing} faltantes, ${malformed2} mal formadas`,
     risks: (risks) => `${risks.high} altos, ${risks.review} revisión, ${risks.unknown} desconocidos, ${risks.low} bajos`,
     waived: (applied, expired, unmatched) => `${applied} aplicadas, ${expired} caducadas, ${unmatched} sin coincidencia`,
     reviewStatus: (risks) => {
@@ -46818,7 +48567,7 @@ var FRENCH_TEXT = {
     dependencies: (total, direct, transitive) => `${total} au total, ${direct} directes, ${transitive} transitives`,
     evidence: (files, warnings) => `${files} fichiers, ${warnings} avertissements`,
     licenseConfidence: (high, medium, low) => `${high} confiance élevée, ${medium} confiance moyenne, ${low} confiance faible`,
-    licenseIssues: (missing, malformed) => `${missing} manquantes, ${malformed} mal formées`,
+    licenseIssues: (missing, malformed2) => `${missing} manquantes, ${malformed2} mal formées`,
     risks: (risks) => `${risks.high} élevés, ${risks.review} revue, ${risks.unknown} inconnus, ${risks.low} faibles`,
     waived: (applied, expired, unmatched) => `${applied} appliquées, ${expired} expirées, ${unmatched} sans correspondance`,
     reviewStatus: (risks) => {
@@ -47066,7 +48815,7 @@ var CHINESE_TEXT = {
     dependencies: (total, direct, transitive) => `共 ${total} 个，直接 ${direct} 个，传递 ${transitive} 个`,
     evidence: (files, warnings) => `${files} 个文件，${warnings} 个警告`,
     licenseConfidence: (high, medium, low) => `高置信度 ${high} 个，中置信度 ${medium} 个，低置信度 ${low} 个`,
-    licenseIssues: (missing, malformed) => `缺失 ${missing} 个，格式错误 ${malformed} 个`,
+    licenseIssues: (missing, malformed2) => `缺失 ${missing} 个，格式错误 ${malformed2} 个`,
     risks: (risks) => `高 ${risks.high} 个，需审查 ${risks.review} 个，未知 ${risks.unknown} 个，低 ${risks.low} 个`,
     waived: (applied, expired, unmatched) => `已应用 ${applied} 个，已过期 ${expired} 个，未匹配 ${unmatched} 个`,
     reviewStatus: (risks) => {
@@ -47314,7 +49063,7 @@ var HINDI_TEXT = {
     dependencies: (total, direct, transitive) => `कुल ${total}, प्रत्यक्ष ${direct}, पारगामी ${transitive}`,
     evidence: (files, warnings) => `${files} फ़ाइलें, ${warnings} चेतावनियाँ`,
     licenseConfidence: (high, medium, low) => `${high} उच्च भरोसा, ${medium} मध्यम भरोसा, ${low} कम भरोसा`,
-    licenseIssues: (missing, malformed) => `${missing} अनुपस्थित, ${malformed} गलत प्रारूप`,
+    licenseIssues: (missing, malformed2) => `${missing} अनुपस्थित, ${malformed2} गलत प्रारूप`,
     risks: (risks) => `${risks.high} उच्च, ${risks.review} समीक्षा, ${risks.unknown} अज्ञात, ${risks.low} कम`,
     waived: (applied, expired, unmatched) => `${applied} लागू, ${expired} समाप्त, ${unmatched} बेमेल`,
     reviewStatus: (risks) => {
@@ -47562,7 +49311,7 @@ var JAPANESE_TEXT = {
     dependencies: (total, direct, transitive) => `合計 ${total}、直接 ${direct}、推移 ${transitive}`,
     evidence: (files, warnings) => `${files} ファイル、${warnings} 警告`,
     licenseConfidence: (high, medium, low) => `高信頼 ${high}、中信頼 ${medium}、低信頼 ${low}`,
-    licenseIssues: (missing, malformed) => `不足 ${missing}、形式不正 ${malformed}`,
+    licenseIssues: (missing, malformed2) => `不足 ${missing}、形式不正 ${malformed2}`,
     risks: (risks) => `高 ${risks.high}、レビュー ${risks.review}、不明 ${risks.unknown}、低 ${risks.low}`,
     waived: (applied, expired, unmatched) => `適用済み ${applied}、期限切れ ${expired}、未一致 ${unmatched}`,
     reviewStatus: (risks) => {
@@ -47810,7 +49559,7 @@ var INDONESIAN_TEXT = {
     dependencies: (total, direct, transitive) => `${total} total, ${direct} langsung, ${transitive} transitif`,
     evidence: (files, warnings) => `${files} file, ${warnings} peringatan`,
     licenseConfidence: (high, medium, low) => `${high} keyakinan tinggi, ${medium} keyakinan sedang, ${low} keyakinan rendah`,
-    licenseIssues: (missing, malformed) => `${missing} hilang, ${malformed} salah format`,
+    licenseIssues: (missing, malformed2) => `${missing} hilang, ${malformed2} salah format`,
     risks: (risks) => `${risks.high} tinggi, ${risks.review} review, ${risks.unknown} tidak diketahui, ${risks.low} rendah`,
     waived: (applied, expired, unmatched) => `${applied} diterapkan, ${expired} kedaluwarsa, ${unmatched} tidak cocok`,
     reviewStatus: (risks) => {
@@ -48058,7 +49807,7 @@ var TURKISH_TEXT = {
     dependencies: (total, direct, transitive) => `${total} toplam, ${direct} doğrudan, ${transitive} geçişli`,
     evidence: (files, warnings) => `${files} dosya, ${warnings} uyarı`,
     licenseConfidence: (high, medium, low) => `${high} yüksek güven, ${medium} orta güven, ${low} düşük güven`,
-    licenseIssues: (missing, malformed) => `${missing} eksik, ${malformed} hatalı biçimli`,
+    licenseIssues: (missing, malformed2) => `${missing} eksik, ${malformed2} hatalı biçimli`,
     risks: (risks) => `${risks.high} yüksek, ${risks.review} inceleme, ${risks.unknown} bilinmeyen, ${risks.low} düşük`,
     waived: (applied, expired, unmatched) => `${applied} uygulandı, ${expired} süresi doldu, ${unmatched} eşleşmedi`,
     reviewStatus: (risks) => {
@@ -48306,7 +50055,7 @@ var RUSSIAN_TEXT = {
     dependencies: (total, direct, transitive) => `всего ${total}, прямых ${direct}, транзитивных ${transitive}`,
     evidence: (files, warnings) => `${files} файлов, ${warnings} предупреждений`,
     licenseConfidence: (high, medium, low) => `${high} с высокой уверенностью, ${medium} со средней уверенностью, ${low} с низкой уверенностью`,
-    licenseIssues: (missing, malformed) => `${missing} отсутствует, ${malformed} с неверным форматом`,
+    licenseIssues: (missing, malformed2) => `${missing} отсутствует, ${malformed2} с неверным форматом`,
     risks: (risks) => `${risks.high} высокий, ${risks.review} проверка, ${risks.unknown} неизвестный, ${risks.low} низкий`,
     waived: (applied, expired, unmatched) => `${applied} применено, ${expired} просрочено, ${unmatched} не совпало`,
     reviewStatus: (risks) => {
@@ -48554,7 +50303,7 @@ var GERMAN_TEXT = {
     dependencies: (total, direct, transitive) => `${total} insgesamt, ${direct} direkt, ${transitive} transitiv`,
     evidence: (files, warnings) => `${files} Dateien, ${warnings} Warnungen`,
     licenseConfidence: (high, medium, low) => `${high} hohe Sicherheit, ${medium} mittlere Sicherheit, ${low} niedrige Sicherheit`,
-    licenseIssues: (missing, malformed) => `${missing} fehlend, ${malformed} fehlerhaft formatiert`,
+    licenseIssues: (missing, malformed2) => `${missing} fehlend, ${malformed2} fehlerhaft formatiert`,
     risks: (risks) => `${risks.high} hoch, ${risks.review} Prüfung, ${risks.unknown} unbekannt, ${risks.low} niedrig`,
     waived: (applied, expired, unmatched) => `${applied} angewendet, ${expired} abgelaufen, ${unmatched} nicht zugeordnet`,
     reviewStatus: (risks) => {
@@ -48789,6 +50538,7 @@ function renderScanReport(input) {
       schemaVersion: OHRISK_REPORT_SCHEMA_VERSION,
       status: "profile_risk_evaluated",
       projectRoot: ".",
+      ...input.project.source ? { archive: archiveReportSource(input.project) } : {},
       lockfile: {
         kind: input.project.lockfile.kind,
         path: displayLockfilePath(input.project)
@@ -48797,6 +50547,7 @@ function renderScanReport(input) {
       profile: input.profile,
       prodOnly: input.prodOnly,
       dependencyGraph: summary.dependencyGraph,
+      dependencyGraphDiagnostics: input.graph.diagnostics ?? [],
       dependencyOrigins: dependencyProvenance(input),
       evidence: summary.evidence,
       licenses: summary.licenses,
@@ -48821,12 +50572,13 @@ function renderScanReport(input) {
   }
   return [
     "Ohrisk scan",
-    `Project: ${input.project.rootDir}`,
+    `Project: ${displayProjectLabel(input.project)}`,
     `Lockfile: ${displayLockfilePath(input.project)} (${input.project.lockfile.kind})`,
     ...renderAdditionalLockfileLines(input.project),
     `Profile: ${input.profile}`,
     `Production only: ${input.prodOnly ? "yes" : "no"}`,
     `Dependencies: ${summary.dependencyGraph.total} total, ${summary.dependencyGraph.direct} direct, ${summary.dependencyGraph.transitive} transitive`,
+    ...renderDependencyGraphDiagnostics(input.graph.diagnostics ?? []),
     `Evidence: ${summary.evidence.files} files, ${summary.evidence.warnings} warnings`,
     `Licenses: ${summary.licenses.highConfidence} high-confidence, ${summary.licenses.mediumConfidence} medium-confidence, ${summary.licenses.lowConfidence} low-confidence`,
     `License issues: ${summary.licenses.missing} missing, ${summary.licenses.malformed} malformed`,
@@ -48837,7 +50589,7 @@ function renderScanReport(input) {
     ...renderWaiverDriftLines(waiverDriftSummary),
     "Status: profile-aware risk evaluated",
     "",
-    ...renderFindings(input.riskFindings),
+    ...renderFindings2(input.riskFindings),
     "",
     ...renderWaivedFindings(input.waivedFindings),
     "",
@@ -49465,6 +51217,7 @@ function renderMarkdownReport2(input, summary) {
     `- Profile: ${formatMarkdownInlineCode(input.profile)}`,
     `- Production only: ${formatMarkdownInlineCode(input.prodOnly ? "yes" : "no")}`,
     `- Dependencies: ${formatMarkdownInlineCode(`${summary.dependencyGraph.total} total`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.direct} direct`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.transitive} transitive`)}`,
+    ...renderMarkdownDependencyGraphDiagnostics(input.graph.diagnostics ?? []),
     `- Evidence: ${formatMarkdownInlineCode(`${summary.evidence.files} files`)}, ${formatMarkdownInlineCode(`${summary.evidence.warnings} warnings`)}`,
     `- Licenses: ${formatMarkdownInlineCode(`${summary.licenses.highConfidence} high-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.mediumConfidence} medium-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.lowConfidence} low-confidence`)}`,
     `- License issues: ${formatMarkdownInlineCode(`${summary.licenses.missing} missing`)}, ${formatMarkdownInlineCode(`${summary.licenses.malformed} malformed`)}`,
@@ -49474,7 +51227,7 @@ function renderMarkdownReport2(input, summary) {
     ...renderMarkdownThresholdLines2(thresholdSummary),
     ...renderMarkdownWaiverDriftLines(waiverDriftSummary),
     "",
-    ...renderMarkdownFindings(input.riskFindings),
+    ...renderMarkdownFindings2(input.riskFindings),
     "",
     ...renderMarkdownWaivedFindings(input.waivedFindings),
     "",
@@ -49498,7 +51251,7 @@ function dependencyProvenance(input) {
 function displayDependencyOrigins(project, node) {
   const origins = node.origins && node.origins.length > 0 ? node.origins.map((origin) => ({
     kind: origin.lockfileKind,
-    path: displayProjectPath(project.rootDir, origin.lockfilePath)
+    path: displayProjectPath(project, origin.lockfilePath)
   })) : [{
     kind: project.lockfile.kind,
     path: displayLockfilePath(project)
@@ -49523,7 +51276,7 @@ function renderAdditionalMarkdownLockfileLines(project) {
 function displayLockfiles(project) {
   return projectLockfiles(project).map((lockfile) => ({
     kind: lockfile.kind,
-    path: displayProjectPath(project.rootDir, lockfile.path)
+    path: displayProjectPath(project, lockfile.path)
   }));
 }
 function disabledPolicySummary() {
@@ -49540,22 +51293,48 @@ function disabledPolicySummary() {
     registryAuthHostCount: 0
   };
 }
-function displayProjectPath(projectRoot, targetPath) {
-  const relativePath = path77.relative(projectRoot, targetPath);
-  if (relativePath && !relativePath.startsWith("..") && !path77.isAbsolute(relativePath)) {
-    return relativePath.replace(/\\/g, "/");
+function displayProjectPath(project, targetPath) {
+  const relativePath = path78.relative(project.rootDir, targetPath);
+  if (relativePath && !relativePath.startsWith("..") && !path78.isAbsolute(relativePath)) {
+    const normalizedPath = relativePath.replace(/\\/g, "/");
+    return project.source ? `${project.source.displayPath}!/${archiveEntryPath(project, normalizedPath)}` : normalizedPath;
   }
-  return path77.basename(targetPath);
+  return path78.basename(targetPath);
 }
 function displayLockfilePath(project) {
-  return displayProjectPath(project.rootDir, project.lockfile.path);
+  return displayProjectPath(project, project.lockfile.path);
 }
 function displayLockfileDirectoryPath(project) {
-  const directoryPath = path77.dirname(displayLockfilePath(project));
+  const directoryPath = path78.dirname(displayLockfilePath(project));
   return directoryPath === "" ? "." : directoryPath;
 }
 function markdownProjectLabel(input) {
-  return input.graph.rootName ?? ".";
+  return input.project.source ? displayProjectLabel(input.project) : input.graph.rootName ?? ".";
+}
+function displayProjectLabel(project) {
+  if (!project.source) {
+    return project.rootDir;
+  }
+  return project.source.entryRoot === "." || project.source.entryRoot === "" ? project.source.displayPath : `${project.source.displayPath}!/${project.source.entryRoot}`;
+}
+function archiveEntryPath(project, relativePath) {
+  const root = project.source?.entryRoot;
+  if (!root || root === ".") {
+    return relativePath;
+  }
+  return `${root}/${relativePath}`;
+}
+function archiveReportSource(project) {
+  const source = project.source;
+  if (!source) {
+    throw new Error("Archive report source is unavailable.");
+  }
+  return {
+    name: source.displayPath,
+    format: source.format,
+    sha256: source.sha256,
+    root: source.entryRoot
+  };
 }
 function buildWaiverDriftSummary(input) {
   if (!input.strictWaivers) {
@@ -49573,6 +51352,7 @@ function buildScanSummary(input) {
   const transitiveCount = input.graph.nodes.length - directCount;
   const evidenceFileCount = input.evidence.reduce((sum, item) => sum + item.files.length, 0);
   const evidenceWarningCount = input.evidence.reduce((sum, item) => sum + item.warnings.length, 0);
+  const evidenceDetails = summarizeEvidence(input.evidence);
   const licenseSummary = summarizeLicenses(input.normalizedLicenses);
   return {
     dependencyGraph: {
@@ -49583,7 +51363,9 @@ function buildScanSummary(input) {
     evidence: {
       packages: input.evidence.length,
       files: evidenceFileCount,
-      warnings: evidenceWarningCount
+      warnings: evidenceWarningCount,
+      sources: evidenceDetails.sources,
+      diagnostics: evidenceDetails.diagnostics
     },
     licenses: {
       highConfidence: licenseSummary.high,
@@ -49600,7 +51382,76 @@ function buildScanSummary(input) {
     }
   };
 }
-function renderFindings(findings) {
+function summarizeEvidence(evidence) {
+  const sources = {
+    local: { packages: 0, files: 0, warnings: 0 },
+    sbom: { packages: 0, files: 0, warnings: 0 },
+    tarball: { packages: 0, files: 0, warnings: 0 },
+    unavailable: { packages: 0, files: 0, warnings: 0 }
+  };
+  const diagnosticCounts = new Map;
+  for (const item of evidence) {
+    const source = sources[item.source];
+    source.packages += 1;
+    source.files += item.files.length;
+    source.warnings += item.warnings.length;
+    if (item.warnings.length > 0) {
+      addEvidenceDiagnostic(diagnosticCounts, {
+        code: "collector_warning",
+        source: item.source,
+        packageId: item.packageId,
+        occurrenceCount: item.warnings.length
+      });
+    }
+    if (item.source === "unavailable") {
+      addEvidenceDiagnostic(diagnosticCounts, {
+        code: "source_unavailable",
+        source: item.source,
+        packageId: item.packageId,
+        occurrenceCount: 1
+      });
+    }
+    if (item.files.length === 0 && !hasDeclaredLicenseEvidence(item)) {
+      addEvidenceDiagnostic(diagnosticCounts, {
+        code: "license_evidence_missing",
+        source: item.source,
+        packageId: item.packageId,
+        occurrenceCount: 1
+      });
+    }
+  }
+  return {
+    sources,
+    diagnostics: [...diagnosticCounts.values()].map((item) => ({
+      code: item.code,
+      source: item.source,
+      packageCount: item.packageIds.size,
+      occurrenceCount: item.occurrenceCount
+    })).sort((left, right) => left.code.localeCompare(right.code) || left.source.localeCompare(right.source))
+  };
+}
+function addEvidenceDiagnostic(diagnostics, input) {
+  const key = `${input.code}\x00${input.source}`;
+  const current = diagnostics.get(key) ?? {
+    code: input.code,
+    source: input.source,
+    packageIds: new Set,
+    occurrenceCount: 0
+  };
+  current.packageIds.add(input.packageId);
+  current.occurrenceCount += input.occurrenceCount;
+  diagnostics.set(key, current);
+}
+function hasDeclaredLicenseEvidence(evidence) {
+  return typeof evidence.packageJsonLicense === "string" || evidence.packageJsonLicenses !== undefined || typeof evidence.metadataLicense === "string" || evidence.metadataLicenses !== undefined;
+}
+function renderDependencyGraphDiagnostics(diagnostics) {
+  return diagnostics.map((diagnostic) => `Graph diagnostic [${diagnostic.code}]: ${diagnostic.message} (${diagnostic.affectedNodeCount} affected)`);
+}
+function renderMarkdownDependencyGraphDiagnostics(diagnostics) {
+  return diagnostics.map((diagnostic) => `- Graph diagnostic ${formatMarkdownInlineCode(diagnostic.code)}: ${formatMarkdownTableCell(diagnostic.message)} (${formatMarkdownInlineCode(`${diagnostic.affectedNodeCount} affected`)})`);
+}
+function renderFindings2(findings) {
   if (findings.length === 0) {
     return ["Findings: none"];
   }
@@ -49660,7 +51511,7 @@ function renderUnmatchedWaivers(unmatchedWaivers) {
     ])
   ];
 }
-function renderMarkdownFindings(findings) {
+function renderMarkdownFindings2(findings) {
   if (findings.length === 0) {
     return ["## Findings", "", "No findings."];
   }
@@ -49877,7 +51728,7 @@ function createReportOpener(options = {}) {
 }
 var openReportFile = createReportOpener();
 function openReportBuffer(input) {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     let finished = false;
     let timeout;
     let closeDelay;
@@ -49936,7 +51787,7 @@ function openReportBuffer(input) {
       if (closeDelay) {
         clearTimeout(closeDelay);
       }
-      server.close(() => resolve(result));
+      server.close(() => resolve2(result));
     };
     server.once("error", (cause) => {
       finish(err(createReportOpenError({
@@ -50015,22 +51866,22 @@ function openCommandFor(platform, target) {
 
 // src/report/write-output.ts
 import {
-  closeSync as closeSync4,
+  closeSync as closeSync5,
   constants,
   fsyncSync,
   lstatSync as lstatSync2,
   mkdirSync as mkdirSync2,
-  openSync as openSync4,
-  realpathSync as realpathSync5,
+  openSync as openSync5,
+  realpathSync as realpathSync6,
   renameSync as renameSync2,
   rmSync as rmSync2,
   writeFileSync as writeFileSync2
 } from "node:fs";
 import { randomBytes as randomBytes2 } from "node:crypto";
-import path78 from "node:path";
+import path79 from "node:path";
 var writeReportFile = (input) => {
-  const resolvedCwd = path78.resolve(input.cwd);
-  const resolvedPath = path78.resolve(resolvedCwd, input.outputPath);
+  const resolvedCwd = path79.resolve(input.cwd);
+  const resolvedPath = path79.resolve(resolvedCwd, input.outputPath);
   if (!isProjectRelativeOutputPath(input.outputPath) || !isPathInsideOrEqual5(resolvedPath, resolvedCwd)) {
     return err(createError({
       code: "REPORT_OUTPUT_PATH_OUTSIDE_PROJECT",
@@ -50044,7 +51895,7 @@ var writeReportFile = (input) => {
     }));
   }
   try {
-    mkdirSync2(path78.dirname(resolvedPath), { recursive: true });
+    mkdirSync2(path79.dirname(resolvedPath), { recursive: true });
     const validatedPath = validateResolvedReportPath({
       outputPath: input.outputPath,
       projectRoot: resolvedCwd,
@@ -50078,11 +51929,11 @@ function writeValidatedReportFile(input) {
   let tempFileDescriptor;
   try {
     tempPath = createReportTempPath(input.validatedPath.realParent, input.resolvedPath);
-    tempFileDescriptor = openSync4(tempPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 384);
+    tempFileDescriptor = openSync5(tempPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 384);
     writeFileSync2(tempFileDescriptor, `${input.contents}
 `, "utf8");
     fsyncSync(tempFileDescriptor);
-    closeSync4(tempFileDescriptor);
+    closeSync5(tempFileDescriptor);
     tempFileDescriptor = undefined;
     const revalidatedPath = validateResolvedReportPath({
       outputPath: input.outputPath,
@@ -50132,8 +51983,8 @@ function writeValidatedReportFile(input) {
   }
 }
 function validateResolvedReportPath(input) {
-  const realProjectRoot = realpathSync5(input.projectRoot);
-  const realParent = realpathSync5(path78.dirname(input.resolvedPath));
+  const realProjectRoot = realpathSync6(input.projectRoot);
+  const realParent = realpathSync6(path79.dirname(input.resolvedPath));
   const existingOutputIsSymlink = isSymbolicLinkPath(input.resolvedPath);
   if (existingOutputIsSymlink || !isPathInsideOrEqual5(realParent, realProjectRoot)) {
     return err(createError({
@@ -50157,9 +52008,9 @@ function validateResolvedReportPath(input) {
   });
 }
 function createReportTempPath(realParent, resolvedPath) {
-  const baseName = path78.basename(resolvedPath);
+  const baseName = path79.basename(resolvedPath);
   const suffix = randomBytes2(8).toString("hex");
-  return path78.join(realParent, `.ohrisk-report-${process.pid}-${Date.now()}-${suffix}-${baseName}.tmp`);
+  return path79.join(realParent, `.ohrisk-report-${process.pid}-${Date.now()}-${suffix}-${baseName}.tmp`);
 }
 function promoteTempReportFile(tempPath, resolvedPath) {
   try {
@@ -50186,7 +52037,7 @@ function isReplaceBlockedByExistingTarget(cause) {
 }
 function closeReportTempFile(fileDescriptor) {
   try {
-    closeSync4(fileDescriptor);
+    closeSync5(fileDescriptor);
   } catch {}
 }
 function isSymbolicLinkPath(filePath) {
@@ -50197,20 +52048,20 @@ function isSymbolicLinkPath(filePath) {
   }
 }
 function isProjectRelativeOutputPath(outputPath) {
-  if (outputPath.includes("\x00") || path78.isAbsolute(outputPath) || path78.win32.isAbsolute(outputPath) || path78.posix.isAbsolute(outputPath) || /^[A-Za-z]:/.test(outputPath)) {
+  if (outputPath.includes("\x00") || path79.isAbsolute(outputPath) || path79.win32.isAbsolute(outputPath) || path79.posix.isAbsolute(outputPath) || /^[A-Za-z]:/.test(outputPath)) {
     return false;
   }
   return outputPath.split(/[\\/]+/).every((segment) => segment !== "" && segment !== "." && segment !== "..");
 }
 function isPathInsideOrEqual5(childPath, parentPath) {
-  const relativePath = path78.relative(parentPath, childPath);
-  return relativePath === "" || !relativePath.startsWith("..") && !path78.isAbsolute(relativePath);
+  const relativePath = path79.relative(parentPath, childPath);
+  return relativePath === "" || !relativePath.startsWith("..") && !path79.isAbsolute(relativePath);
 }
 function isSameRealPath(leftPath, rightPath) {
   if (process.platform === "win32") {
-    return path78.normalize(leftPath).toLowerCase() === path78.normalize(rightPath).toLowerCase();
+    return path79.normalize(leftPath).toLowerCase() === path79.normalize(rightPath).toLowerCase();
   }
-  return path78.normalize(leftPath) === path78.normalize(rightPath);
+  return path79.normalize(leftPath) === path79.normalize(rightPath);
 }
 
 // src/cli/main.ts
@@ -50253,9 +52104,9 @@ async function main(argv = process.argv.slice(2), io = defaultIO()) {
 function runCache(command, io) {
   const env = io.env ?? process.env;
   const configuredCacheDir = command.cacheDir ?? env.OHRISK_CACHE_DIR;
-  const cacheDir = configuredCacheDir ? path79.resolve(io.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(env);
-  const cache = createArtifactCache(cacheDir);
-  const location = configuredCacheDir ? path79.relative(io.cwd, cacheDir) || "." : cacheDir;
+  const cacheDir = configuredCacheDir ? path80.resolve(io.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(env);
+  const cache = openArtifactCacheForManagement(cacheDir);
+  const location = configuredCacheDir ? path80.relative(io.cwd, cacheDir) || "." : cacheDir;
   if (command.action === "status") {
     const status = cache.status();
     if (!status.ok) {
@@ -50456,12 +52307,29 @@ async function runDiff(command, io) {
     io.stderr(formatError(emitted.error));
     return exitCodeForError(emitted.error);
   }
-  if (command.failOn && hasFindingAtOrAbove(diff.newFindings, command.failOn)) {
+  if (command.failOn && hasFindingAtOrAbove(diff.introducedFindings, command.failOn)) {
     return 1;
   }
   return 0;
 }
 async function runExplain(command, io) {
+  const workspaceRoot = resolveWorkspaceRootPath({
+    cwd: io.cwd,
+    workspaceRootPath: command.workspaceRootPath
+  });
+  if (isErr(workspaceRoot)) {
+    io.stderr(formatError(workspaceRoot.error));
+    return exitCodeForError(workspaceRoot.error);
+  }
+  const policy = readPolicyConfig({
+    projectRoot: io.cwd,
+    ...workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {},
+    ...command.policyPath ? { policyPath: command.policyPath } : {}
+  });
+  if (isErr(policy)) {
+    io.stderr(formatError(policy.error));
+    return exitCodeForError(policy.error);
+  }
   const normalizedLicense = normalizeLicenseEvidence({
     packageId: "input",
     packageJsonLicense: command.expression,
@@ -50480,14 +52348,17 @@ async function runExplain(command, io) {
       direct: true,
       paths: [["input"]]
     },
-    profile: command.profile
+    profile: command.profile,
+    policy: policy.value,
+    includePackagePolicy: false
   });
   const output = renderExplainReport({
     expression: command.expression,
     profile: command.profile,
     normalizedLicense,
     finding,
-    json: command.json
+    json: command.json,
+    policy: summarizePolicyConfig(policy.value)
   });
   const emitted = emitReport({
     contents: output,
@@ -50515,6 +52386,7 @@ async function runScan(command, io) {
   const scanned = await scanProject({
     cwd: io.cwd,
     ...command.lockfilePath ? { lockfilePath: command.lockfilePath } : {},
+    ...command.archivePath ? { archivePath: command.archivePath } : {},
     allLockfiles: command.allLockfiles ?? false,
     ...command.policyPath ? { policyPath: command.policyPath } : {},
     offline: command.offline ?? false,
@@ -50597,7 +52469,14 @@ function hasWaiverDrift(input) {
   return input.expiredWaivers.length > 0 || input.unmatchedWaivers.length > 0;
 }
 async function scanProject(input) {
-  const loaded = loadProjectGraph({
+  const loaded = input.archivePath ? loadArchiveProjectGraph({
+    cwd: input.cwd,
+    archivePath: input.archivePath,
+    allLockfiles: input.allLockfiles,
+    prodOnly: input.prodOnly,
+    now: input.now,
+    ...input.progress ? { progress: input.progress } : {}
+  }) : loadProjectGraph({
     cwd: input.cwd,
     ...input.lockfilePath ? { lockfilePath: input.lockfilePath } : {},
     allLockfiles: input.allLockfiles,
@@ -50608,7 +52487,7 @@ async function scanProject(input) {
     return loaded;
   }
   const policy = readPolicyConfig({
-    projectRoot: loaded.value.project.rootDir,
+    projectRoot: loaded.value.project.source ? input.cwd : loaded.value.project.rootDir,
     ...input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {},
     ...input.policyPath ? { policyPath: input.policyPath } : {}
   });
@@ -50638,8 +52517,32 @@ async function scanProject(input) {
     evidenceRuntime: evidenceRuntime.value,
     applyWaivers: input.applyWaivers,
     now: input.now,
+    ...loaded.value.project.source ? { configurationRoot: input.cwd } : {},
     ...input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {},
     ...input.progress ? { progress: input.progress } : {}
+  });
+}
+function loadArchiveProjectGraph(input) {
+  input.progress?.(SCAN_PROGRESS_DISCOVER_PERCENT, "Reading archive index...");
+  const archive = readArchiveFile({
+    cwd: input.cwd,
+    archivePath: input.archivePath,
+    now: input.now
+  });
+  if (isErr(archive)) {
+    return archive;
+  }
+  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, "Reading archived lockfiles...");
+  const loaded = loadArchiveProject({
+    source: archive.value,
+    allLockfiles: input.allLockfiles
+  });
+  if (isErr(loaded)) {
+    return loaded;
+  }
+  return ok({
+    project: loaded.value.project,
+    scanGraph: filterGraphForProdOnly(loaded.value.graph, input.prodOnly)
   });
 }
 function loadProjectGraph(input) {
@@ -50653,7 +52556,7 @@ function loadProjectGraph(input) {
     return discovered;
   }
   const lockfileCount = discovered.value.lockfiles?.length ?? 1;
-  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, lockfileCount > 1 ? `Reading ${lockfileCount} lockfiles...` : `Reading ${path79.basename(discovered.value.lockfile.path)}...`);
+  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, lockfileCount > 1 ? `Reading ${lockfileCount} lockfiles...` : `Reading ${path80.basename(discovered.value.lockfile.path)}...`);
   const graph = parseProjectDependencyGraph(discovered.value);
   if (isErr(graph)) {
     return graph;
@@ -50673,6 +52576,7 @@ async function evaluateProjectScan(input) {
   const evidence = await collectEvidenceForGraph({
     graph: input.scanGraph,
     projectRoot: input.project.rootDir,
+    ...!input.project.source ? {} : { allowLocalProjectEvidence: false },
     evidenceRuntime: input.evidenceRuntime,
     ...input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {},
     ...evidenceProgress ? { progress: evidenceProgress } : {}
@@ -50701,7 +52605,7 @@ async function evaluateProjectScan(input) {
       policy: summarizePolicyConfig(input.policy)
     });
   }
-  const waivers = readRiskWaivers(input.project.rootDir);
+  const waivers = readRiskWaivers(input.configurationRoot ?? input.project.rootDir);
   if (isErr(waivers)) {
     return waivers;
   }
@@ -50767,6 +52671,7 @@ async function collectEvidenceForGraph(input) {
   const collected = await collectGraphEvidence({
     graph: collectionGraph,
     projectRoot: input.projectRoot,
+    ...input.allowLocalProjectEvidence !== undefined ? { allowLocalProjectEvidence: input.allowLocalProjectEvidence } : {},
     offline: input.evidenceRuntime.offline,
     cacheDir: input.evidenceRuntime.cacheDir,
     ...input.evidenceRuntime.jobs !== undefined ? { evidenceConcurrency: input.evidenceRuntime.jobs } : {},
@@ -50830,7 +52735,7 @@ function resolveEvidenceRuntimeOptions(input) {
     }
   }
   const configuredCacheDir = input.cacheDir ?? input.env.OHRISK_CACHE_DIR;
-  const cacheDir = configuredCacheDir ? path79.resolve(input.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(input.env);
+  const cacheDir = configuredCacheDir ? path80.resolve(input.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(input.env);
   return ok({
     offline: input.offline,
     cacheDir,
@@ -51018,7 +52923,7 @@ function loadBaselineProjectGraph(input) {
     if (baselineLockfiles.length === 0 && listed.value.includes("package.json")) {
       baselineLockfiles = [{
         kind: "package-json",
-        path: path79.join(projectRoot, "package.json")
+        path: path80.join(projectRoot, "package.json")
       }];
     }
   } else {
@@ -51027,7 +52932,7 @@ function loadBaselineProjectGraph(input) {
   if (baselineLockfiles.length === 0) {
     return ok({
       graph: {
-        rootName: path79.basename(projectRoot),
+        rootName: path80.basename(projectRoot),
         lockfilePath: `${input.baselineRef}:<none>`,
         lockfilePaths: [],
         nodes: []
@@ -51043,7 +52948,7 @@ function loadBaselineProjectGraph(input) {
       lockfile,
       baselineRef: input.baselineRef,
       readRefFile: input.readRefFile,
-      rootNameHint: input.currentProject.scanGraph.rootName ?? path79.basename(projectRoot),
+      rootNameHint: input.currentProject.scanGraph.rootName ?? path80.basename(projectRoot),
       ...baselineFiles ? { baselineFiles } : {}
     });
     if (isErr(parsed)) {
@@ -51079,7 +52984,7 @@ function parseBaselineLockfileGraph(input) {
   if (isErr(baselineLockfile)) {
     return baselineLockfile;
   }
-  const lockfileDirectory = path79.posix.dirname(relativeLockfilePath);
+  const lockfileDirectory = path80.posix.dirname(relativeLockfilePath);
   const relativeCompanionPath = (filename) => lockfileDirectory === "." ? filename : `${lockfileDirectory}/${filename}`;
   const packageJsonRelativePath = relativeCompanionPath("package.json");
   const baselinePackageJson = input.lockfile.kind === "yarn-lock" ? input.readRefFile({
@@ -51210,7 +53115,7 @@ function parseBaselineLockfileGraph(input) {
     ...input.lockfile.kind === "cargo-lock" ? { cargoRootName: input.rootNameHint } : {},
     ...baselineGoSum.value ? { goSumText: baselineGoSum.value } : {},
     ...baselineGoWorkModules.value?.length ? { goWorkModuleInputs: baselineGoWorkModules.value } : {},
-    goWorkDir: path79.dirname(input.lockfile.path),
+    goWorkDir: path80.dirname(input.lockfile.path),
     ...baselineComposerJson.value ? { composerJsonText: baselineComposerJson.value } : {},
     ...baselineDirectoryPackagesProps.value?.text ? { directoryPackagesPropsText: baselineDirectoryPackagesProps.value.text } : {},
     ...baselineDirectoryPackagesProps.value?.path ? { directoryPackagesPropsPath: baselineDirectoryPackagesProps.value.path } : {},
@@ -51248,8 +53153,8 @@ function diffLockfileKey(lockfile) {
   return `${lockfile.kind}\x00${lockfile.path}`;
 }
 function projectRelativeLockfilePath(projectRoot, lockfilePath) {
-  const relativePath = path79.relative(projectRoot, lockfilePath).replace(/\\/g, "/");
-  return relativePath === "" ? path79.basename(lockfilePath) : relativePath;
+  const relativePath = path80.relative(projectRoot, lockfilePath).replace(/\\/g, "/");
+  return relativePath === "" ? path80.basename(lockfilePath) : relativePath;
 }
 function readBaselinePrimaryLockfile(input) {
   if (isGradleDependencyLocksDirectory(input.lockfilePath)) {
@@ -51269,7 +53174,7 @@ function readBaselineGradleDependencyLocksDirectory(input) {
       const prefix = `${normalizedDirectory}/`;
       entries = [...input.baselineFiles].filter((entry) => entry.startsWith(prefix)).map((entry) => entry.slice(prefix.length)).filter((entry) => !entry.includes("/") && entry.toLowerCase().endsWith(".lockfile")).sort();
     } else {
-      entries = readdirSync31(input.lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile5(path79.join(input.lockfilePath, entry))).sort();
+      entries = readdirSync31(input.lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile5(path80.join(input.lockfilePath, entry))).sort();
     }
   } catch (cause) {
     return err(createError({
@@ -51314,7 +53219,7 @@ function readBaselineGradleDependencyLocksDirectory(input) {
 `));
 }
 function baselineLockfilePathForKind(input) {
-  return input.kind === "gradle-lock" ? path79.join(input.rootName, input.relativeLockfilePath) : `${input.baselineRef}:${input.relativeLockfilePath}`;
+  return input.kind === "gradle-lock" ? path80.join(input.rootName, input.relativeLockfilePath) : `${input.baselineRef}:${input.relativeLockfilePath}`;
 }
 function readBaselineCargoMemberManifests(input) {
   const memberManifestPaths = input.baselineFiles ? findCargoWorkspaceMemberManifestPathsFromRelativePaths({
@@ -51380,7 +53285,7 @@ function readBaselineYarnWorkspacePackageJsons(input) {
 }
 function createBaselineRequirementsIncludedFileReader(input) {
   return ({ includePath, fromFilePath, directive }) => {
-    if (path79.isAbsolute(includePath)) {
+    if (path80.isAbsolute(includePath)) {
       return err(createError({
         code: "REQUIREMENTS_PARSE_FAILED",
         category: "unsupported_input",
@@ -51393,7 +53298,7 @@ function createBaselineRequirementsIncludedFileReader(input) {
       }));
     }
     const fromRelativePath = stripBaselineRefPrefix(fromFilePath, input.baselineRef);
-    const includedRelativePath = normalizeBaselineRelativePath(path79.join(path79.dirname(fromRelativePath), includePath));
+    const includedRelativePath = normalizeBaselineRelativePath(path80.join(path80.dirname(fromRelativePath), includePath));
     if (!includedRelativePath) {
       return err(createError({
         code: "REQUIREMENTS_PARSE_FAILED",
@@ -51453,7 +53358,7 @@ function baselinePythonLocalSourceErrorsForKind(kind) {
 }
 function createBaselinePythonLocalSourceFileReader(input) {
   return ({ sourcePath, relativeFilePath, fromFilePath }) => {
-    if (path79.isAbsolute(sourcePath)) {
+    if (path80.isAbsolute(sourcePath)) {
       return err(createError({
         code: input.errors.parseCode,
         category: "unsupported_input",
@@ -51466,7 +53371,7 @@ function createBaselinePythonLocalSourceFileReader(input) {
       }));
     }
     const fromRelativePath = stripBaselineRefPrefix(fromFilePath, input.baselineRef);
-    const sourceRelativePath = normalizeBaselineRelativePath(path79.join(path79.dirname(fromRelativePath), sourcePath));
+    const sourceRelativePath = normalizeBaselineRelativePath(path80.join(path80.dirname(fromRelativePath), sourcePath));
     if (!sourceRelativePath) {
       return err(createError({
         code: input.errors.parseCode,
@@ -51479,7 +53384,7 @@ function createBaselinePythonLocalSourceFileReader(input) {
         }
       }));
     }
-    const sourceFileRelativePath = normalizeBaselineRelativePath(path79.join(sourceRelativePath, relativeFilePath));
+    const sourceFileRelativePath = normalizeBaselineRelativePath(path80.join(sourceRelativePath, relativeFilePath));
     if (!sourceFileRelativePath) {
       return err(createError({
         code: input.errors.parseCode,
@@ -51512,18 +53417,18 @@ function stripBaselineRefPrefix(filePath, baselineRef) {
   return filePath.startsWith(prefix) ? filePath.slice(prefix.length) : filePath;
 }
 function normalizeBaselineRelativePath(relativePath) {
-  const normalized = path79.normalize(relativePath).replace(/\\/g, "/");
-  if (normalized === "." || normalized.startsWith("../") || normalized === ".." || path79.isAbsolute(normalized)) {
+  const normalized = path80.normalize(relativePath).replace(/\\/g, "/");
+  if (normalized === "." || normalized.startsWith("../") || normalized === ".." || path80.isAbsolute(normalized)) {
     return;
   }
   return normalized;
 }
 function isGradleDependencyLocksDirectory(lockfilePath) {
-  const segments = path79.normalize(lockfilePath).split(path79.sep);
+  const segments = path80.normalize(lockfilePath).split(path80.sep);
   return segments.length >= 2 && segments[segments.length - 1] === "dependency-locks" && segments[segments.length - 2] === "gradle";
 }
 function findBaselineDirectoryPackagesPropsPath(input) {
-  let current = path79.posix.dirname(projectRelativeLockfilePath(input.projectRoot, input.projectFilePath));
+  let current = path80.posix.dirname(projectRelativeLockfilePath(input.projectRoot, input.projectFilePath));
   while (true) {
     const candidate = current === "." ? "Directory.Packages.props" : `${current}/Directory.Packages.props`;
     if (input.baselineFiles.has(candidate)) {
@@ -51532,7 +53437,7 @@ function findBaselineDirectoryPackagesPropsPath(input) {
     if (current === ".") {
       return;
     }
-    const parent = path79.posix.dirname(current);
+    const parent = path80.posix.dirname(current);
     current = parent === current ? "." : parent;
   }
 }
@@ -51541,7 +53446,7 @@ function readBaselineDirectoryPackagesProps(input) {
     projectRoot: input.project.rootDir,
     projectFilePath: input.project.lockfile.path,
     baselineFiles: input.baselineFiles
-  }) : normalizeBaselineRelativePath(path79.relative(input.project.rootDir, findNearestDirectoryPackagesPropsPath(input.project.lockfile.path) ?? ""));
+  }) : normalizeBaselineRelativePath(path80.relative(input.project.rootDir, findNearestDirectoryPackagesPropsPath(input.project.lockfile.path) ?? ""));
   if (!relativePath) {
     return ok(undefined);
   }
@@ -51606,8 +53511,8 @@ function renderTopLevelHelp() {
     "Ohrisk",
     "",
     "Usage:",
-    "  ohrisk scan [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
-    "  ohrisk ci [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
+    "  ohrisk scan [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
+    "  ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
     "  ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
     "  ohrisk cache status|prune|clear [--cache-dir <path>] [--json]",
@@ -51626,6 +53531,7 @@ function renderTopLevelHelp() {
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
+    "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
     "  --all                  Discover and merge every supported lockfile in the project root.",
     "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
     "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
@@ -51658,11 +53564,12 @@ function renderScanHelp() {
     "Ohrisk scan",
     "",
     "Usage:",
-    "  ohrisk scan [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
+    "  ohrisk scan [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
+    "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
     "  --all                  Discover and merge every supported lockfile in the project root.",
     "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
     "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
@@ -51692,11 +53599,12 @@ function renderCiHelp() {
     "Ohrisk ci",
     "",
     "Usage:",
-    "  ohrisk ci [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
+    "  ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
+    "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
     "  --all                  Discover and merge every supported lockfile in the project root.",
     "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
     "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
@@ -51780,10 +53688,12 @@ function renderExplainHelp() {
     "Ohrisk explain",
     "",
     "Usage:",
-    "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
+    "  ohrisk explain <license-expression> [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--json] [--output <file>]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
+    "  --policy <path>        Apply license rules from a workspace-contained policy file.",
+    "  --workspace-root <path> Set the boundary for local policy inheritance.",
     "  --json                 Print machine-readable output.",
     "  --output <file>        Write report output to a project-relative file instead of stdout.",
     "  --help, -h             Print this help text."
@@ -51927,25 +53837,26 @@ function resolveWorkspaceRootPath(input) {
   if (!input.workspaceRootPath) {
     return ok(undefined);
   }
-  const resolvedPath = path79.resolve(input.cwd, input.workspaceRootPath);
+  const resolvedPath = path80.resolve(input.cwd, input.workspaceRootPath);
   try {
-    const realPath = realpathSync6(resolvedPath);
-    if (!statSync33(realPath).isDirectory()) {
-      return err(workspaceRootInvalidError2(input.workspaceRootPath, resolvedPath));
+    const realPath = realpathSync7(resolvedPath);
+    if (!statSync34(realPath).isDirectory()) {
+      return err(workspaceRootInvalidError2(input.workspaceRootPath));
     }
     return ok(realPath);
   } catch {
-    return err(workspaceRootInvalidError2(input.workspaceRootPath, resolvedPath));
+    return err(workspaceRootInvalidError2(input.workspaceRootPath));
   }
 }
-function workspaceRootInvalidError2(workspaceRootPath, resolvedPath) {
+function workspaceRootInvalidError2(workspaceRootPath) {
+  const absolute = path80.isAbsolute(workspaceRootPath);
   return createError({
     code: "INVALID_ARGUMENT",
     category: "invalid_input",
     message: "--workspace-root must point to an existing directory.",
     details: {
-      workspaceRootPath,
-      resolvedPath
+      workspaceRootPath: absolute ? "<absolute-path>" : workspaceRootPath,
+      reason: absolute ? "absolute_workspace_root_not_available" : "workspace_root_not_available"
     }
   });
 }
@@ -51954,14 +53865,14 @@ function isCliEntrypoint(metaUrl, argvPath) {
     return false;
   }
   try {
-    return realpathSync6(fileURLToPath4(metaUrl)) === realpathSync6(argvPath);
+    return realpathSync7(fileURLToPath4(metaUrl)) === realpathSync7(argvPath);
   } catch {
-    return path79.resolve(fileURLToPath4(metaUrl)) === path79.resolve(argvPath);
+    return path80.resolve(fileURLToPath4(metaUrl)) === path80.resolve(argvPath);
   }
 }
 function isFile5(pathname) {
   try {
-    return statSync33(pathname).isFile();
+    return statSync34(pathname).isFile();
   } catch {
     return false;
   }

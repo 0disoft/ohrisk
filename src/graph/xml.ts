@@ -343,18 +343,9 @@ function decodeXmlText(
       case "apos":
         return "'";
       default:
-        if (entity.startsWith("#x")) {
-          const codePoint = Number.parseInt(entity.slice(2), 16);
-          if (Number.isFinite(codePoint)) {
-            return String.fromCodePoint(codePoint);
-          }
-        }
-
-        if (entity.startsWith("#")) {
-          const codePoint = Number.parseInt(entity.slice(1), 10);
-          if (Number.isFinite(codePoint)) {
-            return String.fromCodePoint(codePoint);
-          }
+        const codePoint = parseXmlNumericEntity(entity);
+        if (codePoint !== undefined) {
+          return String.fromCodePoint(codePoint);
         }
 
         failedEntity = match;
@@ -367,4 +358,25 @@ function decodeXmlText(
   }
 
   return ok(decoded);
+}
+
+function parseXmlNumericEntity(entity: string): number | undefined {
+  const hexadecimal = entity.match(/^#x([0-9A-Fa-f]+)$/);
+  const decimal = entity.match(/^#([0-9]+)$/);
+  const digits = hexadecimal?.[1] ?? decimal?.[1];
+  if (!digits) {
+    return undefined;
+  }
+
+  const codePoint = Number.parseInt(digits, hexadecimal ? 16 : 10);
+  return isXml10CodePoint(codePoint) ? codePoint : undefined;
+}
+
+function isXml10CodePoint(codePoint: number): boolean {
+  return codePoint === 0x9
+    || codePoint === 0xa
+    || codePoint === 0xd
+    || (codePoint >= 0x20 && codePoint <= 0xd7ff)
+    || (codePoint >= 0xe000 && codePoint <= 0xfffd)
+    || (codePoint >= 0x10000 && codePoint <= 0x10ffff);
 }

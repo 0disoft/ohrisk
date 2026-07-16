@@ -85,7 +85,15 @@ corrupt entries, orphan objects, and oldest/newest access times. `cache prune`
 removes expired entries and orphan objects by default; `--max-age` additionally
 removes entries not accessed within the duration, and `--max-size` applies LRU
 trimming to the requested physical size. `cache clear` removes only Ohrisk's
-known index, object, and marker paths inside the selected cache directory.
+known index and object paths inside the selected cache directory. Both
+destructive commands require the exact, regular-file Ohrisk ownership marker
+to exist before inspection or removal; a missing, replaced, or mismatched
+marker fails closed and leaves the directory untouched.
+
+Scan-time cache initialization may create the marker only when the cache
+directory is new or empty. A non-empty unmarked directory is never claimed as
+an Ohrisk cache, and cache reads, revalidation, corruption cleanup, prune, and
+clear do not mutate it.
 
 `--json` returns the action and result without exposing an absolute cache path.
 `--max-size` accepts byte units such as `512MiB`, `2GB`, or `0B`, and

@@ -13,6 +13,8 @@ import type { RiskFinding } from "./types";
 
 export const DEFAULT_WAIVER_FILE_NAME = ".ohrisk-waivers.json";
 export const WAIVER_FILE_MAX_BYTES = 1024 * 1024;
+const WAIVER_ROOT_KEYS = new Set(["waivers"]);
+const WAIVER_KEYS = new Set(["id", "fingerprint", "reason", "expiresOn"]);
 
 export type RiskWaiver = {
   id?: string;
@@ -145,6 +147,11 @@ function parseWaivers(value: unknown): Result<RiskWaiver[], string> {
     return err("Ohrisk waiver file must be an object with a waivers array.");
   }
 
+  const unknownRootKeys = unknownKeys(value, WAIVER_ROOT_KEYS);
+  if (unknownRootKeys.length > 0) {
+    return err(`Ohrisk waiver file contains unknown field(s): ${unknownRootKeys.join(", ")}.`);
+  }
+
   if (!Array.isArray(value.waivers)) {
     return err("Ohrisk waiver file must contain a waivers array.");
   }
@@ -165,6 +172,13 @@ function parseWaivers(value: unknown): Result<RiskWaiver[], string> {
 function parseWaiver(value: unknown, index: number): Result<RiskWaiver, string> {
   if (!isRecord(value)) {
     return err(`Waiver at index ${index} must be an object.`);
+  }
+
+  const unknownWaiverKeys = unknownKeys(value, WAIVER_KEYS);
+  if (unknownWaiverKeys.length > 0) {
+    return err(
+      `Waiver at index ${index} contains unknown field(s): ${unknownWaiverKeys.join(", ")}.`
+    );
   }
 
   const id = readOptionalString(value.id);
@@ -190,6 +204,10 @@ function parseWaiver(value: unknown, index: number): Result<RiskWaiver, string> 
     reason,
     ...(expiresOn ? { expiresOn } : {})
   });
+}
+
+function unknownKeys(value: Record<string, unknown>, allowed: ReadonlySet<string>): string[] {
+  return Object.keys(value).filter((key) => !allowed.has(key)).sort();
 }
 
 function matchesWaiver(waiver: RiskWaiver, finding: RiskFinding): boolean {

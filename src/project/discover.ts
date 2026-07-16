@@ -64,10 +64,19 @@ export type ProjectLockfile = {
   path: string;
 };
 
+export type ProjectArchiveSource = {
+  kind: "archive";
+  displayPath: string;
+  format: "zip" | "tar" | "tar.gz";
+  sha256: string;
+  entryRoot: string;
+};
+
 export type ProjectInput = {
   rootDir: string;
   lockfile: ProjectLockfile;
   lockfiles?: ProjectLockfile[];
+  source?: ProjectArchiveSource;
 };
 
 export type DiscoverProjectOptions = {

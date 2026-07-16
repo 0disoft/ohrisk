@@ -16,7 +16,13 @@ describe("release documentation", () => {
     expect(releasing).toContain("bun run verify:release");
     expect(releasing).toContain(`git tag v${packageVersion}`);
     expect(releasing).toContain("package.json");
-    expect(releasing).toContain("npm view ohrisk version");
+    expect(releasing).toContain(`npm view ohrisk@${packageVersion} version`);
+    expect(releasing).toContain(
+      `npm view ohrisk@${packageVersion} dist.tarball`
+    );
+    expect(releasing).toContain(
+      `npm view ohrisk@${packageVersion} dist.integrity`
+    );
     expect(releasing).toContain("CHANGELOG.md");
   });
 });

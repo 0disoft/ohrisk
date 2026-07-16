@@ -36,14 +36,16 @@ file's example tag when needed, push `main`, then push a version tag matching
 `package.json`:
 
 ```bash
-git tag v1.2.1
-git push origin v1.2.1
+git tag v1.4.0
+git push origin v1.4.0
 ```
 
 The publish workflow verifies that the tag version matches `package.json`, runs
 the local release gate, publishes the package to npm when that exact version is
-not already present, verifies the npm registry result, and creates a GitHub
-Release from the matching `CHANGELOG.md` section.
+not already present, verifies the exact `package@version` registry metadata
+(version, tarball URL, and integrity), and creates a GitHub Release from the
+matching `CHANGELOG.md` section. The postcheck does not depend on the mutable
+`latest` dist-tag.
 
 ## Manual Recovery
 
@@ -53,8 +55,9 @@ locally after confirming npm authentication:
 ```bash
 npm whoami
 npm publish --access public --provenance
-npm view ohrisk version
-npm view ohrisk dist.tarball
+npm view ohrisk@1.4.0 version
+npm view ohrisk@1.4.0 dist.tarball
+npm view ohrisk@1.4.0 dist.integrity
 ```
 
 After manual recovery, create or update the matching GitHub Release using the

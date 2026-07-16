@@ -271,6 +271,42 @@ describe("parseCycloneDxXmlText", () => {
     expect(result.error.code).toBe("CYCLONEDX_PARSE_FAILED");
   });
 
+  test("decodes valid XML 1.0 numeric character references", () => {
+    const result = parseCycloneDxXmlText([
+      "<bom>",
+      "  <metadata><component bom-ref=\"root-app\"><name>fixture&#x20;app&#128512;</name></component></metadata>",
+      "  <components><component bom-ref=\"child\"><purl>pkg:npm/child@1.0.0</purl></component></components>",
+      "  <dependencies><dependency ref=\"root-app\"><dependency ref=\"child\" /></dependency></dependencies>",
+      "</bom>"
+    ].join("\n"), "numeric-entities.cdx.xml");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.rootName).toBe("fixture app😀");
+  });
+
+  test("rejects invalid XML 1.0 numeric character references without throwing", () => {
+    const invalidEntities = ["&#0;", "&#xD800;", "&#xFFFE;", "&#x110000;", "&#1114112;", "&#x10zz;"];
+
+    for (const entity of invalidEntities) {
+      let result: ReturnType<typeof parseCycloneDxXmlText> | undefined;
+      expect(() => {
+        result = parseCycloneDxXmlText(
+          `<bom><components><component bom-ref="child"><purl>pkg:npm/child@1.0.0</purl><name>${entity}</name></component></components></bom>`,
+          "invalid-entity.cdx.xml"
+        );
+      }).not.toThrow();
+      expect(result?.ok).toBe(false);
+      if (result && !result.ok) {
+        expect(result.error.code).toBe("CYCLONEDX_PARSE_FAILED");
+        expect(result.error.details?.cause).toContain("Unsupported XML entity");
+      }
+    }
+  });
+
   test("reports dependency entries with missing refs as unsupported input", () => {
     const result = parseCycloneDxXmlText(`<?xml version="1.0" encoding="UTF-8"?>
 <bom xmlns="http://cyclonedx.org/schema/bom/1.5" version="1">

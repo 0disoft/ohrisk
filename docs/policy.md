@@ -55,6 +55,25 @@ Package rules match the dependency ID or Package URL. Exact keys win before
 wildcard keys, and the longest matching wildcard wins. Use Package URLs when
 several ecosystems can contain the same package name.
 
+When a package rule overrides severity, recommendation, or action, the finding
+reason names the exact package-rule key that matched. If the rule has its own
+`reason`, Ohrisk keeps it with that provenance; otherwise the reason also keeps
+the underlying license classification so a package override is not mistaken
+for a built-in license decision.
+
+License keys may be complete SPDX terms, including exceptions such as
+`GPL-2.0-only WITH Classpath-exception-2.0`. An exact `WITH` term is checked
+before the base license key.
+
+## Explain with policy
+
+`ohrisk explain <expression> --policy <path>` applies license allow, deny, and
+severity rules, including profile-specific license rules. `--workspace-root`
+sets the trusted boundary for policy inheritance. Explain has no package ID or
+Package URL, so package rules are deliberately not evaluated. JSON output marks
+this as `policyScope: "license-only"` and includes only redacted, relative policy
+source paths.
+
 ## Report metadata
 
 Machine-readable scan and diff reports include a redacted policy summary with

@@ -1,6 +1,7 @@
 import type { NormalizedLicense } from "../license/types";
 import type { RiskFinding } from "../policy/types";
 import type { UsageProfile } from "../policy/profiles";
+import type { PolicyConfigSummary } from "../policy/config";
 import {
   OHRISK_EXPLAIN_REPORT_SCHEMA,
   OHRISK_REPORT_SCHEMA_VERSION
@@ -12,6 +13,7 @@ export type ExplainReportInput = {
   normalizedLicense: NormalizedLicense;
   finding: RiskFinding;
   json: boolean;
+  policy: PolicyConfigSummary;
 };
 
 export function renderExplainReport(input: ExplainReportInput): string {
@@ -23,6 +25,8 @@ export function renderExplainReport(input: ExplainReportInput): string {
         status: "license_explained",
         expression: input.expression,
         profile: input.profile,
+        policyScope: "license-only",
+        policy: input.policy,
         license: serializableNormalizedLicense(input.normalizedLicense),
         finding: input.finding
       },
@@ -35,6 +39,8 @@ export function renderExplainReport(input: ExplainReportInput): string {
     "Ohrisk explain",
     `Expression: ${input.expression}`,
     `Profile: ${input.profile}`,
+    `Policy: ${formatPolicy(input.policy)}`,
+    "Policy scope: license rules only; package rules require a package ID or Package URL and were not evaluated.",
     `Severity: ${input.finding.severity}`,
     `Recommendation: ${input.finding.recommendation}`,
     `Action: ${input.finding.action}`,
@@ -44,6 +50,13 @@ export function renderExplainReport(input: ExplainReportInput): string {
     "",
     "Note: Ohrisk reports profile-specific risk, not a legal safe or unsafe verdict."
   ].join("\n");
+}
+
+function formatPolicy(policy: PolicyConfigSummary): string {
+  if (!policy.enabled) {
+    return "none";
+  }
+  return `enabled (${policy.sourceFiles.join(", ")})`;
 }
 
 function serializableNormalizedLicense(license: NormalizedLicense): Omit<NormalizedLicense, "spdxAst"> {

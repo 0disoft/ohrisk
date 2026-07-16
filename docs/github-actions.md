@@ -7,6 +7,47 @@ project secrets.
 Ohrisk is a risk decision aid, not legal advice. These workflows surface new
 license evidence early; they do not replace legal review.
 
+## Bundled action
+
+The repository's composite action runs its checked-in CLI bundle and supports
+`scan`, `ci`, and `diff`. A diff invocation requires a baseline ref:
+
+```yaml
+- uses: actions/checkout@v7
+  with:
+    fetch-depth: 0
+
+- uses: 0disoft/ohrisk@v1.4.0
+  with:
+    command: diff
+    baseline-ref: origin/main
+    prod: "true"
+    fail-on: high
+```
+
+The action passes `baseline-ref` as one argument, but it does not fetch Git
+history. Checkout depth and baseline availability are the caller's
+responsibility. For `scan`, leave `fail-on` empty (the default). For `ci`, an
+empty action input preserves the CLI's `high` default.
+
+To scan a source archive directly, pass a checked-in or downloaded
+repository-relative regular file to `archive`:
+
+```yaml
+- uses: 0disoft/ohrisk@v1.4.0
+  with:
+    command: ci
+    archive: artifacts/source.tar.gz
+    all: "true"
+```
+
+The archive path must stay inside the checked-out repository and cannot use
+symbolic links or be combined with `lockfile`. Archive input is supported only
+for `scan` and `ci`; `diff` rejects it. The CLI reads supported entries in
+memory without extracting files to disk, and it never auto-loads policy or
+waiver files from the untrusted archive. Policy and waivers from the Action's
+host working directory remain authoritative.
+
 ## PR Gate
 
 Fail a pull request when production dependency changes introduce findings at or
@@ -35,7 +76,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install -g ohrisk@1.2.1
+      - run: npm install -g ohrisk@1.4.0
 
       - run: ohrisk diff origin/main --prod --fail-on high
 ```
@@ -73,7 +114,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install -g ohrisk@1.2.1
+      - run: npm install -g ohrisk@1.4.0
 
       - name: Generate Ohrisk report
         run: |
@@ -148,7 +189,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install -g ohrisk@1.2.1
+      - run: npm install -g ohrisk@1.4.0
 
       - run: |
           mkdir -p reports

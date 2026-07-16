@@ -27,6 +27,12 @@ describe("mergeDependencyGraphs", () => {
             files: [],
             source: "sbom",
             warnings: []
+          }],
+          diagnostics: [{
+            code: "dependency_paths_truncated",
+            affectedNodeCount: 2,
+            limit: 64,
+            message: "CycloneDX dependency paths were limited."
           }]
         }
       },
@@ -51,6 +57,12 @@ describe("mergeDependencyGraphs", () => {
             files: [{ path: "LICENSE", kind: "license", text: "MIT License" }],
             source: "local",
             warnings: ["second source"]
+          }],
+          diagnostics: [{
+            code: "dependency_paths_truncated",
+            affectedNodeCount: 3,
+            limit: 64,
+            message: "CycloneDX dependency paths were limited."
           }]
         }
       }
@@ -81,6 +93,12 @@ describe("mergeDependencyGraphs", () => {
       files: [{ path: "LICENSE", kind: "license", text: "MIT License" }],
       warnings: ["second source"]
     })]);
+    expect(merged.diagnostics).toEqual([{
+      code: "dependency_paths_truncated",
+      affectedNodeCount: 5,
+      limit: 64,
+      message: "CycloneDX dependency paths were limited."
+    }]);
     expect(merged.warnings).toEqual([
       "Multiple lockfiles resolve pkg:npm/%40scope/example@1.0.0 to different artifact locations.",
       "Multiple lockfiles declare different integrity values for pkg:npm/%40scope/example@1.0.0."

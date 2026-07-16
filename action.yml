@@ -15,9 +15,13 @@ inputs:
     required: false
     default: "true"
   command:
-    description: Ohrisk command to run.
+    description: "Ohrisk command to run: scan, ci, or diff."
     required: false
     default: ci
+  baseline-ref:
+    description: Git baseline ref required by command=diff.
+    required: false
+    default: ""
   profile:
     description: Risk profile.
     required: false
@@ -27,11 +31,15 @@ inputs:
     required: false
     default: "true"
   fail-on:
-    description: CI severity threshold for ohrisk ci.
+    description: Optional severity threshold for ohrisk ci or ohrisk diff. The CLI ci default remains high when empty.
     required: false
-    default: high
+    default: ""
   lockfile:
     description: Supported repository-relative lockfile path to scan.
+    required: false
+    default: ""
+  archive:
+    description: Repository-relative ZIP, TAR, TAR.GZ, or TGZ project archive to scan without extracting it.
     required: false
     default: ""
   all:
@@ -139,10 +147,12 @@ runs:
       env:
         OHRISK_ACTION_PATH: ${{ github.action_path }}
         OHRISK_COMMAND: ${{ inputs.command }}
+        OHRISK_BASELINE_REF: ${{ inputs.baseline-ref }}
         OHRISK_PROFILE: ${{ inputs.profile }}
         OHRISK_PROD: ${{ inputs.prod }}
         OHRISK_FAIL_ON: ${{ inputs.fail-on }}
         OHRISK_LOCKFILE: ${{ inputs.lockfile }}
+        OHRISK_ARCHIVE: ${{ inputs.archive }}
         OHRISK_ALL: ${{ inputs.all }}
         OHRISK_POLICY: ${{ inputs.policy }}
         OHRISK_FORMAT: ${{ inputs.format }}
@@ -202,6 +212,27 @@ runs:
           done
         }
 
+        require_relative_workspace_file() {
+          local name="$1"
+          local value="$2"
+          local normalized="${value//\\//}"
+          local current="."
+
+          require_relative_workspace_path "$name" "$value"
+          IFS="/" read -r -a path_segments <<< "$normalized"
+          for segment in "${path_segments[@]}"; do
+            current="${current}/${segment}"
+            if [ -L "$current" ]; then
+              echo "::error::${name} must stay inside the repository and must not traverse symbolic links."
+              exit 1
+            fi
+          done
+          if [ ! -f "$normalized" ]; then
+            echo "::error::${name} must name a repository-relative regular file."
+            exit 1
+          fi
+        }
+
         require_bool "prod" "$OHRISK_PROD"
         require_bool "all" "$OHRISK_ALL"
         require_bool "no-waivers" "$OHRISK_NO_WAIVERS"
@@ -213,14 +244,50 @@ runs:
           exit 1
         fi
 
+        if [ -n "$OHRISK_ARCHIVE" ] && [ -n "$OHRISK_LOCKFILE" ]; then
+          echo "::error::archive cannot be combined with lockfile."
+          exit 1
+        fi
+
         args=()
         case "$OHRISK_COMMAND" in
-          scan|ci) args+=("$OHRISK_COMMAND") ;;
+          scan|ci)
+            if [ -n "$OHRISK_BASELINE_REF" ]; then
+              echo "::error::baseline-ref can only be used with command=diff."
+              exit 1
+            fi
+            args+=("$OHRISK_COMMAND")
+            ;;
+          diff)
+            if [ -n "$OHRISK_ARCHIVE" ]; then
+              echo "::error::archive is supported only with command=scan or command=ci."
+              exit 1
+            fi
+            if [ -z "$OHRISK_BASELINE_REF" ]; then
+              echo "::error::baseline-ref is required when command=diff."
+              exit 1
+            fi
+            if [[ "$OHRISK_BASELINE_REF" == -* ]]; then
+              echo "::error::baseline-ref must be a git ref, not a CLI option."
+              exit 1
+            fi
+            args+=("diff" "$OHRISK_BASELINE_REF")
+            ;;
           *)
-            echo "::error::command must be scan or ci."
+            echo "::error::command must be scan, ci, or diff."
             exit 1
             ;;
         esac
+
+        if [ "$OHRISK_COMMAND" = "diff" ] && [ "$OHRISK_NO_WAIVERS" = "true" ]; then
+          echo "::error::no-waivers is not supported when command=diff."
+          exit 1
+        fi
+
+        if [ "$OHRISK_COMMAND" != "ci" ] && [ "$OHRISK_STRICT_WAIVERS" = "true" ]; then
+          echo "::error::strict-waivers requires command=ci."
+          exit 1
+        fi
 
         case "$OHRISK_PROFILE" in
           saas|distributed-app) args+=("--profile" "$OHRISK_PROFILE") ;;
@@ -243,6 +310,11 @@ runs:
           args+=("--lockfile" "$OHRISK_LOCKFILE")
         fi
 
+        if [ -n "$OHRISK_ARCHIVE" ]; then
+          require_relative_workspace_file "archive" "$OHRISK_ARCHIVE"
+          args+=("--archive" "$OHRISK_ARCHIVE")
+        fi
+
         if [ -n "$OHRISK_POLICY" ]; then
           require_relative_workspace_path "policy" "$OHRISK_POLICY"
           args+=("--policy" "$OHRISK_POLICY")
@@ -250,7 +322,14 @@ runs:
 
         case "$OHRISK_FORMAT" in
           text) ;;
-          json|sarif|markdown|html|cyclonedx) args+=("--${OHRISK_FORMAT}") ;;
+          json|markdown) args+=("--${OHRISK_FORMAT}") ;;
+          sarif|html|cyclonedx)
+            if [ "$OHRISK_COMMAND" = "diff" ]; then
+              echo "::error::format must be text, json, or markdown when command=diff."
+              exit 1
+            fi
+            args+=("--${OHRISK_FORMAT}")
+            ;;
           *)
             echo "::error::format must be text, json, sarif, markdown, html, or cyclonedx."
             exit 1
@@ -321,8 +400,8 @@ runs:
         fi
 
         if [ -n "$OHRISK_FAIL_ON" ]; then
-          if [ "$OHRISK_COMMAND" != "ci" ]; then
-            echo "::error::fail-on can only be used with command=ci."
+          if [ "$OHRISK_COMMAND" = "scan" ]; then
+            echo "::error::fail-on can only be used with command=ci or command=diff."
             exit 1
           fi
           case "$OHRISK_FAIL_ON" in

@@ -70,7 +70,12 @@ describe("npm publish workflow", () => {
     expect(workflow).toContain("already_published=true");
     expect(workflow).toContain("npm publish --access public --provenance");
     expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
-    expect(workflow).toContain("npm view \"${package_name}\" dist.tarball");
+    expect(workflow).toContain('package_spec="${package_name}@${package_version}"');
+    expect(workflow).toContain('npm view "$package_spec" version');
+    expect(workflow).toContain('npm view "$package_spec" dist.tarball');
+    expect(workflow).toContain('npm view "$package_spec" dist.integrity');
+    expect(workflow).not.toContain('npm view "${package_name}" version');
+    expect(workflow).not.toContain('npm view "${package_name}" dist.tarball');
     expect(workflow).toContain("CHANGELOG.md does not contain");
     expect(workflow).toContain("gh release create \"$GITHUB_REF_NAME\"");
     expect(workflow).not.toMatch(/uses:\s+[^\s]+@v\d+/);
@@ -81,6 +86,10 @@ describe("npm publish workflow", () => {
 describe("Ohrisk GitHub Action", () => {
   test("uses the bundled CLI by default and permits only exact overrides", () => {
     const actionSource = readFileSync(path.join(repoRoot, "action.yml"), "utf8");
+    const cliArgsSource = readFileSync(
+      path.join(repoRoot, "src", "cli", "args.ts"),
+      "utf8"
+    );
     const action = parseYaml(actionSource) as {
       inputs?: Record<string, { default?: string; required?: boolean }>;
       name?: string;
@@ -105,7 +114,10 @@ describe("Ohrisk GitHub Action", () => {
     expect(action.inputs?.command?.default).toBe("ci");
     expect(action.inputs?.profile?.default).toBe("saas");
     expect(action.inputs?.prod?.default).toBe("true");
-    expect(action.inputs?.["fail-on"]?.default).toBe("high");
+    expect(action.inputs?.["fail-on"]?.default).toBe("");
+    expect(action.inputs?.["baseline-ref"]?.default).toBe("");
+    expect(action.inputs?.archive?.default).toBe("");
+    expect(cliArgsSource).toContain('let failOn: RiskSeverity = "high"');
     expect(action.inputs?.all?.default).toBe("false");
     expect(action.inputs?.offline?.default).toBe("false");
     expect(action.inputs?.format?.default).toBe("text");
@@ -130,12 +142,34 @@ describe("Ohrisk GitHub Action", () => {
     expect(actionSource).toContain(
       'node "${OHRISK_ACTION_PATH}/action-dist/cli.js" "${args[@]}"'
     );
+    expect(actionSource).toContain('args+=("diff" "$OHRISK_BASELINE_REF")');
+    expect(actionSource).toContain("baseline-ref is required when command=diff");
+    expect(actionSource).toContain(
+      "baseline-ref must be a git ref, not a CLI option"
+    );
+    expect(actionSource).toContain(
+      "baseline-ref can only be used with command=diff"
+    );
+    expect(actionSource).toContain(
+      "archive is supported only with command=scan or command=ci"
+    );
+    expect(actionSource).toContain(
+      "fail-on can only be used with command=ci or command=diff"
+    );
+    expect(actionSource).toContain(
+      "format must be text, json, or markdown when command=diff"
+    );
+    expect(actionSource).toContain(
+      "no-waivers is not supported when command=diff"
+    );
+    expect(actionSource).toContain("strict-waivers requires command=ci");
     expect(actionSource).not.toContain("npm install");
     expect(actionSource).not.toContain('version="latest"');
     expect(actionSource).not.toContain("extra-args");
+    expect(actionSource).not.toContain("eval ");
   });
 
-  test("forwards bounded multi-lockfile, policy, cache, and registry inputs", () => {
+  test("forwards bounded archive, multi-lockfile, policy, cache, and registry inputs", () => {
     const actionSource = readFileSync(path.join(repoRoot, "action.yml"), "utf8");
 
     expect(actionSource).toContain("require_relative_workspace_path");
@@ -147,6 +181,9 @@ describe("Ohrisk GitHub Action", () => {
       'require_relative_workspace_path "lockfile" "$OHRISK_LOCKFILE"'
     );
     expect(actionSource).toContain(
+      'require_relative_workspace_file "archive" "$OHRISK_ARCHIVE"'
+    );
+    expect(actionSource).toContain(
       'require_relative_workspace_path "policy" "$OHRISK_POLICY"'
     );
     expect(actionSource).toContain(
@@ -156,7 +193,15 @@ describe("Ohrisk GitHub Action", () => {
       'require_relative_workspace_path "output" "$OHRISK_OUTPUT"'
     );
     expect(actionSource).toContain("all=true cannot be combined with lockfile");
+    expect(actionSource).toContain("archive cannot be combined with lockfile");
+    expect(actionSource).toContain(
+      "${name} must stay inside the repository and must not traverse symbolic links"
+    );
+    expect(actionSource).toContain(
+      "${name} must name a repository-relative regular file"
+    );
     expect(actionSource).toContain('args+=("--all")');
+    expect(actionSource).toContain('args+=("--archive" "$OHRISK_ARCHIVE")');
     expect(actionSource).toContain('args+=("--offline")');
     expect(actionSource).toContain('args+=("--jobs" "$OHRISK_JOBS")');
     expect(actionSource).toContain("OHRISK_ALLOW_HOSTS");
@@ -175,6 +220,10 @@ describe("Ohrisk GitHub Action", () => {
     expect(docs).toContain("Mutable npm tags");
     expect(docs).toContain("format: html");
     expect(docs).toContain("path: reports/ohrisk.html");
+    expect(docs).toContain("command: diff");
+    expect(docs).toContain("baseline-ref: origin/main");
+    expect(docs).toContain("fetch-depth: 0");
+    expect(docs).toContain("caller");
     expect(docs.replace(/\s+/g, " ")).toContain(
       "must be repository-relative paths"
     );

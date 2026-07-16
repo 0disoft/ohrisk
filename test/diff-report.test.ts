@@ -31,14 +31,17 @@ describe("renderDiffReport", () => {
       diff: {
         baselineFindings: [],
         currentFindings: [finding],
-        newFindings: [finding]
+        newFindings: [finding],
+        changedFindings: [],
+        resolvedFindings: [],
+        introducedFindings: [finding]
       },
       json: false,
       markdown: false
     });
 
-    expect(output).toContain("New or changed risks: 0 high, 0 review, 0 unknown, 1 low");
-    expect(output).toContain("New or changed findings:");
+    expect(output).toContain("Introduced risks: 0 high, 0 review, 0 unknown, 1 low");
+    expect(output).toContain("New findings:");
     expect(output).toContain("- [low] notice-package@1.0.0");
     expect(output).toContain(
       "Next: Preserve required NOTICE or attribution files for new or changed packages."
@@ -56,7 +59,10 @@ describe("renderDiffReport", () => {
         diff: {
           baselineFindings: [],
           currentFindings: [finding],
-          newFindings: [finding]
+          newFindings: [finding],
+          changedFindings: [],
+          resolvedFindings: [],
+          introducedFindings: [finding]
         },
         json: true,
         markdown: false
@@ -66,5 +72,36 @@ describe("renderDiffReport", () => {
     expect(payload.nextAction).toBe(
       "Preserve required NOTICE or attribution files for new or changed packages."
     );
+  });
+
+  test("emits separate new, changed, and resolved arrays in JSON", () => {
+    const added = noticeFinding();
+    const changed = { ...noticeFinding(), id: "changed-id", fingerprint: "changed-fingerprint" };
+    const resolved = { ...noticeFinding(), id: "resolved-id", fingerprint: "resolved-fingerprint" };
+    const payload = JSON.parse(renderDiffReport({
+      baselineRef: "main",
+      profile: "distributed-app",
+      prodOnly: true,
+      lockfileChanges: { current: [], baseline: [], added: [], removed: [] },
+      diff: {
+        baselineFindings: [resolved],
+        currentFindings: [added, changed],
+        newFindings: [added],
+        changedFindings: [changed],
+        resolvedFindings: [resolved],
+        introducedFindings: [added, changed]
+      },
+      json: true,
+      markdown: false
+    })) as Record<string, unknown>;
+
+    expect(payload.newFindingCount).toBe(1);
+    expect(payload.changedFindingCount).toBe(1);
+    expect(payload.resolvedFindingCount).toBe(1);
+    expect(payload.introducedFindingCount).toBe(2);
+    expect(payload.newFindings).toEqual([added]);
+    expect(payload.changedFindings).toEqual([changed]);
+    expect(payload.resolvedFindings).toEqual([resolved]);
+    expect(payload.findings).toEqual([added, changed]);
   });
 });

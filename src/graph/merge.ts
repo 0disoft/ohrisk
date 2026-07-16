@@ -3,6 +3,7 @@ import type { ProjectLockfile } from "../project/discover";
 import { packageUrl } from "./package-url";
 import type {
   DependencyGraph,
+  DependencyGraphDiagnostic,
   DependencyNode,
   DependencyOrigin,
   DependencyType
@@ -26,6 +27,7 @@ export function mergeDependencyGraphs(graphs: SourcedDependencyGraph[]): Depende
   const canonicalIdByPurl = new Map<string, string>();
   const evidenceByPackageId = new Map<string, LicenseEvidence>();
   const warnings: string[] = [];
+  const diagnostics: DependencyGraphDiagnostic[] = [];
 
   for (const item of graphs) {
     for (const node of item.graph.nodes) {
@@ -69,6 +71,7 @@ export function mergeDependencyGraphs(graphs: SourcedDependencyGraph[]): Depende
       );
     }
     warnings.push(...(item.graph.warnings ?? []));
+    diagnostics.push(...(item.graph.diagnostics ?? []));
   }
 
   const lockfilePaths = unique(graphs.map((item) => item.source.lockfilePath));
@@ -84,8 +87,26 @@ export function mergeDependencyGraphs(graphs: SourcedDependencyGraph[]): Depende
     ...(evidenceByPackageId.size > 0
       ? { embeddedEvidence: [...evidenceByPackageId.values()] }
       : {}),
-    ...(warnings.length > 0 ? { warnings: unique(warnings) } : {})
+    ...(warnings.length > 0 ? { warnings: unique(warnings) } : {}),
+    ...(diagnostics.length > 0 ? { diagnostics: mergeGraphDiagnostics(diagnostics) } : {})
   };
+}
+
+function mergeGraphDiagnostics(
+  diagnostics: DependencyGraphDiagnostic[]
+): DependencyGraphDiagnostic[] {
+  const byKey = new Map<string, DependencyGraphDiagnostic>();
+  for (const diagnostic of diagnostics) {
+    const key = `${diagnostic.code}\u0000${diagnostic.limit}\u0000${diagnostic.message}`;
+    const existing = byKey.get(key);
+    byKey.set(key, existing
+      ? {
+          ...existing,
+          affectedNodeCount: existing.affectedNodeCount + diagnostic.affectedNodeCount
+        }
+      : diagnostic);
+  }
+  return [...byKey.values()].sort((left, right) => left.code.localeCompare(right.code));
 }
 
 function remapNode(

@@ -14,6 +14,34 @@ optional `version` input is an assertion against the version embedded in the
 bundle, so a workflow fails before scanning when its expected CLI version does
 not match the action release.
 
+## Command selection
+
+The action accepts `scan`, `ci`, and `diff`. `diff` requires `baseline-ref`,
+which is forwarded as one argument without shell re-parsing; option-shaped
+values are rejected before the CLI runs, and `scan` and `ci` reject that input.
+The `fail-on` input defaults to empty. That makes `scan`
+usable without an incompatible threshold while leaving `ci` at the CLI-owned
+default threshold of `high`; explicit thresholds are supported for `ci` and
+`diff`.
+
+The action does not fetch Git history. The calling workflow owns checkout depth
+and baseline availability, so `diff` callers must configure `actions/checkout`
+with suitable history (commonly `fetch-depth: 0`) or fetch the baseline ref
+before invoking Ohrisk.
+
+`diff` accepts only `text`, `json`, or `markdown` output. The action rejects
+SARIF, HTML, and CycloneDX for `diff` before invoking the CLI; those formats are
+available for `scan` and `ci`.
+
+`diff` compares unwaived findings, so the action rejects `no-waivers` for that
+command. `strict-waivers` is a CI-only drift gate and is rejected for both
+`scan` and `diff`.
+
+The optional `archive` input is supported only by `scan` and `ci`. It is
+forwarded as `--archive` after path validation, cannot be combined with
+`lockfile`, and is rejected for `diff`. `all: "true"` remains valid and asks the
+CLI to scan every supported lockfile found at the single archive project root.
+
 ## Version selection
 
 The default `bundled` value uses the embedded CLI without an extra
@@ -22,10 +50,11 @@ ranges, Git references, and local package paths are rejected.
 
 ## Path safety
 
-The `lockfile`, `policy`, `cache-dir`, and `output` inputs must be
+The `lockfile`, `archive`, `policy`, `cache-dir`, and `output` inputs must be
 repository-relative paths. The action rejects absolute paths, Windows drive
 paths, UNC paths, empty segments, `.` segments, and `..` segments before the
-CLI runs.
+CLI runs. `archive` must additionally name an existing regular file inside the
+checked-out repository; symbolic-link traversal is rejected.
 
 ## Network boundary
 
