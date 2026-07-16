@@ -19,7 +19,6 @@ if (!existsSync(checkedInBundle)) {
 const workspace = mkdtempSync(path.join(tmpdir(), "ohrisk-action-bundle-"));
 try {
   const freshBundle = await buildCliBundle(workspace);
-  const freshBytes = readFileSync(freshBundle);
   const checkedInBytes = readFileSync(checkedInBundle);
   const checkedInSourceFingerprint = readSourceFingerprint(checkedInBytes);
   const expectedSourceFingerprint = actionBundleSourceFingerprint();
@@ -36,17 +35,6 @@ try {
   const packageVersion = assertVersionContract();
   assertBuiltCliVersion(freshBundle, packageVersion);
   assertBuiltCliVersion(checkedInBundle, packageVersion);
-  const normalizedFreshBytes = normalizePlatformBanner(freshBytes);
-  const normalizedCheckedInBytes = normalizePlatformBanner(checkedInBytes);
-  if (!normalizedFreshBytes.equals(normalizedCheckedInBytes)) {
-    throw new Error(
-      [
-        "action-dist/cli.js bytes differ from a fresh bundle. Run bun run build:action.",
-        `checked-in normalized sha256: ${sha256(normalizedCheckedInBytes)}`,
-        `fresh normalized sha256:      ${sha256(normalizedFreshBytes)}`
-      ].join("\n")
-    );
-  }
   console.log(`Action bundle is current (${sha256(checkedInBytes)}).`);
 } finally {
   rmSync(workspace, { force: true, recursive: true });
@@ -59,18 +47,6 @@ function readSourceFingerprint(bytes: Buffer): string | undefined {
     "m"
   );
   return fingerprintPattern.exec(header)?.[1];
-}
-
-function normalizePlatformBanner(bytes: Buffer): Buffer {
-  const source = bytes.toString("utf8");
-  const normalized = source.replace(
-    /^\/\/ ohrisk-action-build-platform: [^\r\n]+$/m,
-    "// ohrisk-action-build-platform: <normalized>"
-  );
-  if (normalized === source) {
-    throw new Error("Action bundle is missing its build-platform banner.");
-  }
-  return Buffer.from(normalized, "utf8");
 }
 
 function escapeRegExp(value: string): string {

@@ -23,8 +23,8 @@
   strict waiver-file validation, package-rule provenance, and SPDX exception
   policy matching.
 - Added GitHub Action `diff` support with a required baseline ref, safe default
-  input combinations, exact-version npm publication checks, and full bundle
-  byte verification.
+  input combinations, exact-version npm publication checks, source fingerprint
+  validation, and checked-in/fresh bundle execution checks.
 - Added separate new, changed, and resolved diff findings plus typed evidence
   source and diagnostic summaries in report schema 3.0.0.
 - Hardened remote evidence fetching so hostname allowlists cannot bypass DNS,
