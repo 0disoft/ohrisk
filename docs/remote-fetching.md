@@ -29,11 +29,15 @@ coverage guidance. `--submodules reject` restores strict failure on the first
 gitlink. Recursive fetching is intentionally unsupported because it would widen
 the allowed repository, host, credential, recursion, storage, and timeout scope.
 
-Remote scans may select a nested supported dependency input with
-`--lockfile <repository-relative-path>`. The adapter rejects absolute paths,
-empty or dot segments, and traversal before resolving the path in the validated
-temporary checkout. This selects existing repository data only and does not
-widen the network or credential boundary.
+When the repository root has no supported input, remote scans recursively inspect
+only the already validated checkout. One nested dependency project is selected
+automatically. Multiple nested project roots remain ambiguous and require
+`--lockfile <repository-relative-path>`; `--all` merges multiple inputs only at
+one project root. An SBOM with unresolved uppercase `@BUILD_VARIABLE@`
+placeholders is a build template and is not an automatic candidate. The adapter
+rejects absolute paths, empty or dot segments, and
+traversal before resolving an explicit path. This selects existing repository
+data only and does not widen the network or credential boundary.
 
 Other ecosystems use local caches, vendored source, lockfile-embedded evidence,
 or local package metadata. A new remote ecosystem adapter is not enabled until

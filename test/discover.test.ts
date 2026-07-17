@@ -2308,6 +2308,167 @@ describe("discoverProject", () => {
     expect(path.basename(result.value.lockfile.path)).toBe("package.json");
   });
 
+  test("finds the only supported project inside a bounded descendant tree", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-project-"));
+    const docsRoot = path.join(repositoryRoot, "docs");
+
+    try {
+      mkdirSync(docsRoot, { recursive: true });
+      mkdirSync(path.join(repositoryRoot, "scripts"), { recursive: true });
+      writeFileSync(path.join(repositoryRoot, "CMakeLists.txt"), "project(fixture)\n", "utf8");
+      writeFileSync(path.join(docsRoot, "requirements.txt"), "sphinx==8.2.3\n", "utf8");
+      writeFileSync(path.join(repositoryRoot, "scripts", "sbom.cdx.json"), JSON.stringify({
+        bomFormat: "CycloneDX",
+        specVersion: "1.6",
+        version: 1,
+        components: [{
+          type: "library",
+          name: "fixture",
+          version: "@VCS_VERSION@",
+          purl: "pkg:github/example/fixture@@VCS_TAG@"
+        }]
+      }), "utf8");
+
+      const result = discoverProject({ cwd: repositoryRoot, searchMode: "tree" });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value.rootDir).toBe(docsRoot);
+      expect(result.value.lockfile).toEqual({
+        kind: "requirements-txt",
+        path: path.join(docsRoot, "requirements.txt")
+      });
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps a concrete nested SBOM as an ambiguity candidate", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-sbom-"));
+    const docsRoot = path.join(repositoryRoot, "docs");
+    const scriptsRoot = path.join(repositoryRoot, "scripts");
+
+    try {
+      mkdirSync(docsRoot, { recursive: true });
+      mkdirSync(scriptsRoot, { recursive: true });
+      writeFileSync(path.join(docsRoot, "requirements.txt"), "sphinx==8.2.3\n", "utf8");
+      writeFileSync(path.join(scriptsRoot, "sbom.cdx.json"), JSON.stringify({
+        bomFormat: "CycloneDX",
+        specVersion: "1.6",
+        version: 1,
+        components: [{
+          type: "library",
+          name: "fixture",
+          version: "1.0.0",
+          purl: "pkg:github/example/fixture@1.0.0"
+        }]
+      }), "utf8");
+
+      const result = discoverProject({ cwd: repositoryRoot, searchMode: "tree" });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected a concrete SBOM to remain an ambiguity candidate.");
+      }
+      expect(result.error.code).toBe("MULTIPLE_LOCKFILES");
+      expect(result.error.details).toMatchObject({
+        projectRoots: ["docs", "scripts"],
+        lockfiles: ["docs/requirements.txt", "scripts/sbom.cdx.json"]
+      });
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("does not escape a bounded descendant tree to a parent lockfile", () => {
+    const parentRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-boundary-"));
+    const repositoryRoot = path.join(parentRoot, "repository");
+
+    try {
+      mkdirSync(repositoryRoot, { recursive: true });
+      writeFileSync(path.join(parentRoot, "package-lock.json"), JSON.stringify({
+        name: "outside-repository",
+        version: "1.0.0",
+        lockfileVersion: 3,
+        packages: {}
+      }), "utf8");
+
+      const result = discoverProject({ cwd: repositoryRoot, searchMode: "tree" });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected bounded tree discovery to fail.");
+      }
+      expect(result.error.code).toBe("NO_SUPPORTED_LOCKFILE");
+    } finally {
+      rmSync(parentRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects ambiguous supported projects inside a descendant tree", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-ambiguous-"));
+    const docsRoot = path.join(repositoryRoot, "docs");
+    const toolsRoot = path.join(repositoryRoot, "tools");
+
+    try {
+      mkdirSync(docsRoot, { recursive: true });
+      mkdirSync(toolsRoot, { recursive: true });
+      writeFileSync(path.join(docsRoot, "requirements.txt"), "sphinx==8.2.3\n", "utf8");
+      writeFileSync(path.join(toolsRoot, "go.mod"), "module example.com/tools\n\ngo 1.24\n", "utf8");
+
+      const result = discoverProject({ cwd: repositoryRoot, searchMode: "tree" });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected descendant discovery to reject ambiguous projects.");
+      }
+      expect(result.error.code).toBe("MULTIPLE_LOCKFILES");
+      expect(result.error.details).toMatchObject({
+        projectRoots: ["docs", "tools"],
+        lockfiles: ["docs/requirements.txt", "tools/go.mod"]
+      });
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("merges multiple inputs only when one descendant project root is unambiguous", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-all-"));
+    const docsRoot = path.join(repositoryRoot, "docs");
+
+    try {
+      mkdirSync(docsRoot, { recursive: true });
+      writeFileSync(path.join(docsRoot, "requirements.txt"), "sphinx==8.2.3\n", "utf8");
+      writeFileSync(path.join(docsRoot, "poetry.lock"), "package = []\n", "utf8");
+
+      const defaultResult = discoverProject({ cwd: repositoryRoot, searchMode: "tree" });
+      expect(defaultResult.ok).toBe(false);
+      if (!defaultResult.ok) {
+        expect(defaultResult.error.code).toBe("MULTIPLE_LOCKFILES");
+      }
+
+      const allResult = discoverProject({
+        cwd: repositoryRoot,
+        searchMode: "tree",
+        allLockfiles: true
+      });
+      expect(allResult.ok).toBe(true);
+      if (!allResult.ok) {
+        throw new Error(allResult.error.message);
+      }
+      expect(allResult.value.rootDir).toBe(docsRoot);
+      expect(allResult.value.lockfiles?.map((lockfile) => path.basename(lockfile.path))).toEqual([
+        "poetry.lock",
+        "requirements.txt"
+      ]);
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
+    }
+  });
+
   test("rejects package.json dependency projects without a supported lockfile", () => {
     const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-package-json-needs-lockfile-"));
 

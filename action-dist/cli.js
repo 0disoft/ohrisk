@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 51b822a1d656d49e70ad77a281dc0b5f1ec53f7c6eeb026423e1573edd9c6a5c
+// ohrisk-action-source-sha256: 48daa125876960ea62cf6edce7d112ce3d3b439bc1149c70f5baab46664b316f
 // ohrisk-action-build-platform: win32
 import { createRequire } from "node:module";
 var __create = Object.create;
@@ -18384,7 +18384,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.6.0";
+var OHRISK_VERSION = "1.7.0";
 
 // src/archive/archive-project.ts
 import path46 from "node:path";
@@ -35818,6 +35818,7 @@ var KNOWN_PROJECT_MANIFESTS = [
 var SUPPORTED_LOCKFILE_MESSAGE = "Ohrisk currently supports dependency-free package.json manifests, bun.lock, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml, deno.lock, Cargo.lock, go.work, go.mod, Pipfile.lock, pdm.lock, poetry.lock, pyproject.toml, requirements.txt, uv.lock, pylock.toml, pylock.<name>.toml, gradle.lockfile, gradle/dependency-locks, gradle/dependency-locks/*.lockfile, gradle/libs.versions.toml, MODULE.bazel, pom.xml, packages.lock.json, obj/project.assets.json, packages.config, *.csproj, conan.lock, environment.yml, environment.yaml, conda-lock.yml, conda-lock.yaml, vcpkg.json, .terraform.lock.hcl, Chart.lock, Chart.yaml, flake.lock, Packages/packages-lock.json, renv.lock, Manifest.toml, stack.yaml.lock, cpanfile.snapshot, luarocks.lock, pubspec.lock, Package.resolved, Cartfile.resolved, Podfile.lock, mix.lock, rebar.lock, Gemfile.lock, composer.lock, CycloneDX JSON/XML, SPDX JSON/RDF, SPDX tag-value .spdx, and Yarn classic/Berry yarn.lock.";
 function discoverProject(options = {}) {
   const startDir = path45.resolve(options.cwd ?? process.cwd());
+  const searchMode = options.searchMode ?? "ancestors";
   try {
     if (options.lockfilePath) {
       return discoverExplicitLockfile({
@@ -35826,7 +35827,8 @@ function discoverProject(options = {}) {
       });
     }
     let nearestManifestWithoutParentLockfile;
-    for (const dir of ancestorsFrom(startDir)) {
+    const searchDirectories = searchMode === "tree" ? [startDir] : ancestorsFrom(startDir);
+    for (const dir of searchDirectories) {
       const lockfiles = findKnownLockfiles(dir);
       const hasProjectManifest = hasKnownProjectManifest(dir);
       const hasKnownLockfileDirectory = hasKnownLockfileDirectoryPath(dir);
@@ -35884,6 +35886,15 @@ function discoverProject(options = {}) {
         ...projectLockfileEntries.length > 1 ? { lockfiles: projectLockfileEntries } : {}
       });
     }
+    if (searchMode === "tree") {
+      const descendantProject = discoverDescendantProject({
+        rootDir: startDir,
+        allLockfiles: options.allLockfiles ?? false
+      });
+      if (descendantProject) {
+        return descendantProject;
+      }
+    }
     if (nearestManifestWithoutParentLockfile) {
       return err(createError({
         code: "NO_SUPPORTED_LOCKFILE",
@@ -35915,6 +35926,87 @@ function discoverProject(options = {}) {
       supportedLockfiles: supportedLockfileNames()
     }
   }));
+}
+function discoverDescendantProject(input) {
+  const projects = new Map;
+  const pendingDirectories = [input.rootDir];
+  while (pendingDirectories.length > 0) {
+    const currentDir = pendingDirectories.pop();
+    if (!currentDir) {
+      continue;
+    }
+    const lockfiles = findKnownLockfiles(currentDir).flatMap((lockfileName) => {
+      const lockfilePath = path45.join(currentDir, lockfileName);
+      const kind = supportedKindForLockfilePath(lockfilePath);
+      return kind && isConcreteAutoDiscoveryInput({ kind, path: lockfilePath }) ? [{ kind, path: lockfilePath }] : [];
+    });
+    if (lockfiles.length === 0) {
+      const packageJsonManifest = findDependencyFreePackageJsonManifest(currentDir);
+      if (packageJsonManifest) {
+        lockfiles.push({
+          kind: "package-json",
+          path: path45.join(currentDir, packageJsonManifest)
+        });
+      }
+    }
+    for (const lockfile of lockfiles) {
+      const projectRoot = rootDirForLockfilePath(lockfile.path, lockfile.kind);
+      const projectLockfiles2 = projects.get(projectRoot) ?? new Map;
+      projectLockfiles2.set(`${lockfile.kind}\x00${lockfile.path}`, lockfile);
+      projects.set(projectRoot, projectLockfiles2);
+    }
+    const childDirectories = readdirSync6(currentDir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name !== ".git").map((entry) => path45.join(currentDir, entry.name)).sort().reverse();
+    pendingDirectories.push(...childDirectories);
+  }
+  const candidates = [...projects.entries()].map(([rootDir, lockfileMap]) => ({
+    rootDir,
+    lockfiles: [...lockfileMap.values()].sort((left, right) => left.path.localeCompare(right.path))
+  })).sort((left, right) => left.rootDir.localeCompare(right.rootDir));
+  if (candidates.length === 0) {
+    return;
+  }
+  if (candidates.length > 1) {
+    return err(createError({
+      code: "MULTIPLE_LOCKFILES",
+      category: "unsupported_input",
+      message: "Multiple supported dependency projects were found inside the repository. Select one with --lockfile; --all only merges inputs at one project root.",
+      details: {
+        rootDir: input.rootDir,
+        projectRoots: candidates.map((candidate2) => projectRelativePath(input.rootDir, candidate2.rootDir)),
+        lockfiles: candidates.flatMap((candidate2) => candidate2.lockfiles.map((lockfile) => projectRelativePath(input.rootDir, lockfile.path)))
+      }
+    }));
+  }
+  const candidate = candidates[0];
+  if (candidate.lockfiles.length > 1 && !input.allLockfiles) {
+    return err(createError({
+      code: "MULTIPLE_LOCKFILES",
+      category: "unsupported_input",
+      message: "Multiple lockfiles found in the same nested project root. Select one with --lockfile or scan all with --all.",
+      details: {
+        rootDir: candidate.rootDir,
+        lockfiles: candidate.lockfiles.map((lockfile) => projectRelativePath(candidate.rootDir, lockfile.path))
+      }
+    }));
+  }
+  const selectedLockfiles = input.allLockfiles ? candidate.lockfiles : candidate.lockfiles.slice(0, 1);
+  const primaryLockfile = selectedLockfiles[0];
+  return ok({
+    rootDir: candidate.rootDir,
+    lockfile: primaryLockfile,
+    ...selectedLockfiles.length > 1 ? { lockfiles: selectedLockfiles } : {}
+  });
+}
+function projectRelativePath(rootDir, targetPath) {
+  const relativePath = path45.relative(rootDir, targetPath).replace(/\\/g, "/");
+  return relativePath === "" ? "." : relativePath;
+}
+function isConcreteAutoDiscoveryInput(lockfile) {
+  if (lockfile.kind !== "cyclonedx-json" && lockfile.kind !== "cyclonedx-xml" && lockfile.kind !== "spdx-json" && lockfile.kind !== "spdx-rdf" && lockfile.kind !== "spdx-tag-value") {
+    return true;
+  }
+  const prefix = readFilePrefix(lockfile.path);
+  return prefix === undefined || !/@[A-Z_][A-Z0-9_]*@/.test(prefix);
 }
 function discoverExplicitLockfile(input) {
   const lockfilePath = path45.resolve(input.cwd, input.lockfilePath);
@@ -45725,11 +45817,11 @@ var listGitRefFiles = (input) => {
   if (!context.ok) {
     return context;
   }
-  const projectRelativePath = path74.relative(context.value.gitRoot, context.value.projectRoot);
-  if (isOutsideRelativePath(projectRelativePath)) {
+  const projectRelativePath2 = path74.relative(context.value.gitRoot, context.value.projectRoot);
+  if (isOutsideRelativePath(projectRelativePath2)) {
     return err(projectRootOutsideGitError(input.projectRoot));
   }
-  const normalizedProjectPath = normalizeGitPath(projectRelativePath);
+  const normalizedProjectPath = normalizeGitPath(projectRelativePath2);
   const pathspec = normalizedProjectPath === "" ? "." : normalizedProjectPath;
   try {
     const output = execFileSync("git", [
@@ -45852,9 +45944,9 @@ function readProcessErrorText(cause) {
   return cause instanceof Error ? cause.message : String(cause);
 }
 function toGitObjectPath(input) {
-  const projectRelativePath = path74.relative(input.gitRoot, input.projectRoot);
+  const projectRelativePath2 = path74.relative(input.gitRoot, input.projectRoot);
   const lockfileRelativePath = path74.normalize(input.relativePath);
-  if (isOutsideRelativePath(projectRelativePath) || isOutsideRelativePath(lockfileRelativePath) || path74.isAbsolute(input.relativePath)) {
+  if (isOutsideRelativePath(projectRelativePath2) || isOutsideRelativePath(lockfileRelativePath) || path74.isAbsolute(input.relativePath)) {
     return err(createError({
       code: "GIT_REF_PATH_OUTSIDE_PROJECT",
       category: "invalid_input",
@@ -45864,7 +45956,7 @@ function toGitObjectPath(input) {
       }
     }));
   }
-  return ok(normalizeGitPath(path74.join(projectRelativePath, lockfileRelativePath)));
+  return ok(normalizeGitPath(path74.join(projectRelativePath2, lockfileRelativePath)));
 }
 function normalizeGitRelativePath(value) {
   const normalized = path74.posix.normalize(value.replace(/\\/g, "/"));
@@ -47862,7 +47954,7 @@ function repositoryProperties(repository) {
   ];
 }
 function projectInputPath(project, targetPath) {
-  const relativePath = projectRelativePath(project.rootDir, targetPath);
+  const relativePath = projectRelativePath2(project.rootDir, targetPath);
   if (!project.source) {
     return relativePath;
   }
@@ -47880,7 +47972,7 @@ function archiveProperties(project) {
     { name: "ohrisk:archiveRoot", value: project.source.entryRoot }
   ];
 }
-function projectRelativePath(projectRoot, targetPath) {
+function projectRelativePath2(projectRoot, targetPath) {
   const relativePath = path77.relative(projectRoot, targetPath);
   if (relativePath && !relativePath.startsWith("..") && !path77.isAbsolute(relativePath)) {
     return relativePath.replace(/\\/g, "/");
@@ -53182,6 +53274,7 @@ async function runScanAt(input) {
     ...input.allowLocalProjectEvidence !== undefined ? { allowLocalProjectEvidence: input.allowLocalProjectEvidence } : {},
     ...command.lockfilePath ? { lockfilePath: command.lockfilePath } : {},
     ...command.archivePath ? { archivePath: command.archivePath } : {},
+    ...input.repository ? { projectSearchMode: "tree" } : {},
     allLockfiles: command.allLockfiles ?? false,
     ...command.policyPath ? { policyPath: command.policyPath } : {},
     offline: command.offline ?? false,
@@ -53276,6 +53369,7 @@ async function scanProject(input) {
   }) : loadProjectGraph({
     cwd: input.cwd,
     ...input.lockfilePath ? { lockfilePath: input.lockfilePath } : {},
+    ...input.projectSearchMode ? { projectSearchMode: input.projectSearchMode } : {},
     allLockfiles: input.allLockfiles,
     prodOnly: input.prodOnly,
     ...input.progress ? { progress: input.progress } : {}
@@ -53348,6 +53442,7 @@ function loadProjectGraph(input) {
   const discovered = discoverProject({
     cwd: input.cwd,
     ...input.lockfilePath ? { lockfilePath: input.lockfilePath } : {},
+    ...input.projectSearchMode ? { searchMode: input.projectSearchMode } : {},
     ...input.allLockfiles ? { allLockfiles: true } : {}
   });
   if (isErr(discovered)) {
@@ -54330,7 +54425,7 @@ function renderTopLevelHelp() {
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
     "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
-    "  --repo <url>           Scan a public GitHub HTTPS repository; requires Git on PATH.",
+    "  --repo <url>           Scan public GitHub; auto-select one nested dependency project.",
     "  --submodules <mode>    Ignore with an incomplete-coverage warning (default), or reject.",
     "  --all                  Discover and merge every supported lockfile in the project root.",
     "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
@@ -54370,7 +54465,7 @@ function renderScanHelp() {
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
     "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
-    "  --repo <url>           Scan a public GitHub HTTPS repository; requires Git on PATH.",
+    "  --repo <url>           Scan public GitHub; auto-select one nested dependency project.",
     "  --submodules <mode>    Ignore with an incomplete-coverage warning (default), or reject.",
     "  --all                  Discover and merge every supported lockfile in the project root.",
     "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",

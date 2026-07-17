@@ -582,6 +582,7 @@ async function runScanAt(input: {
       : {}),
     ...(command.lockfilePath ? { lockfilePath: command.lockfilePath } : {}),
     ...(command.archivePath ? { archivePath: command.archivePath } : {}),
+    ...(input.repository ? { projectSearchMode: "tree" as const } : {}),
     allLockfiles: command.allLockfiles ?? false,
     ...(command.policyPath ? { policyPath: command.policyPath } : {}),
     offline: command.offline ?? false,
@@ -692,6 +693,7 @@ async function scanProject(input: {
   allowLocalProjectEvidence?: boolean;
   lockfilePath?: string;
   archivePath?: string;
+  projectSearchMode?: "ancestors" | "tree";
   allLockfiles: boolean;
   policyPath?: string;
   offline: boolean;
@@ -721,6 +723,7 @@ async function scanProject(input: {
     : loadProjectGraph({
         cwd: input.cwd,
         ...(input.lockfilePath ? { lockfilePath: input.lockfilePath } : {}),
+        ...(input.projectSearchMode ? { projectSearchMode: input.projectSearchMode } : {}),
         allLockfiles: input.allLockfiles,
         prodOnly: input.prodOnly,
         ...(input.progress ? { progress: input.progress } : {})
@@ -816,6 +819,7 @@ function loadArchiveProjectGraph(input: {
 function loadProjectGraph(input: {
   cwd: string;
   lockfilePath?: string;
+  projectSearchMode?: "ancestors" | "tree";
   allLockfiles?: boolean;
   prodOnly: boolean;
   progress?: ScanProgressReporter;
@@ -827,6 +831,7 @@ function loadProjectGraph(input: {
   const discovered = discoverProject({
     cwd: input.cwd,
     ...(input.lockfilePath ? { lockfilePath: input.lockfilePath } : {}),
+    ...(input.projectSearchMode ? { searchMode: input.projectSearchMode } : {}),
     ...(input.allLockfiles ? { allLockfiles: true } : {})
   });
 
@@ -2274,7 +2279,7 @@ function renderTopLevelHelp(): string {
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
     "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
-    "  --repo <url>           Scan a public GitHub HTTPS repository; requires Git on PATH.",
+    "  --repo <url>           Scan public GitHub; auto-select one nested dependency project.",
     "  --submodules <mode>    Ignore with an incomplete-coverage warning (default), or reject.",
     "  --all                  Discover and merge every supported lockfile in the project root.",
     "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
@@ -2314,7 +2319,7 @@ function renderScanHelp(): string {
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
     "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
-    "  --repo <url>           Scan a public GitHub HTTPS repository; requires Git on PATH.",
+    "  --repo <url>           Scan public GitHub; auto-select one nested dependency project.",
     "  --submodules <mode>    Ignore with an incomplete-coverage warning (default), or reject.",
     "  --all                  Discover and merge every supported lockfile in the project root.",
     "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",

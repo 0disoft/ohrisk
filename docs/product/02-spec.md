@@ -21,8 +21,10 @@ checkout afterward. Remote HTML scans default their report file to the host
 invocation directory. This input is CLI-only and is not part of `ci`, `diff`, or
 the composite GitHub Action contract. Submodule gitlinks are skipped by default
 with incomplete-coverage metadata in every report; strict rejection is available
-through `--submodules reject`. A safe repository-relative `--lockfile` may select
-a nested supported dependency input when the repository root has none.
+through `--submodules reject`. When the repository root has no supported input,
+Ohrisk automatically selects one unambiguous nested dependency project. Multiple
+nested project roots require a safe repository-relative `--lockfile`; `--all`
+continues to merge inputs only at one project root.
 
 ## Commands
 

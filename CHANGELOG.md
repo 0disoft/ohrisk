@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.7.0 - 2026-07-17
+
+- Remote GitHub scans now search the validated checkout when the repository root
+  has no supported dependency input and automatically select one unambiguous
+  nested project, so Mbed TLS scans no longer require an explicit
+  `--lockfile docs/requirements.txt`.
+- Multiple nested project roots remain fail-closed with safe relative candidate
+  paths, while `--all` continues to merge inputs only within one project root.
+- Unresolved `@BUILD_VARIABLE@` SBOM templates are excluded from automatic
+  candidate selection while concrete SBOMs remain eligible.
+- Bounded remote discovery never walks into `.git` or escapes the temporary
+  repository to an unrelated parent lockfile.
+
 ## 1.6.0 - 2026-07-17
 
 - Remote GitHub scans now skip unmaterialized Git submodules by default instead

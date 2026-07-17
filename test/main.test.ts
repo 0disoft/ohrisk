@@ -167,6 +167,58 @@ describe("main", () => {
     }
   });
 
+  test("automatically scans the only nested supported project in a remote repository", async () => {
+    const invocationRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-remote-auto-invocation-"));
+    const temporaryRepository = mkdtempSync(path.join(tmpdir(), "ohrisk-remote-auto-checkout-"));
+
+    try {
+      const docsRoot = path.join(temporaryRepository, "docs");
+      const scriptsRoot = path.join(temporaryRepository, "scripts");
+      mkdirSync(docsRoot, { recursive: true });
+      mkdirSync(scriptsRoot, { recursive: true });
+      writeFileSync(path.join(temporaryRepository, "CMakeLists.txt"), "project(fixture)\n", "utf8");
+      writeFileSync(path.join(docsRoot, "requirements.txt"), "# no runtime dependencies\n", "utf8");
+      writeFileSync(path.join(scriptsRoot, "sbom.cdx.json"), JSON.stringify({
+        bomFormat: "CycloneDX",
+        specVersion: "1.6",
+        version: 1,
+        components: [{
+          type: "library",
+          name: "fixture",
+          version: "@VCS_VERSION@",
+          purl: "pkg:github/example/fixture@@VCS_TAG@"
+        }]
+      }), "utf8");
+
+      const { io, stdout, stderr } = createTestIO(invocationRoot);
+      io.cloneRepository = async (_repository, options) => {
+        expect(options).toEqual({ submodules: "ignore" });
+        return ok({
+          rootDir: temporaryRepository,
+          submodules: { total: 0, paths: [], pathsTruncated: false },
+          cleanup: () => undefined
+        });
+      };
+
+      const exitCode = await main([
+        "scan",
+        "--json",
+        "https://github.com/Mbed-TLS/mbedtls.git"
+      ], io);
+
+      expect(exitCode, stderr.join("\n")).toBe(0);
+      const report = JSON.parse(stdout.join("\n")) as {
+        lockfile: { kind: string; path: string };
+        repository: { owner: string; name: string };
+      };
+      expect(report.lockfile).toEqual({ kind: "requirements-txt", path: "requirements.txt" });
+      expect(report.repository).toMatchObject({ owner: "Mbed-TLS", name: "mbedtls" });
+    } finally {
+      rmSync(invocationRoot, { recursive: true, force: true });
+      rmSync(temporaryRepository, { recursive: true, force: true });
+    }
+  });
+
   test("scans an explicitly selected nested lockfile inside a remote repository", async () => {
     const invocationRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-remote-lockfile-invocation-"));
     const temporaryRepository = mkdtempSync(path.join(tmpdir(), "ohrisk-remote-lockfile-checkout-"));

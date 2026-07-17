@@ -10,7 +10,7 @@ describe("README report contract", () => {
     const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
 
     expect(readme).toContain("Beginner HTML report flow on Windows PowerShell");
-    expect(readme).toContain("npm install -g ohrisk@1.6.0");
+    expect(readme).toContain("npm install -g ohrisk@1.7.0");
     expect(readme).toContain("ohrisk scan --html --output reports\\ohrisk-report.html --open");
     expect(readme).toContain("The scan prints live terminal progress");
     expect(readme).toContain("plain append-only progress lines");
@@ -80,10 +80,13 @@ describe("README report contract", () => {
 
     expect(readme).toContain("ohrisk scan --html https://github.com/0disoft/laqu.git");
     expect(readme).toContain("ohrisk scan --repo https://github.com/0disoft/laqu.git --json");
+    expect(readme).toContain("ohrisk scan --html https://github.com/Mbed-TLS/mbedtls.git");
     expect(readme).toContain("laqu-ohrisk.html");
     expect(readme).toContain("requires a Git executable available on `PATH`");
     expect(normalized).toContain("Only public `https://github.com/<owner>/<repository>[.git]` URLs are accepted");
     expect(normalized).toContain("checkout-local policy and waivers are never trusted");
+    expect(normalized).toContain("Ohrisk recursively selects the only nested dependency project");
+    expect(normalized).toContain("Multiple nested project roots remain ambiguous");
     expect(normalized).toContain("supported by `scan`, not `ci`, `diff`, or the composite GitHub Action");
   });
 });

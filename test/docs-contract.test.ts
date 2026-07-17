@@ -111,13 +111,18 @@ describe("documentation contract", () => {
       path.join(repoRoot, "docs", "report-formats.md"),
       "utf8"
     );
+    const normalizedCommandContract = commandContract.replace(/\s+/g, " ");
+    const normalizedRemoteBoundary = remoteBoundary.replace(/\s+/g, " ");
 
     expect(commandContract).toContain("## Remote Repository Input");
     expect(commandContract).toContain("https://github.com/<owner>/<repository>[.git]");
     expect(commandContract).toContain("50,000 regular files");
     expect(commandContract).toContain("512 MiB");
+    expect(commandContract).toContain("exactly one nested project root");
+    expect(normalizedCommandContract).toContain("requires `--lockfile <repository-relative-path>` instead of guessing");
     expect(commandContract).toContain("not supported by `ci`, `diff`, or the GitHub Action");
     expect(remoteBoundary).toContain("public GitHub HTTPS repository input");
+    expect(normalizedRemoteBoundary).toContain("One nested dependency project is selected automatically");
     expect(remoteBoundary).toContain("not the clone, owns policy, waivers, cache, and report output");
     expect(reportFormats).toContain("`scan --html <github-url>` writes `<repository>-ohrisk.html`");
   });

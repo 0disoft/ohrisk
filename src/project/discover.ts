@@ -83,6 +83,7 @@ export type DiscoverProjectOptions = {
   cwd?: string;
   lockfilePath?: string;
   allLockfiles?: boolean;
+  searchMode?: "ancestors" | "tree";
 };
 
 export function projectLockfiles(project: ProjectInput): ProjectLockfile[] {
@@ -354,6 +355,7 @@ export function discoverProject(
   options: DiscoverProjectOptions = {}
 ): Result<ProjectInput, OhriskError> {
   const startDir = path.resolve(options.cwd ?? process.cwd());
+  const searchMode = options.searchMode ?? "ancestors";
 
   try {
     if (options.lockfilePath) {
@@ -365,7 +367,8 @@ export function discoverProject(
 
     let nearestManifestWithoutParentLockfile: string | undefined;
 
-    for (const dir of ancestorsFrom(startDir)) {
+    const searchDirectories = searchMode === "tree" ? [startDir] : ancestorsFrom(startDir);
+    for (const dir of searchDirectories) {
       const lockfiles = findKnownLockfiles(dir);
       const hasProjectManifest = hasKnownProjectManifest(dir);
       const hasKnownLockfileDirectory = hasKnownLockfileDirectoryPath(dir);
@@ -442,6 +445,16 @@ export function discoverProject(
       });
     }
 
+    if (searchMode === "tree") {
+      const descendantProject = discoverDescendantProject({
+        rootDir: startDir,
+        allLockfiles: options.allLockfiles ?? false
+      });
+      if (descendantProject) {
+        return descendantProject;
+      }
+    }
+
     if (nearestManifestWithoutParentLockfile) {
       return err(
         createError({
@@ -480,6 +493,135 @@ export function discoverProject(
       }
     })
   );
+}
+
+function discoverDescendantProject(input: {
+  rootDir: string;
+  allLockfiles: boolean;
+}): Result<ProjectInput, OhriskError> | undefined {
+  const projects = new Map<string, Map<string, ProjectLockfile>>();
+  const pendingDirectories = [input.rootDir];
+
+  while (pendingDirectories.length > 0) {
+    const currentDir = pendingDirectories.pop();
+    if (!currentDir) {
+      continue;
+    }
+
+    const lockfiles = findKnownLockfiles(currentDir)
+      .flatMap((lockfileName) => {
+        const lockfilePath = path.join(currentDir, lockfileName);
+        const kind = supportedKindForLockfilePath(lockfilePath);
+        return kind && isConcreteAutoDiscoveryInput({ kind, path: lockfilePath })
+          ? [{ kind, path: lockfilePath } satisfies ProjectLockfile]
+          : [];
+      });
+
+    if (lockfiles.length === 0) {
+      const packageJsonManifest = findDependencyFreePackageJsonManifest(currentDir);
+      if (packageJsonManifest) {
+        lockfiles.push({
+          kind: "package-json",
+          path: path.join(currentDir, packageJsonManifest)
+        });
+      }
+    }
+
+    for (const lockfile of lockfiles) {
+      const projectRoot = rootDirForLockfilePath(lockfile.path, lockfile.kind);
+      const projectLockfiles = projects.get(projectRoot) ?? new Map<string, ProjectLockfile>();
+      projectLockfiles.set(`${lockfile.kind}\0${lockfile.path}`, lockfile);
+      projects.set(projectRoot, projectLockfiles);
+    }
+
+    const childDirectories = readdirSync(currentDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name !== ".git")
+      .map((entry) => path.join(currentDir, entry.name))
+      .sort()
+      .reverse();
+    pendingDirectories.push(...childDirectories);
+  }
+
+  const candidates = [...projects.entries()]
+    .map(([rootDir, lockfileMap]) => ({
+      rootDir,
+      lockfiles: [...lockfileMap.values()].sort((left, right) =>
+        left.path.localeCompare(right.path)
+      )
+    }))
+    .sort((left, right) => left.rootDir.localeCompare(right.rootDir));
+
+  if (candidates.length === 0) {
+    return undefined;
+  }
+
+  if (candidates.length > 1) {
+    return err(
+      createError({
+        code: "MULTIPLE_LOCKFILES",
+        category: "unsupported_input",
+        message: "Multiple supported dependency projects were found inside the repository. Select one with --lockfile; --all only merges inputs at one project root.",
+        details: {
+          rootDir: input.rootDir,
+          projectRoots: candidates.map((candidate) =>
+            projectRelativePath(input.rootDir, candidate.rootDir)
+          ),
+          lockfiles: candidates.flatMap((candidate) =>
+            candidate.lockfiles.map((lockfile) =>
+              projectRelativePath(input.rootDir, lockfile.path)
+            )
+          )
+        }
+      })
+    );
+  }
+
+  const candidate = candidates[0]!;
+  if (candidate.lockfiles.length > 1 && !input.allLockfiles) {
+    return err(
+      createError({
+        code: "MULTIPLE_LOCKFILES",
+        category: "unsupported_input",
+        message: "Multiple lockfiles found in the same nested project root. Select one with --lockfile or scan all with --all.",
+        details: {
+          rootDir: candidate.rootDir,
+          lockfiles: candidate.lockfiles.map((lockfile) =>
+            projectRelativePath(candidate.rootDir, lockfile.path)
+          )
+        }
+      })
+    );
+  }
+
+  const selectedLockfiles = input.allLockfiles
+    ? candidate.lockfiles
+    : candidate.lockfiles.slice(0, 1);
+  const primaryLockfile = selectedLockfiles[0]!;
+  return ok({
+    rootDir: candidate.rootDir,
+    lockfile: primaryLockfile,
+    ...(selectedLockfiles.length > 1 ? { lockfiles: selectedLockfiles } : {})
+  });
+}
+
+function projectRelativePath(rootDir: string, targetPath: string): string {
+  const relativePath = path.relative(rootDir, targetPath).replace(/\\/g, "/");
+  return relativePath === "" ? "." : relativePath;
+}
+
+function isConcreteAutoDiscoveryInput(lockfile: ProjectLockfile): boolean {
+  if (
+    lockfile.kind !== "cyclonedx-json"
+    && lockfile.kind !== "cyclonedx-xml"
+    && lockfile.kind !== "spdx-json"
+    && lockfile.kind !== "spdx-rdf"
+    && lockfile.kind !== "spdx-tag-value"
+  ) {
+    return true;
+  }
+
+  const prefix = readFilePrefix(lockfile.path);
+  return prefix === undefined || !/@[A-Z_][A-Z0-9_]*@/.test(prefix);
 }
 
 function discoverExplicitLockfile(input: {

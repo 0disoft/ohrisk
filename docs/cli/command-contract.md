@@ -70,11 +70,17 @@ from `PATH` without a shell or interactive credential prompt, uses a depth-one s
 submodule recursion and symlink checkout, inspects the Git tree before checkout, and removes its
 owned temporary directory after success or failure.
 
-A repository with no supported input at its root may select a nested input with
-`--lockfile <repository-relative-path>`. For example, Mbed TLS documentation
-dependencies can be scanned with `--lockfile docs/requirements.txt`. Absolute,
-empty-segment, dot-segment, and traversal paths are rejected before resolution
-inside the validated temporary checkout.
+When a repository has no supported input at its root, Ohrisk searches only
+inside the validated checkout. It automatically selects the dependency project
+when exactly one nested project root contains supported input. For example, a
+plain Mbed TLS scan selects `docs/requirements.txt`. If multiple nested project
+roots are found, Ohrisk reports their safe relative paths and requires
+`--lockfile <repository-relative-path>` instead of guessing. `--all` may merge
+multiple inputs only when they belong to the same single nested project root.
+SBOM files containing unresolved uppercase `@BUILD_VARIABLE@` placeholders are
+treated as build templates rather than concrete automatic-discovery candidates.
+Absolute, empty-segment, dot-segment, and traversal paths are rejected before
+resolution inside the validated temporary checkout.
 
 The pre-checkout tree allows at most 50,000 regular files, 50 MiB per file, 256 MiB total file
 content, 4,096 UTF-8 bytes and 64 segments per path, and 255 UTF-8 bytes per segment. Symlinks,

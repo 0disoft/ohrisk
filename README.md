@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.6.0
+npm install -g ohrisk@1.7.0
 cd your-project
 ohrisk scan
 ```
@@ -305,7 +305,7 @@ Scan a public GitHub repository through a temporary shallow clone:
 ```bash
 ohrisk scan --html https://github.com/0disoft/laqu.git
 ohrisk scan --repo https://github.com/0disoft/laqu.git --json
-ohrisk scan --html --lockfile docs/requirements.txt https://github.com/Mbed-TLS/mbedtls.git
+ohrisk scan --html https://github.com/Mbed-TLS/mbedtls.git
 ohrisk scan --submodules reject https://github.com/0disoft/laqu.git
 ```
 
@@ -318,8 +318,10 @@ while `--submodules reject` preserves strict failure. Private credentials, other
 hosts or protocols, symlinks, unsafe or oversized trees, and `--offline` are rejected. The temporary checkout is removed
 after the scan. Policy, waivers, cache, and report output stay rooted in the
 directory where Ohrisk was invoked; checkout-local policy and waivers are never
-trusted. `--lockfile <relative-path>` may select a nested supported input inside
-the temporary checkout; absolute and traversal paths are rejected. Remote repository input is supported by `scan`, not `ci`, `diff`, or
+trusted. When the repository root has no supported input, Ohrisk recursively
+selects the only nested dependency project. Multiple nested project roots remain
+ambiguous and require `--lockfile <relative-path>`; `--all` only merges inputs
+at one project root. Absolute and traversal paths are rejected. Remote repository input is supported by `scan`, not `ci`, `diff`, or
 the composite GitHub Action. See the [CLI command contract](docs/cli/command-contract.md#remote-repository-input)
 for exact limits.
 
@@ -344,7 +346,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.6.0
+npm install -g ohrisk@1.7.0
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
