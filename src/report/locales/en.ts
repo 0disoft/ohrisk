@@ -38,6 +38,7 @@ export const ENGLISH_TEXT: HtmlReportText = {
     reviewFocus: "Review focus",
     reviewSummary: "Review summary",
     risks: "Risks",
+    scanCoverage: "Scan coverage",
     scope: "Scope",
     search: "Search",
     severity: "Severity",
@@ -69,6 +70,10 @@ export const ENGLISH_TEXT: HtmlReportText = {
     dependencies: (total, direct, transitive) =>
       `${total} total, ${direct} direct, ${transitive} transitive`,
     evidence: (files, warnings) => `${files} files, ${warnings} warnings`,
+    skippedSubmodules: (count, paths, pathsTruncated) =>
+      `${count} Git submodule${count === 1 ? "" : "s"} skipped (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); coverage is incomplete.`,
+    skippedSubmoduleAction:
+      "Scan the skipped Git submodules separately before treating this report as complete.",
     licenseConfidence: (high, medium, low) =>
       `${high} high-confidence, ${medium} medium-confidence, ${low} low-confidence`,
     licenseIssues: (missing, malformed) => `${missing} missing, ${malformed} malformed`,

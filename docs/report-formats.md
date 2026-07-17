@@ -21,9 +21,10 @@ Draft 2020-12 contracts live in `schemas/common.schema.json`,
 `schemas/scan-report.schema.json`, `schemas/diff-report.schema.json`, and
 `schemas/explain-report.schema.json`.
 
-Schema `3.1.0` is a closed contract. Report roots and structured nested objects
+Schema `3.2.0` is a closed contract. Report roots and structured nested objects
 reject unknown properties, while common `$defs` define findings, evidence,
-normalized licenses, policy summaries, waivers, thresholds, provenance, and
+normalized licenses, policy summaries, waivers, thresholds, provenance, remote
+repository submodule coverage, and
 lockfile changes. Required-field, enum, array-item, path, and dependent-field
 rules are validated against real scan, diff, and explain output during release
 verification.
@@ -81,7 +82,8 @@ Structured output for scripting and CI automation.
 - **Input changes**: diff JSON includes `lockfileChanges.current`, `baseline`, `added`, and `removed` arrays with project-relative paths and lockfile kinds
 - **Diff classification**: `newFindings`, `changedFindings`, and `resolvedFindings` are separate; `findings` remains the combined new-and-changed threshold set
 - **Evidence diagnostics**: scan JSON groups package/file/warning counts by `local`, `sbom`, `tarball`, and `unavailable`, with stable diagnostic codes and typed dependency-graph truncation diagnostics
-- **Schema validation**: scan, diff, and explain JSON must satisfy the packaged 3.1.0 schema; unknown object properties are rejected
+- **Remote repository coverage**: remote scan JSON includes `repository.owner`, `repository.name`, and bounded `repository.submodules` mode, skipped count, relative paths, and path-list truncation state
+- **Schema validation**: scan, diff, and explain JSON must satisfy the packaged 3.2.0 schema; unknown object properties are rejected
 - **Local paths**: `projectRoot` is represented as `.`, and lockfile metadata uses a project-relative path so CI artifacts do not expose workspace paths
 
 ## Markdown
@@ -95,6 +97,7 @@ Formatted for PR comments, release notes, or documentation.
 - **Waiver mode**: shown as inline code in the summary
 - **Strict waiver drift**: shown as inline code in the summary when `--strict-waivers` is set
 - **Local paths**: the project summary uses the package/project name, not the absolute project root, so PR-facing artifacts do not expose local or CI workspace paths
+- **Remote repository coverage**: skipped submodules are listed as incomplete scan coverage with a separate follow-up action
 
 ## HTML
 
@@ -111,6 +114,7 @@ Formatted as a standalone browser-friendly HTML document for local review.
 - **Local paths**: the project summary uses the package/project name, not the absolute project root, so local browser artifacts are safer to share than terminal output
 - **Open after write**: `--open` can be combined with `--html --output <file>` to open a project-relative report path through a temporary `127.0.0.1` URL after scan completion
 - **Remote repository default**: `scan --html <github-url>` writes `<repository>-ohrisk.html` in the invocation directory when `--output` is omitted; local and archive HTML scans still print to stdout by default
+- **Remote repository coverage**: a localized summary card and next action identify skipped submodules so a clean findings list is not mistaken for complete coverage
 
 ## SARIF
 
@@ -123,6 +127,7 @@ SARIF 2.1.0 output for security tools and GitHub code scanning.
   - `ohriskUnmatchedWaiverCount`
   - When `--strict-waivers` is set: `ohriskStrictWaivers`, `ohriskWaiverDriftFailed`, `ohriskWaiverDriftCount`
 - **Waiver mode**: `ohriskWaiverMode` in run properties
+- **Remote repository coverage**: repository identity, submodule mode, skipped count and paths, and truncation state are recorded in run properties
 - **CI artifact**: suitable for `github/codeql-action/upload-sarif` (requires `security-events: write` permission)
 
 SARIF does not list expired or unmatched waiver objects. Use JSON or Markdown output if you need the full waiver details for review.
@@ -135,6 +140,7 @@ CycloneDX 1.5 JSON SBOM for supply chain tools.
 - **Waived findings**: NOT listed. CycloneDX does not receive waived finding data.
 - **Expired/unmatched waivers**: NOT listed.
 - **Waiver mode**: `ohrisk:waiverMode` in metadata properties
+- **Remote repository coverage**: repository identity and bounded skipped-submodule metadata are recorded in metadata properties
 - **Local paths**: project root is represented as `.`, and lockfile metadata uses a project-relative path.
 - **CI artifact**: suitable as an SBOM artifact for compliance pipelines
 

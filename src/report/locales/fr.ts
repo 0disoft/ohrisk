@@ -38,6 +38,7 @@ export const FRENCH_TEXT: HtmlReportText = {
     reviewFocus: "Point de revue",
     reviewSummary: "Résumé de revue",
     risks: "Risques",
+    scanCoverage: "Couverture de l’analyse",
     scope: "Portée",
     search: "Rechercher",
     severity: "Sévérité",
@@ -69,6 +70,10 @@ export const FRENCH_TEXT: HtmlReportText = {
     dependencies: (total, direct, transitive) =>
       `${total} au total, ${direct} directes, ${transitive} transitives`,
     evidence: (files, warnings) => `${files} fichiers, ${warnings} avertissements`,
+    skippedSubmodules: (count, paths, pathsTruncated) =>
+      `${count} sous-modules Git ignorés (${paths.join(", ")}${pathsTruncated ? ", …" : ""}) ; la couverture est incomplète.`,
+    skippedSubmoduleAction:
+      "Analysez séparément les sous-modules Git ignorés avant de considérer ce rapport comme complet.",
     licenseConfidence: (high, medium, low) =>
       `${high} confiance élevée, ${medium} confiance moyenne, ${low} confiance faible`,
     licenseIssues: (missing, malformed) => `${missing} manquantes, ${malformed} mal formées`,

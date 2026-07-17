@@ -38,6 +38,7 @@ export const JAPANESE_TEXT: HtmlReportText = {
     reviewFocus: "レビュー対象",
     reviewSummary: "レビュー概要",
     risks: "リスク",
+    scanCoverage: "スキャン範囲",
     scope: "範囲",
     search: "検索",
     severity: "重要度",
@@ -69,6 +70,10 @@ export const JAPANESE_TEXT: HtmlReportText = {
     dependencies: (total, direct, transitive) =>
       `合計 ${total}、直接 ${direct}、推移 ${transitive}`,
     evidence: (files, warnings) => `${files} ファイル、${warnings} 警告`,
+    skippedSubmodules: (count, paths, pathsTruncated) =>
+      `Git サブモジュール ${count} 件を除外しました（${paths.join("、")}${pathsTruncated ? "、…" : ""}）。スキャン範囲は不完全です。`,
+    skippedSubmoduleAction:
+      "このレポートを完全なものとして扱う前に、除外された Git サブモジュールを個別にスキャンしてください。",
     licenseConfidence: (high, medium, low) =>
       `高信頼 ${high}、中信頼 ${medium}、低信頼 ${low}`,
     licenseIssues: (missing, malformed) => `不足 ${missing}、形式不正 ${malformed}`,

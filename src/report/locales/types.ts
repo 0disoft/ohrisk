@@ -57,6 +57,7 @@ export type HtmlReportText = {
     reviewFocus: string;
     reviewSummary: string;
     risks: string;
+    scanCoverage: string;
     scope: string;
     search: string;
     severity: string;
@@ -86,6 +87,8 @@ export type HtmlReportText = {
     waiverMode: (mode: WaiverMode) => string;
     dependencies: (total: number, direct: number, transitive: number) => string;
     evidence: (files: number, warnings: number) => string;
+    skippedSubmodules: (count: number, paths: string[], pathsTruncated: boolean) => string;
+    skippedSubmoduleAction: string;
     licenseConfidence: (high: number, medium: number, low: number) => string;
     licenseIssues: (missing: number, malformed: number) => string;
     risks: (risks: RiskCounts) => string;

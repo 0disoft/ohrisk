@@ -5,6 +5,7 @@ import type { NormalizedLicense } from "../license/types";
 import type { RiskFinding } from "../policy/types";
 import type { ProjectInput } from "../project/discover";
 import { packageUrl } from "./package-url";
+import type { RemoteRepositoryReportSource } from "./scan-report";
 
 export type CycloneDxReportInput = {
   project: ProjectInput;
@@ -12,6 +13,7 @@ export type CycloneDxReportInput = {
   normalizedLicenses: NormalizedLicense[];
   riskFindings: RiskFinding[];
   waiverMode: "local" | "ignored";
+  repository?: RemoteRepositoryReportSource;
 };
 
 type CycloneDxComponent = {
@@ -83,6 +85,7 @@ export function renderCycloneDxReport(input: CycloneDxReportInput): string {
             name: "ohrisk:waiverMode",
             value: input.waiverMode
           },
+          ...repositoryProperties(input.repository),
           ...archiveProperties(input.project)
         ]
       },
@@ -105,6 +108,31 @@ export function renderCycloneDxReport(input: CycloneDxReportInput): string {
     null,
     2
   );
+}
+
+function repositoryProperties(
+  repository: RemoteRepositoryReportSource | undefined
+): Array<{ name: string; value: string }> {
+  if (!repository) {
+    return [];
+  }
+  return [
+    { name: "ohrisk:repositoryOwner", value: repository.owner },
+    { name: "ohrisk:repositoryName", value: repository.name },
+    { name: "ohrisk:submoduleMode", value: repository.submodules.mode },
+    {
+      name: "ohrisk:skippedSubmoduleCount",
+      value: String(repository.submodules.skippedCount)
+    },
+    {
+      name: "ohrisk:skippedSubmodulePaths",
+      value: JSON.stringify(repository.submodules.skippedPaths)
+    },
+    {
+      name: "ohrisk:submodulePathsTruncated",
+      value: String(repository.submodules.pathsTruncated)
+    }
+  ];
 }
 
 function projectInputPath(project: ProjectInput, targetPath: string): string {

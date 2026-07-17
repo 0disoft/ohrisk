@@ -38,6 +38,7 @@ export const TURKISH_TEXT: HtmlReportText = {
     reviewFocus: "İnceleme odağı",
     reviewSummary: "İnceleme özeti",
     risks: "Riskler",
+    scanCoverage: "Tarama kapsamı",
     scope: "Kapsam",
     search: "Ara",
     severity: "Önem",
@@ -69,6 +70,10 @@ export const TURKISH_TEXT: HtmlReportText = {
     dependencies: (total, direct, transitive) =>
       `${total} toplam, ${direct} doğrudan, ${transitive} geçişli`,
     evidence: (files, warnings) => `${files} dosya, ${warnings} uyarı`,
+    skippedSubmodules: (count, paths, pathsTruncated) =>
+      `${count} Git alt modülü atlandı (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); tarama kapsamı eksik.`,
+    skippedSubmoduleAction:
+      "Bu raporu tamamlanmış saymadan önce atlanan Git alt modüllerini ayrı ayrı tarayın.",
     licenseConfidence: (high, medium, low) =>
       `${high} yüksek güven, ${medium} orta güven, ${low} düşük güven`,
     licenseIssues: (missing, malformed) => `${missing} eksik, ${malformed} hatalı biçimli`,

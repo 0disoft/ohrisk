@@ -15,12 +15,39 @@ describe("parseArgs", () => {
         kind: "scan",
         html: true,
         outputPath: "laqu-ohrisk.html",
+        submoduleMode: "ignore",
         repository: {
           url: "https://github.com/0disoft/laqu.git",
           owner: "0disoft",
           name: "laqu"
         }
       });
+    }
+  });
+
+  test("parses strict submodule mode only for remote scans", () => {
+    const strict = parseArgs([
+      "scan",
+      "--submodules",
+      "reject",
+      "https://github.com/Mbed-TLS/mbedtls.git"
+    ]);
+    expect(strict.ok).toBe(true);
+    if (!strict.ok) throw new Error(strict.error.message);
+    expect(strict.value).toMatchObject({
+      kind: "scan",
+      submoduleMode: "reject"
+    });
+
+    for (const argv of [
+      ["scan", "--submodules", "follow", "https://github.com/Mbed-TLS/mbedtls.git"],
+      ["scan", "--submodules", "ignore"],
+      ["ci", "--submodules", "ignore"]
+    ]) {
+      const parsed = parseArgs(argv);
+      expect(parsed.ok).toBe(false);
+      if (parsed.ok) throw new Error(`Expected ${argv.join(" ")} to fail.`);
+      expect(parsed.error.code).toBe("INVALID_ARGUMENT");
     }
   });
 

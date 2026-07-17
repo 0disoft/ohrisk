@@ -38,6 +38,7 @@ export const KOREAN_TEXT: HtmlReportText = {
     reviewFocus: "검토 초점",
     reviewSummary: "검토 요약",
     risks: "위험",
+    scanCoverage: "검사 범위",
     scope: "범위",
     search: "검색",
     severity: "심각도",
@@ -69,6 +70,10 @@ export const KOREAN_TEXT: HtmlReportText = {
     dependencies: (total, direct, transitive) =>
       `총 ${total}개, 직접 ${direct}개, 전이 ${transitive}개`,
     evidence: (files, warnings) => `파일 ${files}개, 경고 ${warnings}개`,
+    skippedSubmodules: (count, paths, pathsTruncated) =>
+      `Git 서브모듈 ${count}개 제외됨 (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); 검사 범위가 불완전합니다.`,
+    skippedSubmoduleAction:
+      "이 보고서를 완전한 검사로 취급하기 전에 제외된 Git 서브모듈을 별도로 검사하세요.",
     licenseConfidence: (high, medium, low) =>
       `높은 신뢰도 ${high}개, 중간 신뢰도 ${medium}개, 낮은 신뢰도 ${low}개`,
     licenseIssues: (missing, malformed) => `누락 ${missing}개, 형식 오류 ${malformed}개`,

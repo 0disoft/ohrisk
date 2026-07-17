@@ -75,10 +75,47 @@ describe("GitHub repository input", () => {
       treeEntry("100644", "blob", 42, "package.json"),
       treeEntry("100755", "blob", 128, "scripts/check.ts")
     ]));
-    expect(validated).toEqual({ ok: true, value: undefined });
+    expect(validated).toEqual({
+      ok: true,
+      value: {
+        submodules: { total: 0, paths: [], pathsTruncated: false }
+      }
+    });
   });
 
-  test("rejects symlinks, submodules, unsafe names, and compatibility collisions", () => {
+  test("ignores submodule gitlinks only when requested and reports bounded paths", () => {
+    const validated = validateGitTree(treeBuffer([
+      treeEntry("160000", "commit", "-", "framework"),
+      treeEntry("160000", "commit", "-", "tf-psa-crypto"),
+      treeEntry("100644", "blob", 42, "package.json")
+    ]), { submodules: "ignore" });
+
+    expect(validated).toEqual({
+      ok: true,
+      value: {
+        submodules: {
+          total: 2,
+          paths: ["framework", "tf-psa-crypto"],
+          pathsTruncated: false
+        }
+      }
+    });
+
+    const many = validateGitTree(treeBuffer(
+      Array.from({ length: 101 }, (_, index) =>
+        treeEntry("160000", "commit", "-", `modules/module-${index}`)
+      )
+    ), { submodules: "ignore" });
+    expect(many.ok).toBe(true);
+    if (!many.ok) throw new Error(many.error.message);
+    expect(many.value.submodules).toMatchObject({
+      total: 101,
+      pathsTruncated: true
+    });
+    expect(many.value.submodules.paths).toHaveLength(100);
+  });
+
+  test("rejects symlinks, strict-mode submodules, unsafe names, and compatibility collisions", () => {
     const cases = [
       [treeEntry("120000", "blob", 6, "linked")],
       [treeEntry("160000", "commit", 0, "vendor/module")],
@@ -100,6 +137,16 @@ describe("GitHub repository input", () => {
       if (validated.ok) throw new Error("Expected unsafe repository tree to fail.");
       expect(validated.error.code).toBe("REPOSITORY_TREE_INVALID");
     }
+
+    const submodule = validateGitTree(treeBuffer([
+      treeEntry("160000", "commit", "-", "vendor/module")
+    ]));
+    expect(submodule.ok).toBe(false);
+    if (submodule.ok) throw new Error("Expected strict submodule mode to fail.");
+    expect(submodule.error.details).toMatchObject({
+      reason: "submodule",
+      path: "vendor/module"
+    });
   });
 
   test("rejects oversized files and malformed non-NUL-terminated tree output", () => {
@@ -120,7 +167,7 @@ describe("GitHub repository input", () => {
   });
 });
 
-function treeEntry(mode: string, type: string, size: number, filePath: string): string {
+function treeEntry(mode: string, type: string, size: number | "-", filePath: string): string {
   return `${mode} ${type} ${OBJECT_ID} ${size}\t${filePath}`;
 }
 

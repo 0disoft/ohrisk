@@ -10,7 +10,7 @@ describe("README report contract", () => {
     const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
 
     expect(readme).toContain("Beginner HTML report flow on Windows PowerShell");
-    expect(readme).toContain("npm install -g ohrisk@1.5.0");
+    expect(readme).toContain("npm install -g ohrisk@1.6.0");
     expect(readme).toContain("ohrisk scan --html --output reports\\ohrisk-report.html --open");
     expect(readme).toContain("The scan prints live terminal progress");
     expect(readme).toContain("plain append-only progress lines");

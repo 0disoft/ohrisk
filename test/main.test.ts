@@ -99,10 +99,16 @@ describe("main", () => {
       writeFileSync(path.join(temporaryRepository, ".ohrisk-waivers.json"), "not-json", "utf8");
 
       const { io, stdout, stderr } = createTestIO(invocationRoot);
-      io.cloneRepository = async (repository) => {
+      io.cloneRepository = async (repository, options) => {
         expect(repository.url).toBe("https://github.com/0disoft/laqu.git");
+        expect(options).toEqual({ submodules: "ignore" });
         return ok({
           rootDir: temporaryRepository,
+          submodules: {
+            total: 2,
+            paths: ["framework", "tf-psa-crypto"],
+            pathsTruncated: false
+          },
           cleanup: () => {
             cleaned = true;
           }
@@ -121,6 +127,8 @@ describe("main", () => {
       expect(cleaned).toBe(true);
       expect(stderr.join("\n")).toContain(`Wrote report to ${reportPath}`);
       expect(readFileSync(reportPath, "utf8")).toContain("remote-fixture");
+      expect(readFileSync(reportPath, "utf8")).toContain("framework");
+      expect(readFileSync(reportPath, "utf8")).toContain("coverage is incomplete");
       expect(readFileSync(reportPath, "utf8")).not.toContain(temporaryRepository);
     } finally {
       rmSync(invocationRoot, { recursive: true, force: true });
@@ -137,6 +145,7 @@ describe("main", () => {
       const { io, stderr } = createTestIO(invocationRoot);
       io.cloneRepository = async () => ok({
         rootDir: temporaryRepository,
+        submodules: { total: 0, paths: [], pathsTruncated: false },
         cleanup: () => {
           cleaned = true;
         }
@@ -187,8 +196,9 @@ describe("main", () => {
     expect(scanExitCode).toBe(0);
     expect(scan.stderr).toEqual([]);
     expect(scanOutput).toContain("Ohrisk scan");
-    expect(scanOutput).toContain("ohrisk scan [repository-url|--repo <url>] [--archive <path>]");
+    expect(scanOutput).toContain("ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>]");
     expect(scanOutput).toContain("--repo <url>");
+    expect(scanOutput).toContain("--submodules <mode>");
     expect(scanOutput).toContain("--archive <path>");
     expect(scanOutput).toContain("--lockfile <path>");
     expect(scanOutput).toContain("--workspace-root <path>");

@@ -46,8 +46,11 @@ PS C:\Users\cherr\Downloads> ohrisk scan --html https://github.com/0disoft/laqu.
 `--html`과 함께 `--output`을 생략한 원격 스캔만 현재 실행 폴더에
 `<저장소>-ohrisk.html`을 자동 생성한다. 로컬/아카이브 스캔의 `--html` stdout
 동작은 바뀌지 않는다. 공개 `https://github.com/<owner>/<repository>[.git]`만
-허용하며 private credential, 다른 Git host/protocol, submodule, symlink, 위험하거나
-제한을 넘는 tree는 거부한다. 원격 스캔에는 `PATH`에서 실행 가능한 Git이 필요하다.
+허용하며 private credential, 다른 Git host/protocol, symlink, 위험하거나
+제한을 넘는 tree는 거부한다. submodule 내용은 가져오지 않으며 기본
+`--submodules ignore` 모드에서는 gitlink를 건너뛰고 모든 보고서에 불완전한 검사
+범위와 경로를 기록한다. `--submodules reject`를 사용하면 첫 submodule에서 실패한다.
+원격 스캔에는 `PATH`에서 실행 가능한 Git이 필요하다.
 임시 shallow clone은 끝나면 삭제되고, 실행 폴더의
 policy·waiver·cache·report output만 신뢰한다. 이 입력은 `scan` 전용이며 `ci`,
 `diff`, GitHub Action input에서는 지원하지 않는다.

@@ -73,7 +73,11 @@ import { renderCycloneDxReport } from "../report/cyclonedx-report";
 import { renderDiffReport, type DiffLockfileChanges } from "../report/diff-report";
 import { renderExplainReport } from "../report/explain-report";
 import { renderSarifReport } from "../report/sarif-report";
-import { renderScanReport, type ScanReportInput } from "../report/scan-report";
+import {
+  renderScanReport,
+  type RemoteRepositoryReportSource,
+  type ScanReportInput
+} from "../report/scan-report";
 import { openReportFile, type ReportOpener } from "../report/open-report";
 import { writeReportFile, type ReportWriter } from "../report/write-output";
 import {
@@ -513,7 +517,8 @@ async function runScan(
 
   reportProgress?.(0, `Cloning ${repository.owner}/${repository.name}...`);
   const cloner = io.cloneRepository ?? cloneGitHubRepository;
-  const cloned = await cloner(repository);
+  const submoduleMode = command.kind === "scan" ? command.submoduleMode ?? "ignore" : "ignore";
+  const cloned = await cloner(repository, { submodules: submoduleMode });
   if (isErr(cloned)) {
     await closeScanProgressReporter(reportProgress, "failure");
     io.stderr(formatError(cloned.error));
@@ -529,7 +534,17 @@ async function runScan(
       runtimeRoot: io.cwd,
       allowLocalProjectEvidence: false,
       reportProgress,
-      temporaryRoot: cloned.value.rootDir
+      temporaryRoot: cloned.value.rootDir,
+      repository: {
+        owner: repository.owner,
+        name: repository.name,
+        submodules: {
+          mode: submoduleMode,
+          skippedCount: cloned.value.submodules.total,
+          skippedPaths: cloned.value.submodules.paths,
+          pathsTruncated: cloned.value.submodules.pathsTruncated
+        }
+      }
     });
   } finally {
     cloned.value.cleanup();
@@ -545,6 +560,7 @@ async function runScanAt(input: {
   allowLocalProjectEvidence?: boolean;
   reportProgress?: ScanProgressReporter;
   temporaryRoot?: string;
+  repository?: RemoteRepositoryReportSource;
 }): Promise<number> {
   const { command, io, reportProgress } = input;
   const now = io.now ?? Date.now;
@@ -611,7 +627,8 @@ async function runScanAt(input: {
     waivedFindings: scanned.value.waivedFindings,
     expiredWaivers: scanned.value.expiredWaivers,
     unmatchedWaivers: scanned.value.unmatchedWaivers,
-    policy: scanned.value.policy
+    policy: scanned.value.policy,
+    ...(input.repository ? { repository: input.repository } : {})
   };
 
   reportProgress?.(SCAN_PROGRESS_RENDER_PERCENT, `Rendering ${reportFormatLabel(command)} report...`);
@@ -2236,7 +2253,7 @@ function renderTopLevelHelp(): string {
     "Ohrisk",
     "",
     "Usage:",
-    "  ohrisk scan [repository-url|--repo <url>] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
+    "  ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
     "  ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
     "  ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
@@ -2258,6 +2275,7 @@ function renderTopLevelHelp(): string {
     "  --lockfile <path>      Use a specific supported lockfile path.",
     "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
     "  --repo <url>           Scan a public GitHub HTTPS repository; requires Git on PATH.",
+    "  --submodules <mode>    Ignore with an incomplete-coverage warning (default), or reject.",
     "  --all                  Discover and merge every supported lockfile in the project root.",
     "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
     "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
@@ -2290,13 +2308,14 @@ function renderScanHelp(): string {
     "Ohrisk scan",
     "",
     "Usage:",
-    "  ohrisk scan [repository-url|--repo <url>] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
+    "  ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
     "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
     "  --repo <url>           Scan a public GitHub HTTPS repository; requires Git on PATH.",
+    "  --submodules <mode>    Ignore with an incomplete-coverage warning (default), or reject.",
     "  --all                  Discover and merge every supported lockfile in the project root.",
     "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
     "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",

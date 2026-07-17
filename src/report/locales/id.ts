@@ -38,6 +38,7 @@ export const INDONESIAN_TEXT: HtmlReportText = {
     reviewFocus: "Fokus review",
     reviewSummary: "Ringkasan review",
     risks: "Risiko",
+    scanCoverage: "Cakupan pemindaian",
     scope: "Cakupan",
     search: "Cari",
     severity: "Keparahan",
@@ -69,6 +70,10 @@ export const INDONESIAN_TEXT: HtmlReportText = {
     dependencies: (total, direct, transitive) =>
       `${total} total, ${direct} langsung, ${transitive} transitif`,
     evidence: (files, warnings) => `${files} file, ${warnings} peringatan`,
+    skippedSubmodules: (count, paths, pathsTruncated) =>
+      `${count} submodul Git dilewati (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); cakupan belum lengkap.`,
+    skippedSubmoduleAction:
+      "Pindai submodul Git yang dilewati secara terpisah sebelum menganggap laporan ini lengkap.",
     licenseConfidence: (high, medium, low) =>
       `${high} keyakinan tinggi, ${medium} keyakinan sedang, ${low} keyakinan rendah`,
     licenseIssues: (missing, malformed) => `${missing} hilang, ${malformed} salah format`,

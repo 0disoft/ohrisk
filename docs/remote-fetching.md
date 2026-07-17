@@ -16,11 +16,18 @@ Remote fetching is limited to these explicit adapters:
 - the tarball URL returned by that exact-version registry metadata response.
 
 The repository adapter accepts only `github.com` owner/repository URLs, disables
-credential prompts, submodules, and symlink checkout, rejects non-portable or
+credential prompts, submodule fetching, and symlink checkout, rejects non-portable or
 oversized trees before checkout, caps temporary storage, applies a two-minute
 work budget, and removes its owned staging directory. It does not accept private
 repository credentials or arbitrary Git hosts. The host invocation directory,
 not the clone, owns policy, waivers, cache, and report output.
+
+Submodule gitlinks are skipped by default without resolving `.gitmodules` URLs
+or making additional network requests. Every report records the total skipped
+count, a bounded list of safe relative paths, truncation state, and incomplete
+coverage guidance. `--submodules reject` restores strict failure on the first
+gitlink. Recursive fetching is intentionally unsupported because it would widen
+the allowed repository, host, credential, recursion, storage, and timeout scope.
 
 Other ecosystems use local caches, vendored source, lockfile-embedded evidence,
 or local package metadata. A new remote ecosystem adapter is not enabled until

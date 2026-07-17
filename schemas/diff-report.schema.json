@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:ohrisk:schema:diff-report:3.1.0",
+  "$id": "urn:ohrisk:schema:diff-report:3.2.0",
   "title": "Ohrisk diff report",
   "type": "object",
   "required": [
@@ -29,10 +29,10 @@
   ],
   "properties": {
     "$schema": {
-      "const": "urn:ohrisk:schema:diff-report:3.1.0"
+      "const": "urn:ohrisk:schema:diff-report:3.2.0"
     },
     "schemaVersion": {
-      "const": "3.1.0"
+      "const": "3.2.0"
     },
     "status": {
       "const": "risk_diff_evaluated"
@@ -42,7 +42,7 @@
       "minLength": 1
     },
     "profile": {
-      "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/usageProfile"
+      "$ref": "urn:ohrisk:schema:common:3.2.0#/$defs/usageProfile"
     },
     "prodOnly": {
       "type": "boolean"
@@ -72,29 +72,29 @@
       "minimum": 0
     },
     "newRisks": {
-      "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskCounts"
+      "$ref": "urn:ohrisk:schema:common:3.2.0#/$defs/riskCounts"
     },
     "changedRisks": {
-      "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskCounts"
+      "$ref": "urn:ohrisk:schema:common:3.2.0#/$defs/riskCounts"
     },
     "resolvedRisks": {
-      "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskCounts"
+      "$ref": "urn:ohrisk:schema:common:3.2.0#/$defs/riskCounts"
     },
     "introducedRisks": {
-      "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskCounts"
+      "$ref": "urn:ohrisk:schema:common:3.2.0#/$defs/riskCounts"
     },
     "lockfileChanges": {
-      "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/lockfileChanges"
+      "$ref": "urn:ohrisk:schema:common:3.2.0#/$defs/lockfileChanges"
     },
     "nextAction": {
       "type": "string",
       "minLength": 1
     },
     "policy": {
-      "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/policySummary"
+      "$ref": "urn:ohrisk:schema:common:3.2.0#/$defs/policySummary"
     },
     "failOn": {
-      "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskSeverity"
+      "$ref": "urn:ohrisk:schema:common:3.2.0#/$defs/riskSeverity"
     },
     "failed": {
       "type": "boolean"
@@ -106,25 +106,25 @@
     "findings": {
       "type": "array",
       "items": {
-        "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskFinding"
+        "$ref": "urn:ohrisk:schema:common:3.2.0#/$defs/riskFinding"
       }
     },
     "newFindings": {
       "type": "array",
       "items": {
-        "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskFinding"
+        "$ref": "urn:ohrisk:schema:common:3.2.0#/$defs/riskFinding"
       }
     },
     "changedFindings": {
       "type": "array",
       "items": {
-        "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskFinding"
+        "$ref": "urn:ohrisk:schema:common:3.2.0#/$defs/riskFinding"
       }
     },
     "resolvedFindings": {
       "type": "array",
       "items": {
-        "$ref": "urn:ohrisk:schema:common:3.1.0#/$defs/riskFinding"
+        "$ref": "urn:ohrisk:schema:common:3.2.0#/$defs/riskFinding"
       }
     }
   },

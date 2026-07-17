@@ -119,6 +119,16 @@ describe("machine-readable report schemas", () => {
       sha256: "a".repeat(64),
       root: "release"
     });
+    expect(scan.repository).toEqual({
+      owner: "Mbed-TLS",
+      name: "mbedtls",
+      submodules: {
+        mode: "ignore",
+        skippedCount: 2,
+        skippedPaths: ["framework", "tf-psa-crypto"],
+        pathsTruncated: false
+      }
+    });
     expect(JSON.stringify(scan)).not.toContain(scan.projectRootPathForTest);
     expect(explain.license).not.toHaveProperty("spdxAst");
     expect(explain.license).not.toHaveProperty("debug");
@@ -133,6 +143,13 @@ describe("machine-readable report schemas", () => {
       { ...scan, findings: [{ ...finding, legalVerdict: "safe" }] },
       { ...scan, findings: [{ ...finding, severity: "critical" }] },
       { ...scan, lockfile: { kind: "package-lock", path: "/absolute/package-lock.json" } },
+      {
+        ...scan,
+        repository: {
+          ...scan.repository,
+          submodules: { ...scan.repository.submodules, skippedPaths: ["../outside"] }
+        }
+      },
       { ...scan, archive: { name: "/absolute/source.zip", format: "zip", sha256: "a".repeat(64), root: "." } },
       { ...scan, archive: { name: "source.zip", format: "rar", sha256: "a".repeat(64), root: "." } },
       { ...scan, archive: { name: "source.zip", format: "zip", sha256: "not-a-digest", root: "." } },
@@ -256,6 +273,16 @@ function renderCompleteScanReport(): Record<string, any> {
       id: "OHRISK-missing",
       reason: "Dependency was removed."
     }],
+    repository: {
+      owner: "Mbed-TLS",
+      name: "mbedtls",
+      submodules: {
+        mode: "ignore",
+        skippedCount: 2,
+        skippedPaths: ["framework", "tf-psa-crypto"],
+        pathsTruncated: false
+      }
+    },
     policy
   })) as Record<string, any>;
 

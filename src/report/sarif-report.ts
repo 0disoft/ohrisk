@@ -115,6 +115,16 @@ export function renderSarifReport(input: ScanReportInput): string {
             ohriskWaivedFindingCount: input.waivedFindings.length,
             ohriskExpiredWaiverCount: input.expiredWaivers.length,
             ohriskUnmatchedWaiverCount: input.unmatchedWaivers.length,
+            ...(input.repository
+              ? {
+                  ohriskRepositoryOwner: input.repository.owner,
+                  ohriskRepositoryName: input.repository.name,
+                  ohriskSubmoduleMode: input.repository.submodules.mode,
+                  ohriskSkippedSubmoduleCount: input.repository.submodules.skippedCount,
+                  ohriskSkippedSubmodulePaths: input.repository.submodules.skippedPaths,
+                  ohriskSubmodulePathsTruncated: input.repository.submodules.pathsTruncated
+                }
+              : {}),
             ...(input.project.source
               ? {
                   ohriskArchiveName: input.project.source.displayPath,

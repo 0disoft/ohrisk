@@ -60,11 +60,23 @@ export type ScanReportInput = {
   expiredWaivers: RiskWaiver[];
   unmatchedWaivers: RiskWaiver[];
   policy?: PolicyConfigSummary;
+  repository?: RemoteRepositoryReportSource;
+};
+
+export type RemoteRepositoryReportSource = {
+  owner: string;
+  name: string;
+  submodules: {
+    mode: "ignore" | "reject";
+    skippedCount: number;
+    skippedPaths: string[];
+    pathsTruncated: boolean;
+  };
 };
 
 export function renderScanReport(input: ScanReportInput): string {
   const summary = buildScanSummary(input);
-  const nextAction = nextActionFor(input.riskFindings);
+  const nextAction = nextActionFor(input.riskFindings, input.repository);
   const thresholdSummary = buildThresholdSummary(input.riskFindings, input.failOn);
   const waiverDriftSummary = buildWaiverDriftSummary(input);
 
@@ -75,6 +87,7 @@ export function renderScanReport(input: ScanReportInput): string {
         schemaVersion: OHRISK_REPORT_SCHEMA_VERSION,
         status: "profile_risk_evaluated",
         projectRoot: ".",
+        ...(input.repository ? { repository: input.repository } : {}),
         ...(input.project.source ? { archive: archiveReportSource(input.project) } : {}),
         lockfile: {
           kind: input.project.lockfile.kind,
@@ -118,6 +131,7 @@ export function renderScanReport(input: ScanReportInput): string {
     `Project: ${displayProjectLabel(input.project)}`,
     `Lockfile: ${displayLockfilePath(input.project)} (${input.project.lockfile.kind})`,
     ...renderAdditionalLockfileLines(input.project),
+    ...renderRepositoryCoverageLines(input.repository),
     `Profile: ${input.profile}`,
     `Production only: ${input.prodOnly ? "yes" : "no"}`,
     `Dependencies: ${summary.dependencyGraph.total} total, ${summary.dependencyGraph.direct} direct, ${summary.dependencyGraph.transitive} transitive`,
@@ -170,7 +184,7 @@ function renderHtmlReport(
     "    <header>",
     `      <p class="eyebrow">${escapeHtml(input.project.lockfile.kind)}</p>`,
     `      <h1>${escapeHtml(title)}</h1>`,
-    `      <p class="lead">${escapeHtml(text.messages.nextAction(input.riskFindings))}</p>`,
+    `      <p class="lead">${escapeHtml(localizedNextAction(input, text))}</p>`,
     "    </header>",
     '    <section aria-labelledby="review-summary-heading">',
     `      <h2 id="review-summary-heading">${escapeHtml(text.labels.reviewSummary)}</h2>`,
@@ -209,6 +223,7 @@ function renderHtmlReport(
       ],
       [text.labels.risks, text.messages.risks(summary.risks)],
       [text.labels.waiverMode, text.messages.waiverMode(input.waiverMode)],
+      ...renderHtmlRepositoryCoverageCard(input.repository, text),
       [
         text.labels.waived,
         text.messages.waived(
@@ -232,7 +247,7 @@ function renderHtmlReport(
     ...renderHtmlUnmatchedWaiversSection(input.unmatchedWaivers, text),
     '    <section aria-labelledby="next-heading">',
     `      <h2 id="next-heading">${escapeHtml(text.labels.next)}</h2>`,
-    `      <p>${escapeHtml(text.messages.nextAction(input.riskFindings))}</p>`,
+    `      <p>${escapeHtml(localizedNextAction(input, text))}</p>`,
     "    </section>",
     "  </main>",
     "  <script>",
@@ -361,7 +376,7 @@ function buildReviewSummaryCards(
         summary.waivers.expired + summary.waivers.unmatched
       )
     ],
-    [text.labels.reviewFocus, text.messages.nextAction(input.riskFindings)],
+    [text.labels.reviewFocus, localizedNextAction(input, text)],
     ...(evidenceRecoveryAdvice
       ? [[text.labels.evidenceRecovery, text.messages.evidenceRecovery(evidenceRecoveryAdvice)] as const]
       : []),
@@ -867,7 +882,7 @@ function renderMarkdownReport(
   input: ScanReportInput,
   summary: ReturnType<typeof buildScanSummary>
 ): string {
-  const nextAction = nextActionFor(input.riskFindings);
+  const nextAction = nextActionFor(input.riskFindings, input.repository);
   const thresholdSummary = buildThresholdSummary(input.riskFindings, input.failOn);
   const waiverDriftSummary = buildWaiverDriftSummary(input);
 
@@ -877,6 +892,7 @@ function renderMarkdownReport(
     `- Project: ${formatMarkdownInlineCode(markdownProjectLabel(input))}`,
     `- Lockfile: ${formatMarkdownInlineCode(displayLockfilePath(input.project))} (${formatMarkdownInlineCode(input.project.lockfile.kind)})`,
     ...renderAdditionalMarkdownLockfileLines(input.project),
+    ...renderMarkdownRepositoryCoverageLines(input.repository),
     `- Profile: ${formatMarkdownInlineCode(input.profile)}`,
     `- Production only: ${formatMarkdownInlineCode(input.prodOnly ? "yes" : "no")}`,
     `- Dependencies: ${formatMarkdownInlineCode(`${summary.dependencyGraph.total} total`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.direct} direct`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.transitive} transitive`)}`,
@@ -1541,7 +1557,14 @@ function formatWaiverTarget(waiver: RiskWaiver): string {
   return `fingerprint: ${waiver.fingerprint ?? "unknown"}`;
 }
 
-function nextActionFor(findings: RiskFinding[]): string {
+function nextActionFor(
+  findings: RiskFinding[],
+  repository?: RemoteRepositoryReportSource
+): string {
+  if (repository && repository.submodules.skippedCount > 0) {
+    return "Scan the skipped Git submodules separately before treating this report as complete.";
+  }
+
   if (findings.some((finding) => finding.recommendation === "replace")) {
     return "Replace or escalate high-risk dependencies before shipping.";
   }
@@ -1563,4 +1586,52 @@ function nextActionFor(findings: RiskFinding[]): string {
   }
 
   return "No action needed for this profile.";
+}
+
+function localizedNextAction(input: ScanReportInput, text: HtmlReportText): string {
+  return input.repository && input.repository.submodules.skippedCount > 0
+    ? text.messages.skippedSubmoduleAction
+    : text.messages.nextAction(input.riskFindings);
+}
+
+function renderRepositoryCoverageLines(
+  repository?: RemoteRepositoryReportSource
+): string[] {
+  if (!repository || repository.submodules.skippedCount === 0) {
+    return [];
+  }
+  return [`Scan coverage: ${formatSkippedSubmoduleSummary(repository)}`];
+}
+
+function renderMarkdownRepositoryCoverageLines(
+  repository?: RemoteRepositoryReportSource
+): string[] {
+  if (!repository || repository.submodules.skippedCount === 0) {
+    return [];
+  }
+  return [`- Scan coverage: ${formatMarkdownTableCell(formatSkippedSubmoduleSummary(repository))}`];
+}
+
+function renderHtmlRepositoryCoverageCard(
+  repository: RemoteRepositoryReportSource | undefined,
+  text: HtmlReportText
+): Array<readonly [string, string]> {
+  if (!repository || repository.submodules.skippedCount === 0) {
+    return [];
+  }
+  return [[
+    text.labels.scanCoverage,
+    text.messages.skippedSubmodules(
+      repository.submodules.skippedCount,
+      repository.submodules.skippedPaths,
+      repository.submodules.pathsTruncated
+    )
+  ]];
+}
+
+function formatSkippedSubmoduleSummary(repository: RemoteRepositoryReportSource): string {
+  const { skippedCount, skippedPaths, pathsTruncated } = repository.submodules;
+  const pathList = skippedPaths.join(", ");
+  const suffix = pathsTruncated ? ", …" : "";
+  return `${skippedCount} Git submodule${skippedCount === 1 ? "" : "s"} skipped (${pathList}${suffix}); coverage is incomplete.`;
 }

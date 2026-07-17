@@ -17,13 +17,27 @@ export type GitHubRepository = {
   name: string;
 };
 
+export type RepositorySubmoduleMode = "ignore" | "reject";
+
+export type RepositorySubmoduleSummary = {
+  total: number;
+  paths: string[];
+  pathsTruncated: boolean;
+};
+
 export type ClonedRepository = {
   rootDir: string;
+  submodules: RepositorySubmoduleSummary;
   cleanup: () => void;
 };
 
+export type RepositoryCloneOptions = {
+  submodules: RepositorySubmoduleMode;
+};
+
 export type RepositoryCloner = (
-  repository: GitHubRepository
+  repository: GitHubRepository,
+  options: RepositoryCloneOptions
 ) => Promise<Result<ClonedRepository, OhriskError>>;
 
 const GITHUB_HOSTNAME = "github.com";
@@ -39,6 +53,7 @@ const MAX_PATH_SEGMENTS = 64;
 const MAX_SEGMENT_BYTES = 255;
 const MAX_GIT_STDOUT_BYTES = 64 * 1024 * 1024;
 const MAX_GIT_STDERR_BYTES = 64 * 1024;
+const MAX_REPORTED_SUBMODULE_PATHS = 100;
 const RESERVED_WINDOWS_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
 
 type GitRunResult = {
@@ -98,7 +113,7 @@ export function parseGitHubRepositoryUrl(
   });
 }
 
-export const cloneGitHubRepository: RepositoryCloner = async (repository) => {
+export const cloneGitHubRepository: RepositoryCloner = async (repository, options) => {
   const stagingRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-repository-"));
   const repositoryRoot = path.join(stagingRoot, "repository");
   const deadline = Date.now() + CLONE_TIMEOUT_MS;
@@ -129,7 +144,7 @@ export const cloneGitHubRepository: RepositoryCloner = async (repository) => {
       return err(treeFailure);
     }
 
-    const validatedTree = validateGitTree(tree.stdout);
+    const validatedTree = validateGitTree(tree.stdout, options);
     if (isErr(validatedTree)) {
       cleanup();
       return validatedTree;
@@ -153,7 +168,11 @@ export const cloneGitHubRepository: RepositoryCloner = async (repository) => {
       return materialized;
     }
 
-    return ok({ rootDir: repositoryRoot, cleanup });
+    return ok({
+      rootDir: repositoryRoot,
+      submodules: validatedTree.value.submodules,
+      cleanup
+    });
   } catch (cause) {
     cleanup();
     return err(createError({
@@ -210,7 +229,10 @@ export function checkoutArguments(repositoryRoot: string): string[] {
   ];
 }
 
-export function validateGitTree(treeOutput: Buffer): Result<void, OhriskError> {
+export function validateGitTree(
+  treeOutput: Buffer,
+  options: RepositoryCloneOptions = { submodules: "reject" }
+): Result<{ submodules: RepositorySubmoduleSummary }, OhriskError> {
   if (treeOutput.length > 0 && treeOutput[treeOutput.length - 1] !== 0) {
     return err(repositoryTreeError("malformed_tree_output"));
   }
@@ -220,6 +242,8 @@ export function validateGitTree(treeOutput: Buffer): Result<void, OhriskError> {
   }
 
   let totalBytes = 0;
+  let submoduleCount = 0;
+  const submodulePaths: string[] = [];
   const compatiblePaths = new Map<string, string>();
   const decoder = new TextDecoder("utf-8", { fatal: true });
 
@@ -236,23 +260,6 @@ export function validateGitTree(treeOutput: Buffer): Result<void, OhriskError> {
       return err(repositoryTreeError("malformed_tree_entry"));
     }
     const [, mode, type, , sizeText] = header;
-    if (type !== "blob" || mode === "120000" || mode === "160000") {
-      return err(repositoryTreeError(
-        mode === "120000" ? "symbolic_link" : mode === "160000" ? "submodule" : "unsupported_entry"
-      ));
-    }
-
-    const size = Number(sizeText);
-    if (!Number.isSafeInteger(size) || size < 0) {
-      return err(repositoryTreeError("unknown_file_size"));
-    }
-    if (size > MAX_FILE_BYTES) {
-      return err(repositoryLimitError("file_size", size, MAX_FILE_BYTES));
-    }
-    totalBytes += size;
-    if (!Number.isSafeInteger(totalBytes) || totalBytes > MAX_TREE_BYTES) {
-      return err(repositoryLimitError("total_file_size", totalBytes, MAX_TREE_BYTES));
-    }
 
     let repositoryPath: string;
     try {
@@ -264,9 +271,48 @@ export function validateGitTree(treeOutput: Buffer): Result<void, OhriskError> {
     if (isErr(pathValidation)) {
       return pathValidation;
     }
+
+    if (mode === "160000") {
+      if (type !== "commit") {
+        return err(repositoryTreeError("unsupported_entry", repositoryPath));
+      }
+      if (options.submodules === "reject") {
+        return err(repositoryTreeError("submodule", repositoryPath));
+      }
+      submoduleCount += 1;
+      if (submodulePaths.length < MAX_REPORTED_SUBMODULE_PATHS) {
+        submodulePaths.push(repositoryPath);
+      }
+      continue;
+    }
+
+    if (type !== "blob" || mode === "120000") {
+      return err(repositoryTreeError(
+        mode === "120000" ? "symbolic_link" : "unsupported_entry",
+        repositoryPath
+      ));
+    }
+
+    const size = Number(sizeText);
+    if (!Number.isSafeInteger(size) || size < 0) {
+      return err(repositoryTreeError("unknown_file_size", repositoryPath));
+    }
+    if (size > MAX_FILE_BYTES) {
+      return err(repositoryLimitError("file_size", size, MAX_FILE_BYTES));
+    }
+    totalBytes += size;
+    if (!Number.isSafeInteger(totalBytes) || totalBytes > MAX_TREE_BYTES) {
+      return err(repositoryLimitError("total_file_size", totalBytes, MAX_TREE_BYTES));
+    }
   }
 
-  return ok(undefined);
+  return ok({
+    submodules: {
+      total: submoduleCount,
+      paths: submodulePaths,
+      pathsTruncated: submoduleCount > submodulePaths.length
+    }
+  });
 }
 
 function safeGitConfiguration(): string[] {

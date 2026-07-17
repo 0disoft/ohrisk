@@ -38,6 +38,7 @@ export const CHINESE_TEXT: HtmlReportText = {
     reviewFocus: "审查重点",
     reviewSummary: "审查摘要",
     risks: "风险",
+    scanCoverage: "扫描范围",
     scope: "范围",
     search: "搜索",
     severity: "严重性",
@@ -69,6 +70,10 @@ export const CHINESE_TEXT: HtmlReportText = {
     dependencies: (total, direct, transitive) =>
       `共 ${total} 个，直接 ${direct} 个，传递 ${transitive} 个`,
     evidence: (files, warnings) => `${files} 个文件，${warnings} 个警告`,
+    skippedSubmodules: (count, paths, pathsTruncated) =>
+      `已跳过 ${count} 个 Git 子模块（${paths.join("、")}${pathsTruncated ? "、…" : ""}）；扫描范围不完整。`,
+    skippedSubmoduleAction:
+      "在将此报告视为完整报告之前，请单独扫描被跳过的 Git 子模块。",
     licenseConfidence: (high, medium, low) =>
       `高置信度 ${high} 个，中置信度 ${medium} 个，低置信度 ${low} 个`,
     licenseIssues: (missing, malformed) => `缺失 ${missing} 个，格式错误 ${malformed} 个`,

@@ -38,6 +38,7 @@ export const HINDI_TEXT: HtmlReportText = {
     reviewFocus: "समीक्षा केंद्र",
     reviewSummary: "समीक्षा सारांश",
     risks: "जोखिम",
+    scanCoverage: "स्कैन कवरेज",
     scope: "दायरा",
     search: "खोज",
     severity: "गंभीरता",
@@ -69,6 +70,10 @@ export const HINDI_TEXT: HtmlReportText = {
     dependencies: (total, direct, transitive) =>
       `कुल ${total}, प्रत्यक्ष ${direct}, पारगामी ${transitive}`,
     evidence: (files, warnings) => `${files} फ़ाइलें, ${warnings} चेतावनियाँ`,
+    skippedSubmodules: (count, paths, pathsTruncated) =>
+      `${count} Git सबमॉड्यूल छोड़े गए (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); स्कैन कवरेज अधूरा है।`,
+    skippedSubmoduleAction:
+      "इस रिपोर्ट को पूर्ण मानने से पहले छोड़े गए Git सबमॉड्यूल को अलग से स्कैन करें।",
     licenseConfidence: (high, medium, low) =>
       `${high} उच्च भरोसा, ${medium} मध्यम भरोसा, ${low} कम भरोसा`,
     licenseIssues: (missing, malformed) => `${missing} अनुपस्थित, ${malformed} गलत प्रारूप`,

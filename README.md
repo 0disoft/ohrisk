@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.5.0
+npm install -g ohrisk@1.6.0
 cd your-project
 ohrisk scan
 ```
@@ -52,6 +52,10 @@ no `--output`, the report is written to the directory where you ran Ohrisk:
 ohrisk scan --html https://github.com/0disoft/laqu.git
 # writes ./laqu-ohrisk.html
 ```
+
+Git submodules are not fetched. Their paths are skipped by default and the
+report is marked as incomplete; use `--submodules reject` when any submodule
+must fail the scan instead.
 
 Use Korean, Spanish, French, Chinese, Hindi, Japanese, Indonesian, Turkish, Russian, or German HTML report text when you want a local review artifact for those readers:
 
@@ -301,13 +305,17 @@ Scan a public GitHub repository through a temporary shallow clone:
 ```bash
 ohrisk scan --html https://github.com/0disoft/laqu.git
 ohrisk scan --repo https://github.com/0disoft/laqu.git --json
+ohrisk scan --html https://github.com/Mbed-TLS/mbedtls.git
+ohrisk scan --submodules reject https://github.com/0disoft/laqu.git
 ```
 
 The first command writes `laqu-ohrisk.html` in the current invocation directory.
 Only public `https://github.com/<owner>/<repository>[.git]` URLs are accepted.
-The remote scan path requires a Git executable available on `PATH`.
-Private credentials, other hosts or protocols, submodules, symlinks, unsafe or
-oversized trees, and `--offline` are rejected. The temporary checkout is removed
+The remote scan path requires a Git executable available on `PATH`. Git
+submodules are never fetched: the default `--submodules ignore` mode skips their
+gitlinks and records bounded paths plus incomplete coverage in every report,
+while `--submodules reject` preserves strict failure. Private credentials, other
+hosts or protocols, symlinks, unsafe or oversized trees, and `--offline` are rejected. The temporary checkout is removed
 after the scan. Policy, waivers, cache, and report output stay rooted in the
 directory where Ohrisk was invoked; checkout-local policy and waivers are never
 trusted. Remote repository input is supported by `scan`, not `ci`, `diff`, or
@@ -335,7 +343,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.5.0
+npm install -g ohrisk@1.6.0
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open

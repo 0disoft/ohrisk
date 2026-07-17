@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 71a6ea1ffafd2a896b6481a58c8e06e06a93aafadbfc9be272a6c82bf18f4edd
+// ohrisk-action-source-sha256: 341ef44926b822e713c3dff4c9898c696016bad9de31d7dc168462be15c05b0a
 // ohrisk-action-build-platform: win32
 import { createRequire } from "node:module";
 var __create = Object.create;
@@ -16583,6 +16583,7 @@ var MAX_PATH_SEGMENTS = 64;
 var MAX_SEGMENT_BYTES = 255;
 var MAX_GIT_STDOUT_BYTES = 64 * 1024 * 1024;
 var MAX_GIT_STDERR_BYTES = 64 * 1024;
+var MAX_REPORTED_SUBMODULE_PATHS = 100;
 var RESERVED_WINDOWS_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
 function parseGitHubRepositoryUrl(value) {
   const trimmed = value.trim();
@@ -16612,7 +16613,7 @@ function parseGitHubRepositoryUrl(value) {
     name
   });
 }
-var cloneGitHubRepository = async (repository) => {
+var cloneGitHubRepository = async (repository, options) => {
   const stagingRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-repository-"));
   const repositoryRoot = path.join(stagingRoot, "repository");
   const deadline = Date.now() + CLONE_TIMEOUT_MS;
@@ -16640,7 +16641,7 @@ var cloneGitHubRepository = async (repository) => {
       cleanup();
       return err(treeFailure);
     }
-    const validatedTree = validateGitTree(tree.stdout);
+    const validatedTree = validateGitTree(tree.stdout, options);
     if (isErr(validatedTree)) {
       cleanup();
       return validatedTree;
@@ -16661,7 +16662,11 @@ var cloneGitHubRepository = async (repository) => {
       cleanup();
       return materialized;
     }
-    return ok({ rootDir: repositoryRoot, cleanup });
+    return ok({
+      rootDir: repositoryRoot,
+      submodules: validatedTree.value.submodules,
+      cleanup
+    });
   } catch (cause) {
     cleanup();
     return err(createError({
@@ -16714,7 +16719,7 @@ function checkoutArguments(repositoryRoot) {
     "HEAD"
   ];
 }
-function validateGitTree(treeOutput) {
+function validateGitTree(treeOutput, options = { submodules: "reject" }) {
   if (treeOutput.length > 0 && treeOutput[treeOutput.length - 1] !== 0) {
     return err(repositoryTreeError("malformed_tree_output"));
   }
@@ -16723,6 +16728,8 @@ function validateGitTree(treeOutput) {
     return err(repositoryLimitError("entry_count", entries.length, MAX_TREE_ENTRIES));
   }
   let totalBytes = 0;
+  let submoduleCount = 0;
+  const submodulePaths = [];
   const compatiblePaths = new Map;
   const decoder = new TextDecoder("utf-8", { fatal: true });
   for (const rawEntry of entries) {
@@ -16735,20 +16742,6 @@ function validateGitTree(treeOutput) {
       return err(repositoryTreeError("malformed_tree_entry"));
     }
     const [, mode, type, , sizeText] = header;
-    if (type !== "blob" || mode === "120000" || mode === "160000") {
-      return err(repositoryTreeError(mode === "120000" ? "symbolic_link" : mode === "160000" ? "submodule" : "unsupported_entry"));
-    }
-    const size = Number(sizeText);
-    if (!Number.isSafeInteger(size) || size < 0) {
-      return err(repositoryTreeError("unknown_file_size"));
-    }
-    if (size > MAX_FILE_BYTES) {
-      return err(repositoryLimitError("file_size", size, MAX_FILE_BYTES));
-    }
-    totalBytes += size;
-    if (!Number.isSafeInteger(totalBytes) || totalBytes > MAX_TREE_BYTES) {
-      return err(repositoryLimitError("total_file_size", totalBytes, MAX_TREE_BYTES));
-    }
     let repositoryPath;
     try {
       repositoryPath = decoder.decode(rawEntry.subarray(tabIndex + 1));
@@ -16759,8 +16752,41 @@ function validateGitTree(treeOutput) {
     if (isErr(pathValidation)) {
       return pathValidation;
     }
+    if (mode === "160000") {
+      if (type !== "commit") {
+        return err(repositoryTreeError("unsupported_entry", repositoryPath));
+      }
+      if (options.submodules === "reject") {
+        return err(repositoryTreeError("submodule", repositoryPath));
+      }
+      submoduleCount += 1;
+      if (submodulePaths.length < MAX_REPORTED_SUBMODULE_PATHS) {
+        submodulePaths.push(repositoryPath);
+      }
+      continue;
+    }
+    if (type !== "blob" || mode === "120000") {
+      return err(repositoryTreeError(mode === "120000" ? "symbolic_link" : "unsupported_entry", repositoryPath));
+    }
+    const size = Number(sizeText);
+    if (!Number.isSafeInteger(size) || size < 0) {
+      return err(repositoryTreeError("unknown_file_size", repositoryPath));
+    }
+    if (size > MAX_FILE_BYTES) {
+      return err(repositoryLimitError("file_size", size, MAX_FILE_BYTES));
+    }
+    totalBytes += size;
+    if (!Number.isSafeInteger(totalBytes) || totalBytes > MAX_TREE_BYTES) {
+      return err(repositoryLimitError("total_file_size", totalBytes, MAX_TREE_BYTES));
+    }
   }
-  return ok(undefined);
+  return ok({
+    submodules: {
+      total: submoduleCount,
+      paths: submodulePaths,
+      pathsTruncated: submoduleCount > submodulePaths.length
+    }
+  });
 }
 function safeGitConfiguration() {
   return [
@@ -17272,6 +17298,8 @@ function parseScanLikeArgs(argv, kind) {
   let lockfilePath;
   let archivePath;
   let repository;
+  let submoduleMode = "ignore";
+  let submoduleModeSet = false;
   let allLockfiles = false;
   let policyPath;
   let offline = false;
@@ -17423,6 +17451,29 @@ function parseScanLikeArgs(argv, kind) {
           return value;
         }
         archivePath = value.value;
+        index += 1;
+        break;
+      }
+      case "--submodules": {
+        if (kind !== "scan") {
+          return err(createError({
+            code: "INVALID_ARGUMENT",
+            category: "invalid_input",
+            message: "--submodules is only supported by remote scan commands.",
+            details: { supportedOptions: supportedOptionsFor(kind) }
+          }));
+        }
+        const value = readRequiredOptionValue(argv, index, "--submodules", {
+          supportedModes: ["ignore", "reject"]
+        });
+        if (isErr(value)) {
+          return value;
+        }
+        if (!isRepositorySubmoduleMode(value.value)) {
+          return invalidOptionValue("--submodules", value.value, "ignore or reject");
+        }
+        submoduleMode = value.value;
+        submoduleModeSet = true;
         index += 1;
         break;
       }
@@ -17629,6 +17680,14 @@ function parseScanLikeArgs(argv, kind) {
   if (repository && offline) {
     return repositoryConflict("--offline", kind);
   }
+  if (submoduleModeSet && !repository) {
+    return err(createError({
+      code: "INVALID_ARGUMENT",
+      category: "invalid_input",
+      message: "--submodules requires a public GitHub repository input.",
+      details: { supportedOptions: supportedOptionsFor(kind) }
+    }));
+  }
   if (kind === "ci" && noWaivers && strictWaivers) {
     return err(createError({
       code: "INVALID_ARGUMENT",
@@ -17705,6 +17764,7 @@ function parseScanLikeArgs(argv, kind) {
     ...lockfilePath ? { lockfilePath } : {},
     ...archivePath ? { archivePath } : {},
     ...repository ? { repository } : {},
+    ...repository ? { submoduleMode } : {},
     ...allLockfiles ? { allLockfiles: true } : {},
     ...policyPath ? { policyPath } : {},
     ...offline ? { offline: true } : {},
@@ -17824,6 +17884,9 @@ function isAllowedRegistryHostname(host) {
 function isFailOnSeverity(value) {
   return FAIL_ON_SEVERITIES.includes(value);
 }
+function isRepositorySubmoduleMode(value) {
+  return value === "ignore" || value === "reject";
+}
 function isHelpFlag(value) {
   return value === "--help" || value === "-h";
 }
@@ -17856,7 +17919,7 @@ function supportedOptionsFor(kind) {
     "--help",
     "-h"
   ];
-  return kind === "ci" ? [...common, "--fail-on", "--strict-waivers"] : [...common, "--repo"];
+  return kind === "ci" ? [...common, "--fail-on", "--strict-waivers"] : [...common, "--repo", "--submodules"];
 }
 function readRequiredOptionValue(argv, index, option, details) {
   const value = argv[index + 1];
@@ -18308,7 +18371,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.5.0";
+var OHRISK_VERSION = "1.6.0";
 
 // src/archive/archive-project.ts
 import path46 from "node:path";
@@ -47746,6 +47809,7 @@ function renderCycloneDxReport(input) {
           name: "ohrisk:waiverMode",
           value: input.waiverMode
         },
+        ...repositoryProperties(input.repository),
         ...archiveProperties(input.project)
       ]
     },
@@ -47761,6 +47825,28 @@ function renderCycloneDxReport(input) {
       }))
     ]
   }, null, 2);
+}
+function repositoryProperties(repository) {
+  if (!repository) {
+    return [];
+  }
+  return [
+    { name: "ohrisk:repositoryOwner", value: repository.owner },
+    { name: "ohrisk:repositoryName", value: repository.name },
+    { name: "ohrisk:submoduleMode", value: repository.submodules.mode },
+    {
+      name: "ohrisk:skippedSubmoduleCount",
+      value: String(repository.submodules.skippedCount)
+    },
+    {
+      name: "ohrisk:skippedSubmodulePaths",
+      value: JSON.stringify(repository.submodules.skippedPaths)
+    },
+    {
+      name: "ohrisk:submodulePathsTruncated",
+      value: String(repository.submodules.pathsTruncated)
+    }
+  ];
 }
 function projectInputPath(project, targetPath) {
   const relativePath = projectRelativePath(project.rootDir, targetPath);
@@ -47975,7 +48061,7 @@ function formatThresholdSummary(summary) {
 }
 
 // src/report/schema.ts
-var OHRISK_REPORT_SCHEMA_VERSION = "3.1.0";
+var OHRISK_REPORT_SCHEMA_VERSION = "3.2.0";
 var OHRISK_COMMON_REPORT_SCHEMA = `urn:ohrisk:schema:common:${OHRISK_REPORT_SCHEMA_VERSION}`;
 var OHRISK_SCAN_REPORT_SCHEMA = `urn:ohrisk:schema:scan-report:${OHRISK_REPORT_SCHEMA_VERSION}`;
 var OHRISK_DIFF_REPORT_SCHEMA = `urn:ohrisk:schema:diff-report:${OHRISK_REPORT_SCHEMA_VERSION}`;
@@ -48263,6 +48349,14 @@ function renderSarifReport(input) {
           ohriskWaivedFindingCount: input.waivedFindings.length,
           ohriskExpiredWaiverCount: input.expiredWaivers.length,
           ohriskUnmatchedWaiverCount: input.unmatchedWaivers.length,
+          ...input.repository ? {
+            ohriskRepositoryOwner: input.repository.owner,
+            ohriskRepositoryName: input.repository.name,
+            ohriskSubmoduleMode: input.repository.submodules.mode,
+            ohriskSkippedSubmoduleCount: input.repository.submodules.skippedCount,
+            ohriskSkippedSubmodulePaths: input.repository.submodules.skippedPaths,
+            ohriskSubmodulePathsTruncated: input.repository.submodules.pathsTruncated
+          } : {},
           ...input.project.source ? {
             ohriskArchiveName: input.project.source.displayPath,
             ohriskArchiveFormat: input.project.source.format,
@@ -48458,6 +48552,7 @@ var ENGLISH_TEXT = {
     reviewFocus: "Review focus",
     reviewSummary: "Review summary",
     risks: "Risks",
+    scanCoverage: "Scan coverage",
     scope: "Scope",
     search: "Search",
     severity: "Severity",
@@ -48487,6 +48582,8 @@ var ENGLISH_TEXT = {
     waiverMode: (mode) => mode === "ignored" ? "ignored (--no-waivers)" : "local (.ohrisk-waivers.json)",
     dependencies: (total, direct, transitive) => `${total} total, ${direct} direct, ${transitive} transitive`,
     evidence: (files, warnings) => `${files} files, ${warnings} warnings`,
+    skippedSubmodules: (count, paths, pathsTruncated) => `${count} Git submodule${count === 1 ? "" : "s"} skipped (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); coverage is incomplete.`,
+    skippedSubmoduleAction: "Scan the skipped Git submodules separately before treating this report as complete.",
     licenseConfidence: (high, medium, low) => `${high} high-confidence, ${medium} medium-confidence, ${low} low-confidence`,
     licenseIssues: (missing, malformed2) => `${missing} missing, ${malformed2} malformed`,
     risks: (risks) => `${risks.high} high, ${risks.review} review, ${risks.unknown} unknown, ${risks.low} low`,
@@ -48619,6 +48716,7 @@ var KOREAN_TEXT = {
     reviewFocus: "검토 초점",
     reviewSummary: "검토 요약",
     risks: "위험",
+    scanCoverage: "검사 범위",
     scope: "범위",
     search: "검색",
     severity: "심각도",
@@ -48648,6 +48746,8 @@ var KOREAN_TEXT = {
     waiverMode: (mode) => mode === "ignored" ? "무시됨 (--no-waivers)" : "로컬 (.ohrisk-waivers.json)",
     dependencies: (total, direct, transitive) => `총 ${total}개, 직접 ${direct}개, 전이 ${transitive}개`,
     evidence: (files, warnings) => `파일 ${files}개, 경고 ${warnings}개`,
+    skippedSubmodules: (count, paths, pathsTruncated) => `Git 서브모듈 ${count}개 제외됨 (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); 검사 범위가 불완전합니다.`,
+    skippedSubmoduleAction: "이 보고서를 완전한 검사로 취급하기 전에 제외된 Git 서브모듈을 별도로 검사하세요.",
     licenseConfidence: (high, medium, low) => `높은 신뢰도 ${high}개, 중간 신뢰도 ${medium}개, 낮은 신뢰도 ${low}개`,
     licenseIssues: (missing, malformed2) => `누락 ${missing}개, 형식 오류 ${malformed2}개`,
     risks: (risks) => `높음 ${risks.high}개, 검토 ${risks.review}개, 불명 ${risks.unknown}개, 낮음 ${risks.low}개`,
@@ -48864,6 +48964,7 @@ var SPANISH_TEXT = {
     reviewFocus: "Foco de revisión",
     reviewSummary: "Resumen de revisión",
     risks: "Riesgos",
+    scanCoverage: "Cobertura del análisis",
     scope: "Alcance",
     search: "Buscar",
     severity: "Severidad",
@@ -48893,6 +48994,8 @@ var SPANISH_TEXT = {
     waiverMode: (mode) => mode === "ignored" ? "ignorado (--no-waivers)" : "local (.ohrisk-waivers.json)",
     dependencies: (total, direct, transitive) => `${total} en total, ${direct} directas, ${transitive} transitivas`,
     evidence: (files, warnings) => `${files} archivos, ${warnings} advertencias`,
+    skippedSubmodules: (count, paths, pathsTruncated) => `Se omitieron ${count} submódulos de Git (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); la cobertura está incompleta.`,
+    skippedSubmoduleAction: "Analice por separado los submódulos de Git omitidos antes de considerar completo este informe.",
     licenseConfidence: (high, medium, low) => `${high} de alta confianza, ${medium} de confianza media, ${low} de baja confianza`,
     licenseIssues: (missing, malformed2) => `${missing} faltantes, ${malformed2} mal formadas`,
     risks: (risks) => `${risks.high} altos, ${risks.review} revisión, ${risks.unknown} desconocidos, ${risks.low} bajos`,
@@ -49112,6 +49215,7 @@ var FRENCH_TEXT = {
     reviewFocus: "Point de revue",
     reviewSummary: "Résumé de revue",
     risks: "Risques",
+    scanCoverage: "Couverture de l’analyse",
     scope: "Portée",
     search: "Rechercher",
     severity: "Sévérité",
@@ -49141,6 +49245,8 @@ var FRENCH_TEXT = {
     waiverMode: (mode) => mode === "ignored" ? "ignoré (--no-waivers)" : "local (.ohrisk-waivers.json)",
     dependencies: (total, direct, transitive) => `${total} au total, ${direct} directes, ${transitive} transitives`,
     evidence: (files, warnings) => `${files} fichiers, ${warnings} avertissements`,
+    skippedSubmodules: (count, paths, pathsTruncated) => `${count} sous-modules Git ignorés (${paths.join(", ")}${pathsTruncated ? ", …" : ""}) ; la couverture est incomplète.`,
+    skippedSubmoduleAction: "Analysez séparément les sous-modules Git ignorés avant de considérer ce rapport comme complet.",
     licenseConfidence: (high, medium, low) => `${high} confiance élevée, ${medium} confiance moyenne, ${low} confiance faible`,
     licenseIssues: (missing, malformed2) => `${missing} manquantes, ${malformed2} mal formées`,
     risks: (risks) => `${risks.high} élevés, ${risks.review} revue, ${risks.unknown} inconnus, ${risks.low} faibles`,
@@ -49360,6 +49466,7 @@ var CHINESE_TEXT = {
     reviewFocus: "审查重点",
     reviewSummary: "审查摘要",
     risks: "风险",
+    scanCoverage: "扫描范围",
     scope: "范围",
     search: "搜索",
     severity: "严重性",
@@ -49389,6 +49496,8 @@ var CHINESE_TEXT = {
     waiverMode: (mode) => mode === "ignored" ? "已忽略 (--no-waivers)" : "本地 (.ohrisk-waivers.json)",
     dependencies: (total, direct, transitive) => `共 ${total} 个，直接 ${direct} 个，传递 ${transitive} 个`,
     evidence: (files, warnings) => `${files} 个文件，${warnings} 个警告`,
+    skippedSubmodules: (count, paths, pathsTruncated) => `已跳过 ${count} 个 Git 子模块（${paths.join("、")}${pathsTruncated ? "、…" : ""}）；扫描范围不完整。`,
+    skippedSubmoduleAction: "在将此报告视为完整报告之前，请单独扫描被跳过的 Git 子模块。",
     licenseConfidence: (high, medium, low) => `高置信度 ${high} 个，中置信度 ${medium} 个，低置信度 ${low} 个`,
     licenseIssues: (missing, malformed2) => `缺失 ${missing} 个，格式错误 ${malformed2} 个`,
     risks: (risks) => `高 ${risks.high} 个，需审查 ${risks.review} 个，未知 ${risks.unknown} 个，低 ${risks.low} 个`,
@@ -49608,6 +49717,7 @@ var HINDI_TEXT = {
     reviewFocus: "समीक्षा केंद्र",
     reviewSummary: "समीक्षा सारांश",
     risks: "जोखिम",
+    scanCoverage: "स्कैन कवरेज",
     scope: "दायरा",
     search: "खोज",
     severity: "गंभीरता",
@@ -49637,6 +49747,8 @@ var HINDI_TEXT = {
     waiverMode: (mode) => mode === "ignored" ? "अनदेखा (--no-waivers)" : "स्थानीय (.ohrisk-waivers.json)",
     dependencies: (total, direct, transitive) => `कुल ${total}, प्रत्यक्ष ${direct}, पारगामी ${transitive}`,
     evidence: (files, warnings) => `${files} फ़ाइलें, ${warnings} चेतावनियाँ`,
+    skippedSubmodules: (count, paths, pathsTruncated) => `${count} Git सबमॉड्यूल छोड़े गए (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); स्कैन कवरेज अधूरा है।`,
+    skippedSubmoduleAction: "इस रिपोर्ट को पूर्ण मानने से पहले छोड़े गए Git सबमॉड्यूल को अलग से स्कैन करें।",
     licenseConfidence: (high, medium, low) => `${high} उच्च भरोसा, ${medium} मध्यम भरोसा, ${low} कम भरोसा`,
     licenseIssues: (missing, malformed2) => `${missing} अनुपस्थित, ${malformed2} गलत प्रारूप`,
     risks: (risks) => `${risks.high} उच्च, ${risks.review} समीक्षा, ${risks.unknown} अज्ञात, ${risks.low} कम`,
@@ -49856,6 +49968,7 @@ var JAPANESE_TEXT = {
     reviewFocus: "レビュー対象",
     reviewSummary: "レビュー概要",
     risks: "リスク",
+    scanCoverage: "スキャン範囲",
     scope: "範囲",
     search: "検索",
     severity: "重要度",
@@ -49885,6 +49998,8 @@ var JAPANESE_TEXT = {
     waiverMode: (mode) => mode === "ignored" ? "無視 (--no-waivers)" : "ローカル (.ohrisk-waivers.json)",
     dependencies: (total, direct, transitive) => `合計 ${total}、直接 ${direct}、推移 ${transitive}`,
     evidence: (files, warnings) => `${files} ファイル、${warnings} 警告`,
+    skippedSubmodules: (count, paths, pathsTruncated) => `Git サブモジュール ${count} 件を除外しました（${paths.join("、")}${pathsTruncated ? "、…" : ""}）。スキャン範囲は不完全です。`,
+    skippedSubmoduleAction: "このレポートを完全なものとして扱う前に、除外された Git サブモジュールを個別にスキャンしてください。",
     licenseConfidence: (high, medium, low) => `高信頼 ${high}、中信頼 ${medium}、低信頼 ${low}`,
     licenseIssues: (missing, malformed2) => `不足 ${missing}、形式不正 ${malformed2}`,
     risks: (risks) => `高 ${risks.high}、レビュー ${risks.review}、不明 ${risks.unknown}、低 ${risks.low}`,
@@ -50104,6 +50219,7 @@ var INDONESIAN_TEXT = {
     reviewFocus: "Fokus review",
     reviewSummary: "Ringkasan review",
     risks: "Risiko",
+    scanCoverage: "Cakupan pemindaian",
     scope: "Cakupan",
     search: "Cari",
     severity: "Keparahan",
@@ -50133,6 +50249,8 @@ var INDONESIAN_TEXT = {
     waiverMode: (mode) => mode === "ignored" ? "diabaikan (--no-waivers)" : "lokal (.ohrisk-waivers.json)",
     dependencies: (total, direct, transitive) => `${total} total, ${direct} langsung, ${transitive} transitif`,
     evidence: (files, warnings) => `${files} file, ${warnings} peringatan`,
+    skippedSubmodules: (count, paths, pathsTruncated) => `${count} submodul Git dilewati (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); cakupan belum lengkap.`,
+    skippedSubmoduleAction: "Pindai submodul Git yang dilewati secara terpisah sebelum menganggap laporan ini lengkap.",
     licenseConfidence: (high, medium, low) => `${high} keyakinan tinggi, ${medium} keyakinan sedang, ${low} keyakinan rendah`,
     licenseIssues: (missing, malformed2) => `${missing} hilang, ${malformed2} salah format`,
     risks: (risks) => `${risks.high} tinggi, ${risks.review} review, ${risks.unknown} tidak diketahui, ${risks.low} rendah`,
@@ -50352,6 +50470,7 @@ var TURKISH_TEXT = {
     reviewFocus: "İnceleme odağı",
     reviewSummary: "İnceleme özeti",
     risks: "Riskler",
+    scanCoverage: "Tarama kapsamı",
     scope: "Kapsam",
     search: "Ara",
     severity: "Önem",
@@ -50381,6 +50500,8 @@ var TURKISH_TEXT = {
     waiverMode: (mode) => mode === "ignored" ? "yok sayıldı (--no-waivers)" : "yerel (.ohrisk-waivers.json)",
     dependencies: (total, direct, transitive) => `${total} toplam, ${direct} doğrudan, ${transitive} geçişli`,
     evidence: (files, warnings) => `${files} dosya, ${warnings} uyarı`,
+    skippedSubmodules: (count, paths, pathsTruncated) => `${count} Git alt modülü atlandı (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); tarama kapsamı eksik.`,
+    skippedSubmoduleAction: "Bu raporu tamamlanmış saymadan önce atlanan Git alt modüllerini ayrı ayrı tarayın.",
     licenseConfidence: (high, medium, low) => `${high} yüksek güven, ${medium} orta güven, ${low} düşük güven`,
     licenseIssues: (missing, malformed2) => `${missing} eksik, ${malformed2} hatalı biçimli`,
     risks: (risks) => `${risks.high} yüksek, ${risks.review} inceleme, ${risks.unknown} bilinmeyen, ${risks.low} düşük`,
@@ -50600,6 +50721,7 @@ var RUSSIAN_TEXT = {
     reviewFocus: "Фокус проверки",
     reviewSummary: "Итоги проверки",
     risks: "Риски",
+    scanCoverage: "Охват сканирования",
     scope: "Область",
     search: "Поиск",
     severity: "Серьезность",
@@ -50629,6 +50751,8 @@ var RUSSIAN_TEXT = {
     waiverMode: (mode) => mode === "ignored" ? "игнорируются (--no-waivers)" : "локальные (.ohrisk-waivers.json)",
     dependencies: (total, direct, transitive) => `всего ${total}, прямых ${direct}, транзитивных ${transitive}`,
     evidence: (files, warnings) => `${files} файлов, ${warnings} предупреждений`,
+    skippedSubmodules: (count, paths, pathsTruncated) => `Пропущено подмодулей Git: ${count} (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); охват неполный.`,
+    skippedSubmoduleAction: "Проверьте пропущенные подмодули Git отдельно, прежде чем считать этот отчет полным.",
     licenseConfidence: (high, medium, low) => `${high} с высокой уверенностью, ${medium} со средней уверенностью, ${low} с низкой уверенностью`,
     licenseIssues: (missing, malformed2) => `${missing} отсутствует, ${malformed2} с неверным форматом`,
     risks: (risks) => `${risks.high} высокий, ${risks.review} проверка, ${risks.unknown} неизвестный, ${risks.low} низкий`,
@@ -50848,6 +50972,7 @@ var GERMAN_TEXT = {
     reviewFocus: "Prüffokus",
     reviewSummary: "Prüfzusammenfassung",
     risks: "Risiken",
+    scanCoverage: "Prüfabdeckung",
     scope: "Umfang",
     search: "Suchen",
     severity: "Schweregrad",
@@ -50877,6 +51002,8 @@ var GERMAN_TEXT = {
     waiverMode: (mode) => mode === "ignored" ? "ignoriert (--no-waivers)" : "lokal (.ohrisk-waivers.json)",
     dependencies: (total, direct, transitive) => `${total} insgesamt, ${direct} direkt, ${transitive} transitiv`,
     evidence: (files, warnings) => `${files} Dateien, ${warnings} Warnungen`,
+    skippedSubmodules: (count, paths, pathsTruncated) => `${count} Git-Submodule übersprungen (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); die Abdeckung ist unvollständig.`,
+    skippedSubmoduleAction: "Prüfen Sie die übersprungenen Git-Submodule separat, bevor Sie diesen Bericht als vollständig betrachten.",
     licenseConfidence: (high, medium, low) => `${high} hohe Sicherheit, ${medium} mittlere Sicherheit, ${low} niedrige Sicherheit`,
     licenseIssues: (missing, malformed2) => `${missing} fehlend, ${malformed2} fehlerhaft formatiert`,
     risks: (risks) => `${risks.high} hoch, ${risks.review} Prüfung, ${risks.unknown} unbekannt, ${risks.low} niedrig`,
@@ -51104,7 +51231,7 @@ var HTML_REPORT_CONTENT_SECURITY_POLICY = [
 // src/report/scan-report.ts
 function renderScanReport(input) {
   const summary = buildScanSummary(input);
-  const nextAction = nextActionFor2(input.riskFindings);
+  const nextAction = nextActionFor2(input.riskFindings, input.repository);
   const thresholdSummary = buildThresholdSummary(input.riskFindings, input.failOn);
   const waiverDriftSummary = buildWaiverDriftSummary(input);
   if (input.json) {
@@ -51113,6 +51240,7 @@ function renderScanReport(input) {
       schemaVersion: OHRISK_REPORT_SCHEMA_VERSION,
       status: "profile_risk_evaluated",
       projectRoot: ".",
+      ...input.repository ? { repository: input.repository } : {},
       ...input.project.source ? { archive: archiveReportSource(input.project) } : {},
       lockfile: {
         kind: input.project.lockfile.kind,
@@ -51150,6 +51278,7 @@ function renderScanReport(input) {
     `Project: ${displayProjectLabel(input.project)}`,
     `Lockfile: ${displayLockfilePath(input.project)} (${input.project.lockfile.kind})`,
     ...renderAdditionalLockfileLines(input.project),
+    ...renderRepositoryCoverageLines(input.repository),
     `Profile: ${input.profile}`,
     `Production only: ${input.prodOnly ? "yes" : "no"}`,
     `Dependencies: ${summary.dependencyGraph.total} total, ${summary.dependencyGraph.direct} direct, ${summary.dependencyGraph.transitive} transitive`,
@@ -51198,7 +51327,7 @@ function renderHtmlReport(input, summary) {
     "    <header>",
     `      <p class="eyebrow">${escapeHtml(input.project.lockfile.kind)}</p>`,
     `      <h1>${escapeHtml(title)}</h1>`,
-    `      <p class="lead">${escapeHtml(text3.messages.nextAction(input.riskFindings))}</p>`,
+    `      <p class="lead">${escapeHtml(localizedNextAction(input, text3))}</p>`,
     "    </header>",
     '    <section aria-labelledby="review-summary-heading">',
     `      <h2 id="review-summary-heading">${escapeHtml(text3.labels.reviewSummary)}</h2>`,
@@ -51229,6 +51358,7 @@ function renderHtmlReport(input, summary) {
       ],
       [text3.labels.risks, text3.messages.risks(summary.risks)],
       [text3.labels.waiverMode, text3.messages.waiverMode(input.waiverMode)],
+      ...renderHtmlRepositoryCoverageCard(input.repository, text3),
       [
         text3.labels.waived,
         text3.messages.waived(summary.waivers.applied, summary.waivers.expired, summary.waivers.unmatched)
@@ -51244,7 +51374,7 @@ function renderHtmlReport(input, summary) {
     ...renderHtmlUnmatchedWaiversSection(input.unmatchedWaivers, text3),
     '    <section aria-labelledby="next-heading">',
     `      <h2 id="next-heading">${escapeHtml(text3.labels.next)}</h2>`,
-    `      <p>${escapeHtml(text3.messages.nextAction(input.riskFindings))}</p>`,
+    `      <p>${escapeHtml(localizedNextAction(input, text3))}</p>`,
     "    </section>",
     "  </main>",
     "  <script>",
@@ -51362,7 +51492,7 @@ function buildReviewSummaryCards(input, summary, text3, waiverDriftSummary) {
       text3.labels.waivers,
       text3.messages.reviewWaivers(summary.waivers.applied, summary.waivers.expired + summary.waivers.unmatched)
     ],
-    [text3.labels.reviewFocus, text3.messages.nextAction(input.riskFindings)],
+    [text3.labels.reviewFocus, localizedNextAction(input, text3)],
     ...evidenceRecoveryAdvice ? [[text3.labels.evidenceRecovery, text3.messages.evidenceRecovery(evidenceRecoveryAdvice)]] : [],
     [text3.labels.waiverDrift, text3.messages.reviewWaiverDrift(waiverDriftSummary)]
   ];
@@ -51780,7 +51910,7 @@ function escapeHtml(value) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#x27;");
 }
 function renderMarkdownReport2(input, summary) {
-  const nextAction = nextActionFor2(input.riskFindings);
+  const nextAction = nextActionFor2(input.riskFindings, input.repository);
   const thresholdSummary = buildThresholdSummary(input.riskFindings, input.failOn);
   const waiverDriftSummary = buildWaiverDriftSummary(input);
   return [
@@ -51789,6 +51919,7 @@ function renderMarkdownReport2(input, summary) {
     `- Project: ${formatMarkdownInlineCode(markdownProjectLabel(input))}`,
     `- Lockfile: ${formatMarkdownInlineCode(displayLockfilePath(input.project))} (${formatMarkdownInlineCode(input.project.lockfile.kind)})`,
     ...renderAdditionalMarkdownLockfileLines(input.project),
+    ...renderMarkdownRepositoryCoverageLines(input.repository),
     `- Profile: ${formatMarkdownInlineCode(input.profile)}`,
     `- Production only: ${formatMarkdownInlineCode(input.prodOnly ? "yes" : "no")}`,
     `- Dependencies: ${formatMarkdownInlineCode(`${summary.dependencyGraph.total} total`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.direct} direct`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.transitive} transitive`)}`,
@@ -52241,7 +52372,10 @@ function formatWaiverTarget(waiver) {
   }
   return `fingerprint: ${waiver.fingerprint ?? "unknown"}`;
 }
-function nextActionFor2(findings) {
+function nextActionFor2(findings, repository) {
+  if (repository && repository.submodules.skippedCount > 0) {
+    return "Scan the skipped Git submodules separately before treating this report as complete.";
+  }
   if (findings.some((finding) => finding.recommendation === "replace")) {
     return "Replace or escalate high-risk dependencies before shipping.";
   }
@@ -52258,6 +52392,36 @@ function nextActionFor2(findings) {
     return "Preserve required NOTICE or attribution files when distributing this project.";
   }
   return "No action needed for this profile.";
+}
+function localizedNextAction(input, text3) {
+  return input.repository && input.repository.submodules.skippedCount > 0 ? text3.messages.skippedSubmoduleAction : text3.messages.nextAction(input.riskFindings);
+}
+function renderRepositoryCoverageLines(repository) {
+  if (!repository || repository.submodules.skippedCount === 0) {
+    return [];
+  }
+  return [`Scan coverage: ${formatSkippedSubmoduleSummary(repository)}`];
+}
+function renderMarkdownRepositoryCoverageLines(repository) {
+  if (!repository || repository.submodules.skippedCount === 0) {
+    return [];
+  }
+  return [`- Scan coverage: ${formatMarkdownTableCell(formatSkippedSubmoduleSummary(repository))}`];
+}
+function renderHtmlRepositoryCoverageCard(repository, text3) {
+  if (!repository || repository.submodules.skippedCount === 0) {
+    return [];
+  }
+  return [[
+    text3.labels.scanCoverage,
+    text3.messages.skippedSubmodules(repository.submodules.skippedCount, repository.submodules.skippedPaths, repository.submodules.pathsTruncated)
+  ]];
+}
+function formatSkippedSubmoduleSummary(repository) {
+  const { skippedCount, skippedPaths, pathsTruncated } = repository.submodules;
+  const pathList = skippedPaths.join(", ");
+  const suffix = pathsTruncated ? ", …" : "";
+  return `${skippedCount} Git submodule${skippedCount === 1 ? "" : "s"} skipped (${pathList}${suffix}); coverage is incomplete.`;
 }
 
 // src/report/open-report.ts
@@ -52955,7 +53119,8 @@ async function runScan(command, io) {
   }
   reportProgress?.(0, `Cloning ${repository.owner}/${repository.name}...`);
   const cloner = io.cloneRepository ?? cloneGitHubRepository;
-  const cloned = await cloner(repository);
+  const submoduleMode = command.kind === "scan" ? command.submoduleMode ?? "ignore" : "ignore";
+  const cloned = await cloner(repository, { submodules: submoduleMode });
   if (isErr(cloned)) {
     await closeScanProgressReporter(reportProgress, "failure");
     io.stderr(formatError(cloned.error));
@@ -52970,7 +53135,17 @@ async function runScan(command, io) {
       runtimeRoot: io.cwd,
       allowLocalProjectEvidence: false,
       reportProgress,
-      temporaryRoot: cloned.value.rootDir
+      temporaryRoot: cloned.value.rootDir,
+      repository: {
+        owner: repository.owner,
+        name: repository.name,
+        submodules: {
+          mode: submoduleMode,
+          skippedCount: cloned.value.submodules.total,
+          skippedPaths: cloned.value.submodules.paths,
+          pathsTruncated: cloned.value.submodules.pathsTruncated
+        }
+      }
     });
   } finally {
     cloned.value.cleanup();
@@ -53035,7 +53210,8 @@ async function runScanAt(input) {
     waivedFindings: scanned.value.waivedFindings,
     expiredWaivers: scanned.value.expiredWaivers,
     unmatchedWaivers: scanned.value.unmatchedWaivers,
-    policy: scanned.value.policy
+    policy: scanned.value.policy,
+    ...input.repository ? { repository: input.repository } : {}
   };
   reportProgress?.(SCAN_PROGRESS_RENDER_PERCENT, `Rendering ${reportFormatLabel(command)} report...`);
   const output = command.cyclonedx ? renderCycloneDxReport(reportInput) : command.sarif ? renderSarifReport(reportInput) : renderScanReport(reportInput);
@@ -54120,7 +54296,7 @@ function renderTopLevelHelp() {
     "Ohrisk",
     "",
     "Usage:",
-    "  ohrisk scan [repository-url|--repo <url>] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
+    "  ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
     "  ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
     "  ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
@@ -54142,6 +54318,7 @@ function renderTopLevelHelp() {
     "  --lockfile <path>      Use a specific supported lockfile path.",
     "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
     "  --repo <url>           Scan a public GitHub HTTPS repository; requires Git on PATH.",
+    "  --submodules <mode>    Ignore with an incomplete-coverage warning (default), or reject.",
     "  --all                  Discover and merge every supported lockfile in the project root.",
     "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
     "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
@@ -54174,13 +54351,14 @@ function renderScanHelp() {
     "Ohrisk scan",
     "",
     "Usage:",
-    "  ohrisk scan [repository-url|--repo <url>] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
+    "  ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
     "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
     "  --repo <url>           Scan a public GitHub HTTPS repository; requires Git on PATH.",
+    "  --submodules <mode>    Ignore with an incomplete-coverage warning (default), or reject.",
     "  --all                  Discover and merge every supported lockfile in the project root.",
     "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
     "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",

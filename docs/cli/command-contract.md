@@ -31,6 +31,7 @@ development, tests, and packaging.
 - `--json`, `--markdown`, `--html`, `--sarif`, and `--cyclonedx` select report formats.
 - `--output <path>` writes a report artifact.
 - A remote repository scan with `--html` and no explicit `--output` writes `<repository>-ohrisk.html` under the invocation directory. Local and archive HTML scans keep their existing stdout behavior.
+- `--submodules ignore|reject` controls remote Git submodule gitlinks. The default `ignore` mode reports incomplete coverage without fetching submodules; `reject` fails on the first submodule path.
 - `--language <locale>` localizes HTML report chrome and Ohrisk-generated review text.
 - `--no-waivers` ignores local waiver files; `--strict-waivers` fails on expired or unmatched waivers.
 - `--offline` forbids network requests and permits only local or verified cached evidence.
@@ -71,8 +72,11 @@ owned temporary directory after success or failure.
 
 The pre-checkout tree allows at most 50,000 regular files, 50 MiB per file, 256 MiB total file
 content, 4,096 UTF-8 bytes and 64 segments per path, and 255 UTF-8 bytes per segment. Symlinks,
-submodules, special entries, Windows-reserved or otherwise non-portable names, and case or Unicode
-normalization collisions are rejected. Temporary clone storage is capped at 512 MiB and the full
+special entries, Windows-reserved or otherwise non-portable names, and case or Unicode
+normalization collisions are rejected. Submodule gitlinks are skipped without fetching in the
+default `--submodules ignore` mode. Reports include the total skipped count, at most 100 safe
+relative submodule paths, and whether that path list was truncated; `--submodules reject` instead
+fails with the first detected path. Temporary clone storage is capped at 512 MiB and the full
 clone/inspection/checkout sequence has a two-minute work budget. These are fail-closed limits, not
 truncation rules.
 

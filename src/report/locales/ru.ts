@@ -38,6 +38,7 @@ export const RUSSIAN_TEXT: HtmlReportText = {
     reviewFocus: "Фокус проверки",
     reviewSummary: "Итоги проверки",
     risks: "Риски",
+    scanCoverage: "Охват сканирования",
     scope: "Область",
     search: "Поиск",
     severity: "Серьезность",
@@ -69,6 +70,10 @@ export const RUSSIAN_TEXT: HtmlReportText = {
     dependencies: (total, direct, transitive) =>
       `всего ${total}, прямых ${direct}, транзитивных ${transitive}`,
     evidence: (files, warnings) => `${files} файлов, ${warnings} предупреждений`,
+    skippedSubmodules: (count, paths, pathsTruncated) =>
+      `Пропущено подмодулей Git: ${count} (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); охват неполный.`,
+    skippedSubmoduleAction:
+      "Проверьте пропущенные подмодули Git отдельно, прежде чем считать этот отчет полным.",
     licenseConfidence: (high, medium, low) =>
       `${high} с высокой уверенностью, ${medium} со средней уверенностью, ${low} с низкой уверенностью`,
     licenseIssues: (missing, malformed) => `${missing} отсутствует, ${malformed} с неверным форматом`,

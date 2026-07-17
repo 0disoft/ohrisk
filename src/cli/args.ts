@@ -11,7 +11,8 @@ import {
 } from "../report/language";
 import {
   parseGitHubRepositoryUrl,
-  type GitHubRepository
+  type GitHubRepository,
+  type RepositorySubmoduleMode
 } from "../repository/github-repository";
 import { err, isErr, ok, type Result } from "../shared/result";
 
@@ -47,6 +48,7 @@ export type CliCommand =
       lockfilePath?: string;
       archivePath?: string;
       repository?: GitHubRepository;
+      submoduleMode?: RepositorySubmoduleMode;
       allLockfiles?: boolean;
       policyPath?: string;
       offline?: boolean;
@@ -384,6 +386,8 @@ function parseScanLikeArgs(
   let lockfilePath: string | undefined;
   let archivePath: string | undefined;
   let repository: GitHubRepository | undefined;
+  let submoduleMode: RepositorySubmoduleMode = "ignore";
+  let submoduleModeSet = false;
   let allLockfiles = false;
   let policyPath: string | undefined;
   let offline = false;
@@ -556,6 +560,31 @@ function parseScanLikeArgs(
         }
 
         archivePath = value.value;
+        index += 1;
+        break;
+      }
+      case "--submodules": {
+        if (kind !== "scan") {
+          return err(
+            createError({
+              code: "INVALID_ARGUMENT",
+              category: "invalid_input",
+              message: "--submodules is only supported by remote scan commands.",
+              details: { supportedOptions: supportedOptionsFor(kind) }
+            })
+          );
+        }
+        const value = readRequiredOptionValue(argv, index, "--submodules", {
+          supportedModes: ["ignore", "reject"]
+        });
+        if (isErr(value)) {
+          return value;
+        }
+        if (!isRepositorySubmoduleMode(value.value)) {
+          return invalidOptionValue("--submodules", value.value, "ignore or reject");
+        }
+        submoduleMode = value.value;
+        submoduleModeSet = true;
         index += 1;
         break;
       }
@@ -801,6 +830,17 @@ function parseScanLikeArgs(
     return repositoryConflict("--offline", kind);
   }
 
+  if (submoduleModeSet && !repository) {
+    return err(
+      createError({
+        code: "INVALID_ARGUMENT",
+        category: "invalid_input",
+        message: "--submodules requires a public GitHub repository input.",
+        details: { supportedOptions: supportedOptionsFor(kind) }
+      })
+    );
+  }
+
   if (kind === "ci" && noWaivers && strictWaivers) {
     return err(
       createError({
@@ -888,6 +928,7 @@ function parseScanLikeArgs(
     ...(lockfilePath ? { lockfilePath } : {}),
     ...(archivePath ? { archivePath } : {}),
     ...(repository ? { repository } : {}),
+    ...(repository ? { submoduleMode } : {}),
     ...(allLockfiles ? { allLockfiles: true } : {}),
     ...(policyPath ? { policyPath } : {}),
     ...(offline ? { offline: true } : {}),
@@ -1049,6 +1090,10 @@ function isFailOnSeverity(value: string): value is RiskSeverity {
   return (FAIL_ON_SEVERITIES as string[]).includes(value);
 }
 
+function isRepositorySubmoduleMode(value: string): value is RepositorySubmoduleMode {
+  return value === "ignore" || value === "reject";
+}
+
 function isHelpFlag(value: string | undefined): boolean {
   return value === "--help" || value === "-h";
 }
@@ -1084,7 +1129,7 @@ function supportedOptionsFor(kind: "scan" | "ci"): string[] {
   ];
   return kind === "ci"
     ? [...common, "--fail-on", "--strict-waivers"]
-    : [...common, "--repo"];
+    : [...common, "--repo", "--submodules"];
 }
 
 function readRequiredOptionValue(

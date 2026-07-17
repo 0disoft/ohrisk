@@ -47,7 +47,17 @@ describe("renderCycloneDxReport", () => {
       graph,
       normalizedLicenses: [],
       riskFindings: [],
-      waiverMode: "local"
+      waiverMode: "local",
+      repository: {
+        owner: "Mbed-TLS",
+        name: "mbedtls",
+        submodules: {
+          mode: "ignore",
+          skippedCount: 2,
+          skippedPaths: ["framework", "tf-psa-crypto"],
+          pathsTruncated: false
+        }
+      }
     })) as {
       metadata: {
         properties: Array<{
@@ -76,6 +86,10 @@ describe("renderCycloneDxReport", () => {
     expect(payload.metadata.properties).not.toContainEqual({
       name: "ohrisk:lockfilePath",
       value: "/fixture-alias-project/bun.lock"
+    });
+    expect(payload.metadata.properties).toContainEqual({
+      name: "ohrisk:skippedSubmodulePaths",
+      value: '["framework","tf-psa-crypto"]'
     });
 
     expect(payload.dependencies).toContainEqual({

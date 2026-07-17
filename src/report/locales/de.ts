@@ -38,6 +38,7 @@ export const GERMAN_TEXT: HtmlReportText = {
     reviewFocus: "Prüffokus",
     reviewSummary: "Prüfzusammenfassung",
     risks: "Risiken",
+    scanCoverage: "Prüfabdeckung",
     scope: "Umfang",
     search: "Suchen",
     severity: "Schweregrad",
@@ -69,6 +70,10 @@ export const GERMAN_TEXT: HtmlReportText = {
     dependencies: (total, direct, transitive) =>
       `${total} insgesamt, ${direct} direkt, ${transitive} transitiv`,
     evidence: (files, warnings) => `${files} Dateien, ${warnings} Warnungen`,
+    skippedSubmodules: (count, paths, pathsTruncated) =>
+      `${count} Git-Submodule übersprungen (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); die Abdeckung ist unvollständig.`,
+    skippedSubmoduleAction:
+      "Prüfen Sie die übersprungenen Git-Submodule separat, bevor Sie diesen Bericht als vollständig betrachten.",
     licenseConfidence: (high, medium, low) =>
       `${high} hohe Sicherheit, ${medium} mittlere Sicherheit, ${low} niedrige Sicherheit`,
     licenseIssues: (missing, malformed) => `${missing} fehlend, ${malformed} fehlerhaft formatiert`,

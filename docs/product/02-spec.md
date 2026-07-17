@@ -16,10 +16,12 @@ the host invocation directory remains the authority for both.
 
 `scan` may also accept one public GitHub HTTPS repository URL, materialize a
 bounded depth-one temporary checkout, scan it without trusting checkout-local
-policy, waivers, symlinks, submodules, or local package evidence, and remove the
+policy, waivers, symlinks, submodule contents, or local package evidence, and remove the
 checkout afterward. Remote HTML scans default their report file to the host
 invocation directory. This input is CLI-only and is not part of `ci`, `diff`, or
-the composite GitHub Action contract.
+the composite GitHub Action contract. Submodule gitlinks are skipped by default
+with incomplete-coverage metadata in every report; strict rejection is available
+through `--submodules reject`.
 
 ## Commands
 
@@ -39,8 +41,9 @@ the composite GitHub Action contract.
 ## Output Contract
 
 Supported formats are terminal text, JSON, Markdown, HTML, SARIF, and CycloneDX.
-Scan, diff, and explain JSON use strict packaged Draft 2020-12 schema 3.1.0
-contracts. Scan JSON includes typed evidence source and graph diagnostics; diff
+Scan, diff, and explain JSON use strict packaged Draft 2020-12 schema 3.2.0
+contracts. Scan JSON includes typed evidence source and graph diagnostics plus
+optional remote repository and skipped-submodule coverage metadata; diff
 JSON records new, changed, and resolved findings plus current, baseline, added,
 and removed lockfile sets.
 Format-specific behavior is owned by `docs/report-formats.md` and matching tests.
