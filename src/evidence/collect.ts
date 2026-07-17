@@ -26,6 +26,11 @@ import {
 } from "./cache";
 import { collectRegisteredEcosystemEvidence } from "../ecosystems/registry";
 import { collectLocalPackageEvidence } from "./local-package";
+import {
+  collectPythonDistributionEvidence,
+  parsePyPiReleaseMetadata,
+  pythonDistributionArchiveFormat
+} from "./pypi-package";
 import { collectTarballEvidence } from "./tarball";
 import type { LicenseEvidence } from "./types";
 import { collectZipPackageEvidence } from "./zip-package";
@@ -90,6 +95,7 @@ type RemoteArtifactFetchPolicy = {
   details: Record<string, unknown>;
   resolveArtifactHost: ArtifactHostResolver | undefined;
   allowedHosts?: ReadonlySet<string>;
+  permittedHosts?: ReadonlySet<string>;
 };
 
 type YarnCacheIndex = {
@@ -113,6 +119,8 @@ const INSTALLED_PACKAGE_JSON_MAX_BYTES = 1024 * 1024;
 const LOCAL_ARTIFACT_READ_CHUNK_BYTES = 64 * 1024;
 const MAX_ARTIFACT_REDIRECTS = 5;
 const DEFAULT_EVIDENCE_CONCURRENCY = 8;
+const PYPI_METADATA_HOSTS = new Set(["pypi.org"]);
+const PYPI_DISTRIBUTION_HOSTS = new Set(["files.pythonhosted.org"]);
 
 const SUPPORTED_INTEGRITY_DIGEST_BYTES = {
   sha1: 20,
@@ -161,7 +169,8 @@ export async function collectGraphEvidence(input: {
   const workerCount = normalizeEvidenceConcurrency(input.evidenceConcurrency, total);
   const allowedHosts = normalizeAllowedArtifactHosts(input.allowedArtifactHosts);
   const baseFetchArtifact = input.fetchArtifact ?? createDefaultArtifactFetcher();
-  const fetchArtifact = withRegistryAuthorization(baseFetchArtifact, input.registryAuthTokens);
+  const fetchArtifact = baseFetchArtifact;
+  const npmFetchArtifact = withRegistryAuthorization(baseFetchArtifact, input.registryAuthTokens);
   const resolveArtifactHost =
     input.resolveArtifactHost ??
     (input.fetchArtifact ? undefined : defaultArtifactHostResolver);
@@ -196,6 +205,7 @@ export async function collectGraphEvidence(input: {
         allowLocalProjectEvidence,
         ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}),
         fetchArtifact,
+        npmFetchArtifact,
         resolveArtifactHost,
         fetchTimeoutMs,
         registryMetadataMaxBytes,
@@ -296,6 +306,7 @@ async function collectNodeEvidence(input: {
   allowLocalProjectEvidence: boolean;
   workspaceRoot?: string;
   fetchArtifact: ArtifactFetcher;
+  npmFetchArtifact: ArtifactFetcher;
   resolveArtifactHost: ArtifactHostResolver | undefined;
   fetchTimeoutMs: number;
   registryMetadataMaxBytes: number;
@@ -370,10 +381,52 @@ async function collectNodeEvidence(input: {
     return ok(yarnCacheEvidence.value);
   }
 
-  if (!input.node.resolved) {
-    return collectRegistryTarballEvidence({
+  if (input.node.ecosystem === "pypi") {
+    if (!input.node.resolved) {
+      return collectPyPiReleaseEvidence({
+        node: input.node,
+        fetchArtifact: input.fetchArtifact,
+        resolveArtifactHost: input.resolveArtifactHost,
+        fetchTimeoutMs: input.fetchTimeoutMs,
+        registryMetadataMaxBytes: input.registryMetadataMaxBytes,
+        artifactMaxBytes: input.tarballMaxBytes,
+        offline: input.offline,
+        artifactCache: input.artifactCache,
+        allowedHosts: input.allowedHosts
+      });
+    }
+
+    if (isHttpUrl(input.node.resolved)) {
+      const artifactFilename = remoteArtifactFilename(input.node.resolved);
+      if (!artifactFilename || !pythonDistributionArchiveFormat(artifactFilename)) {
+        return ok(unsupportedRemoteEcosystemEvidence({
+          node: input.node,
+          reason: "The resolved Python package URL did not identify a supported wheel or source distribution."
+        }));
+      }
+
+      return collectRemotePythonDistributionEvidence({
+        node: input.node,
+        resolved: input.node.resolved,
+        artifactFilename,
+        ...(input.node.integrity ? { integrity: input.node.integrity } : {}),
+        fetchArtifact: input.fetchArtifact,
+        resolveArtifactHost: input.resolveArtifactHost,
+        fetchTimeoutMs: input.fetchTimeoutMs,
+        artifactMaxBytes: input.tarballMaxBytes,
+        offline: input.offline,
+        artifactCache: input.artifactCache,
+        allowedHosts: input.allowedHosts
+      });
+    }
+
+    return ok(unsupportedRemoteEcosystemEvidence({ node: input.node }));
+  }
+
+  if (input.node.ecosystem === "npm" && !input.node.resolved) {
+    return collectNpmRegistryTarballEvidence({
       node: input.node,
-      fetchArtifact: input.fetchArtifact,
+      fetchArtifact: input.npmFetchArtifact,
       resolveArtifactHost: input.resolveArtifactHost,
       fetchTimeoutMs: input.fetchTimeoutMs,
       registryMetadataMaxBytes: input.registryMetadataMaxBytes,
@@ -385,12 +438,13 @@ async function collectNodeEvidence(input: {
     });
   }
 
-  if (isHttpUrl(input.node.resolved)) {
+  const resolved = input.node.resolved;
+  if (input.node.ecosystem === "npm" && resolved && isHttpUrl(resolved)) {
     return collectRemoteTarballEvidence({
       packageId: input.node.id,
-      resolved: input.node.resolved,
+      resolved,
       ...(input.node.integrity ? { integrity: input.node.integrity } : {}),
-      fetchArtifact: input.fetchArtifact,
+      fetchArtifact: input.npmFetchArtifact,
       resolveArtifactHost: input.resolveArtifactHost,
       fetchTimeoutMs: input.fetchTimeoutMs,
       tarballMaxBytes: input.tarballMaxBytes,
@@ -400,12 +454,7 @@ async function collectNodeEvidence(input: {
     });
   }
 
-  return ok({
-    packageId: input.node.id,
-    files: [],
-    source: "unavailable",
-    warnings: [`Unsupported resolved artifact specifier: ${safeUrlForErrorDetails(input.node.resolved)}`]
-  });
+  return ok(unsupportedRemoteEcosystemEvidence({ node: input.node }));
 }
 
 function collectLocalPathEvidence(input: {
@@ -616,7 +665,7 @@ function localArtifactTooLargeError(input: {
   });
 }
 
-async function collectRegistryTarballEvidence(input: {
+async function collectNpmRegistryTarballEvidence(input: {
   node: DependencyNode;
   fetchArtifact: ArtifactFetcher;
   resolveArtifactHost: ArtifactHostResolver | undefined;
@@ -704,6 +753,218 @@ async function collectRegistryTarballEvidence(input: {
       }
     }
   });
+}
+
+async function collectPyPiReleaseEvidence(input: {
+  node: DependencyNode;
+  fetchArtifact: ArtifactFetcher;
+  resolveArtifactHost: ArtifactHostResolver | undefined;
+  fetchTimeoutMs: number;
+  registryMetadataMaxBytes: number;
+  artifactMaxBytes: number;
+  offline: boolean;
+  artifactCache: ArtifactCache | undefined;
+  allowedHosts: ReadonlySet<string>;
+}): Promise<Result<LicenseEvidence, OhriskError>> {
+  const metadataUrl = pypiPackageVersionUrl(input.node.name, input.node.version);
+  const metadataBytes = await readRemoteArtifactBytes({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    packageId: input.node.id,
+    url: metadataUrl,
+    blockedMessage: "PyPI release metadata URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve PyPI release metadata host.",
+    fetchFailureMessage: "Failed to fetch PyPI release metadata.",
+    tooLargeMessage: "PyPI release metadata response exceeded the maximum supported size.",
+    unreadableMessage: "PyPI release metadata response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find PyPI release metadata in the artifact cache.",
+    details: { registryUrl: metadataUrl },
+    maxBytes: input.registryMetadataMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: PYPI_METADATA_HOSTS,
+    urlDetailKey: "registryUrl"
+  });
+  if (!metadataBytes.ok) {
+    return err(metadataBytes.error);
+  }
+
+  const release = parsePyPiReleaseMetadata({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    version: input.node.version,
+    registryUrl: metadataUrl,
+    text: metadataBytes.value.toString("utf8")
+  });
+  if (!release.ok) {
+    return err(release.error);
+  }
+
+  if (
+    release.value.artifact.size !== undefined
+    && release.value.artifact.size > input.artifactMaxBytes
+  ) {
+    return ok(unavailableOversizedTarballEvidence(input.node.id));
+  }
+
+  return collectRemotePythonDistributionEvidence({
+    node: input.node,
+    resolved: release.value.artifact.url,
+    artifactFilename: release.value.artifact.filename,
+    integrity: sha256HexIntegrity(release.value.artifact.sha256),
+    ...(release.value.metadataLicense
+      ? { registryMetadataLicense: release.value.metadataLicense }
+      : {}),
+    yanked: release.value.artifact.yanked,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    artifactMaxBytes: input.artifactMaxBytes,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: PYPI_DISTRIBUTION_HOSTS,
+    urlError: {
+      code: "TARBALL_FETCH_FAILED",
+      message: "PyPI release metadata included an unsupported distribution URL.",
+      resolveFailureMessage: "Failed to resolve PyPI distribution host.",
+      details: {
+        registryUrl: metadataUrl,
+        version: input.node.version,
+        resolved: release.value.artifact.url
+      }
+    }
+  });
+}
+
+async function collectRemotePythonDistributionEvidence(input: {
+  node: DependencyNode;
+  resolved: string;
+  artifactFilename: string;
+  integrity?: string;
+  registryMetadataLicense?: string;
+  yanked?: boolean;
+  fetchArtifact: ArtifactFetcher;
+  resolveArtifactHost: ArtifactHostResolver | undefined;
+  fetchTimeoutMs: number;
+  artifactMaxBytes: number;
+  offline: boolean;
+  artifactCache: ArtifactCache | undefined;
+  allowedHosts: ReadonlySet<string>;
+  permittedHosts?: ReadonlySet<string>;
+  urlError?: {
+    code: "REGISTRY_METADATA_FETCH_FAILED" | "TARBALL_FETCH_FAILED";
+    message: string;
+    resolveFailureMessage: string;
+    details: Record<string, unknown>;
+  };
+}): Promise<Result<LicenseEvidence, OhriskError>> {
+  const urlError = input.urlError ?? {
+    code: "TARBALL_FETCH_FAILED" as const,
+    message: "Python distribution URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve Python distribution host.",
+    details: { resolved: safeUrlForErrorDetails(input.resolved) }
+  };
+  const urlValidation = validateRemoteArtifactUrl({
+    code: urlError.code,
+    packageId: input.node.id,
+    resolved: input.resolved,
+    message: urlError.message,
+    details: urlError.details,
+    allowedHosts: input.allowedHosts,
+    ...(input.permittedHosts ? { permittedHosts: input.permittedHosts } : {})
+  });
+  if (!urlValidation.ok) {
+    return err(urlValidation.error);
+  }
+
+  if (!input.integrity) {
+    if (!input.offline) {
+      const preflight = await preflightRemoteArtifactFetchTarget({
+        code: urlError.code,
+        packageId: input.node.id,
+        resolved: input.resolved,
+        message: urlError.message,
+        resolveFailureMessage: urlError.resolveFailureMessage,
+        details: urlError.details,
+        resolveArtifactHost: input.resolveArtifactHost,
+        allowedHosts: input.allowedHosts,
+        ...(input.permittedHosts ? { permittedHosts: input.permittedHosts } : {})
+      });
+      if (!preflight.ok) {
+        return err(preflight.error);
+      }
+    }
+    return ok(unavailableUnverifiedRemoteTarballEvidence(input.node.id));
+  }
+
+  try {
+    const artifact = await readRemoteArtifactBytes({
+      code: urlError.code,
+      packageId: input.node.id,
+      url: input.resolved,
+      blockedMessage: urlError.message,
+      resolveFailureMessage: urlError.resolveFailureMessage,
+      fetchFailureMessage: "Failed to fetch Python distribution.",
+      tooLargeMessage: "Python distribution response exceeded the maximum supported size.",
+      unreadableMessage: "Python distribution response did not expose a readable body stream.",
+      offlineMissMessage: "Offline mode could not find the Python distribution in the artifact cache.",
+      details: urlError.details,
+      maxBytes: input.artifactMaxBytes,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      allowedHosts: input.allowedHosts,
+      ...(input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}),
+      urlDetailKey: "resolved"
+    });
+    if (!artifact.ok) {
+      if (isPackageArtifactTooLargeError(artifact.error)) {
+        return ok(unavailableOversizedTarballEvidence(input.node.id));
+      }
+      return err(artifact.error);
+    }
+
+    const verified = verifyPackageIntegrity({
+      packageId: input.node.id,
+      resolved: input.resolved,
+      integrity: input.integrity,
+      tarball: artifact.value
+    });
+    if (!verified.ok) {
+      return err(verified.error);
+    }
+
+    return collectPythonDistributionEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      artifactFilename: input.artifactFilename,
+      artifactBytes: artifact.value,
+      artifactMaxBytes: input.artifactMaxBytes,
+      ...(input.registryMetadataLicense
+        ? { registryMetadataLicense: input.registryMetadataLicense }
+        : {}),
+      ...(input.yanked !== undefined ? { yanked: input.yanked } : {})
+    });
+  } catch (cause) {
+    return err(createRemoteArtifactExceptionError({
+      code: urlError.code,
+      message: "Failed to fetch Python distribution.",
+      blockedMessage: urlError.message,
+      details: {
+        packageId: input.node.id,
+        resolved: safeUrlForErrorDetails(input.resolved),
+        ...urlError.details
+      },
+      cause
+    }));
+  }
 }
 
 function parseRegistryMetadata(input: {
@@ -1194,6 +1455,7 @@ async function readRemoteArtifactBytes(input: {
   offline: boolean;
   artifactCache: ArtifactCache | undefined;
   allowedHosts: ReadonlySet<string>;
+  permittedHosts?: ReadonlySet<string>;
   urlDetailKey: "registryUrl" | "resolved";
 }): Promise<Result<Buffer, OhriskError>> {
   const urlValidation = validateRemoteArtifactUrl({
@@ -1202,7 +1464,8 @@ async function readRemoteArtifactBytes(input: {
     resolved: input.url,
     message: input.blockedMessage,
     details: input.details,
-    allowedHosts: input.allowedHosts
+    allowedHosts: input.allowedHosts,
+    ...(input.permittedHosts ? { permittedHosts: input.permittedHosts } : {})
   });
   if (!urlValidation.ok) {
     return err(urlValidation.error);
@@ -1234,7 +1497,8 @@ async function readRemoteArtifactBytes(input: {
     resolveFailureMessage: input.resolveFailureMessage,
     details: input.details,
     resolveArtifactHost: input.resolveArtifactHost,
-    allowedHosts: input.allowedHosts
+    allowedHosts: input.allowedHosts,
+    ...(input.permittedHosts ? { permittedHosts: input.permittedHosts } : {})
   });
   if (!preflight.ok) {
     return err(preflight.error);
@@ -1252,7 +1516,8 @@ async function readRemoteArtifactBytes(input: {
       resolveFailureMessage: input.resolveFailureMessage,
       details: input.details,
       resolveArtifactHost: input.resolveArtifactHost,
-      allowedHosts: input.allowedHosts
+      allowedHosts: input.allowedHosts,
+      ...(input.permittedHosts ? { permittedHosts: input.permittedHosts } : {})
     },
     readResponse: async (response, signal) => {
       const cacheMetadata = artifactCacheMetadataFromHeaders(response.headers);
@@ -1353,6 +1618,13 @@ function isPackageTarballTooLargeError(error: OhriskError): boolean {
     error.code === "TARBALL_PARSE_FAILED"
     && error.message === "Failed to decompress package tarball evidence."
     && typeof error.details?.maxUnpackedBytes === "number"
+  );
+}
+
+function isPackageArtifactTooLargeError(error: OhriskError): boolean {
+  return isPackageTarballTooLargeError(error) || (
+    error.code === "TARBALL_FETCH_FAILED"
+    && error.message === "Python distribution response exceeded the maximum supported size."
   );
 }
 
@@ -1788,6 +2060,9 @@ async function fetchArtifactWithManualRedirects(input: {
       resolveArtifactHost: input.redirectPolicy.resolveArtifactHost,
       ...(input.redirectPolicy.allowedHosts
         ? { allowedHosts: input.redirectPolicy.allowedHosts }
+        : {}),
+      ...(input.redirectPolicy.permittedHosts
+        ? { permittedHosts: input.redirectPolicy.permittedHosts }
         : {})
     });
 
@@ -1857,6 +2132,7 @@ function validateRemoteArtifactUrl(input: {
   message: string;
   details: Record<string, unknown>;
   allowedHosts?: ReadonlySet<string>;
+  permittedHosts?: ReadonlySet<string>;
 }): Result<void, OhriskError> {
   const url = parseHttpUrl(input.resolved);
   if (!url) {
@@ -1907,6 +2183,21 @@ function validateRemoteArtifactUrl(input: {
   }
 
   const normalizedHost = normalizeUrlHostname(url.hostname);
+  if (input.permittedHosts && !input.permittedHosts.has(normalizedHost)) {
+    return err(
+      createError({
+        code: input.code,
+        category: "unsupported_input",
+        message: input.message,
+        details: {
+          packageId: input.packageId,
+          ...redactUrlCredentialsInDetails(input.details),
+          artifactHost: normalizedHost,
+          reason: "host_not_permitted"
+        }
+      })
+    );
+  }
   const blockedHostReason = isExplicitlyAllowedArtifactHost(normalizedHost, input.allowedHosts)
     ? undefined
     : blockedRemoteArtifactHostReason(normalizedHost);
@@ -1938,6 +2229,7 @@ async function preflightRemoteArtifactFetchTarget(input: {
   details: Record<string, unknown>;
   resolveArtifactHost: ArtifactHostResolver | undefined;
   allowedHosts?: ReadonlySet<string>;
+  permittedHosts?: ReadonlySet<string>;
 }): Promise<Result<void, OhriskError>> {
   const urlValidation = validateRemoteArtifactUrl({
     code: input.code,
@@ -1945,7 +2237,8 @@ async function preflightRemoteArtifactFetchTarget(input: {
     resolved: input.resolved,
     message: input.message,
     details: input.details,
-    ...(input.allowedHosts ? { allowedHosts: input.allowedHosts } : {})
+    ...(input.allowedHosts ? { allowedHosts: input.allowedHosts } : {}),
+    ...(input.permittedHosts ? { permittedHosts: input.permittedHosts } : {})
   });
 
   if (!urlValidation.ok) {
@@ -2491,6 +2784,43 @@ function npmRegistryPackageVersionUrl(
   registryUrl?: string
 ): string {
   return `${npmRegistryPackageUrl(name, registryUrl)}/${encodeURIComponent(version)}`;
+}
+
+function pypiPackageVersionUrl(name: string, version: string): string {
+  return `https://pypi.org/pypi/${encodeURIComponent(name)}/${encodeURIComponent(version)}/json`;
+}
+
+function sha256HexIntegrity(sha256: string): string {
+  return `sha256-${Buffer.from(sha256, "hex").toString("base64")}`;
+}
+
+function remoteArtifactFilename(resolved: string): string | undefined {
+  const parsed = parseHttpUrl(resolved);
+  const encodedFilename = parsed?.pathname.split("/").pop();
+  if (!encodedFilename) {
+    return undefined;
+  }
+  try {
+    return decodeURIComponent(encodedFilename);
+  } catch {
+    return encodedFilename;
+  }
+}
+
+function unsupportedRemoteEcosystemEvidence(input: {
+  node: DependencyNode;
+  reason?: string;
+}): LicenseEvidence {
+  const warning = input.reason
+    ?? (input.node.resolved
+      ? `Unsupported resolved artifact specifier: ${safeUrlForErrorDetails(input.node.resolved)}`
+      : `Remote package evidence is not configured for the ${input.node.ecosystem} ecosystem.`);
+  return {
+    packageId: input.node.id,
+    files: [],
+    source: "unavailable",
+    warnings: [warning]
+  };
 }
 
 function npmRegistryPackageUrl(name: string, registryUrl?: string): string {

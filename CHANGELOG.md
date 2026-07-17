@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.8.0 - 2026-07-17
+
+- Added exact-version PyPI release evidence for locked Python packages. Ohrisk
+  fetches the release JSON, selects a deterministic supported sdist or wheel,
+  verifies the PyPI SHA-256 digest, rechecks distribution name and version, and
+  reads bounded `PKG-INFO`, `METADATA`, and license files.
+- PyPI metadata and distribution downloads use the existing SSRF, redirect,
+  timeout, response-size, archive, cache, and offline boundaries without
+  forwarding npm registry credentials.
+- Fixed missing-artifact fallback so non-npm ecosystems are no longer queried
+  through the npm registry.
+- Python metadata now falls through from a legacy `License: UNKNOWN` value to a
+  recognized license classifier instead of reporting avoidable unknown risk.
+
 ## 1.7.0 - 2026-07-17
 
 - Remote GitHub scans now search the validated checkout when the repository root

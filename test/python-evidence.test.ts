@@ -116,6 +116,86 @@ describe("collectPythonPackageEvidence", () => {
     }
   });
 
+  test("uses a recognized classifier when the legacy License field is UNKNOWN", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-python-unknown-license-"));
+    const distInfoDir = path.join(
+      projectRoot,
+      ".venv",
+      "Lib",
+      "site-packages",
+      "example_pkg-1.0.0.dist-info"
+    );
+
+    try {
+      mkdirSync(distInfoDir, { recursive: true });
+      writeFileSync(
+        path.join(distInfoDir, "METADATA"),
+        [
+          "Metadata-Version: 2.1",
+          "Name: example-pkg",
+          "Version: 1.0.0",
+          "License: UNKNOWN",
+          "Classifier: License :: OSI Approved :: MIT License",
+          ""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const evidence = collectPythonPackageEvidence({
+        packageId: "example-pkg@1.0.0",
+        packageName: "example-pkg",
+        version: "1.0.0",
+        projectRoot
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) throw new Error(evidence.error.message);
+      expect(evidence.value.metadataLicense).toBe("MIT");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("prefers a recognized classifier over a prose legacy License field", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-python-prose-license-"));
+    const distInfoDir = path.join(
+      projectRoot,
+      ".venv",
+      "Lib",
+      "site-packages",
+      "example_pkg-1.0.0.dist-info"
+    );
+
+    try {
+      mkdirSync(distInfoDir, { recursive: true });
+      writeFileSync(
+        path.join(distInfoDir, "METADATA"),
+        [
+          "Metadata-Version: 2.1",
+          "Name: example-pkg",
+          "Version: 1.0.0",
+          "License: Copyright 2010 Example Authors",
+          "Classifier: License :: OSI Approved :: BSD License",
+          ""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const evidence = collectPythonPackageEvidence({
+        packageId: "example-pkg@1.0.0",
+        packageName: "example-pkg",
+        version: "1.0.0",
+        projectRoot
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) throw new Error(evidence.error.message);
+      expect(evidence.value.metadataLicense).toBe("BSD-3-Clause");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("stops collecting Python package evidence files at the configured limit", () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-python-evidence-limit-"));
     const distInfoDir = path.join(

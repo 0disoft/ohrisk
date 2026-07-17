@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 
 export const VERSION_REFERENCE_FILES = [
   "README.md",
+  "RELEASING.md",
   "docs/ci.md",
   "docs/github-actions.md",
   "docs/risky-demo.md",
@@ -21,5 +22,6 @@ export function synchronizedVersionText(text: string, version: string): string {
   return text
     .replace(/\bohrisk@(latest|\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)/g, `ohrisk@${version}`)
     .replace(/\b0disoft\/ohrisk@(main|v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)/g, `0disoft/ohrisk@v${version}`)
+    .replace(/\b(git tag v|git push origin v)\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/g, `$1${version}`)
     .replace(/(^\s*version:\s*)(latest|v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(\s*$)/gm, `$1${version}$3`);
 }

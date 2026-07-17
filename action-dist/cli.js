@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 48daa125876960ea62cf6edce7d112ce3d3b439bc1149c70f5baab46664b316f
+// ohrisk-action-source-sha256: 3dc5aa87f9a498fffc61857b16ed30b186f6cd8f1a08d548ab024f2521d8e5c1
 // ohrisk-action-build-platform: win32
 import { createRequire } from "node:module";
 var __create = Object.create;
@@ -16478,7 +16478,7 @@ function acquireLiveStreamLease(stream) {
 }
 // src/cli/main.ts
 import { readdirSync as readdirSync32, realpathSync as realpathSync7, statSync as statSync34 } from "node:fs";
-import path81 from "node:path";
+import path82 from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // src/cli/args.ts
@@ -18384,7 +18384,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.7.0";
+var OHRISK_VERSION = "1.8.0";
 
 // src/archive/archive-project.ts
 import path46 from "node:path";
@@ -36788,6 +36788,20 @@ function readArchiveFile(input) {
     return err(toOhriskError(cause, "ARCHIVE_READ_FAILED", "filesystem", safeName));
   }
 }
+function readArchiveBytes(input) {
+  const safeName = safeBasename(input.displayName);
+  try {
+    const limits = resolveLimits(input.limits);
+    enforceLimit("inputBytes", limits.inputBytes, input.bytes.byteLength, safeName);
+    return readOwnedArchiveBuffer({
+      ...input,
+      limits,
+      bytes: Buffer.from(input.bytes)
+    });
+  } catch (cause) {
+    return err(toOhriskError(cause, "ARCHIVE_MALFORMED", "invalid_input", safeName));
+  }
+}
 function readOwnedArchiveBuffer(input) {
   const safeName = safeBasename(input.displayName);
   try {
@@ -38417,7 +38431,7 @@ import {
 } from "node:fs";
 import { request as httpsRequest } from "node:https";
 import { isIP as isIP2 } from "node:net";
-import path73 from "node:path";
+import path74 from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
@@ -41895,14 +41909,18 @@ function readPythonMetadata(input) {
       }
     }));
   }
-  const headers = parseEmailStyleHeaders(text3.value);
-  return ok(omitUndefined({
+  return ok(parsePythonMetadataText(text3.value));
+}
+function parsePythonMetadataText(text3) {
+  const headers = parseEmailStyleHeaders(text3);
+  return omitUndefined({
     name: firstHeader(headers, "Name"),
     version: firstHeader(headers, "Version"),
     licenseExpression: firstHeader(headers, "License-Expression"),
     license: firstHeader(headers, "License"),
-    classifiers: headers.get("Classifier") ?? []
-  }));
+    classifiers: headers.get("Classifier") ?? [],
+    licenseFiles: headers.get("License-File") ?? []
+  });
 }
 function parseEmailStyleHeaders(text3) {
   const headers = new Map;
@@ -41939,15 +41957,19 @@ function readPythonMetadataLicense(metadata) {
   if (metadata.licenseExpression) {
     return metadata.licenseExpression;
   }
-  if (metadata.license && metadata.license.length <= 200 && !metadata.license.includes(`
-`)) {
-    return metadata.license;
-  }
   const classifierLicenses = metadata.classifiers.map((classifier) => LICENSE_CLASSIFIER_ALIASES.get(classifier)).filter((license) => license !== undefined);
   if (classifierLicenses.length > 0) {
     return [...new Set(classifierLicenses)].join(" OR ");
   }
+  if (metadata.license && metadata.license.length <= 200 && !metadata.license.includes(`
+`) && !isAbsentPythonLicense(metadata.license)) {
+    return metadata.license;
+  }
   return;
+}
+function isAbsentPythonLicense(value) {
+  const normalized = value.trim().toUpperCase();
+  return normalized === "" || normalized === "UNKNOWN" || normalized === "NOASSERTION";
 }
 function readPythonEvidenceFiles(input) {
   const files = [];
@@ -43323,6 +43345,691 @@ function adapter(id, lockfileKinds, packageEcosystems) {
   };
 }
 
+// src/evidence/pypi-package.ts
+import path73 from "node:path";
+
+// src/license/spdx.ts
+var LICENSE_ALIASES = new Map([
+  ["apache 2", "Apache-2.0"],
+  ["apache 2.0", "Apache-2.0"],
+  ["apache license 2.0", "Apache-2.0"],
+  ["apache license version 2.0", "Apache-2.0"],
+  ["apache license, version 2.0", "Apache-2.0"],
+  ["bsd", "BSD-3-Clause"],
+  ["bsd 2-clause", "BSD-2-Clause"],
+  ["bsd 3-clause", "BSD-3-Clause"],
+  ["bsd-2-clause license", "BSD-2-Clause"],
+  ["bsd-3-clause license", "BSD-3-Clause"],
+  ["bsd license", "BSD-3-Clause"],
+  ["business source license", "BUSL-1.1"],
+  ["business source license 1.1", "BUSL-1.1"],
+  ["busl", "BUSL-1.1"],
+  ["commons clause", "Commons-Clause"],
+  ["commons clause license condition", "Commons-Clause"],
+  ["elastic license", "Elastic-2.0"],
+  ["elastic license 2.0", "Elastic-2.0"],
+  ["2-clause bsd", "BSD-2-Clause"],
+  ["3-clause bsd", "BSD-3-Clause"],
+  ["simplified bsd license", "BSD-2-Clause"],
+  ["new bsd license", "BSD-3-Clause"],
+  ["isc license", "ISC"],
+  ["mit license", "MIT"],
+  ["polyform free trial 1.0.0", "PolyForm-Free-Trial-1.0.0"],
+  ["polyform noncommercial 1.0.0", "PolyForm-Noncommercial-1.0.0"],
+  ["server side public license", "SSPL-1.0"],
+  ["server side public license 1.0", "SSPL-1.0"],
+  ["sspl", "SSPL-1.0"],
+  ["the mit license", "MIT"],
+  ["unlicensed", "UNLICENSED"]
+]);
+var VALID_SPDX_ID = /^[A-Za-z0-9-.+]+$/;
+function parseSpdxExpression(input) {
+  const original = input.trim();
+  if (original.length === 0) {
+    return malformedResult(original, [], false);
+  }
+  const alias = normalizeLicenseToken(original);
+  if (alias.normalized && !alias.malformed && alias.normalized !== original) {
+    const ast2 = {
+      type: "license",
+      license: alias.normalized
+    };
+    return parsedResult(original, ast2, true);
+  }
+  const shorthandOrExpression = parseShorthandOrExpression(original);
+  if (shorthandOrExpression) {
+    return shorthandOrExpression;
+  }
+  const tokens = lexExpression(original);
+  if (!tokens) {
+    return malformedResult(original, collectRecoverableChoices(original), false);
+  }
+  const state = {
+    tokens,
+    index: 0,
+    usedAlias: false
+  };
+  const ast = parseOrExpression(state);
+  if (!ast || state.index !== state.tokens.length) {
+    return malformedResult(original, collectChoicesFromTokens(tokens), state.usedAlias);
+  }
+  return parsedResult(original, ast, state.usedAlias);
+}
+function formatSpdxExpression(ast) {
+  return formatNode(ast, 0);
+}
+function parsedResult(original, ast, usedAlias) {
+  const choices = [];
+  const exceptions = [];
+  let hasAnd = false;
+  let hasOr = false;
+  visitNode(ast, (node) => {
+    if (node.type === "license") {
+      choices.push(node.license);
+      if (node.exception) {
+        exceptions.push(node.exception);
+      }
+      return;
+    }
+    if (node.type === "and") {
+      hasAnd = true;
+    } else {
+      hasOr = true;
+    }
+  });
+  const result = {
+    original,
+    expression: formatSpdxExpression(ast),
+    choices: [...new Set(choices)],
+    joiner: joinerFor(hasAnd, hasOr),
+    malformed: false,
+    usedAlias,
+    exceptions: [...new Set(exceptions)]
+  };
+  Object.defineProperty(result, "ast", {
+    value: ast,
+    enumerable: false,
+    configurable: false,
+    writable: false
+  });
+  return result;
+}
+function malformedResult(original, choices, usedAlias) {
+  return {
+    original,
+    choices: [...new Set(choices.length > 0 ? choices : original ? [original] : [])],
+    joiner: detectJoiner(original),
+    malformed: true,
+    usedAlias,
+    exceptions: []
+  };
+}
+function parseShorthandOrExpression(original) {
+  if (detectJoiner(original) !== "single" || !/[\/,]/.test(original)) {
+    return;
+  }
+  const rawTokens = original.replace(/[()]/g, " ").split(/\s*(?:\/|,)\s*/).map((token) => token.trim());
+  if (rawTokens.length < 2 || rawTokens.some((token) => token.length === 0)) {
+    return;
+  }
+  const normalizedTokens = rawTokens.map((token) => normalizeLicenseToken(token));
+  if (normalizedTokens.some((token) => token.malformed || token.normalized === undefined)) {
+    return;
+  }
+  const licenses = normalizedTokens.map((token) => token.normalized);
+  const firstLicense = licenses[0];
+  if (!firstLicense) {
+    return;
+  }
+  const ast = licenses.slice(1).reduce((left, license) => ({
+    type: "or",
+    left,
+    right: { type: "license", license }
+  }), { type: "license", license: firstLicense });
+  return parsedResult(original, ast, true);
+}
+function lexExpression(expression) {
+  const tokens = [];
+  let chunk = "";
+  let index = 0;
+  const flushOperand = () => {
+    const value = chunk.trim();
+    chunk = "";
+    if (value.length === 0) {
+      return true;
+    }
+    tokens.push({ type: "operand", value });
+    return true;
+  };
+  while (index < expression.length) {
+    const character = expression[index];
+    if (character === "(" || character === ")") {
+      flushOperand();
+      tokens.push({ type: character === "(" ? "lparen" : "rparen" });
+      index += 1;
+      continue;
+    }
+    const operator = readOperatorAt(expression, index);
+    if (operator) {
+      flushOperand();
+      tokens.push({ type: operator.value });
+      index = operator.nextIndex;
+      continue;
+    }
+    chunk += character;
+    index += 1;
+  }
+  flushOperand();
+  return tokens.length > 0 ? tokens : undefined;
+}
+function readOperatorAt(expression, index) {
+  const candidates = ["WITH", "AND", "OR"];
+  for (const candidate of candidates) {
+    const value = expression.slice(index, index + candidate.length);
+    if (value.toUpperCase() !== candidate) {
+      continue;
+    }
+    const previous = index === 0 ? undefined : expression[index - 1];
+    const next = expression[index + candidate.length];
+    if (!isOperatorBoundary(previous) || !isOperatorBoundary(next)) {
+      continue;
+    }
+    return {
+      value: candidate.toLowerCase(),
+      nextIndex: index + candidate.length
+    };
+  }
+  return;
+}
+function isOperatorBoundary(character) {
+  return character === undefined || /\s|\(|\)/.test(character);
+}
+function parseOrExpression(state) {
+  let left = parseAndExpression(state);
+  if (!left) {
+    return;
+  }
+  while (peekToken(state, "or")) {
+    state.index += 1;
+    const right = parseAndExpression(state);
+    if (!right) {
+      return;
+    }
+    left = { type: "or", left, right };
+  }
+  return left;
+}
+function parseAndExpression(state) {
+  let left = parseWithExpression(state);
+  if (!left) {
+    return;
+  }
+  while (peekToken(state, "and")) {
+    state.index += 1;
+    const right = parseWithExpression(state);
+    if (!right) {
+      return;
+    }
+    left = { type: "and", left, right };
+  }
+  return left;
+}
+function parseWithExpression(state) {
+  const primary = parsePrimaryExpression(state);
+  if (!primary) {
+    return;
+  }
+  if (!peekToken(state, "with")) {
+    return primary;
+  }
+  if (primary.type !== "license") {
+    return;
+  }
+  state.index += 1;
+  const exceptionToken = state.tokens[state.index];
+  if (!exceptionToken || exceptionToken.type !== "operand") {
+    return;
+  }
+  const exception = normalizeExceptionToken(exceptionToken.value);
+  if (!exception) {
+    return;
+  }
+  state.index += 1;
+  return {
+    ...primary,
+    exception
+  };
+}
+function parsePrimaryExpression(state) {
+  const token = state.tokens[state.index];
+  if (!token) {
+    return;
+  }
+  if (token.type === "operand") {
+    const normalized = normalizeLicenseToken(token.value);
+    if (normalized.malformed || !normalized.normalized) {
+      return;
+    }
+    state.usedAlias ||= normalized.usedAlias;
+    state.index += 1;
+    return {
+      type: "license",
+      license: normalized.normalized
+    };
+  }
+  if (token.type !== "lparen") {
+    return;
+  }
+  state.index += 1;
+  const nested = parseOrExpression(state);
+  if (!nested || !peekToken(state, "rparen")) {
+    return;
+  }
+  state.index += 1;
+  return nested;
+}
+function peekToken(state, type) {
+  return state.tokens[state.index]?.type === type;
+}
+function normalizeLicenseToken(token) {
+  const trimmed = token.trim();
+  if (!trimmed) {
+    return {
+      malformed: true,
+      usedAlias: false
+    };
+  }
+  const alias = LICENSE_ALIASES.get(trimmed.toLowerCase());
+  if (alias) {
+    return {
+      normalized: alias,
+      malformed: false,
+      usedAlias: alias !== trimmed
+    };
+  }
+  if (!VALID_SPDX_ID.test(trimmed)) {
+    return {
+      normalized: trimmed,
+      malformed: true,
+      usedAlias: false
+    };
+  }
+  return {
+    normalized: trimmed,
+    malformed: false,
+    usedAlias: false
+  };
+}
+function normalizeExceptionToken(token) {
+  const trimmed = token.trim();
+  return VALID_SPDX_ID.test(trimmed) ? trimmed : undefined;
+}
+function collectChoicesFromTokens(tokens) {
+  return tokens.flatMap((token) => {
+    if (token.type !== "operand") {
+      return [];
+    }
+    const normalized = normalizeLicenseToken(token.value);
+    return normalized.normalized && !normalized.malformed ? [normalized.normalized] : [];
+  });
+}
+function collectRecoverableChoices(original) {
+  return original.replace(/[()]/g, " ").split(/\s+(?:AND|OR|WITH)\s+/i).flatMap((token) => {
+    const normalized = normalizeLicenseToken(token);
+    return normalized.normalized && !normalized.malformed ? [normalized.normalized] : [];
+  });
+}
+function detectJoiner(expression) {
+  const hasAnd = /(?:^|\s|\()AND(?:$|\s|\))/i.test(expression);
+  const hasOr = /(?:^|\s|\()OR(?:$|\s|\))/i.test(expression);
+  return joinerFor(hasAnd, hasOr);
+}
+function joinerFor(hasAnd, hasOr) {
+  if (hasAnd && hasOr) {
+    return "mixed";
+  }
+  if (hasAnd) {
+    return "and";
+  }
+  if (hasOr) {
+    return "or";
+  }
+  return "single";
+}
+function formatNode(ast, parentPrecedence) {
+  if (ast.type === "license") {
+    return ast.exception ? `${ast.license} WITH ${ast.exception}` : ast.license;
+  }
+  const precedence = ast.type === "and" ? 2 : 1;
+  const operator = ast.type.toUpperCase();
+  const formatted = `${formatNode(ast.left, precedence)} ${operator} ${formatNode(ast.right, precedence)}`;
+  return precedence < parentPrecedence ? `(${formatted})` : formatted;
+}
+function visitNode(ast, visitor) {
+  visitor(ast);
+  if (ast.type === "license") {
+    return;
+  }
+  visitNode(ast.left, visitor);
+  visitNode(ast.right, visitor);
+}
+
+// src/evidence/pypi-package.ts
+var PYPI_METADATA_LICENSE_MAX_CHARS = 200;
+var PYTHON_DISTRIBUTION_METADATA_MAX_BYTES = 1024 * 1024;
+var PYTHON_DISTRIBUTION_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var PYTHON_DISTRIBUTION_LICENSE_FILE_LIMIT = 50;
+function parsePyPiReleaseMetadata(input) {
+  let document2;
+  try {
+    document2 = JSON.parse(input.text);
+  } catch (cause) {
+    return err(pypiMetadataError(input, "PyPI release metadata was not valid JSON.", {
+      cause: cause instanceof Error ? cause.message : String(cause)
+    }));
+  }
+  if (!isRecord24(document2) || !isRecord24(document2.info) || !Array.isArray(document2.urls)) {
+    return err(pypiMetadataError(input, "PyPI release metadata did not have the expected shape."));
+  }
+  const infoName = document2.info.name;
+  const infoVersion = document2.info.version;
+  if (typeof infoName !== "string" || normalizePythonPackageName7(infoName) !== normalizePythonPackageName7(input.packageName) || typeof infoVersion !== "string" || infoVersion !== input.version) {
+    return err(pypiMetadataError(input, "PyPI release metadata did not match the requested package identity.", {
+      requestedName: input.packageName,
+      requestedVersion: input.version,
+      ...typeof infoName === "string" ? { metadataName: infoName } : {},
+      ...typeof infoVersion === "string" ? { metadataVersion: infoVersion } : {}
+    }));
+  }
+  const artifacts = document2.urls.map(readPyPiReleaseArtifact).filter((artifact2) => artifact2 !== undefined).sort(comparePyPiArtifacts);
+  const artifact = artifacts[0];
+  if (!artifact) {
+    return err(pypiMetadataError(input, "PyPI release metadata did not include a supported distribution with a SHA-256 digest."));
+  }
+  const metadataLicense = readPythonMetadataLicense({
+    licenseExpression: readShortMetadataString(document2.info.license_expression),
+    license: readShortMetadataString(document2.info.license),
+    classifiers: readStringArray(document2.info.classifiers),
+    licenseFiles: readStringArray(document2.info.license_files)
+  });
+  return ok({
+    artifact,
+    ...metadataLicense ? { metadataLicense } : {}
+  });
+}
+function collectPythonDistributionEvidence(input) {
+  const format = pythonDistributionArchiveFormat(input.artifactFilename);
+  if (!format) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "unsupported_input",
+      message: "Python distribution archive format is not supported.",
+      details: {
+        packageId: input.packageId,
+        filename: safeArtifactFilename(input.artifactFilename)
+      }
+    }));
+  }
+  const archive = readArchiveBytes({
+    displayName: safeArtifactFilename(input.artifactFilename),
+    bytes: input.artifactBytes,
+    formatHint: format,
+    limits: { inputBytes: input.artifactMaxBytes }
+  });
+  if (!archive.ok) {
+    return err(archive.error);
+  }
+  const metadata = findDistributionMetadata({
+    packageId: input.packageId,
+    packageName: input.packageName,
+    version: input.version,
+    archive: archive.value,
+    packageType: format === "zip" && input.artifactFilename.toLowerCase().endsWith(".whl") ? "bdist_wheel" : "sdist"
+  });
+  if (!metadata.ok) {
+    return err(metadata.error);
+  }
+  const warnings = [];
+  const files = collectDistributionEvidenceFiles({
+    archive: archive.value,
+    metadataPath: metadata.value.path,
+    metadata: metadata.value.metadata,
+    warnings
+  });
+  const artifactMetadataLicense = readPythonMetadataLicense(metadata.value.metadata);
+  const selectedMetadata = selectMetadataLicense({
+    artifactLicense: artifactMetadataLicense,
+    artifactSource: metadata.value.path,
+    registryLicense: input.registryMetadataLicense
+  });
+  warnings.push(...selectedMetadata.warnings);
+  if (input.yanked) {
+    warnings.push("The selected PyPI distribution is yanked, but it was retained because the dependency pins this exact version.");
+  }
+  if (files.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in the Python distribution.");
+  }
+  if (!selectedMetadata.license) {
+    warnings.push("Python distribution metadata did not declare License-Expression, License, or a recognized license classifier.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...selectedMetadata.license && selectedMetadata.source ? { metadataLicense: selectedMetadata.license, metadataSource: selectedMetadata.source } : {},
+    files,
+    source: "tarball",
+    warnings
+  });
+}
+function selectMetadataLicense(input) {
+  if (!input.artifactLicense) {
+    return input.registryLicense ? { license: input.registryLicense, source: "PyPI release metadata", warnings: [] } : { warnings: [] };
+  }
+  if (!input.registryLicense) {
+    return { license: input.artifactLicense, source: input.artifactSource, warnings: [] };
+  }
+  if (input.artifactLicense === input.registryLicense) {
+    return { license: input.artifactLicense, source: input.artifactSource, warnings: [] };
+  }
+  const artifactMalformed = parseSpdxExpression(input.artifactLicense).malformed;
+  const registryMalformed = parseSpdxExpression(input.registryLicense).malformed;
+  if (artifactMalformed && !registryMalformed) {
+    return {
+      license: input.registryLicense,
+      source: "PyPI release metadata",
+      warnings: [
+        "Distribution metadata contained a malformed license value; the valid PyPI release metadata license was preferred."
+      ]
+    };
+  }
+  return {
+    license: input.artifactLicense,
+    source: input.artifactSource,
+    warnings: [
+      "PyPI release metadata license did not match the distribution metadata; the verified distribution metadata was preferred."
+    ]
+  };
+}
+function pythonDistributionArchiveFormat(filename) {
+  const normalized = filename.toLowerCase();
+  if (normalized.endsWith(".whl") || normalized.endsWith(".zip")) {
+    return "zip";
+  }
+  if (normalized.endsWith(".tar.gz") || normalized.endsWith(".tgz")) {
+    return "tar.gz";
+  }
+  if (normalized.endsWith(".tar")) {
+    return "tar";
+  }
+  return;
+}
+function readPyPiReleaseArtifact(value) {
+  if (!isRecord24(value)) {
+    return;
+  }
+  const filename = value.filename;
+  const url = value.url;
+  const packageType = value.packagetype;
+  const sha2562 = isRecord24(value.digests) ? value.digests.sha256 : undefined;
+  if (typeof filename !== "string" || filename === "" || filename.includes("/") || filename.includes("\\") || !pythonDistributionArchiveFormat(filename) || typeof url !== "string" || url === "" || !isOfficialPyPiArtifactUrl(url) || packageType !== "sdist" && packageType !== "bdist_wheel" || typeof sha2562 !== "string" || !/^[a-f0-9]{64}$/iu.test(sha2562)) {
+    return;
+  }
+  const size = typeof value.size === "number" && Number.isSafeInteger(value.size) && value.size >= 0 ? value.size : undefined;
+  return {
+    filename,
+    url,
+    sha256: sha2562.toLowerCase(),
+    packageType,
+    yanked: value.yanked === true,
+    ...size !== undefined ? { size } : {}
+  };
+}
+function isOfficialPyPiArtifactUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname.toLowerCase() === "files.pythonhosted.org" && url.port === "" && url.username === "" && url.password === "";
+  } catch {
+    return false;
+  }
+}
+function comparePyPiArtifacts(left, right) {
+  return Number(left.yanked) - Number(right.yanked) || artifactTypeRank(left.packageType) - artifactTypeRank(right.packageType) || left.filename.localeCompare(right.filename);
+}
+function artifactTypeRank(packageType) {
+  return packageType === "bdist_wheel" ? 0 : 1;
+}
+function findDistributionMetadata(input) {
+  const candidates = input.archive.entries.filter((entry) => entry.type === "file" && isMetadataPath(entry.path, input.packageType)).sort((left, right) => metadataPathRank(left.path) - metadataPathRank(right.path) || left.path.localeCompare(right.path));
+  for (const candidate of candidates) {
+    const text3 = input.archive.readText(candidate.path, PYTHON_DISTRIBUTION_METADATA_MAX_BYTES);
+    if (!text3.ok) {
+      return err(text3.error);
+    }
+    const metadata = parsePythonMetadataText(text3.value);
+    if (normalizePythonPackageName7(metadata.name ?? "") === normalizePythonPackageName7(input.packageName) && metadata.version === input.version) {
+      return ok({ path: candidate.path, metadata });
+    }
+  }
+  return err(createError({
+    code: "PACKAGE_EVIDENCE_READ_FAILED",
+    category: "unsupported_input",
+    message: "Python distribution metadata did not match the requested package identity.",
+    details: {
+      packageId: input.packageId,
+      requestedName: input.packageName,
+      requestedVersion: input.version,
+      metadataCandidates: candidates.length
+    }
+  }));
+}
+function isMetadataPath(entryPath, packageType) {
+  const normalized = entryPath.toLowerCase();
+  return packageType === "bdist_wheel" ? /(?:^|\/)[^/]+\.dist-info\/metadata$/u.test(normalized) : /(?:^|\/)pkg-info$/u.test(normalized);
+}
+function metadataPathRank(entryPath) {
+  const segments = entryPath.split("/").length;
+  return entryPath.toLowerCase().endsWith(".dist-info/metadata") ? segments : segments * 10;
+}
+function collectDistributionEvidenceFiles(input) {
+  const packageRoot = distributionPackageRoot(input.metadataPath);
+  const metadataDir = archiveDirname2(input.metadataPath);
+  const declaredPaths = declaredLicensePaths(packageRoot, metadataDir, input.metadata.licenseFiles);
+  const candidates = input.archive.entries.filter((entry) => entry.type === "file").filter((entry) => isDistributionEvidencePath({
+    entryPath: entry.path,
+    packageRoot,
+    metadataDir,
+    declaredPaths
+  })).sort((left, right) => left.path.localeCompare(right.path)).slice(0, PYTHON_DISTRIBUTION_LICENSE_FILE_LIMIT);
+  const files = [];
+  for (const candidate of candidates) {
+    if (candidate.size > PYTHON_DISTRIBUTION_EVIDENCE_FILE_MAX_BYTES) {
+      input.warnings.push(`Skipped ${candidate.path}: evidence file exceeded the maximum supported size.`);
+      continue;
+    }
+    const text3 = input.archive.readText(candidate.path, PYTHON_DISTRIBUTION_EVIDENCE_FILE_MAX_BYTES);
+    if (!text3.ok) {
+      input.warnings.push(`Failed to read ${candidate.path}: ${text3.error.message}`);
+      continue;
+    }
+    files.push({
+      path: relativeEvidencePath(candidate.path, packageRoot),
+      kind: classifyEvidenceFile(candidate.path) ?? "license",
+      text: text3.value
+    });
+  }
+  return files;
+}
+function isDistributionEvidencePath(input) {
+  if (input.declaredPaths.has(input.entryPath)) {
+    return true;
+  }
+  if (input.metadataDir.toLowerCase().endsWith(".dist-info") && input.entryPath.startsWith(`${input.metadataDir}/licenses/`)) {
+    return true;
+  }
+  const relative2 = relativeEvidencePath(input.entryPath, input.packageRoot);
+  return !relative2.includes("/") && classifyEvidenceFile(relative2) !== undefined;
+}
+function declaredLicensePaths(packageRoot, metadataDir, licenseFiles) {
+  const declared = new Set;
+  for (const licenseFile of licenseFiles) {
+    const normalized = licenseFile.replace(/\\/gu, "/").replace(/^\.\//u, "");
+    if (!isSafeRelativeArchivePath(normalized)) {
+      continue;
+    }
+    declared.add(joinArchivePath2(packageRoot, normalized));
+    if (metadataDir.toLowerCase().endsWith(".dist-info")) {
+      declared.add(joinArchivePath2(`${metadataDir}/licenses`, normalized));
+    }
+  }
+  return declared;
+}
+function distributionPackageRoot(metadataPath) {
+  const segments = metadataPath.split("/");
+  if (!metadataPath.toLowerCase().endsWith("/pkg-info") || segments.length <= 1) {
+    return "";
+  }
+  const metadataDir = segments.at(-2)?.toLowerCase();
+  return metadataDir?.endsWith(".egg-info") ? segments.slice(0, -2).join("/") : segments.slice(0, -1).join("/");
+}
+function relativeEvidencePath(entryPath, packageRoot) {
+  return packageRoot && entryPath.startsWith(`${packageRoot}/`) ? entryPath.slice(packageRoot.length + 1) : entryPath;
+}
+function archiveDirname2(entryPath) {
+  const dirname = path73.posix.dirname(entryPath);
+  return dirname === "." ? "" : dirname;
+}
+function joinArchivePath2(left, right) {
+  return left ? `${left}/${right}` : right;
+}
+function isSafeRelativeArchivePath(value) {
+  return value !== "" && !value.startsWith("/") && !value.endsWith("/") && value.split("/").every((segment) => segment !== "" && segment !== "." && segment !== "..");
+}
+function pypiMetadataError(input, message, details = {}) {
+  return createError({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    category: "unsupported_input",
+    message,
+    details: {
+      packageId: input.packageId,
+      registryUrl: input.registryUrl,
+      ...details
+    }
+  });
+}
+function readShortMetadataString(value) {
+  return typeof value === "string" && value.trim() !== "" && value.length <= PYPI_METADATA_LICENSE_MAX_CHARS && !value.includes(`
+`) ? value.trim() : undefined;
+}
+function readStringArray(value) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+}
+function safeArtifactFilename(value) {
+  const normalized = value.replace(/\\/gu, "/");
+  return normalized.split("/").pop() || "python-distribution";
+}
+function isRecord24(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 // src/evidence/tarball.ts
 import { gunzipSync as gunzipSync3 } from "node:zlib";
 var PACKAGE_TARBALL_UNPACKED_MAX_BYTES = 100 * 1024 * 1024;
@@ -43497,11 +44204,11 @@ function readLicenseFields2(packageJson) {
 function isObjectRecord7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function normalizePackagePath(path73, packageRoot) {
+function normalizePackagePath(path74, packageRoot) {
   if (packageRoot === "") {
-    return path73;
+    return path74;
   }
-  return path73.startsWith(`${packageRoot}/`) ? path73.slice(packageRoot.length + 1) : path73;
+  return path74.startsWith(`${packageRoot}/`) ? path74.slice(packageRoot.length + 1) : path74;
 }
 function readNullTerminated2(buffer, start, length) {
   const slice = buffer.subarray(start, start + length);
@@ -43835,6 +44542,8 @@ var INSTALLED_PACKAGE_JSON_MAX_BYTES = 1024 * 1024;
 var LOCAL_ARTIFACT_READ_CHUNK_BYTES = 64 * 1024;
 var MAX_ARTIFACT_REDIRECTS = 5;
 var DEFAULT_EVIDENCE_CONCURRENCY = 8;
+var PYPI_METADATA_HOSTS = new Set(["pypi.org"]);
+var PYPI_DISTRIBUTION_HOSTS = new Set(["files.pythonhosted.org"]);
 var SUPPORTED_INTEGRITY_DIGEST_BYTES = {
   sha1: 20,
   sha256: 32,
@@ -43857,7 +44566,8 @@ async function collectGraphEvidence(input) {
   const workerCount = normalizeEvidenceConcurrency(input.evidenceConcurrency, total);
   const allowedHosts = normalizeAllowedArtifactHosts(input.allowedArtifactHosts);
   const baseFetchArtifact = input.fetchArtifact ?? createDefaultArtifactFetcher();
-  const fetchArtifact = withRegistryAuthorization(baseFetchArtifact, input.registryAuthTokens);
+  const fetchArtifact = baseFetchArtifact;
+  const npmFetchArtifact = withRegistryAuthorization(baseFetchArtifact, input.registryAuthTokens);
   const resolveArtifactHost = input.resolveArtifactHost ?? (input.fetchArtifact ? undefined : defaultArtifactHostResolver);
   const artifactCache = input.cacheDir ? createArtifactCache(input.cacheDir) : undefined;
   const fetchTimeoutMs = input.fetchTimeoutMs ?? ARTIFACT_FETCH_TIMEOUT_MS;
@@ -43883,6 +44593,7 @@ async function collectGraphEvidence(input) {
         allowLocalProjectEvidence,
         ...workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {},
         fetchArtifact,
+        npmFetchArtifact,
         resolveArtifactHost,
         fetchTimeoutMs,
         registryMetadataMaxBytes,
@@ -44005,10 +44716,48 @@ async function collectNodeEvidence(input) {
   if (yarnCacheEvidence.value) {
     return ok(yarnCacheEvidence.value);
   }
-  if (!input.node.resolved) {
-    return collectRegistryTarballEvidence({
+  if (input.node.ecosystem === "pypi") {
+    if (!input.node.resolved) {
+      return collectPyPiReleaseEvidence({
+        node: input.node,
+        fetchArtifact: input.fetchArtifact,
+        resolveArtifactHost: input.resolveArtifactHost,
+        fetchTimeoutMs: input.fetchTimeoutMs,
+        registryMetadataMaxBytes: input.registryMetadataMaxBytes,
+        artifactMaxBytes: input.tarballMaxBytes,
+        offline: input.offline,
+        artifactCache: input.artifactCache,
+        allowedHosts: input.allowedHosts
+      });
+    }
+    if (isHttpUrl(input.node.resolved)) {
+      const artifactFilename = remoteArtifactFilename(input.node.resolved);
+      if (!artifactFilename || !pythonDistributionArchiveFormat(artifactFilename)) {
+        return ok(unsupportedRemoteEcosystemEvidence({
+          node: input.node,
+          reason: "The resolved Python package URL did not identify a supported wheel or source distribution."
+        }));
+      }
+      return collectRemotePythonDistributionEvidence({
+        node: input.node,
+        resolved: input.node.resolved,
+        artifactFilename,
+        ...input.node.integrity ? { integrity: input.node.integrity } : {},
+        fetchArtifact: input.fetchArtifact,
+        resolveArtifactHost: input.resolveArtifactHost,
+        fetchTimeoutMs: input.fetchTimeoutMs,
+        artifactMaxBytes: input.tarballMaxBytes,
+        offline: input.offline,
+        artifactCache: input.artifactCache,
+        allowedHosts: input.allowedHosts
+      });
+    }
+    return ok(unsupportedRemoteEcosystemEvidence({ node: input.node }));
+  }
+  if (input.node.ecosystem === "npm" && !input.node.resolved) {
+    return collectNpmRegistryTarballEvidence({
       node: input.node,
-      fetchArtifact: input.fetchArtifact,
+      fetchArtifact: input.npmFetchArtifact,
       resolveArtifactHost: input.resolveArtifactHost,
       fetchTimeoutMs: input.fetchTimeoutMs,
       registryMetadataMaxBytes: input.registryMetadataMaxBytes,
@@ -44019,12 +44768,13 @@ async function collectNodeEvidence(input) {
       allowedHosts: input.allowedHosts
     });
   }
-  if (isHttpUrl(input.node.resolved)) {
+  const resolved = input.node.resolved;
+  if (input.node.ecosystem === "npm" && resolved && isHttpUrl(resolved)) {
     return collectRemoteTarballEvidence({
       packageId: input.node.id,
-      resolved: input.node.resolved,
+      resolved,
       ...input.node.integrity ? { integrity: input.node.integrity } : {},
-      fetchArtifact: input.fetchArtifact,
+      fetchArtifact: input.npmFetchArtifact,
       resolveArtifactHost: input.resolveArtifactHost,
       fetchTimeoutMs: input.fetchTimeoutMs,
       tarballMaxBytes: input.tarballMaxBytes,
@@ -44033,12 +44783,7 @@ async function collectNodeEvidence(input) {
       allowedHosts: input.allowedHosts
     });
   }
-  return ok({
-    packageId: input.node.id,
-    files: [],
-    source: "unavailable",
-    warnings: [`Unsupported resolved artifact specifier: ${safeUrlForErrorDetails(input.node.resolved)}`]
-  });
+  return ok(unsupportedRemoteEcosystemEvidence({ node: input.node }));
 }
 function collectLocalPathEvidence(input) {
   if (!existsSync44(input.localPath)) {
@@ -44195,7 +44940,7 @@ function localArtifactTooLargeError(input) {
     }
   });
 }
-async function collectRegistryTarballEvidence(input) {
+async function collectNpmRegistryTarballEvidence(input) {
   const metadataUrl = npmRegistryPackageVersionUrl(input.node.name, input.node.version, input.npmRegistryUrl);
   const metadataBytes = await readRemoteArtifactBytes({
     code: "REGISTRY_METADATA_FETCH_FAILED",
@@ -44264,6 +45009,171 @@ async function collectRegistryTarballEvidence(input) {
     }
   });
 }
+async function collectPyPiReleaseEvidence(input) {
+  const metadataUrl = pypiPackageVersionUrl(input.node.name, input.node.version);
+  const metadataBytes = await readRemoteArtifactBytes({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    packageId: input.node.id,
+    url: metadataUrl,
+    blockedMessage: "PyPI release metadata URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve PyPI release metadata host.",
+    fetchFailureMessage: "Failed to fetch PyPI release metadata.",
+    tooLargeMessage: "PyPI release metadata response exceeded the maximum supported size.",
+    unreadableMessage: "PyPI release metadata response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find PyPI release metadata in the artifact cache.",
+    details: { registryUrl: metadataUrl },
+    maxBytes: input.registryMetadataMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: PYPI_METADATA_HOSTS,
+    urlDetailKey: "registryUrl"
+  });
+  if (!metadataBytes.ok) {
+    return err(metadataBytes.error);
+  }
+  const release = parsePyPiReleaseMetadata({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    version: input.node.version,
+    registryUrl: metadataUrl,
+    text: metadataBytes.value.toString("utf8")
+  });
+  if (!release.ok) {
+    return err(release.error);
+  }
+  if (release.value.artifact.size !== undefined && release.value.artifact.size > input.artifactMaxBytes) {
+    return ok(unavailableOversizedTarballEvidence(input.node.id));
+  }
+  return collectRemotePythonDistributionEvidence({
+    node: input.node,
+    resolved: release.value.artifact.url,
+    artifactFilename: release.value.artifact.filename,
+    integrity: sha256HexIntegrity(release.value.artifact.sha256),
+    ...release.value.metadataLicense ? { registryMetadataLicense: release.value.metadataLicense } : {},
+    yanked: release.value.artifact.yanked,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    artifactMaxBytes: input.artifactMaxBytes,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: PYPI_DISTRIBUTION_HOSTS,
+    urlError: {
+      code: "TARBALL_FETCH_FAILED",
+      message: "PyPI release metadata included an unsupported distribution URL.",
+      resolveFailureMessage: "Failed to resolve PyPI distribution host.",
+      details: {
+        registryUrl: metadataUrl,
+        version: input.node.version,
+        resolved: release.value.artifact.url
+      }
+    }
+  });
+}
+async function collectRemotePythonDistributionEvidence(input) {
+  const urlError = input.urlError ?? {
+    code: "TARBALL_FETCH_FAILED",
+    message: "Python distribution URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve Python distribution host.",
+    details: { resolved: safeUrlForErrorDetails(input.resolved) }
+  };
+  const urlValidation = validateRemoteArtifactUrl({
+    code: urlError.code,
+    packageId: input.node.id,
+    resolved: input.resolved,
+    message: urlError.message,
+    details: urlError.details,
+    allowedHosts: input.allowedHosts,
+    ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
+  });
+  if (!urlValidation.ok) {
+    return err(urlValidation.error);
+  }
+  if (!input.integrity) {
+    if (!input.offline) {
+      const preflight = await preflightRemoteArtifactFetchTarget({
+        code: urlError.code,
+        packageId: input.node.id,
+        resolved: input.resolved,
+        message: urlError.message,
+        resolveFailureMessage: urlError.resolveFailureMessage,
+        details: urlError.details,
+        resolveArtifactHost: input.resolveArtifactHost,
+        allowedHosts: input.allowedHosts,
+        ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
+      });
+      if (!preflight.ok) {
+        return err(preflight.error);
+      }
+    }
+    return ok(unavailableUnverifiedRemoteTarballEvidence(input.node.id));
+  }
+  try {
+    const artifact = await readRemoteArtifactBytes({
+      code: urlError.code,
+      packageId: input.node.id,
+      url: input.resolved,
+      blockedMessage: urlError.message,
+      resolveFailureMessage: urlError.resolveFailureMessage,
+      fetchFailureMessage: "Failed to fetch Python distribution.",
+      tooLargeMessage: "Python distribution response exceeded the maximum supported size.",
+      unreadableMessage: "Python distribution response did not expose a readable body stream.",
+      offlineMissMessage: "Offline mode could not find the Python distribution in the artifact cache.",
+      details: urlError.details,
+      maxBytes: input.artifactMaxBytes,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      allowedHosts: input.allowedHosts,
+      ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {},
+      urlDetailKey: "resolved"
+    });
+    if (!artifact.ok) {
+      if (isPackageArtifactTooLargeError(artifact.error)) {
+        return ok(unavailableOversizedTarballEvidence(input.node.id));
+      }
+      return err(artifact.error);
+    }
+    const verified = verifyPackageIntegrity({
+      packageId: input.node.id,
+      resolved: input.resolved,
+      integrity: input.integrity,
+      tarball: artifact.value
+    });
+    if (!verified.ok) {
+      return err(verified.error);
+    }
+    return collectPythonDistributionEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      artifactFilename: input.artifactFilename,
+      artifactBytes: artifact.value,
+      artifactMaxBytes: input.artifactMaxBytes,
+      ...input.registryMetadataLicense ? { registryMetadataLicense: input.registryMetadataLicense } : {},
+      ...input.yanked !== undefined ? { yanked: input.yanked } : {}
+    });
+  } catch (cause) {
+    return err(createRemoteArtifactExceptionError({
+      code: urlError.code,
+      message: "Failed to fetch Python distribution.",
+      blockedMessage: urlError.message,
+      details: {
+        packageId: input.node.id,
+        resolved: safeUrlForErrorDetails(input.resolved),
+        ...urlError.details
+      },
+      cause
+    }));
+  }
+}
 function parseRegistryMetadata(input) {
   try {
     return ok(JSON.parse(input.text));
@@ -44290,21 +45200,21 @@ function resolveLocalArtifact(input) {
   }
   if (!localPath && input.resolved.startsWith("file:")) {
     const specifier = decodeFilePathSpecifier(input.resolved.slice("file:".length));
-    localPath = path73.resolve(input.projectRoot, specifier);
+    localPath = path74.resolve(input.projectRoot, specifier);
   }
   if (!localPath && input.resolved.startsWith("workspace:")) {
     const specifier = decodeFilePathSpecifier(input.resolved.slice("workspace:".length));
     if (isWorkspaceLocalPathSpecifier(specifier)) {
-      localPath = path73.resolve(input.projectRoot, specifier);
+      localPath = path74.resolve(input.projectRoot, specifier);
     }
   }
-  if (!localPath && (input.resolved.startsWith(".") || path73.isAbsolute(input.resolved))) {
-    localPath = path73.resolve(input.projectRoot, input.resolved);
+  if (!localPath && (input.resolved.startsWith(".") || path74.isAbsolute(input.resolved))) {
+    localPath = path74.resolve(input.projectRoot, input.resolved);
   }
   if (!localPath) {
     return ok(undefined);
   }
-  const artifactPath = path73.resolve(localPath);
+  const artifactPath = path74.resolve(localPath);
   return ok(artifactPath);
 }
 function resolveFileUrl(value) {
@@ -44348,10 +45258,10 @@ function resolveNodeModulesPackageCandidates(input) {
   if (!segments) {
     return [];
   }
-  const candidates = [path73.join(input.projectRoot, "node_modules", ...segments)];
+  const candidates = [path74.join(input.projectRoot, "node_modules", ...segments)];
   const bunStoreSegment = bunIsolatedStoreSegment(input.packageName, input.version);
   if (bunStoreSegment) {
-    candidates.push(path73.join(input.projectRoot, "node_modules", ".bun", bunStoreSegment, "node_modules", ...segments));
+    candidates.push(path74.join(input.projectRoot, "node_modules", ".bun", bunStoreSegment, "node_modules", ...segments));
   }
   return candidates;
 }
@@ -44391,14 +45301,14 @@ function isReadableDirectory23(filePath) {
 function installedPackageMatchesNode(input) {
   try {
     const packageJsonText = readTextFileWithLimit({
-      filePath: path73.join(input.packagePath, "package.json"),
+      filePath: path74.join(input.packagePath, "package.json"),
       maxBytes: input.maxBytes
     });
     if (!packageJsonText.ok) {
       return false;
     }
     const packageJson = JSON.parse(packageJsonText.value);
-    return isRecord24(packageJson) && packageJson.name === input.node.name && packageJson.version === input.node.version;
+    return isRecord25(packageJson) && packageJson.name === input.node.name && packageJson.version === input.node.version;
   } catch {
     return false;
   }
@@ -44419,7 +45329,7 @@ function collectYarnCachePackageEvidence(input) {
     if (!filename.startsWith(filenamePrefix)) {
       continue;
     }
-    const cachePath = path73.join(loadedIndex.value.cacheDir, filename);
+    const cachePath = path74.join(loadedIndex.value.cacheDir, filename);
     const stats = readLocalArtifactStats({
       filePath: cachePath,
       packageId: input.node.id,
@@ -44467,7 +45377,7 @@ function createYarnCacheIndexLoader(projectRoot) {
     if (loaded) {
       return loaded;
     }
-    const cacheDir = path73.join(projectRoot, ".yarn", "cache");
+    const cacheDir = path74.join(projectRoot, ".yarn", "cache");
     if (!existsSync44(cacheDir) || !isReadableDirectory23(cacheDir)) {
       loaded = ok(undefined);
       return loaded;
@@ -44608,7 +45518,8 @@ async function readRemoteArtifactBytes(input) {
     resolved: input.url,
     message: input.blockedMessage,
     details: input.details,
-    allowedHosts: input.allowedHosts
+    allowedHosts: input.allowedHosts,
+    ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
   });
   if (!urlValidation.ok) {
     return err(urlValidation.error);
@@ -44637,7 +45548,8 @@ async function readRemoteArtifactBytes(input) {
     resolveFailureMessage: input.resolveFailureMessage,
     details: input.details,
     resolveArtifactHost: input.resolveArtifactHost,
-    allowedHosts: input.allowedHosts
+    allowedHosts: input.allowedHosts,
+    ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
   });
   if (!preflight.ok) {
     return err(preflight.error);
@@ -44654,7 +45566,8 @@ async function readRemoteArtifactBytes(input) {
       resolveFailureMessage: input.resolveFailureMessage,
       details: input.details,
       resolveArtifactHost: input.resolveArtifactHost,
-      allowedHosts: input.allowedHosts
+      allowedHosts: input.allowedHosts,
+      ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
     },
     readResponse: async (response, signal) => {
       const cacheMetadata = artifactCacheMetadataFromHeaders(response.headers);
@@ -44740,6 +45653,9 @@ async function readRemoteArtifactBytes(input) {
 function isPackageTarballTooLargeError(error) {
   return error.code === "TARBALL_FETCH_FAILED" && error.message === "Package tarball response exceeded the maximum supported size." || error.code === "TARBALL_PARSE_FAILED" && error.message === "Failed to decompress package tarball evidence." && typeof error.details?.maxUnpackedBytes === "number";
 }
+function isPackageArtifactTooLargeError(error) {
+  return isPackageTarballTooLargeError(error) || error.code === "TARBALL_FETCH_FAILED" && error.message === "Python distribution response exceeded the maximum supported size.";
+}
 function unavailableOversizedTarballEvidence(packageId) {
   return {
     packageId,
@@ -44791,7 +45707,7 @@ function isSupportedLocalTarballPath(artifactPath) {
   return normalizedPath.endsWith(".tgz") || normalizedPath.endsWith(".tar.gz");
 }
 function resolveTrustedWorkspaceRoot(workspaceRoot) {
-  const resolvedPath = path73.resolve(workspaceRoot);
+  const resolvedPath = path74.resolve(workspaceRoot);
   try {
     const realPath = realpathSync3(resolvedPath);
     if (!statSync32(realPath).isDirectory()) {
@@ -44824,15 +45740,15 @@ function realpathLocalArtifactRoots(input) {
   ]);
 }
 function resolveLocalArtifactRoot(projectRoot) {
-  return findNearestGitRoot(projectRoot) ?? path73.resolve(projectRoot);
+  return findNearestGitRoot(projectRoot) ?? path74.resolve(projectRoot);
 }
 function findNearestGitRoot(startPath) {
-  let currentPath = path73.resolve(startPath);
+  let currentPath = path74.resolve(startPath);
   while (true) {
-    if (existsSync44(path73.join(currentPath, ".git"))) {
+    if (existsSync44(path74.join(currentPath, ".git"))) {
       return currentPath;
     }
-    const parentPath = path73.dirname(currentPath);
+    const parentPath = path74.dirname(currentPath);
     if (parentPath === currentPath) {
       return;
     }
@@ -44840,8 +45756,8 @@ function findNearestGitRoot(startPath) {
   }
 }
 function isPathInsideOrEqual4(childPath, parentPath) {
-  const relativePath = path73.relative(parentPath, childPath);
-  return relativePath === "" || !relativePath.startsWith("..") && !path73.isAbsolute(relativePath);
+  const relativePath = path74.relative(parentPath, childPath);
+  return relativePath === "" || !relativePath.startsWith("..") && !path74.isAbsolute(relativePath);
 }
 function isPathInsideAnyRoot(childPath, parentPaths) {
   return parentPaths.some((parentPath) => isPathInsideOrEqual4(childPath, parentPath));
@@ -45051,7 +45967,8 @@ async function fetchArtifactWithManualRedirects(input) {
         redirectUrl: nextUrl
       },
       resolveArtifactHost: input.redirectPolicy.resolveArtifactHost,
-      ...input.redirectPolicy.allowedHosts ? { allowedHosts: input.redirectPolicy.allowedHosts } : {}
+      ...input.redirectPolicy.allowedHosts ? { allowedHosts: input.redirectPolicy.allowedHosts } : {},
+      ...input.redirectPolicy.permittedHosts ? { permittedHosts: input.redirectPolicy.permittedHosts } : {}
     });
     if (!redirectPreflight.ok) {
       return err(redirectPreflight.error);
@@ -45138,6 +46055,19 @@ function validateRemoteArtifactUrl(input) {
     }));
   }
   const normalizedHost = normalizeUrlHostname(url.hostname);
+  if (input.permittedHosts && !input.permittedHosts.has(normalizedHost)) {
+    return err(createError({
+      code: input.code,
+      category: "unsupported_input",
+      message: input.message,
+      details: {
+        packageId: input.packageId,
+        ...redactUrlCredentialsInDetails(input.details),
+        artifactHost: normalizedHost,
+        reason: "host_not_permitted"
+      }
+    }));
+  }
   const blockedHostReason = isExplicitlyAllowedArtifactHost(normalizedHost, input.allowedHosts) ? undefined : blockedRemoteArtifactHostReason(normalizedHost);
   if (blockedHostReason) {
     return err(createError({
@@ -45161,7 +46091,8 @@ async function preflightRemoteArtifactFetchTarget(input) {
     resolved: input.resolved,
     message: input.message,
     details: input.details,
-    ...input.allowedHosts ? { allowedHosts: input.allowedHosts } : {}
+    ...input.allowedHosts ? { allowedHosts: input.allowedHosts } : {},
+    ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
   });
   if (!urlValidation.ok) {
     return err(urlValidation.error);
@@ -45562,33 +46493,60 @@ function decodeIntegrityDigest(input) {
 function npmRegistryPackageVersionUrl(name, version, registryUrl) {
   return `${npmRegistryPackageUrl(name, registryUrl)}/${encodeURIComponent(version)}`;
 }
+function pypiPackageVersionUrl(name, version) {
+  return `https://pypi.org/pypi/${encodeURIComponent(name)}/${encodeURIComponent(version)}/json`;
+}
+function sha256HexIntegrity(sha2562) {
+  return `sha256-${Buffer.from(sha2562, "hex").toString("base64")}`;
+}
+function remoteArtifactFilename(resolved) {
+  const parsed = parseHttpUrl(resolved);
+  const encodedFilename = parsed?.pathname.split("/").pop();
+  if (!encodedFilename) {
+    return;
+  }
+  try {
+    return decodeURIComponent(encodedFilename);
+  } catch {
+    return encodedFilename;
+  }
+}
+function unsupportedRemoteEcosystemEvidence(input) {
+  const warning = input.reason ?? (input.node.resolved ? `Unsupported resolved artifact specifier: ${safeUrlForErrorDetails(input.node.resolved)}` : `Remote package evidence is not configured for the ${input.node.ecosystem} ecosystem.`);
+  return {
+    packageId: input.node.id,
+    files: [],
+    source: "unavailable",
+    warnings: [warning]
+  };
+}
 function npmRegistryPackageUrl(name, registryUrl) {
   const baseUrl = (registryUrl ?? "https://registry.npmjs.org").replace(/\/$/, "");
   return `${baseUrl}/${encodeURIComponent(name).replace(/^%40/, "@")}`;
 }
 function readRegistryTarballUrl(metadata, version) {
-  if (!isRecord24(metadata)) {
+  if (!isRecord25(metadata)) {
     return;
   }
   const dist = metadata.dist;
-  if (isRecord24(dist) && typeof dist.tarball === "string") {
+  if (isRecord25(dist) && typeof dist.tarball === "string") {
     return dist.tarball;
   }
   const versions = metadata.versions;
-  if (!isRecord24(versions)) {
+  if (!isRecord25(versions)) {
     return;
   }
   const versionMetadata = versions[version];
-  if (!isRecord24(versionMetadata)) {
+  if (!isRecord25(versionMetadata)) {
     return;
   }
   const versionDist = versionMetadata.dist;
-  if (!isRecord24(versionDist) || typeof versionDist.tarball !== "string") {
+  if (!isRecord25(versionDist) || typeof versionDist.tarball !== "string") {
     return;
   }
   return versionDist.tarball;
 }
-function isRecord24(value) {
+function isRecord25(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function normalizeAllowedArtifactHosts(hosts) {
@@ -45780,7 +46738,7 @@ async function readIncomingMessageToBuffer(message) {
 import { Buffer as Buffer2 } from "node:buffer";
 import { execFileSync } from "node:child_process";
 import { realpathSync as realpathSync4 } from "node:fs";
-import path74 from "node:path";
+import path75 from "node:path";
 var GIT_FILE_LIST_MAX_BYTES = 16 * 1024 * 1024;
 var GIT_FILE_LIST_MAX_ENTRIES = 1e5;
 var readGitRefFile = (input) => {
@@ -45817,7 +46775,7 @@ var listGitRefFiles = (input) => {
   if (!context.ok) {
     return context;
   }
-  const projectRelativePath2 = path74.relative(context.value.gitRoot, context.value.projectRoot);
+  const projectRelativePath2 = path75.relative(context.value.gitRoot, context.value.projectRoot);
   if (isOutsideRelativePath(projectRelativePath2)) {
     return err(projectRootOutsideGitError(input.projectRoot));
   }
@@ -45869,7 +46827,7 @@ var listGitRefFiles = (input) => {
   }
 };
 function resolveGitProjectContext(projectRoot, ref) {
-  const resolvedProjectRoot = realpathSync4(path74.resolve(projectRoot));
+  const resolvedProjectRoot = realpathSync4(path75.resolve(projectRoot));
   let gitRoot;
   try {
     const gitRootRelativePath = execFileSync("git", [
@@ -45881,14 +46839,14 @@ function resolveGitProjectContext(projectRoot, ref) {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"]
     }).trim();
-    gitRoot = realpathSync4(path74.resolve(resolvedProjectRoot, gitRootRelativePath || "."));
+    gitRoot = realpathSync4(path75.resolve(resolvedProjectRoot, gitRootRelativePath || "."));
   } catch (cause) {
     return err(readFailedError({
       input: { ref, relativePath: "." },
       cause
     }));
   }
-  if (isOutsideRelativePath(path74.relative(gitRoot, resolvedProjectRoot))) {
+  if (isOutsideRelativePath(path75.relative(gitRoot, resolvedProjectRoot))) {
     return err(projectRootOutsideGitError(resolvedProjectRoot));
   }
   return ok({ gitRoot, projectRoot: resolvedProjectRoot });
@@ -45944,9 +46902,9 @@ function readProcessErrorText(cause) {
   return cause instanceof Error ? cause.message : String(cause);
 }
 function toGitObjectPath(input) {
-  const projectRelativePath2 = path74.relative(input.gitRoot, input.projectRoot);
-  const lockfileRelativePath = path74.normalize(input.relativePath);
-  if (isOutsideRelativePath(projectRelativePath2) || isOutsideRelativePath(lockfileRelativePath) || path74.isAbsolute(input.relativePath)) {
+  const projectRelativePath2 = path75.relative(input.gitRoot, input.projectRoot);
+  const lockfileRelativePath = path75.normalize(input.relativePath);
+  if (isOutsideRelativePath(projectRelativePath2) || isOutsideRelativePath(lockfileRelativePath) || path75.isAbsolute(input.relativePath)) {
     return err(createError({
       code: "GIT_REF_PATH_OUTSIDE_PROJECT",
       category: "invalid_input",
@@ -45956,10 +46914,10 @@ function toGitObjectPath(input) {
       }
     }));
   }
-  return ok(normalizeGitPath(path74.join(projectRelativePath2, lockfileRelativePath)));
+  return ok(normalizeGitPath(path75.join(projectRelativePath2, lockfileRelativePath)));
 }
 function normalizeGitRelativePath(value) {
-  const normalized = path74.posix.normalize(value.replace(/\\/g, "/"));
+  const normalized = path75.posix.normalize(value.replace(/\\/g, "/"));
   if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/")) {
     return;
   }
@@ -45970,376 +46928,10 @@ function normalizeGitPath(value) {
   return normalized === "." ? "" : normalized;
 }
 function isOutsideRelativePath(relativePath) {
-  return relativePath === ".." || relativePath.startsWith(`..${path74.sep}`) || path74.isAbsolute(relativePath);
+  return relativePath === ".." || relativePath.startsWith(`..${path75.sep}`) || path75.isAbsolute(relativePath);
 }
 function isObjectRecord9(value) {
   return typeof value === "object" && value !== null;
-}
-
-// src/license/spdx.ts
-var LICENSE_ALIASES = new Map([
-  ["apache 2", "Apache-2.0"],
-  ["apache 2.0", "Apache-2.0"],
-  ["apache license 2.0", "Apache-2.0"],
-  ["apache license version 2.0", "Apache-2.0"],
-  ["apache license, version 2.0", "Apache-2.0"],
-  ["bsd", "BSD-3-Clause"],
-  ["bsd 2-clause", "BSD-2-Clause"],
-  ["bsd 3-clause", "BSD-3-Clause"],
-  ["bsd-2-clause license", "BSD-2-Clause"],
-  ["bsd-3-clause license", "BSD-3-Clause"],
-  ["bsd license", "BSD-3-Clause"],
-  ["business source license", "BUSL-1.1"],
-  ["business source license 1.1", "BUSL-1.1"],
-  ["busl", "BUSL-1.1"],
-  ["commons clause", "Commons-Clause"],
-  ["commons clause license condition", "Commons-Clause"],
-  ["elastic license", "Elastic-2.0"],
-  ["elastic license 2.0", "Elastic-2.0"],
-  ["2-clause bsd", "BSD-2-Clause"],
-  ["3-clause bsd", "BSD-3-Clause"],
-  ["simplified bsd license", "BSD-2-Clause"],
-  ["new bsd license", "BSD-3-Clause"],
-  ["isc license", "ISC"],
-  ["mit license", "MIT"],
-  ["polyform free trial 1.0.0", "PolyForm-Free-Trial-1.0.0"],
-  ["polyform noncommercial 1.0.0", "PolyForm-Noncommercial-1.0.0"],
-  ["server side public license", "SSPL-1.0"],
-  ["server side public license 1.0", "SSPL-1.0"],
-  ["sspl", "SSPL-1.0"],
-  ["the mit license", "MIT"],
-  ["unlicensed", "UNLICENSED"]
-]);
-var VALID_SPDX_ID = /^[A-Za-z0-9-.+]+$/;
-function parseSpdxExpression(input) {
-  const original = input.trim();
-  if (original.length === 0) {
-    return malformedResult(original, [], false);
-  }
-  const alias = normalizeLicenseToken(original);
-  if (alias.normalized && !alias.malformed && alias.normalized !== original) {
-    const ast2 = {
-      type: "license",
-      license: alias.normalized
-    };
-    return parsedResult(original, ast2, true);
-  }
-  const shorthandOrExpression = parseShorthandOrExpression(original);
-  if (shorthandOrExpression) {
-    return shorthandOrExpression;
-  }
-  const tokens = lexExpression(original);
-  if (!tokens) {
-    return malformedResult(original, collectRecoverableChoices(original), false);
-  }
-  const state = {
-    tokens,
-    index: 0,
-    usedAlias: false
-  };
-  const ast = parseOrExpression(state);
-  if (!ast || state.index !== state.tokens.length) {
-    return malformedResult(original, collectChoicesFromTokens(tokens), state.usedAlias);
-  }
-  return parsedResult(original, ast, state.usedAlias);
-}
-function formatSpdxExpression(ast) {
-  return formatNode(ast, 0);
-}
-function parsedResult(original, ast, usedAlias) {
-  const choices = [];
-  const exceptions = [];
-  let hasAnd = false;
-  let hasOr = false;
-  visitNode(ast, (node) => {
-    if (node.type === "license") {
-      choices.push(node.license);
-      if (node.exception) {
-        exceptions.push(node.exception);
-      }
-      return;
-    }
-    if (node.type === "and") {
-      hasAnd = true;
-    } else {
-      hasOr = true;
-    }
-  });
-  const result = {
-    original,
-    expression: formatSpdxExpression(ast),
-    choices: [...new Set(choices)],
-    joiner: joinerFor(hasAnd, hasOr),
-    malformed: false,
-    usedAlias,
-    exceptions: [...new Set(exceptions)]
-  };
-  Object.defineProperty(result, "ast", {
-    value: ast,
-    enumerable: false,
-    configurable: false,
-    writable: false
-  });
-  return result;
-}
-function malformedResult(original, choices, usedAlias) {
-  return {
-    original,
-    choices: [...new Set(choices.length > 0 ? choices : original ? [original] : [])],
-    joiner: detectJoiner(original),
-    malformed: true,
-    usedAlias,
-    exceptions: []
-  };
-}
-function parseShorthandOrExpression(original) {
-  if (detectJoiner(original) !== "single" || !/[\/,]/.test(original)) {
-    return;
-  }
-  const rawTokens = original.replace(/[()]/g, " ").split(/\s*(?:\/|,)\s*/).map((token) => token.trim());
-  if (rawTokens.length < 2 || rawTokens.some((token) => token.length === 0)) {
-    return;
-  }
-  const normalizedTokens = rawTokens.map((token) => normalizeLicenseToken(token));
-  if (normalizedTokens.some((token) => token.malformed || token.normalized === undefined)) {
-    return;
-  }
-  const licenses = normalizedTokens.map((token) => token.normalized);
-  const firstLicense = licenses[0];
-  if (!firstLicense) {
-    return;
-  }
-  const ast = licenses.slice(1).reduce((left, license) => ({
-    type: "or",
-    left,
-    right: { type: "license", license }
-  }), { type: "license", license: firstLicense });
-  return parsedResult(original, ast, true);
-}
-function lexExpression(expression) {
-  const tokens = [];
-  let chunk = "";
-  let index = 0;
-  const flushOperand = () => {
-    const value = chunk.trim();
-    chunk = "";
-    if (value.length === 0) {
-      return true;
-    }
-    tokens.push({ type: "operand", value });
-    return true;
-  };
-  while (index < expression.length) {
-    const character = expression[index];
-    if (character === "(" || character === ")") {
-      flushOperand();
-      tokens.push({ type: character === "(" ? "lparen" : "rparen" });
-      index += 1;
-      continue;
-    }
-    const operator = readOperatorAt(expression, index);
-    if (operator) {
-      flushOperand();
-      tokens.push({ type: operator.value });
-      index = operator.nextIndex;
-      continue;
-    }
-    chunk += character;
-    index += 1;
-  }
-  flushOperand();
-  return tokens.length > 0 ? tokens : undefined;
-}
-function readOperatorAt(expression, index) {
-  const candidates = ["WITH", "AND", "OR"];
-  for (const candidate of candidates) {
-    const value = expression.slice(index, index + candidate.length);
-    if (value.toUpperCase() !== candidate) {
-      continue;
-    }
-    const previous = index === 0 ? undefined : expression[index - 1];
-    const next = expression[index + candidate.length];
-    if (!isOperatorBoundary(previous) || !isOperatorBoundary(next)) {
-      continue;
-    }
-    return {
-      value: candidate.toLowerCase(),
-      nextIndex: index + candidate.length
-    };
-  }
-  return;
-}
-function isOperatorBoundary(character) {
-  return character === undefined || /\s|\(|\)/.test(character);
-}
-function parseOrExpression(state) {
-  let left = parseAndExpression(state);
-  if (!left) {
-    return;
-  }
-  while (peekToken(state, "or")) {
-    state.index += 1;
-    const right = parseAndExpression(state);
-    if (!right) {
-      return;
-    }
-    left = { type: "or", left, right };
-  }
-  return left;
-}
-function parseAndExpression(state) {
-  let left = parseWithExpression(state);
-  if (!left) {
-    return;
-  }
-  while (peekToken(state, "and")) {
-    state.index += 1;
-    const right = parseWithExpression(state);
-    if (!right) {
-      return;
-    }
-    left = { type: "and", left, right };
-  }
-  return left;
-}
-function parseWithExpression(state) {
-  const primary = parsePrimaryExpression(state);
-  if (!primary) {
-    return;
-  }
-  if (!peekToken(state, "with")) {
-    return primary;
-  }
-  if (primary.type !== "license") {
-    return;
-  }
-  state.index += 1;
-  const exceptionToken = state.tokens[state.index];
-  if (!exceptionToken || exceptionToken.type !== "operand") {
-    return;
-  }
-  const exception = normalizeExceptionToken(exceptionToken.value);
-  if (!exception) {
-    return;
-  }
-  state.index += 1;
-  return {
-    ...primary,
-    exception
-  };
-}
-function parsePrimaryExpression(state) {
-  const token = state.tokens[state.index];
-  if (!token) {
-    return;
-  }
-  if (token.type === "operand") {
-    const normalized = normalizeLicenseToken(token.value);
-    if (normalized.malformed || !normalized.normalized) {
-      return;
-    }
-    state.usedAlias ||= normalized.usedAlias;
-    state.index += 1;
-    return {
-      type: "license",
-      license: normalized.normalized
-    };
-  }
-  if (token.type !== "lparen") {
-    return;
-  }
-  state.index += 1;
-  const nested = parseOrExpression(state);
-  if (!nested || !peekToken(state, "rparen")) {
-    return;
-  }
-  state.index += 1;
-  return nested;
-}
-function peekToken(state, type) {
-  return state.tokens[state.index]?.type === type;
-}
-function normalizeLicenseToken(token) {
-  const trimmed = token.trim();
-  if (!trimmed) {
-    return {
-      malformed: true,
-      usedAlias: false
-    };
-  }
-  const alias = LICENSE_ALIASES.get(trimmed.toLowerCase());
-  if (alias) {
-    return {
-      normalized: alias,
-      malformed: false,
-      usedAlias: alias !== trimmed
-    };
-  }
-  if (!VALID_SPDX_ID.test(trimmed)) {
-    return {
-      normalized: trimmed,
-      malformed: true,
-      usedAlias: false
-    };
-  }
-  return {
-    normalized: trimmed,
-    malformed: false,
-    usedAlias: false
-  };
-}
-function normalizeExceptionToken(token) {
-  const trimmed = token.trim();
-  return VALID_SPDX_ID.test(trimmed) ? trimmed : undefined;
-}
-function collectChoicesFromTokens(tokens) {
-  return tokens.flatMap((token) => {
-    if (token.type !== "operand") {
-      return [];
-    }
-    const normalized = normalizeLicenseToken(token.value);
-    return normalized.normalized && !normalized.malformed ? [normalized.normalized] : [];
-  });
-}
-function collectRecoverableChoices(original) {
-  return original.replace(/[()]/g, " ").split(/\s+(?:AND|OR|WITH)\s+/i).flatMap((token) => {
-    const normalized = normalizeLicenseToken(token);
-    return normalized.normalized && !normalized.malformed ? [normalized.normalized] : [];
-  });
-}
-function detectJoiner(expression) {
-  const hasAnd = /(?:^|\s|\()AND(?:$|\s|\))/i.test(expression);
-  const hasOr = /(?:^|\s|\()OR(?:$|\s|\))/i.test(expression);
-  return joinerFor(hasAnd, hasOr);
-}
-function joinerFor(hasAnd, hasOr) {
-  if (hasAnd && hasOr) {
-    return "mixed";
-  }
-  if (hasAnd) {
-    return "and";
-  }
-  if (hasOr) {
-    return "or";
-  }
-  return "single";
-}
-function formatNode(ast, parentPrecedence) {
-  if (ast.type === "license") {
-    return ast.exception ? `${ast.license} WITH ${ast.exception}` : ast.license;
-  }
-  const precedence = ast.type === "and" ? 2 : 1;
-  const operator = ast.type.toUpperCase();
-  const formatted = `${formatNode(ast.left, precedence)} ${operator} ${formatNode(ast.right, precedence)}`;
-  return precedence < parentPrecedence ? `(${formatted})` : formatted;
-}
-function visitNode(ast, visitor) {
-  visitor(ast);
-  if (ast.type === "license") {
-    return;
-  }
-  visitNode(ast.left, visitor);
-  visitNode(ast.right, visitor);
 }
 
 // src/license/normalize.ts
@@ -46717,7 +47309,7 @@ function encodeFindingComponent(value) {
 // src/policy/config.ts
 import { existsSync as existsSync45, readFileSync as readFileSync3, realpathSync as realpathSync5, statSync as statSync33 } from "node:fs";
 import { isIP as isIP3 } from "node:net";
-import path75 from "node:path";
+import path76 from "node:path";
 var POLICY_FILENAME = ".ohrisk.yml";
 var POLICY_VERSION = 1;
 var POLICY_MAX_BYTES = 1024 * 1024;
@@ -46770,7 +47362,7 @@ function readPolicyConfig(input) {
   if (!boundaryRoot.ok) {
     return boundaryRoot;
   }
-  const requestedPath = input.policyPath ? path75.resolve(input.projectRoot, input.policyPath) : path75.join(input.projectRoot, POLICY_FILENAME);
+  const requestedPath = input.policyPath ? path76.resolve(input.projectRoot, input.policyPath) : path76.join(input.projectRoot, POLICY_FILENAME);
   if (!existsSync45(requestedPath)) {
     if (input.policyPath) {
       return err(policyReadError({
@@ -46857,7 +47449,7 @@ function readPolicyFile(input) {
       }));
     }
     const inherited = readPolicyFile({
-      filePath: path75.resolve(path75.dirname(trustedPath.value), inheritedPath),
+      filePath: path76.resolve(path76.dirname(trustedPath.value), inheritedPath),
       boundaryRoot: input.boundaryRoot,
       visited: nextVisited,
       depth: input.depth + 1
@@ -46886,7 +47478,7 @@ function readPolicyFile(input) {
   return ok(merged);
 }
 function parsePolicyDocument(value, filePath) {
-  if (!isRecord25(value)) {
+  if (!isRecord26(value)) {
     return err(policyParseError({
       message: "Policy root must be a YAML object.",
       filePath
@@ -46903,7 +47495,7 @@ function parsePolicyDocument(value, filePath) {
   if (!extendsPaths.ok)
     return extendsPaths;
   const licenses = value.licenses === undefined ? {} : value.licenses;
-  if (!isRecord25(licenses)) {
+  if (!isRecord26(licenses)) {
     return err(policyParseError({ message: "licenses must be a YAML object.", filePath }));
   }
   const allow = readStringList(licenses.allow, "licenses.allow", filePath);
@@ -46922,7 +47514,7 @@ function parsePolicyDocument(value, filePath) {
   if (!profiles.ok)
     return profiles;
   const network = value.network === undefined ? {} : value.network;
-  if (!isRecord25(network)) {
+  if (!isRecord26(network)) {
     return err(policyParseError({ message: "network must be a YAML object.", filePath }));
   }
   const allowedHosts = readStringList(network.allowedHosts, "network.allowedHosts", filePath);
@@ -47086,13 +47678,13 @@ function readProfilePolicies(value, filePath) {
   if (value === undefined) {
     return ok(new Map);
   }
-  if (!isRecord25(value)) {
+  if (!isRecord26(value)) {
     return err(policyParseError({ message: "profiles must be a YAML object.", filePath }));
   }
   const supportedProfiles = new Set(USAGE_PROFILES);
   const result = new Map;
   for (const [profileName, rawProfile] of Object.entries(value)) {
-    if (!supportedProfiles.has(profileName) || !isRecord25(rawProfile)) {
+    if (!supportedProfiles.has(profileName) || !isRecord26(rawProfile)) {
       return err(policyParseError({
         message: "profiles keys must be supported usage profiles with object values.",
         filePath,
@@ -47100,7 +47692,7 @@ function readProfilePolicies(value, filePath) {
       }));
     }
     const licenses = rawProfile.licenses === undefined ? {} : rawProfile.licenses;
-    if (!isRecord25(licenses)) {
+    if (!isRecord26(licenses)) {
       return err(policyParseError({
         message: `profiles.${profileName}.licenses must be a YAML object.`,
         filePath
@@ -47130,7 +47722,7 @@ function readProfilePolicies(value, filePath) {
 function readSeverityOverrides(value, filePath, field = "licenses.severity") {
   if (value === undefined)
     return ok({});
-  if (!isRecord25(value)) {
+  if (!isRecord26(value)) {
     return err(policyParseError({
       message: `${field} must be a YAML object.`,
       filePath
@@ -47152,12 +47744,12 @@ function readSeverityOverrides(value, filePath, field = "licenses.severity") {
 function readPackageRules(value, filePath, field = "packages") {
   if (value === undefined)
     return ok({});
-  if (!isRecord25(value)) {
+  if (!isRecord26(value)) {
     return err(policyParseError({ message: `${field} must be a YAML object.`, filePath }));
   }
   const result = {};
   for (const [packagePattern, rawRule] of Object.entries(value)) {
-    if (packagePattern.trim() === "" || !isRecord25(rawRule)) {
+    if (packagePattern.trim() === "" || !isRecord26(rawRule)) {
       return err(policyParseError({
         message: "Each packages entry must be an object keyed by a package ID, Package URL, or glob.",
         filePath,
@@ -47216,12 +47808,12 @@ function readPackageRules(value, filePath, field = "packages") {
 function readRegistryAuth(value, filePath) {
   if (value === undefined)
     return ok({});
-  if (!isRecord25(value)) {
+  if (!isRecord26(value)) {
     return err(policyParseError({ message: "network.auth must be a YAML object.", filePath }));
   }
   const result = {};
   for (const [host, rawAuth] of Object.entries(value)) {
-    if (!isRecord25(rawAuth) || typeof rawAuth.tokenEnv !== "string" || !ENV_NAME_PATTERN.test(rawAuth.tokenEnv)) {
+    if (!isRecord26(rawAuth) || typeof rawAuth.tokenEnv !== "string" || !ENV_NAME_PATTERN.test(rawAuth.tokenEnv)) {
       return err(policyParseError({
         message: "Each network.auth entry requires a valid tokenEnv environment variable name.",
         filePath,
@@ -47271,8 +47863,8 @@ function readStringList(value, field, filePath, allowSingle = false) {
 function trustedPolicyPath(filePath, boundaryRoot) {
   try {
     const realPath = realpathSync5(filePath);
-    const relative2 = path75.relative(boundaryRoot, realPath);
-    if (relative2.startsWith("..") || path75.isAbsolute(relative2)) {
+    const relative2 = path76.relative(boundaryRoot, realPath);
+    if (relative2.startsWith("..") || path76.isAbsolute(relative2)) {
       return err(policyReadError({
         message: "Policy files and inherited policy files must stay inside the workspace root.",
         filePath: realPath,
@@ -47326,8 +47918,8 @@ function policyParseError(input) {
   });
 }
 function safeRelativePath(root, filePath) {
-  const relative2 = path75.relative(root, filePath);
-  return relative2 === "" ? path75.basename(filePath) : relative2.split(path75.sep).join("/");
+  const relative2 = path76.relative(root, filePath);
+  return relative2 === "" ? path76.basename(filePath) : relative2.split(path76.sep).join("/");
 }
 function normalizeHostname(host) {
   const trimmed = host.trim().toLowerCase().replace(/\.$/, "");
@@ -47354,7 +47946,7 @@ function escapeRegExp9(value) {
 function unique2(values) {
   return [...new Set(values)];
 }
-function isRecord25(value) {
+function isRecord26(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isRemoteReference(value) {
@@ -47714,13 +48306,13 @@ function severityRank2(severity) {
 
 // src/policy/waivers.ts
 import { existsSync as existsSync46 } from "node:fs";
-import path76 from "node:path";
+import path77 from "node:path";
 var DEFAULT_WAIVER_FILE_NAME = ".ohrisk-waivers.json";
 var WAIVER_FILE_MAX_BYTES = 1024 * 1024;
 var WAIVER_ROOT_KEYS = new Set(["waivers"]);
 var WAIVER_KEYS = new Set(["id", "fingerprint", "reason", "expiresOn"]);
 function readRiskWaivers(projectRoot, options) {
-  const waiverPath = path76.join(projectRoot, DEFAULT_WAIVER_FILE_NAME);
+  const waiverPath = path77.join(projectRoot, DEFAULT_WAIVER_FILE_NAME);
   if (!existsSync46(waiverPath)) {
     return ok([]);
   }
@@ -47797,7 +48389,7 @@ function applyRiskWaivers(input) {
   };
 }
 function parseWaivers(value) {
-  if (!isRecord26(value)) {
+  if (!isRecord27(value)) {
     return err("Ohrisk waiver file must be an object with a waivers array.");
   }
   const unknownRootKeys = unknownKeys(value, WAIVER_ROOT_KEYS);
@@ -47818,7 +48410,7 @@ function parseWaivers(value) {
   return ok(waivers);
 }
 function parseWaiver(value, index) {
-  if (!isRecord26(value)) {
+  if (!isRecord27(value)) {
     return err(`Waiver at index ${index} must be an object.`);
   }
   const unknownWaiverKeys = unknownKeys(value, WAIVER_KEYS);
@@ -47872,12 +48464,12 @@ function isIsoDate(value) {
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
-function isRecord26(value) {
+function isRecord27(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/report/cyclonedx-report.ts
-import path77 from "node:path";
+import path78 from "node:path";
 function renderCycloneDxReport(input) {
   const licensesByPackageId = new Map(input.normalizedLicenses.map((license) => [license.packageId, license]));
   const findingsByPackageId = new Map(input.riskFindings.map((finding) => [finding.packageId, finding]));
@@ -47973,11 +48565,11 @@ function archiveProperties(project) {
   ];
 }
 function projectRelativePath2(projectRoot, targetPath) {
-  const relativePath = path77.relative(projectRoot, targetPath);
-  if (relativePath && !relativePath.startsWith("..") && !path77.isAbsolute(relativePath)) {
+  const relativePath = path78.relative(projectRoot, targetPath);
+  if (relativePath && !relativePath.startsWith("..") && !path78.isAbsolute(relativePath)) {
     return relativePath.replace(/\\/g, "/");
   }
-  return path77.basename(targetPath);
+  return path78.basename(targetPath);
 }
 function renderComponent(input) {
   const licenses = input.license ? renderLicenses(input.license) : [];
@@ -48080,8 +48672,8 @@ function directChildRefsByNodeId(nodes) {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const childIdsByNodeId = new Map;
   for (const candidate of nodes) {
-    for (const path78 of candidate.paths) {
-      const packagePath = path78.map(packageIdFromPathSegment);
+    for (const path79 of candidate.paths) {
+      const packagePath = path79.map(packageIdFromPathSegment);
       for (let index = 0;index < packagePath.length - 1; index += 1) {
         const parentId = packagePath[index];
         const childId = packagePath[index + 1];
@@ -48413,7 +49005,7 @@ function formatNormalizedExpression(license) {
 }
 
 // src/report/sarif-report.ts
-import path78 from "node:path";
+import path79 from "node:path";
 var SARIF_SCHEMA_URL = "https://json.schemastore.org/sarif-2.1.0.json";
 var RULES = [
   ruleFor("high", "High license risk", "A dependency has license evidence that is high risk for the selected profile."),
@@ -48479,7 +49071,7 @@ function renderSarifReport(input) {
   }, null, 2);
 }
 function sarifLockfileUri(input) {
-  const relativePath = path78.relative(input.project.rootDir, input.project.lockfile.path).replace(/\\/g, "/") || path78.basename(input.project.lockfile.path);
+  const relativePath = path79.relative(input.project.rootDir, input.project.lockfile.path).replace(/\\/g, "/") || path79.basename(input.project.lockfile.path);
   if (!input.project.source) {
     return relativePath;
   }
@@ -48624,7 +49216,7 @@ function securitySeverityFor(severity) {
 }
 
 // src/report/scan-report.ts
-import path79 from "node:path";
+import path80 from "node:path";
 
 // src/report/locales/en.ts
 var ENGLISH_TEXT = {
@@ -52105,18 +52697,18 @@ function disabledPolicySummary() {
   };
 }
 function displayProjectPath(project, targetPath) {
-  const relativePath = path79.relative(project.rootDir, targetPath);
-  if (relativePath && !relativePath.startsWith("..") && !path79.isAbsolute(relativePath)) {
+  const relativePath = path80.relative(project.rootDir, targetPath);
+  if (relativePath && !relativePath.startsWith("..") && !path80.isAbsolute(relativePath)) {
     const normalizedPath = relativePath.replace(/\\/g, "/");
     return project.source ? `${project.source.displayPath}!/${archiveEntryPath(project, normalizedPath)}` : normalizedPath;
   }
-  return path79.basename(targetPath);
+  return path80.basename(targetPath);
 }
 function displayLockfilePath(project) {
   return displayProjectPath(project, project.lockfile.path);
 }
 function displayLockfileDirectoryPath(project) {
-  const directoryPath = path79.dirname(displayLockfilePath(project));
+  const directoryPath = path80.dirname(displayLockfilePath(project));
   return directoryPath === "" ? "." : directoryPath;
 }
 function markdownProjectLabel(input) {
@@ -52722,10 +53314,10 @@ import {
   writeFileSync as writeFileSync2
 } from "node:fs";
 import { randomBytes as randomBytes2 } from "node:crypto";
-import path80 from "node:path";
+import path81 from "node:path";
 var writeReportFile = (input) => {
-  const resolvedCwd = path80.resolve(input.cwd);
-  const resolvedPath = path80.resolve(resolvedCwd, input.outputPath);
+  const resolvedCwd = path81.resolve(input.cwd);
+  const resolvedPath = path81.resolve(resolvedCwd, input.outputPath);
   if (!isProjectRelativeOutputPath(input.outputPath) || !isPathInsideOrEqual5(resolvedPath, resolvedCwd)) {
     return err(createError({
       code: "REPORT_OUTPUT_PATH_OUTSIDE_PROJECT",
@@ -52739,7 +53331,7 @@ var writeReportFile = (input) => {
     }));
   }
   try {
-    mkdirSync2(path80.dirname(resolvedPath), { recursive: true });
+    mkdirSync2(path81.dirname(resolvedPath), { recursive: true });
     const validatedPath = validateResolvedReportPath({
       outputPath: input.outputPath,
       projectRoot: resolvedCwd,
@@ -52828,7 +53420,7 @@ function writeValidatedReportFile(input) {
 }
 function validateResolvedReportPath(input) {
   const realProjectRoot = realpathSync6(input.projectRoot);
-  const realParent = realpathSync6(path80.dirname(input.resolvedPath));
+  const realParent = realpathSync6(path81.dirname(input.resolvedPath));
   const existingOutputIsSymlink = isSymbolicLinkPath(input.resolvedPath);
   if (existingOutputIsSymlink || !isPathInsideOrEqual5(realParent, realProjectRoot)) {
     return err(createError({
@@ -52852,9 +53444,9 @@ function validateResolvedReportPath(input) {
   });
 }
 function createReportTempPath(realParent, resolvedPath) {
-  const baseName = path80.basename(resolvedPath);
+  const baseName = path81.basename(resolvedPath);
   const suffix = randomBytes2(8).toString("hex");
-  return path80.join(realParent, `.ohrisk-report-${process.pid}-${Date.now()}-${suffix}-${baseName}.tmp`);
+  return path81.join(realParent, `.ohrisk-report-${process.pid}-${Date.now()}-${suffix}-${baseName}.tmp`);
 }
 function promoteTempReportFile(tempPath, resolvedPath) {
   try {
@@ -52892,20 +53484,20 @@ function isSymbolicLinkPath(filePath) {
   }
 }
 function isProjectRelativeOutputPath(outputPath) {
-  if (outputPath.includes("\x00") || path80.isAbsolute(outputPath) || path80.win32.isAbsolute(outputPath) || path80.posix.isAbsolute(outputPath) || /^[A-Za-z]:/.test(outputPath)) {
+  if (outputPath.includes("\x00") || path81.isAbsolute(outputPath) || path81.win32.isAbsolute(outputPath) || path81.posix.isAbsolute(outputPath) || /^[A-Za-z]:/.test(outputPath)) {
     return false;
   }
   return outputPath.split(/[\\/]+/).every((segment) => segment !== "" && segment !== "." && segment !== "..");
 }
 function isPathInsideOrEqual5(childPath, parentPath) {
-  const relativePath = path80.relative(parentPath, childPath);
-  return relativePath === "" || !relativePath.startsWith("..") && !path80.isAbsolute(relativePath);
+  const relativePath = path81.relative(parentPath, childPath);
+  return relativePath === "" || !relativePath.startsWith("..") && !path81.isAbsolute(relativePath);
 }
 function isSameRealPath(leftPath, rightPath) {
   if (process.platform === "win32") {
-    return path80.normalize(leftPath).toLowerCase() === path80.normalize(rightPath).toLowerCase();
+    return path81.normalize(leftPath).toLowerCase() === path81.normalize(rightPath).toLowerCase();
   }
-  return path80.normalize(leftPath) === path80.normalize(rightPath);
+  return path81.normalize(leftPath) === path81.normalize(rightPath);
 }
 
 // src/cli/main.ts
@@ -52948,9 +53540,9 @@ async function main(argv = process.argv.slice(2), io = defaultIO()) {
 function runCache(command, io) {
   const env = io.env ?? process.env;
   const configuredCacheDir = command.cacheDir ?? env.OHRISK_CACHE_DIR;
-  const cacheDir = configuredCacheDir ? path81.resolve(io.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(env);
+  const cacheDir = configuredCacheDir ? path82.resolve(io.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(env);
   const cache = openArtifactCacheForManagement(cacheDir);
-  const location = configuredCacheDir ? path81.relative(io.cwd, cacheDir) || "." : cacheDir;
+  const location = configuredCacheDir ? path82.relative(io.cwd, cacheDir) || "." : cacheDir;
   if (command.action === "status") {
     const status = cache.status();
     if (!status.ok) {
@@ -53449,7 +54041,7 @@ function loadProjectGraph(input) {
     return discovered;
   }
   const lockfileCount = discovered.value.lockfiles?.length ?? 1;
-  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, lockfileCount > 1 ? `Reading ${lockfileCount} lockfiles...` : `Reading ${path81.basename(discovered.value.lockfile.path)}...`);
+  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, lockfileCount > 1 ? `Reading ${lockfileCount} lockfiles...` : `Reading ${path82.basename(discovered.value.lockfile.path)}...`);
   const graph = parseProjectDependencyGraph(discovered.value);
   if (isErr(graph)) {
     return graph;
@@ -53628,7 +54220,7 @@ function resolveEvidenceRuntimeOptions(input) {
     }
   }
   const configuredCacheDir = input.cacheDir ?? input.env.OHRISK_CACHE_DIR;
-  const cacheDir = configuredCacheDir ? path81.resolve(input.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(input.env);
+  const cacheDir = configuredCacheDir ? path82.resolve(input.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(input.env);
   return ok({
     offline: input.offline,
     cacheDir,
@@ -53816,7 +54408,7 @@ function loadBaselineProjectGraph(input) {
     if (baselineLockfiles.length === 0 && listed.value.includes("package.json")) {
       baselineLockfiles = [{
         kind: "package-json",
-        path: path81.join(projectRoot, "package.json")
+        path: path82.join(projectRoot, "package.json")
       }];
     }
   } else {
@@ -53825,7 +54417,7 @@ function loadBaselineProjectGraph(input) {
   if (baselineLockfiles.length === 0) {
     return ok({
       graph: {
-        rootName: path81.basename(projectRoot),
+        rootName: path82.basename(projectRoot),
         lockfilePath: `${input.baselineRef}:<none>`,
         lockfilePaths: [],
         nodes: []
@@ -53841,7 +54433,7 @@ function loadBaselineProjectGraph(input) {
       lockfile,
       baselineRef: input.baselineRef,
       readRefFile: input.readRefFile,
-      rootNameHint: input.currentProject.scanGraph.rootName ?? path81.basename(projectRoot),
+      rootNameHint: input.currentProject.scanGraph.rootName ?? path82.basename(projectRoot),
       ...baselineFiles ? { baselineFiles } : {}
     });
     if (isErr(parsed)) {
@@ -53877,7 +54469,7 @@ function parseBaselineLockfileGraph(input) {
   if (isErr(baselineLockfile)) {
     return baselineLockfile;
   }
-  const lockfileDirectory = path81.posix.dirname(relativeLockfilePath);
+  const lockfileDirectory = path82.posix.dirname(relativeLockfilePath);
   const relativeCompanionPath = (filename) => lockfileDirectory === "." ? filename : `${lockfileDirectory}/${filename}`;
   const packageJsonRelativePath = relativeCompanionPath("package.json");
   const baselinePackageJson = input.lockfile.kind === "yarn-lock" ? input.readRefFile({
@@ -54008,7 +54600,7 @@ function parseBaselineLockfileGraph(input) {
     ...input.lockfile.kind === "cargo-lock" ? { cargoRootName: input.rootNameHint } : {},
     ...baselineGoSum.value ? { goSumText: baselineGoSum.value } : {},
     ...baselineGoWorkModules.value?.length ? { goWorkModuleInputs: baselineGoWorkModules.value } : {},
-    goWorkDir: path81.dirname(input.lockfile.path),
+    goWorkDir: path82.dirname(input.lockfile.path),
     ...baselineComposerJson.value ? { composerJsonText: baselineComposerJson.value } : {},
     ...baselineDirectoryPackagesProps.value?.text ? { directoryPackagesPropsText: baselineDirectoryPackagesProps.value.text } : {},
     ...baselineDirectoryPackagesProps.value?.path ? { directoryPackagesPropsPath: baselineDirectoryPackagesProps.value.path } : {},
@@ -54046,8 +54638,8 @@ function diffLockfileKey(lockfile) {
   return `${lockfile.kind}\x00${lockfile.path}`;
 }
 function projectRelativeLockfilePath(projectRoot, lockfilePath) {
-  const relativePath = path81.relative(projectRoot, lockfilePath).replace(/\\/g, "/");
-  return relativePath === "" ? path81.basename(lockfilePath) : relativePath;
+  const relativePath = path82.relative(projectRoot, lockfilePath).replace(/\\/g, "/");
+  return relativePath === "" ? path82.basename(lockfilePath) : relativePath;
 }
 function readBaselinePrimaryLockfile(input) {
   if (isGradleDependencyLocksDirectory(input.lockfilePath)) {
@@ -54067,7 +54659,7 @@ function readBaselineGradleDependencyLocksDirectory(input) {
       const prefix = `${normalizedDirectory}/`;
       entries = [...input.baselineFiles].filter((entry) => entry.startsWith(prefix)).map((entry) => entry.slice(prefix.length)).filter((entry) => !entry.includes("/") && entry.toLowerCase().endsWith(".lockfile")).sort();
     } else {
-      entries = readdirSync32(input.lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile5(path81.join(input.lockfilePath, entry))).sort();
+      entries = readdirSync32(input.lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile5(path82.join(input.lockfilePath, entry))).sort();
     }
   } catch (cause) {
     return err(createError({
@@ -54112,7 +54704,7 @@ function readBaselineGradleDependencyLocksDirectory(input) {
 `));
 }
 function baselineLockfilePathForKind(input) {
-  return input.kind === "gradle-lock" ? path81.join(input.rootName, input.relativeLockfilePath) : `${input.baselineRef}:${input.relativeLockfilePath}`;
+  return input.kind === "gradle-lock" ? path82.join(input.rootName, input.relativeLockfilePath) : `${input.baselineRef}:${input.relativeLockfilePath}`;
 }
 function readBaselineCargoMemberManifests(input) {
   const memberManifestPaths = input.baselineFiles ? findCargoWorkspaceMemberManifestPathsFromRelativePaths({
@@ -54178,7 +54770,7 @@ function readBaselineYarnWorkspacePackageJsons(input) {
 }
 function createBaselineRequirementsIncludedFileReader(input) {
   return ({ includePath, fromFilePath, directive }) => {
-    if (path81.isAbsolute(includePath)) {
+    if (path82.isAbsolute(includePath)) {
       return err(createError({
         code: "REQUIREMENTS_PARSE_FAILED",
         category: "unsupported_input",
@@ -54191,7 +54783,7 @@ function createBaselineRequirementsIncludedFileReader(input) {
       }));
     }
     const fromRelativePath = stripBaselineRefPrefix(fromFilePath, input.baselineRef);
-    const includedRelativePath = normalizeBaselineRelativePath(path81.join(path81.dirname(fromRelativePath), includePath));
+    const includedRelativePath = normalizeBaselineRelativePath(path82.join(path82.dirname(fromRelativePath), includePath));
     if (!includedRelativePath) {
       return err(createError({
         code: "REQUIREMENTS_PARSE_FAILED",
@@ -54251,7 +54843,7 @@ function baselinePythonLocalSourceErrorsForKind(kind) {
 }
 function createBaselinePythonLocalSourceFileReader(input) {
   return ({ sourcePath, relativeFilePath, fromFilePath }) => {
-    if (path81.isAbsolute(sourcePath)) {
+    if (path82.isAbsolute(sourcePath)) {
       return err(createError({
         code: input.errors.parseCode,
         category: "unsupported_input",
@@ -54264,7 +54856,7 @@ function createBaselinePythonLocalSourceFileReader(input) {
       }));
     }
     const fromRelativePath = stripBaselineRefPrefix(fromFilePath, input.baselineRef);
-    const sourceRelativePath = normalizeBaselineRelativePath(path81.join(path81.dirname(fromRelativePath), sourcePath));
+    const sourceRelativePath = normalizeBaselineRelativePath(path82.join(path82.dirname(fromRelativePath), sourcePath));
     if (!sourceRelativePath) {
       return err(createError({
         code: input.errors.parseCode,
@@ -54277,7 +54869,7 @@ function createBaselinePythonLocalSourceFileReader(input) {
         }
       }));
     }
-    const sourceFileRelativePath = normalizeBaselineRelativePath(path81.join(sourceRelativePath, relativeFilePath));
+    const sourceFileRelativePath = normalizeBaselineRelativePath(path82.join(sourceRelativePath, relativeFilePath));
     if (!sourceFileRelativePath) {
       return err(createError({
         code: input.errors.parseCode,
@@ -54310,18 +54902,18 @@ function stripBaselineRefPrefix(filePath, baselineRef) {
   return filePath.startsWith(prefix) ? filePath.slice(prefix.length) : filePath;
 }
 function normalizeBaselineRelativePath(relativePath) {
-  const normalized = path81.normalize(relativePath).replace(/\\/g, "/");
-  if (normalized === "." || normalized.startsWith("../") || normalized === ".." || path81.isAbsolute(normalized)) {
+  const normalized = path82.normalize(relativePath).replace(/\\/g, "/");
+  if (normalized === "." || normalized.startsWith("../") || normalized === ".." || path82.isAbsolute(normalized)) {
     return;
   }
   return normalized;
 }
 function isGradleDependencyLocksDirectory(lockfilePath) {
-  const segments = path81.normalize(lockfilePath).split(path81.sep);
+  const segments = path82.normalize(lockfilePath).split(path82.sep);
   return segments.length >= 2 && segments[segments.length - 1] === "dependency-locks" && segments[segments.length - 2] === "gradle";
 }
 function findBaselineDirectoryPackagesPropsPath(input) {
-  let current = path81.posix.dirname(projectRelativeLockfilePath(input.projectRoot, input.projectFilePath));
+  let current = path82.posix.dirname(projectRelativeLockfilePath(input.projectRoot, input.projectFilePath));
   while (true) {
     const candidate = current === "." ? "Directory.Packages.props" : `${current}/Directory.Packages.props`;
     if (input.baselineFiles.has(candidate)) {
@@ -54330,7 +54922,7 @@ function findBaselineDirectoryPackagesPropsPath(input) {
     if (current === ".") {
       return;
     }
-    const parent = path81.posix.dirname(current);
+    const parent = path82.posix.dirname(current);
     current = parent === current ? "." : parent;
   }
 }
@@ -54339,7 +54931,7 @@ function readBaselineDirectoryPackagesProps(input) {
     projectRoot: input.project.rootDir,
     projectFilePath: input.project.lockfile.path,
     baselineFiles: input.baselineFiles
-  }) : normalizeBaselineRelativePath(path81.relative(input.project.rootDir, findNearestDirectoryPackagesPropsPath(input.project.lockfile.path) ?? ""));
+  }) : normalizeBaselineRelativePath(path82.relative(input.project.rootDir, findNearestDirectoryPackagesPropsPath(input.project.lockfile.path) ?? ""));
   if (!relativePath) {
     return ok(undefined);
   }
@@ -54761,7 +55353,7 @@ function resolveWorkspaceRootPath(input) {
   if (!input.workspaceRootPath) {
     return ok(undefined);
   }
-  const resolvedPath = path81.resolve(input.cwd, input.workspaceRootPath);
+  const resolvedPath = path82.resolve(input.cwd, input.workspaceRootPath);
   try {
     const realPath = realpathSync7(resolvedPath);
     if (!statSync34(realPath).isDirectory()) {
@@ -54773,7 +55365,7 @@ function resolveWorkspaceRootPath(input) {
   }
 }
 function workspaceRootInvalidError2(workspaceRootPath) {
-  const absolute = path81.isAbsolute(workspaceRootPath);
+  const absolute = path82.isAbsolute(workspaceRootPath);
   return createError({
     code: "INVALID_ARGUMENT",
     category: "invalid_input",
@@ -54791,7 +55383,7 @@ function isCliEntrypoint(metaUrl, argvPath) {
   try {
     return realpathSync7(fileURLToPath4(metaUrl)) === realpathSync7(argvPath);
   } catch {
-    return path81.resolve(fileURLToPath4(metaUrl)) === path81.resolve(argvPath);
+    return path82.resolve(fileURLToPath4(metaUrl)) === path82.resolve(argvPath);
   }
 }
 function isFile5(pathname) {

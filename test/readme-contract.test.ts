@@ -4,13 +4,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const packageVersion = readPackageVersion();
 
 describe("README report contract", () => {
   test("documents the beginner HTML report flow", () => {
     const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
 
     expect(readme).toContain("Beginner HTML report flow on Windows PowerShell");
-    expect(readme).toContain("npm install -g ohrisk@1.7.0");
+    expect(readme).toContain(`npm install -g ohrisk@${packageVersion}`);
     expect(readme).toContain("ohrisk scan --html --output reports\\ohrisk-report.html --open");
     expect(readme).toContain("The scan prints live terminal progress");
     expect(readme).toContain("plain append-only progress lines");
@@ -90,3 +91,13 @@ describe("README report contract", () => {
     expect(normalized).toContain("supported by `scan`, not `ci`, `diff`, or the composite GitHub Action");
   });
 });
+
+function readPackageVersion(): string {
+  const packageJson = JSON.parse(
+    readFileSync(path.join(repoRoot, "package.json"), "utf8")
+  ) as { version?: unknown };
+  if (typeof packageJson.version !== "string") {
+    throw new Error("package.json must contain a string version.");
+  }
+  return packageJson.version;
+}

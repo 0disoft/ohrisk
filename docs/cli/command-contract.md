@@ -95,7 +95,7 @@ truncation rules.
 Policy and waiver files in the cloned repository are untrusted and are not auto-loaded. The
 directory where Ohrisk was invoked remains the configuration, waiver, cache, and report-output
 root. Local package evidence from the temporary checkout is disabled; lockfile-embedded evidence
-and the normal bounded remote package-evidence pipeline remain available. Shareable reports and
+and the bounded npm/PyPI remote package-evidence pipeline remain available. Shareable reports and
 errors redact the temporary checkout path.
 
 ## Multiple Lockfiles

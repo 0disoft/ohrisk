@@ -1,6 +1,6 @@
 # Cache and Registry Configuration
 
-Ohrisk stores fetched npm registry metadata and package artifacts in a shared,
+Ohrisk stores fetched npm registry metadata, PyPI release metadata, and package artifacts in a shared,
 content-addressed cache. The URL index contains only a SHA-256 URL key, object
 digest, byte size, access timestamps, expiration metadata, and optional HTTP
 validators. Raw URLs, credentials, authorization headers, and token values are

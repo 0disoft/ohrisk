@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.7.0
+npm install -g ohrisk@1.8.0
 cd your-project
 ohrisk scan
 ```
@@ -190,6 +190,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - local Cargo registry source and `vendor/<crate>` package evidence before unavailable fallback
 - local Go module cache, `vendor/<module>`, and project-root-contained local `replace` path evidence before unavailable fallback for `go.work` and `go.mod` scans
 - Python `.venv` and `venv` `*.dist-info/METADATA` package evidence, plus project-root-contained local source metadata and license files for `uv.lock`, `pylock.toml`, `requirements.txt`, `Pipfile.lock`, and `pdm.lock` local source entries, before unavailable fallback
+- exact-version PyPI release evidence for locked Python packages, using SHA-256-verified source distributions or wheels plus identity-checked `PKG-INFO`, `METADATA`, and license files
 - local Maven `.m2/repository` POMs for Maven parent/BOM version management and package license evidence before unavailable fallback for Gradle lockfile and Maven `pom.xml` coordinates
 - Bazel module license evidence uses local Bazel registry `local_path` sources from file-based registries when present; remote Bazel registry metadata fetching is not scanned yet
 - local NuGet package cache `.nuspec` evidence before unavailable fallback for `packages.lock.json`, `obj/project.assets.json`, `packages.config`, and `*.csproj` packages
@@ -216,6 +217,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - `ohrisk cache status|prune|clear` commands for cache inspection, age/size cleanup, and bounded removal
 - lockfile integrity verification for local and remote package tarballs; remote tarballs without integrity are reported as unavailable instead of being trusted as license evidence
 - npm registry metadata lookup when the lockfile does not include a direct tarball URL
+- PyPI exact-release metadata lookup when a locked Python package does not include a direct distribution URL
 - gzipped package tarball evidence
 - `package.json` license fields
 - Cargo `Cargo.toml` package `license` fields
@@ -273,7 +275,7 @@ Carthage parent graph reconstruction, remote Swift package checkout fetching,
 Carthage remote checkout or binary framework license fetching, CocoaPods remote podspec or source
 fetching, Mix and Rebar3 dependency graph reconstruction, Rebar3 git/path deps, Rebar3 plugin locks, remote Hex.pm artifact fetching,
 Composer plugin/platform repository resolution, remote
-crates.io, Go proxy, PyPI, Maven, NuGet, pub.dev, RubyGems, or Packagist artifact
+crates.io, Go proxy, Maven, NuGet, pub.dev, RubyGems, or Packagist artifact
 fetching are not part of this slice yet.
 
 ## Usage
@@ -346,7 +348,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.7.0
+npm install -g ohrisk@1.8.0
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open

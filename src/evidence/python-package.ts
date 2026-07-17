@@ -17,12 +17,13 @@ const PYTHON_METADATA_MAX_BYTES = 1024 * 1024;
 const PYTHON_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 const PYTHON_LICENSE_FILE_LIMIT = 50;
 
-type PythonMetadata = {
+export type PythonMetadata = {
   name?: string;
   version?: string;
   licenseExpression?: string;
   license?: string;
   classifiers: string[];
+  licenseFiles: string[];
 };
 
 type PythonDistInfo = {
@@ -235,15 +236,20 @@ function readPythonMetadata(input: {
     );
   }
 
-  const headers = parseEmailStyleHeaders(text.value);
+  return ok(parsePythonMetadataText(text.value));
+}
 
-  return ok(omitUndefined({
+export function parsePythonMetadataText(text: string): PythonMetadata {
+  const headers = parseEmailStyleHeaders(text);
+
+  return omitUndefined({
     name: firstHeader(headers, "Name"),
     version: firstHeader(headers, "Version"),
     licenseExpression: firstHeader(headers, "License-Expression"),
     license: firstHeader(headers, "License"),
-    classifiers: headers.get("Classifier") ?? []
-  }));
+    classifiers: headers.get("Classifier") ?? [],
+    licenseFiles: headers.get("License-File") ?? []
+  });
 }
 
 function parseEmailStyleHeaders(text: string): Map<string, string[]> {
@@ -284,13 +290,9 @@ function firstHeader(headers: Map<string, string[]>, key: string): string | unde
   return value && value.length > 0 ? value : undefined;
 }
 
-function readPythonMetadataLicense(metadata: PythonMetadata): string | undefined {
+export function readPythonMetadataLicense(metadata: PythonMetadata): string | undefined {
   if (metadata.licenseExpression) {
     return metadata.licenseExpression;
-  }
-
-  if (metadata.license && metadata.license.length <= 200 && !metadata.license.includes("\n")) {
-    return metadata.license;
   }
 
   const classifierLicenses = metadata.classifiers
@@ -301,7 +303,21 @@ function readPythonMetadataLicense(metadata: PythonMetadata): string | undefined
     return [...new Set(classifierLicenses)].join(" OR ");
   }
 
+  if (
+    metadata.license
+    && metadata.license.length <= 200
+    && !metadata.license.includes("\n")
+    && !isAbsentPythonLicense(metadata.license)
+  ) {
+    return metadata.license;
+  }
+
   return undefined;
+}
+
+function isAbsentPythonLicense(value: string): boolean {
+  const normalized = value.trim().toUpperCase();
+  return normalized === "" || normalized === "UNKNOWN" || normalized === "NOASSERTION";
 }
 
 function readPythonEvidenceFiles(input: {
@@ -367,7 +383,7 @@ function evidenceFileCandidates(dir: string, relativePrefix: string): Array<{
   }
 }
 
-function normalizePythonPackageName(name: string): string {
+export function normalizePythonPackageName(name: string): string {
   return name.toLowerCase().replace(/[-_.]+/g, "-");
 }
 

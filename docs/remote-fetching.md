@@ -14,6 +14,10 @@ Remote fetching is limited to these explicit adapters:
 - direct HTTPS package tarball URLs recorded in supported npm-family lockfiles;
 - npm-compatible registry metadata lookup for an exact locked package version when no direct tarball URL is available;
 - the tarball URL returned by that exact-version registry metadata response.
+- PyPI release metadata lookup for an exact locked Python package version;
+- the SHA-256-identified source distribution or wheel returned by that exact
+  PyPI release response, including bounded identity-checked package metadata and
+  license files.
 
 The repository adapter accepts only `github.com` owner/repository URLs, disables
 credential prompts, submodule fetching, and symlink checkout, rejects non-portable or
@@ -40,7 +44,7 @@ traversal before resolving an explicit path. This selects existing repository
 data only and does not widen the network or credential boundary.
 
 Other ecosystems use local caches, vendored source, lockfile-embedded evidence,
-or local package metadata. A new remote ecosystem adapter is not enabled until
+or local package metadata. Another remote ecosystem adapter is not enabled until
 it implements the same target, integrity, cache, credential, and resource
 boundary.
 
@@ -103,10 +107,20 @@ decompression limits, archive entry limits, and evidence-worker concurrency.
 The CLI exposes bounded `--timeout` and `--jobs` values; policy cannot expand
 hard safety ceilings.
 
-When a remote package artifact has supported lockfile integrity metadata,
-Ohrisk verifies downloaded bytes before trusting tarball evidence. Without
-supported integrity metadata, Ohrisk does not fetch or trust that tarball and
-records unavailable evidence with a warning.
+When a remote package artifact has supported lockfile integrity metadata, or an
+exact PyPI release response supplies its SHA-256 digest, Ohrisk verifies the
+downloaded bytes before trusting package evidence. Without supported integrity
+metadata, Ohrisk does not fetch or trust the artifact and records unavailable
+evidence with a warning.
+
+PyPI uses fixed public `pypi.org` release metadata and
+`files.pythonhosted.org` distribution URLs. It never receives npm registry
+credentials. A selected distribution is accepted only after its filename,
+archive format, SHA-256 digest, embedded package name, and embedded version are
+validated. Non-yanked wheels are preferred, then non-yanked source
+distributions, keeping the archive surface smaller when equivalent wheel
+metadata is available. Yanked files are considered only for an exact pinned
+release and are reported with a warning.
 
 ## Failure Semantics
 

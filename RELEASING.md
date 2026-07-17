@@ -36,8 +36,8 @@ file's example tag when needed, push `main`, then push a version tag matching
 `package.json`:
 
 ```bash
-git tag v1.7.0
-git push origin v1.7.0
+git tag v1.8.0
+git push origin v1.8.0
 ```
 
 The publish workflow verifies that the tag version matches `package.json`, runs
@@ -55,9 +55,9 @@ locally after confirming npm authentication:
 ```bash
 npm whoami
 npm publish --access public --provenance
-npm view ohrisk@1.7.0 version
-npm view ohrisk@1.7.0 dist.tarball
-npm view ohrisk@1.7.0 dist.integrity
+npm view ohrisk@1.8.0 version
+npm view ohrisk@1.8.0 dist.tarball
+npm view ohrisk@1.8.0 dist.integrity
 ```
 
 After manual recovery, create or update the matching GitHub Release using the
