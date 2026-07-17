@@ -50,6 +50,8 @@ PS C:\Users\cherr\Downloads> ohrisk scan --html https://github.com/0disoft/laqu.
 제한을 넘는 tree는 거부한다. submodule 내용은 가져오지 않으며 기본
 `--submodules ignore` 모드에서는 gitlink를 건너뛰고 모든 보고서에 불완전한 검사
 범위와 경로를 기록한다. `--submodules reject`를 사용하면 첫 submodule에서 실패한다.
+루트에 지원 입력이 없는 저장소는 `--lockfile docs/requirements.txt`처럼 안전한
+저장소 상대 경로로 중첩 입력을 선택할 수 있다. 절대 경로와 상위 경로 이탈은 거부한다.
 원격 스캔에는 `PATH`에서 실행 가능한 Git이 필요하다.
 임시 shallow clone은 끝나면 삭제되고, 실행 폴더의
 policy·waiver·cache·report output만 신뢰한다. 이 입력은 `scan` 전용이며 `ci`,

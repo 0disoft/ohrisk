@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 341ef44926b822e713c3dff4c9898c696016bad9de31d7dc168462be15c05b0a
+// ohrisk-action-source-sha256: 51b822a1d656d49e70ad77a281dc0b5f1ec53f7c6eeb026423e1573edd9c6a5c
 // ohrisk-action-build-platform: win32
 import { createRequire } from "node:module";
 var __create = Object.create;
@@ -17671,8 +17671,16 @@ function parseScanLikeArgs(argv, kind) {
   if (repository && archivePath) {
     return repositoryConflict("--archive", kind);
   }
-  if (repository && lockfilePath) {
-    return repositoryConflict("--lockfile", kind);
+  if (repository && lockfilePath && !isSafeRepositoryRelativePath(lockfilePath)) {
+    return err(createError({
+      code: "INVALID_ARGUMENT",
+      category: "invalid_input",
+      message: "Remote repository --lockfile must be a safe repository-relative path.",
+      details: {
+        option: "--lockfile",
+        supportedOptions: supportedOptionsFor(kind)
+      }
+    }));
   }
   if (repository && workspaceRootPath) {
     return repositoryConflict("--workspace-root", kind);
@@ -17886,6 +17894,11 @@ function isFailOnSeverity(value) {
 }
 function isRepositorySubmoduleMode(value) {
   return value === "ignore" || value === "reject";
+}
+function isSafeRepositoryRelativePath(value) {
+  const normalized = value.replace(/\\/g, "/");
+  const segments = normalized.split("/");
+  return normalized !== "" && !normalized.startsWith("/") && !/^[A-Za-z]:/.test(normalized) && !normalized.includes("\x00") && segments.every((segment) => segment !== "" && segment !== "." && segment !== "..");
 }
 function isHelpFlag(value) {
   return value === "--help" || value === "-h";

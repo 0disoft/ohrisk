@@ -5,6 +5,8 @@
 - Remote GitHub scans now skip unmaterialized Git submodules by default instead
   of rejecting the whole repository, while `--submodules reject` preserves the
   previous strict behavior.
+- Remote scans can select a safe repository-relative nested input with
+  `--lockfile`, including `docs/requirements.txt` in Mbed TLS.
 - Added bounded skipped-submodule provenance and incomplete-coverage guidance to
   terminal, JSON, Markdown, HTML, SARIF, and CycloneDX reports.
 - Advanced the closed report contract to schema 3.2.0 for optional remote

@@ -167,6 +167,49 @@ describe("main", () => {
     }
   });
 
+  test("scans an explicitly selected nested lockfile inside a remote repository", async () => {
+    const invocationRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-remote-lockfile-invocation-"));
+    const temporaryRepository = mkdtempSync(path.join(tmpdir(), "ohrisk-remote-lockfile-checkout-"));
+
+    try {
+      const docsRoot = path.join(temporaryRepository, "docs");
+      mkdirSync(docsRoot, { recursive: true });
+      writeFileSync(path.join(docsRoot, "package.json"), JSON.stringify({
+        name: "remote-docs",
+        version: "1.0.0"
+      }));
+
+      const { io, stdout } = createTestIO(invocationRoot);
+      io.cloneRepository = async (_repository, options) => {
+        expect(options).toEqual({ submodules: "ignore" });
+        return ok({
+          rootDir: temporaryRepository,
+          submodules: { total: 0, paths: [], pathsTruncated: false },
+          cleanup: () => undefined
+        });
+      };
+
+      const exitCode = await main([
+        "scan",
+        "--json",
+        "--lockfile",
+        "docs/package.json",
+        "https://github.com/Mbed-TLS/mbedtls.git"
+      ], io);
+
+      expect(exitCode).toBe(0);
+      const report = JSON.parse(stdout.join("\n")) as {
+        lockfile: { kind: string; path: string };
+        repository: { owner: string; name: string };
+      };
+      expect(report.lockfile).toEqual({ kind: "package-json", path: "package.json" });
+      expect(report.repository).toMatchObject({ owner: "Mbed-TLS", name: "mbedtls" });
+    } finally {
+      rmSync(invocationRoot, { recursive: true, force: true });
+      rmSync(temporaryRepository, { recursive: true, force: true });
+    }
+  });
+
   test("prints help text", async () => {
     const { io, stdout, stderr } = createTestIO(fixturesDir);
     const exitCode = await main(["help"], io);

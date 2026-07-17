@@ -22,7 +22,7 @@ development, tests, and packaging.
 
 - `--lockfile <path>` selects one supported input; `--all` discovers and merges all supported lockfiles at the selected project root. They are mutually exclusive for scan, CI, and diff.
 - `scan|ci --archive <path>` scans a ZIP, TAR, TAR.GZ, or TGZ as a read-only in-memory virtual project. It is mutually exclusive with `--lockfile` and `--workspace-root`, may be combined with `--all`, and is not supported by `diff`.
-- `scan [repository-url]` and `scan --repo <url>` scan one public GitHub HTTPS repository through a bounded temporary shallow clone. Remote repository input is mutually exclusive with `--archive`, `--lockfile`, `--workspace-root`, and `--offline`, and is not supported by `ci`, `diff`, or the GitHub Action input contract.
+- `scan [repository-url]` and `scan --repo <url>` scan one public GitHub HTTPS repository through a bounded temporary shallow clone. Remote repository input may combine with a safe repository-relative `--lockfile`, is mutually exclusive with `--archive`, `--workspace-root`, and `--offline`, and is not supported by `ci`, `diff`, or the GitHub Action input contract.
 - `--policy <path>` selects a workspace-contained policy file; otherwise `.ohrisk.yml` is loaded when present.
 - `explain --policy <path>` accepts `--workspace-root <path>` for the inheritance boundary. It reports policy sources as relative paths and never applies package rules because explain has no package identity.
 - `--profile saas|distributed-app` selects the shipping model, with organization policy overrides applied afterward.
@@ -69,6 +69,12 @@ Private repositories and alternate Git hosts or protocols are not supported. Ohr
 from `PATH` without a shell or interactive credential prompt, uses a depth-one single-branch clone, disables
 submodule recursion and symlink checkout, inspects the Git tree before checkout, and removes its
 owned temporary directory after success or failure.
+
+A repository with no supported input at its root may select a nested input with
+`--lockfile <repository-relative-path>`. For example, Mbed TLS documentation
+dependencies can be scanned with `--lockfile docs/requirements.txt`. Absolute,
+empty-segment, dot-segment, and traversal paths are rejected before resolution
+inside the validated temporary checkout.
 
 The pre-checkout tree allows at most 50,000 regular files, 50 MiB per file, 256 MiB total file
 content, 4,096 UTF-8 bytes and 64 segments per path, and 255 UTF-8 bytes per segment. Symlinks,

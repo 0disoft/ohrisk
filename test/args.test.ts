@@ -72,14 +72,30 @@ describe("parseArgs", () => {
     expect(json.ok).toBe(true);
     if (!json.ok) throw new Error(json.error.message);
     expect("outputPath" in json.value).toBe(false);
+
+    const nestedLockfile = parseArgs([
+      "scan",
+      "--lockfile",
+      "docs/requirements.txt",
+      "https://github.com/Mbed-TLS/mbedtls.git"
+    ]);
+    expect(nestedLockfile.ok).toBe(true);
+    if (!nestedLockfile.ok) throw new Error(nestedLockfile.error.message);
+    expect(nestedLockfile.value).toMatchObject({
+      kind: "scan",
+      lockfilePath: "docs/requirements.txt",
+      submoduleMode: "ignore"
+    });
   });
 
   test("rejects remote repository conflicts and unsupported CI input", () => {
     for (const argv of [
       ["scan", "https://github.com/0disoft/laqu.git", "--archive", "source.zip"],
-      ["scan", "https://github.com/0disoft/laqu.git", "--lockfile", "package-lock.json"],
       ["scan", "https://github.com/0disoft/laqu.git", "--workspace-root", "."],
       ["scan", "https://github.com/0disoft/laqu.git", "--offline"],
+      ["scan", "https://github.com/0disoft/laqu.git", "--lockfile", "../package-lock.json"],
+      ["scan", "https://github.com/0disoft/laqu.git", "--lockfile", "C:\\package-lock.json"],
+      ["scan", "https://github.com/0disoft/laqu.git", "--lockfile", "C:package-lock.json"],
       ["scan", "--repo", "https://github.com/0disoft/laqu.git", "https://github.com/0disoft/other.git"],
       ["ci", "--repo", "https://github.com/0disoft/laqu.git"]
     ]) {

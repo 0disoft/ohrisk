@@ -818,8 +818,18 @@ function parseScanLikeArgs(
     return repositoryConflict("--archive", kind);
   }
 
-  if (repository && lockfilePath) {
-    return repositoryConflict("--lockfile", kind);
+  if (repository && lockfilePath && !isSafeRepositoryRelativePath(lockfilePath)) {
+    return err(
+      createError({
+        code: "INVALID_ARGUMENT",
+        category: "invalid_input",
+        message: "Remote repository --lockfile must be a safe repository-relative path.",
+        details: {
+          option: "--lockfile",
+          supportedOptions: supportedOptionsFor(kind)
+        }
+      })
+    );
   }
 
   if (repository && workspaceRootPath) {
@@ -1092,6 +1102,16 @@ function isFailOnSeverity(value: string): value is RiskSeverity {
 
 function isRepositorySubmoduleMode(value: string): value is RepositorySubmoduleMode {
   return value === "ignore" || value === "reject";
+}
+
+function isSafeRepositoryRelativePath(value: string): boolean {
+  const normalized = value.replace(/\\/g, "/");
+  const segments = normalized.split("/");
+  return normalized !== ""
+    && !normalized.startsWith("/")
+    && !/^[A-Za-z]:/.test(normalized)
+    && !normalized.includes("\0")
+    && segments.every((segment) => segment !== "" && segment !== "." && segment !== "..");
 }
 
 function isHelpFlag(value: string | undefined): boolean {

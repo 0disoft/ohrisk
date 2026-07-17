@@ -21,7 +21,8 @@ checkout afterward. Remote HTML scans default their report file to the host
 invocation directory. This input is CLI-only and is not part of `ci`, `diff`, or
 the composite GitHub Action contract. Submodule gitlinks are skipped by default
 with incomplete-coverage metadata in every report; strict rejection is available
-through `--submodules reject`.
+through `--submodules reject`. A safe repository-relative `--lockfile` may select
+a nested supported dependency input when the repository root has none.
 
 ## Commands
 

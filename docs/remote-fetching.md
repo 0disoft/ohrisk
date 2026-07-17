@@ -29,6 +29,12 @@ coverage guidance. `--submodules reject` restores strict failure on the first
 gitlink. Recursive fetching is intentionally unsupported because it would widen
 the allowed repository, host, credential, recursion, storage, and timeout scope.
 
+Remote scans may select a nested supported dependency input with
+`--lockfile <repository-relative-path>`. The adapter rejects absolute paths,
+empty or dot segments, and traversal before resolving the path in the validated
+temporary checkout. This selects existing repository data only and does not
+widen the network or credential boundary.
+
 Other ecosystems use local caches, vendored source, lockfile-embedded evidence,
 or local package metadata. A new remote ecosystem adapter is not enabled until
 it implements the same target, integrity, cache, credential, and resource
