@@ -77,6 +77,10 @@ import { renderScanReport, type ScanReportInput } from "../report/scan-report";
 import { openReportFile, type ReportOpener } from "../report/open-report";
 import { writeReportFile, type ReportWriter } from "../report/write-output";
 import {
+  cloneGitHubRepository,
+  type RepositoryCloner
+} from "../repository/github-repository";
+import {
   discoverProject,
   projectLockfiles,
   projectLockfilesFromRelativePaths,
@@ -97,6 +101,7 @@ export type CliIO = {
   listRefFiles?: GitRefFileLister;
   writeReport?: ReportWriter;
   openReport?: ReportOpener;
+  cloneRepository?: RepositoryCloner;
 };
 
 type ScanClock = () => number;
@@ -498,6 +503,50 @@ async function runScan(
   command: Extract<CliCommand, { kind: "scan" | "ci" }>,
   io: CliIO
 ): Promise<number> {
+  const repository = command.kind === "scan" ? command.repository : undefined;
+  const reportProgress = command.outputPath ? createScanProgressReporter(io) : undefined;
+  reportProgress?.(0, command.kind === "ci" ? "Starting CI scan..." : "Starting scan...");
+
+  if (!repository) {
+    return runScanAt({ command, io, scanCwd: io.cwd, reportProgress });
+  }
+
+  reportProgress?.(0, `Cloning ${repository.owner}/${repository.name}...`);
+  const cloner = io.cloneRepository ?? cloneGitHubRepository;
+  const cloned = await cloner(repository);
+  if (isErr(cloned)) {
+    await closeScanProgressReporter(reportProgress, "failure");
+    io.stderr(formatError(cloned.error));
+    return exitCodeForError(cloned.error);
+  }
+
+  try {
+    return await runScanAt({
+      command,
+      io,
+      scanCwd: cloned.value.rootDir,
+      configurationRoot: io.cwd,
+      runtimeRoot: io.cwd,
+      allowLocalProjectEvidence: false,
+      reportProgress,
+      temporaryRoot: cloned.value.rootDir
+    });
+  } finally {
+    cloned.value.cleanup();
+  }
+}
+
+async function runScanAt(input: {
+  command: Extract<CliCommand, { kind: "scan" | "ci" }>;
+  io: CliIO;
+  scanCwd: string;
+  configurationRoot?: string;
+  runtimeRoot?: string;
+  allowLocalProjectEvidence?: boolean;
+  reportProgress?: ScanProgressReporter;
+  temporaryRoot?: string;
+}): Promise<number> {
+  const { command, io, reportProgress } = input;
   const now = io.now ?? Date.now;
   const workspaceRoot = resolveWorkspaceRootPath({
     cwd: io.cwd,
@@ -508,11 +557,13 @@ async function runScan(
     return exitCodeForError(workspaceRoot.error);
   }
 
-  const reportProgress = command.outputPath ? createScanProgressReporter(io) : undefined;
-  reportProgress?.(0, command.kind === "ci" ? "Starting CI scan..." : "Starting scan...");
-
   const scanned = await scanProject({
-    cwd: io.cwd,
+    cwd: input.scanCwd,
+    ...(input.configurationRoot ? { configurationRoot: input.configurationRoot } : {}),
+    ...(input.runtimeRoot ? { runtimeRoot: input.runtimeRoot } : {}),
+    ...(input.allowLocalProjectEvidence !== undefined
+      ? { allowLocalProjectEvidence: input.allowLocalProjectEvidence }
+      : {}),
     ...(command.lockfilePath ? { lockfilePath: command.lockfilePath } : {}),
     ...(command.archivePath ? { archivePath: command.archivePath } : {}),
     allLockfiles: command.allLockfiles ?? false,
@@ -535,8 +586,11 @@ async function runScan(
 
   if (isErr(scanned)) {
     await closeScanProgressReporter(reportProgress, "failure");
-    io.stderr(formatError(scanned.error));
-    return exitCodeForError(scanned.error);
+    const scanError = input.temporaryRoot
+      ? redactTemporaryPath(scanned.error, input.temporaryRoot)
+      : scanned.error;
+    io.stderr(formatError(scanError));
+    return exitCodeForError(scanError);
   }
 
   const reportInput: ScanReportInput = {
@@ -616,6 +670,9 @@ function hasWaiverDrift(input: {
 
 async function scanProject(input: {
   cwd: string;
+  configurationRoot?: string;
+  runtimeRoot?: string;
+  allowLocalProjectEvidence?: boolean;
   lockfilePath?: string;
   archivePath?: string;
   allLockfiles: boolean;
@@ -657,7 +714,8 @@ async function scanProject(input: {
   }
 
   const policy = readPolicyConfig({
-    projectRoot: loaded.value.project.source ? input.cwd : loaded.value.project.rootDir,
+    projectRoot: input.configurationRoot
+      ?? (loaded.value.project.source ? input.cwd : loaded.value.project.rootDir),
     ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
     ...(input.policyPath ? { policyPath: input.policyPath } : {})
   });
@@ -666,7 +724,7 @@ async function scanProject(input: {
   }
 
   const evidenceRuntime = resolveEvidenceRuntimeOptions({
-    cwd: input.cwd,
+    cwd: input.runtimeRoot ?? input.cwd,
     projectRoot: loaded.value.project.rootDir,
     policy: policy.value,
     offline: input.offline,
@@ -689,7 +747,14 @@ async function scanProject(input: {
     evidenceRuntime: evidenceRuntime.value,
     applyWaivers: input.applyWaivers,
     now: input.now,
-    ...(loaded.value.project.source ? { configurationRoot: input.cwd } : {}),
+    ...(input.configurationRoot
+      ? { configurationRoot: input.configurationRoot }
+      : loaded.value.project.source
+        ? { configurationRoot: input.cwd }
+        : {}),
+    ...(input.allowLocalProjectEvidence !== undefined
+      ? { allowLocalProjectEvidence: input.allowLocalProjectEvidence }
+      : {}),
     ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
     ...(input.progress ? { progress: input.progress } : {})
   });
@@ -777,6 +842,7 @@ async function evaluateProjectScan(input: {
   project: ProjectInput;
   scanGraph: DependencyGraph;
   configurationRoot?: string;
+  allowLocalProjectEvidence?: boolean;
   profile: Extract<CliCommand, { kind: "scan" | "ci" | "diff" }>["profile"];
   policy: ResolvedPolicyConfig;
   evidenceRuntime: EvidenceRuntimeOptions;
@@ -799,7 +865,11 @@ async function evaluateProjectScan(input: {
   const evidence = await collectEvidenceForGraph({
     graph: input.scanGraph,
     projectRoot: input.project.rootDir,
-    ...(!input.project.source ? {} : { allowLocalProjectEvidence: false }),
+    ...(input.allowLocalProjectEvidence !== undefined
+      ? { allowLocalProjectEvidence: input.allowLocalProjectEvidence }
+      : input.project.source
+        ? { allowLocalProjectEvidence: false }
+        : {}),
     evidenceRuntime: input.evidenceRuntime,
     ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
     ...(evidenceProgress ? { progress: evidenceProgress } : {})
@@ -2166,7 +2236,7 @@ function renderTopLevelHelp(): string {
     "Ohrisk",
     "",
     "Usage:",
-    "  ohrisk scan [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
+    "  ohrisk scan [repository-url|--repo <url>] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
     "  ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
     "  ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
@@ -2187,6 +2257,7 @@ function renderTopLevelHelp(): string {
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
     "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
+    "  --repo <url>           Scan a public GitHub HTTPS repository; requires Git on PATH.",
     "  --all                  Discover and merge every supported lockfile in the project root.",
     "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
     "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
@@ -2202,7 +2273,7 @@ function renderTopLevelHelp(): string {
     "  --json                 Print machine-readable output.",
     "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
     "  --markdown             Print a Markdown report for PRs or release notes.",
-    "  --html                 Print a browser-friendly HTML report.",
+    "  --html                 Render HTML; remote scans save it in the current directory.",
     "  --language <en|ko|es|fr|zh|hi|ja|id|tr|ru|de> Set the HTML report language. Defaults to en.",
     "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
     "  --output <file>        Write report output to a project-relative file instead of stdout.",
@@ -2219,12 +2290,13 @@ function renderScanHelp(): string {
     "Ohrisk scan",
     "",
     "Usage:",
-    "  ohrisk scan [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
+    "  ohrisk scan [repository-url|--repo <url>] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
     "  --lockfile <path>      Use a specific supported lockfile path.",
     "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
+    "  --repo <url>           Scan a public GitHub HTTPS repository; requires Git on PATH.",
     "  --all                  Discover and merge every supported lockfile in the project root.",
     "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
     "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
@@ -2240,7 +2312,7 @@ function renderScanHelp(): string {
     "  --json                 Print machine-readable output.",
     "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
     "  --markdown             Print a Markdown report for PRs or release notes.",
-    "  --html                 Print a browser-friendly HTML report.",
+    "  --html                 Render HTML; remote scans default to <repository>-ohrisk.html.",
     "  --language <en|ko|es|fr|zh|hi|ja|id|tr|ru|de> Set the HTML report language. Defaults to en.",
     "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
     "  --output <file>        Write report output to a project-relative file instead of stdout.",
@@ -2428,6 +2500,43 @@ function formatReportOpenWarning(error: OhriskError): string {
       ? ` Cause: ${error.details.cause}`
       : "";
   return `Could not open report${opener}: ${error.message}${cause}`;
+}
+
+function redactTemporaryPath(error: OhriskError, temporaryRoot: string): OhriskError {
+  return {
+    ...error,
+    message: redactTemporaryPathText(error.message, temporaryRoot),
+    ...(error.details
+      ? { details: redactTemporaryPathValue(error.details, temporaryRoot) as Record<string, unknown> }
+      : {})
+  };
+}
+
+function redactTemporaryPathValue(value: unknown, temporaryRoot: string): unknown {
+  if (typeof value === "string") {
+    return redactTemporaryPathText(value, temporaryRoot);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactTemporaryPathValue(item, temporaryRoot));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, redactTemporaryPathValue(item, temporaryRoot)])
+    );
+  }
+  return value;
+}
+
+function redactTemporaryPathText(value: string, temporaryRoot: string): string {
+  const variants = [
+    temporaryRoot,
+    temporaryRoot.replace(/\\/g, "/"),
+    temporaryRoot.replace(/\//g, "\\")
+  ];
+  return variants.reduce(
+    (redacted, variant) => redacted.split(variant).join("<temporary repository>"),
+    value
+  );
 }
 
 function createScanProgressReporter(io: CliIO): ScanProgressReporter {

@@ -120,6 +120,7 @@ describe("Ohrisk GitHub Action", () => {
     expect(cliArgsSource).toContain('let failOn: RiskSeverity = "high"');
     expect(action.inputs?.all?.default).toBe("false");
     expect(action.inputs?.offline?.default).toBe("false");
+    expect(action.inputs?.repo).toBeUndefined();
     expect(action.inputs?.format?.default).toBe("text");
     expect(action.outputs?.["report-path"]?.value).toBe(
       "${{ steps.run.outputs.report-path }}"

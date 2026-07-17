@@ -9,6 +9,10 @@ import {
   supportedReportLanguages,
   type ReportLanguage
 } from "../report/language";
+import {
+  parseGitHubRepositoryUrl,
+  type GitHubRepository
+} from "../repository/github-repository";
 import { err, isErr, ok, type Result } from "../shared/result";
 
 const FAIL_ON_SEVERITIES: RiskSeverity[] = ["high", "unknown", "review", "low"];
@@ -42,6 +46,7 @@ export type CliCommand =
       noWaivers: boolean;
       lockfilePath?: string;
       archivePath?: string;
+      repository?: GitHubRepository;
       allLockfiles?: boolean;
       policyPath?: string;
       offline?: boolean;
@@ -378,6 +383,7 @@ function parseScanLikeArgs(
   let noWaivers = false;
   let lockfilePath: string | undefined;
   let archivePath: string | undefined;
+  let repository: GitHubRepository | undefined;
   let allLockfiles = false;
   let policyPath: string | undefined;
   let offline = false;
@@ -553,6 +559,32 @@ function parseScanLikeArgs(
         index += 1;
         break;
       }
+      case "--repo": {
+        if (kind !== "scan") {
+          return err(
+            createError({
+              code: "INVALID_ARGUMENT",
+              category: "invalid_input",
+              message: "--repo is only supported by the scan command.",
+              details: { supportedOptions: supportedOptionsFor(kind) }
+            })
+          );
+        }
+        const value = readRequiredOptionValue(argv, index, "--repo");
+        if (isErr(value)) {
+          return value;
+        }
+        if (repository) {
+          return multipleRepositoryInputs(kind);
+        }
+        const parsedRepository = parseGitHubRepositoryUrl(value.value);
+        if (isErr(parsedRepository)) {
+          return parsedRepository;
+        }
+        repository = parsedRepository.value;
+        index += 1;
+        break;
+      }
       case "--workspace-root": {
         const value = readRequiredOptionValue(argv, index, "--workspace-root");
         if (isErr(value)) {
@@ -696,6 +728,17 @@ function parseScanLikeArgs(
       case "-h":
         return ok({ kind: "help", target: kind });
       default:
+        if (kind === "scan" && !arg.startsWith("-")) {
+          if (repository) {
+            return multipleRepositoryInputs(kind);
+          }
+          const parsedRepository = parseGitHubRepositoryUrl(arg);
+          if (isErr(parsedRepository)) {
+            return parsedRepository;
+          }
+          repository = parsedRepository.value;
+          break;
+        }
         return err(
           createError({
             code: "INVALID_ARGUMENT",
@@ -742,6 +785,22 @@ function parseScanLikeArgs(
     );
   }
 
+  if (repository && archivePath) {
+    return repositoryConflict("--archive", kind);
+  }
+
+  if (repository && lockfilePath) {
+    return repositoryConflict("--lockfile", kind);
+  }
+
+  if (repository && workspaceRootPath) {
+    return repositoryConflict("--workspace-root", kind);
+  }
+
+  if (repository && offline) {
+    return repositoryConflict("--offline", kind);
+  }
+
   if (kind === "ci" && noWaivers && strictWaivers) {
     return err(
       createError({
@@ -753,6 +812,10 @@ function parseScanLikeArgs(
         }
       })
     );
+  }
+
+  if (repository && html && !outputPath) {
+    outputPath = `${repository.name}-ohrisk.html`;
   }
 
   if (openReport && (!html || !outputPath)) {
@@ -824,6 +887,7 @@ function parseScanLikeArgs(
     noWaivers,
     ...(lockfilePath ? { lockfilePath } : {}),
     ...(archivePath ? { archivePath } : {}),
+    ...(repository ? { repository } : {}),
     ...(allLockfiles ? { allLockfiles: true } : {}),
     ...(policyPath ? { policyPath } : {}),
     ...(offline ? { offline: true } : {}),
@@ -838,6 +902,33 @@ function parseScanLikeArgs(
     ...(openReport ? { openReport } : {}),
     ...(reportLanguage !== DEFAULT_REPORT_LANGUAGE ? { reportLanguage } : {})
   });
+}
+
+function multipleRepositoryInputs(
+  kind: "scan" | "ci"
+): Result<CliCommand, OhriskError> {
+  return err(
+    createError({
+      code: "INVALID_ARGUMENT",
+      category: "invalid_input",
+      message: "Specify one repository URL, either positionally or with --repo.",
+      details: { supportedOptions: supportedOptionsFor(kind) }
+    })
+  );
+}
+
+function repositoryConflict(
+  option: string,
+  kind: "scan" | "ci"
+): Result<CliCommand, OhriskError> {
+  return err(
+    createError({
+      code: "INVALID_ARGUMENT",
+      category: "invalid_input",
+      message: `Remote repository input cannot be combined with ${option}.`,
+      details: { supportedOptions: supportedOptionsFor(kind) }
+    })
+  );
 }
 
 function invalidOptionValue(
@@ -991,7 +1082,9 @@ function supportedOptionsFor(kind: "scan" | "ci"): string[] {
     "--help",
     "-h"
   ];
-  return kind === "ci" ? [...common, "--fail-on", "--strict-waivers"] : common;
+  return kind === "ci"
+    ? [...common, "--fail-on", "--strict-waivers"]
+    : [...common, "--repo"];
 }
 
 function readRequiredOptionValue(

@@ -6,11 +6,21 @@ resulting evidence bounded and reproducible enough for a license-risk check.
 
 ## Current Scope
 
-Remote fetching is limited to npm package evidence:
+Remote fetching is limited to these explicit adapters:
+
+- public GitHub HTTPS repository input for the `scan` CLI command, materialized
+  through a bounded temporary shallow clone;
 
 - direct HTTPS package tarball URLs recorded in supported npm-family lockfiles;
 - npm-compatible registry metadata lookup for an exact locked package version when no direct tarball URL is available;
 - the tarball URL returned by that exact-version registry metadata response.
+
+The repository adapter accepts only `github.com` owner/repository URLs, disables
+credential prompts, submodules, and symlink checkout, rejects non-portable or
+oversized trees before checkout, caps temporary storage, applies a two-minute
+work budget, and removes its owned staging directory. It does not accept private
+repository credentials or arbitrary Git hosts. The host invocation directory,
+not the clone, owns policy, waivers, cache, and report output.
 
 Other ecosystems use local caches, vendored source, lockfile-embedded evidence,
 or local package metadata. A new remote ecosystem adapter is not enabled until

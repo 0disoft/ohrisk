@@ -10,7 +10,7 @@ describe("README report contract", () => {
     const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
 
     expect(readme).toContain("Beginner HTML report flow on Windows PowerShell");
-    expect(readme).toContain("npm install -g ohrisk@1.4.0");
+    expect(readme).toContain("npm install -g ohrisk@1.5.0");
     expect(readme).toContain("ohrisk scan --html --output reports\\ohrisk-report.html --open");
     expect(readme).toContain("The scan prints live terminal progress");
     expect(readme).toContain("plain append-only progress lines");
@@ -72,5 +72,18 @@ describe("README report contract", () => {
     expect(normalized).toContain("Policy and waiver files inside an archive are never auto-loaded");
     expect(readme).toContain("Encrypted or ZIP64 archives");
     expect(readme).toContain("exact limits");
+  });
+
+  test("documents bounded GitHub repository scanning and current-directory HTML output", () => {
+    const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
+    const normalized = readme.replace(/\s+/g, " ");
+
+    expect(readme).toContain("ohrisk scan --html https://github.com/0disoft/laqu.git");
+    expect(readme).toContain("ohrisk scan --repo https://github.com/0disoft/laqu.git --json");
+    expect(readme).toContain("laqu-ohrisk.html");
+    expect(readme).toContain("requires a Git executable available on `PATH`");
+    expect(normalized).toContain("Only public `https://github.com/<owner>/<repository>[.git]` URLs are accepted");
+    expect(normalized).toContain("checkout-local policy and waivers are never trusted");
+    expect(normalized).toContain("supported by `scan`, not `ci`, `diff`, or the composite GitHub Action");
   });
 });

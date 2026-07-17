@@ -14,6 +14,13 @@ read-only virtual project without disk extraction. Nested archives stay opaque,
 and policy or waiver files inside the untrusted archive are never auto-loaded;
 the host invocation directory remains the authority for both.
 
+`scan` may also accept one public GitHub HTTPS repository URL, materialize a
+bounded depth-one temporary checkout, scan it without trusting checkout-local
+policy, waivers, symlinks, submodules, or local package evidence, and remove the
+checkout afterward. Remote HTML scans default their report file to the host
+invocation directory. This input is CLI-only and is not part of `ci`, `diff`, or
+the composite GitHub Action contract.
+
 ## Commands
 
 - `ohrisk scan`: non-failing local scan and report generation.

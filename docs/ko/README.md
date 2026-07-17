@@ -35,6 +35,23 @@ bunx ohrisk scan
 ohrisk scan
 ```
 
+GitHub 공개 저장소는 따로 남겨둘 clone 없이 URL로 바로 스캔할 수 있다:
+
+```powershell
+PS C:\Users\cherr\Downloads> ohrisk scan --html https://github.com/0disoft/laqu.git
+# C:\Users\cherr\Downloads\laqu-ohrisk.html 생성
+```
+
+같은 입력을 `--repo https://github.com/0disoft/laqu.git`로 명시해도 된다.
+`--html`과 함께 `--output`을 생략한 원격 스캔만 현재 실행 폴더에
+`<저장소>-ohrisk.html`을 자동 생성한다. 로컬/아카이브 스캔의 `--html` stdout
+동작은 바뀌지 않는다. 공개 `https://github.com/<owner>/<repository>[.git]`만
+허용하며 private credential, 다른 Git host/protocol, submodule, symlink, 위험하거나
+제한을 넘는 tree는 거부한다. 원격 스캔에는 `PATH`에서 실행 가능한 Git이 필요하다.
+임시 shallow clone은 끝나면 삭제되고, 실행 폴더의
+policy·waiver·cache·report output만 신뢰한다. 이 입력은 `scan` 전용이며 `ci`,
+`diff`, GitHub Action input에서는 지원하지 않는다.
+
 압축을 디스크에 풀지 않고 소스 아카이브를 바로 스캔할 수도 있다:
 
 ```bash

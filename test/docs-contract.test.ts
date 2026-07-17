@@ -98,6 +98,30 @@ describe("documentation contract", () => {
     expect(sarifSection).toContain("ohriskUnmatchedWaiverCount");
   });
 
+  test("documents the bounded remote repository and HTML output contract", () => {
+    const commandContract = readFileSync(
+      path.join(repoRoot, "docs", "cli", "command-contract.md"),
+      "utf8"
+    );
+    const remoteBoundary = readFileSync(
+      path.join(repoRoot, "docs", "remote-fetching.md"),
+      "utf8"
+    );
+    const reportFormats = readFileSync(
+      path.join(repoRoot, "docs", "report-formats.md"),
+      "utf8"
+    );
+
+    expect(commandContract).toContain("## Remote Repository Input");
+    expect(commandContract).toContain("https://github.com/<owner>/<repository>[.git]");
+    expect(commandContract).toContain("50,000 regular files");
+    expect(commandContract).toContain("512 MiB");
+    expect(commandContract).toContain("not supported by `ci`, `diff`, or the GitHub Action");
+    expect(remoteBoundary).toContain("public GitHub HTTPS repository input");
+    expect(remoteBoundary).toContain("not the clone, owns policy, waivers, cache, and report output");
+    expect(reportFormats).toContain("`scan --html <github-url>` writes `<repository>-ohrisk.html`");
+  });
+
   test("docs/report-formats.md preserves CycloneDX boundary statements", () => {
     const doc = readFileSync(
       path.join(repoRoot, "docs", "report-formats.md"),

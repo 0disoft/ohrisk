@@ -3,6 +3,66 @@ import { describe, expect, test } from "bun:test";
 import { parseArgs } from "../src/cli/args";
 
 describe("parseArgs", () => {
+  test("parses positional and explicit GitHub repository inputs", () => {
+    for (const argv of [
+      ["scan", "--html", "https://github.com/0disoft/laqu.git"],
+      ["scan", "--html", "--repo", "https://github.com/0disoft/laqu"]
+    ]) {
+      const parsed = parseArgs(argv);
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) throw new Error(parsed.error.message);
+      expect(parsed.value).toMatchObject({
+        kind: "scan",
+        html: true,
+        outputPath: "laqu-ohrisk.html",
+        repository: {
+          url: "https://github.com/0disoft/laqu.git",
+          owner: "0disoft",
+          name: "laqu"
+        }
+      });
+    }
+  });
+
+  test("keeps explicit remote report output and stdout formats", () => {
+    const explicit = parseArgs([
+      "scan",
+      "--repo",
+      "https://github.com/0disoft/laqu.git",
+      "--html",
+      "--output",
+      "reports/custom.html"
+    ]);
+    expect(explicit.ok).toBe(true);
+    if (!explicit.ok) throw new Error(explicit.error.message);
+    expect(explicit.value).toMatchObject({ outputPath: "reports/custom.html" });
+
+    const json = parseArgs([
+      "scan",
+      "--json",
+      "https://github.com/0disoft/laqu.git"
+    ]);
+    expect(json.ok).toBe(true);
+    if (!json.ok) throw new Error(json.error.message);
+    expect("outputPath" in json.value).toBe(false);
+  });
+
+  test("rejects remote repository conflicts and unsupported CI input", () => {
+    for (const argv of [
+      ["scan", "https://github.com/0disoft/laqu.git", "--archive", "source.zip"],
+      ["scan", "https://github.com/0disoft/laqu.git", "--lockfile", "package-lock.json"],
+      ["scan", "https://github.com/0disoft/laqu.git", "--workspace-root", "."],
+      ["scan", "https://github.com/0disoft/laqu.git", "--offline"],
+      ["scan", "--repo", "https://github.com/0disoft/laqu.git", "https://github.com/0disoft/other.git"],
+      ["ci", "--repo", "https://github.com/0disoft/laqu.git"]
+    ]) {
+      const parsed = parseArgs(argv);
+      expect(parsed.ok).toBe(false);
+      if (parsed.ok) throw new Error(`Expected ${argv.join(" ")} to fail.`);
+      expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+    }
+  });
+
   test("parses help aliases", () => {
     for (const argv of [[], ["--help"], ["-h"], ["help"]]) {
       const parsed = parseArgs(argv);

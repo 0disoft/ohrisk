@@ -12,7 +12,7 @@ development, tests, and packaging.
 
 | Command | Contract |
 | --- | --- |
-| `ohrisk scan` | Scan local dependency evidence and render a non-failing report unless an output/write error occurs. |
+| `ohrisk scan` | Scan local, archive, or supported public GitHub repository dependency evidence and render a non-failing report unless input preparation or output/write fails. |
 | `ohrisk ci` | Run a scan and exit non-zero when active findings meet `--fail-on` after waiver handling. |
 | `ohrisk diff <ref>` | Compare findings against a git baseline and classify new, meaningfully changed, and resolved risk. |
 | `ohrisk explain <expr>` | Classify one license expression for the selected profile without scanning a project; `--policy` applies license-level organization rules only. |
@@ -22,6 +22,7 @@ development, tests, and packaging.
 
 - `--lockfile <path>` selects one supported input; `--all` discovers and merges all supported lockfiles at the selected project root. They are mutually exclusive for scan, CI, and diff.
 - `scan|ci --archive <path>` scans a ZIP, TAR, TAR.GZ, or TGZ as a read-only in-memory virtual project. It is mutually exclusive with `--lockfile` and `--workspace-root`, may be combined with `--all`, and is not supported by `diff`.
+- `scan [repository-url]` and `scan --repo <url>` scan one public GitHub HTTPS repository through a bounded temporary shallow clone. Remote repository input is mutually exclusive with `--archive`, `--lockfile`, `--workspace-root`, and `--offline`, and is not supported by `ci`, `diff`, or the GitHub Action input contract.
 - `--policy <path>` selects a workspace-contained policy file; otherwise `.ohrisk.yml` is loaded when present.
 - `explain --policy <path>` accepts `--workspace-root <path>` for the inheritance boundary. It reports policy sources as relative paths and never applies package rules because explain has no package identity.
 - `--profile saas|distributed-app` selects the shipping model, with organization policy overrides applied afterward.
@@ -29,6 +30,7 @@ development, tests, and packaging.
 - `--fail-on unknown|review|high|low` controls CI failure threshold.
 - `--json`, `--markdown`, `--html`, `--sarif`, and `--cyclonedx` select report formats.
 - `--output <path>` writes a report artifact.
+- A remote repository scan with `--html` and no explicit `--output` writes `<repository>-ohrisk.html` under the invocation directory. Local and archive HTML scans keep their existing stdout behavior.
 - `--language <locale>` localizes HTML report chrome and Ohrisk-generated review text.
 - `--no-waivers` ignores local waiver files; `--strict-waivers` fails on expired or unmatched waivers.
 - `--offline` forbids network requests and permits only local or verified cached evidence.
@@ -57,6 +59,28 @@ also use the 128 MiB materialized-data ceiling for the expanded TAR container.
 `.ohrisk.yml` and `.ohrisk-waivers.json` inside an archive are untrusted data and
 are never auto-loaded. Policy inheritance and waiver loading continue from the
 host invocation directory, so host policy and waivers remain authoritative.
+
+## Remote Repository Input
+
+Remote repository input accepts only `https://github.com/<owner>/<repository>[.git]` without
+credentials, ports, query strings, fragments, encoded path components, or extra path segments.
+Private repositories and alternate Git hosts or protocols are not supported. Ohrisk invokes Git
+from `PATH` without a shell or interactive credential prompt, uses a depth-one single-branch clone, disables
+submodule recursion and symlink checkout, inspects the Git tree before checkout, and removes its
+owned temporary directory after success or failure.
+
+The pre-checkout tree allows at most 50,000 regular files, 50 MiB per file, 256 MiB total file
+content, 4,096 UTF-8 bytes and 64 segments per path, and 255 UTF-8 bytes per segment. Symlinks,
+submodules, special entries, Windows-reserved or otherwise non-portable names, and case or Unicode
+normalization collisions are rejected. Temporary clone storage is capped at 512 MiB and the full
+clone/inspection/checkout sequence has a two-minute work budget. These are fail-closed limits, not
+truncation rules.
+
+Policy and waiver files in the cloned repository are untrusted and are not auto-loaded. The
+directory where Ohrisk was invoked remains the configuration, waiver, cache, and report-output
+root. Local package evidence from the temporary checkout is disabled; lockfile-embedded evidence
+and the normal bounded remote package-evidence pipeline remain available. Shareable reports and
+errors redact the temporary checkout path.
 
 ## Multiple Lockfiles
 

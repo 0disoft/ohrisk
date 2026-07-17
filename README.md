@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.4.0
+npm install -g ohrisk@1.5.0
 cd your-project
 ohrisk scan
 ```
@@ -43,6 +43,14 @@ Open a browser-friendly HTML report:
 
 ```bash
 ohrisk scan --html --output ohrisk-report.html --open
+```
+
+Scan a public GitHub repository without keeping a checkout. With `--html` and
+no `--output`, the report is written to the directory where you ran Ohrisk:
+
+```bash
+ohrisk scan --html https://github.com/0disoft/laqu.git
+# writes ./laqu-ohrisk.html
 ```
 
 Use Korean, Spanish, French, Chinese, Hindi, Japanese, Indonesian, Turkish, Russian, or German HTML report text when you want a local review artifact for those readers:
@@ -288,6 +296,24 @@ Run a local scan from a supported project:
 ohrisk scan
 ```
 
+Scan a public GitHub repository through a temporary shallow clone:
+
+```bash
+ohrisk scan --html https://github.com/0disoft/laqu.git
+ohrisk scan --repo https://github.com/0disoft/laqu.git --json
+```
+
+The first command writes `laqu-ohrisk.html` in the current invocation directory.
+Only public `https://github.com/<owner>/<repository>[.git]` URLs are accepted.
+The remote scan path requires a Git executable available on `PATH`.
+Private credentials, other hosts or protocols, submodules, symlinks, unsafe or
+oversized trees, and `--offline` are rejected. The temporary checkout is removed
+after the scan. Policy, waivers, cache, and report output stay rooted in the
+directory where Ohrisk was invoked; checkout-local policy and waivers are never
+trusted. Remote repository input is supported by `scan`, not `ci`, `diff`, or
+the composite GitHub Action. See the [CLI command contract](docs/cli/command-contract.md#remote-repository-input)
+for exact limits.
+
 Scan a source archive without extracting it to disk:
 
 ```bash
@@ -309,7 +335,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.4.0
+npm install -g ohrisk@1.5.0
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open

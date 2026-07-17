@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.5.0 - 2026-07-17
+
+- Added `scan <github-url>` and `scan --repo <github-url>` for public GitHub
+  HTTPS repositories through a bounded, non-interactive temporary shallow clone.
+- Made remote `--html` scans write `<repository>-ohrisk.html` in the invocation
+  directory by default while preserving stdout defaults for local and archive scans.
+- Reject credentials, alternate hosts or protocols, submodules, symlinks,
+  non-portable paths, compatibility collisions, oversized trees, and timed-out
+  clones before scanning; temporary paths are redacted and staging is cleaned.
+- Kept checkout-local policy, waivers, local package evidence, cache paths, and
+  report destinations outside the remote trust boundary.
+
 ## 1.4.0 - 2026-07-16
 
 - Added `scan` and `ci --archive` support for ZIP, TAR, TAR.GZ, and TGZ project

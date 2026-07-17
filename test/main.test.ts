@@ -85,6 +85,79 @@ function writeLocalPackage(
 }
 
 describe("main", () => {
+  test("scans a GitHub repository and writes default HTML output to the invocation directory", async () => {
+    const invocationRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-remote-invocation-"));
+    const temporaryRepository = mkdtempSync(path.join(tmpdir(), "ohrisk-remote-checkout-"));
+    let cleaned = false;
+
+    try {
+      writeFileSync(path.join(temporaryRepository, "package.json"), JSON.stringify({
+        name: "remote-fixture",
+        version: "1.0.0"
+      }));
+      writeFileSync(path.join(temporaryRepository, ".ohrisk.yml"), "not: [valid", "utf8");
+      writeFileSync(path.join(temporaryRepository, ".ohrisk-waivers.json"), "not-json", "utf8");
+
+      const { io, stdout, stderr } = createTestIO(invocationRoot);
+      io.cloneRepository = async (repository) => {
+        expect(repository.url).toBe("https://github.com/0disoft/laqu.git");
+        return ok({
+          rootDir: temporaryRepository,
+          cleanup: () => {
+            cleaned = true;
+          }
+        });
+      };
+
+      const exitCode = await main([
+        "scan",
+        "--html",
+        "https://github.com/0disoft/laqu.git"
+      ], io);
+
+      const reportPath = path.join(invocationRoot, "laqu-ohrisk.html");
+      expect(exitCode).toBe(0);
+      expect(stdout).toEqual([]);
+      expect(cleaned).toBe(true);
+      expect(stderr.join("\n")).toContain(`Wrote report to ${reportPath}`);
+      expect(readFileSync(reportPath, "utf8")).toContain("remote-fixture");
+      expect(readFileSync(reportPath, "utf8")).not.toContain(temporaryRepository);
+    } finally {
+      rmSync(invocationRoot, { recursive: true, force: true });
+      rmSync(temporaryRepository, { recursive: true, force: true });
+    }
+  });
+
+  test("cleans a temporary repository and redacts its path after scan failure", async () => {
+    const invocationRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-remote-error-invocation-"));
+    const temporaryRepository = mkdtempSync(path.join(tmpdir(), "ohrisk-remote-error-checkout-"));
+    let cleaned = false;
+
+    try {
+      const { io, stderr } = createTestIO(invocationRoot);
+      io.cloneRepository = async () => ok({
+        rootDir: temporaryRepository,
+        cleanup: () => {
+          cleaned = true;
+        }
+      });
+
+      const exitCode = await main([
+        "scan",
+        "--json",
+        "https://github.com/0disoft/empty.git"
+      ], io);
+
+      expect(exitCode).toBe(2);
+      expect(cleaned).toBe(true);
+      expect(stderr.join("\n")).not.toContain(temporaryRepository);
+      expect(stderr.join("\n")).toContain("<temporary repository>");
+    } finally {
+      rmSync(invocationRoot, { recursive: true, force: true });
+      rmSync(temporaryRepository, { recursive: true, force: true });
+    }
+  });
+
   test("prints help text", async () => {
     const { io, stdout, stderr } = createTestIO(fixturesDir);
     const exitCode = await main(["help"], io);
@@ -114,7 +187,8 @@ describe("main", () => {
     expect(scanExitCode).toBe(0);
     expect(scan.stderr).toEqual([]);
     expect(scanOutput).toContain("Ohrisk scan");
-    expect(scanOutput).toContain("ohrisk scan [--archive <path>] [--lockfile <path>|--all] [--policy <path>]");
+    expect(scanOutput).toContain("ohrisk scan [repository-url|--repo <url>] [--archive <path>]");
+    expect(scanOutput).toContain("--repo <url>");
     expect(scanOutput).toContain("--archive <path>");
     expect(scanOutput).toContain("--lockfile <path>");
     expect(scanOutput).toContain("--workspace-root <path>");
