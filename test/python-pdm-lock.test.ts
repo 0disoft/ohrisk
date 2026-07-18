@@ -154,7 +154,7 @@ describe("parsePdmLockText", () => {
       "[[package]]",
       "name = \"local-risk\"",
       "groups = [\"default\"]",
-      "path = \"./local-risk\""
+      "path = \"libs/local-risk\""
     ].join("\n");
     const pyproject = [
       "[project]",
@@ -164,7 +164,7 @@ describe("parsePdmLockText", () => {
     ].join("\n");
     const files = new Map([
       [
-        "./local-risk/pyproject.toml",
+        "libs/local-risk/pyproject.toml",
         [
           "[project]",
           "name = \"local-risk\"",
@@ -173,7 +173,7 @@ describe("parsePdmLockText", () => {
         ].join("\n")
       ],
       [
-        "./local-risk/LICENSE",
+        "libs/local-risk/LICENSE",
         "GNU AFFERO GENERAL PUBLIC LICENSE Version 3\n"
       ]
     ]);
@@ -218,7 +218,7 @@ describe("parsePdmLockText", () => {
         source: "local",
         files: [
           expect.objectContaining({
-            path: "local-risk/LICENSE",
+            path: "libs/local-risk/LICENSE",
             kind: "license"
           })
         ]

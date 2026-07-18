@@ -1,4 +1,5 @@
 import { omitUndefined } from "../shared/object";
+import { realpathSync } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
@@ -36,7 +37,20 @@ type MavenPomParseOptions = {
   mavenRepositoryRoots?: string[];
   maxBytes?: number;
   maxExternalPomDepth?: number;
+  maxModuleDepth?: number;
+  maxModules?: number;
+  readProjectPom?: MavenProjectPomReader;
 };
+
+export type MavenProjectPomFile = {
+  path: string;
+  text: string;
+};
+
+export type MavenProjectPomReader = (input: {
+  pomPath: string;
+  fromPomPath: string;
+}) => Result<MavenProjectPomFile, OhriskError>;
 
 type MavenPomParseContext = {
   repositoryRoots: string[];
@@ -55,6 +69,22 @@ type MavenPomCoordinates = {
 type MissingExternalMavenPom = {
   usage: "parent" | "imported_bom";
   dependency: string;
+};
+
+type ParsedMavenModule = {
+  pomPath: string;
+  rootName: string;
+  ancestry: string[];
+  dependencies: MavenPomDependency[];
+};
+
+type MavenModuleParseState = {
+  projectRoot: string;
+  maxModuleDepth: number;
+  maxModules: number;
+  readProjectPom?: MavenProjectPomReader;
+  visitedPomPaths: Set<string>;
+  parsedModuleCount: number;
 };
 
 export function parseMavenPomFile(
@@ -82,9 +112,14 @@ export function parseMavenPomFile(
     );
   }
 
+  const projectRoot = path.resolve(options.projectRoot ?? path.dirname(pomPath));
   return parseMavenPomText(pomText.value, pomPath, {
     ...options,
-    projectRoot: options.projectRoot ?? path.dirname(pomPath)
+    projectRoot,
+    readProjectPom: options.readProjectPom ?? createDiskMavenProjectPomReader({
+      projectRoot,
+      maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES
+    })
   });
 }
 
@@ -102,38 +137,34 @@ export function parseMavenPomText(
       visitedExternalPoms: new Set(),
       missingExternalPoms: []
     };
-    const scannedProject = stripUnsupportedMavenSections(input);
-    const model = readMavenPomModel(scannedProject, pomPath, context, 0);
+    const moduleState: MavenModuleParseState = {
+      projectRoot: path.resolve(projectRoot),
+      maxModuleDepth: options.maxModuleDepth ?? 16,
+      maxModules: options.maxModules ?? 512,
+      ...(options.readProjectPom ? { readProjectPom: options.readProjectPom } : {}),
+      visitedPomPaths: new Set(),
+      parsedModuleCount: 0
+    };
+    const parsedModules = readMavenProjectModules({
+      text: input,
+      pomPath,
+      context,
+      moduleState,
+      depth: 0,
+      ancestry: []
+    });
 
-    if (!model.ok) {
-      return model;
+    if (!parsedModules.ok) {
+      return parsedModules;
     }
 
-    const rootName = model.value.rootName ?? "<maven-project>";
-    const dependencies = readMavenPomDependencies(scannedProject, model.value, pomPath, context);
-
-    if (!dependencies.ok) {
-      return dependencies;
-    }
+    const rootModule = parsedModules.value[0];
+    const rootName = rootModule?.rootName ?? "<maven-project>";
 
     return ok({
       rootName,
       lockfilePath: pomPath,
-      nodes: dependencies.value
-        .map((dependency): DependencyNode => {
-          const name = `${dependency.groupId}:${dependency.artifactId}`;
-          const id = `${name}@${dependency.version}`;
-          return {
-            id,
-            name,
-            version: dependency.version,
-            ecosystem: "maven",
-            dependencyType: dependencyTypeForMavenDependency(dependency),
-            direct: true,
-            paths: [[rootName, id]]
-          };
-        })
-        .sort((left, right) => left.id.localeCompare(right.id))
+      nodes: dependencyNodesFromMavenModules(parsedModules.value)
     });
   } catch (cause) {
     return err(
@@ -150,11 +181,303 @@ export function parseMavenPomText(
   }
 }
 
+function readMavenProjectModules(input: {
+  text: string;
+  pomPath: string;
+  context: MavenPomParseContext;
+  moduleState: MavenModuleParseState;
+  depth: number;
+  ancestry: string[];
+  declaredModuleParent?: MavenPomModel;
+}): Result<ParsedMavenModule[], OhriskError> {
+  if (input.depth > input.moduleState.maxModuleDepth) {
+    return err(createError({
+      code: "MAVEN_POM_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse pom.xml. Maven module nesting exceeded the maximum supported depth.",
+      details: {
+        lockfilePath: input.pomPath,
+        reason: "maven_module_depth",
+        maxModuleDepth: input.moduleState.maxModuleDepth
+      }
+    }));
+  }
+
+  const normalizedPomPath = path.resolve(input.pomPath);
+  const visitedKey = normalizedPomPath.toLowerCase();
+  if (input.moduleState.visitedPomPaths.has(visitedKey)) {
+    return err(createError({
+      code: "MAVEN_POM_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse pom.xml. Maven modules contain a cycle or duplicate module path.",
+      details: {
+        lockfilePath: input.pomPath,
+        reason: "maven_module_cycle"
+      }
+    }));
+  }
+
+  input.moduleState.parsedModuleCount += 1;
+  if (input.moduleState.parsedModuleCount > input.moduleState.maxModules) {
+    return err(createError({
+      code: "MAVEN_POM_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse pom.xml. Maven module count exceeded the supported limit.",
+      details: {
+        lockfilePath: input.pomPath,
+        reason: "maven_module_count",
+        maxModules: input.moduleState.maxModules
+      }
+    }));
+  }
+
+  input.moduleState.visitedPomPaths.add(visitedKey);
+  const scannedProject = stripUnsupportedMavenSections(input.text);
+  const model = readMavenPomModel(
+    scannedProject,
+    input.pomPath,
+    input.context,
+    0,
+    input.declaredModuleParent
+  );
+  if (!model.ok) {
+    return model;
+  }
+
+  const rootName = model.value.rootName
+    ?? (path.basename(path.dirname(input.pomPath)) || "<maven-project>");
+  const dependencies = readMavenPomDependencies(
+    scannedProject,
+    model.value,
+    input.pomPath,
+    input.context
+  );
+  if (!dependencies.ok) {
+    return dependencies;
+  }
+
+  const result: ParsedMavenModule[] = [{
+    pomPath: input.pomPath,
+    rootName,
+    ancestry: input.ancestry,
+    dependencies: dependencies.value
+  }];
+  const modulePaths = readMavenModulePaths(scannedProject);
+  if (modulePaths.length === 0) {
+    return ok(result);
+  }
+  if (!input.moduleState.readProjectPom) {
+    return err(createError({
+      code: "MAVEN_POM_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse pom.xml. Maven multi-module projects require access to module POM files.",
+      details: {
+        lockfilePath: input.pomPath,
+        reason: "maven_module_file_access_required",
+        modules: modulePaths
+      }
+    }));
+  }
+
+  for (const modulePath of modulePaths) {
+    const resolvedModulePom = resolveMavenModulePomPath({
+      modulePath,
+      fromPomPath: input.pomPath,
+      projectRoot: input.moduleState.projectRoot
+    });
+    if (!resolvedModulePom.ok) {
+      return resolvedModulePom;
+    }
+
+    const modulePom = input.moduleState.readProjectPom({
+      pomPath: resolvedModulePom.value,
+      fromPomPath: input.pomPath
+    });
+    if (!modulePom.ok) {
+      return modulePom;
+    }
+
+    const parsedChild = readMavenProjectModules({
+      text: modulePom.value.text,
+      pomPath: modulePom.value.path,
+      context: input.context,
+      moduleState: input.moduleState,
+      depth: input.depth + 1,
+      ancestry: [...input.ancestry, rootName],
+      declaredModuleParent: model.value
+    });
+    if (!parsedChild.ok) {
+      return parsedChild;
+    }
+    result.push(...parsedChild.value);
+  }
+
+  return ok(result);
+}
+
+function readMavenModulePaths(text: string): string[] {
+  const modules: string[] = [];
+  for (const section of text.matchAll(/<modules\b[^>]*>([\s\S]*?)<\/modules>/gi)) {
+    for (const match of (section[1] ?? "").matchAll(/<module\b[^>]*>([\s\S]*?)<\/module>/gi)) {
+      const modulePath = normalizePomText(match[1] ?? "");
+      if (modulePath !== "" && !modules.includes(modulePath)) {
+        modules.push(modulePath);
+      }
+    }
+  }
+  return modules;
+}
+
+function resolveMavenModulePomPath(input: {
+  modulePath: string;
+  fromPomPath: string;
+  projectRoot: string;
+}): Result<string, OhriskError> {
+  const rawPath = input.modulePath.replace(/\\/g, "/");
+  if (
+    rawPath === ""
+    || rawPath.includes("${")
+    || path.posix.isAbsolute(rawPath)
+    || path.win32.isAbsolute(input.modulePath)
+    || /[\u0000-\u001f\u007f]/u.test(rawPath)
+  ) {
+    return err(invalidMavenModulePath(input, "invalid_maven_module_path"));
+  }
+
+  const moduleTarget = path.resolve(
+    path.dirname(input.fromPomPath),
+    ...rawPath.split("/"),
+    rawPath.toLowerCase().endsWith(".xml") ? "" : "pom.xml"
+  );
+  if (!isPathInsideOrEqual(moduleTarget, input.projectRoot)) {
+    return err(invalidMavenModulePath(input, "maven_module_path_escape"));
+  }
+
+  return ok(moduleTarget);
+}
+
+function invalidMavenModulePath(
+  input: { modulePath: string; fromPomPath: string },
+  reason: string
+): OhriskError {
+  return createError({
+    code: "MAVEN_POM_PARSE_FAILED",
+    category: "unsupported_input",
+    message: "Failed to parse pom.xml. Maven module paths must be project-contained relative paths.",
+    details: {
+      lockfilePath: input.fromPomPath,
+      modulePath: input.modulePath,
+      reason
+    }
+  });
+}
+
+function createDiskMavenProjectPomReader(input: {
+  projectRoot: string;
+  maxBytes: number;
+}): MavenProjectPomReader {
+  let canonicalProjectRoot = path.resolve(input.projectRoot);
+  try {
+    canonicalProjectRoot = realpathSync.native(canonicalProjectRoot);
+  } catch {
+    // The root POM read reports the authoritative filesystem error.
+  }
+
+  return ({ pomPath, fromPomPath }) => {
+    const resolvedPomPath = path.resolve(pomPath);
+    if (!isPathInsideOrEqual(resolvedPomPath, input.projectRoot)) {
+      return err(invalidMavenModulePath({
+        modulePath: pomPath,
+        fromPomPath
+      }, "maven_module_path_escape"));
+    }
+
+    try {
+      const canonicalPomPath = realpathSync.native(resolvedPomPath);
+      if (!isPathInsideOrEqual(canonicalPomPath, canonicalProjectRoot)) {
+        return err(invalidMavenModulePath({
+          modulePath: pomPath,
+          fromPomPath
+        }, "maven_module_symlink_escape"));
+      }
+    } catch {
+      // readInputTextFile below returns the bounded typed read failure.
+    }
+
+    const pomText = readInputTextFile({
+      filePath: resolvedPomPath,
+      maxBytes: input.maxBytes
+    });
+    if (!pomText.ok) {
+      return err(createError({
+        code: "MAVEN_POM_READ_FAILED",
+        category: inputFileReadErrorCategory(pomText.error),
+        message: pomText.error.kind === "too_large"
+          ? "Maven module pom.xml exceeded the maximum supported size."
+          : "Failed to read Maven module pom.xml.",
+        details: {
+          lockfilePath: fromPomPath,
+          modulePomPath: resolvedPomPath,
+          ...inputFileReadErrorDetails(pomText.error)
+        }
+      }));
+    }
+
+    return ok({ path: resolvedPomPath, text: pomText.value });
+  };
+}
+
+function dependencyNodesFromMavenModules(modules: ParsedMavenModule[]): DependencyNode[] {
+  const nodes = new Map<string, DependencyNode>();
+
+  for (const module of modules) {
+    const modulePath = [...module.ancestry, module.rootName];
+    for (const dependency of module.dependencies) {
+      const name = `${dependency.groupId}:${dependency.artifactId}`;
+      const id = `${name}@${dependency.version}`;
+      const dependencyPath = [...modulePath, id];
+      const dependencyType = dependencyTypeForMavenDependency(dependency);
+      const existing = nodes.get(id);
+      if (!existing) {
+        nodes.set(id, {
+          id,
+          name,
+          version: dependency.version,
+          ecosystem: "maven",
+          dependencyType,
+          direct: true,
+          paths: [dependencyPath]
+        });
+        continue;
+      }
+
+      existing.dependencyType = dependencyTypeRank(existing.dependencyType) >= dependencyTypeRank(dependencyType)
+        ? existing.dependencyType
+        : dependencyType;
+      if (!existing.paths.some((candidate) => pathsEqual(candidate, dependencyPath))) {
+        existing.paths.push(dependencyPath);
+      }
+    }
+  }
+
+  return [...nodes.values()].sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function pathsEqual(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((segment, index) => segment === right[index]);
+}
+
+function isPathInsideOrEqual(candidate: string, root: string): boolean {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
 function readMavenPomModel(
   text: string,
   pomPath: string,
   context: MavenPomParseContext,
-  depth: number
+  depth: number,
+  declaredModuleParent?: MavenPomModel
 ): Result<MavenPomModel, OhriskError> {
   if (depth > context.maxExternalPomDepth) {
     return err(
@@ -170,7 +493,13 @@ function readMavenPomModel(
     );
   }
 
-  const parent = readMavenParentModel(text, pomPath, context, depth);
+  const parent = readMavenParentModel(
+    text,
+    pomPath,
+    context,
+    depth,
+    declaredModuleParent
+  );
   if (!parent.ok) {
     return parent;
   }
@@ -201,14 +530,43 @@ function readMavenParentModel(
   text: string,
   pomPath: string,
   context: MavenPomParseContext,
-  depth: number
+  depth: number,
+  declaredModuleParent?: MavenPomModel
 ): Result<MavenPomModel | undefined, OhriskError> {
+  if (declaredModuleParent && matchesDeclaredMavenParent(text, declaredModuleParent)) {
+    return ok(declaredModuleParent);
+  }
+
   const parent = readMavenParentCoordinates(text);
   if (!parent) {
     return ok(undefined);
   }
 
   return readExternalMavenPomModel(parent, pomPath, context, depth + 1);
+}
+
+function matchesDeclaredMavenParent(text: string, candidate: MavenPomModel): boolean {
+  const parentText = text.match(/<parent\b[^>]*>([\s\S]*?)<\/parent>/i)?.[1];
+  if (!parentText || !candidate.rootName) {
+    return false;
+  }
+
+  const artifactId = readXmlTagText(parentText, "artifactId");
+  if (artifactId !== candidate.rootName) {
+    return false;
+  }
+
+  const rawGroupId = readXmlTagText(parentText, "groupId");
+  const rawVersion = readXmlTagText(parentText, "version");
+  const groupId = rawGroupId
+    ? resolveMavenExpression(rawGroupId, candidate.properties)
+    : undefined;
+  const version = rawVersion
+    ? resolveMavenExpression(rawVersion, candidate.properties)
+    : undefined;
+
+  return (!groupId || !candidate.groupId || groupId === candidate.groupId)
+    && (!version || !candidate.version || version === candidate.version);
 }
 
 function readExternalMavenPomModel(
@@ -287,7 +645,14 @@ function readExternalMavenPomModel(
 function readMavenPomProject(text: string, parent: MavenPomModel | undefined): MavenPomProject {
   const projectText = stripXmlSection(text, "parent");
   const properties = new Map(parent?.properties);
-  const parentCoordinates = readMavenParentCoordinates(text);
+  const parentCoordinates = readMavenParentCoordinates(text)
+    ?? (parent?.groupId && parent.rootName && parent.version
+      ? {
+          groupId: parent.groupId,
+          artifactId: parent.rootName,
+          version: parent.version
+        }
+      : undefined);
   if (parentCoordinates) {
     properties.set("project.parent.groupId", parentCoordinates.groupId);
     properties.set("pom.parent.groupId", parentCoordinates.groupId);
@@ -491,7 +856,11 @@ function mergeMavenManagedVersions(
 }
 
 function stripUnsupportedMavenSections(text: string): string {
-  return stripXmlSections(text, ["build", "reporting", "profiles"]);
+  return stripXmlSections(stripXmlComments(text), ["build", "reporting", "profiles"]);
+}
+
+function stripXmlComments(text: string): string {
+  return text.replace(/<!--[\s\S]*?-->/g, "");
 }
 
 function stripXmlSections(text: string, tags: string[]): string {

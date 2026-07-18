@@ -29,11 +29,8 @@ const PERMISSIVE_LICENSES = new Set([
   "Unlicense"
 ]);
 
-const WEAK_COPYLEFT_LICENSE_PREFIXES = [
-  "LGPL",
-  "MPL",
-  "EPL"
-];
+const FILE_LEVEL_COPYLEFT_LICENSE_PREFIXES = ["MPL"];
+const WEAK_COPYLEFT_LICENSE_PREFIXES = ["LGPL", "EPL"];
 
 const STRONG_COPYLEFT_LICENSE_PREFIXES = [
   "GPL"
@@ -279,6 +276,10 @@ function classifyLicenseChoice(
       return "review";
     }
     return profile === "distributed-app" ? "high" : "review";
+  }
+
+  if (matchesPrefix(choice.license, FILE_LEVEL_COPYLEFT_LICENSE_PREFIXES)) {
+    return profile === "saas" ? "low" : "review";
   }
 
   if (matchesPrefix(choice.license, WEAK_COPYLEFT_LICENSE_PREFIXES)) {

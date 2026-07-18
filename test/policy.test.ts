@@ -359,6 +359,36 @@ describe("evaluateLicenseRisk", () => {
     ).toBe("high");
   });
 
+  test("treats MPL as low for SaaS and review for distributed apps", () => {
+    const license = {
+      packageId: "package@1.0.0",
+      original: "MPL-2.0",
+      expression: "MPL-2.0",
+      choices: ["MPL-2.0"],
+      joiner: "single" as const,
+      signals: [],
+      evidenceSources: ["source: local", "METADATA license: MPL-2.0"],
+      confidence: "high" as const
+    };
+
+    const saasFinding = evaluateLicenseRisk({
+      license,
+      dependency: baseDependency,
+      profile: "saas"
+    });
+    const distributedFinding = evaluateLicenseRisk({
+      license,
+      dependency: baseDependency,
+      profile: "distributed-app"
+    });
+
+    expect(saasFinding.severity).toBe("low");
+    expect(saasFinding.recommendation).toBe("allow");
+    expect(saasFinding.action).toBe("No action needed for this profile.");
+    expect(distributedFinding.severity).toBe("review");
+    expect(distributedFinding.recommendation).toBe("review");
+  });
+
   test("recommends excluding dev-only risky packages from production scans", () => {
     const finding = evaluateLicenseRisk({
       license: {

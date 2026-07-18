@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 3dc5aa87f9a498fffc61857b16ed30b186f6cd8f1a08d548ab024f2521d8e5c1
+// ohrisk-action-source-sha256: 64598fbee012822ceb7b2547fd3b3d0f81981f87a90a7d8361dd8ba5e6fadbde
 // ohrisk-action-build-platform: win32
 import { createRequire } from "node:module";
 var __create = Object.create;
@@ -11367,8 +11367,8 @@ globstar while`, file, fr, pattern, pr, swallowee);
     function(module2, exports2, __webpack_require__) {
       module2.exports = realpath;
       realpath.realpath = realpath;
-      realpath.sync = realpathSync;
-      realpath.realpathSync = realpathSync;
+      realpath.sync = realpathSync2;
+      realpath.realpathSync = realpathSync2;
       realpath.monkeypatch = monkeypatch;
       realpath.unmonkeypatch = unmonkeypatch;
       var fs = __webpack_require__(3);
@@ -11396,7 +11396,7 @@ globstar while`, file, fr, pattern, pr, swallowee);
           }
         });
       }
-      function realpathSync(p, cache) {
+      function realpathSync2(p, cache) {
         if (ok2) {
           return origRealpathSync(p, cache);
         }
@@ -11412,7 +11412,7 @@ globstar while`, file, fr, pattern, pr, swallowee);
       }
       function monkeypatch() {
         fs.realpath = realpath;
-        fs.realpathSync = realpathSync;
+        fs.realpathSync = realpathSync2;
       }
       function unmonkeypatch() {
         fs.realpath = origRealpath;
@@ -13518,7 +13518,7 @@ ${indent}`);
       } else {
         var splitRootRe = /^[\/]*/;
       }
-      exports2.realpathSync = function realpathSync(p, cache) {
+      exports2.realpathSync = function realpathSync2(p, cache) {
         p = pathModule.resolve(p);
         if (cache && Object.prototype.hasOwnProperty.call(cache, p)) {
           return cache[p];
@@ -16477,7 +16477,7 @@ function acquireLiveStreamLease(stream) {
   };
 }
 // src/cli/main.ts
-import { readdirSync as readdirSync32, realpathSync as realpathSync7, statSync as statSync34 } from "node:fs";
+import { readdirSync as readdirSync32, realpathSync as realpathSync8, statSync as statSync34 } from "node:fs";
 import path82 from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -18384,7 +18384,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.8.0";
+var OHRISK_VERSION = "1.9.0";
 
 // src/archive/archive-project.ts
 import path46 from "node:path";
@@ -24948,6 +24948,7 @@ function gradleCatalogParseError(input) {
 }
 
 // src/graph/java-maven-pom.ts
+import { realpathSync } from "node:fs";
 import path20 from "node:path";
 
 // src/shared/maven-repository.ts
@@ -25016,9 +25017,14 @@ function parseMavenPomFile(pomPath, options = {}) {
       }
     }));
   }
+  const projectRoot = path20.resolve(options.projectRoot ?? path20.dirname(pomPath));
   return parseMavenPomText(pomText.value, pomPath, {
     ...options,
-    projectRoot: options.projectRoot ?? path20.dirname(pomPath)
+    projectRoot,
+    readProjectPom: options.readProjectPom ?? createDiskMavenProjectPomReader({
+      projectRoot,
+      maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES
+    })
   });
 }
 function parseMavenPomText(input, pomPath = "pom.xml", options = {}) {
@@ -25031,32 +25037,31 @@ function parseMavenPomText(input, pomPath = "pom.xml", options = {}) {
       visitedExternalPoms: new Set,
       missingExternalPoms: []
     };
-    const scannedProject = stripUnsupportedMavenSections(input);
-    const model = readMavenPomModel(scannedProject, pomPath, context, 0);
-    if (!model.ok) {
-      return model;
+    const moduleState = {
+      projectRoot: path20.resolve(projectRoot),
+      maxModuleDepth: options.maxModuleDepth ?? 16,
+      maxModules: options.maxModules ?? 512,
+      ...options.readProjectPom ? { readProjectPom: options.readProjectPom } : {},
+      visitedPomPaths: new Set,
+      parsedModuleCount: 0
+    };
+    const parsedModules = readMavenProjectModules({
+      text: input,
+      pomPath,
+      context,
+      moduleState,
+      depth: 0,
+      ancestry: []
+    });
+    if (!parsedModules.ok) {
+      return parsedModules;
     }
-    const rootName = model.value.rootName ?? "<maven-project>";
-    const dependencies = readMavenPomDependencies(scannedProject, model.value, pomPath, context);
-    if (!dependencies.ok) {
-      return dependencies;
-    }
+    const rootModule = parsedModules.value[0];
+    const rootName = rootModule?.rootName ?? "<maven-project>";
     return ok({
       rootName,
       lockfilePath: pomPath,
-      nodes: dependencies.value.map((dependency) => {
-        const name = `${dependency.groupId}:${dependency.artifactId}`;
-        const id = `${name}@${dependency.version}`;
-        return {
-          id,
-          name,
-          version: dependency.version,
-          ecosystem: "maven",
-          dependencyType: dependencyTypeForMavenDependency(dependency),
-          direct: true,
-          paths: [[rootName, id]]
-        };
-      }).sort((left, right) => left.id.localeCompare(right.id))
+      nodes: dependencyNodesFromMavenModules(parsedModules.value)
     });
   } catch (cause) {
     return err(createError({
@@ -25070,7 +25075,224 @@ function parseMavenPomText(input, pomPath = "pom.xml", options = {}) {
     }));
   }
 }
-function readMavenPomModel(text3, pomPath, context, depth) {
+function readMavenProjectModules(input) {
+  if (input.depth > input.moduleState.maxModuleDepth) {
+    return err(createError({
+      code: "MAVEN_POM_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse pom.xml. Maven module nesting exceeded the maximum supported depth.",
+      details: {
+        lockfilePath: input.pomPath,
+        reason: "maven_module_depth",
+        maxModuleDepth: input.moduleState.maxModuleDepth
+      }
+    }));
+  }
+  const normalizedPomPath = path20.resolve(input.pomPath);
+  const visitedKey = normalizedPomPath.toLowerCase();
+  if (input.moduleState.visitedPomPaths.has(visitedKey)) {
+    return err(createError({
+      code: "MAVEN_POM_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse pom.xml. Maven modules contain a cycle or duplicate module path.",
+      details: {
+        lockfilePath: input.pomPath,
+        reason: "maven_module_cycle"
+      }
+    }));
+  }
+  input.moduleState.parsedModuleCount += 1;
+  if (input.moduleState.parsedModuleCount > input.moduleState.maxModules) {
+    return err(createError({
+      code: "MAVEN_POM_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse pom.xml. Maven module count exceeded the supported limit.",
+      details: {
+        lockfilePath: input.pomPath,
+        reason: "maven_module_count",
+        maxModules: input.moduleState.maxModules
+      }
+    }));
+  }
+  input.moduleState.visitedPomPaths.add(visitedKey);
+  const scannedProject = stripUnsupportedMavenSections(input.text);
+  const model = readMavenPomModel(scannedProject, input.pomPath, input.context, 0, input.declaredModuleParent);
+  if (!model.ok) {
+    return model;
+  }
+  const rootName = model.value.rootName ?? (path20.basename(path20.dirname(input.pomPath)) || "<maven-project>");
+  const dependencies = readMavenPomDependencies(scannedProject, model.value, input.pomPath, input.context);
+  if (!dependencies.ok) {
+    return dependencies;
+  }
+  const result = [{
+    pomPath: input.pomPath,
+    rootName,
+    ancestry: input.ancestry,
+    dependencies: dependencies.value
+  }];
+  const modulePaths = readMavenModulePaths(scannedProject);
+  if (modulePaths.length === 0) {
+    return ok(result);
+  }
+  if (!input.moduleState.readProjectPom) {
+    return err(createError({
+      code: "MAVEN_POM_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse pom.xml. Maven multi-module projects require access to module POM files.",
+      details: {
+        lockfilePath: input.pomPath,
+        reason: "maven_module_file_access_required",
+        modules: modulePaths
+      }
+    }));
+  }
+  for (const modulePath of modulePaths) {
+    const resolvedModulePom = resolveMavenModulePomPath({
+      modulePath,
+      fromPomPath: input.pomPath,
+      projectRoot: input.moduleState.projectRoot
+    });
+    if (!resolvedModulePom.ok) {
+      return resolvedModulePom;
+    }
+    const modulePom = input.moduleState.readProjectPom({
+      pomPath: resolvedModulePom.value,
+      fromPomPath: input.pomPath
+    });
+    if (!modulePom.ok) {
+      return modulePom;
+    }
+    const parsedChild = readMavenProjectModules({
+      text: modulePom.value.text,
+      pomPath: modulePom.value.path,
+      context: input.context,
+      moduleState: input.moduleState,
+      depth: input.depth + 1,
+      ancestry: [...input.ancestry, rootName],
+      declaredModuleParent: model.value
+    });
+    if (!parsedChild.ok) {
+      return parsedChild;
+    }
+    result.push(...parsedChild.value);
+  }
+  return ok(result);
+}
+function readMavenModulePaths(text3) {
+  const modules = [];
+  for (const section of text3.matchAll(/<modules\b[^>]*>([\s\S]*?)<\/modules>/gi)) {
+    for (const match of (section[1] ?? "").matchAll(/<module\b[^>]*>([\s\S]*?)<\/module>/gi)) {
+      const modulePath = normalizePomText(match[1] ?? "");
+      if (modulePath !== "" && !modules.includes(modulePath)) {
+        modules.push(modulePath);
+      }
+    }
+  }
+  return modules;
+}
+function resolveMavenModulePomPath(input) {
+  const rawPath = input.modulePath.replace(/\\/g, "/");
+  if (rawPath === "" || rawPath.includes("${") || path20.posix.isAbsolute(rawPath) || path20.win32.isAbsolute(input.modulePath) || /[\u0000-\u001f\u007f]/u.test(rawPath)) {
+    return err(invalidMavenModulePath(input, "invalid_maven_module_path"));
+  }
+  const moduleTarget = path20.resolve(path20.dirname(input.fromPomPath), ...rawPath.split("/"), rawPath.toLowerCase().endsWith(".xml") ? "" : "pom.xml");
+  if (!isPathInsideOrEqual(moduleTarget, input.projectRoot)) {
+    return err(invalidMavenModulePath(input, "maven_module_path_escape"));
+  }
+  return ok(moduleTarget);
+}
+function invalidMavenModulePath(input, reason) {
+  return createError({
+    code: "MAVEN_POM_PARSE_FAILED",
+    category: "unsupported_input",
+    message: "Failed to parse pom.xml. Maven module paths must be project-contained relative paths.",
+    details: {
+      lockfilePath: input.fromPomPath,
+      modulePath: input.modulePath,
+      reason
+    }
+  });
+}
+function createDiskMavenProjectPomReader(input) {
+  let canonicalProjectRoot = path20.resolve(input.projectRoot);
+  try {
+    canonicalProjectRoot = realpathSync.native(canonicalProjectRoot);
+  } catch {}
+  return ({ pomPath, fromPomPath }) => {
+    const resolvedPomPath = path20.resolve(pomPath);
+    if (!isPathInsideOrEqual(resolvedPomPath, input.projectRoot)) {
+      return err(invalidMavenModulePath({
+        modulePath: pomPath,
+        fromPomPath
+      }, "maven_module_path_escape"));
+    }
+    try {
+      const canonicalPomPath = realpathSync.native(resolvedPomPath);
+      if (!isPathInsideOrEqual(canonicalPomPath, canonicalProjectRoot)) {
+        return err(invalidMavenModulePath({
+          modulePath: pomPath,
+          fromPomPath
+        }, "maven_module_symlink_escape"));
+      }
+    } catch {}
+    const pomText = readInputTextFile({
+      filePath: resolvedPomPath,
+      maxBytes: input.maxBytes
+    });
+    if (!pomText.ok) {
+      return err(createError({
+        code: "MAVEN_POM_READ_FAILED",
+        category: inputFileReadErrorCategory(pomText.error),
+        message: pomText.error.kind === "too_large" ? "Maven module pom.xml exceeded the maximum supported size." : "Failed to read Maven module pom.xml.",
+        details: {
+          lockfilePath: fromPomPath,
+          modulePomPath: resolvedPomPath,
+          ...inputFileReadErrorDetails(pomText.error)
+        }
+      }));
+    }
+    return ok({ path: resolvedPomPath, text: pomText.value });
+  };
+}
+function dependencyNodesFromMavenModules(modules) {
+  const nodes = new Map;
+  for (const module of modules) {
+    const modulePath = [...module.ancestry, module.rootName];
+    for (const dependency of module.dependencies) {
+      const name = `${dependency.groupId}:${dependency.artifactId}`;
+      const id = `${name}@${dependency.version}`;
+      const dependencyPath = [...modulePath, id];
+      const dependencyType = dependencyTypeForMavenDependency(dependency);
+      const existing = nodes.get(id);
+      if (!existing) {
+        nodes.set(id, {
+          id,
+          name,
+          version: dependency.version,
+          ecosystem: "maven",
+          dependencyType,
+          direct: true,
+          paths: [dependencyPath]
+        });
+        continue;
+      }
+      existing.dependencyType = dependencyTypeRank10(existing.dependencyType) >= dependencyTypeRank10(dependencyType) ? existing.dependencyType : dependencyType;
+      if (!existing.paths.some((candidate) => pathsEqual2(candidate, dependencyPath))) {
+        existing.paths.push(dependencyPath);
+      }
+    }
+  }
+  return [...nodes.values()].sort((left, right) => left.id.localeCompare(right.id));
+}
+function pathsEqual2(left, right) {
+  return left.length === right.length && left.every((segment, index) => segment === right[index]);
+}
+function isPathInsideOrEqual(candidate, root) {
+  const relative = path20.relative(path20.resolve(root), path20.resolve(candidate));
+  return relative === "" || !relative.startsWith("..") && !path20.isAbsolute(relative);
+}
+function readMavenPomModel(text3, pomPath, context, depth, declaredModuleParent) {
   if (depth > context.maxExternalPomDepth) {
     return err(createError({
       code: "MAVEN_POM_PARSE_FAILED",
@@ -25082,7 +25304,7 @@ function readMavenPomModel(text3, pomPath, context, depth) {
       }
     }));
   }
-  const parent = readMavenParentModel(text3, pomPath, context, depth);
+  const parent = readMavenParentModel(text3, pomPath, context, depth, declaredModuleParent);
   if (!parent.ok) {
     return parent;
   }
@@ -25096,12 +25318,30 @@ function readMavenPomModel(text3, pomPath, context, depth) {
     managedVersions: mergeMavenManagedVersions(parent.value?.managedVersions, ownManagedVersions.value)
   });
 }
-function readMavenParentModel(text3, pomPath, context, depth) {
+function readMavenParentModel(text3, pomPath, context, depth, declaredModuleParent) {
+  if (declaredModuleParent && matchesDeclaredMavenParent(text3, declaredModuleParent)) {
+    return ok(declaredModuleParent);
+  }
   const parent = readMavenParentCoordinates(text3);
   if (!parent) {
     return ok(undefined);
   }
   return readExternalMavenPomModel(parent, pomPath, context, depth + 1);
+}
+function matchesDeclaredMavenParent(text3, candidate) {
+  const parentText = text3.match(/<parent\b[^>]*>([\s\S]*?)<\/parent>/i)?.[1];
+  if (!parentText || !candidate.rootName) {
+    return false;
+  }
+  const artifactId = readXmlTagText2(parentText, "artifactId");
+  if (artifactId !== candidate.rootName) {
+    return false;
+  }
+  const rawGroupId = readXmlTagText2(parentText, "groupId");
+  const rawVersion = readXmlTagText2(parentText, "version");
+  const groupId = rawGroupId ? resolveMavenExpression(rawGroupId, candidate.properties) : undefined;
+  const version = rawVersion ? resolveMavenExpression(rawVersion, candidate.properties) : undefined;
+  return (!groupId || !candidate.groupId || groupId === candidate.groupId) && (!version || !candidate.version || version === candidate.version);
 }
 function readExternalMavenPomModel(coordinates, pomPath, context, depth, usage = "parent") {
   const externalPomPath = findMavenPomInRepository({
@@ -25156,7 +25396,11 @@ function readExternalMavenPomModel(coordinates, pomPath, context, depth, usage =
 function readMavenPomProject(text3, parent) {
   const projectText = stripXmlSection(text3, "parent");
   const properties = new Map(parent?.properties);
-  const parentCoordinates = readMavenParentCoordinates(text3);
+  const parentCoordinates = readMavenParentCoordinates(text3) ?? (parent?.groupId && parent.rootName && parent.version ? {
+    groupId: parent.groupId,
+    artifactId: parent.rootName,
+    version: parent.version
+  } : undefined);
   if (parentCoordinates) {
     properties.set("project.parent.groupId", parentCoordinates.groupId);
     properties.set("pom.parent.groupId", parentCoordinates.groupId);
@@ -25306,7 +25550,10 @@ function mergeMavenManagedVersions(parentVersions, ownVersions) {
   ]);
 }
 function stripUnsupportedMavenSections(text3) {
-  return stripXmlSections(text3, ["build", "reporting", "profiles"]);
+  return stripXmlSections(stripXmlComments(text3), ["build", "reporting", "profiles"]);
+}
+function stripXmlComments(text3) {
+  return text3.replace(/<!--[\s\S]*?-->/g, "");
 }
 function stripXmlSections(text3, tags) {
   return tags.reduce((current, tag) => stripXmlSection(current, tag), text3);
@@ -28793,7 +29040,7 @@ var LOCAL_SOURCE_EVIDENCE_FILE_CANDIDATES = [
   "NOTICE",
   "NOTICE.md"
 ];
-function normalizePythonLocalSourcePathSpec(input) {
+function normalizePythonLocalSourcePathSpec(input, options = {}) {
   let value = unquotePythonLocalSourcePath(input.trim());
   const fragmentIndex = value.indexOf("#");
   if (fragmentIndex >= 0) {
@@ -28808,9 +29055,9 @@ function normalizePythonLocalSourcePathSpec(input) {
   }
   if (value.startsWith("file:")) {
     const filePath = safeDecodePath(value.slice("file:".length));
-    return isRelativeLocalPath(filePath) ? filePath : undefined;
+    return isRelativeLocalPath(filePath, options.allowBareRelativePath ?? false) ? filePath : undefined;
   }
-  return isRelativeLocalPath(value) ? value : undefined;
+  return isRelativeLocalPath(value, options.allowBareRelativePath ?? false) ? value : undefined;
 }
 function readPythonLocalSourcePackage(input) {
   if (!input.readLocalSourceFile) {
@@ -28887,7 +29134,7 @@ function createDiskPythonLocalSourceFileReader(input) {
       return resolvedSource;
     }
     const resolvedFilePath = path30.resolve(resolvedSource.value, relativeFilePath);
-    if (!isPathInsideOrEqual(resolvedFilePath, resolvedSource.value)) {
+    if (!isPathInsideOrEqual2(resolvedFilePath, resolvedSource.value)) {
       return err(createError({
         code: input.errors.parseCode,
         category: "unsupported_input",
@@ -29110,7 +29357,7 @@ function resolveDiskLocalSourcePath(input) {
     }));
   }
   const resolved = path30.resolve(path30.dirname(input.fromFilePath), input.sourcePath);
-  if (!isPathInsideOrEqual(resolved, input.rootDir)) {
+  if (!isPathInsideOrEqual2(resolved, input.rootDir)) {
     return err(createError({
       code: input.errors.parseCode,
       category: "unsupported_input",
@@ -29147,9 +29394,12 @@ function safeDecodePath(value) {
     return value;
   }
 }
-function isRelativeLocalPath(value) {
+function isRelativeLocalPath(value, allowBareRelativePath) {
   const normalized = value.replace(/\\/g, "/");
-  return normalized === "." || normalized === ".." || normalized.startsWith("./") || normalized.startsWith("../");
+  if (normalized === "" || normalized.startsWith("/") || path30.win32.isAbsolute(value) || /^[A-Za-z][A-Za-z0-9+.-]*:/u.test(normalized) || /[\u0000-\u001f\u007f]/u.test(normalized)) {
+    return false;
+  }
+  return allowBareRelativePath || normalized === "." || normalized === ".." || normalized.startsWith("./") || normalized.startsWith("../");
 }
 function normalizePythonPackageName(name) {
   return name.toLowerCase().replace(/[-_.]+/g, "-");
@@ -29201,7 +29451,7 @@ function stripInlineComment(line, marker) {
 function escapeRegExp(input) {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-function isPathInsideOrEqual(candidate, root) {
+function isPathInsideOrEqual2(candidate, root) {
   const relative = path30.relative(root, candidate);
   return relative === "" || !relative.startsWith("..") && !path30.isAbsolute(relative);
 }
@@ -29669,7 +29919,9 @@ function readStringAssignment(line, key) {
 function readPdmSourceAssignment(line) {
   const pathSource = readStringAssignment(line, "path");
   if (pathSource !== undefined) {
-    const sourcePath = normalizePythonLocalSourcePathSpec(pathSource);
+    const sourcePath = normalizePythonLocalSourcePathSpec(pathSource, {
+      allowBareRelativePath: true
+    });
     return sourcePath ? { sourcePath } : {
       unsupportedSource: {
         value: pathSource,
@@ -29962,7 +30214,9 @@ function readPipfileLockLocalSourcePath(entry) {
   if (typeof rawPath !== "string") {
     return;
   }
-  return normalizePythonLocalSourcePathSpec(rawPath);
+  return normalizePythonLocalSourcePathSpec(rawPath, {
+    allowBareRelativePath: true
+  });
 }
 function readPipfileLockUnsupportedSource(entry) {
   const rawGit = entry.git;
@@ -29973,7 +30227,7 @@ function readPipfileLockUnsupportedSource(entry) {
     };
   }
   const rawPath = entry.path;
-  if (typeof rawPath === "string" && normalizePythonLocalSourcePathSpec(rawPath) === undefined) {
+  if (typeof rawPath === "string" && normalizePythonLocalSourcePathSpec(rawPath, { allowBareRelativePath: true }) === undefined) {
     return {
       value: rawPath,
       reason: classifyUnsupportedPipfileSource(rawPath)
@@ -31127,6 +31381,8 @@ function stripTomlComment7(line) {
 // src/graph/python-requirements.ts
 import path36 from "node:path";
 var MAX_REQUIREMENTS_INCLUDE_DEPTH = 32;
+var MAX_REQUIREMENTS_PATHS_PER_PACKAGE = 64;
+var MAX_REQUIREMENTS_PATH_DEPTH = 64;
 var REQUIREMENTS_LOCAL_SOURCE_ERRORS = {
   parseCode: "REQUIREMENTS_PARSE_FAILED",
   readCode: "REQUIREMENTS_READ_FAILED",
@@ -31176,19 +31432,13 @@ function parseRequirementsText(input, lockfilePath = "requirements.txt", options
     return records;
   }
   const embeddedEvidence = [...records.value.values()].map((record) => record.evidence).filter((evidence) => evidence !== undefined);
+  const graph = buildRequirementsGraph([...records.value.values()], rootName);
   return ok({
     rootName,
     lockfilePath,
-    nodes: [...records.value.values()].sort((left, right) => left.id.localeCompare(right.id)).map((record) => ({
-      id: record.id,
-      name: record.name,
-      version: record.version,
-      ecosystem: "pypi",
-      dependencyType: "production",
-      direct: true,
-      paths: [[rootName, record.id]]
-    })),
-    ...embeddedEvidence.length > 0 ? { embeddedEvidence: embeddedEvidence.sort((left, right) => left.packageId.localeCompare(right.packageId)) } : {}
+    nodes: graph.nodes,
+    ...embeddedEvidence.length > 0 ? { embeddedEvidence: embeddedEvidence.sort((left, right) => left.packageId.localeCompare(right.packageId)) } : {},
+    ...graph.diagnostics.length > 0 ? { diagnostics: graph.diagnostics } : {}
   });
 }
 function parseRequirementsDocument(input) {
@@ -31218,11 +31468,38 @@ function parseRequirementsDocument(input) {
   seenFiles.add(normalizedLockfilePath);
   const records = new Map;
   const entries = [];
+  let annotationTarget;
+  let collectingViaContinuation = false;
   for (const [index, rawLine] of input.text.split(/\r?\n/).entries()) {
-    const line = stripRequirementComment(rawLine).trim();
-    if (line === "" || isIgnoredRequirementLine(line)) {
+    const splitLine = splitRequirementComment(rawLine);
+    const line = splitLine.entry.trim();
+    if (line === "") {
+      const comment = splitLine.comment?.trim();
+      if (comment === undefined || comment === "") {
+        annotationTarget = undefined;
+        collectingViaContinuation = false;
+        continue;
+      }
+      const viaStart = parseViaAnnotation(comment);
+      if (viaStart !== undefined && annotationTarget) {
+        annotationTarget.via = mergeViaAnnotations(annotationTarget.via, viaStart);
+        collectingViaContinuation = true;
+        continue;
+      }
+      if (collectingViaContinuation && annotationTarget) {
+        annotationTarget.via = mergeViaAnnotations(annotationTarget.via, [comment]);
+        continue;
+      }
+      annotationTarget = undefined;
+      collectingViaContinuation = false;
       continue;
     }
+    collectingViaContinuation = false;
+    if (isIgnoredRequirementLine(line)) {
+      annotationTarget = undefined;
+      continue;
+    }
+    const inlineVia = splitLine.comment === undefined ? undefined : parseViaAnnotation(splitLine.comment.trim());
     const directive = parseRequirementDirective(line);
     if (directive) {
       entries.push({
@@ -31230,15 +31507,19 @@ function parseRequirementsDocument(input) {
         entry: line,
         directive
       });
+      annotationTarget = undefined;
       continue;
     }
     const localSource = parseLocalSourceRequirement(line);
     if (localSource) {
-      entries.push({
+      const entry2 = {
         line: index + 1,
         entry: line,
-        localSource
-      });
+        localSource,
+        ...inlineVia !== undefined ? { via: inlineVia } : {}
+      };
+      entries.push(entry2);
+      annotationTarget = entry2;
       continue;
     }
     const unsupportedRemoteVcs = classifyUnsupportedRemoteVcsRequirement(line);
@@ -31272,10 +31553,13 @@ function parseRequirementsDocument(input) {
         }
       }));
     }
-    entries.push({
+    const entry = {
       line: index + 1,
-      entry: line
-    });
+      entry: line,
+      ...inlineVia !== undefined ? { via: inlineVia } : {}
+    };
+    entries.push(entry);
+    annotationTarget = entry;
   }
   for (const entry of entries) {
     if (entry.directive?.kind !== "constraint") {
@@ -31371,7 +31655,7 @@ function parseRequirementsDocument(input) {
       if (!parsedLocalSource.ok) {
         return parsedLocalSource;
       }
-      records.set(parsedLocalSource.value.id, parsedLocalSource.value);
+      records.set(parsedLocalSource.value.id, withViaAnnotations(parsedLocalSource.value, entry.via));
       continue;
     }
     const parsed = parsePinnedRequirement(entry.entry) ?? parseConstrainedRequirement(entry.entry, input.constraints);
@@ -31390,7 +31674,7 @@ function parseRequirementsDocument(input) {
     if (input.mode === "constraints") {
       input.constraints.set(normalizePythonPackageName5(parsed.name), parsed);
     } else {
-      records.set(parsed.id, parsed);
+      records.set(parsed.id, withViaAnnotations(parsed, entry.via));
     }
   }
   return ok(records);
@@ -31451,12 +31735,16 @@ function parseLocalSourceRequirement(line) {
   const requirement = line.split(";", 1)[0]?.trim() ?? "";
   const editableTarget = editableRequirementTarget(requirement);
   if (editableTarget) {
-    const sourcePath2 = normalizePythonLocalSourcePathSpec(editableTarget);
+    const sourcePath2 = normalizePythonLocalSourcePathSpec(editableTarget, {
+      allowBareRelativePath: true
+    });
     return sourcePath2 ? { sourcePath: sourcePath2 } : undefined;
   }
   const directReferenceMatch = /^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?\s*@\s*(.+)$/.exec(requirement);
   if (directReferenceMatch?.[1] && directReferenceMatch[2]) {
-    const sourcePath2 = normalizePythonLocalSourcePathSpec(directReferenceMatch[2]);
+    const sourcePath2 = normalizePythonLocalSourcePathSpec(directReferenceMatch[2], {
+      allowBareRelativePath: true
+    });
     return sourcePath2 ? {
       expectedName: directReferenceMatch[1],
       sourcePath: sourcePath2
@@ -31545,7 +31833,7 @@ function createDiskRequirementsIncludedFileReader(input) {
       }));
     }
     const resolved = path36.resolve(path36.dirname(fromFilePath), includePath);
-    if (!isPathInsideOrEqual2(resolved, rootDir)) {
+    if (!isPathInsideOrEqual3(resolved, rootDir)) {
       return err(createError({
         code: "REQUIREMENTS_PARSE_FAILED",
         category: "unsupported_input",
@@ -31588,8 +31876,29 @@ function createDiskRequirementsLocalSourceFileReader(input) {
 }
 function mergeRequirementsRecords(target, source) {
   for (const [id, record] of source.entries()) {
-    target.set(id, record);
+    const existing = target.get(id);
+    if (!existing) {
+      target.set(id, record);
+      continue;
+    }
+    const via = existing.via === undefined || record.via === undefined ? undefined : mergeViaAnnotations(existing.via, record.via);
+    const merged = {
+      ...record,
+      evidence: existing.evidence ?? record.evidence
+    };
+    if (via === undefined) {
+      delete merged.via;
+    } else {
+      merged.via = via;
+    }
+    target.set(id, merged);
   }
+}
+function withViaAnnotations(record, via) {
+  return via === undefined ? record : { ...record, via };
+}
+function mergeViaAnnotations(existing, additions) {
+  return [...new Set([...existing ?? [], ...additions.map((value) => value.trim()).filter(Boolean)])];
 }
 function normalizePythonPackageName5(name) {
   return name.toLowerCase().replace(/[-_.]+/g, "-");
@@ -31604,11 +31913,11 @@ function unquoteRequirementPath(input) {
   }
   return value;
 }
-function isPathInsideOrEqual2(candidate, root) {
+function isPathInsideOrEqual3(candidate, root) {
   const relative = path36.relative(root, candidate);
   return relative === "" || !relative.startsWith("..") && !path36.isAbsolute(relative);
 }
-function stripRequirementComment(line) {
+function splitRequirementComment(line) {
   let quote;
   let escaped = false;
   for (let index = 0;index < line.length; index += 1) {
@@ -31626,10 +31935,128 @@ function stripRequirementComment(line) {
       continue;
     }
     if (char === "#" && !quote && (index === 0 || /\s/.test(line[index - 1] ?? ""))) {
-      return line.slice(0, index);
+      return {
+        entry: line.slice(0, index),
+        comment: line.slice(index + 1)
+      };
     }
   }
-  return line;
+  return { entry: line };
+}
+function parseViaAnnotation(comment) {
+  const match = /^via(?:\s+(.+))?$/i.exec(comment);
+  if (!match) {
+    return;
+  }
+  return match[1] ? [match[1].trim()] : [];
+}
+function buildRequirementsGraph(records, rootName) {
+  const sortedRecords = [...records].sort((left, right) => left.id.localeCompare(right.id));
+  const recordsByName = new Map;
+  for (const record of sortedRecords) {
+    const normalizedName = normalizePythonPackageName5(record.name);
+    recordsByName.set(normalizedName, [...recordsByName.get(normalizedName) ?? [], record]);
+  }
+  const childrenById = new Map;
+  const directById = new Map;
+  for (const record of sortedRecords) {
+    const parents = (record.via ?? []).map(viaPackageName).filter((name) => name !== undefined).flatMap((name) => {
+      const matches = recordsByName.get(normalizePythonPackageName5(name)) ?? [];
+      return matches.length === 1 ? matches : [];
+    }).filter((parent, index, values) => parent.id !== record.id && values.findIndex((candidate) => candidate.id === parent.id) === index);
+    const hasRequirementRoot = record.via?.some(isRequirementRootVia) ?? false;
+    directById.set(record.id, record.via === undefined || hasRequirementRoot || parents.length === 0);
+    for (const parent of parents) {
+      childrenById.set(parent.id, [...childrenById.get(parent.id) ?? [], record]);
+    }
+  }
+  const pathsById = new Map(sortedRecords.map((record) => [record.id, []]));
+  const queuedPaths = [];
+  for (const record of sortedRecords) {
+    if (directById.get(record.id)) {
+      const dependencyPath = [rootName, record.id];
+      pathsById.get(record.id)?.push(dependencyPath);
+      queuedPaths.push({ record, path: dependencyPath });
+    }
+  }
+  const truncatedNodes = new Set;
+  const depthLimitedNodes = new Set;
+  for (let queueIndex = 0;queueIndex < queuedPaths.length; queueIndex += 1) {
+    const current = queuedPaths[queueIndex];
+    if (!current) {
+      continue;
+    }
+    for (const child of childrenById.get(current.record.id) ?? []) {
+      if (current.path.includes(child.id)) {
+        continue;
+      }
+      const nextPath = [...current.path, child.id];
+      if (nextPath.length - 1 > MAX_REQUIREMENTS_PATH_DEPTH) {
+        depthLimitedNodes.add(child.id);
+        continue;
+      }
+      const childPaths = pathsById.get(child.id) ?? [];
+      const pathKey = nextPath.join("\x00");
+      if (childPaths.some((dependencyPath) => dependencyPath.join("\x00") === pathKey)) {
+        continue;
+      }
+      if (childPaths.length >= MAX_REQUIREMENTS_PATHS_PER_PACKAGE) {
+        truncatedNodes.add(child.id);
+        continue;
+      }
+      childPaths.push(nextPath);
+      pathsById.set(child.id, childPaths);
+      queuedPaths.push({ record: child, path: nextPath });
+    }
+  }
+  for (const record of sortedRecords) {
+    const dependencyPaths = pathsById.get(record.id) ?? [];
+    if (dependencyPaths.length === 0) {
+      directById.set(record.id, true);
+      dependencyPaths.push([rootName, record.id]);
+      pathsById.set(record.id, dependencyPaths);
+    }
+  }
+  const diagnostics = [];
+  if (truncatedNodes.size > 0) {
+    diagnostics.push({
+      code: "dependency_paths_truncated",
+      affectedNodeCount: truncatedNodes.size,
+      limit: MAX_REQUIREMENTS_PATHS_PER_PACKAGE,
+      message: `requirements.txt dependency paths were limited to ${MAX_REQUIREMENTS_PATHS_PER_PACKAGE} paths per package.`
+    });
+  }
+  if (depthLimitedNodes.size > 0) {
+    diagnostics.push({
+      code: "dependency_path_depth_summarized",
+      affectedNodeCount: depthLimitedNodes.size,
+      limit: MAX_REQUIREMENTS_PATH_DEPTH,
+      message: `requirements.txt dependency paths were limited to ${MAX_REQUIREMENTS_PATH_DEPTH} package levels.`
+    });
+  }
+  return {
+    nodes: sortedRecords.map((record) => ({
+      id: record.id,
+      name: record.name,
+      version: record.version,
+      ecosystem: "pypi",
+      dependencyType: "production",
+      direct: directById.get(record.id) ?? true,
+      paths: [...pathsById.get(record.id) ?? [[rootName, record.id]]].sort((left, right) => left.join("\x00").localeCompare(right.join("\x00")))
+    })),
+    diagnostics
+  };
+}
+function viaPackageName(value) {
+  const trimmed = value.trim();
+  if (trimmed.startsWith("-")) {
+    return;
+  }
+  const match = /^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?$/.exec(trimmed);
+  return match?.[1];
+}
+function isRequirementRootVia(value) {
+  return /^(?:-r(?:\s|$)|--requirement(?:\s|=|$))/i.test(value.trim());
 }
 
 // src/graph/python-uv-lock.ts
@@ -31765,7 +32192,7 @@ function parseUvPackageRecords(input, options) {
       return err(createError({
         code: "UV_LOCK_PARSE_FAILED",
         category: "unsupported_input",
-        message: "Failed to parse uv.lock package source. Remote VCS package sources are not supported yet; use locked PyPI package records or project-root-contained local source paths.",
+        message: unsupportedUvSourceMessage(current.unsupportedSource.reason),
         details: {
           lockfilePath: options.lockfilePath,
           packageName: current.name,
@@ -31948,7 +32375,9 @@ function readStringAssignment4(line, key) {
 function readUvSourceAssignment(line) {
   const rawSource = readUvLocalSourceAssignmentValue(line);
   if (rawSource !== undefined) {
-    const sourcePath = normalizePythonLocalSourcePathSpec(rawSource);
+    const sourcePath = normalizePythonLocalSourcePathSpec(rawSource, {
+      allowBareRelativePath: true
+    });
     return sourcePath ? { sourcePath } : {
       unsupportedSource: {
         value: rawSource,
@@ -32000,6 +32429,18 @@ function classifyUnsupportedPythonSource2(value, sourceKey) {
     return "unsupported_remote_source";
   }
   return "unsupported_source_entry";
+}
+function unsupportedUvSourceMessage(reason) {
+  if (reason === "unsupported_remote_vcs_source") {
+    return "Failed to parse uv.lock package source. Remote VCS package sources are not supported yet; use locked PyPI package records or project-root-contained local source paths.";
+  }
+  if (reason === "unsupported_absolute_source_path") {
+    return "Failed to parse uv.lock package source. Local source paths must be relative and stay inside the project root.";
+  }
+  if (reason === "unsupported_remote_source") {
+    return "Failed to parse uv.lock package source. Direct remote package URLs are not supported yet; use locked PyPI package records or project-root-contained local source paths.";
+  }
+  return "Failed to parse uv.lock package source. Use a locked PyPI package record or a project-root-contained local source path.";
 }
 function stripTomlComment8(line) {
   let inString = false;
@@ -35496,7 +35937,8 @@ function parseLockfileTextForKind(input) {
       return parseBazelModuleText(input.text, input.lockfilePath);
     case "maven-pom":
       return parseMavenPomText(input.text, input.lockfilePath, omitUndefined({
-        projectRoot: input.projectRoot
+        projectRoot: input.projectRoot,
+        readProjectPom: input.mavenProjectPomReader
       }));
     case "nuget-lock":
       return parseNugetLockText(input.text, input.lockfilePath);
@@ -35848,7 +36290,8 @@ function discoverProject(options = {}) {
         }
         continue;
       }
-      if (lockfiles.length > 1 && !options.allLockfiles) {
+      const mergeSameRoot = options.allLockfiles || options.autoMergeSameRoot;
+      if (lockfiles.length > 1 && !mergeSameRoot) {
         return err(createError({
           code: "MULTIPLE_LOCKFILES",
           category: "unsupported_input",
@@ -35859,7 +36302,7 @@ function discoverProject(options = {}) {
           }
         }));
       }
-      const selectedLockfiles = options.allLockfiles ? lockfiles : lockfiles.slice(0, 1);
+      const selectedLockfiles = mergeSameRoot ? lockfiles : lockfiles.slice(0, 1);
       const projectLockfileEntries = selectedLockfiles.flatMap((lockfileName) => {
         const kind = supportedKindForLockfilePath(lockfileName);
         return kind ? [{ kind, path: path45.join(dir, lockfileName) }] : [];
@@ -35881,7 +36324,7 @@ function discoverProject(options = {}) {
         continue;
       }
       return ok({
-        rootDir: options.allLockfiles ? dir : rootDirForLockfilePath(primaryLockfile.path, primaryLockfile.kind),
+        rootDir: mergeSameRoot ? dir : rootDirForLockfilePath(primaryLockfile.path, primaryLockfile.kind),
         lockfile: primaryLockfile,
         ...projectLockfileEntries.length > 1 ? { lockfiles: projectLockfileEntries } : {}
       });
@@ -35889,7 +36332,8 @@ function discoverProject(options = {}) {
     if (searchMode === "tree") {
       const descendantProject = discoverDescendantProject({
         rootDir: startDir,
-        allLockfiles: options.allLockfiles ?? false
+        allLockfiles: options.allLockfiles ?? false,
+        autoMergeSameRoot: options.autoMergeSameRoot ?? false
       });
       if (descendantProject) {
         return descendantProject;
@@ -35978,7 +36422,8 @@ function discoverDescendantProject(input) {
     }));
   }
   const candidate = candidates[0];
-  if (candidate.lockfiles.length > 1 && !input.allLockfiles) {
+  const mergeSameRoot = input.allLockfiles || input.autoMergeSameRoot;
+  if (candidate.lockfiles.length > 1 && !mergeSameRoot) {
     return err(createError({
       code: "MULTIPLE_LOCKFILES",
       category: "unsupported_input",
@@ -35989,7 +36434,7 @@ function discoverDescendantProject(input) {
       }
     }));
   }
-  const selectedLockfiles = input.allLockfiles ? candidate.lockfiles : candidate.lockfiles.slice(0, 1);
+  const selectedLockfiles = mergeSameRoot ? candidate.lockfiles : candidate.lockfiles.slice(0, 1);
   const primaryLockfile = selectedLockfiles[0];
   return ok({
     rootDir: candidate.rootDir,
@@ -36592,6 +37037,19 @@ function buildParseInput(input) {
       }
       const included = input.source.readText(includedPath, LOCKFILE_MAX_BYTES);
       return included.ok ? ok({ path: syntheticCompanionPath(input.projectRoot, input.entryRoot, includedPath), text: included.value }) : included;
+    },
+    mavenProjectPomReader: ({ pomPath, fromPomPath }) => {
+      const moduleEntryPath = syntheticToEntryPath(input.projectRoot, input.entryRoot, pomPath);
+      if (!isWithinArchiveRoot(moduleEntryPath, input.entryRoot)) {
+        return err(createError({
+          code: "MAVEN_POM_PARSE_FAILED",
+          category: "invalid_input",
+          message: "A Maven module points outside the archive project root.",
+          details: { lockfilePath: fromPomPath, modulePomPath: pomPath }
+        }));
+      }
+      const modulePom = input.source.readText(moduleEntryPath, LOCKFILE_MAX_BYTES);
+      return modulePom.ok ? ok({ path: pomPath, text: modulePom.value }) : modulePom;
     }
   });
 }
@@ -36725,7 +37183,7 @@ function noProjectError(source) {
 
 // src/archive/archive-reader.ts
 import { createHash } from "node:crypto";
-import { closeSync as closeSync3, fstatSync, openSync as openSync3, readSync as readSync3, realpathSync, statSync as statSync6 } from "node:fs";
+import { closeSync as closeSync3, fstatSync, openSync as openSync3, readSync as readSync3, realpathSync as realpathSync2, statSync as statSync6 } from "node:fs";
 import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import { gunzipSync, inflateRawSync } from "node:zlib";
 var BLOCK_BYTES = 512;
@@ -36769,8 +37227,8 @@ function readArchiveFile(input) {
   const safeName = safeBasename(input.archivePath);
   try {
     const limits = resolveLimits(input.limits);
-    const cwd = realpathSync(resolve(input.cwd));
-    const filePath = realpathSync(resolve(cwd, input.archivePath));
+    const cwd = realpathSync2(resolve(input.cwd));
+    const filePath = realpathSync2(resolve(cwd, input.archivePath));
     const relativePath = relative(cwd, filePath);
     if (relativePath === "" || isAbsolute(relativePath) || relativePath === ".." || relativePath.startsWith(`..${sep}`)) {
       fail("ARCHIVE_READ_FAILED", "invalid_input", "Archive path is outside the working directory.", {
@@ -38426,7 +38884,7 @@ import {
   openSync as openSync4,
   readdirSync as readdirSync31,
   readSync as readSync4,
-  realpathSync as realpathSync3,
+  realpathSync as realpathSync4,
   statSync as statSync32
 } from "node:fs";
 import { request as httpsRequest } from "node:https";
@@ -40058,7 +40516,7 @@ function roundUpToBlock(size) {
 }
 
 // src/evidence/go-module.ts
-import { existsSync as existsSync27, readdirSync as readdirSync15, realpathSync as realpathSync2, statSync as statSync16 } from "node:fs";
+import { existsSync as existsSync27, readdirSync as readdirSync15, realpathSync as realpathSync3, statSync as statSync16 } from "node:fs";
 import path56 from "node:path";
 var GO_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var GO_LICENSE_FILE_LIMIT = 50;
@@ -40149,7 +40607,7 @@ function resolveLocalReplacementModuleDir(input) {
   const candidate = path56.resolve(input.projectRoot, input.localPath);
   const projectRoot = resolveRealPathIfPossible(input.projectRoot);
   const moduleDir = resolveRealPathIfPossible(candidate);
-  if (!isPathInsideOrEqual3(moduleDir, projectRoot)) {
+  if (!isPathInsideOrEqual4(moduleDir, projectRoot)) {
     return;
   }
   if (!existsSync27(moduleDir) || !isReadableDirectory8(moduleDir)) {
@@ -40226,12 +40684,12 @@ function isReadableDirectory8(dir) {
 }
 function resolveRealPathIfPossible(targetPath) {
   try {
-    return realpathSync2(targetPath);
+    return realpathSync3(targetPath);
   } catch {
     return path56.resolve(targetPath);
   }
 }
-function isPathInsideOrEqual3(candidate, root) {
+function isPathInsideOrEqual4(candidate, root) {
   const relativePath = path56.relative(root, candidate);
   return relativePath === "" || relativePath !== ".." && !relativePath.startsWith(`..${path56.sep}`) && !path56.isAbsolute(relativePath);
 }
@@ -45569,6 +46027,17 @@ async function readRemoteArtifactBytes(input) {
       allowedHosts: input.allowedHosts,
       ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
     },
+    createFailureError: (cause) => createRemoteArtifactExceptionError({
+      code: input.code,
+      message: input.fetchFailureMessage,
+      blockedMessage: input.blockedMessage,
+      details: {
+        packageId: input.packageId,
+        [input.urlDetailKey]: safeUrlForErrorDetails(input.url),
+        ...input.details
+      },
+      cause
+    }),
     readResponse: async (response, signal) => {
       const cacheMetadata = artifactCacheMetadataFromHeaders(response.headers);
       if (response.status === 304) {
@@ -45674,7 +46143,7 @@ function resolveExistingLocalArtifactPath(input) {
   if (!allowedRoots.ok) {
     return err(allowedRoots.error);
   }
-  const artifactPath = realpathSync3(input.artifactPath);
+  const artifactPath = realpathSync4(input.artifactPath);
   if (!isPathInsideAnyRoot(artifactPath, allowedRoots.value) && !isVerifiableExternalLocalTarball({
     artifactPath,
     integrity: input.integrity
@@ -45709,7 +46178,7 @@ function isSupportedLocalTarballPath(artifactPath) {
 function resolveTrustedWorkspaceRoot(workspaceRoot) {
   const resolvedPath = path74.resolve(workspaceRoot);
   try {
-    const realPath = realpathSync3(resolvedPath);
+    const realPath = realpathSync4(resolvedPath);
     if (!statSync32(realPath).isDirectory()) {
       return err(workspaceRootInvalidError(workspaceRoot, resolvedPath));
     }
@@ -45735,7 +46204,7 @@ function realpathLocalArtifactRoots(input) {
     return err(workspaceRoot.error);
   }
   return ok([
-    realpathSync3(resolveLocalArtifactRoot(input.projectRoot)),
+    realpathSync4(resolveLocalArtifactRoot(input.projectRoot)),
     ...workspaceRoot.value ? [workspaceRoot.value] : []
   ]);
 }
@@ -45755,12 +46224,12 @@ function findNearestGitRoot(startPath) {
     currentPath = parentPath;
   }
 }
-function isPathInsideOrEqual4(childPath, parentPath) {
+function isPathInsideOrEqual5(childPath, parentPath) {
   const relativePath = path74.relative(parentPath, childPath);
   return relativePath === "" || !relativePath.startsWith("..") && !path74.isAbsolute(relativePath);
 }
 function isPathInsideAnyRoot(childPath, parentPaths) {
-  return parentPaths.some((parentPath) => isPathInsideOrEqual4(childPath, parentPath));
+  return parentPaths.some((parentPath) => isPathInsideOrEqual5(childPath, parentPath));
 }
 function addIntegrityWarningWhenUnverified(input) {
   if (input.integrity) {
@@ -45875,11 +46344,11 @@ async function readArtifactWithTimeout(input) {
   const controller = new AbortController;
   let timeout;
   let timeoutError;
-  const timeoutPromise = new Promise((_, reject) => {
+  const timeoutPromise = new Promise((resolve2) => {
     timeout = setTimeout(() => {
       timeoutError = new Error(`Artifact fetch timed out after ${input.timeoutMs}ms.`);
       controller.abort();
-      reject(timeoutError);
+      resolve2(err(input.createFailureError(timeoutError)));
     }, input.timeoutMs);
   });
   try {
@@ -45898,7 +46367,7 @@ async function readArtifactWithTimeout(input) {
         throw timeoutError;
       }
       return result;
-    });
+    }).catch((cause) => err(input.createFailureError(cause)));
     return await Promise.race([readPromise, timeoutPromise]);
   } finally {
     if (timeout) {
@@ -46737,7 +47206,7 @@ async function readIncomingMessageToBuffer(message) {
 // src/git/ref-file.ts
 import { Buffer as Buffer2 } from "node:buffer";
 import { execFileSync } from "node:child_process";
-import { realpathSync as realpathSync4 } from "node:fs";
+import { realpathSync as realpathSync5 } from "node:fs";
 import path75 from "node:path";
 var GIT_FILE_LIST_MAX_BYTES = 16 * 1024 * 1024;
 var GIT_FILE_LIST_MAX_ENTRIES = 1e5;
@@ -46827,7 +47296,7 @@ var listGitRefFiles = (input) => {
   }
 };
 function resolveGitProjectContext(projectRoot, ref) {
-  const resolvedProjectRoot = realpathSync4(path75.resolve(projectRoot));
+  const resolvedProjectRoot = realpathSync5(path75.resolve(projectRoot));
   let gitRoot;
   try {
     const gitRootRelativePath = execFileSync("git", [
@@ -46839,7 +47308,7 @@ function resolveGitProjectContext(projectRoot, ref) {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"]
     }).trim();
-    gitRoot = realpathSync4(path75.resolve(resolvedProjectRoot, gitRootRelativePath || "."));
+    gitRoot = realpathSync5(path75.resolve(resolvedProjectRoot, gitRootRelativePath || "."));
   } catch (cause) {
     return err(readFailedError({
       input: { ref, relativePath: "." },
@@ -47307,7 +47776,7 @@ function encodeFindingComponent(value) {
 }
 
 // src/policy/config.ts
-import { existsSync as existsSync45, readFileSync as readFileSync3, realpathSync as realpathSync5, statSync as statSync33 } from "node:fs";
+import { existsSync as existsSync45, readFileSync as readFileSync3, realpathSync as realpathSync6, statSync as statSync33 } from "node:fs";
 import { isIP as isIP3 } from "node:net";
 import path76 from "node:path";
 var POLICY_FILENAME = ".ohrisk.yml";
@@ -47862,7 +48331,7 @@ function readStringList(value, field, filePath, allowSingle = false) {
 }
 function trustedPolicyPath(filePath, boundaryRoot) {
   try {
-    const realPath = realpathSync5(filePath);
+    const realPath = realpathSync6(filePath);
     const relative2 = path76.relative(boundaryRoot, realPath);
     if (relative2.startsWith("..") || path76.isAbsolute(relative2)) {
       return err(policyReadError({
@@ -47882,7 +48351,7 @@ function trustedPolicyPath(filePath, boundaryRoot) {
 }
 function realDirectory(directory) {
   try {
-    const realPath = realpathSync5(directory);
+    const realPath = realpathSync6(directory);
     if (!statSync33(realPath).isDirectory()) {
       throw new Error("Not a directory.");
     }
@@ -47977,11 +48446,8 @@ var PERMISSIVE_LICENSES = new Set([
   "CC0-1.0",
   "Unlicense"
 ]);
-var WEAK_COPYLEFT_LICENSE_PREFIXES = [
-  "LGPL",
-  "MPL",
-  "EPL"
-];
+var FILE_LEVEL_COPYLEFT_LICENSE_PREFIXES = ["MPL"];
+var WEAK_COPYLEFT_LICENSE_PREFIXES = ["LGPL", "EPL"];
 var STRONG_COPYLEFT_LICENSE_PREFIXES = [
   "GPL"
 ];
@@ -48140,6 +48606,9 @@ function classifyLicenseChoice(choice, profile, policy) {
       return "review";
     }
     return profile === "distributed-app" ? "high" : "review";
+  }
+  if (matchesPrefix(choice.license, FILE_LEVEL_COPYLEFT_LICENSE_PREFIXES)) {
+    return profile === "saas" ? "low" : "review";
   }
   if (matchesPrefix(choice.license, WEAK_COPYLEFT_LICENSE_PREFIXES)) {
     return "review";
@@ -53308,7 +53777,7 @@ import {
   lstatSync as lstatSync3,
   mkdirSync as mkdirSync2,
   openSync as openSync5,
-  realpathSync as realpathSync6,
+  realpathSync as realpathSync7,
   renameSync as renameSync2,
   rmSync as rmSync3,
   writeFileSync as writeFileSync2
@@ -53318,7 +53787,7 @@ import path81 from "node:path";
 var writeReportFile = (input) => {
   const resolvedCwd = path81.resolve(input.cwd);
   const resolvedPath = path81.resolve(resolvedCwd, input.outputPath);
-  if (!isProjectRelativeOutputPath(input.outputPath) || !isPathInsideOrEqual5(resolvedPath, resolvedCwd)) {
+  if (!isProjectRelativeOutputPath(input.outputPath) || !isPathInsideOrEqual6(resolvedPath, resolvedCwd)) {
     return err(createError({
       code: "REPORT_OUTPUT_PATH_OUTSIDE_PROJECT",
       category: "invalid_input",
@@ -53419,10 +53888,10 @@ function writeValidatedReportFile(input) {
   }
 }
 function validateResolvedReportPath(input) {
-  const realProjectRoot = realpathSync6(input.projectRoot);
-  const realParent = realpathSync6(path81.dirname(input.resolvedPath));
+  const realProjectRoot = realpathSync7(input.projectRoot);
+  const realParent = realpathSync7(path81.dirname(input.resolvedPath));
   const existingOutputIsSymlink = isSymbolicLinkPath(input.resolvedPath);
-  if (existingOutputIsSymlink || !isPathInsideOrEqual5(realParent, realProjectRoot)) {
+  if (existingOutputIsSymlink || !isPathInsideOrEqual6(realParent, realProjectRoot)) {
     return err(createError({
       code: "REPORT_OUTPUT_PATH_OUTSIDE_PROJECT",
       category: "invalid_input",
@@ -53489,7 +53958,7 @@ function isProjectRelativeOutputPath(outputPath) {
   }
   return outputPath.split(/[\\/]+/).every((segment) => segment !== "" && segment !== "." && segment !== "..");
 }
-function isPathInsideOrEqual5(childPath, parentPath) {
+function isPathInsideOrEqual6(childPath, parentPath) {
   const relativePath = path81.relative(parentPath, childPath);
   return relativePath === "" || !relativePath.startsWith("..") && !path81.isAbsolute(relativePath);
 }
@@ -53867,6 +54336,7 @@ async function runScanAt(input) {
     ...command.lockfilePath ? { lockfilePath: command.lockfilePath } : {},
     ...command.archivePath ? { archivePath: command.archivePath } : {},
     ...input.repository ? { projectSearchMode: "tree" } : {},
+    ...input.repository ? { autoMergeSameRoot: true } : {},
     allLockfiles: command.allLockfiles ?? false,
     ...command.policyPath ? { policyPath: command.policyPath } : {},
     offline: command.offline ?? false,
@@ -53962,6 +54432,7 @@ async function scanProject(input) {
     cwd: input.cwd,
     ...input.lockfilePath ? { lockfilePath: input.lockfilePath } : {},
     ...input.projectSearchMode ? { projectSearchMode: input.projectSearchMode } : {},
+    ...input.autoMergeSameRoot ? { autoMergeSameRoot: true } : {},
     allLockfiles: input.allLockfiles,
     prodOnly: input.prodOnly,
     ...input.progress ? { progress: input.progress } : {}
@@ -54035,6 +54506,7 @@ function loadProjectGraph(input) {
     cwd: input.cwd,
     ...input.lockfilePath ? { lockfilePath: input.lockfilePath } : {},
     ...input.projectSearchMode ? { searchMode: input.projectSearchMode } : {},
+    ...input.autoMergeSameRoot ? { autoMergeSameRoot: true } : {},
     ...input.allLockfiles ? { allLockfiles: true } : {}
   });
   if (isErr(discovered)) {
@@ -55355,7 +55827,7 @@ function resolveWorkspaceRootPath(input) {
   }
   const resolvedPath = path82.resolve(input.cwd, input.workspaceRootPath);
   try {
-    const realPath = realpathSync7(resolvedPath);
+    const realPath = realpathSync8(resolvedPath);
     if (!statSync34(realPath).isDirectory()) {
       return err(workspaceRootInvalidError2(input.workspaceRootPath));
     }
@@ -55381,7 +55853,7 @@ function isCliEntrypoint(metaUrl, argvPath) {
     return false;
   }
   try {
-    return realpathSync7(fileURLToPath4(metaUrl)) === realpathSync7(argvPath);
+    return realpathSync8(fileURLToPath4(metaUrl)) === realpathSync8(argvPath);
   } catch {
     return path82.resolve(fileURLToPath4(metaUrl)) === path82.resolve(argvPath);
   }

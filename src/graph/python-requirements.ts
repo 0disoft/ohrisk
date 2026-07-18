@@ -17,13 +17,14 @@ import {
   LOCKFILE_MAX_BYTES,
   readInputTextFile
 } from "./read-input-file";
-import type { DependencyGraph, DependencyNode } from "./types";
+import type { DependencyGraph, DependencyGraphDiagnostic, DependencyNode } from "./types";
 
 type RequirementsRecord = {
   name: string;
   version: string;
   id: string;
   evidence?: LicenseEvidence;
+  via?: string[];
 };
 
 export type RequirementsIncludedFile = {
@@ -58,9 +59,12 @@ type RequirementsLineEntry = {
   entry: string;
   directive?: RequirementsDirective;
   localSource?: RequirementsLocalSource;
+  via?: string[];
 };
 
 const MAX_REQUIREMENTS_INCLUDE_DEPTH = 32;
+const MAX_REQUIREMENTS_PATHS_PER_PACKAGE = 64;
+const MAX_REQUIREMENTS_PATH_DEPTH = 64;
 const REQUIREMENTS_LOCAL_SOURCE_ERRORS = {
   parseCode: "REQUIREMENTS_PARSE_FAILED",
   readCode: "REQUIREMENTS_READ_FAILED",
@@ -130,23 +134,16 @@ export function parseRequirementsText(
     .map((record) => record.evidence)
     .filter((evidence): evidence is LicenseEvidence => evidence !== undefined);
 
+  const graph = buildRequirementsGraph([...records.value.values()], rootName);
+
   return ok({
     rootName,
     lockfilePath,
-    nodes: [...records.value.values()]
-      .sort((left, right) => left.id.localeCompare(right.id))
-      .map((record): DependencyNode => ({
-        id: record.id,
-        name: record.name,
-        version: record.version,
-        ecosystem: "pypi",
-        dependencyType: "production",
-        direct: true,
-        paths: [[rootName, record.id]]
-      })),
+    nodes: graph.nodes,
     ...(embeddedEvidence.length > 0
       ? { embeddedEvidence: embeddedEvidence.sort((left, right) => left.packageId.localeCompare(right.packageId)) }
-      : {})
+      : {}),
+    ...(graph.diagnostics.length > 0 ? { diagnostics: graph.diagnostics } : {})
   });
 }
 
@@ -192,12 +189,46 @@ function parseRequirementsDocument(input: {
   seenFiles.add(normalizedLockfilePath);
   const records = new Map<string, RequirementsRecord>();
   const entries: RequirementsLineEntry[] = [];
+  let annotationTarget: RequirementsLineEntry | undefined;
+  let collectingViaContinuation = false;
 
   for (const [index, rawLine] of input.text.split(/\r?\n/).entries()) {
-    const line = stripRequirementComment(rawLine).trim();
-    if (line === "" || isIgnoredRequirementLine(line)) {
+    const splitLine = splitRequirementComment(rawLine);
+    const line = splitLine.entry.trim();
+    if (line === "") {
+      const comment = splitLine.comment?.trim();
+      if (comment === undefined || comment === "") {
+        annotationTarget = undefined;
+        collectingViaContinuation = false;
+        continue;
+      }
+
+      const viaStart = parseViaAnnotation(comment);
+      if (viaStart !== undefined && annotationTarget) {
+        annotationTarget.via = mergeViaAnnotations(annotationTarget.via, viaStart);
+        collectingViaContinuation = true;
+        continue;
+      }
+
+      if (collectingViaContinuation && annotationTarget) {
+        annotationTarget.via = mergeViaAnnotations(annotationTarget.via, [comment]);
+        continue;
+      }
+
+      annotationTarget = undefined;
+      collectingViaContinuation = false;
       continue;
     }
+
+    collectingViaContinuation = false;
+    if (isIgnoredRequirementLine(line)) {
+      annotationTarget = undefined;
+      continue;
+    }
+
+    const inlineVia = splitLine.comment === undefined
+      ? undefined
+      : parseViaAnnotation(splitLine.comment.trim());
 
     const directive = parseRequirementDirective(line);
     if (directive) {
@@ -206,16 +237,20 @@ function parseRequirementsDocument(input: {
         entry: line,
         directive
       });
+      annotationTarget = undefined;
       continue;
     }
 
     const localSource = parseLocalSourceRequirement(line);
     if (localSource) {
-      entries.push({
+      const entry: RequirementsLineEntry = {
         line: index + 1,
         entry: line,
-        localSource
-      });
+        localSource,
+        ...(inlineVia !== undefined ? { via: inlineVia } : {})
+      };
+      entries.push(entry);
+      annotationTarget = entry;
       continue;
     }
 
@@ -256,10 +291,13 @@ function parseRequirementsDocument(input: {
       );
     }
 
-    entries.push({
+    const entry: RequirementsLineEntry = {
       line: index + 1,
-      entry: line
-    });
+      entry: line,
+      ...(inlineVia !== undefined ? { via: inlineVia } : {})
+    };
+    entries.push(entry);
+    annotationTarget = entry;
   }
 
   for (const entry of entries) {
@@ -370,7 +408,10 @@ function parseRequirementsDocument(input: {
         return parsedLocalSource;
       }
 
-      records.set(parsedLocalSource.value.id, parsedLocalSource.value);
+      records.set(
+        parsedLocalSource.value.id,
+        withViaAnnotations(parsedLocalSource.value, entry.via)
+      );
       continue;
     }
 
@@ -394,7 +435,7 @@ function parseRequirementsDocument(input: {
     if (input.mode === "constraints") {
       input.constraints.set(normalizePythonPackageName(parsed.name), parsed);
     } else {
-      records.set(parsed.id, parsed);
+      records.set(parsed.id, withViaAnnotations(parsed, entry.via));
     }
   }
 
@@ -476,14 +517,18 @@ function parseLocalSourceRequirement(line: string): RequirementsLocalSource | un
   const requirement = line.split(";", 1)[0]?.trim() ?? "";
   const editableTarget = editableRequirementTarget(requirement);
   if (editableTarget) {
-    const sourcePath = normalizePythonLocalSourcePathSpec(editableTarget);
+    const sourcePath = normalizePythonLocalSourcePathSpec(editableTarget, {
+      allowBareRelativePath: true
+    });
     return sourcePath ? { sourcePath } : undefined;
   }
 
   const directReferenceMatch =
     /^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?\s*@\s*(.+)$/.exec(requirement);
   if (directReferenceMatch?.[1] && directReferenceMatch[2]) {
-    const sourcePath = normalizePythonLocalSourcePathSpec(directReferenceMatch[2]);
+    const sourcePath = normalizePythonLocalSourcePathSpec(directReferenceMatch[2], {
+      allowBareRelativePath: true
+    });
     return sourcePath
       ? {
           expectedName: directReferenceMatch[1],
@@ -682,8 +727,40 @@ function mergeRequirementsRecords(
   source: Map<string, RequirementsRecord>
 ): void {
   for (const [id, record] of source.entries()) {
-    target.set(id, record);
+    const existing = target.get(id);
+    if (!existing) {
+      target.set(id, record);
+      continue;
+    }
+
+    const via = existing.via === undefined || record.via === undefined
+      ? undefined
+      : mergeViaAnnotations(existing.via, record.via);
+    const merged: RequirementsRecord = {
+      ...record,
+      evidence: existing.evidence ?? record.evidence
+    };
+    if (via === undefined) {
+      delete merged.via;
+    } else {
+      merged.via = via;
+    }
+    target.set(id, merged);
   }
+}
+
+function withViaAnnotations(
+  record: RequirementsRecord,
+  via: string[] | undefined
+): RequirementsRecord {
+  return via === undefined ? record : { ...record, via };
+}
+
+function mergeViaAnnotations(
+  existing: string[] | undefined,
+  additions: string[]
+): string[] {
+  return [...new Set([...(existing ?? []), ...additions.map((value) => value.trim()).filter(Boolean)])];
 }
 
 function normalizePythonPackageName(name: string): string {
@@ -708,7 +785,7 @@ function isPathInsideOrEqual(candidate: string, root: string): boolean {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
-function stripRequirementComment(line: string): string {
+function splitRequirementComment(line: string): { entry: string; comment?: string } {
   let quote: "\"" | "'" | undefined;
   let escaped = false;
 
@@ -730,9 +807,153 @@ function stripRequirementComment(line: string): string {
     }
 
     if (char === "#" && !quote && (index === 0 || /\s/.test(line[index - 1] ?? ""))) {
-      return line.slice(0, index);
+      return {
+        entry: line.slice(0, index),
+        comment: line.slice(index + 1)
+      };
     }
   }
 
-  return line;
+  return { entry: line };
+}
+
+function parseViaAnnotation(comment: string): string[] | undefined {
+  const match = /^via(?:\s+(.+))?$/i.exec(comment);
+  if (!match) {
+    return undefined;
+  }
+
+  return match[1] ? [match[1].trim()] : [];
+}
+
+function buildRequirementsGraph(
+  records: RequirementsRecord[],
+  rootName: string
+): { nodes: DependencyNode[]; diagnostics: DependencyGraphDiagnostic[] } {
+  const sortedRecords = [...records].sort((left, right) => left.id.localeCompare(right.id));
+  const recordsByName = new Map<string, RequirementsRecord[]>();
+  for (const record of sortedRecords) {
+    const normalizedName = normalizePythonPackageName(record.name);
+    recordsByName.set(normalizedName, [...(recordsByName.get(normalizedName) ?? []), record]);
+  }
+
+  const childrenById = new Map<string, RequirementsRecord[]>();
+  const directById = new Map<string, boolean>();
+  for (const record of sortedRecords) {
+    const parents = (record.via ?? [])
+      .map(viaPackageName)
+      .filter((name): name is string => name !== undefined)
+      .flatMap((name) => {
+        const matches = recordsByName.get(normalizePythonPackageName(name)) ?? [];
+        return matches.length === 1 ? matches : [];
+      })
+      .filter((parent, index, values) =>
+        parent.id !== record.id && values.findIndex((candidate) => candidate.id === parent.id) === index
+      );
+    const hasRequirementRoot = record.via?.some(isRequirementRootVia) ?? false;
+    directById.set(record.id, record.via === undefined || hasRequirementRoot || parents.length === 0);
+    for (const parent of parents) {
+      childrenById.set(parent.id, [...(childrenById.get(parent.id) ?? []), record]);
+    }
+  }
+
+  const pathsById = new Map(sortedRecords.map((record) => [record.id, [] as string[][]]));
+  const queuedPaths: Array<{ record: RequirementsRecord; path: string[] }> = [];
+  for (const record of sortedRecords) {
+    if (directById.get(record.id)) {
+      const dependencyPath = [rootName, record.id];
+      pathsById.get(record.id)?.push(dependencyPath);
+      queuedPaths.push({ record, path: dependencyPath });
+    }
+  }
+
+  const truncatedNodes = new Set<string>();
+  const depthLimitedNodes = new Set<string>();
+  for (let queueIndex = 0; queueIndex < queuedPaths.length; queueIndex += 1) {
+    const current = queuedPaths[queueIndex];
+    if (!current) {
+      continue;
+    }
+
+    for (const child of childrenById.get(current.record.id) ?? []) {
+      if (current.path.includes(child.id)) {
+        continue;
+      }
+
+      const nextPath = [...current.path, child.id];
+      if (nextPath.length - 1 > MAX_REQUIREMENTS_PATH_DEPTH) {
+        depthLimitedNodes.add(child.id);
+        continue;
+      }
+
+      const childPaths = pathsById.get(child.id) ?? [];
+      const pathKey = nextPath.join("\u0000");
+      if (childPaths.some((dependencyPath) => dependencyPath.join("\u0000") === pathKey)) {
+        continue;
+      }
+      if (childPaths.length >= MAX_REQUIREMENTS_PATHS_PER_PACKAGE) {
+        truncatedNodes.add(child.id);
+        continue;
+      }
+
+      childPaths.push(nextPath);
+      pathsById.set(child.id, childPaths);
+      queuedPaths.push({ record: child, path: nextPath });
+    }
+  }
+
+  for (const record of sortedRecords) {
+    const dependencyPaths = pathsById.get(record.id) ?? [];
+    if (dependencyPaths.length === 0) {
+      directById.set(record.id, true);
+      dependencyPaths.push([rootName, record.id]);
+      pathsById.set(record.id, dependencyPaths);
+    }
+  }
+
+  const diagnostics: DependencyGraphDiagnostic[] = [];
+  if (truncatedNodes.size > 0) {
+    diagnostics.push({
+      code: "dependency_paths_truncated",
+      affectedNodeCount: truncatedNodes.size,
+      limit: MAX_REQUIREMENTS_PATHS_PER_PACKAGE,
+      message: `requirements.txt dependency paths were limited to ${MAX_REQUIREMENTS_PATHS_PER_PACKAGE} paths per package.`
+    });
+  }
+  if (depthLimitedNodes.size > 0) {
+    diagnostics.push({
+      code: "dependency_path_depth_summarized",
+      affectedNodeCount: depthLimitedNodes.size,
+      limit: MAX_REQUIREMENTS_PATH_DEPTH,
+      message: `requirements.txt dependency paths were limited to ${MAX_REQUIREMENTS_PATH_DEPTH} package levels.`
+    });
+  }
+
+  return {
+    nodes: sortedRecords.map((record): DependencyNode => ({
+      id: record.id,
+      name: record.name,
+      version: record.version,
+      ecosystem: "pypi",
+      dependencyType: "production",
+      direct: directById.get(record.id) ?? true,
+      paths: [...(pathsById.get(record.id) ?? [[rootName, record.id]])]
+        .sort((left, right) => left.join("\u0000").localeCompare(right.join("\u0000")))
+    })),
+    diagnostics
+  };
+}
+
+function viaPackageName(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (trimmed.startsWith("-")) {
+    return undefined;
+  }
+
+  const match = /^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?$/.exec(trimmed);
+  return match?.[1];
+}
+
+function isRequirementRootVia(value: string): boolean {
+  return /^(?:-r(?:\s|$)|--requirement(?:\s|=|$))/i.test(value.trim());
 }

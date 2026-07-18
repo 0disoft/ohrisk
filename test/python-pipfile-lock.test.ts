@@ -53,7 +53,7 @@ describe("parsePipfileLockText", () => {
   test("parses local path package entries with embedded license evidence", () => {
     const files = new Map([
       [
-        "./local-risk/pyproject.toml",
+        "libs/local-risk/pyproject.toml",
         [
           "[project]",
           "name = \"local-risk\"",
@@ -62,7 +62,7 @@ describe("parsePipfileLockText", () => {
         ].join("\n")
       ],
       [
-        "./local-risk/LICENSE",
+        "libs/local-risk/LICENSE",
         "GNU AFFERO GENERAL PUBLIC LICENSE Version 3\n"
       ]
     ]);
@@ -71,7 +71,7 @@ describe("parsePipfileLockText", () => {
       default: {
         "local-risk": {
           editable: true,
-          path: "./local-risk"
+          path: "libs/local-risk"
         }
       }
     }), "fixture-python/Pipfile.lock", {
@@ -113,7 +113,7 @@ describe("parsePipfileLockText", () => {
         source: "local",
         files: [
           expect.objectContaining({
-            path: "local-risk/LICENSE",
+            path: "libs/local-risk/LICENSE",
             kind: "license"
           })
         ]

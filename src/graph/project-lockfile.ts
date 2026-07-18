@@ -38,7 +38,11 @@ import {
   parseGradleVersionCatalogFile,
   parseGradleVersionCatalogText
 } from "./java-gradle-version-catalog";
-import { parseMavenPomFile, parseMavenPomText } from "./java-maven-pom";
+import {
+  parseMavenPomFile,
+  parseMavenPomText,
+  type MavenProjectPomReader
+} from "./java-maven-pom";
 import { parseJuliaManifestFile, parseJuliaManifestText } from "./julia-manifest";
 import { parseLuarocksLockfile, parseLuarocksLockText } from "./lua-luarocks-lock";
 import { parseNixFlakeLockfile, parseNixFlakeLockText } from "./nix-flake-lock";
@@ -115,6 +119,7 @@ export type LockfileTextParseInput = {
   requirementsRootName?: string;
   requirementsIncludedFileReader?: RequirementsIncludedFileReader;
   pythonLocalSourceFileReader?: PythonLocalSourceFileReader;
+  mavenProjectPomReader?: MavenProjectPomReader;
 };
 
 export function parseProjectLockfile(project: ProjectInput): Result<DependencyGraph, OhriskError> {
@@ -296,7 +301,8 @@ export function parseLockfileTextForKind(
       return parseBazelModuleText(input.text, input.lockfilePath);
     case "maven-pom":
       return parseMavenPomText(input.text, input.lockfilePath, omitUndefined({
-        projectRoot: input.projectRoot
+        projectRoot: input.projectRoot,
+        readProjectPom: input.mavenProjectPomReader
       }));
     case "nuget-lock":
       return parseNugetLockText(input.text, input.lockfilePath);

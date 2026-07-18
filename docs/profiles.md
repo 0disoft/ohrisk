@@ -21,7 +21,9 @@ binaries to users. In this mode:
 - GPL-only copyleft (GPL-2.0, GPL-3.0) is `review`, not `high`, because SaaS
   usage does not trigger redistribution obligations.
 - AGPL, source-available restrictions, and UNLICENSED remain `high`.
-- Weak copyleft (LGPL, MPL, EPL) is `review`.
+- MPL file-level copyleft is `low` because service use does not deliver a copy
+  of the package to users.
+- Weak copyleft LGPL and EPL remain `review`.
 - Permissive licenses (MIT, Apache-2.0, BSD, ISC, etc.) are `low`.
 
 ## When to choose distributed-app
@@ -37,11 +39,12 @@ mode:
 
 ## Why the same license changes
 
-GPL is the only license family where the profile changes the severity. Under
-`saas`, you are not redistributing the package, so the GPL redistribution
-obligation does not trigger — Ohrisk flags it as `review` instead of blocking.
-Under `distributed-app`, you are shipping the package, so GPL redistribution
-obligations apply and the severity becomes `high`.
+GPL and MPL change severity with the shipping profile. Under `saas`, you are
+not redistributing the package, so GPL redistribution obligations do not
+trigger and MPL file-level source obligations are not activated because no
+package copy is delivered. Ohrisk classifies GPL as `review` and MPL as `low`. Under
+`distributed-app`, you are shipping the package, so GPL becomes `high` and MPL
+becomes `review`.
 
 All other license families are profile-independent. AGPL is `high` under both
 profiles because the network clause applies regardless of how you ship. SSPL,
@@ -54,7 +57,8 @@ distribution model.
 | License family | Example SPDX IDs | saas | distributed-app |
 |---|---|---|---|
 | Permissive | MIT, Apache-2.0, BSD-3-Clause, ISC, 0BSD, Zlib | low | low |
-| Weak copyleft | LGPL-3.0, MPL-2.0, EPL-2.0 | review | review |
+| File-level copyleft | MPL-2.0 | low | review |
+| Weak copyleft | LGPL-3.0, EPL-2.0 | review | review |
 | Strong copyleft (GPL) | GPL-2.0, GPL-3.0 | review | high |
 | Network copyleft | AGPL-3.0 | high | high |
 | Source-available restriction | SSPL-1.0, BUSL-1.1, Commons-Clause, Elastic-2.0, PolyForm-Noncommercial-1.0.0, PolyForm-Free-Trial-1.0.0 | high | high |

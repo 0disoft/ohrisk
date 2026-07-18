@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.9.0 - 2026-07-18
+
+- `requirements.txt` scans now use pip-compile `# via` annotations to restore
+  bounded direct/transitive dependency paths when every named parent is present;
+  plain files and unresolved annotations remain fail-safe as direct dependencies.
+- The built-in `saas` profile now classifies MPL file-level copyleft as `low`
+  when package copies are not redistributed, while `distributed-app` keeps MPL
+  at `review` and LGPL/EPL behavior remains unchanged.
+- Python local-source records now accept safe bare repository-relative paths
+  such as `libs/giskard-agents`, while absolute, remote, and escaping paths
+  remain fail-closed with source-specific diagnostics.
+- Remote GitHub scans now automatically merge multiple supported inputs at one
+  selected project root, so mixed roots such as `pom.xml` plus
+  `requirements.txt` no longer require `--all`.
+- Maven aggregator POM scans now recurse through bounded project-contained
+  modules, inherit matching aggregator parent metadata, and reject path escape,
+  cycles, missing module POMs, or resource-limit violations instead of emitting
+  an empty successful report.
+- Remote artifact and PyPI metadata timeouts now resolve to typed unavailable
+  evidence instead of leaking a rejected timeout promise that can terminate the
+  CLI process under short evidence timeouts.
+
 ## 1.8.0 - 2026-07-17
 
 - Added exact-version PyPI release evidence for locked Python packages. Ohrisk

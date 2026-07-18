@@ -253,6 +253,32 @@ describe("PyPI release evidence", () => {
     });
   });
 
+  test("turns stalled PyPI metadata fetches into unavailable evidence", async () => {
+    let fetchSignal: AbortSignal | undefined;
+    const result = await collectGraphEvidence({
+      graph: graphFor("pypi"),
+      projectRoot: process.cwd(),
+      allowLocalProjectEvidence: false,
+      fetchTimeoutMs: 1,
+      fetchArtifact: async (_url, options) => {
+        fetchSignal = options?.signal;
+        return await new Promise<never>(() => {});
+      }
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(fetchSignal?.aborted).toBe(true);
+    expect(result.value).toEqual([{
+      packageId: "example-pkg@1.2.3",
+      files: [],
+      source: "unavailable",
+      warnings: [
+        "Package evidence could not be fetched (REGISTRY_METADATA_FETCH_FAILED): Failed to fetch PyPI release metadata."
+      ]
+    }]);
+  });
+
   test("fails closed when the PyPI distribution digest does not match", async () => {
     const wheel = exampleWheel("MIT");
     const metadata = pypiMetadata(wheel, "0".repeat(64));

@@ -2464,6 +2464,21 @@ describe("discoverProject", () => {
         "poetry.lock",
         "requirements.txt"
       ]);
+
+      const automaticResult = discoverProject({
+        cwd: repositoryRoot,
+        searchMode: "tree",
+        autoMergeSameRoot: true
+      });
+      expect(automaticResult.ok).toBe(true);
+      if (!automaticResult.ok) {
+        throw new Error(automaticResult.error.message);
+      }
+      expect(automaticResult.value.rootDir).toBe(docsRoot);
+      expect(automaticResult.value.lockfiles?.map((lockfile) => path.basename(lockfile.path))).toEqual([
+        "poetry.lock",
+        "requirements.txt"
+      ]);
     } finally {
       rmSync(repositoryRoot, { recursive: true, force: true });
     }

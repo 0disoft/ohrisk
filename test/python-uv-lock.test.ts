@@ -141,7 +141,7 @@ describe("parseUvLockText", () => {
   test("parses local source package records with embedded license evidence", () => {
     const files = new Map([
       [
-        "./local-risk/pyproject.toml",
+        "libs/local-risk/pyproject.toml",
         [
           "[project]",
           "name = \"local-risk\"",
@@ -150,7 +150,7 @@ describe("parseUvLockText", () => {
         ].join("\n")
       ],
       [
-        "./local-risk/LICENSE",
+        "libs/local-risk/LICENSE",
         "GNU AFFERO GENERAL PUBLIC LICENSE Version 3\n"
       ]
     ]);
@@ -171,7 +171,7 @@ describe("parseUvLockText", () => {
         "[[package]]",
         "name = \"local-risk\"",
         "version = \"1.0.0\"",
-        "source = { directory = \"./local-risk\" }"
+        "source = { directory = \"libs/local-risk\" }"
       ].join("\n"),
       "uv.lock",
       {
@@ -213,7 +213,7 @@ describe("parseUvLockText", () => {
         metadataSource: "pyproject.toml",
         files: [
           {
-            path: "local-risk/LICENSE",
+            path: "libs/local-risk/LICENSE",
             kind: "license",
             text: "GNU AFFERO GENERAL PUBLIC LICENSE Version 3\n"
           }

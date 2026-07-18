@@ -391,6 +391,25 @@ function buildParseInput(input: {
         input.entryRoot,
         includedPath
       ), text: included.value }) : included;
+    },
+    mavenProjectPomReader: ({ pomPath, fromPomPath }) => {
+      const moduleEntryPath = syntheticToEntryPath(
+        input.projectRoot,
+        input.entryRoot,
+        pomPath
+      );
+      if (!isWithinArchiveRoot(moduleEntryPath, input.entryRoot)) {
+        return err(createError({
+          code: "MAVEN_POM_PARSE_FAILED",
+          category: "invalid_input",
+          message: "A Maven module points outside the archive project root.",
+          details: { lockfilePath: fromPomPath, modulePomPath: pomPath }
+        }));
+      }
+      const modulePom = input.source.readText(moduleEntryPath, LOCKFILE_MAX_BYTES);
+      return modulePom.ok
+        ? ok({ path: pomPath, text: modulePom.value })
+        : modulePom;
     }
   });
 }

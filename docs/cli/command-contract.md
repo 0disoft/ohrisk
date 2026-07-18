@@ -20,7 +20,7 @@ development, tests, and packaging.
 
 ## Stable Options
 
-- `--lockfile <path>` selects one supported input; `--all` discovers and merges all supported lockfiles at the selected project root. They are mutually exclusive for scan, CI, and diff.
+- `--lockfile <path>` selects one supported input; `--all` discovers and merges all supported lockfiles at the selected project root. They are mutually exclusive for scan, CI, and diff. A remote repository scan automatically merges multiple supported inputs at its one selected project root; local, archive, CI, and diff inputs keep the explicit `--all` opt-in.
 - `scan|ci --archive <path>` scans a ZIP, TAR, TAR.GZ, or TGZ as a read-only in-memory virtual project. It is mutually exclusive with `--lockfile` and `--workspace-root`, may be combined with `--all`, and is not supported by `diff`.
 - `scan [repository-url]` and `scan --repo <url>` scan one public GitHub HTTPS repository through a bounded temporary shallow clone. Remote repository input may combine with a safe repository-relative `--lockfile`, is mutually exclusive with `--archive`, `--workspace-root`, and `--offline`, and is not supported by `ci`, `diff`, or the GitHub Action input contract.
 - `--policy <path>` selects a workspace-contained policy file; otherwise `.ohrisk.yml` is loaded when present.
@@ -75,8 +75,9 @@ inside the validated checkout. It automatically selects the dependency project
 when exactly one nested project root contains supported input. For example, a
 plain Mbed TLS scan selects `docs/requirements.txt`. If multiple nested project
 roots are found, Ohrisk reports their safe relative paths and requires
-`--lockfile <repository-relative-path>` instead of guessing. `--all` may merge
-multiple inputs only when they belong to the same single nested project root.
+`--lockfile <repository-relative-path>` instead of guessing. When one root is
+selected, every supported input at that root is merged automatically; the scan
+does not prefer one ecosystem and silently omit the others.
 SBOM files containing unresolved uppercase `@BUILD_VARIABLE@` placeholders are
 treated as build templates rather than concrete automatic-discovery candidates.
 Absolute, empty-segment, dot-segment, and traversal paths are rejected before
@@ -94,9 +95,11 @@ truncation rules.
 
 Policy and waiver files in the cloned repository are untrusted and are not auto-loaded. The
 directory where Ohrisk was invoked remains the configuration, waiver, cache, and report-output
-root. Local package evidence from the temporary checkout is disabled; lockfile-embedded evidence
-and the bounded npm/PyPI remote package-evidence pipeline remain available. Shareable reports and
-errors redact the temporary checkout path.
+root. General package-cache, install-tree, and vendored-source evidence from the temporary checkout
+is disabled. Project-contained source metadata and license files explicitly referenced by a selected
+Python lockfile local-source record are parser inputs and remain bounded by the validated checkout;
+lockfile-embedded evidence and the bounded npm/PyPI remote package-evidence pipeline also remain
+available. Shareable reports and errors redact the temporary checkout path.
 
 ## Multiple Lockfiles
 
@@ -105,6 +108,12 @@ are deduplicated by Package URL while the original package identifier and every
 contributing lockfile remain available as provenance. Conflicting package
 metadata is reported instead of silently replacing the first deterministic
 record.
+
+Maven aggregator `pom.xml` inputs recursively scan project-contained `<module>`
+POMs. Module paths, nesting depth, total module count, file size, cycles, and
+missing module POMs fail closed. Child modules inherit matching aggregator
+parent properties and `dependencyManagement`; external parent and imported BOM
+resolution remains limited to already available local Maven repository POMs.
 
 `diff <ref> --all` independently discovers the supported input set in the
 current worktree and the baseline git tree, parses each set with the same
@@ -115,6 +124,13 @@ and Markdown output summarize added and removed inputs. JSON also separates
 remains the combined new-and-changed threshold set. A baseline with no
 supported input is represented as an empty dependency graph instead of forcing
 the current lockfile path to exist in that ref.
+
+For `requirements.txt`, plain pins and entries whose provenance cannot be
+resolved are treated as direct dependencies. Inline or following pip-compile
+`# via` annotations restore bounded parent paths when every named parent maps
+unambiguously to another pin in the same parsed requirements set. A `-r` source
+marks a direct requirement; a `-c` constraint alone does not. Cycles, excessive
+depth, and excessive path fan-out cannot make graph reconstruction unbounded.
 
 ## Output Requirements
 

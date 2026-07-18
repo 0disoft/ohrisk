@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.8.0
+npm install -g ohrisk@1.9.0
 cd your-project
 ohrisk scan
 ```
@@ -56,6 +56,11 @@ ohrisk scan --html https://github.com/0disoft/laqu.git
 Git submodules are not fetched. Their paths are skipped by default and the
 report is marked as incomplete; use `--submodules reject` when any submodule
 must fail the scan instead.
+
+Remote scans automatically merge supported dependency inputs found at the same
+project root. Maven aggregator POMs are followed through bounded, project-contained
+`<module>` paths, so a root `packaging=pom` file does not produce an empty success
+while its child modules contain the actual dependencies.
 
 Use Korean, Spanish, French, Chinese, Hindi, Japanese, Indonesian, Turkish, Russian, or German HTML report text when you want a local review artifact for those readers:
 
@@ -108,7 +113,8 @@ software, because redistribution changes license obligations.
   binaries to users. GPL-only copyleft such as GPL-2.0 and GPL-3.0 is treated
   as `review` rather than an immediate block, because SaaS usage does not
   trigger redistribution obligations. AGPL and source-available restrictions
-  remain `high`.
+  remain `high`. MPL file-level copyleft is `low` when no package copy is
+  redistributed; LGPL and EPL remain `review`.
 - `distributed-app`: you ship the package to users. GPL becomes `high` because
   redistribution obligations apply. Weak copyleft (LGPL, MPL, EPL) is flagged as
   `review`.
@@ -155,7 +161,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - Python PDM `pdm.lock` and `poetry.lock` projects are scanned for PyPI package dependencies recorded in the lockfile
 - Python Pipenv `Pipfile.lock` projects are scanned for exact `==version` PyPI package entries and project-root-contained local `path` or editable source entries in the `default` and `develop` sections
 - Python PDM `pdm.lock` projects use adjacent `pyproject.toml` root dependencies when available, infer roots from lockfile dependency references otherwise, and scan project-root-contained local `path` or relative `file:` source records
-- Python `requirements.txt` files are scanned for pinned direct PyPI package dependencies, project-root-contained local source entries, editable local source entries, nested `-r` requirement files, and exact `-c` constraint pins
+- Python `requirements.txt` files are scanned for pinned PyPI packages, project-root-contained local source entries, editable local source entries, nested `-r` requirement files, and exact `-c` constraint pins; pip-compile `# via` annotations restore direct/transitive package paths when every named parent is present
 - Java Gradle `gradle.lockfile` and legacy `gradle/dependency-locks` directory projects are scanned for Maven coordinates recorded in dependency locking output; explicit `gradle/dependency-locks/*.lockfile` files are also accepted. Java Gradle `gradle/libs.versions.toml` projects are scanned for exact Maven library aliases from compact notation, `module` plus exact `version`, or `module` plus `version.ref`
 - Java Maven `pom.xml` projects are scanned for direct dependencies with explicit, property-resolved, same-file `dependencyManagement`, or local `.m2/repository` parent/imported-BOM `dependencyManagement` versions
 - Bazel `MODULE.bazel` projects are scanned for direct `bazel_dep` entries with literal exact `version` strings; nodep `repo_name = None` entries, `include()` expansion, overrides, module extensions, and `MODULE.bazel.lock` resolution output fail closed instead of being partial-scanned
@@ -348,7 +354,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.8.0
+npm install -g ohrisk@1.9.0
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
@@ -415,7 +421,7 @@ Supported dependency input files:
 - `Pipfile.lock` exact `==version` entries and project-root-contained local `path` or editable source entries from Python Pipenv projects, using installed `.venv`/`venv` dist-info metadata or local source metadata and license files for local evidence
 - `pdm.lock` package entries and project-root-contained local `path` or relative `file:` source records from Python PDM projects, using adjacent `pyproject.toml` root dependencies when available and installed `.venv`/`venv` dist-info metadata or local source metadata and license files for local evidence
 - `poetry.lock` package entries from Python Poetry projects, using adjacent `pyproject.toml` root dependencies when available and installed `.venv`/`venv` dist-info metadata for local evidence
-- pinned `requirements.txt` entries such as `name==version`, local source entries such as `-e ./local-package`, `./local-package`, `file:./local-package`, and `name @ file:./local-package`, nested `-r` requirement files, and exact `-c` constraint pins for ranged entries, using installed `.venv`/`venv` dist-info metadata or project-root-contained local source metadata and license files for local evidence
+- pinned `requirements.txt` entries such as `name==version`, local source entries such as `-e ./local-package`, `./local-package`, `file:./local-package`, and `name @ file:./local-package`, nested `-r` requirement files, and exact `-c` constraint pins for ranged entries, using pip-compile `# via` annotations for bounded dependency-path reconstruction and installed `.venv`/`venv` dist-info metadata or project-root-contained local source metadata and license files for local evidence
 - `gradle.lockfile`, legacy `gradle/dependency-locks` directories, and explicit `gradle/dependency-locks/*.lockfile` Maven coordinates from Java Gradle dependency locking, using local `.m2/repository` POM metadata for evidence
 - `gradle/libs.versions.toml` Maven library aliases with exact versions or `version.ref` values from the same catalog, using local `.m2/repository` POM metadata for evidence
 - Maven `pom.xml` direct dependencies with explicit versions or versions resolved from local `<properties>`, same-file `dependencyManagement`, or local `.m2/repository` parent/imported-BOM `dependencyManagement`, using local `.m2/repository` POM metadata for evidence

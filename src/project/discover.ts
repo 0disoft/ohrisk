@@ -83,6 +83,7 @@ export type DiscoverProjectOptions = {
   cwd?: string;
   lockfilePath?: string;
   allLockfiles?: boolean;
+  autoMergeSameRoot?: boolean;
   searchMode?: "ancestors" | "tree";
 };
 
@@ -394,7 +395,8 @@ export function discoverProject(
         continue;
       }
 
-      if (lockfiles.length > 1 && !options.allLockfiles) {
+      const mergeSameRoot = options.allLockfiles || options.autoMergeSameRoot;
+      if (lockfiles.length > 1 && !mergeSameRoot) {
         return err(
           createError({
             code: "MULTIPLE_LOCKFILES",
@@ -408,7 +410,7 @@ export function discoverProject(
         );
       }
 
-      const selectedLockfiles = options.allLockfiles ? lockfiles : lockfiles.slice(0, 1);
+      const selectedLockfiles = mergeSameRoot ? lockfiles : lockfiles.slice(0, 1);
       const projectLockfileEntries = selectedLockfiles.flatMap((lockfileName) => {
         const kind = supportedKindForLockfilePath(lockfileName);
         return kind
@@ -437,7 +439,7 @@ export function discoverProject(
       }
 
       return ok({
-        rootDir: options.allLockfiles
+        rootDir: mergeSameRoot
           ? dir
           : rootDirForLockfilePath(primaryLockfile.path, primaryLockfile.kind),
         lockfile: primaryLockfile,
@@ -448,7 +450,8 @@ export function discoverProject(
     if (searchMode === "tree") {
       const descendantProject = discoverDescendantProject({
         rootDir: startDir,
-        allLockfiles: options.allLockfiles ?? false
+        allLockfiles: options.allLockfiles ?? false,
+        autoMergeSameRoot: options.autoMergeSameRoot ?? false
       });
       if (descendantProject) {
         return descendantProject;
@@ -498,6 +501,7 @@ export function discoverProject(
 function discoverDescendantProject(input: {
   rootDir: string;
   allLockfiles: boolean;
+  autoMergeSameRoot: boolean;
 }): Result<ProjectInput, OhriskError> | undefined {
   const projects = new Map<string, Map<string, ProjectLockfile>>();
   const pendingDirectories = [input.rootDir];
@@ -577,7 +581,8 @@ function discoverDescendantProject(input: {
   }
 
   const candidate = candidates[0]!;
-  if (candidate.lockfiles.length > 1 && !input.allLockfiles) {
+  const mergeSameRoot = input.allLockfiles || input.autoMergeSameRoot;
+  if (candidate.lockfiles.length > 1 && !mergeSameRoot) {
     return err(
       createError({
         code: "MULTIPLE_LOCKFILES",
@@ -593,7 +598,7 @@ function discoverDescendantProject(input: {
     );
   }
 
-  const selectedLockfiles = input.allLockfiles
+  const selectedLockfiles = mergeSameRoot
     ? candidate.lockfiles
     : candidate.lockfiles.slice(0, 1);
   const primaryLockfile = selectedLockfiles[0]!;

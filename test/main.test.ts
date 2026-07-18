@@ -219,6 +219,52 @@ describe("main", () => {
     }
   });
 
+  test("automatically merges multiple supported inputs at one remote project root", async () => {
+    const invocationRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-remote-multi-invocation-"));
+    const temporaryRepository = mkdtempSync(path.join(tmpdir(), "ohrisk-remote-multi-checkout-"));
+
+    try {
+      writeFileSync(path.join(temporaryRepository, "pom.xml"), [
+        "<project>",
+        "  <modelVersion>4.0.0</modelVersion>",
+        "  <groupId>net.coreprotect</groupId>",
+        "  <artifactId>CoreProtect</artifactId>",
+        "  <version>24.0</version>",
+        "</project>"
+      ].join("\n"), "utf8");
+      writeFileSync(
+        path.join(temporaryRepository, "requirements.txt"),
+        "# documentation dependencies are intentionally empty in this fixture\n",
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(invocationRoot);
+      io.cloneRepository = async () => ok({
+        rootDir: temporaryRepository,
+        submodules: { total: 0, paths: [], pathsTruncated: false },
+        cleanup: () => undefined
+      });
+
+      const exitCode = await main([
+        "scan",
+        "--json",
+        "https://github.com/PlayPro/CoreProtect"
+      ], io);
+
+      expect(exitCode, stderr.join("\n")).toBe(0);
+      const report = JSON.parse(stdout.join("\n")) as {
+        lockfiles: { kind: string; path: string }[];
+      };
+      expect(report.lockfiles).toEqual([
+        { kind: "maven-pom", path: "pom.xml" },
+        { kind: "requirements-txt", path: "requirements.txt" }
+      ]);
+    } finally {
+      rmSync(invocationRoot, { recursive: true, force: true });
+      rmSync(temporaryRepository, { recursive: true, force: true });
+    }
+  });
+
   test("scans an explicitly selected nested lockfile inside a remote repository", async () => {
     const invocationRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-remote-lockfile-invocation-"));
     const temporaryRepository = mkdtempSync(path.join(tmpdir(), "ohrisk-remote-lockfile-checkout-"));
@@ -2042,6 +2088,66 @@ describe("main", () => {
       expect(output).toContain("Risks: 1 high, 0 review, 0 unknown, 0 low");
       expect(output).toContain("- [high] risk-pkg@1.0.0");
       expect(output).toContain("source: local; METADATA license: AGPL-3.0-only");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("reports pip-compile MPL dependencies as transitive low risk for SaaS", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-requirements-via-project-"));
+    const sitePackages = path.join(projectRoot, ".venv", "Lib", "site-packages");
+    const certifiDistInfo = path.join(sitePackages, "certifi-2025.8.3.dist-info");
+    const requestsDistInfo = path.join(sitePackages, "requests-2.32.5.dist-info");
+
+    try {
+      mkdirSync(certifiDistInfo, { recursive: true });
+      mkdirSync(requestsDistInfo, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "requirements.txt"),
+        [
+          "certifi==2025.8.3",
+          "    # via requests",
+          "requests==2.32.5",
+          "    # via -r requirements.in"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(certifiDistInfo, "METADATA"),
+        [
+          "Metadata-Version: 2.4",
+          "Name: certifi",
+          "Version: 2025.8.3",
+          "License-Expression: MPL-2.0",
+          ""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(requestsDistInfo, "METADATA"),
+        [
+          "Metadata-Version: 2.4",
+          "Name: requests",
+          "Version: 2.32.5",
+          "License-Expression: Apache-2.0",
+          ""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--profile", "saas", "--prod", "--offline"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Dependencies: 2 total, 1 direct, 1 transitive");
+      expect(output).toContain("Risks: 0 high, 0 review, 0 unknown, 2 low");
+      expect(output).toContain("- [low] certifi@2025.8.3");
+      expect(output).toContain("dependency: production transitive");
+      expect(output).toContain("requests@2.32.5 -> certifi@2025.8.3");
+      expect(output).toContain("License expression is low risk for saas.");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }

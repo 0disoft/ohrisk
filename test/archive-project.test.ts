@@ -122,6 +122,50 @@ describe("archive project loading", () => {
     expect(result.value.graph.nodes.map((node) => node.name)).toEqual(["left-pad"]);
   });
 
+  test("reads Maven aggregator modules through the archive virtual filesystem", () => {
+    const result = load({
+      "pom.xml": [
+        "<project>",
+        "  <groupId>com.example</groupId>",
+        "  <artifactId>archive-parent</artifactId>",
+        "  <version>1.0.0</version>",
+        "  <packaging>pom</packaging>",
+        "  <modules><module>modules/core</module></modules>",
+        "</project>"
+      ].join("\n"),
+      "modules/core/pom.xml": [
+        "<project>",
+        "  <parent>",
+        "    <groupId>com.example</groupId>",
+        "    <artifactId>archive-parent</artifactId>",
+        "    <version>1.0.0</version>",
+        "  </parent>",
+        "  <artifactId>archive-core</artifactId>",
+        "  <dependencies>",
+        "    <dependency>",
+        "      <groupId>org.example</groupId>",
+        "      <artifactId>archive-library</artifactId>",
+        "      <version>2.0.0</version>",
+        "    </dependency>",
+        "  </dependencies>",
+        "</project>"
+      ].join("\n")
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.graph.nodes).toEqual([
+      expect.objectContaining({
+        id: "org.example:archive-library@2.0.0",
+        paths: [[
+          "archive-parent",
+          "archive-core",
+          "org.example:archive-library@2.0.0"
+        ]]
+      })
+    ]);
+  });
+
   test("propagates a size failure from an existing companion manifest", () => {
     const result = load({
       "package.json": "x".repeat(PACKAGE_JSON_MAX_BYTES + 1),

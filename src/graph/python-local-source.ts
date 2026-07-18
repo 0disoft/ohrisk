@@ -64,7 +64,10 @@ const LOCAL_SOURCE_EVIDENCE_FILE_CANDIDATES = [
   "NOTICE.md"
 ] as const;
 
-export function normalizePythonLocalSourcePathSpec(input: string): string | undefined {
+export function normalizePythonLocalSourcePathSpec(
+  input: string,
+  options: { allowBareRelativePath?: boolean } = {}
+): string | undefined {
   let value = unquotePythonLocalSourcePath(input.trim());
   const fragmentIndex = value.indexOf("#");
   if (fragmentIndex >= 0) {
@@ -82,10 +85,14 @@ export function normalizePythonLocalSourcePathSpec(input: string): string | unde
 
   if (value.startsWith("file:")) {
     const filePath = safeDecodePath(value.slice("file:".length));
-    return isRelativeLocalPath(filePath) ? filePath : undefined;
+    return isRelativeLocalPath(filePath, options.allowBareRelativePath ?? false)
+      ? filePath
+      : undefined;
   }
 
-  return isRelativeLocalPath(value) ? value : undefined;
+  return isRelativeLocalPath(value, options.allowBareRelativePath ?? false)
+    ? value
+    : undefined;
 }
 
 export function readPythonLocalSourcePackage(input: {
@@ -535,9 +542,20 @@ function safeDecodePath(value: string): string {
   }
 }
 
-function isRelativeLocalPath(value: string): boolean {
+function isRelativeLocalPath(value: string, allowBareRelativePath: boolean): boolean {
   const normalized = value.replace(/\\/g, "/");
-  return normalized === "."
+  if (
+    normalized === ""
+    || normalized.startsWith("/")
+    || path.win32.isAbsolute(value)
+    || /^[A-Za-z][A-Za-z0-9+.-]*:/u.test(normalized)
+    || /[\u0000-\u001f\u007f]/u.test(normalized)
+  ) {
+    return false;
+  }
+
+  return allowBareRelativePath
+    || normalized === "."
     || normalized === ".."
     || normalized.startsWith("./")
     || normalized.startsWith("../");

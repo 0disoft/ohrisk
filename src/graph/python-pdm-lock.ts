@@ -650,7 +650,9 @@ function readPdmSourceAssignment(line: string): {
 } | undefined {
   const pathSource = readStringAssignment(line, "path");
   if (pathSource !== undefined) {
-    const sourcePath = normalizePythonLocalSourcePathSpec(pathSource);
+    const sourcePath = normalizePythonLocalSourcePathSpec(pathSource, {
+      allowBareRelativePath: true
+    });
     return sourcePath
       ? { sourcePath }
       : {

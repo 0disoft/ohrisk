@@ -52,6 +52,97 @@ describe("parseRequirementsText", () => {
     ]);
   });
 
+  test("reconstructs pip-compile dependency paths from via annotations", () => {
+    const result = parseRequirementsText(
+      [
+        "certifi==2025.8.3",
+        "    # via requests",
+        "readthedocs-cli==5",
+        "    # via -r docs/requirements.in",
+        "requests==2.32.5",
+        "    # via",
+        "    #   readthedocs-cli",
+        "    #   sphinx",
+        "sphinx==7.4.7 # via -r docs/requirements.in"
+      ].join("\n"),
+      "mbedtls/docs/requirements.txt"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes).toEqual([
+      expect.objectContaining({
+        id: "certifi@2025.8.3",
+        direct: false,
+        paths: [
+          ["docs", "readthedocs-cli@5", "requests@2.32.5", "certifi@2025.8.3"],
+          ["docs", "sphinx@7.4.7", "requests@2.32.5", "certifi@2025.8.3"]
+        ]
+      }),
+      expect.objectContaining({
+        id: "readthedocs-cli@5",
+        direct: true,
+        paths: [["docs", "readthedocs-cli@5"]]
+      }),
+      expect.objectContaining({
+        id: "requests@2.32.5",
+        direct: false,
+        paths: [
+          ["docs", "readthedocs-cli@5", "requests@2.32.5"],
+          ["docs", "sphinx@7.4.7", "requests@2.32.5"]
+        ]
+      }),
+      expect.objectContaining({
+        id: "sphinx@7.4.7",
+        direct: true,
+        paths: [["docs", "sphinx@7.4.7"]]
+      })
+    ]);
+  });
+
+  test("keeps plain and unresolved via annotations fail-safe as direct dependencies", () => {
+    const result = parseRequirementsText(
+      [
+        "plain==1.0.0",
+        "unknown-parent-child==2.0.0",
+        "    # via package-not-present",
+        "constraint-only==3.0.0",
+        "    # via -c constraints.txt"
+      ].join("\n"),
+      "fixture-python/requirements.txt"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.map((node) => ({
+      id: node.id,
+      direct: node.direct,
+      paths: node.paths
+    }))).toEqual([
+      {
+        id: "constraint-only@3.0.0",
+        direct: true,
+        paths: [["fixture-python", "constraint-only@3.0.0"]]
+      },
+      {
+        id: "plain@1.0.0",
+        direct: true,
+        paths: [["fixture-python", "plain@1.0.0"]]
+      },
+      {
+        id: "unknown-parent-child@2.0.0",
+        direct: true,
+        paths: [["fixture-python", "unknown-parent-child@2.0.0"]]
+      }
+    ]);
+  });
+
   test("follows nested requirements and exact constraint pins", () => {
     const files = new Map([
       [
@@ -167,7 +258,7 @@ describe("parseRequirementsText", () => {
   test("parses editable local source requirements with embedded license evidence", () => {
     const files = new Map([
       [
-        "./local-risk/pyproject.toml",
+        "libs/local-risk/pyproject.toml",
         [
           "[project]",
           "name = \"local-risk\"",
@@ -176,14 +267,14 @@ describe("parseRequirementsText", () => {
         ].join("\n")
       ],
       [
-        "./local-risk/LICENSE",
+        "libs/local-risk/LICENSE",
         "GNU AFFERO GENERAL PUBLIC LICENSE Version 3\n"
       ]
     ]);
     const result = parseRequirementsText(
       [
-        "-e ./local-risk",
-        "local-risk @ file:./local-risk"
+        "-e libs/local-risk",
+        "local-risk @ libs/local-risk"
       ].join("\n"),
       "fixture-python/requirements.txt",
       {
@@ -225,7 +316,7 @@ describe("parseRequirementsText", () => {
         source: "local",
         files: [
           expect.objectContaining({
-            path: "local-risk/LICENSE",
+            path: "libs/local-risk/LICENSE",
             kind: "license"
           })
         ]

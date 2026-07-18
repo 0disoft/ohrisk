@@ -583,6 +583,7 @@ async function runScanAt(input: {
     ...(command.lockfilePath ? { lockfilePath: command.lockfilePath } : {}),
     ...(command.archivePath ? { archivePath: command.archivePath } : {}),
     ...(input.repository ? { projectSearchMode: "tree" as const } : {}),
+    ...(input.repository ? { autoMergeSameRoot: true } : {}),
     allLockfiles: command.allLockfiles ?? false,
     ...(command.policyPath ? { policyPath: command.policyPath } : {}),
     offline: command.offline ?? false,
@@ -694,6 +695,7 @@ async function scanProject(input: {
   lockfilePath?: string;
   archivePath?: string;
   projectSearchMode?: "ancestors" | "tree";
+  autoMergeSameRoot?: boolean;
   allLockfiles: boolean;
   policyPath?: string;
   offline: boolean;
@@ -724,6 +726,7 @@ async function scanProject(input: {
         cwd: input.cwd,
         ...(input.lockfilePath ? { lockfilePath: input.lockfilePath } : {}),
         ...(input.projectSearchMode ? { projectSearchMode: input.projectSearchMode } : {}),
+        ...(input.autoMergeSameRoot ? { autoMergeSameRoot: true } : {}),
         allLockfiles: input.allLockfiles,
         prodOnly: input.prodOnly,
         ...(input.progress ? { progress: input.progress } : {})
@@ -820,6 +823,7 @@ function loadProjectGraph(input: {
   cwd: string;
   lockfilePath?: string;
   projectSearchMode?: "ancestors" | "tree";
+  autoMergeSameRoot?: boolean;
   allLockfiles?: boolean;
   prodOnly: boolean;
   progress?: ScanProgressReporter;
@@ -832,6 +836,7 @@ function loadProjectGraph(input: {
     cwd: input.cwd,
     ...(input.lockfilePath ? { lockfilePath: input.lockfilePath } : {}),
     ...(input.projectSearchMode ? { searchMode: input.projectSearchMode } : {}),
+    ...(input.autoMergeSameRoot ? { autoMergeSameRoot: true } : {}),
     ...(input.allLockfiles ? { allLockfiles: true } : {})
   });
 

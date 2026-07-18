@@ -260,7 +260,9 @@ function readPipfileLockLocalSourcePath(entry: Record<string, unknown>): string 
     return undefined;
   }
 
-  return normalizePythonLocalSourcePathSpec(rawPath);
+  return normalizePythonLocalSourcePathSpec(rawPath, {
+    allowBareRelativePath: true
+  });
 }
 
 function readPipfileLockUnsupportedSource(entry: Record<string, unknown>): UnsupportedPipfileSource | undefined {
@@ -273,7 +275,10 @@ function readPipfileLockUnsupportedSource(entry: Record<string, unknown>): Unsup
   }
 
   const rawPath = entry.path;
-  if (typeof rawPath === "string" && normalizePythonLocalSourcePathSpec(rawPath) === undefined) {
+  if (
+    typeof rawPath === "string"
+    && normalizePythonLocalSourcePathSpec(rawPath, { allowBareRelativePath: true }) === undefined
+  ) {
     return {
       value: rawPath,
       reason: classifyUnsupportedPipfileSource(rawPath)

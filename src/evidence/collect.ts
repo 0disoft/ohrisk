@@ -1519,6 +1519,17 @@ async function readRemoteArtifactBytes(input: {
       allowedHosts: input.allowedHosts,
       ...(input.permittedHosts ? { permittedHosts: input.permittedHosts } : {})
     },
+    createFailureError: (cause) => createRemoteArtifactExceptionError({
+      code: input.code,
+      message: input.fetchFailureMessage,
+      blockedMessage: input.blockedMessage,
+      details: {
+        packageId: input.packageId,
+        [input.urlDetailKey]: safeUrlForErrorDetails(input.url),
+        ...input.details
+      },
+      cause
+    }),
     readResponse: async (response, signal) => {
       const cacheMetadata = artifactCacheMetadataFromHeaders(response.headers);
       if (response.status === 304) {
@@ -1933,6 +1944,7 @@ async function readArtifactWithTimeout<T>(input: {
   requestHeaders?: Record<string, string>;
   timeoutMs: number;
   redirectPolicy: RemoteArtifactFetchPolicy;
+  createFailureError: (cause: unknown) => OhriskError;
   readResponse: (
     response: ArtifactFetchResponse,
     signal: AbortSignal
@@ -1942,11 +1954,11 @@ async function readArtifactWithTimeout<T>(input: {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   let timeoutError: Error | undefined;
 
-  const timeoutPromise = new Promise<never>((_, reject) => {
+  const timeoutPromise = new Promise<Result<T, OhriskError>>((resolve) => {
     timeout = setTimeout(() => {
       timeoutError = new Error(`Artifact fetch timed out after ${input.timeoutMs}ms.`);
       controller.abort();
-      reject(timeoutError);
+      resolve(err(input.createFailureError(timeoutError)));
     }, input.timeoutMs);
   });
 
@@ -1958,7 +1970,7 @@ async function readArtifactWithTimeout<T>(input: {
       ...(input.requestHeaders ? { requestHeaders: input.requestHeaders } : {}),
       redirectPolicy: input.redirectPolicy
     })
-      .then(async (response) => {
+      .then(async (response): Promise<Result<T, OhriskError>> => {
         if (!response.ok) {
           return err(response.error);
         }
@@ -1969,7 +1981,8 @@ async function readArtifactWithTimeout<T>(input: {
         }
 
         return result;
-      });
+      })
+      .catch((cause): Result<T, OhriskError> => err(input.createFailureError(cause)));
     return await Promise.race([readPromise, timeoutPromise]);
   } finally {
     if (timeout) {

@@ -36,12 +36,18 @@ the allowed repository, host, credential, recursion, storage, and timeout scope.
 When the repository root has no supported input, remote scans recursively inspect
 only the already validated checkout. One nested dependency project is selected
 automatically. Multiple nested project roots remain ambiguous and require
-`--lockfile <repository-relative-path>`; `--all` merges multiple inputs only at
-one project root. An SBOM with unresolved uppercase `@BUILD_VARIABLE@`
+`--lockfile <repository-relative-path>`. Once one root is selected, remote scans
+automatically merge every supported input at that root instead of silently
+preferring one ecosystem. An SBOM with unresolved uppercase `@BUILD_VARIABLE@`
 placeholders is a build template and is not an automatic candidate. The adapter
 rejects absolute paths, empty or dot segments, and
 traversal before resolving an explicit path. This selects existing repository
 data only and does not widen the network or credential boundary.
+
+Maven aggregator POMs are expanded only through bounded `<module>` paths that
+remain inside the validated checkout. Cycles, missing module POMs, path escape,
+excessive depth, and excessive module count fail the scan instead of returning
+an empty successful report.
 
 Other ecosystems use local caches, vendored source, lockfile-embedded evidence,
 or local package metadata. Another remote ecosystem adapter is not enabled until

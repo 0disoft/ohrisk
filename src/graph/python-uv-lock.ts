@@ -219,7 +219,7 @@ function parseUvPackageRecords(input: string, options: {
         createError({
           code: "UV_LOCK_PARSE_FAILED",
           category: "unsupported_input",
-          message: "Failed to parse uv.lock package source. Remote VCS package sources are not supported yet; use locked PyPI package records or project-root-contained local source paths.",
+          message: unsupportedUvSourceMessage(current.unsupportedSource.reason),
           details: {
             lockfilePath: options.lockfilePath,
             packageName: current.name,
@@ -442,7 +442,9 @@ function readUvSourceAssignment(line: string): {
 } | undefined {
   const rawSource = readUvLocalSourceAssignmentValue(line);
   if (rawSource !== undefined) {
-    const sourcePath = normalizePythonLocalSourcePathSpec(rawSource);
+    const sourcePath = normalizePythonLocalSourcePathSpec(rawSource, {
+      allowBareRelativePath: true
+    });
     return sourcePath
       ? { sourcePath }
       : {
@@ -509,6 +511,22 @@ function classifyUnsupportedPythonSource(value: string, sourceKey?: "git" | "url
   }
 
   return "unsupported_source_entry";
+}
+
+function unsupportedUvSourceMessage(reason: string): string {
+  if (reason === "unsupported_remote_vcs_source") {
+    return "Failed to parse uv.lock package source. Remote VCS package sources are not supported yet; use locked PyPI package records or project-root-contained local source paths.";
+  }
+
+  if (reason === "unsupported_absolute_source_path") {
+    return "Failed to parse uv.lock package source. Local source paths must be relative and stay inside the project root.";
+  }
+
+  if (reason === "unsupported_remote_source") {
+    return "Failed to parse uv.lock package source. Direct remote package URLs are not supported yet; use locked PyPI package records or project-root-contained local source paths.";
+  }
+
+  return "Failed to parse uv.lock package source. Use a locked PyPI package record or a project-root-contained local source path.";
 }
 
 function stripTomlComment(line: string): string {

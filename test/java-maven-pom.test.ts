@@ -3,9 +3,138 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { parseMavenPomText } from "../src/graph/java-maven-pom";
+import { parseMavenPomFile, parseMavenPomText } from "../src/graph/java-maven-pom";
 
 describe("parseMavenPomText", () => {
+  test("recursively parses dependencies from Maven aggregator modules", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-maven-modules-"));
+    const coreModule = path.join(projectRoot, "modules", "swagger-core");
+    const modelsModule = path.join(projectRoot, "modules", "swagger-models");
+
+    try {
+      mkdirSync(coreModule, { recursive: true });
+      mkdirSync(modelsModule, { recursive: true });
+      writeFileSync(path.join(projectRoot, "pom.xml"), [
+        "<project>",
+        "  <modelVersion>4.0.0</modelVersion>",
+        "  <groupId>io.swagger.core.v3</groupId>",
+        "  <artifactId>swagger-project</artifactId>",
+        "  <version>${revision}</version>",
+        "  <packaging>pom</packaging>",
+        "  <properties>",
+        "    <revision>2.2.40</revision>",
+        "    <jackson.version>2.18.2</jackson.version>",
+        "  </properties>",
+        "  <dependencyManagement>",
+        "    <dependencies>",
+        "      <dependency>",
+        "        <groupId>com.fasterxml.jackson.core</groupId>",
+        "        <artifactId>jackson-databind</artifactId>",
+        "        <version>${jackson.version}</version>",
+        "      </dependency>",
+        "    </dependencies>",
+        "  </dependencyManagement>",
+        "  <modules>",
+        "    <module>modules/swagger-core</module>",
+        "    <module>modules/swagger-models</module>",
+        "  </modules>",
+        "</project>"
+      ].join("\n"), "utf8");
+      writeFileSync(path.join(coreModule, "pom.xml"), [
+        "<project>",
+        "  <modelVersion>4.0.0</modelVersion>",
+        "  <parent>",
+        "    <groupId>io.swagger.core.v3</groupId>",
+        "    <artifactId>swagger-project</artifactId>",
+        "    <version>${revision}</version>",
+        "  </parent>",
+        "  <artifactId>swagger-core</artifactId>",
+        "  <dependencies>",
+        "    <dependency>",
+        "      <groupId>com.fasterxml.jackson.core</groupId>",
+        "      <artifactId>jackson-databind</artifactId>",
+        "    </dependency>",
+        "  </dependencies>",
+        "</project>"
+      ].join("\n"), "utf8");
+      writeFileSync(path.join(modelsModule, "pom.xml"), [
+        "<project>",
+        "  <modelVersion>4.0.0</modelVersion>",
+        "  <parent>",
+        "    <groupId>io.swagger.core.v3</groupId>",
+        "    <artifactId>swagger-project</artifactId>",
+        "    <version>${revision}</version>",
+        "  </parent>",
+        "  <artifactId>swagger-models</artifactId>",
+        "  <dependencies>",
+        "    <dependency>",
+        "      <groupId>org.apache.commons</groupId>",
+        "      <artifactId>commons-lang3</artifactId>",
+        "      <version>3.17.0</version>",
+        "    </dependency>",
+        "  </dependencies>",
+        "</project>"
+      ].join("\n"), "utf8");
+
+      const result = parseMavenPomFile(path.join(projectRoot, "pom.xml"));
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value.rootName).toBe("swagger-project");
+      expect(result.value.nodes).toEqual([
+        expect.objectContaining({
+          id: "com.fasterxml.jackson.core:jackson-databind@2.18.2",
+          direct: true,
+          paths: [[
+            "swagger-project",
+            "swagger-core",
+            "com.fasterxml.jackson.core:jackson-databind@2.18.2"
+          ]]
+        }),
+        expect.objectContaining({
+          id: "org.apache.commons:commons-lang3@3.17.0",
+          direct: true,
+          paths: [[
+            "swagger-project",
+            "swagger-models",
+            "org.apache.commons:commons-lang3@3.17.0"
+          ]]
+        })
+      ]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("fails closed when a Maven aggregator module path escapes the project root", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-maven-module-escape-"));
+
+    try {
+      writeFileSync(path.join(projectRoot, "pom.xml"), [
+        "<project>",
+        "  <artifactId>unsafe-aggregator</artifactId>",
+        "  <packaging>pom</packaging>",
+        "  <modules><module>../outside</module></modules>",
+        "</project>"
+      ].join("\n"), "utf8");
+
+      const result = parseMavenPomFile(path.join(projectRoot, "pom.xml"));
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected escaping Maven module path to fail.");
+      }
+      expect(result.error.code).toBe("MAVEN_POM_PARSE_FAILED");
+      expect(result.error.details).toMatchObject({
+        modulePath: "../outside",
+        reason: "maven_module_path_escape"
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("parses direct Maven dependencies with explicit and property versions", () => {
     const result = parseMavenPomText(
       [
