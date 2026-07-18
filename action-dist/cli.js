@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: eb5fed57c144b2cacfcf8d80cc90f00a2321146b7a040c9519b4faf90d12228e
+// ohrisk-action-source-sha256: fa3afb1897f9f5b420e4139a1d8010e28b490fbc08f6b340803d2d3aaf5f660f
 // ohrisk-action-build-platform: win32
 import { createRequire } from "node:module";
 var __create = Object.create;
@@ -18384,7 +18384,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.10.0";
+var OHRISK_VERSION = "1.10.1";
 
 // src/archive/archive-project.ts
 import path46 from "node:path";
@@ -18696,6 +18696,7 @@ function mergeDependencyGraphs(graphs) {
   const evidenceByPackageId = new Map;
   const warnings = [];
   const diagnostics = [];
+  const mavenRepositoryUrls = [];
   for (const item of graphs) {
     for (const node of item.graph.nodes) {
       const purl = packageUrl(node);
@@ -18731,6 +18732,7 @@ function mergeDependencyGraphs(graphs) {
     }
     warnings.push(...item.graph.warnings ?? []);
     diagnostics.push(...item.graph.diagnostics ?? []);
+    mavenRepositoryUrls.push(...item.graph.mavenRepositoryUrls ?? []);
   }
   const lockfilePaths = unique(graphs.map((item) => item.source.lockfilePath));
   const rootNames = unique(graphs.flatMap((item) => item.graph.rootName ? [item.graph.rootName] : []));
@@ -18738,6 +18740,7 @@ function mergeDependencyGraphs(graphs) {
     ...rootNames.length === 1 ? { rootName: rootNames[0] } : {},
     lockfilePath: first.graph.lockfilePath,
     lockfilePaths,
+    ...mavenRepositoryUrls.length > 0 ? { mavenRepositoryUrls: unique(mavenRepositoryUrls).sort() } : {},
     nodes: [...nodesByPurl.values()].sort((left, right) => left.id.localeCompare(right.id)),
     ...evidenceByPackageId.size > 0 ? { embeddedEvidence: [...evidenceByPackageId.values()] } : {},
     ...warnings.length > 0 ? { warnings: unique(warnings) } : {},
@@ -25006,6 +25009,8 @@ function isPathInside(root, candidate) {
 }
 
 // src/graph/java-maven-pom.ts
+var MAVEN_REPOSITORY_MAX_COUNT = 32;
+var MAVEN_REPOSITORY_URL_MAX_CHARS = 2048;
 function parseMavenPomFile(pomPath, options = {}) {
   const pomText = readInputTextFile({
     filePath: pomPath,
@@ -25063,9 +25068,11 @@ function parseMavenPomText(input, pomPath = "pom.xml", options = {}) {
     }
     const rootModule = parsedModules.value[0];
     const rootName = rootModule?.rootName ?? "<maven-project>";
+    const mavenRepositoryUrls = [...new Set(parsedModules.value.flatMap((module) => module.repositoryUrls))].sort();
     return ok({
       rootName,
       lockfilePath: pomPath,
+      ...mavenRepositoryUrls.length > 0 ? { mavenRepositoryUrls } : {},
       nodes: dependencyNodesFromMavenModules(parsedModules.value)
     });
   } catch (cause) {
@@ -25130,11 +25137,16 @@ function readMavenProjectModules(input) {
   if (!dependencies.ok) {
     return dependencies;
   }
+  const repositoryUrls = readMavenRepositoryUrls(scannedProject, model.value.properties, input.pomPath);
+  if (!repositoryUrls.ok) {
+    return repositoryUrls;
+  }
   const result = [{
     pomPath: input.pomPath,
     rootName,
     ...model.value.groupId ? { groupId: model.value.groupId } : {},
     ...model.value.version ? { version: model.value.version } : {},
+    repositoryUrls: repositoryUrls.value,
     ancestry: input.ancestry,
     dependencies: dependencies.value
   }];
@@ -25197,6 +25209,50 @@ function readMavenModulePaths(text3) {
     }
   }
   return modules;
+}
+function readMavenRepositoryUrls(text3, properties, pomPath) {
+  const urls = [];
+  for (const repositories of text3.matchAll(/<repositories\b[^>]*>([\s\S]*?)<\/repositories>/gi)) {
+    for (const repository of (repositories[1] ?? "").matchAll(/<repository\b[^>]*>([\s\S]*?)<\/repository>/gi)) {
+      const rawUrl = firstXmlTagText(repository[1] ?? "", "url");
+      const resolvedUrl = rawUrl ? resolveMavenExpression(rawUrl, properties)?.trim().replace(/\/+$/u, "") : undefined;
+      if (!resolvedUrl || urls.includes(resolvedUrl)) {
+        continue;
+      }
+      if (resolvedUrl.length > MAVEN_REPOSITORY_URL_MAX_CHARS) {
+        return err(createError({
+          code: "MAVEN_POM_PARSE_FAILED",
+          category: "unsupported_input",
+          message: "Failed to parse pom.xml. Maven repository URL exceeded the supported length.",
+          details: {
+            lockfilePath: pomPath,
+            reason: "maven_repository_url_length",
+            maxChars: MAVEN_REPOSITORY_URL_MAX_CHARS,
+            observedChars: resolvedUrl.length
+          }
+        }));
+      }
+      urls.push(resolvedUrl);
+      if (urls.length > MAVEN_REPOSITORY_MAX_COUNT) {
+        return err(createError({
+          code: "MAVEN_POM_PARSE_FAILED",
+          category: "unsupported_input",
+          message: "Failed to parse pom.xml. Maven repository count exceeded the supported limit.",
+          details: {
+            lockfilePath: pomPath,
+            reason: "maven_repository_count",
+            maxRepositories: MAVEN_REPOSITORY_MAX_COUNT
+          }
+        }));
+      }
+    }
+  }
+  return ok(urls);
+}
+function firstXmlTagText(text3, tagName) {
+  const match = new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`, "i").exec(text3);
+  const value = normalizePomText(match?.[1] ?? "");
+  return value === "" ? undefined : value;
 }
 function resolveMavenModulePomPath(input) {
   const rawPath = input.modulePath.replace(/\\/g, "/");
@@ -37488,11 +37544,13 @@ function parseZip(bytes, budget, archiveName) {
     if (unixType !== 0 && unixType !== 32768 && unixType !== 16384) {
       unsupportedType(archiveName, entryPath, "zip");
     }
-    if ((directoryByName || directoryByDos) && unixType === 32768) {
+    const zeroLengthDirectoryWithRegularUnixMode = (directoryByName || directoryByDos) && unixType === 32768 && size === 0;
+    if ((directoryByName || directoryByDos) && unixType === 32768 && !zeroLengthDirectoryWithRegularUnixMode) {
       malformed(archiveName, "ZIP entry type metadata is inconsistent.", "zip", entryPath);
     }
     const type = directoryByName || directoryByDos || unixType === 16384 ? "directory" : "file";
-    if (type === "directory" && (size !== 0 || compressedSize !== 0) || type === "file" && directoryByName) {
+    const emptyDirectoryEncoding = size === 0 && (compressedSize === 0 || method === 8 && compressedSize === 2 && crc === 0);
+    if (type === "directory" && !emptyDirectoryEncoding || type === "file" && directoryByName) {
       malformed(archiveName, "ZIP entry type metadata is inconsistent.", "zip", entryPath);
     }
     enforceEntryLimits({ size, compressedSize, budget, archiveName, entryPath });
@@ -44001,10 +44059,143 @@ function adapter(id, lockfileKinds, packageEcosystems) {
   };
 }
 
+// src/evidence/maven-jar.ts
+var MAVEN_JAR_MAX_BYTES = 100 * 1024 * 1024;
+var MAVEN_JAR_MAX_ENTRIES = 50000;
+var MAVEN_JAR_ENTRY_MAX_BYTES = 2 * 1024 * 1024;
+var MAVEN_JAR_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
+var MAVEN_JAR_MATERIALIZED_MAX_BYTES = 16 * 1024 * 1024;
+var MAVEN_JAR_IDENTITY_MAX_BYTES = 64 * 1024;
+var MAVEN_JAR_EVIDENCE_FILE_MAX_BYTES = 1024 * 1024;
+var MAVEN_JAR_EVIDENCE_FILE_MAX_COUNT = 16;
+function collectMavenJarEvidence(input) {
+  const archive = readArchiveBytes({
+    displayName: `${input.coordinates.artifactId}-${input.coordinates.version}.jar`,
+    bytes: input.jar,
+    formatHint: "zip",
+    limits: {
+      inputBytes: MAVEN_JAR_MAX_BYTES,
+      entries: MAVEN_JAR_MAX_ENTRIES,
+      entryBytes: MAVEN_JAR_ENTRY_MAX_BYTES,
+      expandedBytes: MAVEN_JAR_EXPANDED_MAX_BYTES,
+      materializedBytes: MAVEN_JAR_MATERIALIZED_MAX_BYTES
+    }
+  });
+  if (!archive.ok) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: [
+        `Checksum-verified Maven JAR was rejected by the bounded archive reader (${archive.error.code}); its contents were not trusted.`
+      ]
+    });
+  }
+  const identityPath = mavenPomPropertiesPath(input.coordinates);
+  if (!archive.value.listPaths().includes(identityPath)) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: [
+        "Checksum-verified Maven JAR did not contain exact embedded pom.properties identity; its contents were not trusted."
+      ]
+    });
+  }
+  const identityText = archive.value.readText(identityPath, MAVEN_JAR_IDENTITY_MAX_BYTES);
+  if (!identityText.ok) {
+    return err(identityText.error);
+  }
+  const identity2 = parsePomProperties(identityText.value);
+  if (identity2.groupId !== input.coordinates.groupId || identity2.artifactId !== input.coordinates.artifactId || identity2.version !== input.coordinates.version) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "unsupported_input",
+      message: "Maven JAR metadata did not match the requested package identity.",
+      details: {
+        packageId: input.packageId,
+        reason: "maven_jar_identity_mismatch",
+        expectedGroupId: input.coordinates.groupId,
+        expectedArtifactId: input.coordinates.artifactId,
+        expectedVersion: input.coordinates.version,
+        ...identity2.groupId ? { observedGroupId: identity2.groupId } : {},
+        ...identity2.artifactId ? { observedArtifactId: identity2.artifactId } : {},
+        ...identity2.version ? { observedVersion: identity2.version } : {}
+      }
+    }));
+  }
+  const evidencePaths = archive.value.listPaths().filter(isPackageLicenseEvidencePath).slice(0, MAVEN_JAR_EVIDENCE_FILE_MAX_COUNT);
+  const files = [];
+  for (const evidencePath of evidencePaths) {
+    const kind = classifyEvidenceFile(evidencePath);
+    if (!kind) {
+      continue;
+    }
+    const text3 = archive.value.readText(evidencePath, MAVEN_JAR_EVIDENCE_FILE_MAX_BYTES);
+    if (!text3.ok) {
+      return err(text3.error);
+    }
+    files.push({ path: evidencePath, kind, text: text3.value });
+  }
+  return ok({
+    packageId: input.packageId,
+    files,
+    source: "tarball",
+    warnings: files.length > 0 ? ["Maven JAR license files were verified with repository SHA-256 and embedded package identity."] : ["Verified Maven JAR did not contain a root or META-INF license evidence file."]
+  });
+}
+function mavenPomPropertiesPath(coordinates) {
+  return [
+    "META-INF",
+    "maven",
+    coordinates.groupId,
+    coordinates.artifactId,
+    "pom.properties"
+  ].join("/");
+}
+function parsePomProperties(text3) {
+  const properties = {};
+  for (const line of text3.split(/\r?\n/u)) {
+    const trimmed = line.trim();
+    if (trimmed === "" || trimmed.startsWith("#") || trimmed.startsWith("!")) {
+      continue;
+    }
+    const separator = trimmed.search(/[=:]/u);
+    if (separator <= 0) {
+      continue;
+    }
+    const key = trimmed.slice(0, separator).trim();
+    const value = trimmed.slice(separator + 1).trim();
+    if (key !== "" && value !== "") {
+      properties[key] = value;
+    }
+  }
+  return properties;
+}
+function isPackageLicenseEvidencePath(filePath) {
+  const normalized = filePath.replace(/\\/gu, "/");
+  if (normalized.includes("/../") || normalized.startsWith("../")) {
+    return false;
+  }
+  const segments = normalized.split("/");
+  if (segments.length === 1) {
+    return classifyEvidenceFile(normalized) !== undefined;
+  }
+  return segments.length === 2 && segments[0]?.toUpperCase() === "META-INF" && classifyEvidenceFile(segments[1] ?? "") !== undefined;
+}
+
 // src/evidence/pypi-package.ts
 import path73 from "node:path";
 
 // src/license/spdx.ts
+var LICENSE_EXPRESSION_ALIASES = new Map([
+  ["gnu general public license, version 3.0", "GPL-3.0-only"],
+  ["eclipse public license v2.0", "EPL-2.0"],
+  [
+    "the gnu general public license, v2 with universal foss exception, v1.0",
+    "GPL-2.0-only WITH Universal-FOSS-exception-1.0"
+  ]
+]);
 var LICENSE_ALIASES = new Map([
   ["apache 2", "Apache-2.0"],
   ["apache 2.0", "Apache-2.0"],
@@ -44057,6 +44248,15 @@ function parseSpdxExpression(input) {
   const original = input.trim();
   if (original.length === 0) {
     return malformedResult(original, [], false);
+  }
+  const expressionAlias = LICENSE_EXPRESSION_ALIASES.get(original.toLowerCase());
+  if (expressionAlias) {
+    const parsedAlias = parseSpdxExpression(expressionAlias);
+    return {
+      ...parsedAlias,
+      original,
+      usedAlias: true
+    };
   }
   const alias = normalizeLicenseToken(original);
   if (alias.normalized && !alias.malformed && alias.normalized !== original) {
@@ -45216,6 +45416,8 @@ var PYPI_METADATA_HOSTS = new Set(["pypi.org"]);
 var PYPI_DISTRIBUTION_HOSTS = new Set(["files.pythonhosted.org"]);
 var MAVEN_CENTRAL_BASE_URL = "https://repo.maven.apache.org/maven2";
 var MAVEN_CENTRAL_HOSTS = new Set(["repo.maven.apache.org"]);
+var MAVEN_JAR_MAX_BYTES2 = 32 * 1024 * 1024;
+var MAVEN_CHECKSUM_MAX_BYTES = 256;
 var SUPPORTED_INTEGRITY_DIGEST_BYTES = {
   sha1: 20,
   sha256: 32,
@@ -45248,14 +45450,16 @@ async function collectGraphEvidence(input) {
   const installedPackageJsonMaxBytes = input.installedPackageJsonMaxBytes ?? INSTALLED_PACKAGE_JSON_MAX_BYTES;
   const allowLocalProjectEvidence = input.allowLocalProjectEvidence ?? true;
   const loadYarnCacheIndex = allowLocalProjectEvidence ? createYarnCacheIndexLoader(input.projectRoot) : () => ok(undefined);
-  const collectMavenCentralEvidence = createMavenCentralEvidenceCollector({
+  const collectMavenEvidence = createMavenEvidenceCollector({
     fetchArtifact,
     resolveArtifactHost,
     fetchTimeoutMs,
     pomMaxBytes: Math.min(registryMetadataMaxBytes, MAVEN_POM_METADATA_MAX_BYTES),
+    jarMaxBytes: Math.min(tarballMaxBytes, MAVEN_JAR_MAX_BYTES2),
     offline: input.offline ?? false,
     artifactCache,
-    allowedHosts
+    allowedHosts,
+    repositoryUrls: input.graph.mavenRepositoryUrls ?? []
   });
   const collectNext = async () => {
     while (!failure) {
@@ -45285,7 +45489,7 @@ async function collectGraphEvidence(input) {
         npmRegistryUrl: input.npmRegistryUrl,
         allowedHosts,
         loadYarnCacheIndex,
-        collectMavenCentralEvidence
+        collectMavenEvidence
       });
       if (!collected.ok) {
         if (isRecoverableRemoteEvidenceError(collected.error)) {
@@ -45439,7 +45643,7 @@ async function collectNodeEvidence(input) {
     return ok(unsupportedRemoteEcosystemEvidence({ node: input.node }));
   }
   if (input.node.ecosystem === "maven") {
-    return input.collectMavenCentralEvidence(input.node);
+    return input.collectMavenEvidence(input.node);
   }
   if (input.node.ecosystem === "npm" && !input.node.resolved) {
     return collectNpmRegistryTarballEvidence({
@@ -45627,7 +45831,8 @@ function localArtifactTooLargeError(input) {
     }
   });
 }
-function createMavenCentralEvidenceCollector(input) {
+function createMavenEvidenceCollector(input) {
+  const repositories = mavenRepositoryEndpoints(input.repositoryUrls, input.allowedHosts);
   const pomRequests = new Map;
   const loadPom = (coordinates) => {
     const key = mavenCoordinateKey2(coordinates);
@@ -45635,8 +45840,9 @@ function createMavenCentralEvidenceCollector(input) {
     if (existing) {
       return existing;
     }
-    const request = loadMavenCentralPom({
+    const request = loadMavenPomFromRepositories({
       coordinates,
+      repositories,
       fetchArtifact: input.fetchArtifact,
       resolveArtifactHost: input.resolveArtifactHost,
       fetchTimeoutMs: input.fetchTimeoutMs,
@@ -45664,6 +45870,7 @@ function createMavenCentralEvidenceCollector(input) {
     }
     const visited = new Set;
     let current = requested;
+    let artifactRepository;
     for (let depth = 0;depth <= MAVEN_LICENSE_PARENT_MAX_DEPTH; depth += 1) {
       const coordinateKey = mavenCoordinateKey2(current);
       if (visited.has(coordinateKey)) {
@@ -45683,25 +45890,48 @@ function createMavenCentralEvidenceCollector(input) {
       if (!metadata.ok) {
         return metadata;
       }
-      if (metadata.value.licenses.length > 0) {
+      if (depth === 0) {
+        artifactRepository = metadata.value.repository;
+      }
+      if (metadata.value.metadata.licenses.length > 0) {
         return ok({
           packageId: node.id,
-          metadataLicense: metadata.value.licenses.join(" OR "),
-          metadataSource: depth === 0 ? "Maven Central pom.xml" : `Maven Central parent pom.xml (${coordinateKey})`,
+          metadataLicense: metadata.value.metadata.licenses.join(" OR "),
+          metadataSource: depth === 0 ? `${metadata.value.repository.label} pom.xml` : `${metadata.value.repository.label} parent pom.xml (${coordinateKey})`,
           files: [],
           source: "tarball",
           warnings: []
         });
       }
-      if (!metadata.value.parent) {
+      if (!metadata.value.metadata.parent) {
+        const jarEvidence = artifactRepository ? await collectRemoteMavenJarEvidence({
+          packageId: node.id,
+          coordinates: requested,
+          repository: artifactRepository,
+          fetchArtifact: input.fetchArtifact,
+          resolveArtifactHost: input.resolveArtifactHost,
+          fetchTimeoutMs: input.fetchTimeoutMs,
+          jarMaxBytes: input.jarMaxBytes,
+          offline: input.offline,
+          artifactCache: input.artifactCache,
+          allowedHosts: input.allowedHosts
+        }) : ok(undefined);
+        if (!jarEvidence.ok) {
+          return jarEvidence;
+        }
+        if (jarEvidence.value) {
+          return ok(jarEvidence.value);
+        }
         return ok({
           packageId: node.id,
           files: [],
           source: "tarball",
-          warnings: ["Maven Central POM and its resolvable parent chain did not declare license names."]
+          warnings: [
+            `${metadata.value.repository.label} POM and its resolvable parent chain did not declare license names.`
+          ]
         });
       }
-      current = metadata.value.parent;
+      current = metadata.value.metadata.parent;
     }
     return err(createError({
       code: "REGISTRY_METADATA_FETCH_FAILED",
@@ -45716,28 +45946,84 @@ function createMavenCentralEvidenceCollector(input) {
     }));
   };
 }
-async function loadMavenCentralPom(input) {
+function mavenRepositoryEndpoints(repositoryUrls, allowedHosts) {
+  const endpoints = [{
+    baseUrl: MAVEN_CENTRAL_BASE_URL,
+    label: "Maven Central",
+    permittedHosts: MAVEN_CENTRAL_HOSTS
+  }];
+  const seen = new Set([MAVEN_CENTRAL_BASE_URL]);
+  for (const rawUrl of repositoryUrls) {
+    const parsed = parseHttpUrl(rawUrl);
+    if (!parsed || parsed.protocol !== "https:" || parsed.username !== "" || parsed.password !== "" || parsed.search !== "" || parsed.hash !== "") {
+      continue;
+    }
+    const host = normalizeUrlHostname(parsed.hostname);
+    if (!allowedHosts.has(host)) {
+      continue;
+    }
+    parsed.pathname = parsed.pathname.replace(/\/+$/u, "");
+    const baseUrl = parsed.toString().replace(/\/$/u, "");
+    if (seen.has(baseUrl)) {
+      continue;
+    }
+    seen.add(baseUrl);
+    endpoints.push({
+      baseUrl,
+      label: `Maven repository ${host}`,
+      permittedHosts: new Set([host])
+    });
+  }
+  return endpoints;
+}
+async function loadMavenPomFromRepositories(input) {
+  let firstNetworkError;
+  for (const repository of input.repositories) {
+    const loaded = await loadMavenPomFromRepository({
+      ...input,
+      repository
+    });
+    if (loaded.ok) {
+      return ok({ metadata: loaded.value, repository });
+    }
+    if (loaded.error.category !== "network") {
+      return loaded;
+    }
+    firstNetworkError ??= loaded.error;
+  }
+  return err(firstNetworkError ?? createError({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    category: "network",
+    message: "Failed to fetch Maven POM metadata.",
+    details: {
+      coordinates: mavenCoordinateKey2(input.coordinates),
+      reason: "no_permitted_repository"
+    }
+  }));
+}
+async function loadMavenPomFromRepository(input) {
   const repositoryPath = mavenPomRepositoryPath(input.coordinates);
   const coordinateKey = mavenCoordinateKey2(input.coordinates);
   if (!repositoryPath) {
     return err(createError({
       code: "REGISTRY_METADATA_FETCH_FAILED",
       category: "unsupported_input",
-      message: "Maven Central POM coordinates were not safe exact repository coordinates.",
+      message: "Maven POM coordinates were not safe exact repository coordinates.",
       details: { packageId: coordinateKey, coordinates: coordinateKey }
     }));
   }
-  const pomUrl = `${MAVEN_CENTRAL_BASE_URL}/${repositoryPath}`;
+  const pomUrl = `${input.repository.baseUrl}/${repositoryPath}`;
+  const central = input.repository.baseUrl === MAVEN_CENTRAL_BASE_URL;
   const pomBytes = await readRemoteArtifactBytes({
     code: "REGISTRY_METADATA_FETCH_FAILED",
     packageId: coordinateKey,
     url: pomUrl,
-    blockedMessage: "Maven Central POM URL targets an unsupported or blocked host.",
-    resolveFailureMessage: "Failed to resolve Maven Central host.",
-    fetchFailureMessage: "Failed to fetch Maven Central POM metadata.",
-    tooLargeMessage: "Maven Central POM response exceeded the maximum supported size.",
-    unreadableMessage: "Maven Central POM response did not expose a readable body stream.",
-    offlineMissMessage: "Offline mode could not find Maven Central POM metadata in the artifact cache.",
+    blockedMessage: "Maven POM URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve Maven repository host.",
+    fetchFailureMessage: central ? "Failed to fetch Maven Central POM metadata." : "Failed to fetch Maven repository POM metadata.",
+    tooLargeMessage: "Maven POM response exceeded the maximum supported size.",
+    unreadableMessage: "Maven POM response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find Maven POM metadata in the artifact cache.",
     details: { registryUrl: pomUrl, coordinates: coordinateKey },
     maxBytes: input.pomMaxBytes,
     fetchArtifact: input.fetchArtifact,
@@ -45746,7 +46032,7 @@ async function loadMavenCentralPom(input) {
     offline: input.offline,
     artifactCache: input.artifactCache,
     allowedHosts: input.allowedHosts,
-    permittedHosts: MAVEN_CENTRAL_HOSTS,
+    permittedHosts: input.repository.permittedHosts,
     urlDetailKey: "registryUrl"
   });
   if (!pomBytes.ok) {
@@ -45757,6 +46043,103 @@ async function loadMavenCentralPom(input) {
     requested: input.coordinates,
     source: pomUrl,
     text: pomBytes.value.toString("utf8")
+  });
+}
+async function collectRemoteMavenJarEvidence(input) {
+  const pomPath = mavenPomRepositoryPath(input.coordinates);
+  if (!pomPath) {
+    return err(createError({
+      code: "REGISTRY_METADATA_FETCH_FAILED",
+      category: "unsupported_input",
+      message: "Maven JAR coordinates were not safe exact repository coordinates.",
+      details: {
+        packageId: input.packageId,
+        coordinates: mavenCoordinateKey2(input.coordinates)
+      }
+    }));
+  }
+  const jarPath = pomPath.replace(/\.pom$/u, ".jar");
+  const jarUrl = `${input.repository.baseUrl}/${jarPath}`;
+  const checksumUrl = `${jarUrl}.sha256`;
+  const checksumBytes = await readRemoteArtifactBytes({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    packageId: input.packageId,
+    url: checksumUrl,
+    blockedMessage: "Maven JAR checksum URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve Maven repository host.",
+    fetchFailureMessage: "Failed to fetch Maven JAR SHA-256 checksum.",
+    tooLargeMessage: "Maven JAR SHA-256 checksum response exceeded the maximum supported size.",
+    unreadableMessage: "Maven JAR SHA-256 checksum response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find the Maven JAR SHA-256 checksum in the artifact cache.",
+    details: { registryUrl: checksumUrl, coordinates: mavenCoordinateKey2(input.coordinates) },
+    maxBytes: MAVEN_CHECKSUM_MAX_BYTES,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: input.repository.permittedHosts,
+    urlDetailKey: "registryUrl"
+  });
+  if (!checksumBytes.ok) {
+    return checksumBytes.error.category === "network" ? ok(undefined) : checksumBytes;
+  }
+  const checksum = checksumBytes.value.toString("utf8").trim();
+  if (!/^[a-f0-9]{64}$/iu.test(checksum)) {
+    return err(createError({
+      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
+      category: "unsupported_input",
+      message: "Maven JAR SHA-256 checksum response was malformed.",
+      details: {
+        packageId: input.packageId,
+        coordinates: mavenCoordinateKey2(input.coordinates),
+        reason: "maven_jar_checksum_malformed"
+      }
+    }));
+  }
+  const jarBytes = await readRemoteArtifactBytes({
+    code: "TARBALL_FETCH_FAILED",
+    packageId: input.packageId,
+    url: jarUrl,
+    blockedMessage: "Maven JAR URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve Maven repository host.",
+    fetchFailureMessage: "Failed to fetch Maven JAR evidence.",
+    tooLargeMessage: "Maven JAR response exceeded the maximum supported size.",
+    unreadableMessage: "Maven JAR response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find the Maven JAR in the artifact cache.",
+    details: { resolved: jarUrl, coordinates: mavenCoordinateKey2(input.coordinates) },
+    maxBytes: input.jarMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: input.repository.permittedHosts,
+    urlDetailKey: "resolved"
+  });
+  if (!jarBytes.ok) {
+    return jarBytes.error.category === "network" ? ok(undefined) : jarBytes;
+  }
+  const expected = Buffer.from(checksum, "hex");
+  const observed = createHash3("sha256").update(jarBytes.value).digest();
+  if (expected.length !== observed.length || !timingSafeEqual(expected, observed)) {
+    return err(createError({
+      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
+      category: "unsupported_input",
+      message: "Maven JAR did not match its repository SHA-256 checksum.",
+      details: {
+        packageId: input.packageId,
+        coordinates: mavenCoordinateKey2(input.coordinates),
+        reason: "maven_jar_checksum_mismatch"
+      }
+    }));
+  }
+  return collectMavenJarEvidence({
+    packageId: input.packageId,
+    coordinates: input.coordinates,
+    jar: jarBytes.value
   });
 }
 async function collectNpmRegistryTarballEvidence(input) {
@@ -47771,9 +48154,11 @@ function normalizeLicenseEvidence(evidence) {
   if (evidence.files.some((file) => file.kind === "notice")) {
     signals.push("notice-required");
   }
-  if (hasExplicitCommercialRestriction(evidence)) {
+  const commercialRestriction = analyzeCommercialRestrictions(evidence);
+  if (commercialRestriction.packageRestricted) {
     signals.push("commercial-restriction");
   }
+  addNonPackageRestrictionSources(evidenceSources, commercialRestriction);
   if (evidence.packageJsonPrivate && evidence.source === "local") {
     signals.push("internal-private");
   }
@@ -47858,11 +48243,32 @@ function withSpdxAst(license, ast) {
 function normalizeAllLicenseEvidence(evidence) {
   return evidence.map(normalizeLicenseEvidence);
 }
-function hasExplicitCommercialRestriction(evidence) {
-  return [
-    ...collectPackageLicenseTexts(evidence),
-    ...evidence.files.map((file) => file.text)
-  ].some(hasCommercialRestrictionText);
+function analyzeCommercialRestrictions(evidence) {
+  const nonPackageScopes = new Map;
+  let packageRestricted = collectPackageLicenseTexts(evidence).some(hasCommercialRestrictionText);
+  for (const file of evidence.files) {
+    for (const statement of commercialRestrictionStatements(file.text)) {
+      if (!hasCommercialRestrictionText(statement)) {
+        continue;
+      }
+      const scopes = restrictionScopes(statement);
+      if (scopes.package || !scopes.documentation && !scopes.data) {
+        packageRestricted = true;
+      }
+      if (scopes.documentation && !scopes.package) {
+        const key = `documentation:${file.path}`;
+        nonPackageScopes.set(key, { path: file.path, scope: "documentation" });
+      }
+      if (scopes.data && !scopes.package) {
+        const key = `data:${file.path}`;
+        nonPackageScopes.set(key, { path: file.path, scope: "data" });
+      }
+    }
+  }
+  return {
+    packageRestricted,
+    nonPackageScopes: [...nonPackageScopes.values()]
+  };
 }
 function collectPackageLicenseTexts(evidence) {
   const texts = [];
@@ -47932,8 +48338,27 @@ var COMMERCIAL_USE_DENIAL_PATTERNS = [
   /\bshall not be used for commercial purposes\b/i,
   /\bcannot be used for commercial purposes\b/i
 ];
+var PACKAGE_RESTRICTION_SCOPE_PATTERN = /\b(?:software|source\s+code|codebase|package|library|program|application|module|toolkit)\b/i;
+var DOCUMENTATION_RESTRICTION_SCOPE_PATTERN = /\b(?:documentation|docs?|manuals?|tutorials?)\b/i;
+var DATA_RESTRICTION_SCOPE_PATTERN = /\b(?:corpora?|corpus|datasets?|data[ -]?sets?|training\s+data|test\s+data|model\s+weights?)\b/i;
 function hasCommercialRestrictionText(text3) {
   return COMMERCIAL_RESTRICTION_LICENSE_NAME_PATTERNS.some((pattern) => pattern.test(text3)) || COMMERCIAL_USE_DENIAL_PATTERNS.some((pattern) => pattern.test(text3));
+}
+function commercialRestrictionStatements(text3) {
+  return text3.replace(/\r\n?/g, `
+`).split(/\n{2,}|\n(?=\s*(?:[-*+]\s+|\d+[.)]\s+|#{1,6}\s+))/u).map((statement) => statement.replace(/\s+/g, " ").trim()).filter((statement) => statement.length > 0);
+}
+function restrictionScopes(statement) {
+  return {
+    package: PACKAGE_RESTRICTION_SCOPE_PATTERN.test(statement),
+    documentation: DOCUMENTATION_RESTRICTION_SCOPE_PATTERN.test(statement),
+    data: DATA_RESTRICTION_SCOPE_PATTERN.test(statement)
+  };
+}
+function addNonPackageRestrictionSources(evidenceSources, analysis) {
+  for (const item of analysis.nonPackageScopes) {
+    evidenceSources.push(`restriction scope: ${item.scope} in ${item.path}`);
+  }
 }
 function readLicenseExpressionEvidence(evidence) {
   const packageExpression = readPackageLicenseExpression(evidence);

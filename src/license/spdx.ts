@@ -1,3 +1,12 @@
+const LICENSE_EXPRESSION_ALIASES = new Map<string, string>([
+  ["gnu general public license, version 3.0", "GPL-3.0-only"],
+  ["eclipse public license v2.0", "EPL-2.0"],
+  [
+    "the gnu general public license, v2 with universal foss exception, v1.0",
+    "GPL-2.0-only WITH Universal-FOSS-exception-1.0"
+  ]
+]);
+
 const LICENSE_ALIASES = new Map<string, string>([
   ["apache 2", "Apache-2.0"],
   ["apache 2.0", "Apache-2.0"],
@@ -94,6 +103,16 @@ export function parseSpdxExpression(input: string): ParsedSpdxExpression {
 
   if (original.length === 0) {
     return malformedResult(original, [], false);
+  }
+
+  const expressionAlias = LICENSE_EXPRESSION_ALIASES.get(original.toLowerCase());
+  if (expressionAlias) {
+    const parsedAlias = parseSpdxExpression(expressionAlias);
+    return {
+      ...parsedAlias,
+      original,
+      usedAlias: true
+    };
   }
 
   const alias = normalizeLicenseToken(original);

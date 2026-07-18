@@ -76,6 +76,7 @@ type ParsedMavenModule = {
   rootName: string;
   groupId?: string;
   version?: string;
+  repositoryUrls: string[];
   ancestry: string[];
   dependencies: MavenPomDependency[];
 };
@@ -88,6 +89,9 @@ type MavenModuleParseState = {
   visitedPomPaths: Set<string>;
   parsedModuleCount: number;
 };
+
+const MAVEN_REPOSITORY_MAX_COUNT = 32;
+const MAVEN_REPOSITORY_URL_MAX_CHARS = 2_048;
 
 export function parseMavenPomFile(
   pomPath: string,
@@ -162,10 +166,14 @@ export function parseMavenPomText(
 
     const rootModule = parsedModules.value[0];
     const rootName = rootModule?.rootName ?? "<maven-project>";
+    const mavenRepositoryUrls = [...new Set(
+      parsedModules.value.flatMap((module) => module.repositoryUrls)
+    )].sort();
 
     return ok({
       rootName,
       lockfilePath: pomPath,
+      ...(mavenRepositoryUrls.length > 0 ? { mavenRepositoryUrls } : {}),
       nodes: dependencyNodesFromMavenModules(parsedModules.value)
     });
   } catch (cause) {
@@ -257,12 +265,21 @@ function readMavenProjectModules(input: {
   if (!dependencies.ok) {
     return dependencies;
   }
+  const repositoryUrls = readMavenRepositoryUrls(
+    scannedProject,
+    model.value.properties,
+    input.pomPath
+  );
+  if (!repositoryUrls.ok) {
+    return repositoryUrls;
+  }
 
   const result: ParsedMavenModule[] = [{
     pomPath: input.pomPath,
     rootName,
     ...(model.value.groupId ? { groupId: model.value.groupId } : {}),
     ...(model.value.version ? { version: model.value.version } : {}),
+    repositoryUrls: repositoryUrls.value,
     ancestry: input.ancestry,
     dependencies: dependencies.value
   }];
@@ -330,6 +347,58 @@ function readMavenModulePaths(text: string): string[] {
     }
   }
   return modules;
+}
+
+function readMavenRepositoryUrls(
+  text: string,
+  properties: Map<string, string>,
+  pomPath: string
+): Result<string[], OhriskError> {
+  const urls: string[] = [];
+  for (const repositories of text.matchAll(/<repositories\b[^>]*>([\s\S]*?)<\/repositories>/gi)) {
+    for (const repository of (repositories[1] ?? "").matchAll(/<repository\b[^>]*>([\s\S]*?)<\/repository>/gi)) {
+      const rawUrl = firstXmlTagText(repository[1] ?? "", "url");
+      const resolvedUrl = rawUrl
+        ? resolveMavenExpression(rawUrl, properties)?.trim().replace(/\/+$/u, "")
+        : undefined;
+      if (!resolvedUrl || urls.includes(resolvedUrl)) {
+        continue;
+      }
+      if (resolvedUrl.length > MAVEN_REPOSITORY_URL_MAX_CHARS) {
+        return err(createError({
+          code: "MAVEN_POM_PARSE_FAILED",
+          category: "unsupported_input",
+          message: "Failed to parse pom.xml. Maven repository URL exceeded the supported length.",
+          details: {
+            lockfilePath: pomPath,
+            reason: "maven_repository_url_length",
+            maxChars: MAVEN_REPOSITORY_URL_MAX_CHARS,
+            observedChars: resolvedUrl.length
+          }
+        }));
+      }
+      urls.push(resolvedUrl);
+      if (urls.length > MAVEN_REPOSITORY_MAX_COUNT) {
+        return err(createError({
+          code: "MAVEN_POM_PARSE_FAILED",
+          category: "unsupported_input",
+          message: "Failed to parse pom.xml. Maven repository count exceeded the supported limit.",
+          details: {
+            lockfilePath: pomPath,
+            reason: "maven_repository_count",
+            maxRepositories: MAVEN_REPOSITORY_MAX_COUNT
+          }
+        }));
+      }
+    }
+  }
+  return ok(urls);
+}
+
+function firstXmlTagText(text: string, tagName: string): string | undefined {
+  const match = new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`, "i").exec(text);
+  const value = normalizePomText(match?.[1] ?? "");
+  return value === "" ? undefined : value;
 }
 
 function resolveMavenModulePomPath(input: {

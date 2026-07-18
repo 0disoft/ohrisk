@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.10.1 - 2026-07-18
+
+- Fixed commercial-use restriction detection so terms explicitly scoped to
+  documentation or data/corpora do not override a separate package-code license.
+  Scoped restrictions remain visible in finding evidence, while genuine
+  package-level commercial denials continue to produce `high` findings.
+- Added an NLTK 3.9.4 regression fixture covering its Apache-2.0 source code,
+  noncommercial documentation license, and separately licensed corpora notice.
+- Normalized exact Maven POM names used by FastAsyncWorldEdit, JUnit Jupiter,
+  and MySQL Connector/J, including the full Universal FOSS Exception expression,
+  so recognized copyleft licenses are reviewed instead of reported as malformed.
+- Added opt-in evidence lookup for project-declared HTTPS Maven repositories
+  whose exact hosts are allowed by policy or `--allow-host`, while retaining
+  credential isolation, DNS/socket/redirect validation, bounded POM inheritance,
+  exact artifact identity checks, caching, and offline behavior.
+- Added a bounded Maven JAR license-file fallback that requires a same-repository
+  SHA-256 checksum and exact embedded Maven identity. Checksum or identity drift
+  fails closed; absent or unusable optional evidence remains `unknown`.
+- Accepted the exact zero-length deflated-directory encoding emitted by Gradle
+  JARs without weakening archive path, type, CRC, expansion, or size checks.
+
 ## 1.10.0 - 2026-07-18
 
 - Added exact-version Maven Central POM license evidence for Maven and Gradle

@@ -12,6 +12,50 @@ import { createTar, createTarEntries } from "./helpers/tar";
 import { createZip, createZipEntries } from "./helpers/zip";
 
 describe("archive reader", () => {
+  test("accepts zero-length Gradle JAR directories with DOS directory and regular Unix bits", () => {
+    const bytes = createZip({ "META-INF": "" });
+    const centralOffset = bytes.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+    expect(centralOffset).toBeGreaterThanOrEqual(0);
+    bytes.writeUInt32LE(0x81a40010, centralOffset + 38);
+
+    const result = readArchiveBytes({
+      displayName: "gradle.jar",
+      bytes,
+      formatHint: "zip"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.entries).toEqual([
+      expect.objectContaining({ path: "META-INF", type: "directory", size: 0 })
+    ]);
+  });
+
+  test("accepts the exact two-byte empty deflate encoding used by Gradle JAR directories", () => {
+    const bytes = createZipEntries([{
+      path: "META-INF/",
+      data: "",
+      directory: true,
+      method: 8
+    }]);
+    const result = readArchiveBytes({
+      displayName: "gradle-empty-directory.jar",
+      bytes,
+      formatHint: "zip"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.entries).toEqual([
+      expect.objectContaining({
+        path: "META-INF",
+        type: "directory",
+        size: 0,
+        compressedSize: 2
+      })
+    ]);
+  });
+
   test("indexes stored and deflated ZIP files and materializes them lazily", () => {
     for (const deflate of [false, true]) {
       const bytes = createZip(

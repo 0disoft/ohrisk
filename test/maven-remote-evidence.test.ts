@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -6,12 +7,164 @@ import path from "node:path";
 import { collectGraphEvidence } from "../src/evidence/collect";
 import { normalizeLicenseEvidence } from "../src/license/normalize";
 import type { DependencyGraph, DependencyNode } from "../src/graph/types";
+import { createZip } from "./helpers/zip";
 
 const DEMO_POM_URL = "https://repo.maven.apache.org/maven2/org/example/demo/1.2.3/demo-1.2.3.pom";
 const TOOL_POM_URL = "https://repo.maven.apache.org/maven2/org/example/tool/1.2.3/tool-1.2.3.pom";
 const PARENT_POM_URL = "https://repo.maven.apache.org/maven2/org/example/parent/1.2.3/parent-1.2.3.pom";
+const CUSTOM_REPOSITORY_URL = "https://repo.example.test/maven-public";
+const CUSTOM_DEMO_POM_URL = `${CUSTOM_REPOSITORY_URL}/org/example/demo/1.2.3/demo-1.2.3.pom`;
+const CUSTOM_DEMO_JAR_URL = `${CUSTOM_REPOSITORY_URL}/org/example/demo/1.2.3/demo-1.2.3.jar`;
+const CUSTOM_DEMO_JAR_CHECKSUM_URL = `${CUSTOM_DEMO_JAR_URL}.sha256`;
 
 describe("Maven Central evidence", () => {
+  test("uses a project-declared Maven repository only when its exact host is allowed", async () => {
+    const requests: string[] = [];
+    const result = await collectGraphEvidence({
+      graph: mavenGraph(
+        [mavenNode("org.example:demo", "1.2.3")],
+        [CUSTOM_REPOSITORY_URL]
+      ),
+      projectRoot: process.cwd(),
+      allowLocalProjectEvidence: false,
+      allowedArtifactHosts: ["repo.example.test"],
+      fetchArtifact: async (url) => {
+        requests.push(url);
+        if (url === DEMO_POM_URL) return notFoundResponse();
+        if (url === CUSTOM_DEMO_POM_URL) {
+          return okResponse([
+            "<project>",
+            "  <groupId>org.example</groupId>",
+            "  <artifactId>demo</artifactId>",
+            "  <version>1.2.3</version>",
+            "  <licenses><license><name>Eclipse Public License v2.0</name></license></licenses>",
+            "</project>"
+          ].join("\n"));
+        }
+        return notFoundResponse();
+      }
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(requests).toEqual([DEMO_POM_URL, CUSTOM_DEMO_POM_URL]);
+    expect(result.value[0]).toMatchObject({
+      metadataLicense: "Eclipse Public License v2.0",
+      metadataSource: "Maven repository repo.example.test pom.xml",
+      source: "tarball"
+    });
+  });
+
+  test("does not contact a project-declared Maven repository without an explicit host allowlist", async () => {
+    const requests: string[] = [];
+    const result = await collectGraphEvidence({
+      graph: mavenGraph(
+        [mavenNode("org.example:demo", "1.2.3")],
+        [CUSTOM_REPOSITORY_URL]
+      ),
+      projectRoot: process.cwd(),
+      allowLocalProjectEvidence: false,
+      fetchArtifact: async (url) => {
+        requests.push(url);
+        return notFoundResponse();
+      }
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(requests).toEqual([DEMO_POM_URL]);
+    expect(result.value[0]?.source).toBe("unavailable");
+  });
+
+  test("uses checksum and embedded identity verified Maven JAR license evidence", async () => {
+    const jar = createZip({
+      "META-INF/maven/org.example/demo/pom.properties": "groupId=org.example\nartifactId=demo\nversion=1.2.3\n",
+      "META-INF/LICENSE": "GNU GENERAL PUBLIC LICENSE Version 3"
+    });
+    const checksum = createHash("sha256").update(jar).digest("hex");
+    const requests: string[] = [];
+    const result = await collectGraphEvidence({
+      graph: mavenGraph(
+        [mavenNode("org.example:demo", "1.2.3")],
+        [CUSTOM_REPOSITORY_URL]
+      ),
+      projectRoot: process.cwd(),
+      allowLocalProjectEvidence: false,
+      allowedArtifactHosts: ["repo.example.test"],
+      fetchArtifact: async (url) => {
+        requests.push(url);
+        if (url === DEMO_POM_URL) return notFoundResponse();
+        if (url === CUSTOM_DEMO_POM_URL) {
+          return okResponse([
+            "<project>",
+            "  <groupId>org.example</groupId>",
+            "  <artifactId>demo</artifactId>",
+            "  <version>1.2.3</version>",
+            "</project>"
+          ].join("\n"));
+        }
+        if (url === CUSTOM_DEMO_JAR_CHECKSUM_URL) return okResponse(checksum);
+        if (url === CUSTOM_DEMO_JAR_URL) return okBufferResponse(jar);
+        return notFoundResponse();
+      }
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(requests).toEqual([
+      DEMO_POM_URL,
+      CUSTOM_DEMO_POM_URL,
+      CUSTOM_DEMO_JAR_CHECKSUM_URL,
+      CUSTOM_DEMO_JAR_URL
+    ]);
+    expect(result.value[0]).toMatchObject({
+      source: "tarball",
+      files: [{ path: "META-INF/LICENSE", kind: "license" }]
+    });
+    expect(normalizeLicenseEvidence(result.value[0]!)).toMatchObject({
+      expression: "GPL-3.0-only",
+      choices: ["GPL-3.0-only"]
+    });
+  });
+
+  test("fails closed when a Maven JAR disagrees with its repository SHA-256 checksum", async () => {
+    const jar = createZip({
+      "META-INF/maven/org.example/demo/pom.properties": "groupId=org.example\nartifactId=demo\nversion=1.2.3\n"
+    });
+    const result = await collectGraphEvidence({
+      graph: mavenGraph(
+        [mavenNode("org.example:demo", "1.2.3")],
+        [CUSTOM_REPOSITORY_URL]
+      ),
+      projectRoot: process.cwd(),
+      allowLocalProjectEvidence: false,
+      allowedArtifactHosts: ["repo.example.test"],
+      fetchArtifact: async (url) => {
+        if (url === DEMO_POM_URL) return notFoundResponse();
+        if (url === CUSTOM_DEMO_POM_URL) {
+          return okResponse([
+            "<project>",
+            "  <groupId>org.example</groupId>",
+            "  <artifactId>demo</artifactId>",
+            "  <version>1.2.3</version>",
+            "</project>"
+          ].join("\n"));
+        }
+        if (url === CUSTOM_DEMO_JAR_CHECKSUM_URL) return okResponse("0".repeat(64));
+        if (url === CUSTOM_DEMO_JAR_URL) return okBufferResponse(jar);
+        return notFoundResponse();
+      }
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected Maven JAR checksum mismatch.");
+    expect(result.error).toMatchObject({
+      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
+      category: "unsupported_input",
+      details: { reason: "maven_jar_checksum_mismatch" }
+    });
+  });
+
   test("fetches exact POMs, inherits parent licenses, and deduplicates shared parent requests", async () => {
     const requests: Array<{ url: string; authorization?: string }> = [];
     const result = await collectGraphEvidence({
@@ -170,10 +323,11 @@ describe("Maven Central evidence", () => {
   });
 });
 
-function mavenGraph(nodes: DependencyNode[]): DependencyGraph {
+function mavenGraph(nodes: DependencyNode[], mavenRepositoryUrls: string[] = []): DependencyGraph {
   return {
     rootName: "fixture",
     lockfilePath: "pom.xml",
+    ...(mavenRepositoryUrls.length > 0 ? { mavenRepositoryUrls } : {}),
     nodes
   };
 }
@@ -225,6 +379,29 @@ function okResponse(input: string): {
   arrayBuffer: () => Promise<ArrayBuffer>;
 } {
   const bytes = Buffer.from(input, "utf8");
+  return {
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    headers: { get: () => null },
+    body: new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      }
+    }),
+    arrayBuffer: async () => Uint8Array.from(bytes).buffer
+  };
+}
+
+function okBufferResponse(bytes: Buffer): {
+  ok: boolean;
+  status: number;
+  statusText: string;
+  headers: { get: () => null };
+  body: ReadableStream<Uint8Array>;
+  arrayBuffer: () => Promise<ArrayBuffer>;
+} {
   return {
     ok: true,
     status: 200,

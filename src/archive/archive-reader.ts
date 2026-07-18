@@ -407,11 +407,23 @@ function parseZip(bytes: Buffer, budget: Budget, archiveName: string): IndexedEn
     if (unixType !== 0 && unixType !== 0x8000 && unixType !== 0x4000) {
       unsupportedType(archiveName, entryPath, "zip");
     }
-    if ((directoryByName || directoryByDos) && unixType === 0x8000) {
+    const zeroLengthDirectoryWithRegularUnixMode = (directoryByName || directoryByDos)
+      && unixType === 0x8000
+      && size === 0;
+    if (
+      (directoryByName || directoryByDos)
+      && unixType === 0x8000
+      && !zeroLengthDirectoryWithRegularUnixMode
+    ) {
       malformed(archiveName, "ZIP entry type metadata is inconsistent.", "zip", entryPath);
     }
     const type = directoryByName || directoryByDos || unixType === 0x4000 ? "directory" : "file";
-    if ((type === "directory" && (size !== 0 || compressedSize !== 0)) || (type === "file" && directoryByName)) {
+    const emptyDirectoryEncoding = size === 0
+      && (
+        compressedSize === 0
+        || (method === 8 && compressedSize === 2 && crc === 0)
+      );
+    if ((type === "directory" && !emptyDirectoryEncoding) || (type === "file" && directoryByName)) {
       malformed(archiveName, "ZIP entry type metadata is inconsistent.", "zip", entryPath);
     }
     enforceEntryLimits({ size, compressedSize, budget, archiveName, entryPath });

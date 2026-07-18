@@ -6,6 +6,32 @@ import path from "node:path";
 import { parseMavenPomFile, parseMavenPomText } from "../src/graph/java-maven-pom";
 
 describe("parseMavenPomText", () => {
+  test("preserves bounded project-declared Maven repository URLs for evidence lookup", () => {
+    const result = parseMavenPomText([
+      "<project>",
+      "  <groupId>com.example</groupId>",
+      "  <artifactId>repository-fixture</artifactId>",
+      "  <version>1.0.0</version>",
+      "  <properties><paper.repo>https://repo.papermc.io/repository</paper.repo></properties>",
+      "  <repositories>",
+      "    <repository><id>paper</id><url>${paper.repo}/maven-public/</url></repository>",
+      "    <repository><id>jitpack</id><url>https://jitpack.io</url></repository>",
+      "    <repository><id>duplicate</id><url>https://jitpack.io/</url></repository>",
+      "  </repositories>",
+      "  <profiles>",
+      "    <profile><repositories><repository><url>https://profile.invalid/repo</url></repository></repositories></profile>",
+      "  </profiles>",
+      "</project>"
+    ].join("\n"));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.mavenRepositoryUrls).toEqual([
+      "https://jitpack.io",
+      "https://repo.papermc.io/repository/maven-public"
+    ]);
+  });
+
   test("recursively parses dependencies from Maven aggregator modules", () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-maven-modules-"));
     const coreModule = path.join(projectRoot, "modules", "swagger-core");

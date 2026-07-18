@@ -26,6 +26,13 @@ Ohrisk automatically selects one unambiguous nested dependency project. Multiple
 nested project roots require a safe repository-relative `--lockfile`; `--all`
 continues to merge inputs only at one project root.
 
+Maven license evidence uses local POMs, then Maven Central, then only those
+project-declared HTTPS repositories whose exact host is explicitly allowed by
+the caller or host-owned policy. If a verified POM chain has no license name,
+Ohrisk may inspect a bounded JAR only after a same-repository SHA-256 checksum
+and exact embedded Maven identity are verified. Missing or unusable optional JAR
+evidence remains `unknown`; checksum or identity disagreement fails closed.
+
 ## Commands
 
 - `ohrisk scan`: non-failing local scan and report generation.
@@ -38,6 +45,8 @@ continues to merge inputs only at one project root.
 
 - Severities are `low`, `review`, `high`, and `unknown`.
 - Usage profiles are `saas` and `distributed-app`.
+- Commercial restrictions explicitly scoped to documentation or data remain
+  evidence for those assets and do not override a separate package-code license.
 - Waivers may suppress matching findings, but strict waiver drift can fail CI.
 - Shareable formats must avoid leaking absolute local paths.
 

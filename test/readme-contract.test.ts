@@ -89,6 +89,8 @@ describe("README report contract", () => {
     expect(normalized).toContain("Ohrisk recursively selects the only nested dependency project");
     expect(normalized).toContain("Multiple nested project roots remain ambiguous");
     expect(normalized).toContain("supported by `scan`, not `ci`, `diff`, or the composite GitHub Action");
+    expect(readme).toContain("ohrisk scan --allow-host repo.papermc.io https://github.com/PlayPro/CoreProtect");
+    expect(normalized).toContain("same-repository SHA-256 sidecar");
   });
 });
 

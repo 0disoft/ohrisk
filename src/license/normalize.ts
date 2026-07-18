@@ -8,6 +8,16 @@ type LicenseExpressionEvidence = {
   filePath?: string;
 };
 
+type NonPackageRestrictionScope = "documentation" | "data";
+
+type CommercialRestrictionAnalysis = {
+  packageRestricted: boolean;
+  nonPackageScopes: Array<{
+    path: string;
+    scope: NonPackageRestrictionScope;
+  }>;
+};
+
 export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedLicense {
   const signals: NormalizedLicenseSignal[] = [];
   const evidenceSources = describeEvidenceSources(evidence);
@@ -16,9 +26,11 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     signals.push("notice-required");
   }
 
-  if (hasExplicitCommercialRestriction(evidence)) {
+  const commercialRestriction = analyzeCommercialRestrictions(evidence);
+  if (commercialRestriction.packageRestricted) {
     signals.push("commercial-restriction");
   }
+  addNonPackageRestrictionSources(evidenceSources, commercialRestriction);
 
   if (evidence.packageJsonPrivate && evidence.source === "local") {
     signals.push("internal-private");
@@ -126,11 +138,37 @@ export function normalizeAllLicenseEvidence(evidence: LicenseEvidence[]): Normal
   return evidence.map(normalizeLicenseEvidence);
 }
 
-function hasExplicitCommercialRestriction(evidence: LicenseEvidence): boolean {
-  return [
-    ...collectPackageLicenseTexts(evidence),
-    ...evidence.files.map((file) => file.text)
-  ].some(hasCommercialRestrictionText);
+function analyzeCommercialRestrictions(evidence: LicenseEvidence): CommercialRestrictionAnalysis {
+  const nonPackageScopes = new Map<string, CommercialRestrictionAnalysis["nonPackageScopes"][number]>();
+  let packageRestricted = collectPackageLicenseTexts(evidence).some(hasCommercialRestrictionText);
+
+  for (const file of evidence.files) {
+    for (const statement of commercialRestrictionStatements(file.text)) {
+      if (!hasCommercialRestrictionText(statement)) {
+        continue;
+      }
+
+      const scopes = restrictionScopes(statement);
+      if (scopes.package || (!scopes.documentation && !scopes.data)) {
+        packageRestricted = true;
+      }
+
+      if (scopes.documentation && !scopes.package) {
+        const key = `documentation:${file.path}`;
+        nonPackageScopes.set(key, { path: file.path, scope: "documentation" });
+      }
+
+      if (scopes.data && !scopes.package) {
+        const key = `data:${file.path}`;
+        nonPackageScopes.set(key, { path: file.path, scope: "data" });
+      }
+    }
+  }
+
+  return {
+    packageRestricted,
+    nonPackageScopes: [...nonPackageScopes.values()]
+  };
 }
 
 function collectPackageLicenseTexts(evidence: LicenseEvidence): string[] {
@@ -213,9 +251,45 @@ const COMMERCIAL_USE_DENIAL_PATTERNS = [
   /\bcannot be used for commercial purposes\b/i
 ];
 
+const PACKAGE_RESTRICTION_SCOPE_PATTERN =
+  /\b(?:software|source\s+code|codebase|package|library|program|application|module|toolkit)\b/i;
+const DOCUMENTATION_RESTRICTION_SCOPE_PATTERN =
+  /\b(?:documentation|docs?|manuals?|tutorials?)\b/i;
+const DATA_RESTRICTION_SCOPE_PATTERN =
+  /\b(?:corpora?|corpus|datasets?|data[ -]?sets?|training\s+data|test\s+data|model\s+weights?)\b/i;
+
 function hasCommercialRestrictionText(text: string): boolean {
   return COMMERCIAL_RESTRICTION_LICENSE_NAME_PATTERNS.some((pattern) => pattern.test(text))
     || COMMERCIAL_USE_DENIAL_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function commercialRestrictionStatements(text: string): string[] {
+  return text
+    .replace(/\r\n?/g, "\n")
+    .split(/\n{2,}|\n(?=\s*(?:[-*+]\s+|\d+[.)]\s+|#{1,6}\s+))/u)
+    .map((statement) => statement.replace(/\s+/g, " ").trim())
+    .filter((statement) => statement.length > 0);
+}
+
+function restrictionScopes(statement: string): {
+  package: boolean;
+  documentation: boolean;
+  data: boolean;
+} {
+  return {
+    package: PACKAGE_RESTRICTION_SCOPE_PATTERN.test(statement),
+    documentation: DOCUMENTATION_RESTRICTION_SCOPE_PATTERN.test(statement),
+    data: DATA_RESTRICTION_SCOPE_PATTERN.test(statement)
+  };
+}
+
+function addNonPackageRestrictionSources(
+  evidenceSources: string[],
+  analysis: CommercialRestrictionAnalysis
+): void {
+  for (const item of analysis.nonPackageScopes) {
+    evidenceSources.push(`restriction scope: ${item.scope} in ${item.path}`);
+  }
 }
 
 function readLicenseExpressionEvidence(evidence: LicenseEvidence): LicenseExpressionEvidence | undefined {

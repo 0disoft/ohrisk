@@ -20,8 +20,11 @@ Remote fetching is limited to these explicit adapters:
   license files.
 - Maven Central POM metadata for an exact Maven coordinate and version when
   local POM evidence is unavailable;
-- a bounded Maven Central parent-POM chain used only to inherit package license
-  names.
+- a bounded parent-POM chain used only to inherit package license names;
+- exact-version POM metadata from a project-declared HTTPS Maven repository only
+  when its exact host is explicitly allowed by policy or `--allow-host`;
+- a bounded Maven JAR license-file fallback only when the selected repository
+  publishes a SHA-256 sidecar and the JAR contains exact embedded Maven identity.
 
 The repository adapter accepts only `github.com` owner/repository URLs, disables
 credential prompts, submodule fetching, and symlink checkout, rejects non-portable or
@@ -89,6 +92,14 @@ match the requested artifact identity; malformed XML, identity mismatches,
 parent cycles, unsafe parent coordinates, excessive parent depth, and oversized
 POMs fail closed.
 
+Project `pom.xml` files may contribute at most 32 bounded repository URLs after
+profile sections are removed and local properties are resolved. A contributed
+URL is not authority to contact its host: it must use HTTPS, contain no URL
+credentials, query, or fragment, and its exact hostname must already be present
+in host-owned policy or repeatable `--allow-host` input. Maven Central is tried
+first. Each permitted repository is constrained to its own exact hostname for
+redirects, uses no npm token, and receives only safe exact coordinate paths.
+
 ## Credential Rules
 
 Registry credentials are read from the environment through
@@ -142,12 +153,23 @@ distributions, keeping the archive surface smaller when equivalent wheel
 metadata is available. Yanked files are considered only for an exact pinned
 release and are reported with a warning.
 
-Maven Central POM evidence is requested by exact-version path and is bounded to
-2 MiB per POM and eight inherited parent levels. Parent requests are
+Maven POM evidence is requested by exact-version path and is bounded to 2 MiB
+per POM and eight inherited parent levels. Parent requests are
 deduplicated within a scan and use the same persistent cache, conditional
 revalidation, offline behavior, timeout, DNS, connected-address, and response
-stream limits as other remote metadata. Maven JAR and source archives are not
-downloaded by this adapter.
+stream limits as other remote metadata.
+
+When the selected POM and resolvable parent chain contain no license name, the
+same repository may be queried for `<artifact>.jar.sha256`. The checksum response
+is limited to one exact 64-hex SHA-256 value. Only then may Ohrisk download the
+matching JAR, capped at 32 MiB, verify the checksum, parse it with the bounded ZIP
+reader, and require exact
+`META-INF/maven/<groupId>/<artifactId>/pom.properties` identity. Only package-root
+or direct `META-INF` LICENSE, LICENCE, COPYING, and NOTICE files are considered;
+nested dependency license directories are ignored. Missing checksums, missing
+embedded identity, absent license files, or a safely rejected optional JAR leave
+the package `unknown`. A malformed checksum, checksum mismatch, or embedded
+identity mismatch fails closed. Maven source archives are not fetched.
 
 ## Failure Semantics
 

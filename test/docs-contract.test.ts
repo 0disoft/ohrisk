@@ -126,9 +126,18 @@ describe("documentation contract", () => {
     expect(remoteBoundary).toContain("not the clone, owns policy, waivers, cache, and report output");
     expect(remoteBoundary).toContain("https://repo.maven.apache.org/maven2/");
     expect(remoteBoundary).toContain("eight inherited parent levels");
-    expect(normalizedCommandContract).toContain("bounded npm/PyPI/Maven Central remote package-evidence pipeline");
+    expect(remoteBoundary).toContain("exact host is explicitly allowed by policy or `--allow-host`");
+    expect(remoteBoundary).toContain("publishes a SHA-256 sidecar");
+    expect(remoteBoundary).toContain("META-INF/maven/<groupId>/<artifactId>/pom.properties");
+    expect(normalizedCommandContract).toContain("bounded npm/PyPI/Maven remote package-evidence pipeline");
     expect(normalizedCommandContract).toContain("exact reactor-internal module dependencies are excluded");
     expect(reportFormats).toContain("`scan --html <github-url>` writes `<repository>-ohrisk.html`");
+    expect(reportFormats).toContain("restriction scope: documentation in <path>");
+    expect(reportFormats).toContain("restriction scope: data in <path>");
+    expect(reportFormats).toContain("Fingerprint waivers for corrected Maven findings must be reviewed after upgrade");
+    expect(readFileSync(path.join(repoRoot, "docs", "profiles.md"), "utf8")).toContain(
+      "they do not override a separate package-code license"
+    );
   });
 
   test("docs/report-formats.md preserves CycloneDX boundary statements", () => {

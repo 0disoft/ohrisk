@@ -52,6 +52,15 @@ BUSL, Commons-Clause, and similar source-available restrictions are `high`
 under both profiles because they restrict commercial use regardless of
 distribution model.
 
+Commercial restrictions are evaluated against the part of the package they
+explicitly govern. Package metadata and terms applied to software, source code,
+or the package itself can raise severity to `high`. Terms explicitly limited to
+documentation or data such as corpora and datasets are retained in finding
+evidence as `restriction scope: documentation` or `restriction scope: data`,
+but they do not override a separate package-code license. If the application
+ships or uses those separately licensed materials, review their terms as a
+separate asset decision.
+
 ## License family reference
 
 | License family | Example SPDX IDs | saas | distributed-app |

@@ -123,6 +123,38 @@ describe("parseSpdxExpression", () => {
     }
   });
 
+  test("normalizes Maven Central license names and full exception expressions", () => {
+    for (const [input, expression, choices, exceptions] of [
+      [
+        "GNU General Public License, Version 3.0",
+        "GPL-3.0-only",
+        ["GPL-3.0-only"],
+        []
+      ],
+      [
+        "Eclipse Public License v2.0",
+        "EPL-2.0",
+        ["EPL-2.0"],
+        []
+      ],
+      [
+        "The GNU General Public License, v2 with Universal FOSS Exception, v1.0",
+        "GPL-2.0-only WITH Universal-FOSS-exception-1.0",
+        ["GPL-2.0-only"],
+        ["Universal-FOSS-exception-1.0"]
+      ]
+    ] as const) {
+      expect(parseSpdxExpression(input)).toMatchObject({
+        original: input,
+        expression,
+        choices,
+        exceptions,
+        malformed: false,
+        usedAlias: true
+      });
+    }
+  });
+
   test("normalizes common source-available restriction aliases", () => {
     expect(parseSpdxExpression("Commons Clause")).toMatchObject({
       original: "Commons Clause",
@@ -810,6 +842,81 @@ describe("normalizeLicenseEvidence", () => {
     });
 
     expect(normalized.signals).not.toContain("commercial-restriction");
+  });
+
+  test("does not apply NLTK documentation and corpus restrictions to the Apache-licensed package code", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "nltk@3.9.4",
+      metadataLicense: "Apache-2.0",
+      metadataSource: "nltk-3.9.4.dist-info/METADATA",
+      files: [
+        {
+          path: "nltk-3.9.4.dist-info/licenses/AUTHORS.md",
+          kind: "license",
+          text: "NLTK contributors"
+        },
+        {
+          path: "nltk-3.9.4.dist-info/licenses/LICENSE.txt",
+          kind: "license",
+          text: "Apache License\nVersion 2.0, January 2004"
+        },
+        {
+          path: "nltk-3.9.4.dist-info/licenses/README.md",
+          kind: "license",
+          text: [
+            "### Redistributing",
+            "",
+            "- NLTK source code is distributed under the Apache 2.0 License.",
+            "- NLTK documentation is distributed under the Creative Commons Attribution-Noncommercial-No Derivative Works 3.0 United States license.",
+            "- NLTK corpora are provided under the terms given in the README file for each corpus; all are redistributable and available for non-commercial use.",
+            "- NLTK may be freely redistributed, subject to the provisions of these licenses."
+          ].join("\n")
+        }
+      ],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      packageId: "nltk@3.9.4",
+      original: "Apache-2.0",
+      expression: "Apache-2.0",
+      choices: ["Apache-2.0"],
+      signals: [],
+      confidence: "high"
+    });
+    expect(normalized.evidenceSources).toContain(
+      "restriction scope: documentation in nltk-3.9.4.dist-info/licenses/README.md"
+    );
+    expect(normalized.evidenceSources).toContain(
+      "restriction scope: data in nltk-3.9.4.dist-info/licenses/README.md"
+    );
+  });
+
+  test("keeps a package-scoped commercial denial high even when a README also describes data", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "restricted-toolkit@1.0.0",
+      metadataLicense: "MIT",
+      metadataSource: "METADATA",
+      files: [
+        {
+          path: "licenses/README.md",
+          kind: "license",
+          text: [
+            "The bundled example dataset is available for non-commercial use.",
+            "",
+            "This software may not be used for commercial purposes without a commercial license."
+          ].join("\n")
+        }
+      ],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized.signals).toContain("commercial-restriction");
+    expect(normalized.evidenceSources).toContain(
+      "restriction scope: data in licenses/README.md"
+    );
   });
 
   test("marks explicit commercial restriction text in license files", () => {

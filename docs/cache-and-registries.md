@@ -33,6 +33,12 @@ project-specific cache.
 --allow-host <hostname>  Additional allowed artifact host; repeatable
 ```
 
+For Maven projects, `--allow-host` permits only an exact matching HTTPS
+repository URL already declared in the scanned `pom.xml`; it does not construct
+or discover arbitrary repository URLs. Maven Central remains the default. A
+permitted Maven repository may supply bounded POM evidence and, only with a
+same-repository SHA-256 sidecar plus exact embedded identity, JAR license files.
+
 Cache objects are verified by size and SHA-256 before use. Corrupt, truncated,
 or mismatched entries are deleted and treated as misses. Writes use private
 file permissions where supported, temporary files, and atomic rename so

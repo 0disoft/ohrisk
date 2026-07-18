@@ -37,7 +37,7 @@ development, tests, and packaging.
 - `--offline` forbids network requests and permits only local or verified cached evidence.
 - `--cache-dir <path>`, `--jobs <1..64>`, and `--timeout <duration>` configure persistent cache location and bounded evidence collection.
 - `cache status|prune|clear` accepts `--cache-dir` and `--json`; `cache prune` also accepts `--max-size <bytes>` and `--max-age <duration>`.
-- `--registry-url <https-url>`, `--registry-token-env <name>`, and repeatable `--allow-host <hostname>` configure a private npm-compatible registry without accepting raw token arguments.
+- `--registry-url <https-url>`, `--registry-token-env <name>`, and repeatable `--allow-host <hostname>` configure a private npm-compatible registry without accepting raw token arguments. `--allow-host` also permits an exact matching HTTPS Maven repository already declared by the scanned project; it never invents a repository URL or permits arbitrary Maven hosts.
 
 ## Archive Input
 
@@ -98,7 +98,7 @@ directory where Ohrisk was invoked remains the configuration, waiver, cache, and
 root. General package-cache, install-tree, and vendored-source evidence from the temporary checkout
 is disabled. Project-contained source metadata and license files explicitly referenced by a selected
 Python lockfile local-source record are parser inputs and remain bounded by the validated checkout;
-lockfile-embedded evidence and the bounded npm/PyPI/Maven Central remote package-evidence pipeline also remain
+lockfile-embedded evidence and the bounded npm/PyPI/Maven remote package-evidence pipeline also remain
 available. Shareable reports and errors redact the temporary checkout path.
 
 ## Multiple Lockfiles

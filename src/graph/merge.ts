@@ -28,6 +28,7 @@ export function mergeDependencyGraphs(graphs: SourcedDependencyGraph[]): Depende
   const evidenceByPackageId = new Map<string, LicenseEvidence>();
   const warnings: string[] = [];
   const diagnostics: DependencyGraphDiagnostic[] = [];
+  const mavenRepositoryUrls: string[] = [];
 
   for (const item of graphs) {
     for (const node of item.graph.nodes) {
@@ -72,6 +73,7 @@ export function mergeDependencyGraphs(graphs: SourcedDependencyGraph[]): Depende
     }
     warnings.push(...(item.graph.warnings ?? []));
     diagnostics.push(...(item.graph.diagnostics ?? []));
+    mavenRepositoryUrls.push(...(item.graph.mavenRepositoryUrls ?? []));
   }
 
   const lockfilePaths = unique(graphs.map((item) => item.source.lockfilePath));
@@ -83,6 +85,9 @@ export function mergeDependencyGraphs(graphs: SourcedDependencyGraph[]): Depende
     ...(rootNames.length === 1 ? { rootName: rootNames[0] } : {}),
     lockfilePath: first.graph.lockfilePath,
     lockfilePaths,
+    ...(mavenRepositoryUrls.length > 0
+      ? { mavenRepositoryUrls: unique(mavenRepositoryUrls).sort() }
+      : {}),
     nodes: [...nodesByPurl.values()].sort((left, right) => left.id.localeCompare(right.id)),
     ...(evidenceByPackageId.size > 0
       ? { embeddedEvidence: [...evidenceByPackageId.values()] }

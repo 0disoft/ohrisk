@@ -65,6 +65,7 @@ export type DependencyGraph = {
   rootName?: string;
   lockfilePath: string;
   lockfilePaths?: string[];
+  mavenRepositoryUrls?: string[];
   nodes: DependencyNode[];
   embeddedEvidence?: LicenseEvidence[];
   warnings?: string[];
