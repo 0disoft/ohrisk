@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.10.0 - 2026-07-18
+
+- Added exact-version Maven Central POM license evidence for Maven and Gradle
+  coordinates when local POM evidence is unavailable. Requests use the fixed
+  official host with existing DNS, socket, redirect, timeout, cache, offline,
+  response-size, and credential-isolation boundaries.
+- Maven license evidence now follows a bounded parent-POM chain locally and
+  remotely, verifies returned artifact identities, deduplicates shared parent
+  requests, and fails closed on malformed XML, unsafe coordinates, cycles, or
+  excessive depth.
+- Fixed Maven multi-module parsing so dependency coordinates cannot be mistaken
+  for a child project's inherited group or version, and exact reactor-internal
+  dependencies are no longer reported as external packages.
+- Added conservative SPDX aliases for unambiguous Maven POM license names while
+  preserving `unknown` for ambiguous values such as unspecified `LGPL 2.1` or
+  generic public-domain labels.
+
 ## 1.9.0 - 2026-07-18
 
 - `requirements.txt` scans now use pip-compile `# via` annotations to restore

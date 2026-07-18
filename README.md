@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.9.0
+npm install -g ohrisk@1.10.0
 cd your-project
 ohrisk scan
 ```
@@ -197,7 +197,8 @@ The current implementation is the first local dependency-risk vertical slice:
 - local Go module cache, `vendor/<module>`, and project-root-contained local `replace` path evidence before unavailable fallback for `go.work` and `go.mod` scans
 - Python `.venv` and `venv` `*.dist-info/METADATA` package evidence, plus project-root-contained local source metadata and license files for `uv.lock`, `pylock.toml`, `requirements.txt`, `Pipfile.lock`, and `pdm.lock` local source entries, before unavailable fallback
 - exact-version PyPI release evidence for locked Python packages, using SHA-256-verified source distributions or wheels plus identity-checked `PKG-INFO`, `METADATA`, and license files
-- local Maven `.m2/repository` POMs for Maven parent/BOM version management and package license evidence before unavailable fallback for Gradle lockfile and Maven `pom.xml` coordinates
+- local Maven `.m2/repository` POMs for Maven parent/BOM version management and package license evidence, including bounded parent-POM license inheritance
+- exact-version Maven Central POM evidence for Maven and Gradle coordinates when local POM evidence is unavailable, using the fixed official repository host, bounded parent inheritance, cache, offline, timeout, redirect, identity, and response-size checks
 - Bazel module license evidence uses local Bazel registry `local_path` sources from file-based registries when present; remote Bazel registry metadata fetching is not scanned yet
 - local NuGet package cache `.nuspec` evidence before unavailable fallback for `packages.lock.json`, `obj/project.assets.json`, `packages.config`, and `*.csproj` packages
 - local Conan cache `conanfile.py` metadata and package source license evidence before unavailable fallback for `conan.lock` recipes
@@ -228,7 +229,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - `package.json` license fields
 - Cargo `Cargo.toml` package `license` fields
 - Python `METADATA` `License-Expression`, `License`, and recognized license classifier fields
-- Maven POM `<licenses>` names
+- Maven POM `<licenses>` names from the package POM or a bounded inherited parent POM
 - NuGet `.nuspec` `<license>` expressions
 - Ruby gemspec `license` and `licenses` fields
 - Composer package `composer.json` `license` fields
@@ -270,7 +271,7 @@ The current implementation is the first local dependency-risk vertical slice:
 
 Central approval workflows, GitHub App checks, Go `go.work` use paths outside the project root, Go local `replace` paths outside the project root, full Go module parent graph
 reconstruction, unpinned or direct-reference `pyproject.toml` dependencies, uv, Pipenv, and PDM remote VCS entries, uv, Pipenv, and PDM local source paths outside the project root, remote VCS `requirements.txt` entries, unpinned requirements ranges without exact constraint pins,
-remote Maven parent/BOM fetching, Maven transitive graph
+remote Maven parent/BOM fetching for dependency-version resolution, Maven transitive graph
 resolution, external Maven repository resolution beyond local `.m2/repository`, Gradle graph reconstruction, Gradle version catalog rich versions, bundle aliases, plugin aliases, and usage-site configuration reconstruction, Bazel `MODULE.bazel` `include()` expansion, Bazel overrides, module extensions, `MODULE.bazel.lock` graph reconstruction, remote Bazel registry metadata fetching, Conan 1 graph lock support, Conan binary package ID and remote ConanCenter
 artifact fetching, unpinned or ranged Conda `environment.yml` specs, Conda environment transitive dependency reconstruction, explicit per-platform `conda-<platform>.lock` exports, remote Conda channel artifact fetching,
 Conda build/channel/subdir Package URL qualifiers, Terraform module scanning, remote Terraform Registry metadata fetching, Helm transitive chart graph
@@ -281,7 +282,7 @@ Carthage parent graph reconstruction, remote Swift package checkout fetching,
 Carthage remote checkout or binary framework license fetching, CocoaPods remote podspec or source
 fetching, Mix and Rebar3 dependency graph reconstruction, Rebar3 git/path deps, Rebar3 plugin locks, remote Hex.pm artifact fetching,
 Composer plugin/platform repository resolution, remote
-crates.io, Go proxy, Maven, NuGet, pub.dev, RubyGems, or Packagist artifact
+crates.io, Go proxy, Maven JAR/source, NuGet, pub.dev, RubyGems, or Packagist artifact
 fetching are not part of this slice yet.
 
 ## Usage
@@ -354,7 +355,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.9.0
+npm install -g ohrisk@1.10.0
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
@@ -422,9 +423,9 @@ Supported dependency input files:
 - `pdm.lock` package entries and project-root-contained local `path` or relative `file:` source records from Python PDM projects, using adjacent `pyproject.toml` root dependencies when available and installed `.venv`/`venv` dist-info metadata or local source metadata and license files for local evidence
 - `poetry.lock` package entries from Python Poetry projects, using adjacent `pyproject.toml` root dependencies when available and installed `.venv`/`venv` dist-info metadata for local evidence
 - pinned `requirements.txt` entries such as `name==version`, local source entries such as `-e ./local-package`, `./local-package`, `file:./local-package`, and `name @ file:./local-package`, nested `-r` requirement files, and exact `-c` constraint pins for ranged entries, using pip-compile `# via` annotations for bounded dependency-path reconstruction and installed `.venv`/`venv` dist-info metadata or project-root-contained local source metadata and license files for local evidence
-- `gradle.lockfile`, legacy `gradle/dependency-locks` directories, and explicit `gradle/dependency-locks/*.lockfile` Maven coordinates from Java Gradle dependency locking, using local `.m2/repository` POM metadata for evidence
-- `gradle/libs.versions.toml` Maven library aliases with exact versions or `version.ref` values from the same catalog, using local `.m2/repository` POM metadata for evidence
-- Maven `pom.xml` direct dependencies with explicit versions or versions resolved from local `<properties>`, same-file `dependencyManagement`, or local `.m2/repository` parent/imported-BOM `dependencyManagement`, using local `.m2/repository` POM metadata for evidence
+- `gradle.lockfile`, legacy `gradle/dependency-locks` directories, and explicit `gradle/dependency-locks/*.lockfile` Maven coordinates from Java Gradle dependency locking, using local `.m2/repository` POM metadata or exact-version Maven Central POM fallback for evidence
+- `gradle/libs.versions.toml` Maven library aliases with exact versions or `version.ref` values from the same catalog, using local `.m2/repository` POM metadata or exact-version Maven Central POM fallback for evidence
+- Maven `pom.xml` direct dependencies with explicit versions or versions resolved from local `<properties>`, same-file `dependencyManagement`, or local `.m2/repository` parent/imported-BOM `dependencyManagement`; reactor-internal module dependencies are excluded, and package licenses use local POM metadata or exact-version Maven Central POM fallback with bounded parent inheritance
 - Bazel `MODULE.bazel` direct `bazel_dep` entries with literal exact versions, failing closed on graph-expanding constructs and using local Bazel registry `local_path` source evidence when present
 - .NET NuGet `packages.lock.json` package entries, restored `obj/project.assets.json` package graph entries, `packages.config` package entries, and direct `*.csproj` `PackageReference` entries, resolving central versions from the nearest `Directory.Packages.props` when present and using local NuGet cache `.nuspec` metadata for evidence
 - Conan 2 `conan.lock` recipe references from `requires`, `build_requires`, and `python_requires`, using local Conan cache `conanfile.py` metadata and license files for evidence

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 64598fbee012822ceb7b2547fd3b3d0f81981f87a90a7d8361dd8ba5e6fadbde
+// ohrisk-action-source-sha256: eb5fed57c144b2cacfcf8d80cc90f00a2321146b7a040c9519b4faf90d12228e
 // ohrisk-action-build-platform: win32
 import { createRequire } from "node:module";
 var __create = Object.create;
@@ -18384,7 +18384,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.9.0";
+var OHRISK_VERSION = "1.10.0";
 
 // src/archive/archive-project.ts
 import path46 from "node:path";
@@ -24968,7 +24968,8 @@ function mavenRepositoryRoots(projectRoot, extraRoots = []) {
   return [...new Set(roots.map((root) => path19.resolve(root)))];
 }
 function findMavenPomInRepository(input) {
-  const relativePomPath = mavenPomRelativePath(input);
+  const repositoryPath = mavenPomRepositoryPath(input);
+  const relativePomPath = repositoryPath?.replaceAll("/", path19.sep);
   if (!relativePomPath) {
     return;
   }
@@ -24984,13 +24985,17 @@ function findMavenPomInRepository(input) {
   }
   return;
 }
-function mavenPomRelativePath(input) {
+function mavenPomRepositoryPath(input) {
   const groupSegments = input.groupId.split(".");
   if (groupSegments.some((segment) => !isSafeMavenPathSegment(segment, MAVEN_GROUP_SEGMENT_PATTERN)) || !isSafeMavenPathSegment(input.artifactId, MAVEN_ARTIFACT_SEGMENT_PATTERN) || !isSafeMavenPathSegment(input.version, MAVEN_ARTIFACT_SEGMENT_PATTERN)) {
     return;
   }
-  const relativePomPath = path19.join(...groupSegments, input.artifactId, input.version, `${input.artifactId}-${input.version}.pom`);
-  return relativePomPath;
+  return [
+    ...groupSegments,
+    input.artifactId,
+    input.version,
+    `${input.artifactId}-${input.version}.pom`
+  ].join("/");
 }
 function isSafeMavenPathSegment(segment, pattern) {
   return segment.length > 0 && segment !== "." && segment !== ".." && !segment.includes("..") && !segment.includes("/") && !segment.includes("\\") && !segment.includes("\x00") && !path19.isAbsolute(segment) && !/^[A-Za-z]:/.test(segment) && pattern.test(segment);
@@ -25128,6 +25133,8 @@ function readMavenProjectModules(input) {
   const result = [{
     pomPath: input.pomPath,
     rootName,
+    ...model.value.groupId ? { groupId: model.value.groupId } : {},
+    ...model.value.version ? { version: model.value.version } : {},
     ancestry: input.ancestry,
     dependencies: dependencies.value
   }];
@@ -25257,11 +25264,15 @@ function createDiskMavenProjectPomReader(input) {
 }
 function dependencyNodesFromMavenModules(modules) {
   const nodes = new Map;
+  const reactorPackageIds = new Set(modules.flatMap((module) => module.groupId && module.version ? [`${module.groupId}:${module.rootName}@${module.version}`] : []));
   for (const module of modules) {
     const modulePath = [...module.ancestry, module.rootName];
     for (const dependency of module.dependencies) {
       const name = `${dependency.groupId}:${dependency.artifactId}`;
       const id = `${name}@${dependency.version}`;
+      if (reactorPackageIds.has(id)) {
+        continue;
+      }
       const dependencyPath = [...modulePath, id];
       const dependencyType = dependencyTypeForMavenDependency(dependency);
       const existing = nodes.get(id);
@@ -25395,6 +25406,11 @@ function readExternalMavenPomModel(coordinates, pomPath, context, depth, usage =
 }
 function readMavenPomProject(text3, parent) {
   const projectText = stripXmlSection(text3, "parent");
+  const projectCoordinatesText = stripXmlSections(projectText, [
+    "dependencies",
+    "dependencyManagement",
+    "properties"
+  ]);
   const properties = new Map(parent?.properties);
   const parentCoordinates = readMavenParentCoordinates(text3) ?? (parent?.groupId && parent.rootName && parent.version ? {
     groupId: parent.groupId,
@@ -25412,9 +25428,9 @@ function readMavenPomProject(text3, parent) {
   for (const [key, value] of readPomProperties(projectText)) {
     properties.set(key, value);
   }
-  const groupId = readXmlTagText2(projectText, "groupId") ?? parent?.groupId;
-  const artifactId = readXmlTagText2(projectText, "artifactId");
-  const rawVersion = readXmlTagText2(projectText, "version");
+  const groupId = readXmlTagText2(projectCoordinatesText, "groupId") ?? parent?.groupId;
+  const artifactId = readXmlTagText2(projectCoordinatesText, "artifactId");
+  const rawVersion = readXmlTagText2(projectCoordinatesText, "version");
   const version = rawVersion ? resolveMavenExpression(rawVersion, properties) : parent?.version;
   if (groupId) {
     properties.set("project.groupId", groupId);
@@ -41567,10 +41583,15 @@ function rockspecReadFailedMessage(error) {
 }
 
 // src/evidence/maven-package.ts
-var MAVEN_POM_MAX_BYTES = 2 * 1024 * 1024;
+var MAVEN_POM_METADATA_MAX_BYTES = 2 * 1024 * 1024;
+var MAVEN_LICENSE_PARENT_MAX_DEPTH = 8;
+var MAVEN_LICENSE_NAME_MAX_CHARS = 200;
+var MAVEN_LICENSE_COUNT_MAX = 16;
+var MAVEN_PROPERTY_RESOLUTION_MAX_DEPTH = 8;
+var MAVEN_PROPERTY_REFERENCE_PATTERN = /\$\{([^{}]+)\}/gu;
 function collectMavenPackageEvidence(input) {
-  const coordinates = parseMavenCoordinates3(input.coordinates);
-  if (!coordinates) {
+  const requested = parseMavenPackageCoordinates(input.coordinates, input.version);
+  if (!requested) {
     return ok({
       packageId: input.packageId,
       files: [],
@@ -41578,90 +41599,267 @@ function collectMavenPackageEvidence(input) {
       warnings: [`Maven coordinates were not parseable: ${input.coordinates}`]
     });
   }
-  const pomPath = findMavenPom({
-    projectRoot: input.projectRoot,
-    groupId: coordinates.groupId,
-    artifactId: coordinates.artifactId,
-    version: input.version
-  });
-  if (!pomPath) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: [
-        `Maven POM metadata for ${input.coordinates}@${input.version} was not found in local .m2/repository caches; run Maven/Gradle dependency resolution first or provide a project .m2/repository cache.`
-      ]
-    });
-  }
-  const pomText = readTextFileWithLimit({
-    filePath: pomPath,
-    maxBytes: input.pomMaxBytes ?? MAVEN_POM_MAX_BYTES
-  });
-  if (!pomText.ok) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: textFileReadErrorCategory(pomText.error),
-      message: pomReadFailedMessage(pomText.error),
-      details: {
+  const repositoryRoots = mavenRepositoryRoots(input.projectRoot);
+  const maxParentDepth = input.maxParentDepth ?? MAVEN_LICENSE_PARENT_MAX_DEPTH;
+  const visited = new Set;
+  let current = requested;
+  for (let depth = 0;depth <= maxParentDepth; depth += 1) {
+    const coordinateKey = mavenCoordinateKey2(current);
+    if (visited.has(coordinateKey)) {
+      return err(mavenPomMetadataError({
         packageId: input.packageId,
-        pomPath,
-        ...textFileReadErrorDetails(pomText.error)
-      }
-    }));
+        source: coordinateKey,
+        message: "Maven POM license inheritance contains a parent cycle.",
+        details: { reason: "parent_cycle", coordinates: coordinateKey }
+      }));
+    }
+    visited.add(coordinateKey);
+    const pomPath = findMavenPomInRepository({ repositoryRoots, ...current });
+    if (!pomPath) {
+      const warning = depth === 0 ? `Maven POM metadata for ${input.coordinates}@${input.version} was not found in local .m2/repository caches; run Maven/Gradle dependency resolution first or provide a project .m2/repository cache.` : `Maven parent POM metadata for ${coordinateKey} was not found in local .m2/repository caches.`;
+      return ok({
+        packageId: input.packageId,
+        files: [],
+        source: "unavailable",
+        warnings: [warning]
+      });
+    }
+    const pomText = readTextFileWithLimit({
+      filePath: pomPath,
+      maxBytes: input.pomMaxBytes ?? MAVEN_POM_METADATA_MAX_BYTES
+    });
+    if (!pomText.ok) {
+      return err(createError({
+        code: "PACKAGE_EVIDENCE_READ_FAILED",
+        category: textFileReadErrorCategory(pomText.error),
+        message: pomReadFailedMessage(pomText.error),
+        details: {
+          packageId: input.packageId,
+          pomPath,
+          ...textFileReadErrorDetails(pomText.error)
+        }
+      }));
+    }
+    const metadata = parseMavenPomLicenseMetadata({
+      packageId: input.packageId,
+      requested: current,
+      source: coordinateKey,
+      text: pomText.value
+    });
+    if (!metadata.ok) {
+      return metadata;
+    }
+    if (metadata.value.licenses.length > 0) {
+      return ok({
+        packageId: input.packageId,
+        metadataLicense: metadata.value.licenses.join(" OR "),
+        metadataSource: depth === 0 ? "pom.xml" : `parent pom.xml (${coordinateKey})`,
+        files: [],
+        source: "local",
+        warnings: []
+      });
+    }
+    if (!metadata.value.parent) {
+      return ok({
+        packageId: input.packageId,
+        files: [],
+        source: "local",
+        warnings: ["Maven POM and its resolvable parent chain did not declare license names."]
+      });
+    }
+    current = metadata.value.parent;
   }
-  const licenses = readPomLicenseNames(pomText.value);
-  const warnings = licenses.length === 0 ? ["Maven POM did not declare license names."] : [];
-  return ok({
+  return err(mavenPomMetadataError({
     packageId: input.packageId,
-    ...licenses.length > 0 ? {
-      metadataLicense: [...new Set(licenses)].join(" OR "),
-      metadataSource: "pom.xml"
-    } : {},
-    files: [],
-    source: "local",
-    warnings
-  });
+    source: mavenCoordinateKey2(current),
+    message: "Maven POM license inheritance exceeded the maximum supported parent depth.",
+    details: { reason: "parent_depth", maxParentDepth }
+  }));
 }
-function parseMavenCoordinates3(coordinates) {
+function parseMavenPackageCoordinates(coordinates, version) {
   const [groupId, artifactId, extra] = coordinates.split(":");
   if (!groupId || !artifactId || extra !== undefined) {
     return;
   }
-  return { groupId, artifactId };
+  const parsed = { groupId, artifactId, version };
+  return mavenPomRepositoryPath(parsed) ? parsed : undefined;
 }
-function findMavenPom(input) {
-  return findMavenPomInRepository({
-    repositoryRoots: mavenRepositoryRoots(input.projectRoot),
-    groupId: input.groupId,
-    artifactId: input.artifactId,
-    version: input.version
+function parseMavenPomLicenseMetadata(input) {
+  const parsed = parseXmlDocument(input.text, input.source, (_source, cause) => err(mavenPomMetadataError({
+    packageId: input.packageId,
+    source: input.source,
+    message: "Maven POM metadata was not valid bounded XML.",
+    details: { reason: "malformed_xml", cause }
+  })));
+  if (!parsed.ok) {
+    return parsed;
+  }
+  if (parsed.value.name !== "project") {
+    return err(mavenPomMetadataError({
+      packageId: input.packageId,
+      source: input.source,
+      message: "Maven POM metadata did not use a project root element.",
+      details: { reason: "invalid_root", rootElement: parsed.value.name }
+    }));
+  }
+  const properties = readMavenPomProperties(parsed.value, input.requested);
+  const parent = readParentCoordinates({
+    packageId: input.packageId,
+    source: input.source,
+    parent: firstChild(parsed.value, "parent"),
+    properties
+  });
+  if (!parent.ok) {
+    return parent;
+  }
+  const artifactId = resolveMavenPomValue(childText(parsed.value, "artifactId"), properties);
+  const groupId = resolveMavenPomValue(childText(parsed.value, "groupId"), properties) ?? parent.value?.groupId;
+  const version = resolveMavenPomValue(childText(parsed.value, "version"), properties) ?? parent.value?.version;
+  if (artifactId !== input.requested.artifactId || groupId !== undefined && groupId !== input.requested.groupId || version !== undefined && version !== input.requested.version) {
+    return err(mavenPomMetadataError({
+      packageId: input.packageId,
+      source: input.source,
+      message: "Maven POM metadata did not match the requested package identity.",
+      details: {
+        reason: "identity_mismatch",
+        requested: mavenCoordinateKey2(input.requested),
+        ...groupId ? { metadataGroupId: groupId } : {},
+        ...artifactId ? { metadataArtifactId: artifactId } : {},
+        ...version ? { metadataVersion: version } : {}
+      }
+    }));
+  }
+  const licenses = readPomLicenseNames({
+    packageId: input.packageId,
+    source: input.source,
+    project: parsed.value,
+    properties
+  });
+  if (!licenses.ok) {
+    return licenses;
+  }
+  return ok({
+    licenses: licenses.value,
+    ...parent.value ? { parent: parent.value } : {}
   });
 }
-function readPomLicenseNames(text3) {
-  const licensesSection = text3.match(/<licenses\b[^>]*>([\s\S]*?)<\/licenses>/i)?.[1];
-  if (!licensesSection) {
-    return [];
+function mavenCoordinateKey2(coordinates) {
+  return `${coordinates.groupId}:${coordinates.artifactId}@${coordinates.version}`;
+}
+function readParentCoordinates(input) {
+  if (!input.parent) {
+    return ok(undefined);
+  }
+  const groupId = resolveMavenPomValue(childText(input.parent, "groupId"), input.properties);
+  const artifactId = resolveMavenPomValue(childText(input.parent, "artifactId"), input.properties);
+  const version = resolveMavenPomValue(childText(input.parent, "version"), input.properties);
+  if (!groupId || !artifactId || !version) {
+    return err(mavenPomMetadataError({
+      packageId: input.packageId,
+      source: input.source,
+      message: "Maven parent POM coordinates were incomplete or unresolved.",
+      details: { reason: "parent_coordinates_unresolved" }
+    }));
+  }
+  const coordinates = { groupId, artifactId, version };
+  if (!mavenPomRepositoryPath(coordinates)) {
+    return err(mavenPomMetadataError({
+      packageId: input.packageId,
+      source: input.source,
+      message: "Maven parent POM coordinates were not safe exact repository coordinates.",
+      details: { reason: "parent_coordinates_invalid" }
+    }));
+  }
+  return ok(coordinates);
+}
+function readMavenPomProperties(project, requested) {
+  const properties = new Map([
+    ["project.groupId", requested.groupId],
+    ["pom.groupId", requested.groupId],
+    ["project.artifactId", requested.artifactId],
+    ["pom.artifactId", requested.artifactId],
+    ["project.version", requested.version],
+    ["pom.version", requested.version]
+  ]);
+  for (const property of firstChild(project, "properties")?.children ?? []) {
+    const value = property.text.trim();
+    if (value !== "") {
+      properties.set(property.name, value);
+    }
+  }
+  return properties;
+}
+function resolveMavenPomValue(value, properties) {
+  if (!value) {
+    return;
+  }
+  let resolved = value.trim();
+  for (let depth = 0;depth < MAVEN_PROPERTY_RESOLUTION_MAX_DEPTH; depth += 1) {
+    let changed = false;
+    resolved = resolved.replace(MAVEN_PROPERTY_REFERENCE_PATTERN, (reference, key) => {
+      const replacement = properties.get(key.trim());
+      if (replacement === undefined) {
+        return reference;
+      }
+      changed = true;
+      return replacement;
+    });
+    if (!changed) {
+      break;
+    }
+  }
+  return resolved === "" || resolved.includes("${") ? undefined : resolved;
+}
+function readPomLicenseNames(input) {
+  const licenseNodes = childNodes(firstChild(input.project, "licenses"), "license");
+  if (licenseNodes.length > MAVEN_LICENSE_COUNT_MAX) {
+    return err(mavenPomMetadataError({
+      packageId: input.packageId,
+      source: input.source,
+      message: "Maven POM declared too many license records.",
+      details: {
+        reason: "license_count",
+        maxLicenses: MAVEN_LICENSE_COUNT_MAX,
+        observedLicenses: licenseNodes.length
+      }
+    }));
   }
   const names = [];
-  const licenseBlocks = licensesSection.matchAll(/<license\b[^>]*>([\s\S]*?)<\/license>/gi);
-  for (const block of licenseBlocks) {
-    const name = block[1]?.match(/<name\b[^>]*>([\s\S]*?)<\/name>/i)?.[1];
+  for (const license of licenseNodes) {
+    const name = resolveMavenPomValue(childText(license, "name"), input.properties);
     if (!name) {
       continue;
     }
-    const normalized = normalizePomText2(name);
-    if (normalized) {
+    const normalized = name.replace(/\s+/gu, " ").trim();
+    if (normalized.length > MAVEN_LICENSE_NAME_MAX_CHARS) {
+      return err(mavenPomMetadataError({
+        packageId: input.packageId,
+        source: input.source,
+        message: "Maven POM license name exceeded the maximum supported length.",
+        details: {
+          reason: "license_name_length",
+          maxChars: MAVEN_LICENSE_NAME_MAX_CHARS,
+          observedChars: normalized.length
+        }
+      }));
+    }
+    if (normalized !== "") {
       names.push(normalized);
     }
   }
-  return names;
+  return ok([...new Set(names)]);
 }
-function normalizePomText2(text3) {
-  return decodeXmlEntities2(text3.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
-}
-function decodeXmlEntities2(text3) {
-  return text3.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+function mavenPomMetadataError(input) {
+  return createError({
+    code: "PACKAGE_EVIDENCE_READ_FAILED",
+    category: "unsupported_input",
+    message: input.message,
+    details: {
+      packageId: input.packageId,
+      pomSource: input.source,
+      ...input.details ?? {}
+    }
+  });
 }
 function pomReadFailedMessage(error) {
   return error.kind === "too_large" ? "Maven POM metadata exceeded the maximum supported size." : "Failed to read Maven POM metadata.";
@@ -41964,9 +42162,9 @@ function evidenceFileCandidates10(dir) {
   }
 }
 function normalizeXmlText(text3) {
-  return decodeXmlEntities3(text3.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+  return decodeXmlEntities2(text3.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
 }
-function decodeXmlEntities3(text3) {
+function decodeXmlEntities2(text3) {
   return text3.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
 }
 function isReadableDirectory14(dir) {
@@ -43813,6 +44011,8 @@ var LICENSE_ALIASES = new Map([
   ["apache license 2.0", "Apache-2.0"],
   ["apache license version 2.0", "Apache-2.0"],
   ["apache license, version 2.0", "Apache-2.0"],
+  ["apache license, 2.0", "Apache-2.0"],
+  ["the apache software license, version 2.0", "Apache-2.0"],
   ["bsd", "BSD-3-Clause"],
   ["bsd 2-clause", "BSD-2-Clause"],
   ["bsd 3-clause", "BSD-3-Clause"],
@@ -43826,12 +44026,24 @@ var LICENSE_ALIASES = new Map([
   ["commons clause license condition", "Commons-Clause"],
   ["elastic license", "Elastic-2.0"],
   ["elastic license 2.0", "Elastic-2.0"],
+  ["eclipse distribution license - v 1.0", "BSD-3-Clause"],
+  ["edl 1.0", "BSD-3-Clause"],
+  ["eclipse public license 1.0", "EPL-1.0"],
+  ["eclipse public license - v 1.0", "EPL-1.0"],
+  ["eclipse public license - v 2.0", "EPL-2.0"],
+  ["epl 2.0", "EPL-2.0"],
+  ["gpl2 w/ cpe", "GPL-2.0-with-classpath-exception"],
+  ["the gnu general public license (gpl), version 2, with classpath exception", "GPL-2.0-with-classpath-exception"],
+  ["gnu lesser general public license v2.1 only", "LGPL-2.1-only"],
   ["2-clause bsd", "BSD-2-Clause"],
   ["3-clause bsd", "BSD-3-Clause"],
   ["simplified bsd license", "BSD-2-Clause"],
   ["new bsd license", "BSD-3-Clause"],
   ["isc license", "ISC"],
   ["mit license", "MIT"],
+  ["the mit license (mit)", "MIT"],
+  ["modified bsd", "BSD-3-Clause"],
+  ["mpl 1.1", "MPL-1.1"],
   ["polyform free trial 1.0.0", "PolyForm-Free-Trial-1.0.0"],
   ["polyform noncommercial 1.0.0", "PolyForm-Noncommercial-1.0.0"],
   ["server side public license", "SSPL-1.0"],
@@ -45002,6 +45214,8 @@ var MAX_ARTIFACT_REDIRECTS = 5;
 var DEFAULT_EVIDENCE_CONCURRENCY = 8;
 var PYPI_METADATA_HOSTS = new Set(["pypi.org"]);
 var PYPI_DISTRIBUTION_HOSTS = new Set(["files.pythonhosted.org"]);
+var MAVEN_CENTRAL_BASE_URL = "https://repo.maven.apache.org/maven2";
+var MAVEN_CENTRAL_HOSTS = new Set(["repo.maven.apache.org"]);
 var SUPPORTED_INTEGRITY_DIGEST_BYTES = {
   sha1: 20,
   sha256: 32,
@@ -45034,6 +45248,15 @@ async function collectGraphEvidence(input) {
   const installedPackageJsonMaxBytes = input.installedPackageJsonMaxBytes ?? INSTALLED_PACKAGE_JSON_MAX_BYTES;
   const allowLocalProjectEvidence = input.allowLocalProjectEvidence ?? true;
   const loadYarnCacheIndex = allowLocalProjectEvidence ? createYarnCacheIndexLoader(input.projectRoot) : () => ok(undefined);
+  const collectMavenCentralEvidence = createMavenCentralEvidenceCollector({
+    fetchArtifact,
+    resolveArtifactHost,
+    fetchTimeoutMs,
+    pomMaxBytes: Math.min(registryMetadataMaxBytes, MAVEN_POM_METADATA_MAX_BYTES),
+    offline: input.offline ?? false,
+    artifactCache,
+    allowedHosts
+  });
   const collectNext = async () => {
     while (!failure) {
       const index = nextIndex;
@@ -45061,7 +45284,8 @@ async function collectGraphEvidence(input) {
         artifactCache,
         npmRegistryUrl: input.npmRegistryUrl,
         allowedHosts,
-        loadYarnCacheIndex
+        loadYarnCacheIndex,
+        collectMavenCentralEvidence
       });
       if (!collected.ok) {
         if (isRecoverableRemoteEvidenceError(collected.error)) {
@@ -45131,7 +45355,9 @@ async function collectNodeEvidence(input) {
     projectRoot: input.projectRoot
   }) : undefined;
   if (ecosystemEvidence) {
-    return ecosystemEvidence;
+    if (input.node.ecosystem !== "maven" || !ecosystemEvidence.ok || ecosystemEvidence.value.source !== "unavailable") {
+      return ecosystemEvidence;
+    }
   }
   const explicitLocalPath = input.allowLocalProjectEvidence && input.node.resolved ? resolveLocalArtifact({
     packageId: input.node.id,
@@ -45211,6 +45437,9 @@ async function collectNodeEvidence(input) {
       });
     }
     return ok(unsupportedRemoteEcosystemEvidence({ node: input.node }));
+  }
+  if (input.node.ecosystem === "maven") {
+    return input.collectMavenCentralEvidence(input.node);
   }
   if (input.node.ecosystem === "npm" && !input.node.resolved) {
     return collectNpmRegistryTarballEvidence({
@@ -45396,6 +45625,138 @@ function localArtifactTooLargeError(input) {
         observedBytes: input.observedBytes
       })
     }
+  });
+}
+function createMavenCentralEvidenceCollector(input) {
+  const pomRequests = new Map;
+  const loadPom = (coordinates) => {
+    const key = mavenCoordinateKey2(coordinates);
+    const existing = pomRequests.get(key);
+    if (existing) {
+      return existing;
+    }
+    const request = loadMavenCentralPom({
+      coordinates,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      pomMaxBytes: input.pomMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      allowedHosts: input.allowedHosts
+    });
+    pomRequests.set(key, request);
+    return request;
+  };
+  return async (node) => {
+    const requested = parseMavenPackageCoordinates(node.name, node.version);
+    if (!requested) {
+      return err(createError({
+        code: "REGISTRY_METADATA_FETCH_FAILED",
+        category: "unsupported_input",
+        message: "Maven dependency did not contain safe exact repository coordinates.",
+        details: {
+          packageId: node.id,
+          coordinates: node.name,
+          version: node.version
+        }
+      }));
+    }
+    const visited = new Set;
+    let current = requested;
+    for (let depth = 0;depth <= MAVEN_LICENSE_PARENT_MAX_DEPTH; depth += 1) {
+      const coordinateKey = mavenCoordinateKey2(current);
+      if (visited.has(coordinateKey)) {
+        return err(createError({
+          code: "REGISTRY_METADATA_FETCH_FAILED",
+          category: "unsupported_input",
+          message: "Maven Central POM license inheritance contains a parent cycle.",
+          details: {
+            packageId: node.id,
+            coordinates: coordinateKey,
+            reason: "parent_cycle"
+          }
+        }));
+      }
+      visited.add(coordinateKey);
+      const metadata = await loadPom(current);
+      if (!metadata.ok) {
+        return metadata;
+      }
+      if (metadata.value.licenses.length > 0) {
+        return ok({
+          packageId: node.id,
+          metadataLicense: metadata.value.licenses.join(" OR "),
+          metadataSource: depth === 0 ? "Maven Central pom.xml" : `Maven Central parent pom.xml (${coordinateKey})`,
+          files: [],
+          source: "tarball",
+          warnings: []
+        });
+      }
+      if (!metadata.value.parent) {
+        return ok({
+          packageId: node.id,
+          files: [],
+          source: "tarball",
+          warnings: ["Maven Central POM and its resolvable parent chain did not declare license names."]
+        });
+      }
+      current = metadata.value.parent;
+    }
+    return err(createError({
+      code: "REGISTRY_METADATA_FETCH_FAILED",
+      category: "unsupported_input",
+      message: "Maven Central POM license inheritance exceeded the maximum supported parent depth.",
+      details: {
+        packageId: node.id,
+        coordinates: mavenCoordinateKey2(current),
+        reason: "parent_depth",
+        maxParentDepth: MAVEN_LICENSE_PARENT_MAX_DEPTH
+      }
+    }));
+  };
+}
+async function loadMavenCentralPom(input) {
+  const repositoryPath = mavenPomRepositoryPath(input.coordinates);
+  const coordinateKey = mavenCoordinateKey2(input.coordinates);
+  if (!repositoryPath) {
+    return err(createError({
+      code: "REGISTRY_METADATA_FETCH_FAILED",
+      category: "unsupported_input",
+      message: "Maven Central POM coordinates were not safe exact repository coordinates.",
+      details: { packageId: coordinateKey, coordinates: coordinateKey }
+    }));
+  }
+  const pomUrl = `${MAVEN_CENTRAL_BASE_URL}/${repositoryPath}`;
+  const pomBytes = await readRemoteArtifactBytes({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    packageId: coordinateKey,
+    url: pomUrl,
+    blockedMessage: "Maven Central POM URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve Maven Central host.",
+    fetchFailureMessage: "Failed to fetch Maven Central POM metadata.",
+    tooLargeMessage: "Maven Central POM response exceeded the maximum supported size.",
+    unreadableMessage: "Maven Central POM response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find Maven Central POM metadata in the artifact cache.",
+    details: { registryUrl: pomUrl, coordinates: coordinateKey },
+    maxBytes: input.pomMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: MAVEN_CENTRAL_HOSTS,
+    urlDetailKey: "registryUrl"
+  });
+  if (!pomBytes.ok) {
+    return pomBytes;
+  }
+  return parseMavenPomLicenseMetadata({
+    packageId: coordinateKey,
+    requested: input.coordinates,
+    source: pomUrl,
+    text: pomBytes.value.toString("utf8")
   });
 }
 async function collectNpmRegistryTarballEvidence(input) {

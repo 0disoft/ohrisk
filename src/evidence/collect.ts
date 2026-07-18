@@ -27,6 +27,14 @@ import {
 import { collectRegisteredEcosystemEvidence } from "../ecosystems/registry";
 import { collectLocalPackageEvidence } from "./local-package";
 import {
+  MAVEN_LICENSE_PARENT_MAX_DEPTH,
+  MAVEN_POM_METADATA_MAX_BYTES,
+  mavenCoordinateKey,
+  parseMavenPackageCoordinates,
+  parseMavenPomLicenseMetadata,
+  type MavenPomLicenseMetadata
+} from "./maven-package";
+import {
   collectPythonDistributionEvidence,
   parsePyPiReleaseMetadata,
   pythonDistributionArchiveFormat
@@ -36,6 +44,10 @@ import type { LicenseEvidence } from "./types";
 import { collectZipPackageEvidence } from "./zip-package";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
 import { createError, type OhriskError } from "../shared/errors";
+import {
+  mavenPomRepositoryPath,
+  type MavenCoordinates
+} from "../shared/maven-repository";
 import { readTextFileWithLimit } from "../shared/read-text-file";
 import { err, ok, type Result } from "../shared/result";
 
@@ -104,6 +116,9 @@ type YarnCacheIndex = {
 };
 
 type YarnCacheIndexLoader = () => Result<YarnCacheIndex | undefined, OhriskError>;
+type MavenCentralEvidenceCollector = (
+  node: DependencyNode
+) => Promise<Result<LicenseEvidence, OhriskError>>;
 
 export type EvidenceCollectionProgress = {
   completed: number;
@@ -121,6 +136,8 @@ const MAX_ARTIFACT_REDIRECTS = 5;
 const DEFAULT_EVIDENCE_CONCURRENCY = 8;
 const PYPI_METADATA_HOSTS = new Set(["pypi.org"]);
 const PYPI_DISTRIBUTION_HOSTS = new Set(["files.pythonhosted.org"]);
+const MAVEN_CENTRAL_BASE_URL = "https://repo.maven.apache.org/maven2";
+const MAVEN_CENTRAL_HOSTS = new Set(["repo.maven.apache.org"]);
 
 const SUPPORTED_INTEGRITY_DIGEST_BYTES = {
   sha1: 20,
@@ -184,6 +201,15 @@ export async function collectGraphEvidence(input: {
   const loadYarnCacheIndex = allowLocalProjectEvidence
     ? createYarnCacheIndexLoader(input.projectRoot)
     : () => ok(undefined);
+  const collectMavenCentralEvidence = createMavenCentralEvidenceCollector({
+    fetchArtifact,
+    resolveArtifactHost,
+    fetchTimeoutMs,
+    pomMaxBytes: Math.min(registryMetadataMaxBytes, MAVEN_POM_METADATA_MAX_BYTES),
+    offline: input.offline ?? false,
+    artifactCache,
+    allowedHosts
+  });
 
   const collectNext = async (): Promise<void> => {
     while (!failure) {
@@ -215,7 +241,8 @@ export async function collectGraphEvidence(input: {
         artifactCache,
         npmRegistryUrl: input.npmRegistryUrl,
         allowedHosts,
-        loadYarnCacheIndex
+        loadYarnCacheIndex,
+        collectMavenCentralEvidence
       });
 
       if (!collected.ok) {
@@ -317,6 +344,7 @@ async function collectNodeEvidence(input: {
   npmRegistryUrl: string | undefined;
   allowedHosts: ReadonlySet<string>;
   loadYarnCacheIndex: YarnCacheIndexLoader;
+  collectMavenCentralEvidence: MavenCentralEvidenceCollector;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   const ecosystemEvidence = input.allowLocalProjectEvidence
     ? collectRegisteredEcosystemEvidence({
@@ -325,7 +353,13 @@ async function collectNodeEvidence(input: {
       })
     : undefined;
   if (ecosystemEvidence) {
-    return ecosystemEvidence;
+    if (
+      input.node.ecosystem !== "maven"
+      || !ecosystemEvidence.ok
+      || ecosystemEvidence.value.source !== "unavailable"
+    ) {
+      return ecosystemEvidence;
+    }
   }
 
   const explicitLocalPath = input.allowLocalProjectEvidence && input.node.resolved
@@ -421,6 +455,10 @@ async function collectNodeEvidence(input: {
     }
 
     return ok(unsupportedRemoteEcosystemEvidence({ node: input.node }));
+  }
+
+  if (input.node.ecosystem === "maven") {
+    return input.collectMavenCentralEvidence(input.node);
   }
 
   if (input.node.ecosystem === "npm" && !input.node.resolved) {
@@ -662,6 +700,173 @@ function localArtifactTooLargeError(input: {
         observedBytes: input.observedBytes
       })
     }
+  });
+}
+
+function createMavenCentralEvidenceCollector(input: {
+  fetchArtifact: ArtifactFetcher;
+  resolveArtifactHost: ArtifactHostResolver | undefined;
+  fetchTimeoutMs: number;
+  pomMaxBytes: number;
+  offline: boolean;
+  artifactCache: ArtifactCache | undefined;
+  allowedHosts: ReadonlySet<string>;
+}): MavenCentralEvidenceCollector {
+  const pomRequests = new Map<
+    string,
+    Promise<Result<MavenPomLicenseMetadata, OhriskError>>
+  >();
+
+  const loadPom = (
+    coordinates: MavenCoordinates
+  ): Promise<Result<MavenPomLicenseMetadata, OhriskError>> => {
+    const key = mavenCoordinateKey(coordinates);
+    const existing = pomRequests.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    const request = loadMavenCentralPom({
+      coordinates,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      pomMaxBytes: input.pomMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      allowedHosts: input.allowedHosts
+    });
+    pomRequests.set(key, request);
+    return request;
+  };
+
+  return async (node) => {
+    const requested = parseMavenPackageCoordinates(node.name, node.version);
+    if (!requested) {
+      return err(createError({
+        code: "REGISTRY_METADATA_FETCH_FAILED",
+        category: "unsupported_input",
+        message: "Maven dependency did not contain safe exact repository coordinates.",
+        details: {
+          packageId: node.id,
+          coordinates: node.name,
+          version: node.version
+        }
+      }));
+    }
+
+    const visited = new Set<string>();
+    let current = requested;
+    for (let depth = 0; depth <= MAVEN_LICENSE_PARENT_MAX_DEPTH; depth += 1) {
+      const coordinateKey = mavenCoordinateKey(current);
+      if (visited.has(coordinateKey)) {
+        return err(createError({
+          code: "REGISTRY_METADATA_FETCH_FAILED",
+          category: "unsupported_input",
+          message: "Maven Central POM license inheritance contains a parent cycle.",
+          details: {
+            packageId: node.id,
+            coordinates: coordinateKey,
+            reason: "parent_cycle"
+          }
+        }));
+      }
+      visited.add(coordinateKey);
+
+      const metadata = await loadPom(current);
+      if (!metadata.ok) {
+        return metadata;
+      }
+      if (metadata.value.licenses.length > 0) {
+        return ok({
+          packageId: node.id,
+          metadataLicense: metadata.value.licenses.join(" OR "),
+          metadataSource: depth === 0
+            ? "Maven Central pom.xml"
+            : `Maven Central parent pom.xml (${coordinateKey})`,
+          files: [],
+          source: "tarball",
+          warnings: []
+        });
+      }
+      if (!metadata.value.parent) {
+        return ok({
+          packageId: node.id,
+          files: [],
+          source: "tarball",
+          warnings: ["Maven Central POM and its resolvable parent chain did not declare license names."]
+        });
+      }
+
+      current = metadata.value.parent;
+    }
+
+    return err(createError({
+      code: "REGISTRY_METADATA_FETCH_FAILED",
+      category: "unsupported_input",
+      message: "Maven Central POM license inheritance exceeded the maximum supported parent depth.",
+      details: {
+        packageId: node.id,
+        coordinates: mavenCoordinateKey(current),
+        reason: "parent_depth",
+        maxParentDepth: MAVEN_LICENSE_PARENT_MAX_DEPTH
+      }
+    }));
+  };
+}
+
+async function loadMavenCentralPom(input: {
+  coordinates: MavenCoordinates;
+  fetchArtifact: ArtifactFetcher;
+  resolveArtifactHost: ArtifactHostResolver | undefined;
+  fetchTimeoutMs: number;
+  pomMaxBytes: number;
+  offline: boolean;
+  artifactCache: ArtifactCache | undefined;
+  allowedHosts: ReadonlySet<string>;
+}): Promise<Result<MavenPomLicenseMetadata, OhriskError>> {
+  const repositoryPath = mavenPomRepositoryPath(input.coordinates);
+  const coordinateKey = mavenCoordinateKey(input.coordinates);
+  if (!repositoryPath) {
+    return err(createError({
+      code: "REGISTRY_METADATA_FETCH_FAILED",
+      category: "unsupported_input",
+      message: "Maven Central POM coordinates were not safe exact repository coordinates.",
+      details: { packageId: coordinateKey, coordinates: coordinateKey }
+    }));
+  }
+
+  const pomUrl = `${MAVEN_CENTRAL_BASE_URL}/${repositoryPath}`;
+  const pomBytes = await readRemoteArtifactBytes({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    packageId: coordinateKey,
+    url: pomUrl,
+    blockedMessage: "Maven Central POM URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve Maven Central host.",
+    fetchFailureMessage: "Failed to fetch Maven Central POM metadata.",
+    tooLargeMessage: "Maven Central POM response exceeded the maximum supported size.",
+    unreadableMessage: "Maven Central POM response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find Maven Central POM metadata in the artifact cache.",
+    details: { registryUrl: pomUrl, coordinates: coordinateKey },
+    maxBytes: input.pomMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: MAVEN_CENTRAL_HOSTS,
+    urlDetailKey: "registryUrl"
+  });
+  if (!pomBytes.ok) {
+    return pomBytes;
+  }
+
+  return parseMavenPomLicenseMetadata({
+    packageId: coordinateKey,
+    requested: input.coordinates,
+    source: pomUrl,
+    text: pomBytes.value.toString("utf8")
   });
 }
 

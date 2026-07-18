@@ -371,7 +371,7 @@ describe("PyPI release evidence", () => {
   test("does not route unsupported ecosystems through the npm registry", async () => {
     let fetchCount = 0;
     const result = await collectGraphEvidence({
-      graph: graphFor("maven"),
+      graph: graphFor("cargo"),
       projectRoot: process.cwd(),
       allowLocalProjectEvidence: false,
       fetchArtifact: async () => {
@@ -387,7 +387,7 @@ describe("PyPI release evidence", () => {
       packageId: "example-pkg@1.2.3",
       files: [],
       source: "unavailable",
-      warnings: ["Remote package evidence is not configured for the maven ecosystem."]
+      warnings: ["Remote package evidence is not configured for the cargo ecosystem."]
     }]);
   });
 });

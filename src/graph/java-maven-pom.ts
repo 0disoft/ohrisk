@@ -74,6 +74,8 @@ type MissingExternalMavenPom = {
 type ParsedMavenModule = {
   pomPath: string;
   rootName: string;
+  groupId?: string;
+  version?: string;
   ancestry: string[];
   dependencies: MavenPomDependency[];
 };
@@ -259,6 +261,8 @@ function readMavenProjectModules(input: {
   const result: ParsedMavenModule[] = [{
     pomPath: input.pomPath,
     rootName,
+    ...(model.value.groupId ? { groupId: model.value.groupId } : {}),
+    ...(model.value.version ? { version: model.value.version } : {}),
     ancestry: input.ancestry,
     dependencies: dependencies.value
   }];
@@ -429,12 +433,20 @@ function createDiskMavenProjectPomReader(input: {
 
 function dependencyNodesFromMavenModules(modules: ParsedMavenModule[]): DependencyNode[] {
   const nodes = new Map<string, DependencyNode>();
+  const reactorPackageIds = new Set(
+    modules.flatMap((module) => module.groupId && module.version
+      ? [`${module.groupId}:${module.rootName}@${module.version}`]
+      : [])
+  );
 
   for (const module of modules) {
     const modulePath = [...module.ancestry, module.rootName];
     for (const dependency of module.dependencies) {
       const name = `${dependency.groupId}:${dependency.artifactId}`;
       const id = `${name}@${dependency.version}`;
+      if (reactorPackageIds.has(id)) {
+        continue;
+      }
       const dependencyPath = [...modulePath, id];
       const dependencyType = dependencyTypeForMavenDependency(dependency);
       const existing = nodes.get(id);
@@ -644,6 +656,11 @@ function readExternalMavenPomModel(
 
 function readMavenPomProject(text: string, parent: MavenPomModel | undefined): MavenPomProject {
   const projectText = stripXmlSection(text, "parent");
+  const projectCoordinatesText = stripXmlSections(projectText, [
+    "dependencies",
+    "dependencyManagement",
+    "properties"
+  ]);
   const properties = new Map(parent?.properties);
   const parentCoordinates = readMavenParentCoordinates(text)
     ?? (parent?.groupId && parent.rootName && parent.version
@@ -666,9 +683,9 @@ function readMavenPomProject(text: string, parent: MavenPomModel | undefined): M
     properties.set(key, value);
   }
 
-  const groupId = readXmlTagText(projectText, "groupId") ?? parent?.groupId;
-  const artifactId = readXmlTagText(projectText, "artifactId");
-  const rawVersion = readXmlTagText(projectText, "version");
+  const groupId = readXmlTagText(projectCoordinatesText, "groupId") ?? parent?.groupId;
+  const artifactId = readXmlTagText(projectCoordinatesText, "artifactId");
+  const rawVersion = readXmlTagText(projectCoordinatesText, "version");
   const version = rawVersion
     ? resolveMavenExpression(rawVersion, properties)
     : parent?.version;

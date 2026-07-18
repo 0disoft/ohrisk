@@ -18,6 +18,10 @@ Remote fetching is limited to these explicit adapters:
 - the SHA-256-identified source distribution or wheel returned by that exact
   PyPI release response, including bounded identity-checked package metadata and
   license files.
+- Maven Central POM metadata for an exact Maven coordinate and version when
+  local POM evidence is unavailable;
+- a bounded Maven Central parent-POM chain used only to inherit package license
+  names.
 
 The repository adapter accepts only `github.com` owner/repository URLs, disables
 credential prompts, submodule fetching, and symlink checkout, rejects non-portable or
@@ -47,7 +51,9 @@ data only and does not widen the network or credential boundary.
 Maven aggregator POMs are expanded only through bounded `<module>` paths that
 remain inside the validated checkout. Cycles, missing module POMs, path escape,
 excessive depth, and excessive module count fail the scan instead of returning
-an empty successful report.
+an empty successful report. Dependencies whose exact group, artifact, and
+version match a module in the same reactor are project components and are not
+reported again as external packages.
 
 Other ecosystems use local caches, vendored source, lockfile-embedded evidence,
 or local package metadata. Another remote ecosystem adapter is not enabled until
@@ -74,6 +80,14 @@ hostname. Host matching does not use suffix or substring rules. Allowlisting
 changes only hostname policy: DNS preflight, rejection of every blocked DNS
 answer, guarded socket lookup, connected-address checks, and per-redirect
 revalidation remain mandatory.
+
+Maven Central requests use only `https://repo.maven.apache.org/maven2/` and
+never receive npm registry credentials. Group, artifact, and version segments
+must be safe exact repository coordinates before the URL is constructed.
+Redirects may not leave the fixed Maven Central host. Every returned POM must
+match the requested artifact identity; malformed XML, identity mismatches,
+parent cycles, unsafe parent coordinates, excessive parent depth, and oversized
+POMs fail closed.
 
 ## Credential Rules
 
@@ -127,6 +141,13 @@ validated. Non-yanked wheels are preferred, then non-yanked source
 distributions, keeping the archive surface smaller when equivalent wheel
 metadata is available. Yanked files are considered only for an exact pinned
 release and are reported with a warning.
+
+Maven Central POM evidence is requested by exact-version path and is bounded to
+2 MiB per POM and eight inherited parent levels. Parent requests are
+deduplicated within a scan and use the same persistent cache, conditional
+revalidation, offline behavior, timeout, DNS, connected-address, and response
+stream limits as other remote metadata. Maven JAR and source archives are not
+downloaded by this adapter.
 
 ## Failure Semantics
 

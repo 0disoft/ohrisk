@@ -88,6 +88,39 @@ describe("parseSpdxExpression", () => {
       malformed: false,
       usedAlias: true
     });
+
+    expect(parseSpdxExpression("Eclipse Public License - v 2.0")).toMatchObject({
+      original: "Eclipse Public License - v 2.0",
+      expression: "EPL-2.0",
+      choices: ["EPL-2.0"],
+      malformed: false,
+      usedAlias: true
+    });
+
+    expect(parseSpdxExpression("GNU Lesser General Public License v2.1 only")).toMatchObject({
+      original: "GNU Lesser General Public License v2.1 only",
+      expression: "LGPL-2.1-only",
+      choices: ["LGPL-2.1-only"],
+      malformed: false,
+      usedAlias: true
+    });
+
+    for (const [input, expression] of [
+      ["The Apache Software License, Version 2.0", "Apache-2.0"],
+      ["The MIT License (MIT)", "MIT"],
+      ["EPL 2.0", "EPL-2.0"],
+      ["GPL2 w/ CPE", "GPL-2.0-with-classpath-exception"],
+      ["Eclipse Distribution License - v 1.0", "BSD-3-Clause"],
+      ["Modified BSD", "BSD-3-Clause"],
+      ["MPL 1.1", "MPL-1.1"]
+    ] as const) {
+      expect(parseSpdxExpression(input)).toMatchObject({
+        expression,
+        choices: [expression],
+        malformed: false,
+        usedAlias: true
+      });
+    }
   });
 
   test("normalizes common source-available restriction aliases", () => {

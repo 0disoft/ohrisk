@@ -14,7 +14,7 @@ Clone the repository and run the fixture scan from the repository root:
 ```bash
 git clone https://github.com/0disoft/ohrisk.git
 cd ohrisk
-npm install -g ohrisk@1.9.0
+npm install -g ohrisk@1.10.0
 ohrisk scan --lockfile test/fixtures/bun-project/bun.lock --profile saas --prod
 ```
 

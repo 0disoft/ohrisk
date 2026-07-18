@@ -54,6 +54,11 @@ describe("parseMavenPomText", () => {
         "      <groupId>com.fasterxml.jackson.core</groupId>",
         "      <artifactId>jackson-databind</artifactId>",
         "    </dependency>",
+        "    <dependency>",
+        "      <groupId>io.swagger.core.v3</groupId>",
+        "      <artifactId>swagger-models</artifactId>",
+        "      <version>${revision}</version>",
+        "    </dependency>",
         "  </dependencies>",
         "</project>"
       ].join("\n"), "utf8");

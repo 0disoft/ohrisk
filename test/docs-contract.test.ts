@@ -124,6 +124,10 @@ describe("documentation contract", () => {
     expect(remoteBoundary).toContain("public GitHub HTTPS repository input");
     expect(normalizedRemoteBoundary).toContain("One nested dependency project is selected automatically");
     expect(remoteBoundary).toContain("not the clone, owns policy, waivers, cache, and report output");
+    expect(remoteBoundary).toContain("https://repo.maven.apache.org/maven2/");
+    expect(remoteBoundary).toContain("eight inherited parent levels");
+    expect(normalizedCommandContract).toContain("bounded npm/PyPI/Maven Central remote package-evidence pipeline");
+    expect(normalizedCommandContract).toContain("exact reactor-internal module dependencies are excluded");
     expect(reportFormats).toContain("`scan --html <github-url>` writes `<repository>-ohrisk.html`");
   });
 

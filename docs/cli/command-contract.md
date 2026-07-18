@@ -98,7 +98,7 @@ directory where Ohrisk was invoked remains the configuration, waiver, cache, and
 root. General package-cache, install-tree, and vendored-source evidence from the temporary checkout
 is disabled. Project-contained source metadata and license files explicitly referenced by a selected
 Python lockfile local-source record are parser inputs and remain bounded by the validated checkout;
-lockfile-embedded evidence and the bounded npm/PyPI remote package-evidence pipeline also remain
+lockfile-embedded evidence and the bounded npm/PyPI/Maven Central remote package-evidence pipeline also remain
 available. Shareable reports and errors redact the temporary checkout path.
 
 ## Multiple Lockfiles
@@ -112,8 +112,11 @@ record.
 Maven aggregator `pom.xml` inputs recursively scan project-contained `<module>`
 POMs. Module paths, nesting depth, total module count, file size, cycles, and
 missing module POMs fail closed. Child modules inherit matching aggregator
-parent properties and `dependencyManagement`; external parent and imported BOM
-resolution remains limited to already available local Maven repository POMs.
+parent properties and `dependencyManagement`; exact reactor-internal module
+dependencies are excluded from the external package graph. External parent and
+imported BOM resolution for dependency versions remains limited to already
+available local Maven repository POMs. Package license evidence may fall back to
+exact-version Maven Central POMs and a bounded inherited parent-POM chain.
 
 `diff <ref> --all` independently discovers the supported input set in the
 current worktree and the baseline git tree, parses each set with the same
