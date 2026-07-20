@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:ohrisk:schema:explain-report:3.3.0",
+  "$id": "urn:ohrisk:schema:explain-report:3.4.0",
   "title": "Ohrisk explain report",
   "type": "object",
   "required": [
@@ -16,10 +16,10 @@
   ],
   "properties": {
     "$schema": {
-      "const": "urn:ohrisk:schema:explain-report:3.3.0"
+      "const": "urn:ohrisk:schema:explain-report:3.4.0"
     },
     "schemaVersion": {
-      "const": "3.3.0"
+      "const": "3.4.0"
     },
     "status": {
       "const": "license_explained"
@@ -29,19 +29,19 @@
       "minLength": 1
     },
     "profile": {
-      "$ref": "urn:ohrisk:schema:common:3.3.0#/$defs/usageProfile"
+      "$ref": "urn:ohrisk:schema:common:3.4.0#/$defs/usageProfile"
     },
     "policyScope": {
       "const": "license-only"
     },
     "policy": {
-      "$ref": "urn:ohrisk:schema:common:3.3.0#/$defs/policySummary"
+      "$ref": "urn:ohrisk:schema:common:3.4.0#/$defs/policySummary"
     },
     "license": {
-      "$ref": "urn:ohrisk:schema:common:3.3.0#/$defs/normalizedLicense"
+      "$ref": "urn:ohrisk:schema:common:3.4.0#/$defs/normalizedLicense"
     },
     "finding": {
-      "$ref": "urn:ohrisk:schema:common:3.3.0#/$defs/riskFinding"
+      "$ref": "urn:ohrisk:schema:common:3.4.0#/$defs/riskFinding"
     }
   },
   "additionalProperties": false

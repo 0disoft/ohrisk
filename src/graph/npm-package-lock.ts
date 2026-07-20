@@ -1,4 +1,6 @@
 import { omitUndefined } from "../shared/object";
+import type { LicenseEvidence } from "../evidence/types";
+import { parseSpdxExpression } from "../license/spdx";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 import {
@@ -24,6 +26,7 @@ type PackageLockPackage = {
   devDependencies?: unknown;
   optionalDependencies?: unknown;
   peerDependencies?: unknown;
+  license?: unknown;
   dev?: unknown;
   optional?: unknown;
 };
@@ -42,6 +45,7 @@ type PackageLockRecord = {
   id: string;
   resolved?: string;
   integrity?: string;
+  license?: string;
   dependencies: PackageLockDependencyEdge[];
 };
 
@@ -194,10 +198,13 @@ export function parsePackageLockText(
     pathLimitAffected
   });
 
+  const embeddedEvidence = packageLockEmbeddedEvidence(records, nodeMap, lockfileLabel);
+
   return ok(omitUndefined({
     rootName,
     lockfilePath,
     nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    embeddedEvidence: embeddedEvidence.length > 0 ? embeddedEvidence : undefined,
     diagnostics: pathLimitAffected.size > 0
       ? [{
           code: "dependency_paths_truncated" as const,
@@ -298,6 +305,9 @@ function parsePackageRecords(packages: Record<string, unknown>): PackageLockReco
     const integrity = typeof pkg.integrity === "string" && pkg.integrity !== ""
       ? pkg.integrity
       : undefined;
+    const license = typeof pkg.license === "string" && pkg.license.trim() !== ""
+      ? pkg.license.trim()
+      : undefined;
 
     records.push({
       packagePath,
@@ -306,11 +316,54 @@ function parsePackageRecords(packages: Record<string, unknown>): PackageLockReco
       id: `${name}@${pkg.version}`,
       ...(resolved ? { resolved } : {}),
       ...(integrity ? { integrity } : {}),
+      ...(license ? { license } : {}),
       dependencies: collectDependencyEdges(pkg)
     });
   }
 
   return records;
+}
+
+function packageLockEmbeddedEvidence(
+  records: PackageLockRecord[],
+  nodeMap: ReadonlyMap<string, DependencyNode>,
+  metadataSource: string
+): LicenseEvidence[] {
+  const licensesByPackageId = new Map<string, Set<string>>();
+  for (const record of records) {
+    if (!record.license) {
+      continue;
+    }
+    const licenses = licensesByPackageId.get(record.id) ?? new Set<string>();
+    licenses.add(record.license);
+    licensesByPackageId.set(record.id, licenses);
+  }
+
+  const evidence: LicenseEvidence[] = [];
+  for (const [packageId, licenses] of licensesByPackageId) {
+    const node = nodeMap.get(packageId);
+    if (!node || licenses.size !== 1) {
+      continue;
+    }
+    const metadataLicense = licenses.values().next().value;
+    if (!metadataLicense) {
+      continue;
+    }
+    const parsed = parseSpdxExpression(metadataLicense);
+    if (parsed.malformed || parsed.choices.length === 0) {
+      continue;
+    }
+    evidence.push({
+      packageId,
+      metadataLicense,
+      metadataSource,
+      files: [],
+      source: "local",
+      warnings: []
+    });
+  }
+
+  return evidence.sort((left, right) => left.packageId.localeCompare(right.packageId));
 }
 
 function packageNameFromPath(packagePath: string): string | undefined {

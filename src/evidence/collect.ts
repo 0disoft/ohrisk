@@ -44,6 +44,7 @@ import { collectTarballEvidence } from "./tarball";
 import type { LicenseEvidence } from "./types";
 import { collectZipPackageEvidence } from "./zip-package";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
+import { parseSpdxExpression } from "../license/spdx";
 import { createError, type OhriskError } from "../shared/errors";
 import {
   mavenPomRepositoryPath,
@@ -152,6 +153,8 @@ const MAVEN_CENTRAL_BASE_URL = "https://repo.maven.apache.org/maven2";
 const MAVEN_CENTRAL_HOSTS = new Set(["repo.maven.apache.org"]);
 const MAVEN_JAR_MAX_BYTES = 32 * 1024 * 1024;
 const MAVEN_CHECKSUM_MAX_BYTES = 256;
+const ARTIFACT_HOST_RESOLUTION_CACHE_TTL_MS = 60_000;
+const ARTIFACT_HOST_RESOLUTION_CACHE_MAX_ENTRIES = 256;
 
 const SUPPORTED_INTEGRITY_DIGEST_BYTES = {
   sha1: 20,
@@ -199,12 +202,15 @@ export async function collectGraphEvidence(input: {
   let failure: { index: number; error: OhriskError } | undefined;
   const workerCount = normalizeEvidenceConcurrency(input.evidenceConcurrency, total);
   const allowedHosts = normalizeAllowedArtifactHosts(input.allowedArtifactHosts);
-  const baseFetchArtifact = input.fetchArtifact ?? createDefaultArtifactFetcher();
+  const uncachedArtifactHostResolver = input.resolveArtifactHost
+    ?? (input.fetchArtifact ? undefined : defaultArtifactHostResolver);
+  const resolveArtifactHost = uncachedArtifactHostResolver
+    ? createCachingArtifactHostResolver(uncachedArtifactHostResolver)
+    : undefined;
+  const baseFetchArtifact = input.fetchArtifact
+    ?? createDefaultArtifactFetcher(resolveArtifactHost ?? defaultArtifactHostResolver);
   const fetchArtifact = baseFetchArtifact;
   const npmFetchArtifact = withRegistryAuthorization(baseFetchArtifact, input.registryAuthTokens);
-  const resolveArtifactHost =
-    input.resolveArtifactHost ??
-    (input.fetchArtifact ? undefined : defaultArtifactHostResolver);
   const artifactCache = input.cacheDir ? createArtifactCache(input.cacheDir) : undefined;
   const fetchTimeoutMs = input.fetchTimeoutMs ?? ARTIFACT_FETCH_TIMEOUT_MS;
   const registryMetadataMaxBytes = input.registryMetadataMaxBytes ?? REGISTRY_METADATA_MAX_BYTES;
@@ -477,7 +483,10 @@ async function collectNodeEvidence(input: {
     return input.collectMavenEvidence(input.node);
   }
 
-  if (input.node.ecosystem === "npm" && !input.node.resolved) {
+  if (input.node.ecosystem === "npm" && shouldCollectNpmRegistryEvidence({
+    node: input.node,
+    npmRegistryUrl: input.npmRegistryUrl
+  })) {
     return collectNpmRegistryTarballEvidence({
       node: input.node,
       fetchArtifact: input.npmFetchArtifact,
@@ -488,7 +497,8 @@ async function collectNodeEvidence(input: {
       offline: input.offline,
       artifactCache: input.artifactCache,
       npmRegistryUrl: input.npmRegistryUrl,
-      allowedHosts: input.allowedHosts
+      allowedHosts: input.allowedHosts,
+      preferRegistryMetadata: !input.node.direct
     });
   }
 
@@ -509,6 +519,24 @@ async function collectNodeEvidence(input: {
   }
 
   return ok(unsupportedRemoteEcosystemEvidence({ node: input.node }));
+}
+
+function shouldCollectNpmRegistryEvidence(input: {
+  node: DependencyNode;
+  npmRegistryUrl: string | undefined;
+}): boolean {
+  if (!input.node.resolved) {
+    return true;
+  }
+  if (input.node.direct) {
+    return false;
+  }
+
+  const resolvedUrl = parseHttpUrl(input.node.resolved);
+  const registryUrl = parseHttpUrl(input.npmRegistryUrl ?? "https://registry.npmjs.org");
+  return resolvedUrl?.protocol === "https:"
+    && registryUrl?.protocol === "https:"
+    && normalizeUrlHostname(resolvedUrl.hostname) === normalizeUrlHostname(registryUrl.hostname);
 }
 
 function collectLocalPathEvidence(input: {
@@ -1124,6 +1152,7 @@ async function collectNpmRegistryTarballEvidence(input: {
   artifactCache: ArtifactCache | undefined;
   npmRegistryUrl: string | undefined;
   allowedHosts: ReadonlySet<string>;
+  preferRegistryMetadata: boolean;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   const metadataUrl = npmRegistryPackageVersionUrl(
     input.node.name,
@@ -1161,6 +1190,14 @@ async function collectNpmRegistryTarballEvidence(input: {
   });
   if (!metadata.ok) {
     return err(metadata.error);
+  }
+
+  const registryEvidence = readNpmRegistryLicenseEvidence({
+    node: input.node,
+    metadata: metadata.value
+  });
+  if (input.preferRegistryMetadata && registryEvidence) {
+    return ok(registryEvidence);
   }
 
   const tarballUrl = readRegistryTarballUrl(metadata.value, input.node.version);
@@ -1201,6 +1238,35 @@ async function collectNpmRegistryTarballEvidence(input: {
       }
     }
   });
+}
+
+function readNpmRegistryLicenseEvidence(input: {
+  node: DependencyNode;
+  metadata: unknown;
+}): LicenseEvidence | undefined {
+  const versionMetadata = readRegistryVersionMetadata(input.metadata, input.node.version);
+  if (!versionMetadata) {
+    return undefined;
+  }
+
+  const license = versionMetadata.license;
+  if (typeof license !== "string" || license.trim() === "") {
+    return undefined;
+  }
+
+  const parsed = parseSpdxExpression(license);
+  if (parsed.malformed || parsed.choices.length === 0) {
+    return undefined;
+  }
+
+  return {
+    packageId: input.node.id,
+    metadataLicense: license,
+    metadataSource: "npm registry metadata",
+    files: [],
+    source: "registry",
+    warnings: []
+  };
 }
 
 async function collectPyPiReleaseEvidence(input: {
@@ -3311,31 +3377,34 @@ function npmRegistryPackageUrl(name: string, registryUrl?: string): string {
 }
 
 function readRegistryTarballUrl(metadata: unknown, version: string): string | undefined {
-  if (!isRecord(metadata)) {
+  const versionMetadata = readRegistryVersionMetadata(metadata, version);
+  if (!versionMetadata) {
     return undefined;
   }
 
-  const dist = metadata.dist;
+  const dist = versionMetadata.dist;
   if (isRecord(dist) && typeof dist.tarball === "string") {
     return dist.tarball;
   }
 
+  return undefined;
+}
+
+function readRegistryVersionMetadata(
+  metadata: unknown,
+  version: string
+): Record<string, unknown> | undefined {
+  if (!isRecord(metadata)) {
+    return undefined;
+  }
+
+  if (metadata.version === version || !isRecord(metadata.versions)) {
+    return metadata;
+  }
+
   const versions = metadata.versions;
-  if (!isRecord(versions)) {
-    return undefined;
-  }
-
   const versionMetadata = versions[version];
-  if (!isRecord(versionMetadata)) {
-    return undefined;
-  }
-
-  const versionDist = versionMetadata.dist;
-  if (!isRecord(versionDist) || typeof versionDist.tarball !== "string") {
-    return undefined;
-  }
-
-  return versionDist.tarball;
+  return isRecord(versionMetadata) ? versionMetadata : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -3389,13 +3458,17 @@ function withRegistryAuthorization(
   };
 }
 
-function createDefaultArtifactFetcher(): ArtifactFetcher {
-  return defaultArtifactFetcher;
+function createDefaultArtifactFetcher(
+  resolveArtifactHost: ArtifactHostResolver
+): ArtifactFetcher {
+  const lookup = createSecureArtifactLookup(resolveArtifactHost);
+  return (url, options) => defaultArtifactFetcher(url, options, lookup);
 }
 
 function defaultArtifactFetcher(
   url: string,
-  options: ArtifactFetchOptions | undefined
+  options: ArtifactFetchOptions | undefined,
+  lookup: import("node:net").LookupFunction = secureArtifactLookup as import("node:net").LookupFunction
 ): Promise<ArtifactFetchResponse> {
   const parsedUrl = parseHttpUrl(url);
   if (!parsedUrl || parsedUrl.protocol !== "https:") {
@@ -3407,7 +3480,7 @@ function defaultArtifactFetcher(
       method: "GET",
       signal: options?.signal,
       headers: options?.headers,
-      lookup: secureArtifactLookup as import("node:net").LookupFunction
+      lookup
     }, (response) => {
       const socketAddress = validateArtifactSocketRemoteAddress(
         parsedUrl.hostname,
@@ -3489,7 +3562,14 @@ export function secureArtifactLookup(
     family?: number
   ) => void
 ): void {
-  defaultArtifactHostResolver(hostname)
+  createSecureArtifactLookup(defaultArtifactHostResolver)(hostname, options, callback);
+}
+
+function createSecureArtifactLookup(
+  resolveArtifactHost: ArtifactHostResolver
+): import("node:net").LookupFunction {
+  return (hostname, options, callback) => {
+    resolveArtifactHost(hostname)
     .then((resolutions) => {
       const selection = selectSecureArtifactLookupResponse(hostname, options, resolutions);
       if (!selection.ok) {
@@ -3511,6 +3591,50 @@ export function secureArtifactLookup(
         cause instanceof Error ? cause : new Error(String(cause))
       );
     });
+  };
+}
+
+function createCachingArtifactHostResolver(
+  resolveArtifactHost: ArtifactHostResolver,
+  now: () => number = Date.now
+): ArtifactHostResolver {
+  const cache = new Map<string, {
+    expiresAt: number;
+    resolutions: Promise<ArtifactHostResolution[]>;
+  }>();
+
+  return async (hostname) => {
+    const normalizedHostname = normalizeUrlHostname(hostname);
+    const current = cache.get(normalizedHostname);
+    const currentTime = now();
+    if (current && current.expiresAt > currentTime) {
+      return current.resolutions;
+    }
+
+    const resolutions = resolveArtifactHost(normalizedHostname);
+    cache.delete(normalizedHostname);
+    cache.set(normalizedHostname, {
+      expiresAt: currentTime + ARTIFACT_HOST_RESOLUTION_CACHE_TTL_MS,
+      resolutions
+    });
+    while (cache.size > ARTIFACT_HOST_RESOLUTION_CACHE_MAX_ENTRIES) {
+      const oldest = cache.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      cache.delete(oldest);
+    }
+
+    try {
+      return await resolutions;
+    } catch (cause) {
+      const cached = cache.get(normalizedHostname);
+      if (cached?.resolutions === resolutions) {
+        cache.delete(normalizedHostname);
+      }
+      throw cause;
+    }
+  };
 }
 
 export function selectSecureArtifactLookupResponse(

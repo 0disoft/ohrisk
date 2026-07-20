@@ -1166,6 +1166,7 @@ function summarizeEvidence(evidence: LicenseEvidence[]): {
 } {
   const sources: Record<LicenseEvidenceSource, EvidenceSourceCounts> = {
     local: { packages: 0, files: 0, warnings: 0 },
+    registry: { packages: 0, files: 0, warnings: 0 },
     sbom: { packages: 0, files: 0, warnings: 0 },
     tarball: { packages: 0, files: 0, warnings: 0 },
     unavailable: { packages: 0, files: 0, warnings: 0 }

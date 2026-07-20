@@ -12,6 +12,7 @@ export type LicenseEvidenceFile = {
 
 export type LicenseEvidenceSource =
   | "local"
+  | "registry"
   | "sbom"
   | "tarball"
   | "unavailable";

@@ -58,7 +58,7 @@ evidence remains `unknown`; checksum or identity disagreement fails closed.
 ## Output Contract
 
 Supported formats are terminal text, JSON, Markdown, HTML, SARIF, and CycloneDX.
-Scan, diff, and explain JSON use strict packaged Draft 2020-12 schema 3.3.0
+Scan, diff, and explain JSON use strict packaged Draft 2020-12 schema 3.4.0
 contracts. Scan JSON includes typed evidence source and graph diagnostics plus
 optional remote repository, skipped-submodule, skipped-symbolic-link, and
 skipped-non-portable-path

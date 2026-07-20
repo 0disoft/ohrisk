@@ -2,6 +2,19 @@
 
 ## 1.10.2 - 2026-07-18
 
+- Large npm monorepo scans now use exact registry SPDX metadata for transitive
+  packages, while direct packages and missing or non-SPDX declarations retain
+  integrity-verified tarball inspection. JSON evidence summaries expose the
+  new `registry` source instead of mislabeling metadata-only results.
+- Modern package locks now provide valid embedded SPDX `license` fields
+  before remote collection, eliminating thousands of redundant registry calls
+  in large npm workspaces while retaining artifact fallback for missing,
+  conflicting, or non-SPDX declarations.
+- Transitive npm Git sources no longer fall through the registry metadata
+  optimization, preventing a VCS artifact integrity hash from being compared
+  against unrelated same-name registry tarball bytes.
+- Advanced the strict report schema to 3.4.0 for the explicit `registry`
+  evidence-source count.
 - `.csproj` scans now retain exact `PackageDownload` dependencies and resolve
   exact ranges that reference one unconditional same-file property, covering
   Microsoft UI XAML-style build projects without guessing conditional MSBuild

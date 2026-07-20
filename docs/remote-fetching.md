@@ -12,7 +12,10 @@ Remote fetching is limited to these explicit adapters:
   through a bounded temporary shallow clone;
 
 - direct HTTPS package tarball URLs recorded in supported npm-family lockfiles;
-- npm-compatible registry metadata lookup for an exact locked package version when no direct tarball URL is available;
+- npm-compatible registry metadata lookup for an exact locked package version;
+- exact SPDX metadata from that response for transitive npm packages, while
+  direct packages and absent or non-SPDX declarations continue to the verified
+  tarball path;
 - the tarball URL returned by that exact-version registry metadata response.
 - PyPI release metadata lookup for an exact locked Python package version;
 - the SHA-256-identified source distribution or wheel returned by that exact
@@ -89,6 +92,15 @@ or local package metadata. Another remote ecosystem adapter is not enabled until
 it implements the same target, integrity, cache, credential, and resource
 boundary.
 
+Modern npm package locks may embed the exact package `license` field alongside
+the locked name and version. Ohrisk uses one valid SPDX declaration from that
+local metadata before making a registry request. Missing, non-SPDX, or duplicate
+records with conflicting license values are not trusted as embedded evidence
+and continue through the local-package or integrity-verified tarball path.
+An npm package resolved from Git or another non-registry source is never replaced
+with a same-name registry artifact: its integrity identifies different bytes,
+so absent local evidence remains unavailable instead of mixing identities.
+
 `uv.lock` Git source records are identity-only inputs, not another remote
 adapter. Ohrisk accepts one only when uv's resolved source ends in a full 40- or
 64-hex Git commit, retains the package and dependency paths, and emits
@@ -111,6 +123,14 @@ connected socket address before trusting the response. Redirects are followed
 manually, capped, and fully revalidated. A bearer token is attached only to the
 exact configured registry hostname and is never forwarded to another redirect
 host.
+
+Within one scan, successful public DNS answers are reused for at most 60 seconds
+and 256 exact hostnames. The cache is scan-local, does not retain failures, and
+pins HTTPS lookup to the same previously approved public addresses. Connected
+socket addresses are still checked on every response, and every redirect target
+passes the same hostname and address rules before reuse. This bounds repeated
+DNS work in large monorepos without allowing DNS rebinding to a newly returned
+private address.
 
 Additional public artifact hosts must be declared through policy or repeatable
 `--allow-host` options. `--registry-url` automatically permits only its exact

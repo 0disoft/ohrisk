@@ -817,6 +817,16 @@ describe("collectGraphEvidence", () => {
           await new Promise((resolve) => setTimeout(resolve, 5));
           const match = url.match(/parallel-([a-d])/);
           const name = match?.[1] ?? "unknown";
+          if (url.startsWith("https://registry.npmjs.org/")) {
+            return okArtifactResponseFromBuffer(JSON.stringify({
+              name: `parallel-${name}`,
+              version: "1.0.0",
+              license: "MIT",
+              dist: {
+                tarball: `https://registry.example.test/parallel-${name}/-/parallel-${name}-1.0.0.tgz`
+              }
+            }));
+          }
           return okArtifactResponseFromBuffer(createTarGz({
             "package/package.json": JSON.stringify({
               name: `parallel-${name}`,
@@ -889,6 +899,16 @@ describe("collectGraphEvidence", () => {
         try {
           await new Promise((resolve) => setTimeout(resolve, 5));
           const name = url.match(/default-parallel-\d+/)?.[0] ?? "default-parallel-unknown";
+          if (url.startsWith("https://registry.npmjs.org/")) {
+            return okArtifactResponseFromBuffer(JSON.stringify({
+              name,
+              version: "1.0.0",
+              license: "MIT",
+              dist: {
+                tarball: `https://registry.example.test/${name}/-/${name}-1.0.0.tgz`
+              }
+            }));
+          }
           return okArtifactResponseFromBuffer(createTarGz({
             "package/package.json": JSON.stringify({
               name,
@@ -1714,6 +1734,187 @@ describe("collectGraphEvidence", () => {
         source: "tarball"
       })
     ]);
+  });
+
+  test("uses exact npm registry license metadata for transitive packages without fetching tarballs", async () => {
+    const fetchedUrls: string[] = [];
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "registry-transitive@2.0.0",
+            name: "registry-transitive",
+            version: "2.0.0",
+            ecosystem: "npm",
+            resolved: "https://registry.npmjs.org/registry-transitive/-/registry-transitive-2.0.0.tgz",
+            integrity: "sha512-fixture",
+            dependencyType: "production",
+            direct: false,
+            paths: [["root", "direct@1.0.0", "registry-transitive@2.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async (url) => {
+        fetchedUrls.push(url);
+        return okArtifactResponseFromBuffer(JSON.stringify({
+          name: "registry-transitive",
+          version: "2.0.0",
+          license: "MIT",
+          dist: {
+            tarball: "https://registry.example.test/registry-transitive/-/registry-transitive-2.0.0.tgz"
+          }
+        }));
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+
+    expect(fetchedUrls).toEqual([
+      "https://registry.npmjs.org/registry-transitive/2.0.0"
+    ]);
+    expect(evidence.value).toEqual([{
+      packageId: "registry-transitive@2.0.0",
+      metadataLicense: "MIT",
+      metadataSource: "npm registry metadata",
+      files: [],
+      source: "registry",
+      warnings: []
+    }]);
+  });
+
+  test("reuses bounded artifact host resolutions across registry requests", async () => {
+    let resolutionCount = 0;
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: ["alpha", "beta"].map((name) => ({
+          id: `${name}@1.0.0`,
+          name,
+          version: "1.0.0",
+          ecosystem: "npm" as const,
+          dependencyType: "production" as const,
+          direct: false,
+          paths: [["root", "direct@1.0.0", `${name}@1.0.0`]]
+        }))
+      },
+      projectRoot: bunProjectDir,
+      resolveArtifactHost: async () => {
+        resolutionCount += 1;
+        return [{ address: "1.1.1.1", family: 4 }];
+      },
+      fetchArtifact: async (url) => {
+        const name = url.includes("/alpha/") ? "alpha" : "beta";
+        return okArtifactResponseFromBuffer(JSON.stringify({
+          name,
+          version: "1.0.0",
+          license: "MIT",
+          dist: {
+            tarball: `https://registry.npmjs.org/${name}/-/${name}-1.0.0.tgz`
+          }
+        }));
+      }
+    });
+
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+    expect(evidence.ok).toBe(true);
+    expect(resolutionCount).toBe(1);
+  });
+
+  test("falls back to the verified tarball when transitive npm metadata is not SPDX", async () => {
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "registry-custom",
+        version: "3.0.0",
+        license: "MIT"
+      }),
+      "package/LICENSE": "MIT License fixture text."
+    });
+    const fetchedUrls: string[] = [];
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "bun.lock",
+        nodes: [
+          {
+            id: "registry-custom@3.0.0",
+            name: "registry-custom",
+            version: "3.0.0",
+            ecosystem: "npm",
+            integrity: integrityFor(tarball),
+            dependencyType: "production",
+            direct: false,
+            paths: [["root", "direct@1.0.0", "registry-custom@3.0.0"]]
+          }
+        ]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async (url) => {
+        fetchedUrls.push(url);
+        if (url === "https://registry.npmjs.org/registry-custom/3.0.0") {
+          return okArtifactResponseFromBuffer(JSON.stringify({
+            name: "registry-custom",
+            version: "3.0.0",
+            license: "SEE LICENSE IN LICENSE",
+            dist: {
+              tarball: "https://registry.example.test/registry-custom/-/registry-custom-3.0.0.tgz"
+            }
+          }));
+        }
+        return okArtifactResponseFromBuffer(tarball);
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+    expect(fetchedUrls).toHaveLength(2);
+    expect(evidence.value[0]).toMatchObject({
+      packageId: "registry-custom@3.0.0",
+      packageJsonLicense: "MIT",
+      source: "tarball"
+    });
+  });
+
+  test("does not substitute registry tarballs for transitive npm VCS sources", async () => {
+    let fetchCount = 0;
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "package-lock.json",
+        nodes: [{
+          id: "vcs-package@3.0.0",
+          name: "vcs-package",
+          version: "3.0.0",
+          ecosystem: "npm",
+          resolved: "git+ssh://git@github.com/example/vcs-package.git#0123456789abcdef0123456789abcdef01234567",
+          integrity: "sha512-lockfile-vcs-artifact",
+          dependencyType: "production",
+          direct: false,
+          paths: [["root", "parent@1.0.0", "vcs-package@3.0.0"]]
+        }]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async () => {
+        fetchCount += 1;
+        return okArtifactResponseFromBuffer(Buffer.alloc(0));
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+    expect(fetchCount).toBe(0);
+    expect(evidence.value).toEqual([expect.objectContaining({
+      packageId: "vcs-package@3.0.0",
+      source: "unavailable"
+    })]);
   });
 
   test("encodes scoped npm registry metadata URLs", async () => {

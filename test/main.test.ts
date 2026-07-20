@@ -2849,6 +2849,7 @@ describe("main", () => {
       warnings: 1,
       sources: {
         local: { packages: 5, files: 4, warnings: 1 },
+        registry: { packages: 0, files: 0, warnings: 0 },
         sbom: { packages: 0, files: 0, warnings: 0 },
         tarball: { packages: 0, files: 0, warnings: 0 },
         unavailable: { packages: 0, files: 0, warnings: 0 }

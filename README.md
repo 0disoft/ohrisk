@@ -242,6 +242,8 @@ The current implementation is the first local dependency-risk vertical slice:
 - `ohrisk cache status|prune|clear` commands for cache inspection, age/size cleanup, and bounded removal
 - lockfile integrity verification for local and remote package tarballs; remote tarballs without integrity are reported as unavailable instead of being trusted as license evidence
 - npm registry metadata lookup when the lockfile does not include a direct tarball URL
+- exact npm registry SPDX metadata for transitive packages, with direct dependencies and missing or non-SPDX declarations still inspected from integrity-verified tarballs
+- exact SPDX `license` metadata embedded by npm in modern `package-lock.json` and `npm-shrinkwrap.json`; missing, conflicting, or non-SPDX declarations continue to local or verified-tarball evidence
 - PyPI exact-release metadata lookup when a locked Python package does not include a direct distribution URL
 - gzipped package tarball evidence
 - `package.json` license fields
