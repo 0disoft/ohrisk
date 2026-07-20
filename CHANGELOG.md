@@ -2,6 +2,10 @@
 
 ## 1.10.2 - 2026-07-18
 
+- `.csproj` scans now retain exact `PackageDownload` dependencies and resolve
+  exact ranges that reference one unconditional same-file property, covering
+  Microsoft UI XAML-style build projects without guessing conditional MSBuild
+  evaluation.
 - Remote GitHub scans now skip symbolic-link entries without following their
   targets, remove their checkout materializations before project discovery,
   and report bounded incomplete-coverage metadata instead of rejecting the

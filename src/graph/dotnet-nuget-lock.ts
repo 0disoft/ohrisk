@@ -500,6 +500,7 @@ function parseDotnetProjectXml(
   options: { centralPackageVersions?: DotnetCentralPackageVersions } = {}
 ): Result<NugetPackageRecord[], OhriskError> {
   const records = new Map<string, NugetPackageRecord>();
+  const projectProperties = readUnconditionalDotnetProjectProperties(input);
   const packageReferenceMatches = input.matchAll(
     /<PackageReference\b([^>]*?)(?:\/>|>([\s\S]*?)<\/PackageReference>)/gi
   );
@@ -519,7 +520,8 @@ function parseDotnetProjectXml(
     const unresolvedCentralVersion = rawVersion
       ? undefined
       : options.centralPackageVersions?.unresolved.get(centralKey);
-    const version = normalizeDotnetProjectPackageVersion(rawVersion) ?? centralVersion;
+    const version = resolveDotnetProjectPackageVersion(rawVersion, projectProperties)
+      ?? centralVersion;
     if (!version) {
       return err(
         createError({
@@ -549,12 +551,51 @@ function parseDotnetProjectXml(
     });
   }
 
+  const packageDownloadMatches = input.matchAll(
+    /<PackageDownload\b([^>]*?)(?:\/>|>([\s\S]*?)<\/PackageDownload>)/gi
+  );
+
+  for (const match of packageDownloadMatches) {
+    const attributes = readXmlAttributes(match[1] ?? "");
+    const name = readXmlAttribute(attributes, "Include");
+    if (!name) {
+      continue;
+    }
+
+    const rawVersion = readXmlAttribute(attributes, "Version")
+      ?? readXmlTagText(match[2] ?? "", "Version");
+    const version = resolveDotnetProjectPackageVersion(rawVersion, projectProperties);
+    if (!version) {
+      return err(
+        createError({
+          code: "DOTNET_PROJECT_PARSE_FAILED",
+          category: "unsupported_input",
+          message: "Failed to parse .NET project PackageDownload. Ohrisk requires an exact literal version or an exact range containing one unconditional same-file property reference.",
+          details: {
+            lockfilePath: projectFilePath,
+            packageName: name,
+            version: rawVersion ?? "none"
+          }
+        })
+      );
+    }
+
+    upsertNugetPackageRecord(records, {
+      name,
+      version,
+      id: `${name}@${version}`,
+      dependencyType: "production",
+      direct: true,
+      dependencies: []
+    });
+  }
+
   if (records.size === 0) {
     return err(
       createError({
         code: "DOTNET_PROJECT_PARSE_FAILED",
         category: "unsupported_input",
-        message: "Failed to parse .NET project file. Ohrisk expected at least one PackageReference with Include and Version.",
+        message: "Failed to parse .NET project file. Ohrisk expected at least one PackageReference or PackageDownload with a resolvable exact version.",
         details: {
           lockfilePath: projectFilePath
         }
@@ -764,6 +805,72 @@ function normalizeDotnetProjectPackageVersion(value: string | undefined): string
   }
 
   return version;
+}
+
+function resolveDotnetProjectPackageVersion(
+  value: string | undefined,
+  properties: ReadonlyMap<string, string>
+): string | undefined {
+  const direct = normalizeDotnetProjectPackageVersion(value);
+  if (direct) {
+    return direct;
+  }
+
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const propertyName = trimmed.match(/^\$\(([A-Za-z_][A-Za-z0-9_.-]*)\)$/)?.[1]
+    ?? trimmed.match(/^\[\s*\$\(([A-Za-z_][A-Za-z0-9_.-]*)\)\s*\]$/)?.[1];
+  if (!propertyName) {
+    return undefined;
+  }
+
+  return normalizeDotnetProjectPackageVersion(properties.get(propertyName.toLowerCase()));
+}
+
+function readUnconditionalDotnetProjectProperties(input: string): Map<string, string> {
+  const properties = new Map<string, string>();
+  const ambiguous = new Set<string>();
+
+  for (const groupMatch of input.matchAll(
+    /<PropertyGroup\b([^>]*)>([\s\S]*?)<\/PropertyGroup>/gi
+  )) {
+    const groupAttributes = readXmlAttributes(groupMatch[1] ?? "");
+    if (readXmlAttribute(groupAttributes, "Condition") !== undefined) {
+      continue;
+    }
+
+    for (const propertyMatch of (groupMatch[2] ?? "").matchAll(
+      /<([A-Za-z_][A-Za-z0-9_.-]*)\b([^>]*)>([^<]*)<\/\1>/g
+    )) {
+      const name = propertyMatch[1];
+      if (!name) {
+        continue;
+      }
+      const attributes = readXmlAttributes(propertyMatch[2] ?? "");
+      if (readXmlAttribute(attributes, "Condition") !== undefined) {
+        continue;
+      }
+
+      const value = decodeXmlText(propertyMatch[3] ?? "").trim();
+      if (!value) {
+        continue;
+      }
+
+      const key = name.toLowerCase();
+      const existing = properties.get(key);
+      if (ambiguous.has(key) || (existing !== undefined && existing !== value)) {
+        properties.delete(key);
+        ambiguous.add(key);
+        continue;
+      }
+      properties.set(key, value);
+    }
+  }
+
+  return properties;
 }
 
 function readXmlAttributes(text: string): Map<string, string> {

@@ -179,6 +179,12 @@ reported through the same `dependency_paths_truncated` graph diagnostic used by
 Cargo and modern npm graphs, preventing combinatorial path expansion from
 inflating finding identities and reports without silently dropping packages.
 
+For `*.csproj`, Ohrisk scans direct `PackageReference` and `PackageDownload`
+items. `PackageReference` may use a matching literal central `PackageVersion`;
+`PackageDownload` may use an exact range containing one unconditional
+same-file property reference. Conditional, ambiguous, composite, wildcard, and
+open version expressions fail closed instead of being guessed.
+
 ## Output Requirements
 
 - JSON, Markdown, HTML, SARIF, and CycloneDX behavior is owned by `docs/report-formats.md`.

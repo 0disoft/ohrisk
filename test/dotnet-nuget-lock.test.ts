@@ -266,6 +266,67 @@ describe("parseDotnetProjectText", () => {
     expect(result.error.code).toBe("DOTNET_PROJECT_PARSE_FAILED");
   });
 
+  test("parses exact PackageDownload versions resolved from unconditional project properties", () => {
+    const result = parseDotnetProjectText(
+      [
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+        "<Project Sdk=\"Microsoft.Build.NoTargets\">",
+        "  <PropertyGroup>",
+        "    <PublicWinUIPackageVersion>2.0.12</PublicWinUIPackageVersion>",
+        "  </PropertyGroup>",
+        "  <ItemGroup>",
+        "    <PackageDownload Include=\"Microsoft.WindowsAppSDK.WinUI\" Version=\"[$(PublicWinUIPackageVersion)]\" />",
+        "  </ItemGroup>",
+        "</Project>"
+      ].join("\n"),
+      "XamlCompilerPublic.csproj"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes).toEqual([
+      expect.objectContaining({
+        id: "Microsoft.WindowsAppSDK.WinUI@2.0.12",
+        name: "Microsoft.WindowsAppSDK.WinUI",
+        version: "2.0.12",
+        ecosystem: "nuget",
+        dependencyType: "production",
+        direct: true,
+        paths: [["XamlCompilerPublic", "Microsoft.WindowsAppSDK.WinUI@2.0.12"]]
+      })
+    ]);
+  });
+
+  test("rejects PackageDownload versions from conditional or ambiguous project properties", () => {
+    const result = parseDotnetProjectText(
+      [
+        "<Project Sdk=\"Microsoft.Build.NoTargets\">",
+        "  <PropertyGroup Condition=\"'$(TargetFramework)' == 'net8.0'\">",
+        "    <DownloadedVersion>1.0.0</DownloadedVersion>",
+        "  </PropertyGroup>",
+        "  <ItemGroup>",
+        "    <PackageDownload Include=\"Build.Tool\" Version=\"[$(DownloadedVersion)]\" />",
+        "  </ItemGroup>",
+        "</Project>"
+      ].join("\n"),
+      "ConditionalDownload.csproj"
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected conditional PackageDownload version to fail.");
+    }
+
+    expect(result.error.code).toBe("DOTNET_PROJECT_PARSE_FAILED");
+    expect(result.error.details).toMatchObject({
+      packageName: "Build.Tool",
+      version: "[$(DownloadedVersion)]"
+    });
+  });
+
   test("uses Directory.Packages.props PackageVersion entries for centrally managed PackageReferences", () => {
     const centralVersions = parseDirectoryPackagesPropsText(
       [
