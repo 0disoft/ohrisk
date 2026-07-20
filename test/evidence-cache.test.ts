@@ -237,6 +237,37 @@ describe("persistent artifact cache", () => {
     }
   });
 
+  test("defers automatic cache maintenance until evidence collection completes", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "ohrisk-cache-maintenance-"));
+    let now = 1_000;
+    try {
+      const cache = createArtifactCache(root, {
+        now: () => now,
+        defaultTtlMs: 10_000,
+        maxSizeBytes: 4
+      });
+      cache.write("https://registry.example.com/first.tgz", Buffer.from("1111"));
+      now = 1_100;
+      cache.write("https://registry.example.com/second.tgz", Buffer.from("2222"));
+
+      const before = cache.status();
+      expect(before.ok).toBe(true);
+      if (!before.ok) throw new Error(before.error.message);
+      expect(before.value.totalBytes).toBe(8);
+
+      cache.maintain();
+      const after = cache.status();
+      expect(after.ok).toBe(true);
+      if (!after.ok) throw new Error(after.error.message);
+      expect(after.value.totalBytes).toBe(4);
+      expect(after.value.entryCount).toBe(1);
+      expect(cache.read("https://registry.example.com/second.tgz", 1024)?.bytes.toString("utf8"))
+        .toBe("2222");
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   test("clears only cache-owned children and leaves an empty reusable cache", () => {
     const root = mkdtempSync(path.join(tmpdir(), "ohrisk-cache-clear-"));
     try {

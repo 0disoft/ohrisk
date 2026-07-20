@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -126,6 +126,104 @@ describe("multi-lockfile projects", () => {
         lockfilePath: path.join(projectRoot, "Cargo.lock")
       }]);
     });
+  });
+
+  test("allows nested uv local sources inside the repository scan root", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-uv-repository-root-"));
+    try {
+      const datasetsDir = path.join(repositoryRoot, "datasets");
+      const localSourceDir = path.join(repositoryRoot, "dev");
+      mkdirSync(datasetsDir, { recursive: true });
+      mkdirSync(localSourceDir, { recursive: true });
+      writeFileSync(path.join(localSourceDir, "pyproject.toml"), [
+        "[project]",
+        "name = \"flower-dev\"",
+        "version = \"1.2.3\"",
+        "license = \"Apache-2.0\""
+      ].join("\n") + "\n");
+      writeFileSync(path.join(localSourceDir, "LICENSE"), "Apache License\n");
+      const lockfilePath = path.join(datasetsDir, "uv.lock");
+      writeFileSync(lockfilePath, [
+        "version = 1",
+        "revision = 3",
+        "",
+        "[[package]]",
+        "name = \"datasets\"",
+        "version = \"0.1.0\"",
+        "source = { virtual = \".\" }",
+        "dependencies = [{ name = \"flower-dev\" }]",
+        "",
+        "[[package]]",
+        "name = \"flower-dev\"",
+        "version = \"1.2.3\"",
+        "source = { directory = \"../dev\" }"
+      ].join("\n") + "\n");
+
+      const graph = parseProjectDependencyGraph({
+        rootDir: repositoryRoot,
+        lockfile: { kind: "uv-lock", path: lockfilePath }
+      });
+
+      expect(graph.ok).toBe(true);
+      if (!graph.ok) throw new Error(graph.error.message);
+      expect(graph.value.nodes).toEqual([
+        expect.objectContaining({
+          id: "flower-dev@1.2.3",
+          name: "flower-dev",
+          version: "1.2.3"
+        })
+      ]);
+      expect(graph.value.embeddedEvidence).toEqual([
+        expect.objectContaining({
+          packageId: "flower-dev@1.2.3",
+          metadataLicense: "Apache-2.0",
+          source: "local"
+        })
+      ]);
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects nested uv local sources outside the repository scan root", () => {
+    const temporaryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-uv-outside-root-"));
+    try {
+      const repositoryRoot = path.join(temporaryRoot, "repository");
+      const datasetsDir = path.join(repositoryRoot, "datasets");
+      const outsideDir = path.join(temporaryRoot, "outside");
+      mkdirSync(datasetsDir, { recursive: true });
+      mkdirSync(outsideDir, { recursive: true });
+      writeFileSync(path.join(outsideDir, "pyproject.toml"), [
+        "[project]",
+        "name = \"outside\"",
+        "version = \"1.0.0\""
+      ].join("\n") + "\n");
+      const lockfilePath = path.join(datasetsDir, "uv.lock");
+      writeFileSync(lockfilePath, [
+        "version = 1",
+        "revision = 3",
+        "",
+        "[[package]]",
+        "name = \"outside\"",
+        "version = \"1.0.0\"",
+        "source = { directory = \"../../outside\" }"
+      ].join("\n") + "\n");
+
+      const graph = parseProjectDependencyGraph({
+        rootDir: repositoryRoot,
+        lockfile: { kind: "uv-lock", path: lockfilePath }
+      });
+
+      expect(graph.ok).toBe(false);
+      if (graph.ok) throw new Error("Expected an outside local source to fail.");
+      expect(graph.error.code).toBe("UV_LOCK_PARSE_FAILED");
+      expect(graph.error.message).toContain("stay inside the project root");
+      expect(graph.error.details).toMatchObject({
+        sourcePath: "../../outside"
+      });
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
   });
 
   test("deduplicates by Package URL while preserving the first report identity", () => {

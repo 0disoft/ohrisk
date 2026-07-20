@@ -17,6 +17,7 @@ type CargoPackageRecord = {
   version: string;
   id: string;
   source?: string;
+  checksum?: string;
   dependencies: CargoDependencyEdge[];
 };
 
@@ -29,6 +30,7 @@ type PartialCargoPackageRecord = {
   name?: string;
   version?: string;
   source?: string;
+  checksum?: string;
   dependencies: CargoDependencyEdge[];
 };
 
@@ -580,6 +582,7 @@ function parseCargoPackageRecords(input: string): CargoPackageRecord[] {
       version: current.version,
       id: `${current.name}@${current.version}`,
       ...(current.source ? { source: current.source } : {}),
+      ...(current.checksum ? { checksum: current.checksum } : {}),
       dependencies: current.dependencies
     });
   };
@@ -625,6 +628,12 @@ function parseCargoPackageRecords(input: string): CargoPackageRecord[] {
     const source = readStringAssignment(line, "source");
     if (source !== undefined) {
       current.source = source;
+      continue;
+    }
+
+    const checksum = readStringAssignment(line, "checksum");
+    if (checksum !== undefined) {
+      current.checksum = checksum;
       continue;
     }
 
@@ -940,6 +949,7 @@ function walkCargoDependencies(input: {
       version: state.record.version,
       ecosystem: "cargo",
       resolved: state.record.source,
+      integrity: cargoChecksumIntegrity(state.record.checksum),
       dependencyType: mergedDependencyType,
       direct: state.direct,
       paths: []
@@ -994,6 +1004,13 @@ function walkCargoDependencies(input: {
       });
     }
   }
+}
+
+function cargoChecksumIntegrity(checksum: string | undefined): string | undefined {
+  if (!checksum || !/^[0-9a-f]{64}$/u.test(checksum)) {
+    return undefined;
+  }
+  return `sha256-${Buffer.from(checksum, "hex").toString("base64")}`;
 }
 
 function indexCargoPackageRecords(

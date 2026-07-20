@@ -146,7 +146,11 @@ table-form dependency section(`[dependencies.foo]`)도 root dependency로 처리
 Cargo graph 순회는 반복형으로 수행하며 도달 가능한 crate를 모두 유지한다. crate 하나에
 저장하는 dependency path는 최대 64개이고, 초과하면 typed truncation diagnostic을 남긴다.
 evidence는 로컬 Cargo registry source나 `vendor/<crate>`에서
-읽는다. 아직 crates.io 원격 artifact fetch는 지원하지 않는다.
+먼저 읽되, Cargo.toml identity와 Cargo.lock checksum이 일치해야 신뢰한다. 로컬
+evidence가 없으면 checksum이 있는 crates.io registry crate만 고정된
+`static.crates.io`에서 내려받고, 전체 `.crate` SHA-256과 package root,
+Cargo.toml name/version을 검증한 뒤 license metadata와 파일을 읽는다. Git/path crate와
+대체 registry는 원격으로 가져오지 않는다.
 Go는 `go.work` workspace module, workspace `replace` directive, 각 module의
 `go.mod` require, module-level `replace` directive, 옆의 `go.sum` module ZIP checksum을
 스캔한다. `go.work`의 `replace`는 module `go.mod`의 `replace`보다 먼저 적용한다.

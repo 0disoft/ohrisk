@@ -22,6 +22,10 @@ const LEGACY_CACHE_FORMAT_VERSION = 2;
 const CACHE_INDEX_MAX_BYTES = 32 * 1024;
 const CACHE_MARKER_FILENAME = ".ohrisk-artifact-cache";
 const CACHE_MARKER_CONTENT = "ohrisk artifact cache v3\n";
+const CACHE_MAINTENANCE_LOCK_FILENAME = ".ohrisk-artifact-cache-maintenance.lock";
+const CACHE_MAINTENANCE_STAMP_FILENAME = ".ohrisk-artifact-cache-maintained";
+const CACHE_MAINTENANCE_COOLDOWN_MS = 60_000;
+const CACHE_MAINTENANCE_LOCK_STALE_MS = 10 * 60_000;
 export const DEFAULT_ARTIFACT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 export const DEFAULT_ARTIFACT_CACHE_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_HTTP_CACHE_TTL_MS = 365 * 24 * 60 * 60 * 1000;
@@ -88,6 +92,7 @@ export type ArtifactCache = {
   write: (url: string, bytes: Buffer, metadata?: ArtifactCacheWriteMetadata) => void;
   revalidate: (url: string, metadata?: ArtifactCacheWriteMetadata) => void;
   remove: (url: string) => void;
+  maintain: () => void;
   status: () => Result<ArtifactCacheStatus, OhriskError>;
   prune: (options?: ArtifactCachePruneOptions) => Result<ArtifactCachePruneResult, OhriskError>;
   clear: () => Result<ArtifactCacheClearResult, OhriskError>;
@@ -202,10 +207,6 @@ function createArtifactCacheHandle(
         defaultTtlMs,
         metadata
       });
-      void pruneArtifactCache(resolvedRoot, {
-        maxSizeBytes,
-        removeExpired: false
-      }, now());
     },
     revalidate: (url, metadata) => revalidateArtifactCacheEntry({
       rootDir: resolvedRoot,
@@ -215,6 +216,7 @@ function createArtifactCacheHandle(
       metadata
     }),
     remove: (url) => removeArtifactCacheEntry(resolvedRoot, url, now()),
+    maintain: () => maintainArtifactCache(resolvedRoot, maxSizeBytes, now()),
     status: () => artifactCacheStatus(resolvedRoot, now()),
     prune: (pruneOptions = {}) => pruneArtifactCache(
       resolvedRoot,
@@ -223,6 +225,75 @@ function createArtifactCacheHandle(
     ),
     clear: () => clearArtifactCache(resolvedRoot, now())
   };
+}
+
+function maintainArtifactCache(rootDir: string, maxSizeBytes: number, now: number): void {
+  if (!hasValidCacheMarker(rootDir) || cacheMaintenanceIsRecent(rootDir, now)) {
+    return;
+  }
+
+  const lockPath = path.join(rootDir, CACHE_MAINTENANCE_LOCK_FILENAME);
+  if (!acquireCacheMaintenanceLock(lockPath, now)) {
+    return;
+  }
+
+  try {
+    if (cacheMaintenanceIsRecent(rootDir, now)) {
+      return;
+    }
+    const pruned = pruneArtifactCache(rootDir, {
+      maxSizeBytes,
+      removeExpired: false
+    }, now);
+    if (pruned.ok) {
+      replaceAtomicBestEffort(
+        path.join(rootDir, CACHE_MAINTENANCE_STAMP_FILENAME),
+        Buffer.from(`${now}\n`, "utf8")
+      );
+    }
+  } finally {
+    removeQuietly(lockPath);
+  }
+}
+
+function cacheMaintenanceIsRecent(rootDir: string, now: number): boolean {
+  try {
+    const stamp = lstatSync(path.join(rootDir, CACHE_MAINTENANCE_STAMP_FILENAME));
+    return stamp.isFile()
+      && now >= stamp.mtimeMs
+      && now - stamp.mtimeMs < CACHE_MAINTENANCE_COOLDOWN_MS;
+  } catch {
+    return false;
+  }
+}
+
+function acquireCacheMaintenanceLock(lockPath: string, now: number): boolean {
+  const create = (): boolean => {
+    try {
+      writeFileSync(lockPath, `${process.pid}\n`, { flag: "wx", mode: 0o600 });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (create()) {
+    return true;
+  }
+
+  try {
+    const lock = lstatSync(lockPath);
+    if (
+      !lock.isFile()
+      || now < lock.mtimeMs
+      || now - lock.mtimeMs < CACHE_MAINTENANCE_LOCK_STALE_MS
+    ) {
+      return false;
+    }
+    removeQuietly(lockPath);
+  } catch {
+    return false;
+  }
+  return create();
 }
 
 export function artifactCacheMetadataFromHeaders(

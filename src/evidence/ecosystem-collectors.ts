@@ -49,12 +49,14 @@ const DEFAULT_ECOSYSTEM_EVIDENCE_COLLECTORS: EcosystemEvidenceCollectors = {
     version: node.version,
     projectRoot
   }),
-  cargo: ({ node, projectRoot }) => collectCargoPackageEvidence({
+  cargo: ({ node, projectRoot }) => collectCargoPackageEvidence(omitUndefined({
     packageId: node.id,
     packageName: node.name,
     version: node.version,
-    projectRoot
-  }),
+    projectRoot,
+    resolved: node.resolved,
+    integrity: node.integrity
+  })),
   carthage: ({ node, projectRoot }) => collectCarthagePackageEvidence({
     packageId: node.id,
     packageName: node.name,

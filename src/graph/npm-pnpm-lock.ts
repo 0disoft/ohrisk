@@ -20,6 +20,8 @@ import {
 } from "./read-input-file";
 import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
 
+const PNPM_MAX_PATHS_PER_PACKAGE = 64;
+
 type PnpmLockShape = {
   lockfileVersion?: unknown;
   importers?: unknown;
@@ -148,6 +150,9 @@ export function parsePnpmLockText(
   });
   const packageIndex = indexPackagesByName(records);
   const nodeMap = new Map<string, DependencyNode>();
+  const pathKeysByNodeId = new Map<string, Set<string>>();
+  const expandedPathTypesByNodeId = new Map<string, Set<string>>();
+  const pathLimitAffected = new Set<string>();
 
   for (const importerEntry of importerEntries) {
     for (const rootDependency of collectRootDependencies(importerEntry.importer, catalogs.value)) {
@@ -168,16 +173,27 @@ export function parsePnpmLockText(
         path: [importerEntry.pathSegment],
         packageIndex,
         nodeMap,
+        pathKeysByNodeId,
+        expandedPathTypesByNodeId,
+        pathLimitAffected,
         seen: new Set(),
         requestedName: rootDependency.name
       });
     }
   }
 
-  return ok({
+  return ok(omitUndefined({
     lockfilePath,
-    nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id))
-  });
+    nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    diagnostics: pathLimitAffected.size > 0
+      ? [{
+          code: "dependency_paths_truncated" as const,
+          affectedNodeCount: pathLimitAffected.size,
+          limit: PNPM_MAX_PATHS_PER_PACKAGE,
+          message: `pnpm dependency paths were limited to ${PNPM_MAX_PATHS_PER_PACKAGE} paths per package.`
+        }]
+      : undefined
+  }));
 }
 
 function parseLockfileYaml(
@@ -640,6 +656,9 @@ function walkDependency(input: {
   path: string[];
   packageIndex: Map<string, PnpmPackageRecord[]>;
   nodeMap: Map<string, DependencyNode>;
+  pathKeysByNodeId: Map<string, Set<string>>;
+  expandedPathTypesByNodeId: Map<string, Set<string>>;
+  pathLimitAffected: Set<string>;
   seen: Set<string>;
   requestedName?: string;
 }): void {
@@ -664,32 +683,65 @@ function walkDependency(input: {
     })
   ];
   const existing = input.nodeMap.get(input.record.id);
+  const previousDependencyType = existing?.dependencyType;
+  const mergedDependencyType = previousDependencyType
+    ? mergeDependencyType(previousDependencyType, input.dependencyType)
+    : input.dependencyType;
+  const dependencyTypeStrengthened = previousDependencyType !== undefined
+    && mergedDependencyType !== previousDependencyType;
 
-  if (existing) {
-    existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType(existing.dependencyType, input.dependencyType);
-    const installNames = addUniqueInstallName({
-      current: existing.installNames,
-      installName
-    });
-    if (installNames !== undefined) {
-      existing.installNames = installNames;
-    }
-    existing.paths.push(nextPath);
-  } else {
-    input.nodeMap.set(input.record.id, {
-      id: input.record.id,
-      name: input.record.name,
-      version: input.record.version,
-      ecosystem: "npm",
-      ...(installName ? { installNames: [installName] } : {}),
-      ...(input.record.resolved ? { resolved: input.record.resolved } : {}),
-      ...(input.record.integrity ? { integrity: input.record.integrity } : {}),
-      dependencyType: input.dependencyType,
-      direct: input.direct,
-      paths: [nextPath]
-    });
+  const node = existing ?? {
+    id: input.record.id,
+    name: input.record.name,
+    version: input.record.version,
+    ecosystem: "npm" as const,
+    ...(installName ? { installNames: [installName] } : {}),
+    ...(input.record.resolved ? { resolved: input.record.resolved } : {}),
+    ...(input.record.integrity ? { integrity: input.record.integrity } : {}),
+    dependencyType: mergedDependencyType,
+    direct: input.direct,
+    paths: []
+  };
+  node.direct = node.direct || input.direct;
+  node.dependencyType = mergedDependencyType;
+  const installNames = addUniqueInstallName({
+    current: node.installNames,
+    installName
+  });
+  if (installNames !== undefined) {
+    node.installNames = installNames;
   }
+  if (!existing) {
+    input.nodeMap.set(input.record.id, node);
+  }
+
+  const pathKey = JSON.stringify(nextPath);
+  const pathKeys = input.pathKeysByNodeId.get(input.record.id) ?? new Set<string>();
+  let traversalPath: string[] | undefined;
+  if (pathKeys.has(pathKey)) {
+    traversalPath = dependencyTypeStrengthened ? nextPath : undefined;
+  } else if (pathKeys.size < PNPM_MAX_PATHS_PER_PACKAGE) {
+    pathKeys.add(pathKey);
+    input.pathKeysByNodeId.set(input.record.id, pathKeys);
+    node.paths.push(nextPath);
+    traversalPath = nextPath;
+  } else {
+    input.pathLimitAffected.add(input.record.id);
+    traversalPath = dependencyTypeStrengthened ? node.paths[0] : undefined;
+  }
+
+  if (!traversalPath) {
+    return;
+  }
+
+  const expansionKey = `${JSON.stringify(traversalPath)}\0${input.dependencyType}`;
+  const expandedPathTypes = input.expandedPathTypesByNodeId.get(input.record.id)
+    ?? new Set<string>();
+  if (expandedPathTypes.has(expansionKey)) {
+    return;
+  }
+  expandedPathTypes.add(expansionKey);
+  input.expandedPathTypesByNodeId.set(input.record.id, expandedPathTypes);
 
   for (const child of input.record.dependencies) {
     const childRecord = resolvePackageRecord({
@@ -706,9 +758,12 @@ function walkDependency(input: {
       record: childRecord,
       dependencyType: dependencyTypeForChildEdge(input.dependencyType, child.type),
       direct: false,
-      path: nextPath,
+      path: traversalPath,
       packageIndex: input.packageIndex,
       nodeMap: input.nodeMap,
+      pathKeysByNodeId: input.pathKeysByNodeId,
+      expandedPathTypesByNodeId: input.expandedPathTypesByNodeId,
+      pathLimitAffected: input.pathLimitAffected,
       seen: nextSeen,
       requestedName: child.name
     });

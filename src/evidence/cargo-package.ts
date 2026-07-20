@@ -15,8 +15,15 @@ import type { LicenseEvidence, LicenseEvidenceFile } from "./types";
 const CARGO_MANIFEST_MAX_BYTES = 1024 * 1024;
 const CARGO_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 const CARGO_LICENSE_FILE_LIMIT = 50;
+const CARGO_CHECKSUM_METADATA_MAX_BYTES = 1024 * 1024;
+const CARGO_CRATES_IO_SOURCES = new Set([
+  "registry+https://github.com/rust-lang/crates.io-index",
+  "registry+https://index.crates.io/"
+]);
 
-type CargoManifestMetadata = {
+export type CargoManifestMetadata = {
+  name?: string;
+  version?: string;
   license?: string;
   licenseFile?: string;
 };
@@ -26,13 +33,16 @@ export function collectCargoPackageEvidence(input: {
   packageName: string;
   version: string;
   projectRoot: string;
+  resolved?: string;
+  integrity?: string;
   manifestMaxBytes?: number;
   evidenceFileMaxBytes?: number;
 }): Result<LicenseEvidence, OhriskError> {
   const packageDir = findCargoPackageDir({
     projectRoot: input.projectRoot,
     packageName: input.packageName,
-    version: input.version
+    version: input.version,
+    resolved: input.resolved
   });
 
   if (!packageDir) {
@@ -54,6 +64,21 @@ export function collectCargoPackageEvidence(input: {
 
   if (!manifest.ok) {
     return err(manifest.error);
+  }
+  if (manifest.value.name !== input.packageName || manifest.value.version !== input.version) {
+    return ok(unavailableLocalCargoEvidence(
+      input.packageId,
+      "Local Cargo package manifest identity did not match the locked package."
+    ));
+  }
+  if (input.resolved && CARGO_CRATES_IO_SOURCES.has(input.resolved)) {
+    const localIntegrity = readCargoPackageChecksumIntegrity(packageDir);
+    if (!input.integrity || localIntegrity !== input.integrity) {
+      return ok(unavailableLocalCargoEvidence(
+        input.packageId,
+        "Local Cargo package cache checksum did not match Cargo.lock."
+      ));
+    }
   }
 
   const warnings: string[] = [];
@@ -90,31 +115,38 @@ function findCargoPackageDir(input: {
   projectRoot: string;
   packageName: string;
   version: string;
+  resolved?: string;
 }): string | undefined {
   const crateDirName = `${input.packageName}-${input.version}`;
 
-  for (const registrySourceRoot of cargoRegistrySourceRoots(input.projectRoot)) {
-    if (!existsSync(registrySourceRoot) || !isReadableDirectory(registrySourceRoot)) {
-      continue;
-    }
-
-    let registryDirs;
-    try {
-      registryDirs = readdirSync(registrySourceRoot, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-
-    for (const registryDir of registryDirs) {
-      if (!registryDir.isDirectory()) {
+  if (input.resolved && CARGO_CRATES_IO_SOURCES.has(input.resolved)) {
+    for (const registrySourceRoot of cargoRegistrySourceRoots(input.projectRoot)) {
+      if (!existsSync(registrySourceRoot) || !isReadableDirectory(registrySourceRoot)) {
         continue;
       }
 
-      const candidate = path.join(registrySourceRoot, registryDir.name, crateDirName);
-      if (existsSync(candidate) && isReadableDirectory(candidate)) {
-        return candidate;
+      let registryDirs;
+      try {
+        registryDirs = readdirSync(registrySourceRoot, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+
+      for (const registryDir of registryDirs) {
+        if (!registryDir.isDirectory() || !isCratesIoRegistryDirectory(registryDir.name)) {
+          continue;
+        }
+
+        const candidate = path.join(registrySourceRoot, registryDir.name, crateDirName);
+        if (existsSync(candidate) && isReadableDirectory(candidate)) {
+          return candidate;
+        }
       }
     }
+  }
+
+  if (input.resolved && !CARGO_CRATES_IO_SOURCES.has(input.resolved)) {
+    return undefined;
   }
 
   const vendoredCandidate = path.join(input.projectRoot, "vendor", input.packageName);
@@ -123,6 +155,49 @@ function findCargoPackageDir(input: {
   }
 
   return undefined;
+}
+
+function isCratesIoRegistryDirectory(name: string): boolean {
+  return name.startsWith("index.crates.io-") || name.startsWith("github.com-");
+}
+
+function readCargoPackageChecksumIntegrity(packageDir: string): string | undefined {
+  const checksumPath = path.join(packageDir, ".cargo-checksum.json");
+  if (!existsSync(checksumPath)) {
+    return undefined;
+  }
+  const text = readTextFileWithLimit({
+    filePath: checksumPath,
+    maxBytes: CARGO_CHECKSUM_METADATA_MAX_BYTES
+  });
+  if (!text.ok) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(text.value) as unknown;
+    if (
+      typeof parsed !== "object"
+      || parsed === null
+      || Array.isArray(parsed)
+      || !("package" in parsed)
+      || typeof parsed.package !== "string"
+      || !/^[0-9a-f]{64}$/u.test(parsed.package)
+    ) {
+      return undefined;
+    }
+    return `sha256-${Buffer.from(parsed.package, "hex").toString("base64")}`;
+  } catch {
+    return undefined;
+  }
+}
+
+function unavailableLocalCargoEvidence(packageId: string, warning: string): LicenseEvidence {
+  return {
+    packageId,
+    files: [],
+    source: "unavailable",
+    warnings: [warning]
+  };
 }
 
 function cargoRegistrySourceRoots(projectRoot: string): string[] {
@@ -175,7 +250,7 @@ function readCargoManifestMetadata(input: {
   return ok(parseCargoManifestMetadata(text.value));
 }
 
-function parseCargoManifestMetadata(text: string): CargoManifestMetadata {
+export function parseCargoManifestMetadata(text: string): CargoManifestMetadata {
   let section = "";
   const metadata: CargoManifestMetadata = {};
 
@@ -191,6 +266,18 @@ function parseCargoManifestMetadata(text: string): CargoManifestMetadata {
     }
 
     if (section !== "package") {
+      continue;
+    }
+
+    const name = readStringAssignment(line, "name");
+    if (name !== undefined) {
+      metadata.name = name;
+      continue;
+    }
+
+    const version = readStringAssignment(line, "version");
+    if (version !== undefined) {
+      metadata.version = version;
       continue;
     }
 
@@ -215,27 +302,37 @@ function readCargoEvidenceFiles(input: {
   maxBytes: number;
   warnings: string[];
 }): LicenseEvidenceFile[] {
-  const candidates = evidenceFileCandidates(input.packageDir);
-
+  const candidates = new Map<string, {
+    absolutePath: string;
+    relativePath: string;
+    kind: LicenseEvidenceFile["kind"];
+  }>();
   if (input.manifest.licenseFile) {
-    candidates.unshift({
-      absolutePath: path.resolve(input.packageDir, input.manifest.licenseFile),
-      relativePath: input.manifest.licenseFile
+    const absolutePath = path.resolve(input.packageDir, input.manifest.licenseFile);
+    candidates.set(absolutePath, {
+      absolutePath,
+      relativePath: input.manifest.licenseFile,
+      kind: "license"
     });
+  }
+  for (const candidate of evidenceFileCandidates(input.packageDir)) {
+    const kind = classifyEvidenceFile(candidate.relativePath);
+    if (kind && !candidates.has(candidate.absolutePath)) {
+      candidates.set(candidate.absolutePath, { ...candidate, kind });
+    }
   }
 
   const files: LicenseEvidenceFile[] = [];
   const seen = new Set<string>();
   const packageRoot = path.resolve(input.packageDir);
 
-  for (const candidate of candidates.slice(0, CARGO_LICENSE_FILE_LIMIT)) {
+  for (const candidate of [...candidates.values()].slice(0, CARGO_LICENSE_FILE_LIMIT)) {
     if (seen.has(candidate.absolutePath)) {
       continue;
     }
 
     seen.add(candidate.absolutePath);
-    const kind = classifyEvidenceFile(candidate.relativePath);
-    if (!kind || !isPathInside(packageRoot, candidate.absolutePath)) {
+    if (!isPathInside(packageRoot, candidate.absolutePath)) {
       continue;
     }
 
@@ -251,7 +348,7 @@ function readCargoEvidenceFiles(input: {
 
     files.push({
       path: candidate.relativePath,
-      kind,
+      kind: candidate.kind,
       text: text.value
     });
   }

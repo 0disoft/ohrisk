@@ -1,8 +1,10 @@
 import { closeSync, existsSync, openSync, readSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
+import { parseGradleVersionCatalogFile } from "../graph/java-gradle-version-catalog";
 import { parsePackageJsonManifestFile } from "../graph/npm-package-json";
 import { parsePyprojectFile } from "../graph/python-pyproject";
+import { parseRequirementsFile } from "../graph/python-requirements";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 
@@ -663,6 +665,14 @@ function isConcreteAutoDiscoveryInput(lockfile: ProjectLockfile): boolean {
     return parsePyprojectFile(lockfile.path).ok;
   }
 
+  if (lockfile.kind === "requirements-txt") {
+    return parseRequirementsFile(lockfile.path).ok;
+  }
+
+  if (lockfile.kind === "gradle-version-catalog") {
+    return parseGradleVersionCatalogFile(lockfile.path).ok;
+  }
+
   if (
     lockfile.kind !== "cyclonedx-json"
     && lockfile.kind !== "cyclonedx-xml"
@@ -847,7 +857,16 @@ function findKnownLockfiles(dir: string): string[] {
     ...dotnetProjects,
     ...xcodeSwiftPackageResolvedFiles,
     ...namedPylockTomlFiles
-  ]).sort();
+  ])
+    .filter((lockfileName) => {
+      const lockfilePath = path.join(dir, lockfileName);
+      const kind = supportedKindForLockfilePath(lockfilePath);
+      return kind === undefined || isConcreteAutoDiscoveryInput({
+        kind,
+        path: lockfilePath
+      });
+    })
+    .sort();
 }
 
 function hasKnownProjectManifest(dir: string): boolean {

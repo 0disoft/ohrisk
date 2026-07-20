@@ -87,13 +87,17 @@ selected root are merged without preferring one ecosystem and silently omitting
 the others. Standalone `pyproject.toml` manifests participate in automatic
 discovery only when their dependency entries are exact `name==version` pins;
 ranges and direct references require a resolved lockfile and are not treated as
-concrete automatic inputs.
+concrete automatic inputs. Gradle version catalogs likewise participate only
+when every library alias resolves to an exact Maven version; catalogs containing
+BOM-managed, rich, or otherwise unresolved versions remain available through an
+explicit `--lockfile` selection, which reports the unsupported entry instead of
+silently guessing it.
 SBOM files containing unresolved uppercase `@BUILD_VARIABLE@` placeholders are
 treated as build templates rather than concrete automatic-discovery candidates.
 Absolute, empty-segment, dot-segment, and traversal paths are rejected before
 resolution inside the validated temporary checkout.
 
-The pre-checkout tree allows at most 50,000 entries, 100 MiB per blob, 640 MiB total blob
+The pre-checkout tree allows at most 100,000 entries, 100 MiB per blob, 640 MiB total blob
 content, 4,096 UTF-8 bytes and 64 segments per path, and 255 UTF-8 bytes per segment. Symbolic
 links are skipped without following their targets. Regular files with Windows-reserved names,
 unsupported characters or suffixes, overlong segments, or case/Unicode normalization collisions
@@ -158,12 +162,21 @@ depth, and excessive path fan-out cannot make graph reconstruction unbounded.
 For `Cargo.lock`, graph traversal is iterative and retains every reachable
 crate while storing at most 64 dependency paths per crate. Additional paths are
 reported through a `dependency_paths_truncated` graph diagnostic rather than
-expanding path combinations without a bound.
+expanding path combinations without a bound. For a crates.io registry record,
+remote scans preserve the Cargo.lock SHA-256 and fetch the exact `.crate` only
+from `static.crates.io`; checksum, archive root, package name, package version,
+and Cargo.toml identity must all match before license evidence is trusted.
+Git, path, alternate-registry, and checksumless crate sources are not fetched.
 
 For modern npm `package-lock.json` and `npm-shrinkwrap.json`, graph traversal is
 also iterative and retains every reachable package while storing at most 64
 dependency paths per package. Additional paths use the same typed truncation
 diagnostic instead of expanding path combinations without a bound.
+
+For `pnpm-lock.yaml`, every importer remains a graph root and every reachable
+package remains in the result, while each package stores at most 64 dependency
+paths. Additional paths emit the same typed truncation diagnostic rather than
+materializing combinatorial workspace path fan-out.
 
 For `uv.lock`, a remote Git package record is retained only when uv's resolved
 source ends in a full 40- or 64-hex commit. Ohrisk does not fetch that VCS source
@@ -172,6 +185,11 @@ unavailable evidence and remains an `unknown` finding until the exact commit is
 reviewed. Branches, tags, short revisions, unresolved URLs, and malformed remote
 sources fail closed, and rejected-source diagnostics redact credentials and URL
 parameters.
+
+Local `uv.lock` directory sources are resolved from the lockfile location. In a
+repository-wide remote scan they may reference another selected project inside
+the validated repository checkout, while paths that escape the repository scan
+root remain rejected.
 
 `uv.lock` dependency traversal is iterative and retains every reachable package
 while storing at most 64 dependency paths per package. Additional paths are

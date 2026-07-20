@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.11.0
+npm install -g ohrisk@1.11.1
 cd your-project
 ohrisk scan
 ```
@@ -167,10 +167,10 @@ The current implementation is the first local dependency-risk vertical slice:
 - opt-in `--all` discovery that merges every supported input at one project root, deduplicates packages by Package URL, and preserves contributing-lockfile provenance
 - direct and transitive dependency graph extraction when the dependency input records parent/child relationships
 - Bun, npm, pnpm, and Yarn classic/Berry workspace projects are scanned from every workspace/importer package root
-- npm package-lock/shrinkwrap traversal is iterative, retains every reachable package, and stores at most 64 dependency paths per package with a typed truncation diagnostic
+- npm package-lock/shrinkwrap and pnpm traversal retain every reachable package and store at most 64 dependency paths per package with a typed truncation diagnostic
 - pnpm `catalog:` and `catalog:<name>` dependency specifiers are resolved from `pnpm-workspace.yaml`
 - Deno `deno.lock` projects are scanned for npm package dependencies recorded in `npm:` specifiers; root remote URL imports and JSR packages fail closed instead of being silently skipped
-- Rust `Cargo.lock` projects are scanned for crates, using adjacent `Cargo.toml` root dependencies plus literal and segment `*`/`?` Cargo workspace member manifests such as `crates/*`, `crates/app-*`, `tools/?li`, and `crates/*/plugins/*` when available, honoring workspace `exclude` entries, `crate.workspace = true` dependency keys, workspace dependency package aliases, and table-form dependency sections such as `[dependencies.foo]`; traversal is iterative, retains every reachable crate, and stores at most 64 dependency paths per crate with a typed truncation diagnostic
+- Rust `Cargo.lock` projects are scanned for crates, using adjacent `Cargo.toml` root dependencies plus literal and segment `*`/`?` Cargo workspace member manifests such as `crates/*`, `crates/app-*`, `tools/?li`, and `crates/*/plugins/*` when available, honoring workspace `exclude` entries, `crate.workspace = true` dependency keys, workspace dependency package aliases, and table-form dependency sections such as `[dependencies.foo]`; traversal is iterative, retains every reachable crate, and stores at most 64 dependency paths per crate with a typed truncation diagnostic; remote scans fetch crates.io archives only from the fixed public artifact host and trust them only after Cargo.lock SHA-256 plus archive identity verification
 - Go `go.work` projects are scanned across workspace modules and apply workspace `replace` directives before module-level replacements; Go `go.mod` projects are scanned for required modules and Go `replace` directives, using adjacent `go.sum` entries as exact module-zip checksums rather than treating every historical checksum as a current dependency on Go 1.17 and later
 - Python `pylock.toml` and named `pylock.<name>.toml` projects are scanned for versioned PyPI package records and project-root-contained source-tree package records with local source metadata
 - Python `pyproject.toml` projects without a companion lockfile are scanned for exact PEP 621 `name==version` direct dependency pins
@@ -210,7 +210,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - local `file:` package artifact evidence
 - installed `node_modules` package evidence, including npm alias install names, before network fallback
 - Yarn Berry `.yarn/cache` package zip evidence before registry fallback for PnP installs without `node_modules`
-- local Cargo registry source and `vendor/<crate>` package evidence before unavailable fallback
+- checksum- and identity-verified local Cargo registry source or `vendor/<crate>` evidence before a fixed public crates.io artifact fallback; remote `.crate` archives are trusted only after their exact Cargo.lock SHA-256, package root, and Cargo.toml identity are verified
 - local Go module cache, `vendor/<module>`, and project-root-contained local `replace` path evidence before a fixed public Go module proxy fallback for `go.work` and `go.mod` scans; remote module ZIPs are trusted only after their exact `go.sum` `h1` checksum is verified
 - Python `.venv` and `venv` `*.dist-info/METADATA` package evidence, plus project-root-contained local source metadata and license files for `uv.lock`, `pylock.toml`, `requirements.txt`, `Pipfile.lock`, and `pdm.lock` local source entries, before unavailable fallback
 - exact-version PyPI release evidence for locked Python packages, using SHA-256-verified source distributions or wheels plus identity-checked `PKG-INFO`, `METADATA`, and license files; a verified distribution that exceeds archive inspection limits remains `unknown` without aborting unrelated package findings
@@ -304,8 +304,7 @@ vcpkg feature/platform selection reconstruction, remote vcpkg registry metadata 
 Carthage parent graph reconstruction, remote Swift package checkout fetching,
 Carthage remote checkout or binary framework license fetching, CocoaPods remote podspec or source
 fetching, Mix and Rebar3 dependency graph reconstruction, Rebar3 git/path deps, Rebar3 plugin locks, remote Hex.pm artifact fetching,
-Composer plugin/platform repository resolution, remote
-crates.io, arbitrary or private Go proxies, Maven source archives or JARs without a same-repository SHA-256 sidecar and embedded exact identity, NuGet, pub.dev, RubyGems, or Packagist artifact
+Composer plugin/platform repository resolution, alternate Cargo registries and Cargo Git/path source fetching, arbitrary or private Go proxies, Maven source archives or JARs without a same-repository SHA-256 sidecar and embedded exact identity, NuGet, pub.dev, RubyGems, or Packagist artifact
 fetching are not part of this slice yet.
 
 ## Usage
@@ -382,7 +381,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.11.0
+npm install -g ohrisk@1.11.1
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open

@@ -279,6 +279,73 @@ describe("discoverProject", () => {
     }
   });
 
+  test("ignores tool-only pyproject.toml beside a concrete root lockfile", () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-tool-only-pyproject-"));
+
+    try {
+      writeFileSync(
+        path.join(projectDir, "pyproject.toml"),
+        [
+          "[tool.black]",
+          "line-length = 100"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectDir, "go.mod"),
+        "module example.com/concrete-root\n\ngo 1.24\n",
+        "utf8"
+      );
+
+      const result = discoverProject({
+        cwd: projectDir,
+        autoMergeSameRoot: true
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+      expect(result.value.lockfile).toEqual({
+        kind: "go-mod",
+        path: path.join(projectDir, "go.mod")
+      });
+      expect(result.value.lockfiles).toBeUndefined();
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("ignores unresolved requirements.txt beside a concrete root lockfile", () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-unresolved-requirements-"));
+
+    try {
+      writeFileSync(path.join(projectDir, "requirements.txt"), "flwr >= 0.18.0\n", "utf8");
+      writeFileSync(
+        path.join(projectDir, "go.mod"),
+        "module example.com/concrete-root\n\ngo 1.24\n",
+        "utf8"
+      );
+
+      const result = discoverProject({
+        cwd: projectDir,
+        autoMergeSameRoot: true
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+      expect(result.value.lockfile).toEqual({
+        kind: "go-mod",
+        path: path.join(projectDir, "go.mod")
+      });
+      expect(result.value.lockfiles).toBeUndefined();
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
   test("finds a Python pylock.toml project", () => {
     const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-pylock-discovery-"));
 
@@ -2476,6 +2543,40 @@ describe("discoverProject", () => {
         "[project]",
         "name = \"playground\"",
         "dependencies = [\"ipykernel>=6.29.5\"]"
+      ].join("\n"), "utf8");
+      writeFileSync(path.join(serverRoot, "go.mod"), "module example.com/server\n\ngo 1.24\n", "utf8");
+
+      const result = discoverProject({
+        cwd: repositoryRoot,
+        searchMode: "tree",
+        autoMergeDescendantProjects: true
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value.lockfiles ?? [result.value.lockfile]).toEqual([
+        { kind: "go-mod", path: path.join(serverRoot, "go.mod") }
+      ]);
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("skips partially resolved Gradle catalogs during automatic repository discovery", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-gradle-catalog-"));
+    const gradleRoot = path.join(repositoryRoot, "intelligence", "kt", "gradle");
+    const serverRoot = path.join(repositoryRoot, "server");
+
+    try {
+      mkdirSync(gradleRoot, { recursive: true });
+      mkdirSync(serverRoot, { recursive: true });
+      writeFileSync(path.join(gradleRoot, "libs.versions.toml"), [
+        "[versions]",
+        "composeBom = \"2025.06.01\"",
+        "",
+        "[libraries]",
+        "compose-bom = { module = \"androidx.compose:compose-bom\", version.ref = \"composeBom\" }",
+        "compose-ui = { module = \"androidx.compose.ui:ui\" }"
       ].join("\n"), "utf8");
       writeFileSync(path.join(serverRoot, "go.mod"), "module example.com/server\n\ngo 1.24\n", "utf8");
 

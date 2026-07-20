@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.11.1 - 2026-07-20
+
+- Allowed nested `uv.lock` projects in repository-wide scans to resolve sibling
+  local directory sources inside the validated repository root while continuing
+  to reject paths that escape it.
+- Added checksum- and identity-verified remote crates.io evidence for Cargo
+  lockfiles. Registry crates now use the exact Cargo.lock SHA-256 against a
+  fixed `static.crates.io` archive before trusting Cargo.toml license metadata
+  or package license files; Git, path, alternate-registry, and checksumless
+  crates remain unavailable.
+- Terminated timed-out Git clones as complete process trees, including Windows
+  remote helpers and pack workers, with a bounded completion fallback. Large
+  asset repositories no longer leave `git-remote-https` or `index-pack`
+  workers behind after the clone deadline.
+- Ignored tool-only or otherwise unresolved `pyproject.toml`,
+  `requirements.txt`, and Gradle version catalog files during automatic
+  discovery while preserving explicit `--lockfile` validation. Concrete sibling
+  inputs can now scan without an unrelated formatter-only, range-only Python,
+  or partially resolved catalog file aborting the merged project.
+- Raised the independently byte-bounded GitHub checkout tree ceiling from
+  50,000 to 100,000 entries so large source monorepos remain scannable while
+  retaining per-file, total-tree, projected-staging, and final-staging limits.
+- Bounded pnpm workspace dependency paths to 64 per package with a typed
+  truncation diagnostic. Highly connected workspaces no longer materialize
+  millions of equivalent paths and exhaust the Node.js heap during risk
+  evaluation.
+- Coalesced automatic artifact-cache LRU maintenance into one bounded sweep
+  after evidence collection. Large scans no longer launch a complete cache
+  inventory and prune after every metadata or tarball write, and simultaneous
+  processes coordinate through an atomic maintenance lease and cooldown.
+- Applied the configured package-request timeout to initial DNS and SSRF
+  preflight resolution. A stalled artifact hostname now becomes unavailable
+  evidence for that package instead of permanently consuming an evidence worker
+  during large remote scans.
+
 ## 1.11.0 - 2026-07-20
 
 - Large standalone HTML reports now derive search text from visible cards at

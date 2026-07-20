@@ -25,6 +25,7 @@ import {
   type ArtifactCacheEntry,
   type ArtifactCacheResponseMetadata
 } from "./cache";
+import { collectCargoCrateEvidence } from "./cargo-crate";
 import { collectRegisteredEcosystemEvidence } from "../ecosystems/registry";
 import { collectGoModuleZipEvidence } from "./go-module-zip";
 import { collectLocalPackageEvidence } from "./local-package";
@@ -156,6 +157,12 @@ const GO_MODULE_PROXY_BASE_URL = "https://proxy.golang.org";
 const GO_MODULE_PROXY_HOSTS = new Set(["proxy.golang.org", "storage.googleapis.com"]);
 const GO_MODULE_TRANSIENT_FETCH_ATTEMPTS = 2;
 const GO_MODULE_TRANSIENT_RETRY_DELAY_MS = 200;
+const CARGO_CRATES_IO_SOURCES = new Set([
+  "registry+https://github.com/rust-lang/crates.io-index",
+  "registry+https://index.crates.io/"
+]);
+const CARGO_CRATE_BASE_URL = "https://static.crates.io/crates";
+const CARGO_CRATE_HOSTS = new Set(["static.crates.io"]);
 const ARTIFACT_HOST_RESOLUTION_CACHE_TTL_MS = 60_000;
 const ARTIFACT_HOST_RESOLUTION_CACHE_MAX_ENTRIES = 256;
 
@@ -308,6 +315,7 @@ export async function collectGraphEvidence(input: {
   };
 
   await Promise.all(Array.from({ length: workerCount }, () => collectNext()));
+  artifactCache?.maintain();
 
   if (failure) {
     return err(failure.error);
@@ -379,7 +387,11 @@ async function collectNodeEvidence(input: {
     : undefined;
   if (ecosystemEvidence) {
     if (
-      (input.node.ecosystem !== "maven" && input.node.ecosystem !== "go")
+      (
+        input.node.ecosystem !== "maven"
+        && input.node.ecosystem !== "go"
+        && input.node.ecosystem !== "cargo"
+      )
       || !ecosystemEvidence.ok
       || ecosystemEvidence.value.source !== "unavailable"
     ) {
@@ -488,6 +500,19 @@ async function collectNodeEvidence(input: {
 
   if (input.node.ecosystem === "go") {
     return collectRemoteGoModuleEvidence({
+      node: input.node,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      artifactMaxBytes: input.tarballMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      allowedHosts: input.allowedHosts
+    });
+  }
+
+  if (input.node.ecosystem === "cargo") {
+    return collectRemoteCargoCrateEvidence({
       node: input.node,
       fetchArtifact: input.fetchArtifact,
       resolveArtifactHost: input.resolveArtifactHost,
@@ -728,6 +753,84 @@ async function collectRemoteGoModuleEvidence(input: {
     version: coordinates.version,
     checksum: input.node.integrity,
     zip: zip.value,
+    artifactMaxBytes: input.artifactMaxBytes
+  });
+}
+
+async function collectRemoteCargoCrateEvidence(input: {
+  node: DependencyNode;
+  fetchArtifact: ArtifactFetcher;
+  resolveArtifactHost: ArtifactHostResolver | undefined;
+  fetchTimeoutMs: number;
+  artifactMaxBytes: number;
+  offline: boolean;
+  artifactCache: ArtifactCache | undefined;
+  allowedHosts: ReadonlySet<string>;
+}): Promise<Result<LicenseEvidence, OhriskError>> {
+  if (!input.node.resolved || !CARGO_CRATES_IO_SOURCES.has(input.node.resolved)) {
+    return ok(unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: "Cargo Git, path, and non-crates.io registry sources are not fetched during a remote repository scan."
+    }));
+  }
+  if (!input.node.integrity || !/^sha256-[A-Za-z0-9+/]{43}=$/u.test(input.node.integrity)) {
+    return ok({
+      packageId: input.node.id,
+      files: [],
+      source: "unavailable",
+      warnings: [
+        "Cargo crate source was not fetched because Cargo.lock did not contain a valid SHA-256 checksum."
+      ]
+    });
+  }
+  if (
+    !/^[A-Za-z0-9_-]+$/u.test(input.node.name)
+    || !/^[A-Za-z0-9.+-]+$/u.test(input.node.version)
+  ) {
+    return ok(unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: "Cargo crate name or version could not be encoded safely for the fixed crates.io artifact host."
+    }));
+  }
+
+  const encodedName = encodeURIComponent(input.node.name);
+  const encodedVersion = encodeURIComponent(input.node.version);
+  const resolved = `${CARGO_CRATE_BASE_URL}/${encodedName}/${encodedName}-${encodedVersion}.crate`;
+  const crate = await readRemoteArtifactBytes({
+    code: "TARBALL_FETCH_FAILED",
+    packageId: input.node.id,
+    url: resolved,
+    blockedMessage: "Cargo crate URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve the Cargo crate artifact host.",
+    fetchFailureMessage: "Failed to fetch Cargo crate archive.",
+    tooLargeMessage: "Cargo crate archive response exceeded the maximum supported size.",
+    unreadableMessage: "Cargo crate archive response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find the Cargo crate archive in the artifact cache.",
+    details: {
+      packageName: input.node.name,
+      version: input.node.version,
+      registry: CARGO_CRATE_BASE_URL
+    },
+    maxBytes: input.artifactMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: CARGO_CRATE_HOSTS,
+    urlDetailKey: "resolved"
+  });
+  if (!crate.ok) {
+    return crate;
+  }
+
+  return collectCargoCrateEvidence({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    version: input.node.version,
+    integrity: input.node.integrity,
+    crate: crate.value,
     artifactMaxBytes: input.artifactMaxBytes
   });
 }
@@ -1562,6 +1665,7 @@ async function collectRemotePythonDistributionEvidence(input: {
         resolveFailureMessage: urlError.resolveFailureMessage,
         details: urlError.details,
         resolveArtifactHost: input.resolveArtifactHost,
+        timeoutMs: input.fetchTimeoutMs,
         allowedHosts: input.allowedHosts,
         ...(input.permittedHosts ? { permittedHosts: input.permittedHosts } : {})
       });
@@ -2032,6 +2136,7 @@ async function collectRemoteTarballEvidence(input: {
         resolveFailureMessage: urlError.resolveFailureMessage,
         details: urlError.details,
         resolveArtifactHost: input.resolveArtifactHost,
+        timeoutMs: input.fetchTimeoutMs,
         allowedHosts: input.allowedHosts
       });
       if (!preflight.ok) {
@@ -2174,6 +2279,7 @@ async function readRemoteArtifactBytes(input: {
     resolveFailureMessage: input.resolveFailureMessage,
     details: input.details,
     resolveArtifactHost: input.resolveArtifactHost,
+    timeoutMs: input.fetchTimeoutMs,
     allowedHosts: input.allowedHosts,
     ...(input.permittedHosts ? { permittedHosts: input.permittedHosts } : {})
   });
@@ -2976,6 +3082,7 @@ async function preflightRemoteArtifactFetchTarget(input: {
   resolveFailureMessage: string;
   details: Record<string, unknown>;
   resolveArtifactHost: ArtifactHostResolver | undefined;
+  timeoutMs?: number;
   allowedHosts?: ReadonlySet<string>;
   permittedHosts?: ReadonlySet<string>;
 }): Promise<Result<void, OhriskError>> {
@@ -3009,7 +3116,11 @@ async function preflightRemoteArtifactFetchTarget(input: {
 
   let resolutions: ArtifactHostResolution[];
   try {
-    resolutions = await input.resolveArtifactHost(artifactHost);
+    resolutions = await resolveArtifactHostWithTimeout({
+      resolveArtifactHost: input.resolveArtifactHost,
+      artifactHost,
+      timeoutMs: input.timeoutMs
+    });
   } catch (cause) {
     return err(
       createError({
@@ -3064,6 +3175,34 @@ async function preflightRemoteArtifactFetchTarget(input: {
   }
 
   return ok(undefined);
+}
+
+async function resolveArtifactHostWithTimeout(input: {
+  resolveArtifactHost: ArtifactHostResolver;
+  artifactHost: string;
+  timeoutMs?: number;
+}): Promise<ArtifactHostResolution[]> {
+  if (input.timeoutMs === undefined) {
+    return input.resolveArtifactHost(input.artifactHost);
+  }
+
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      input.resolveArtifactHost(input.artifactHost),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(
+            `Artifact host resolution timed out after ${input.timeoutMs}ms.`
+          ));
+        }, input.timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 }
 
 function parseHttpUrl(value: string): URL | undefined {

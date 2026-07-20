@@ -21,10 +21,17 @@ export type EcosystemAdapter = {
   lockfileKinds: readonly SupportedLockfileKind[];
   packageEcosystems: readonly PackageEcosystem[];
   discover: (project: ProjectInput) => ProjectLockfile[];
-  parse: (project: ProjectInput) => Result<DependencyGraph, OhriskError>;
+  parse: (
+    project: ProjectInput,
+    context?: EcosystemParseContext
+  ) => Result<DependencyGraph, OhriskError>;
   collectEvidence: (
     input: EcosystemEvidenceInput
   ) => Result<LicenseEvidence, OhriskError> | undefined;
+};
+
+export type EcosystemParseContext = {
+  scanRootDir: string;
 };
 
 const DEFAULT_ADAPTERS: readonly EcosystemAdapter[] = [
@@ -172,7 +179,7 @@ export function parseProjectDependencyGraph(
   const parsedGraphs: SourcedDependencyGraph[] = [];
 
   for (const lockfile of discoverProjectLockfiles(project)) {
-    const parsed = parseSingleLockfile(lockfile);
+    const parsed = parseSingleLockfile(lockfile, project.rootDir);
     if (isErr(parsed)) {
       return parsed;
     }
@@ -194,7 +201,8 @@ export function parseProjectDependencyGraph(
 }
 
 function parseSingleLockfile(
-  lockfile: ProjectLockfile
+  lockfile: ProjectLockfile,
+  scanRootDir: string
 ): Result<DependencyGraph, OhriskError> {
   const ecosystemAdapter = ecosystemAdapterForLockfile(lockfile.kind);
   if (!ecosystemAdapter) {
@@ -211,10 +219,13 @@ function parseSingleLockfile(
     );
   }
 
-  return ecosystemAdapter.parse({
-    rootDir: projectRootForLockfile(lockfile),
-    lockfile
-  });
+  return ecosystemAdapter.parse(
+    {
+      rootDir: projectRootForLockfile(lockfile),
+      lockfile
+    },
+    { scanRootDir }
+  );
 }
 
 function adapter(
@@ -231,7 +242,9 @@ function adapter(
     packageEcosystems,
     discover: (project) => projectLockfiles(project)
       .filter((lockfile) => lockfileKindSet.has(lockfile.kind)),
-    parse: parseProjectLockfile,
+    parse: (project, context) => parseProjectLockfile(project, {
+      pythonLocalSourceRootDir: context?.scanRootDir
+    }),
     collectEvidence: (input) => packageEcosystemSet.has(input.node.ecosystem)
       ? collectEcosystemEvidence(input)
       : undefined

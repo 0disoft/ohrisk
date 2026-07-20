@@ -366,6 +366,63 @@ describe("parsePnpmLockfile", () => {
     expect(result.error.category).toBe("unsupported_input");
   });
 
+  test("bounds dependency paths across large pnpm workspaces", () => {
+    const importerLines: string[] = [];
+    const packageLines = [
+      "  /shared-child@1.0.0: {}",
+      "  /shared-leaf@1.0.0: {}"
+    ];
+    const snapshotLines = [
+      "  /shared-child@1.0.0:",
+      "    dependencies:",
+      "      shared-leaf: 1.0.0",
+      "  /shared-leaf@1.0.0: {}"
+    ];
+    for (let index = 0; index < 65; index += 1) {
+      importerLines.push(
+        `  packages/workspace-${index}:`,
+        "    dependencies:",
+        `      parent-${index}:`,
+        "        specifier: 1.0.0",
+        "        version: 1.0.0"
+      );
+      packageLines.push(`  /parent-${index}@1.0.0: {}`);
+      snapshotLines.push(
+        `  /parent-${index}@1.0.0:`,
+        "    dependencies:",
+        "      shared-child: 1.0.0"
+      );
+    }
+
+    const result = parsePnpmLockText([
+      "lockfileVersion: '9.0'",
+      "importers:",
+      ...importerLines,
+      "packages:",
+      ...packageLines,
+      "snapshots:",
+      ...snapshotLines
+    ].join("\n"), "wide-workspace-pnpm-lock.yaml");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "shared-child@1.0.0")?.paths)
+      .toHaveLength(64);
+    expect(result.value.nodes.find((node) => node.id === "shared-leaf@1.0.0")?.paths)
+      .toHaveLength(64);
+    expect(result.value.diagnostics).toEqual([
+      {
+        code: "dependency_paths_truncated",
+        affectedNodeCount: 1,
+        limit: 64,
+        message: "pnpm dependency paths were limited to 64 paths per package."
+      }
+    ]);
+  });
+
   test("keeps nested optional and peer dependency edges from snapshots", () => {
     const result = parsePnpmLockText(
       [

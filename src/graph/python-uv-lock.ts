@@ -68,7 +68,7 @@ const UV_MAX_PATHS_PER_PACKAGE = 64;
 
 export function parseUvLockfile(
   lockfilePath: string,
-  options: { maxBytes?: number } = {}
+  options: { maxBytes?: number; localSourceRootDir?: string } = {}
 ): Result<DependencyGraph, OhriskError> {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -93,7 +93,7 @@ export function parseUvLockfile(
 
   return parseUvLockText(lockfileText.value, lockfilePath, {
     readLocalSourceFile: createDiskPythonLocalSourceFileReader({
-      rootDir: path.dirname(lockfilePath),
+      rootDir: options.localSourceRootDir ?? path.dirname(lockfilePath),
       maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES,
       errors: UV_LOCK_LOCAL_SOURCE_ERRORS
     })

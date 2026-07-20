@@ -6,6 +6,11 @@ digest, byte size, access timestamps, expiration metadata, and optional HTTP
 validators. Raw URLs, credentials, authorization headers, and token values are
 not written to the cache index.
 
+Automatic LRU maintenance runs once after evidence collection instead of after
+every cache write. A cross-process maintenance lock and short cooldown coalesce
+simultaneous scans, while the same 2 GiB default limit, ownership marker, and
+content-addressed integrity checks remain in force.
+
 ## Cache location
 
 The cache used by scans and cache-management commands is selected in this

@@ -24,6 +24,7 @@ describe("parseCargoLockText", () => {
       "name = \"regex\"",
       "version = \"1.10.4\"",
       "source = \"registry+https://github.com/rust-lang/crates.io-index\"",
+      "checksum = \"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\"",
       "dependencies = [",
       " \"aho-corasick 1.1.3\",",
       "]"
@@ -58,6 +59,7 @@ describe("parseCargoLockText", () => {
     expect(result.value.nodes.find((node) => node.id === "regex@1.10.4"))
       .toMatchObject({
         ecosystem: "cargo",
+        integrity: "sha256-AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
         dependencyType: "production",
         direct: true,
         paths: [["fixture-rust", "regex@1.10.4"]]

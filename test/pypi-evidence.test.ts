@@ -409,7 +409,9 @@ describe("PyPI release evidence", () => {
       packageId: "example-pkg@1.2.3",
       files: [],
       source: "unavailable",
-      warnings: ["Remote package evidence is not configured for the cargo ecosystem."]
+      warnings: [
+        "Cargo Git, path, and non-crates.io registry sources are not fetched during a remote repository scan."
+      ]
     }]);
   });
 });

@@ -16,6 +16,7 @@ import { createZip } from "./helpers/zip";
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 const packageVersion = readPackageVersion();
+const cargoFixtureChecksum = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 
 function readPackageVersion(): string {
   const packageJson = JSON.parse(
@@ -1346,7 +1347,8 @@ describe("main", () => {
           "[[package]]",
           "name = \"risk-crate\"",
           "version = \"1.0.0\"",
-          "source = \"registry+https://github.com/rust-lang/crates.io-index\""
+          "source = \"registry+https://github.com/rust-lang/crates.io-index\"",
+          `checksum = "${cargoFixtureChecksum}"`
         ].join("\n"),
         "utf8"
       );
@@ -1358,6 +1360,11 @@ describe("main", () => {
           "version = \"1.0.0\"",
           "license = \"AGPL-3.0-only\""
         ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(crateDir, ".cargo-checksum.json"),
+        JSON.stringify({ package: cargoFixtureChecksum, files: {} }),
         "utf8"
       );
 
@@ -1442,7 +1449,8 @@ describe("main", () => {
           "[[package]]",
           "name = \"risk-crate\"",
           "version = \"1.0.0\"",
-          "source = \"registry+https://github.com/rust-lang/crates.io-index\""
+          "source = \"registry+https://github.com/rust-lang/crates.io-index\"",
+          `checksum = "${cargoFixtureChecksum}"`
         ].join("\n"),
         "utf8"
       );
@@ -1454,6 +1462,11 @@ describe("main", () => {
           "version = \"1.0.0\"",
           "license = \"AGPL-3.0-only\""
         ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(crateDir, ".cargo-checksum.json"),
+        JSON.stringify({ package: cargoFixtureChecksum, files: {} }),
         "utf8"
       );
 

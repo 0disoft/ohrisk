@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import {
   lstatSync,
   mkdtempSync,
@@ -55,7 +55,8 @@ const REPOSITORY_PATTERN = /^(?![.-])[A-Za-z0-9._-]{1,100}(?<!\.)$/;
 const CLONE_TIMEOUT_MS = 120_000;
 const TREE_INSPECTION_TIMEOUT_MS = 30_000;
 const CHECKOUT_TIMEOUT_MS = 180_000;
-const MAX_TREE_ENTRIES = 50_000;
+const PROCESS_TREE_TERMINATION_GRACE_MS = 5_000;
+const MAX_TREE_ENTRIES = 100_000;
 const MAX_TREE_BYTES = 640 * 1024 * 1024;
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const MAX_STAGING_BYTES = 1024 * 1024 * 1024;
@@ -606,20 +607,33 @@ async function runGit(input: {
     const child = spawn("git", input.args, {
       cwd: input.cwd,
       env: gitEnvironment(),
+      detached: process.platform !== "win32",
       shell: false,
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"]
     });
+    let terminationDeadline: ReturnType<typeof setTimeout> | undefined;
 
     const finish = (result: GitRunResult): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
       if (sizeMonitor) clearInterval(sizeMonitor);
+      if (terminationDeadline) clearTimeout(terminationDeadline);
       resolve(result);
     };
     const stop = (): void => {
-      child.kill();
+      terminateGitProcessTree(child);
+      if (!terminationDeadline) {
+        terminationDeadline = setTimeout(() => finish({
+          exitCode: null,
+          stdout: Buffer.concat(stdout),
+          stderr: Buffer.concat(stderr).toString("utf8"),
+          timedOut,
+          sizeLimitExceeded,
+          outputLimitExceeded
+        }), PROCESS_TREE_TERMINATION_GRACE_MS);
+      }
     };
     const timeout = setTimeout(() => {
       timedOut = true;
@@ -666,6 +680,40 @@ async function runGit(input: {
       outputLimitExceeded
     }));
   });
+}
+
+function terminateGitProcessTree(child: ChildProcess): void {
+  const pid = child.pid;
+  if (pid === undefined) {
+    child.kill("SIGKILL");
+    return;
+  }
+
+  if (process.platform === "win32") {
+    const terminator = spawn("taskkill.exe", windowsProcessTreeKillArguments(pid), {
+      shell: false,
+      stdio: "ignore",
+      windowsHide: true
+    });
+    terminator.once("error", () => {
+      child.kill("SIGKILL");
+    });
+    terminator.unref();
+    return;
+  }
+
+  try {
+    process.kill(-pid, "SIGKILL");
+  } catch {
+    child.kill("SIGKILL");
+  }
+}
+
+export function windowsProcessTreeKillArguments(pid: number): string[] {
+  if (!Number.isSafeInteger(pid) || pid <= 0) {
+    throw new Error("Process tree termination requires a positive integer PID.");
+  }
+  return ["/PID", String(pid), "/T", "/F"];
 }
 
 function directorySize(root: string, stopAfter: number): number {

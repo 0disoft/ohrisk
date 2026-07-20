@@ -31,16 +31,22 @@ Remote fetching is limited to these explicit adapters:
 - exact Go module ZIPs from the fixed public `proxy.golang.org` endpoint when
   `go.sum` supplies the module ZIP's exact `h1` checksum; only root license
   files from the checksum-verified archive are evidence.
+- exact crates.io `.crate` archives from the fixed public `static.crates.io`
+  endpoint when `Cargo.lock` supplies the crate SHA-256 checksum; Cargo.toml
+  identity and package-root license files are trusted only after the complete
+  archive checksum matches.
 
 The repository adapter accepts only `github.com` owner/repository URLs, disables
 credential prompts, submodule fetching, and symlink checkout, rejects non-portable or
 oversized trees before checkout, caps temporary storage, applies a two-minute
 clone budget, a 30-second tree-inspection budget, and a three-minute checkout
-budget, and removes its owned staging directory. It does not accept private
+budget, terminates the complete Git process tree when a deadline expires, and
+returns after a bounded termination grace period. It removes its owned staging
+directory and does not accept private
 repository credentials or arbitrary Git hosts. The host invocation directory,
 not the clone, owns policy, waivers, cache, and report output.
 
-The declared tree is capped at 50,000 entries, 100 MiB per blob, and 640 MiB in
+The declared tree is capped at 100,000 entries, 100 MiB per blob, and 640 MiB in
 aggregate. The complete temporary clone, packfiles, index, pathspec, and checkout
 remain subject to the independent 1 GiB staging ceiling.
 Clone transfer is monitored while Git writes unknown pack data. After tree
@@ -222,8 +228,10 @@ commands are defined in `docs/cache-and-registries.md`.
 
 Remote fetches have a bounded per-request timeout, response byte limits, archive
 decompression limits, archive entry limits, and evidence-worker concurrency.
-The CLI exposes bounded `--timeout` and `--jobs` values; policy cannot expand
-hard safety ceilings.
+The timeout also bounds initial DNS and SSRF preflight resolution, so a stalled
+resolver becomes unavailable evidence for one package instead of permanently
+consuming an evidence worker. The CLI exposes bounded `--timeout` and `--jobs`
+values; policy cannot expand hard safety ceilings.
 
 When a remote package artifact has supported lockfile integrity metadata, or an
 exact PyPI release response supplies its SHA-256 digest, Ohrisk verifies the

@@ -10,7 +10,8 @@ import {
   parseGitHubRepositoryUrl,
   removeMaterializedSymbolicLinks,
   treeArguments,
-  validateGitTree
+  validateGitTree,
+  windowsProcessTreeKillArguments
 } from "../src/repository/github-repository";
 
 const OBJECT_ID = "0123456789abcdef0123456789abcdef01234567";
@@ -80,6 +81,12 @@ describe("GitHub repository input", () => {
       ":(top,exclude,literal)fixtures/aux.hcl",
       ""
     ].join("\0"));
+  });
+
+  test("builds exact Windows process-tree termination arguments", () => {
+    expect(windowsProcessTreeKillArguments(42)).toEqual(["/PID", "42", "/T", "/F"]);
+    expect(() => windowsProcessTreeKillArguments(0)).toThrow();
+    expect(() => windowsProcessTreeKillArguments(1.5)).toThrow();
   });
 
   test("accepts a bounded portable regular-file tree", () => {
@@ -293,6 +300,29 @@ describe("GitHub repository input", () => {
     expect(overLimit.error.code).toBe("REPOSITORY_LIMIT_EXCEEDED");
     expect(overLimit.error.details?.reason).toBe("total_file_size");
     expect(overLimit.error.details?.limit).toBe(640 * 1024 * 1024);
+  });
+
+  test("accepts 100,000 repository entries and rejects the next entry", () => {
+    const atLimit = validateGitTree(treeBuffer(
+      Array.from({ length: 100_000 }, (_, index) =>
+        treeEntry("100644", "blob", 0, `files/file-${index}.txt`)
+      )
+    ));
+    expect(atLimit.ok).toBe(true);
+
+    const overLimit = validateGitTree(treeBuffer(
+      Array.from({ length: 100_001 }, (_, index) =>
+        treeEntry("100644", "blob", 0, `files/file-${index}.txt`)
+      )
+    ));
+    expect(overLimit.ok).toBe(false);
+    if (overLimit.ok) throw new Error("Expected the repository entry count to fail.");
+    expect(overLimit.error.code).toBe("REPOSITORY_LIMIT_EXCEEDED");
+    expect(overLimit.error.details).toMatchObject({
+      reason: "entry_count",
+      actual: 100_001,
+      limit: 100_000
+    });
   });
 });
 

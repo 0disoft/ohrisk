@@ -3957,6 +3957,60 @@ describe("collectGraphEvidence", () => {
     ]);
   });
 
+  test("times out stalled artifact host resolution before fetching", async () => {
+    let fetchCount = 0;
+    const evidenceOrTimeout = await Promise.race([
+      collectGraphEvidence({
+        graph: {
+          lockfilePath: "bun.lock",
+          nodes: [
+            {
+              id: "stalled-resolution@1.0.0",
+              name: "stalled-resolution",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved: "https://registry.example.test/stalled-resolution/-/stalled-resolution-1.0.0.tgz",
+              integrity: integrityFor(Buffer.from("stalled resolution")),
+              dependencyType: "production",
+              direct: true,
+              paths: [["root", "stalled-resolution@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot: bunProjectDir,
+        fetchTimeoutMs: 1,
+        resolveArtifactHost: async () => await new Promise<never>(() => {}),
+        fetchArtifact: async () => {
+          fetchCount += 1;
+          throw new Error("Fetch must not start before host resolution succeeds.");
+        }
+      }),
+      new Promise<"test-timeout">((resolve) => {
+        setTimeout(() => resolve("test-timeout"), 250);
+      })
+    ]);
+
+    expect(evidenceOrTimeout).not.toBe("test-timeout");
+    if (evidenceOrTimeout === "test-timeout") {
+      throw new Error("Artifact host resolution did not honor fetchTimeoutMs.");
+    }
+    expect(evidenceOrTimeout.ok).toBe(true);
+    if (!evidenceOrTimeout.ok) {
+      throw new Error(evidenceOrTimeout.error.message);
+    }
+    expect(fetchCount).toBe(0);
+    expect(evidenceOrTimeout.value).toEqual([
+      {
+        packageId: "stalled-resolution@1.0.0",
+        files: [],
+        source: "unavailable",
+        warnings: [
+          "Package evidence could not be fetched (TARBALL_FETCH_FAILED): Failed to resolve package tarball host."
+        ]
+      }
+    ]);
+  });
+
   test("times out stalled remote tarball body reads", async () => {
     let fetchSignal: AbortSignal | undefined;
     let bodyCancelled = false;

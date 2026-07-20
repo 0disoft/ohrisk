@@ -122,7 +122,14 @@ export type LockfileTextParseInput = {
   mavenProjectPomReader?: MavenProjectPomReader;
 };
 
-export function parseProjectLockfile(project: ProjectInput): Result<DependencyGraph, OhriskError> {
+export type ProjectLockfileParseOptions = {
+  pythonLocalSourceRootDir?: string;
+};
+
+export function parseProjectLockfile(
+  project: ProjectInput,
+  options: ProjectLockfileParseOptions = {}
+): Result<DependencyGraph, OhriskError> {
   switch (project.lockfile.kind) {
     case "bun":
       return parseBunLockfile(project.lockfile.path);
@@ -150,7 +157,9 @@ export function parseProjectLockfile(project: ProjectInput): Result<DependencyGr
     case "requirements-txt":
       return parseRequirementsFile(project.lockfile.path);
     case "uv-lock":
-      return parseUvLockfile(project.lockfile.path);
+      return parseUvLockfile(project.lockfile.path, omitUndefined({
+        localSourceRootDir: options.pythonLocalSourceRootDir
+      }));
     case "pylock":
       return parsePylockFile(project.lockfile.path);
     case "gradle-lock":
