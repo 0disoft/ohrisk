@@ -154,6 +154,8 @@ const MAVEN_JAR_MAX_BYTES = 32 * 1024 * 1024;
 const MAVEN_CHECKSUM_MAX_BYTES = 256;
 const GO_MODULE_PROXY_BASE_URL = "https://proxy.golang.org";
 const GO_MODULE_PROXY_HOSTS = new Set(["proxy.golang.org", "storage.googleapis.com"]);
+const GO_MODULE_TRANSIENT_FETCH_ATTEMPTS = 2;
+const GO_MODULE_TRANSIENT_RETRY_DELAY_MS = 200;
 const ARTIFACT_HOST_RESOLUTION_CACHE_TTL_MS = 60_000;
 const ARTIFACT_HOST_RESOLUTION_CACHE_MAX_ENTRIES = 256;
 
@@ -712,7 +714,9 @@ async function collectRemoteGoModuleEvidence(input: {
     artifactCache: input.artifactCache,
     allowedHosts: input.allowedHosts,
     permittedHosts: GO_MODULE_PROXY_HOSTS,
-    urlDetailKey: "resolved"
+    urlDetailKey: "resolved",
+    transientFetchAttempts: GO_MODULE_TRANSIENT_FETCH_ATTEMPTS,
+    transientRetryDelayMs: GO_MODULE_TRANSIENT_RETRY_DELAY_MS
   });
   if (!zip.ok) {
     return zip;
@@ -2128,6 +2132,8 @@ async function readRemoteArtifactBytes(input: {
   allowedHosts: ReadonlySet<string>;
   permittedHosts?: ReadonlySet<string>;
   urlDetailKey: "registryUrl" | "resolved";
+  transientFetchAttempts?: number;
+  transientRetryDelayMs?: number;
 }): Promise<Result<Buffer, OhriskError>> {
   const urlValidation = validateRemoteArtifactUrl({
     code: input.code,
@@ -2175,37 +2181,62 @@ async function readRemoteArtifactBytes(input: {
     return err(preflight.error);
   }
 
-  const artifact = await readArtifactWithTimeout<RemoteArtifactRead>({
-    fetchArtifact: input.fetchArtifact,
-    url: input.url,
-    requestHeaders: conditionalArtifactRequestHeaders(cached),
-    timeoutMs: input.fetchTimeoutMs,
-    redirectPolicy: {
-      code: input.code,
-      packageId: input.packageId,
-      message: input.blockedMessage,
-      resolveFailureMessage: input.resolveFailureMessage,
-      details: input.details,
-      resolveArtifactHost: input.resolveArtifactHost,
-      allowedHosts: input.allowedHosts,
-      ...(input.permittedHosts ? { permittedHosts: input.permittedHosts } : {})
-    },
-    createFailureError: (cause) => createRemoteArtifactExceptionError({
-      code: input.code,
-      message: input.fetchFailureMessage,
-      blockedMessage: input.blockedMessage,
-      details: {
+  const artifact = await readTransientRemoteArtifactWithRetry({
+    attempts: input.transientFetchAttempts ?? 1,
+    retryDelayMs: input.transientRetryDelayMs ?? 0,
+    read: () => readArtifactWithTimeout<RemoteArtifactRead>({
+      fetchArtifact: input.fetchArtifact,
+      url: input.url,
+      requestHeaders: conditionalArtifactRequestHeaders(cached),
+      timeoutMs: input.fetchTimeoutMs,
+      redirectPolicy: {
+        code: input.code,
         packageId: input.packageId,
-        [input.urlDetailKey]: safeUrlForErrorDetails(input.url),
-        ...input.details
+        message: input.blockedMessage,
+        resolveFailureMessage: input.resolveFailureMessage,
+        details: input.details,
+        resolveArtifactHost: input.resolveArtifactHost,
+        allowedHosts: input.allowedHosts,
+        ...(input.permittedHosts ? { permittedHosts: input.permittedHosts } : {})
       },
-      cause
-    }),
-    readResponse: async (response, signal) => {
-      const cacheMetadata = artifactCacheMetadataFromHeaders(response.headers);
-      if (response.status === 304) {
-        cancelReadableBody(response.body);
-        if (!cached) {
+      createFailureError: (cause) => createRemoteArtifactExceptionError({
+        code: input.code,
+        message: input.fetchFailureMessage,
+        blockedMessage: input.blockedMessage,
+        details: {
+          packageId: input.packageId,
+          [input.urlDetailKey]: safeUrlForErrorDetails(input.url),
+          ...input.details
+        },
+        cause
+      }),
+      readResponse: async (response, signal) => {
+        const cacheMetadata = artifactCacheMetadataFromHeaders(response.headers);
+        if (response.status === 304) {
+          cancelReadableBody(response.body);
+          if (!cached) {
+            return err(createError({
+              code: input.code,
+              category: "network",
+              message: input.fetchFailureMessage,
+              details: {
+                packageId: input.packageId,
+                [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url),
+                status: response.status,
+                statusText: response.statusText,
+                reason: "not_modified_without_cache_entry"
+              }
+            }));
+          }
+          return ok({
+            bytes: cached.bytes,
+            cacheMetadata,
+            notModified: true
+          });
+        }
+
+        if (!response.ok) {
+          cancelReadableBody(response.body);
           return err(createError({
             code: input.code,
             category: "network",
@@ -2214,61 +2245,40 @@ async function readRemoteArtifactBytes(input: {
               packageId: input.packageId,
               [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url),
               status: response.status,
-              statusText: response.statusText,
-              reason: "not_modified_without_cache_entry"
+              statusText: response.statusText
             }
           }));
         }
-        return ok({
-          bytes: cached.bytes,
-          cacheMetadata,
-          notModified: true
+
+        const bytes = await readResponseBodyWithLimit({
+          response,
+          signal,
+          maxBytes: input.maxBytes,
+          createTooLargeError: (limit) => createError({
+            code: input.code,
+            category: "unsupported_input",
+            message: input.tooLargeMessage,
+            details: {
+              packageId: input.packageId,
+              [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url),
+              ...artifactBodyLimitDetails(limit)
+            }
+          }),
+          createUnreadableBodyError: () => createError({
+            code: input.code,
+            category: "unsupported_input",
+            message: input.unreadableMessage,
+            details: {
+              packageId: input.packageId,
+              [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url)
+            }
+          })
         });
+        return bytes.ok
+          ? ok({ bytes: bytes.value, cacheMetadata, notModified: false })
+          : bytes;
       }
-
-      if (!response.ok) {
-        cancelReadableBody(response.body);
-        return err(createError({
-          code: input.code,
-          category: "network",
-          message: input.fetchFailureMessage,
-          details: {
-            packageId: input.packageId,
-            [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url),
-            status: response.status,
-            statusText: response.statusText
-          }
-        }));
-      }
-
-      const bytes = await readResponseBodyWithLimit({
-        response,
-        signal,
-        maxBytes: input.maxBytes,
-        createTooLargeError: (limit) => createError({
-          code: input.code,
-          category: "unsupported_input",
-          message: input.tooLargeMessage,
-          details: {
-            packageId: input.packageId,
-            [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url),
-            ...artifactBodyLimitDetails(limit)
-          }
-        }),
-        createUnreadableBodyError: () => createError({
-          code: input.code,
-          category: "unsupported_input",
-          message: input.unreadableMessage,
-          details: {
-            packageId: input.packageId,
-            [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url)
-          }
-        })
-      });
-      return bytes.ok
-        ? ok({ bytes: bytes.value, cacheMetadata, notModified: false })
-        : bytes;
-    }
+    })
   });
   if (!artifact.ok) {
     return artifact;
@@ -2290,6 +2300,43 @@ async function readRemoteArtifactBytes(input: {
     input.artifactCache?.remove(input.url);
   }
   return ok(artifact.value.bytes);
+}
+
+async function readTransientRemoteArtifactWithRetry<T>(input: {
+  attempts: number;
+  retryDelayMs: number;
+  read: () => Promise<Result<T, OhriskError>>;
+}): Promise<Result<T, OhriskError>> {
+  const attempts = Math.max(1, Math.trunc(input.attempts));
+  let result = await input.read();
+  for (let attempt = 1; attempt < attempts && !result.ok; attempt += 1) {
+    if (!isRetryableTransientRemoteError(result.error)) {
+      return result;
+    }
+    if (input.retryDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, input.retryDelayMs));
+    }
+    result = await input.read();
+  }
+  return result;
+}
+
+function isRetryableTransientRemoteError(error: OhriskError): boolean {
+  if (error.category !== "network") {
+    return false;
+  }
+  const status = error.details?.status;
+  if (typeof status === "number") {
+    return status === 408
+      || status === 425
+      || status === 429
+      || status === 500
+      || status === 502
+      || status === 503
+      || status === 504;
+  }
+  const cause = error.details?.cause;
+  return typeof cause !== "string" || !cause.toLowerCase().includes("timed out");
 }
 
 function isPackageTarballTooLargeError(error: OhriskError): boolean {

@@ -150,6 +150,91 @@ describe("remote Go module evidence", () => {
     expect(evidence.value[0]).toMatchObject({ source: "tarball", warnings: [] });
   });
 
+  test("retries one transient Go proxy response and keeps the verified result", async () => {
+    const files = goModuleFiles("example.com/retry", "v1.0.0", {
+      LICENSE: "MIT License\n"
+    });
+    const zip = createZip(files);
+    let fetchCount = 0;
+    const evidence = await collectGraphEvidence({
+      graph: goModuleGraph("example.com/retry", "v1.0.0", goH1(files)),
+      projectRoot: ".",
+      allowLocalProjectEvidence: false,
+      resolveArtifactHost: async () => [{ address: "1.1.1.1", family: 4 }],
+      fetchArtifact: async (url) => {
+        fetchCount += 1;
+        return fetchCount === 1
+          ? {
+              ok: false,
+              status: 503,
+              statusText: "Service Unavailable",
+              url,
+              headers: { get: () => null },
+              arrayBuffer: async () => new ArrayBuffer(0)
+            }
+          : artifactResponse(zip, url);
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+    expect(fetchCount).toBe(2);
+    expect(evidence.value[0]).toMatchObject({ source: "tarball", warnings: [] });
+  });
+
+  test("does not retry permanent Go proxy responses", async () => {
+    const checksum = `h1:${"A".repeat(43)}=`;
+    let fetchCount = 0;
+    const evidence = await collectGraphEvidence({
+      graph: goModuleGraph("example.com/missing", "v1.0.0", checksum),
+      projectRoot: ".",
+      allowLocalProjectEvidence: false,
+      resolveArtifactHost: async () => [{ address: "1.1.1.1", family: 4 }],
+      fetchArtifact: async (url) => {
+        fetchCount += 1;
+        return {
+          ok: false,
+          status: 404,
+          statusText: "Not Found",
+          url,
+          headers: { get: () => null },
+          arrayBuffer: async () => new ArrayBuffer(0)
+        };
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+    expect(fetchCount).toBe(1);
+    expect(evidence.value[0]).toMatchObject({ source: "unavailable" });
+  });
+
+  test("does not multiply a full Go proxy timeout", async () => {
+    let fetchCount = 0;
+    const evidence = await collectGraphEvidence({
+      graph: goModuleGraph("example.com/stalled", "v1.0.0", `h1:${"A".repeat(43)}=`),
+      projectRoot: ".",
+      allowLocalProjectEvidence: false,
+      fetchTimeoutMs: 1,
+      resolveArtifactHost: async () => [{ address: "1.1.1.1", family: 4 }],
+      fetchArtifact: async () => {
+        fetchCount += 1;
+        return await new Promise<never>(() => {});
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+    expect(fetchCount).toBe(1);
+    expect(evidence.value[0]).toMatchObject({ source: "unavailable" });
+  });
+
   test("does not fetch Go modules without zip checksums or with local replacements", async () => {
     let fetchCount = 0;
     const evidence = await collectGraphEvidence({
@@ -210,6 +295,23 @@ function goModuleFiles(
     `${root}/${name}`,
     contents
   ]));
+}
+
+function goModuleGraph(modulePath: string, version: string, integrity: string) {
+  const id = `${modulePath}@${version}`;
+  return {
+    lockfilePath: "go.mod",
+    nodes: [{
+      id,
+      name: modulePath,
+      version,
+      ecosystem: "go" as const,
+      integrity,
+      dependencyType: "production" as const,
+      direct: true,
+      paths: [["root", id]]
+    }]
+  };
 }
 
 function goH1(files: Record<string, string>): string {

@@ -205,6 +205,13 @@ conditional revalidation, offline stale-entry behavior, size ceiling, and LRU
 control as other remote artifacts. Offline cache misses remain unavailable and
 never trigger DNS or HTTP work.
 
+The fixed Go proxy adapter retries one short-lived failure after a bounded
+200-millisecond delay. Retryable responses are limited to HTTP 408, 425, 429,
+500, 502, 503, and 504 plus non-timeout network exceptions. Permanent HTTP
+responses, full request timeouts, blocked targets, malformed archives, and
+integrity failures are not retried. A successful retry is written to the normal
+artifact cache; failures are not persisted as negative cache entries.
+
 `--offline` performs no DNS lookup or network request. It may use a valid stale
 entry because revalidation is impossible by definition, but a missing,
 corrupt, or oversized entry is reported as unavailable evidence instead of

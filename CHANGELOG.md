@@ -2,6 +2,10 @@
 
 ## 1.11.0 - 2026-07-20
 
+- Go module ZIP fetching now retries one narrowly classified transient response
+  or non-timeout network failure. Permanent responses, full timeouts, security
+  rejections, and integrity failures are never retried, while a recovered
+  artifact enters the existing verified cache.
 - Added checksum-verified Go module ZIP license evidence through the fixed
   public Go proxy. Ohrisk now requires the exact `go.sum` `h1` checksum,
   validates the complete module ZIP and requested module/version root, and
