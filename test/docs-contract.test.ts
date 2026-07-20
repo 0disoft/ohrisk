@@ -116,14 +116,19 @@ describe("documentation contract", () => {
 
     expect(commandContract).toContain("## Remote Repository Input");
     expect(commandContract).toContain("https://github.com/<owner>/<repository>[.git]");
-    expect(commandContract).toContain("50,000 regular files");
+    expect(commandContract).toContain("50,000 entries");
     expect(commandContract).toContain("512 MiB");
-    expect(commandContract).toContain("exactly one nested project root");
-    expect(normalizedCommandContract).toContain("requires `--lockfile <repository-relative-path>` instead of guessing");
+    expect(commandContract).toContain("Symbolic-link entries are never followed");
+    expect(normalizedCommandContract).toContain("A symbolic link cannot supply a lockfile or manifest");
+    expect(normalizedCommandContract).toContain("no dependency project was detected");
+    expect(normalizedCommandContract).toContain("merges every supported input across multiple nested project roots");
+    expect(normalizedCommandContract).toContain("limited to 64 project roots and 128 dependency inputs");
     expect(commandContract).toContain("not supported by `ci`, `diff`, or the GitHub Action");
     expect(remoteBoundary).toContain("public GitHub HTTPS repository input");
-    expect(normalizedRemoteBoundary).toContain("One nested dependency project is selected automatically");
+    expect(normalizedRemoteBoundary).toContain("multiple nested project roots are merged into one repository-wide graph");
     expect(remoteBoundary).toContain("not the clone, owns policy, waivers, cache, and report output");
+    expect(remoteBoundary).toContain("Symbolic-link blobs are also skipped");
+    expect(normalizedRemoteBoundary).toContain("cannot act as a dependency manifest or lockfile");
     expect(remoteBoundary).toContain("https://repo.maven.apache.org/maven2/");
     expect(remoteBoundary).toContain("eight inherited parent levels");
     expect(remoteBoundary).toContain("exact host is explicitly allowed by policy or `--allow-host`");

@@ -72,8 +72,12 @@ export const KOREAN_TEXT: HtmlReportText = {
     evidence: (files, warnings) => `파일 ${files}개, 경고 ${warnings}개`,
     skippedSubmodules: (count, paths, pathsTruncated) =>
       `Git 서브모듈 ${count}개 제외됨 (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); 검사 범위가 불완전합니다.`,
-    skippedSubmoduleAction:
-      "이 보고서를 완전한 검사로 취급하기 전에 제외된 Git 서브모듈을 별도로 검사하세요.",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) =>
+      `심볼릭 링크 ${count}개를 대상을 따라가지 않고 제외함 (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); 검사 범위가 불완전합니다.`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) =>
+      `호환되지 않는 경로 ${count}개 제외됨 (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); 검사 범위가 불완전합니다.`,
+    incompleteRepositoryCoverageAction:
+      "이 보고서를 완전한 검사로 취급하기 전에 제외된 저장소 항목을 검토하고 누락된 의존성 입력을 별도로 검사하세요.",
     licenseConfidence: (high, medium, low) =>
       `높은 신뢰도 ${high}개, 중간 신뢰도 ${medium}개, 낮은 신뢰도 ${low}개`,
     licenseIssues: (missing, malformed) => `누락 ${missing}개, 형식 오류 ${malformed}개`,

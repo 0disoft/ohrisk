@@ -126,6 +126,63 @@ describe("parseCargoLockText", () => {
       });
   });
 
+  test("bounds dependency path fan-out while retaining every reachable crate", () => {
+    const layerCount = 10;
+    const packageRecords: string[] = [];
+    for (let layer = 0; layer < layerCount; layer += 1) {
+      for (const branch of ["a", "b"]) {
+        const dependencies = layer === layerCount - 1
+          ? ["leaf 1.0.0"]
+          : [`layer-${layer + 1}-a 1.0.0`, `layer-${layer + 1}-b 1.0.0`];
+        packageRecords.push(
+          "[[package]]",
+          `name = "layer-${layer}-${branch}"`,
+          "version = \"1.0.0\"",
+          "dependencies = [",
+          ...dependencies.map((dependency) => ` \"${dependency}\",`),
+          "]",
+          ""
+        );
+      }
+    }
+    packageRecords.push(
+      "[[package]]",
+      "name = \"leaf\"",
+      "version = \"1.0.0\""
+    );
+
+    const result = parseCargoLockText(
+      packageRecords.join("\n"),
+      "bounded-cargo/Cargo.lock",
+      {
+        manifestText: [
+          "[package]",
+          "name = \"bounded-cargo\"",
+          "version = \"0.1.0\"",
+          "",
+          "[dependencies]",
+          "layer-0-a = \"1\"",
+          "layer-0-b = \"1\""
+        ].join("\n")
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes).toHaveLength((layerCount * 2) + 1);
+    expect(result.value.nodes.find((node) => node.id === "leaf@1.0.0")?.paths)
+      .toHaveLength(64);
+    expect(result.value.diagnostics).toEqual([{
+      code: "dependency_paths_truncated",
+      affectedNodeCount: 7,
+      limit: 64,
+      message: "Cargo dependency paths were limited."
+    }]);
+  });
+
   test("uses Cargo workspace member manifests as dependency roots", () => {
     const cargoLock = [
       "[[package]]",

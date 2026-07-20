@@ -1388,7 +1388,7 @@ async function collectRemotePythonDistributionEvidence(input: {
       return err(verified.error);
     }
 
-    return collectPythonDistributionEvidence({
+    const collected = collectPythonDistributionEvidence({
       packageId: input.node.id,
       packageName: input.node.name,
       version: input.node.version,
@@ -1400,6 +1400,10 @@ async function collectRemotePythonDistributionEvidence(input: {
         : {}),
       ...(input.yanked !== undefined ? { yanked: input.yanked } : {})
     });
+    if (!collected.ok && collected.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
+      return ok(unavailableRemoteArchiveLimitEvidence(input.node.id, collected.error));
+    }
+    return collected;
   } catch (cause) {
     return err(createRemoteArtifactExceptionError({
       code: urlError.code,
@@ -2094,6 +2098,23 @@ function unavailableOversizedTarballEvidence(packageId: string): LicenseEvidence
     source: "unavailable",
     warnings: [
       "Package tarball evidence exceeded Ohrisk's size limit and was not scanned."
+    ]
+  };
+}
+
+function unavailableRemoteArchiveLimitEvidence(
+  packageId: string,
+  error: OhriskError
+): LicenseEvidence {
+  const limit = typeof error.details?.limit === "string"
+    ? ` (${error.details.limit})`
+    : "";
+  return {
+    packageId,
+    files: [],
+    source: "unavailable",
+    warnings: [
+      `Remote Python distribution exceeded Ohrisk's bounded archive inspection limit${limit}; its contents were not used as license evidence.`
     ]
   };
 }

@@ -122,7 +122,13 @@ export function renderSarifReport(input: ScanReportInput): string {
                   ohriskSubmoduleMode: input.repository.submodules.mode,
                   ohriskSkippedSubmoduleCount: input.repository.submodules.skippedCount,
                   ohriskSkippedSubmodulePaths: input.repository.submodules.skippedPaths,
-                  ohriskSubmodulePathsTruncated: input.repository.submodules.pathsTruncated
+                  ohriskSubmodulePathsTruncated: input.repository.submodules.pathsTruncated,
+                  ohriskSkippedSymbolicLinkCount: input.repository.symbolicLinks.skippedCount,
+                  ohriskSkippedSymbolicLinkPaths: input.repository.symbolicLinks.skippedPaths,
+                  ohriskSymbolicLinkPathsTruncated: input.repository.symbolicLinks.pathsTruncated,
+                  ohriskSkippedNonPortablePathCount: input.repository.nonPortablePaths.skippedCount,
+                  ohriskSkippedNonPortablePaths: input.repository.nonPortablePaths.skippedPaths,
+                  ohriskNonPortablePathsTruncated: input.repository.nonPortablePaths.pathsTruncated
                 }
               : {}),
             ...(input.project.source

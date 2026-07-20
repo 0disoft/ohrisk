@@ -88,7 +88,9 @@ export type HtmlReportText = {
     dependencies: (total: number, direct: number, transitive: number) => string;
     evidence: (files: number, warnings: number) => string;
     skippedSubmodules: (count: number, paths: string[], pathsTruncated: boolean) => string;
-    skippedSubmoduleAction: string;
+    skippedSymbolicLinks: (count: number, paths: string[], pathsTruncated: boolean) => string;
+    skippedNonPortablePaths: (count: number, paths: string[], pathsTruncated: boolean) => string;
+    incompleteRepositoryCoverageAction: string;
     licenseConfidence: (high: number, medium: number, low: number) => string;
     licenseIssues: (missing: number, malformed: number) => string;
     risks: (risks: RiskCounts) => string;

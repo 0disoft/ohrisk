@@ -72,6 +72,16 @@ export type RemoteRepositoryReportSource = {
     skippedPaths: string[];
     pathsTruncated: boolean;
   };
+  symbolicLinks: {
+    skippedCount: number;
+    skippedPaths: string[];
+    pathsTruncated: boolean;
+  };
+  nonPortablePaths: {
+    skippedCount: number;
+    skippedPaths: string[];
+    pathsTruncated: boolean;
+  };
 };
 
 export function renderScanReport(input: ScanReportInput): string {
@@ -1477,8 +1487,6 @@ function normalizeFindingSearchText(
   text: HtmlReportText
 ): string {
   return [
-    finding.id,
-    finding.fingerprint,
     finding.packageId,
     finding.severity,
     text.messages.severity(finding.severity),
@@ -1561,8 +1569,8 @@ function nextActionFor(
   findings: RiskFinding[],
   repository?: RemoteRepositoryReportSource
 ): string {
-  if (repository && repository.submodules.skippedCount > 0) {
-    return "Scan the skipped Git submodules separately before treating this report as complete.";
+  if (repository && hasIncompleteRepositoryCoverage(repository)) {
+    return "Review skipped repository entries and scan any omitted dependency inputs separately before treating this report as complete.";
   }
 
   if (findings.some((finding) => finding.recommendation === "replace")) {
@@ -1589,49 +1597,103 @@ function nextActionFor(
 }
 
 function localizedNextAction(input: ScanReportInput, text: HtmlReportText): string {
-  return input.repository && input.repository.submodules.skippedCount > 0
-    ? text.messages.skippedSubmoduleAction
+  return input.repository && hasIncompleteRepositoryCoverage(input.repository)
+    ? text.messages.incompleteRepositoryCoverageAction
     : text.messages.nextAction(input.riskFindings);
 }
 
 function renderRepositoryCoverageLines(
   repository?: RemoteRepositoryReportSource
 ): string[] {
-  if (!repository || repository.submodules.skippedCount === 0) {
+  if (!repository || !hasIncompleteRepositoryCoverage(repository)) {
     return [];
   }
-  return [`Scan coverage: ${formatSkippedSubmoduleSummary(repository)}`];
+  return [`Scan coverage: ${formatSkippedRepositoryEntrySummary(repository)}`];
 }
 
 function renderMarkdownRepositoryCoverageLines(
   repository?: RemoteRepositoryReportSource
 ): string[] {
-  if (!repository || repository.submodules.skippedCount === 0) {
+  if (!repository || !hasIncompleteRepositoryCoverage(repository)) {
     return [];
   }
-  return [`- Scan coverage: ${formatMarkdownTableCell(formatSkippedSubmoduleSummary(repository))}`];
+  return [`- Scan coverage: ${formatMarkdownTableCell(formatSkippedRepositoryEntrySummary(repository))}`];
 }
 
 function renderHtmlRepositoryCoverageCard(
   repository: RemoteRepositoryReportSource | undefined,
   text: HtmlReportText
 ): Array<readonly [string, string]> {
-  if (!repository || repository.submodules.skippedCount === 0) {
+  if (!repository || !hasIncompleteRepositoryCoverage(repository)) {
     return [];
   }
-  return [[
-    text.labels.scanCoverage,
-    text.messages.skippedSubmodules(
+  const summaries: string[] = [];
+  if (repository.submodules.skippedCount > 0) {
+    summaries.push(text.messages.skippedSubmodules(
       repository.submodules.skippedCount,
       repository.submodules.skippedPaths,
       repository.submodules.pathsTruncated
-    )
+    ));
+  }
+  if (repository.symbolicLinks.skippedCount > 0) {
+    summaries.push(text.messages.skippedSymbolicLinks(
+      repository.symbolicLinks.skippedCount,
+      repository.symbolicLinks.skippedPaths,
+      repository.symbolicLinks.pathsTruncated
+    ));
+  }
+  if (repository.nonPortablePaths.skippedCount > 0) {
+    summaries.push(text.messages.skippedNonPortablePaths(
+      repository.nonPortablePaths.skippedCount,
+      repository.nonPortablePaths.skippedPaths,
+      repository.nonPortablePaths.pathsTruncated
+    ));
+  }
+  return [[
+    text.labels.scanCoverage,
+    summaries.join(" ")
   ]];
 }
 
-function formatSkippedSubmoduleSummary(repository: RemoteRepositoryReportSource): string {
-  const { skippedCount, skippedPaths, pathsTruncated } = repository.submodules;
-  const pathList = skippedPaths.join(", ");
-  const suffix = pathsTruncated ? ", …" : "";
-  return `${skippedCount} Git submodule${skippedCount === 1 ? "" : "s"} skipped (${pathList}${suffix}); coverage is incomplete.`;
+function hasIncompleteRepositoryCoverage(repository: RemoteRepositoryReportSource): boolean {
+  return repository.submodules.skippedCount > 0
+    || repository.symbolicLinks.skippedCount > 0
+    || repository.nonPortablePaths.skippedCount > 0;
+}
+
+function formatSkippedRepositoryEntrySummary(repository: RemoteRepositoryReportSource): string {
+  const summaries: string[] = [];
+  if (repository.submodules.skippedCount > 0) {
+    summaries.push(formatSkippedEntrySummary(
+      repository.submodules,
+      "Git submodule",
+      "Git submodules"
+    ));
+  }
+  if (repository.symbolicLinks.skippedCount > 0) {
+    summaries.push(formatSkippedEntrySummary(
+      repository.symbolicLinks,
+      "symbolic link",
+      "symbolic links"
+    ));
+  }
+  if (repository.nonPortablePaths.skippedCount > 0) {
+    summaries.push(formatSkippedEntrySummary(
+      repository.nonPortablePaths,
+      "non-portable path",
+      "non-portable paths"
+    ));
+  }
+  return `${summaries.join("; ")}; coverage is incomplete.`;
+}
+
+function formatSkippedEntrySummary(
+  summary: { skippedCount: number; skippedPaths: string[]; pathsTruncated: boolean },
+  singular: string,
+  plural: string
+): string {
+  const pathList = summary.skippedPaths.join(", ");
+  const suffix = summary.pathsTruncated ? ", …" : "";
+  const label = summary.skippedCount === 1 ? singular : plural;
+  return `${summary.skippedCount} ${label} skipped (${pathList}${suffix})`;
 }

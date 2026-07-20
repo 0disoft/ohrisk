@@ -86,8 +86,8 @@ describe("README report contract", () => {
     expect(readme).toContain("requires a Git executable available on `PATH`");
     expect(normalized).toContain("Only public `https://github.com/<owner>/<repository>[.git]` URLs are accepted");
     expect(normalized).toContain("checkout-local policy and waivers are never trusted");
-    expect(normalized).toContain("Ohrisk recursively selects the only nested dependency project");
-    expect(normalized).toContain("Multiple nested project roots remain ambiguous");
+    expect(normalized).toContain("selects one nested dependency project or merges multiple nested project roots");
+    expect(normalized).toContain("Automatic fan-out is capped at 64 project roots and 128 inputs");
     expect(normalized).toContain("supported by `scan`, not `ci`, `diff`, or the composite GitHub Action");
     expect(readme).toContain("ohrisk scan --allow-host repo.papermc.io https://github.com/PlayPro/CoreProtect");
     expect(normalized).toContain("same-repository SHA-256 sidecar");

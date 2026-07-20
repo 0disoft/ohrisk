@@ -21,7 +21,7 @@ Draft 2020-12 contracts live in `schemas/common.schema.json`,
 `schemas/scan-report.schema.json`, `schemas/diff-report.schema.json`, and
 `schemas/explain-report.schema.json`.
 
-Schema `3.2.0` is a closed contract. Report roots and structured nested objects
+Schema `3.3.0` is a closed contract. Report roots and structured nested objects
 reject unknown properties, while common `$defs` define findings, evidence,
 normalized licenses, policy summaries, waivers, thresholds, provenance, remote
 repository submodule coverage, and
@@ -84,8 +84,8 @@ Structured output for scripting and CI automation.
 - **Evidence diagnostics**: scan JSON groups package/file/warning counts by `local`, `sbom`, `tarball`, and `unavailable`, with stable diagnostic codes and typed dependency-graph truncation diagnostics
 - **Restriction scope evidence**: explicit commercial restrictions limited to documentation or data/corpora are preserved as `restriction scope: documentation in <path>` or `restriction scope: data in <path>` evidence without being treated as package-code restrictions
 - **Maven evidence corrections**: canonical SPDX aliases, allowed repository provenance, and checksum/identity-verified JAR evidence may change severity, reason, evidence, and therefore finding fingerprints. Fingerprint waivers for corrected Maven findings must be reviewed after upgrade; finding-ID waivers remain tied to the same package/path identity.
-- **Remote repository coverage**: remote scan JSON includes `repository.owner`, `repository.name`, and bounded `repository.submodules` mode, skipped count, relative paths, and path-list truncation state
-- **Schema validation**: scan, diff, and explain JSON must satisfy the packaged 3.2.0 schema; unknown object properties are rejected
+- **Remote repository coverage**: remote scan JSON includes `repository.owner`, `repository.name`, bounded `repository.submodules` mode/count/paths, separate `repository.symbolicLinks`, and `repository.nonPortablePaths` skipped counts, relative paths, and path-list truncation state
+- **Schema validation**: scan, diff, and explain JSON must satisfy the packaged 3.3.0 schema; unknown object properties are rejected
 - **Local paths**: `projectRoot` is represented as `.`, and lockfile metadata uses a project-relative path so CI artifacts do not expose workspace paths
 
 ## Markdown
@@ -99,14 +99,14 @@ Formatted for PR comments, release notes, or documentation.
 - **Waiver mode**: shown as inline code in the summary
 - **Strict waiver drift**: shown as inline code in the summary when `--strict-waivers` is set
 - **Local paths**: the project summary uses the package/project name, not the absolute project root, so PR-facing artifacts do not expose local or CI workspace paths
-- **Remote repository coverage**: skipped submodules are listed as incomplete scan coverage with a separate follow-up action
+- **Remote repository coverage**: skipped submodules, non-followed symbolic links, and excluded non-portable paths are listed as incomplete scan coverage with a separate follow-up action
 
 ## HTML
 
 Formatted as a standalone browser-friendly HTML document for local review.
 
 - **Review summary**: first-screen status, active finding counts, scan scope, waiver drift status, and review focus derived from the same finding data as the detailed sections. When unknown findings are dominated by missing local source/cache evidence, the summary also suggests dependency-restore commands such as `go mod download all`, `cargo fetch`, `dotnet restore`, dependency resolution for Maven/Gradle, Python virtualenv install, `dart pub get`, or `swift package resolve` before a full app build.
-- **Active findings**: filterable severity, search, dependency, and action controls with detail cards for Severity, Package, Dependency, Reason, Action, Path, Evidence, and Fingerprint. Long detail values are collapsed by default and can be expanded in the browser.
+- **Active findings**: filterable severity, search, dependency, and action controls with detail cards for Severity, Package, Dependency, Reason, Action, Path, Evidence, and Fingerprint. Long detail values are collapsed by default and can be expanded in the browser. The search index contains package, reason, action, dependency, evidence, and displayed path text; full finding IDs and fingerprints remain visible in their detail fields but are not duplicated into HTML data attributes.
 - **Waived findings**: table with columns Severity, Package, Matched by, Reason, Action, Fingerprint
 - **Expired waivers**: table with columns Target, Expires on, Reason
 - **Unmatched waivers**: table with columns Target, Reason
@@ -116,7 +116,7 @@ Formatted as a standalone browser-friendly HTML document for local review.
 - **Local paths**: the project summary uses the package/project name, not the absolute project root, so local browser artifacts are safer to share than terminal output
 - **Open after write**: `--open` can be combined with `--html --output <file>` to open a project-relative report path through a temporary `127.0.0.1` URL after scan completion
 - **Remote repository default**: `scan --html <github-url>` writes `<repository>-ohrisk.html` in the invocation directory when `--output` is omitted; local and archive HTML scans still print to stdout by default
-- **Remote repository coverage**: a localized summary card and next action identify skipped submodules so a clean findings list is not mistaken for complete coverage
+- **Remote repository coverage**: a localized summary card and next action identify skipped submodules, symbolic links, and non-portable paths so a clean findings list is not mistaken for complete coverage
 
 ## SARIF
 
@@ -129,7 +129,7 @@ SARIF 2.1.0 output for security tools and GitHub code scanning.
   - `ohriskUnmatchedWaiverCount`
   - When `--strict-waivers` is set: `ohriskStrictWaivers`, `ohriskWaiverDriftFailed`, `ohriskWaiverDriftCount`
 - **Waiver mode**: `ohriskWaiverMode` in run properties
-- **Remote repository coverage**: repository identity, submodule mode, skipped count and paths, and truncation state are recorded in run properties
+- **Remote repository coverage**: repository identity plus bounded submodule, symbolic-link, and non-portable-path counts, paths, and truncation state are recorded in run properties
 - **CI artifact**: suitable for `github/codeql-action/upload-sarif` (requires `security-events: write` permission)
 
 SARIF does not list expired or unmatched waiver objects. Use JSON or Markdown output if you need the full waiver details for review.
@@ -142,7 +142,7 @@ CycloneDX 1.5 JSON SBOM for supply chain tools.
 - **Waived findings**: NOT listed. CycloneDX does not receive waived finding data.
 - **Expired/unmatched waivers**: NOT listed.
 - **Waiver mode**: `ohrisk:waiverMode` in metadata properties
-- **Remote repository coverage**: repository identity and bounded skipped-submodule metadata are recorded in metadata properties
+- **Remote repository coverage**: repository identity and bounded skipped-submodule, skipped-symbolic-link, and skipped-non-portable-path metadata are recorded in metadata properties
 - **Local paths**: project root is represented as `.`, and lockfile metadata uses a project-relative path.
 - **CI artifact**: suitable as an SBOM artifact for compliance pipelines
 

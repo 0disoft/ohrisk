@@ -1,5 +1,64 @@
 # Changelog
 
+## 1.10.2 - 2026-07-18
+
+- Remote GitHub scans now skip symbolic-link entries without following their
+  targets, remove their checkout materializations before project discovery,
+  and report bounded incomplete-coverage metadata instead of rejecting the
+  entire repository.
+- Regular files with Windows-reserved or colliding non-portable paths are
+  excluded through a NUL-delimited literal Git pathspec before checkout and
+  reported separately, while structural traversal and `.git` paths still fail.
+- Raised the bounded remote tree aggregate ceiling from 256 MiB to 640 MiB and
+  the independent temporary staging cap from 512 MiB to 1 GiB while retaining
+  a 100 MiB per-blob ceiling and the existing 50,000-entry limit.
+- Bounded Cargo dependency provenance to 64 paths per crate with iterative
+  traversal and typed truncation diagnostics, preventing combinatorial graph
+  expansion on large workspace lockfiles while retaining every reachable crate.
+- Applied the same 64-path iterative traversal boundary to modern npm
+  package-lock/shrinkwrap graphs, preventing large web workspaces from
+  exhausting memory while retaining every reachable package.
+- Applied the same 64-path iterative traversal boundary to `uv.lock` graphs and
+  stopped duplicating full finding IDs and fingerprints in HTML search data.
+  Large Python dependency fan-out now retains every reachable package while
+  producing bounded reports while keeping the complete bounded fingerprint
+  visible. Existing `uv.lock` waivers keyed to an identity containing more than
+  64 paths must be reviewed because the bounded identity is intentionally
+  different from the former unbounded value.
+- Split the former shared two-minute clone/inspection/checkout deadline into
+  bounded per-stage budgets: two minutes for clone, 30 seconds for tree
+  inspection, and three minutes for checkout. This prevents a valid large clone
+  from consuming the Windows materialization budget before checkout starts.
+- Replaced the 250 ms full-directory walk during checkout with a pre-checkout
+  projected-size gate and one post-checkout size verification, preventing the
+  resource monitor from dominating large monorepo materialization time.
+- Added fail-closed regression coverage for traversal paths, unexpected
+  directory materializations, path-list bounds, and PostHog-style internal
+  symbolic links alongside ordinary dependency inputs.
+- Replaced the exhaustive `NO_SUPPORTED_LOCKFILE` dump with a concise
+  distinction between a repository that has no dependency project and a
+  manifest that is missing a supported lockfile.
+- `uv.lock` remote Git sources whose resolved URL ends in a full immutable
+  commit are now retained in the dependency graph as unavailable evidence
+  instead of aborting the scan. Ohrisk does not clone those package sources or
+  substitute same-name PyPI evidence; unresolved, branch, tag, and short-revision
+  records still fail closed.
+- A checksum-verified remote Python distribution that exceeds bounded archive
+  inspection limits now becomes unavailable evidence for that package instead
+  of aborting a large multi-ecosystem scan. The archive limit is unchanged and
+  no bytes from the rejected distribution are trusted.
+- Remote repository discovery now merges bounded independent nested dependency
+  projects into one repository-wide graph, preserving lockfile provenance and
+  deduplicating packages by Package URL. Automatic fan-out is capped at 64
+  project roots and 128 inputs; `--lockfile` remains an explicit narrowing
+  control for Ente-style monorepos.
+- Automatic repository discovery now ignores standalone `pyproject.toml`
+  manifests whose dependencies are ranges or direct references rather than
+  resolved pins. Explicit `--lockfile pyproject.toml` scans remain strict and
+  report the unsupported entry.
+- Advanced strict machine-readable report schemas to 3.3.0 with separate
+  skipped-symbolic-link coverage in JSON, SARIF, and CycloneDX outputs.
+
 ## 1.10.1 - 2026-07-18
 
 - Fixed commercial-use restriction detection so terms explicitly scoped to

@@ -127,6 +127,16 @@ describe("machine-readable report schemas", () => {
         skippedCount: 2,
         skippedPaths: ["framework", "tf-psa-crypto"],
         pathsTruncated: false
+      },
+      symbolicLinks: {
+        skippedCount: 1,
+        skippedPaths: [".claude/skills"],
+        pathsTruncated: false
+      },
+      nonPortablePaths: {
+        skippedCount: 1,
+        skippedPaths: ["fixtures/aux.hcl"],
+        pathsTruncated: false
       }
     });
     expect(JSON.stringify(scan)).not.toContain(scan.projectRootPathForTest);
@@ -148,6 +158,20 @@ describe("machine-readable report schemas", () => {
         repository: {
           ...scan.repository,
           submodules: { ...scan.repository.submodules, skippedPaths: ["../outside"] }
+        }
+      },
+      {
+        ...scan,
+        repository: {
+          ...scan.repository,
+          symbolicLinks: { ...scan.repository.symbolicLinks, skippedPaths: ["C:/outside"] }
+        }
+      },
+      {
+        ...scan,
+        repository: {
+          ...scan.repository,
+          nonPortablePaths: { ...scan.repository.nonPortablePaths, skippedPaths: ["../outside"] }
         }
       },
       { ...scan, archive: { name: "/absolute/source.zip", format: "zip", sha256: "a".repeat(64), root: "." } },
@@ -280,6 +304,16 @@ function renderCompleteScanReport(): Record<string, any> {
         mode: "ignore",
         skippedCount: 2,
         skippedPaths: ["framework", "tf-psa-crypto"],
+        pathsTruncated: false
+      },
+      symbolicLinks: {
+        skippedCount: 1,
+        skippedPaths: [".claude/skills"],
+        pathsTruncated: false
+      },
+      nonPortablePaths: {
+        skippedCount: 1,
+        skippedPaths: ["fixtures/aux.hcl"],
         pathsTruncated: false
       }
     },

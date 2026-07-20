@@ -109,6 +109,16 @@ describe("main", () => {
             paths: ["framework", "tf-psa-crypto"],
             pathsTruncated: false
           },
+          symbolicLinks: {
+            total: 1,
+            paths: [".claude/skills"],
+            pathsTruncated: false
+          },
+          nonPortablePaths: {
+            total: 1,
+            paths: ["fixtures/aux.hcl"],
+            pathsTruncated: false
+          },
           cleanup: () => {
             cleaned = true;
           }
@@ -128,6 +138,10 @@ describe("main", () => {
       expect(stderr.join("\n")).toContain(`Wrote report to ${reportPath}`);
       expect(readFileSync(reportPath, "utf8")).toContain("remote-fixture");
       expect(readFileSync(reportPath, "utf8")).toContain("framework");
+      expect(readFileSync(reportPath, "utf8")).toContain(".claude/skills");
+      expect(readFileSync(reportPath, "utf8")).toContain("symbolic link");
+      expect(readFileSync(reportPath, "utf8")).toContain("fixtures/aux.hcl");
+      expect(readFileSync(reportPath, "utf8")).toContain("non-portable path");
       expect(readFileSync(reportPath, "utf8")).toContain("coverage is incomplete");
       expect(readFileSync(reportPath, "utf8")).not.toContain(temporaryRepository);
     } finally {
@@ -146,6 +160,8 @@ describe("main", () => {
       io.cloneRepository = async () => ok({
         rootDir: temporaryRepository,
         submodules: { total: 0, paths: [], pathsTruncated: false },
+        symbolicLinks: { total: 0, paths: [], pathsTruncated: false },
+        nonPortablePaths: { total: 0, paths: [], pathsTruncated: false },
         cleanup: () => {
           cleaned = true;
         }
@@ -161,6 +177,9 @@ describe("main", () => {
       expect(cleaned).toBe(true);
       expect(stderr.join("\n")).not.toContain(temporaryRepository);
       expect(stderr.join("\n")).toContain("<temporary repository>");
+      expect(stderr.join("\n")).toContain("No dependency project was detected.");
+      expect(stderr.join("\n")).not.toContain("supportedLockfiles:");
+      expect(stderr.join("\n")).not.toContain("Ohrisk currently supports");
     } finally {
       rmSync(invocationRoot, { recursive: true, force: true });
       rmSync(temporaryRepository, { recursive: true, force: true });
@@ -196,6 +215,8 @@ describe("main", () => {
         return ok({
           rootDir: temporaryRepository,
           submodules: { total: 0, paths: [], pathsTruncated: false },
+          symbolicLinks: { total: 0, paths: [], pathsTruncated: false },
+          nonPortablePaths: { total: 0, paths: [], pathsTruncated: false },
           cleanup: () => undefined
         });
       };
@@ -213,6 +234,45 @@ describe("main", () => {
       };
       expect(report.lockfile).toEqual({ kind: "requirements-txt", path: "requirements.txt" });
       expect(report.repository).toMatchObject({ owner: "Mbed-TLS", name: "mbedtls" });
+    } finally {
+      rmSync(invocationRoot, { recursive: true, force: true });
+      rmSync(temporaryRepository, { recursive: true, force: true });
+    }
+  });
+
+  test("automatically merges multiple nested projects in a remote repository", async () => {
+    const invocationRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-remote-projects-invocation-"));
+    const temporaryRepository = mkdtempSync(path.join(tmpdir(), "ohrisk-remote-projects-checkout-"));
+
+    try {
+      const docsRoot = path.join(temporaryRepository, "docs");
+      const toolsRoot = path.join(temporaryRepository, "tools");
+      mkdirSync(docsRoot, { recursive: true });
+      mkdirSync(toolsRoot, { recursive: true });
+      writeFileSync(path.join(docsRoot, "requirements.txt"), "# no dependencies\n", "utf8");
+      writeFileSync(path.join(toolsRoot, "go.mod"), "module example.com/tools\n\ngo 1.24\n", "utf8");
+
+      const { io, stdout, stderr } = createTestIO(invocationRoot);
+      io.cloneRepository = async () => ok({
+        rootDir: temporaryRepository,
+        submodules: { total: 0, paths: [], pathsTruncated: false },
+        symbolicLinks: { total: 0, paths: [], pathsTruncated: false },
+        nonPortablePaths: { total: 0, paths: [], pathsTruncated: false },
+        cleanup: () => undefined
+      });
+
+      const exitCode = await main(["scan", "--json", "https://github.com/ente/ente"], io);
+
+      expect(exitCode, stderr.join("\n")).toBe(0);
+      const report = JSON.parse(stdout.join("\n")) as {
+        lockfiles: { kind: string; path: string }[];
+        dependencyGraph: { total: number };
+      };
+      expect(report.lockfiles).toEqual([
+        { kind: "requirements-txt", path: "docs/requirements.txt" },
+        { kind: "go-mod", path: "tools/go.mod" }
+      ]);
+      expect(report.dependencyGraph.total).toBe(0);
     } finally {
       rmSync(invocationRoot, { recursive: true, force: true });
       rmSync(temporaryRepository, { recursive: true, force: true });
@@ -242,6 +302,8 @@ describe("main", () => {
       io.cloneRepository = async () => ok({
         rootDir: temporaryRepository,
         submodules: { total: 0, paths: [], pathsTruncated: false },
+        symbolicLinks: { total: 0, paths: [], pathsTruncated: false },
+        nonPortablePaths: { total: 0, paths: [], pathsTruncated: false },
         cleanup: () => undefined
       });
 
@@ -283,6 +345,8 @@ describe("main", () => {
         return ok({
           rootDir: temporaryRepository,
           submodules: { total: 0, paths: [], pathsTruncated: false },
+          symbolicLinks: { total: 0, paths: [], pathsTruncated: false },
+          nonPortablePaths: { total: 0, paths: [], pathsTruncated: false },
           cleanup: () => undefined
         });
       };
@@ -1668,6 +1732,49 @@ describe("main", () => {
       expect(output).toContain("- [high] local-risk@1.0.0");
       expect(output).toContain("path: fixture-python -> local-risk@1.0.0");
       expect(output).toContain("source: local; pyproject.toml license: AGPL-3.0-only");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("reports immutable uv.lock remote VCS dependencies without a registry lookup", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-uv-vcs-project-"));
+    const commit = "4e3996d9f69b10e8f91b6b9fa4712f627c539c02";
+
+    try {
+      writeFileSync(
+        path.join(projectRoot, "uv.lock"),
+        [
+          "version = 1",
+          "revision = 3",
+          "",
+          "[[package]]",
+          "name = \"fixture-python\"",
+          "version = \"0.1.0\"",
+          "source = { virtual = \".\" }",
+          "dependencies = [{ name = \"remote-risk\" }]",
+          "",
+          "[[package]]",
+          "name = \"remote-risk\"",
+          "version = \"1.0.0\"",
+          `source = { git = \"https://example.com/acme/remote-risk.git?rev=main#${commit}\" }`
+        ].join("\n"),
+        "utf8"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--offline"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+
+      const output = stdout.join("\n");
+      expect(output).toContain("Dependencies: 1 total, 1 direct, 0 transitive");
+      expect(output).toContain("Risks: 0 high, 0 review, 1 unknown, 0 low");
+      expect(output).toContain("- [unknown] remote-risk@1.0.0");
+      expect(output).toContain(`pinned to immutable commit ${commit}`);
+      expect(output).not.toContain("PyPI release metadata");
+      expect(output).not.toContain("offline cache");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }

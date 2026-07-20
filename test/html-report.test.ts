@@ -451,7 +451,10 @@ describe("HTML scan report", () => {
     expect(output).toContain('<option value="direct">direct (1)</option>');
     expect(output).toContain('<option value="replace">replace (1)</option>');
     expect(output).toContain('<article class="finding-card" data-finding-card data-severity="high" data-dependency-scope="direct" data-recommendation="replace"');
-    expect(output).toContain('data-search-text="risk&lt;script&gt;@1.0.0::production::direct::fixture&gt;risk&lt;script&gt;@1.0.0');
+    const searchText = output.match(/data-search-text="([^"]*)"/)?.[1];
+    expect(searchText).toContain("risk&lt;script&gt;@1.0.0");
+    expect(searchText).toContain("package.json license: custom &lt;unsafe&gt;");
+    expect(searchText).not.toContain("::production::direct::");
     expect(output).toContain("<dt>Severity</dt>");
     expect(output).toContain("<dt>Package</dt>");
     expect(output).toContain("<dt>Dependency</dt>");
@@ -486,6 +489,31 @@ describe("HTML scan report", () => {
     expect(output).toContain("Temporary review waiver &lt;not trusted&gt; with &#x27;quote&#x27;.");
     expect(output).not.toContain("<script>alert(1)</script>");
     expect(output).not.toContain("'quotes'");
+  });
+
+  test("does not duplicate large finding identities in the HTML search index", () => {
+    const longFingerprint = `large-fingerprint-token::${"x".repeat(10_000)}`;
+    const longIdentityFinding: RiskFinding = {
+      ...finding,
+      id: "large-finding-id-token::production::direct::fixture>large-package@1.0.0",
+      fingerprint: longFingerprint,
+      packageId: "large-package@1.0.0",
+      reason: "License evidence requires review.",
+      evidence: ["package metadata license: Custom"]
+    };
+    const output = renderScanReport(scanInput({
+      riskFindings: [longIdentityFinding],
+      waivedFindings: [],
+      expiredWaivers: [],
+      unmatchedWaivers: []
+    }));
+    const searchText = output.match(/data-search-text="([^"]*)"/)?.[1];
+
+    expect(searchText).toContain("large-package@1.0.0");
+    expect(searchText).toContain("license evidence requires review");
+    expect(searchText).not.toContain("large-finding-id-token");
+    expect(searchText).not.toContain("large-fingerprint-token");
+    expect(output.split(longFingerprint)).toHaveLength(2);
   });
 
   test("renders empty states when no findings or waivers exist", () => {

@@ -72,8 +72,12 @@ export const FRENCH_TEXT: HtmlReportText = {
     evidence: (files, warnings) => `${files} fichiers, ${warnings} avertissements`,
     skippedSubmodules: (count, paths, pathsTruncated) =>
       `${count} sous-modules Git ignorés (${paths.join(", ")}${pathsTruncated ? ", …" : ""}) ; la couverture est incomplète.`,
-    skippedSubmoduleAction:
-      "Analysez séparément les sous-modules Git ignorés avant de considérer ce rapport comme complet.",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) =>
+      `${count} liens symboliques ignorés sans suivre leur cible (${paths.join(", ")}${pathsTruncated ? ", …" : ""}) ; la couverture est incomplète.`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) =>
+      `${count} chemins non portables ignorés (${paths.join(", ")}${pathsTruncated ? ", …" : ""}) ; la couverture est incomplète.`,
+    incompleteRepositoryCoverageAction:
+      "Examinez les entrées de dépôt ignorées et analysez séparément les entrées de dépendances omises avant de considérer ce rapport comme complet.",
     licenseConfidence: (high, medium, low) =>
       `${high} confiance élevée, ${medium} confiance moyenne, ${low} confiance faible`,
     licenseIssues: (missing, malformed) => `${missing} manquantes, ${malformed} mal formées`,

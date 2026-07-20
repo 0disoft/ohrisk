@@ -17,7 +17,7 @@ The repository's composite action runs its checked-in CLI bundle and supports
   with:
     fetch-depth: 0
 
-- uses: 0disoft/ohrisk@v1.10.1
+- uses: 0disoft/ohrisk@v1.10.2
   with:
     command: diff
     baseline-ref: origin/main
@@ -34,7 +34,7 @@ To scan a source archive directly, pass a checked-in or downloaded
 repository-relative regular file to `archive`:
 
 ```yaml
-- uses: 0disoft/ohrisk@v1.10.1
+- uses: 0disoft/ohrisk@v1.10.2
   with:
     command: ci
     archive: artifacts/source.tar.gz
@@ -76,7 +76,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install -g ohrisk@1.10.1
+      - run: npm install -g ohrisk@1.10.2
 
       - run: ohrisk diff origin/main --prod --fail-on high
 ```
@@ -114,7 +114,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install -g ohrisk@1.10.1
+      - run: npm install -g ohrisk@1.10.2
 
       - name: Generate Ohrisk report
         run: |
@@ -189,7 +189,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install -g ohrisk@1.10.1
+      - run: npm install -g ohrisk@1.10.2
 
       - run: |
           mkdir -p reports

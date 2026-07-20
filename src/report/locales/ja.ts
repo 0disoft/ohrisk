@@ -72,8 +72,12 @@ export const JAPANESE_TEXT: HtmlReportText = {
     evidence: (files, warnings) => `${files} ファイル、${warnings} 警告`,
     skippedSubmodules: (count, paths, pathsTruncated) =>
       `Git サブモジュール ${count} 件を除外しました（${paths.join("、")}${pathsTruncated ? "、…" : ""}）。スキャン範囲は不完全です。`,
-    skippedSubmoduleAction:
-      "このレポートを完全なものとして扱う前に、除外された Git サブモジュールを個別にスキャンしてください。",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) =>
+      `シンボリックリンク ${count} 件をリンク先をたどらずに除外しました（${paths.join("、")}${pathsTruncated ? "、…" : ""}）。スキャン範囲は不完全です。`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) =>
+      `移植できないパス ${count} 件を除外しました（${paths.join("、")}${pathsTruncated ? "、…" : ""}）。スキャン範囲は不完全です。`,
+    incompleteRepositoryCoverageAction:
+      "このレポートを完全なものとして扱う前に、除外されたリポジトリエントリを確認し、漏れた依存関係入力を個別にスキャンしてください。",
     licenseConfidence: (high, medium, low) =>
       `高信頼 ${high}、中信頼 ${medium}、低信頼 ${low}`,
     licenseIssues: (missing, malformed) => `不足 ${missing}、形式不正 ${malformed}`,

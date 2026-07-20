@@ -72,8 +72,12 @@ export const CHINESE_TEXT: HtmlReportText = {
     evidence: (files, warnings) => `${files} 个文件，${warnings} 个警告`,
     skippedSubmodules: (count, paths, pathsTruncated) =>
       `已跳过 ${count} 个 Git 子模块（${paths.join("、")}${pathsTruncated ? "、…" : ""}）；扫描范围不完整。`,
-    skippedSubmoduleAction:
-      "在将此报告视为完整报告之前，请单独扫描被跳过的 Git 子模块。",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) =>
+      `已跳过 ${count} 个符号链接且未跟随其目标（${paths.join("、")}${pathsTruncated ? "、…" : ""}）；扫描范围不完整。`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) =>
+      `已跳过 ${count} 个不可移植路径（${paths.join("、")}${pathsTruncated ? "、…" : ""}）；扫描范围不完整。`,
+    incompleteRepositoryCoverageAction:
+      "在将此报告视为完整报告之前，请检查被跳过的仓库条目，并单独扫描遗漏的依赖输入。",
     licenseConfidence: (high, medium, low) =>
       `高置信度 ${high} 个，中置信度 ${medium} 个，低置信度 ${low} 个`,
     licenseIssues: (missing, malformed) => `缺失 ${missing} 个，格式错误 ${malformed} 个`,

@@ -99,6 +99,58 @@ describe("parsePackageLockfile", () => {
       });
   });
 
+  test("bounds dependency path fan-out while retaining every reachable package", () => {
+    const layerCount = 10;
+    const packages: Record<string, unknown> = {
+      "": {
+        name: "bounded-package-lock",
+        dependencies: {
+          "layer-0-a": "1.0.0",
+          "layer-0-b": "1.0.0"
+        }
+      }
+    };
+    for (let layer = 0; layer < layerCount; layer += 1) {
+      for (const branch of ["a", "b"]) {
+        packages[`node_modules/layer-${layer}-${branch}`] = {
+          name: `layer-${layer}-${branch}`,
+          version: "1.0.0",
+          dependencies: layer === layerCount - 1
+            ? { leaf: "1.0.0" }
+            : {
+                [`layer-${layer + 1}-a`]: "1.0.0",
+                [`layer-${layer + 1}-b`]: "1.0.0"
+              }
+        };
+      }
+    }
+    packages["node_modules/leaf"] = {
+      name: "leaf",
+      version: "1.0.0"
+    };
+
+    const result = parsePackageLockText(JSON.stringify({
+      name: "bounded-package-lock",
+      lockfileVersion: 3,
+      packages
+    }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes).toHaveLength((layerCount * 2) + 1);
+    expect(result.value.nodes.find((node) => node.id === "leaf@1.0.0")?.paths)
+      .toHaveLength(64);
+    expect(result.value.diagnostics).toEqual([{
+      code: "dependency_paths_truncated",
+      affectedNodeCount: 7,
+      limit: 64,
+      message: "npm dependency paths were limited."
+    }]);
+  });
+
   test("reports malformed package-lock files as typed errors", () => {
     const result = parsePackageLockText("{ this is not json", "broken-package-lock.json");
 

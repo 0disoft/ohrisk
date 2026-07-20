@@ -32,10 +32,18 @@ type UvDependencyEdge = {
   type: DependencyType;
 };
 
+type UvTraversalState = {
+  record: UvPackageRecord;
+  dependencyType: DependencyType;
+  direct: boolean;
+  path: string[];
+};
+
 type PartialUvPackageRecord = {
   name?: string;
   version?: string;
   sourcePath?: string;
+  remoteVcsCommit?: string;
   unsupportedSource?: UnsupportedUvSource;
   virtual: boolean;
   dependencies: UvDependencyEdge[];
@@ -55,6 +63,8 @@ const UV_LOCK_LOCAL_SOURCE_ERRORS = {
   readCode: "UV_LOCK_READ_FAILED",
   displayName: "uv.lock"
 } as const;
+
+const UV_MAX_PATHS_PER_PACKAGE = 64;
 
 export function parseUvLockfile(
   lockfilePath: string,
@@ -120,44 +130,56 @@ export function parseUvLockText(
 
     const roots = records.filter((record) => record.virtual);
     const nodeMap = new Map<string, DependencyNode>();
+    const recordIndex = indexUvPackageRecords(records);
+    const traversalStates: UvTraversalState[] = [];
+    const pathLimitAffected = new Set<string>();
 
     if (roots.length === 0) {
       for (const record of records) {
-        walkUvDependency({
+        traversalStates.push({
           record,
           dependencyType: "unknown",
           direct: true,
-          path: ["<root>"],
-          records,
-          nodeMap,
-          seen: new Set()
+          path: ["<root>"]
         });
       }
     } else {
       for (const root of roots) {
         for (const dependency of root.dependencies) {
-          const record = resolveUvPackageRecord(records, dependency.name);
+          const record = resolveUvPackageRecord(recordIndex, dependency.name);
           if (!record) {
             continue;
           }
 
-          walkUvDependency({
+          traversalStates.push({
             record,
             dependencyType: dependency.type,
             direct: true,
-            path: [root.name],
-            records,
-            nodeMap,
-            seen: new Set()
+            path: [root.name]
           });
         }
       }
     }
 
+    walkUvDependencies({
+      states: traversalStates,
+      recordIndex,
+      nodeMap,
+      pathLimitAffected
+    });
+
     return ok(omitUndefined({
       rootName: roots[0]?.name,
       lockfilePath,
       nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+      diagnostics: pathLimitAffected.size > 0
+        ? [{
+            code: "dependency_paths_truncated" as const,
+            affectedNodeCount: pathLimitAffected.size,
+            limit: UV_MAX_PATHS_PER_PACKAGE,
+            message: "uv dependency paths were limited."
+          }]
+        : undefined,
       ...embeddedEvidenceFromUvRecords(records)
     }));
   } catch (cause) {
@@ -224,10 +246,14 @@ function parseUvPackageRecords(input: string, options: {
             lockfilePath: options.lockfilePath,
             packageName: current.name,
             reason: current.unsupportedSource.reason,
-            source: current.unsupportedSource.value,
+            source: safeUvSourceForErrorDetails(
+              current.unsupportedSource.value,
+              current.unsupportedSource.reason
+            ),
             supportedSourceForms: [
               "locked PyPI package record",
-              "project-root-contained local source path"
+              "project-root-contained local source path",
+              "remote VCS source pinned to a full commit"
             ]
           }
         })
@@ -264,7 +290,15 @@ function parseUvPackageRecords(input: string, options: {
       version: current.version,
       id: `${current.name}@${current.version}`,
       virtual: current.virtual,
-      dependencies: current.dependencies
+      dependencies: current.dependencies,
+      ...(current.remoteVcsCommit
+        ? {
+            evidence: unavailableRemoteVcsEvidence({
+              packageId: `${current.name}@${current.version}`,
+              commit: current.remoteVcsCommit
+            })
+          }
+        : {})
     });
 
     return ok(undefined);
@@ -340,6 +374,8 @@ function parseUvPackageRecords(input: string, options: {
         if (source !== undefined) {
           if (source.unsupportedSource) {
             current.unsupportedSource = source.unsupportedSource;
+          } else if (source.remoteVcsCommit) {
+            current.remoteVcsCommit = source.remoteVcsCommit;
           } else if (source.sourcePath) {
             current.sourcePath = source.sourcePath;
             if (source.sourcePath === ".") {
@@ -438,6 +474,7 @@ function readStringAssignment(line: string, key: "name" | "version"): string | u
 
 function readUvSourceAssignment(line: string): {
   sourcePath?: string;
+  remoteVcsCommit?: string;
   unsupportedSource?: UnsupportedUvSource;
 } | undefined {
   const rawSource = readUvLocalSourceAssignmentValue(line);
@@ -458,6 +495,13 @@ function readUvSourceAssignment(line: string): {
   const remoteSource = readUvRemoteSourceAssignment(line);
   if (remoteSource === undefined) {
     return undefined;
+  }
+
+  if (remoteSource.sourceKey === "git") {
+    const remoteVcsCommit = immutableGitCommitFromUvSource(remoteSource.value);
+    if (remoteVcsCommit) {
+      return { remoteVcsCommit };
+    }
   }
 
   return {
@@ -499,7 +543,7 @@ function readInlineTableStringValue(line: string, key: "editable" | "directory" 
 function classifyUnsupportedPythonSource(value: string, sourceKey?: "git" | "url"): string {
   const source = value.trim();
   if (sourceKey === "git" || /^(?:git|hg|svn|bzr)\+(?:https?|ssh|git):\/\//i.test(source)) {
-    return "unsupported_remote_vcs_source";
+    return "unpinned_remote_vcs_source";
   }
 
   if (path.isAbsolute(source) || source.startsWith("file://")) {
@@ -514,8 +558,8 @@ function classifyUnsupportedPythonSource(value: string, sourceKey?: "git" | "url
 }
 
 function unsupportedUvSourceMessage(reason: string): string {
-  if (reason === "unsupported_remote_vcs_source") {
-    return "Failed to parse uv.lock package source. Remote VCS package sources are not supported yet; use locked PyPI package records or project-root-contained local source paths.";
+  if (reason === "unpinned_remote_vcs_source") {
+    return "Failed to parse uv.lock package source. Remote VCS records must resolve to a full immutable Git commit; branches, tags, short revisions, and unresolved URLs are not reproducible enough to scan.";
   }
 
   if (reason === "unsupported_absolute_source_path") {
@@ -527,6 +571,71 @@ function unsupportedUvSourceMessage(reason: string): string {
   }
 
   return "Failed to parse uv.lock package source. Use a locked PyPI package record or a project-root-contained local source path.";
+}
+
+function immutableGitCommitFromUvSource(value: string): string | undefined {
+  const source = value.trim();
+  if (
+    source.length === 0
+    || source.length > 4_096
+    || /[\u0000-\u001f\u007f]/.test(source)
+    || !/^(?:git\+)?(?:https?|ssh|git):\/\//i.test(source)
+  ) {
+    return undefined;
+  }
+
+  const fragmentIndex = source.lastIndexOf("#");
+  if (fragmentIndex < 0 || fragmentIndex === source.length - 1) {
+    return undefined;
+  }
+
+  const commit = source.slice(fragmentIndex + 1);
+  return /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(commit)
+    ? commit.toLowerCase()
+    : undefined;
+}
+
+function unavailableRemoteVcsEvidence(input: {
+  packageId: string;
+  commit: string;
+}): LicenseEvidence {
+  return {
+    packageId: input.packageId,
+    metadataSource: "uv.lock remote VCS source",
+    files: [],
+    source: "unavailable",
+    warnings: [
+      `Remote VCS dependency is pinned to immutable commit ${input.commit}, but Ohrisk does not fetch VCS package evidence. Verify this dependency's license from that commit before approval.`
+    ]
+  };
+}
+
+function safeUvSourceForErrorDetails(value: string, reason: string): string {
+  if (reason === "unsupported_absolute_source_path") {
+    return "<absolute source path>";
+  }
+
+  if (reason !== "unpinned_remote_vcs_source" && reason !== "unsupported_remote_source") {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  const gitPrefix = trimmed.toLowerCase().startsWith("git+") ? "git+" : "";
+  const parseable = gitPrefix ? trimmed.slice(gitPrefix.length) : trimmed;
+  try {
+    const parsed = new URL(parseable);
+    if (parsed.username !== "") {
+      parsed.username = "redacted";
+    }
+    if (parsed.password !== "") {
+      parsed.password = "redacted";
+    }
+    parsed.search = "";
+    parsed.hash = "";
+    return `${gitPrefix}${parsed.toString()}`;
+  } catch {
+    return "<remote source>";
+  }
 }
 
 function stripTomlComment(line: string): string {
@@ -558,63 +667,115 @@ function stripTomlComment(line: string): string {
   return line;
 }
 
-function walkUvDependency(input: {
-  record: UvPackageRecord;
-  dependencyType: DependencyType;
-  direct: boolean;
-  path: string[];
-  records: UvPackageRecord[];
+function walkUvDependencies(input: {
+  states: UvTraversalState[];
+  recordIndex: ReadonlyMap<string, UvPackageRecord[]>;
   nodeMap: Map<string, DependencyNode>;
-  seen: Set<string>;
+  pathLimitAffected: Set<string>;
 }): void {
-  if (input.seen.has(input.record.id)) {
-    return;
-  }
+  const stack = [...input.states].reverse();
+  const pathKeysByNodeId = new Map<string, Set<string>>();
+  const expandedPathTypesByNodeId = new Map<string, Set<string>>();
 
-  const nextSeen = new Set(input.seen);
-  nextSeen.add(input.record.id);
-  const nextPath = [...input.path, input.record.id];
-  const existing = input.nodeMap.get(input.record.id);
-
-  if (existing) {
-    existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType(existing.dependencyType, input.dependencyType);
-    existing.paths.push(nextPath);
-  } else {
-    input.nodeMap.set(input.record.id, {
-      id: input.record.id,
-      name: input.record.name,
-      version: input.record.version,
-      ecosystem: "pypi",
-      dependencyType: input.dependencyType,
-      direct: input.direct,
-      paths: [nextPath]
-    });
-  }
-
-  for (const dependency of input.record.dependencies) {
-    const record = resolveUvPackageRecord(input.records, dependency.name);
-    if (!record) {
+  while (stack.length > 0) {
+    const state = stack.pop();
+    if (!state || state.path.includes(state.record.id)) {
       continue;
     }
 
-    walkUvDependency({
-      record,
-      dependencyType: dependencyTypeForChildEdge(input.dependencyType, dependency.type),
-      direct: false,
-      path: nextPath,
-      records: input.records,
-      nodeMap: input.nodeMap,
-      seen: nextSeen
-    });
+    const nextPath = [...state.path, state.record.id];
+    const pathKey = JSON.stringify(nextPath);
+    const existing = input.nodeMap.get(state.record.id);
+    const previousDependencyType = existing?.dependencyType;
+    const mergedDependencyType = previousDependencyType
+      ? mergeDependencyType(previousDependencyType, state.dependencyType)
+      : state.dependencyType;
+    const dependencyTypeStrengthened = previousDependencyType !== undefined
+      && mergedDependencyType !== previousDependencyType;
+
+    const node = existing ?? {
+      id: state.record.id,
+      name: state.record.name,
+      version: state.record.version,
+      ecosystem: "pypi" as const,
+      dependencyType: mergedDependencyType,
+      direct: state.direct,
+      paths: []
+    };
+    node.direct = node.direct || state.direct;
+    node.dependencyType = mergedDependencyType;
+    if (!existing) {
+      input.nodeMap.set(state.record.id, node);
+    }
+
+    const pathKeys = pathKeysByNodeId.get(state.record.id) ?? new Set<string>();
+    let traversalPath: string[] | undefined;
+    if (pathKeys.has(pathKey)) {
+      traversalPath = dependencyTypeStrengthened ? nextPath : undefined;
+    } else if (pathKeys.size < UV_MAX_PATHS_PER_PACKAGE) {
+      pathKeys.add(pathKey);
+      pathKeysByNodeId.set(state.record.id, pathKeys);
+      node.paths.push(nextPath);
+      traversalPath = nextPath;
+    } else {
+      input.pathLimitAffected.add(state.record.id);
+      traversalPath = dependencyTypeStrengthened ? node.paths[0] : undefined;
+    }
+
+    if (!traversalPath) {
+      continue;
+    }
+
+    const expansionKey = `${JSON.stringify(traversalPath)}\0${state.dependencyType}`;
+    const expandedPathTypes = expandedPathTypesByNodeId.get(state.record.id) ?? new Set<string>();
+    if (expandedPathTypes.has(expansionKey)) {
+      continue;
+    }
+    expandedPathTypes.add(expansionKey);
+    expandedPathTypesByNodeId.set(state.record.id, expandedPathTypes);
+
+    for (let index = state.record.dependencies.length - 1; index >= 0; index -= 1) {
+      const dependency = state.record.dependencies[index];
+      if (!dependency) {
+        continue;
+      }
+      const record = resolveUvPackageRecord(input.recordIndex, dependency.name);
+      if (!record) {
+        continue;
+      }
+
+      stack.push({
+        record,
+        dependencyType: dependencyTypeForChildEdge(state.dependencyType, dependency.type),
+        direct: false,
+        path: traversalPath
+      });
+    }
   }
 }
 
-function resolveUvPackageRecord(records: UvPackageRecord[], name: string): UvPackageRecord | undefined {
+function indexUvPackageRecords(
+  records: UvPackageRecord[]
+): Map<string, UvPackageRecord[]> {
+  const byName = new Map<string, UvPackageRecord[]>();
+  for (const record of records) {
+    if (record.virtual) {
+      continue;
+    }
+    const normalized = normalizePythonPackageName(record.name);
+    const matches = byName.get(normalized) ?? [];
+    matches.push(record);
+    byName.set(normalized, matches);
+  }
+  return byName;
+}
+
+function resolveUvPackageRecord(
+  recordIndex: ReadonlyMap<string, UvPackageRecord[]>,
+  name: string
+): UvPackageRecord | undefined {
   const normalized = normalizePythonPackageName(name);
-  const matches = records.filter((record) =>
-    !record.virtual && normalizePythonPackageName(record.name) === normalized
-  );
+  const matches = recordIndex.get(normalized) ?? [];
 
   return matches.length === 1 ? matches[0] : undefined;
 }

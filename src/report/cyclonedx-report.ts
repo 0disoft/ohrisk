@@ -131,6 +131,30 @@ function repositoryProperties(
     {
       name: "ohrisk:submodulePathsTruncated",
       value: String(repository.submodules.pathsTruncated)
+    },
+    {
+      name: "ohrisk:skippedSymbolicLinkCount",
+      value: String(repository.symbolicLinks.skippedCount)
+    },
+    {
+      name: "ohrisk:skippedSymbolicLinkPaths",
+      value: JSON.stringify(repository.symbolicLinks.skippedPaths)
+    },
+    {
+      name: "ohrisk:symbolicLinkPathsTruncated",
+      value: String(repository.symbolicLinks.pathsTruncated)
+    },
+    {
+      name: "ohrisk:skippedNonPortablePathCount",
+      value: String(repository.nonPortablePaths.skippedCount)
+    },
+    {
+      name: "ohrisk:skippedNonPortablePaths",
+      value: JSON.stringify(repository.nonPortablePaths.skippedPaths)
+    },
+    {
+      name: "ohrisk:nonPortablePathsTruncated",
+      value: String(repository.nonPortablePaths.pathsTruncated)
     }
   ];
 }

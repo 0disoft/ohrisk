@@ -72,8 +72,12 @@ export const HINDI_TEXT: HtmlReportText = {
     evidence: (files, warnings) => `${files} फ़ाइलें, ${warnings} चेतावनियाँ`,
     skippedSubmodules: (count, paths, pathsTruncated) =>
       `${count} Git सबमॉड्यूल छोड़े गए (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); स्कैन कवरेज अधूरा है।`,
-    skippedSubmoduleAction:
-      "इस रिपोर्ट को पूर्ण मानने से पहले छोड़े गए Git सबमॉड्यूल को अलग से स्कैन करें।",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) =>
+      `${count} सिम्बॉलिक लिंक उनके लक्ष्य का अनुसरण किए बिना छोड़े गए (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); स्कैन कवरेज अधूरा है।`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) =>
+      `${count} गैर-पोर्टेबल पथ छोड़े गए (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); स्कैन कवरेज अधूरा है।`,
+    incompleteRepositoryCoverageAction:
+      "इस रिपोर्ट को पूर्ण मानने से पहले छोड़ी गई रिपॉज़िटरी प्रविष्टियों की समीक्षा करें और छूटे हुए निर्भरता इनपुट को अलग से स्कैन करें।",
     licenseConfidence: (high, medium, low) =>
       `${high} उच्च भरोसा, ${medium} मध्यम भरोसा, ${low} कम भरोसा`,
     licenseIssues: (missing, malformed) => `${missing} अनुपस्थित, ${malformed} गलत प्रारूप`,

@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.10.1
+npm install -g ohrisk@1.10.2
 cd your-project
 ohrisk scan
 ```
@@ -56,6 +56,13 @@ ohrisk scan --html https://github.com/0disoft/laqu.git
 Git submodules are not fetched. Their paths are skipped by default and the
 report is marked as incomplete; use `--submodules reject` when any submodule
 must fail the scan instead.
+
+Symbolic links are never followed. Remote scans remove their checkout entries,
+continue with ordinary dependency inputs, and record bounded skipped paths as
+incomplete coverage.
+Regular files whose names cannot be represented portably on supported systems
+are also excluded before checkout and reported as incomplete coverage; path
+traversal and repository-control paths still fail the scan.
 
 Remote scans automatically merge supported dependency inputs found at the same
 project root. Maven aggregator POMs are followed through bounded, project-contained
@@ -160,13 +167,14 @@ The current implementation is the first local dependency-risk vertical slice:
 - opt-in `--all` discovery that merges every supported input at one project root, deduplicates packages by Package URL, and preserves contributing-lockfile provenance
 - direct and transitive dependency graph extraction when the dependency input records parent/child relationships
 - Bun, npm, pnpm, and Yarn classic/Berry workspace projects are scanned from every workspace/importer package root
+- npm package-lock/shrinkwrap traversal is iterative, retains every reachable package, and stores at most 64 dependency paths per package with a typed truncation diagnostic
 - pnpm `catalog:` and `catalog:<name>` dependency specifiers are resolved from `pnpm-workspace.yaml`
 - Deno `deno.lock` projects are scanned for npm package dependencies recorded in `npm:` specifiers; root remote URL imports and JSR packages fail closed instead of being silently skipped
-- Rust `Cargo.lock` projects are scanned for crates, using adjacent `Cargo.toml` root dependencies plus literal and segment `*`/`?` Cargo workspace member manifests such as `crates/*`, `crates/app-*`, `tools/?li`, and `crates/*/plugins/*` when available, honoring workspace `exclude` entries, `crate.workspace = true` dependency keys, workspace dependency package aliases, and table-form dependency sections such as `[dependencies.foo]`
+- Rust `Cargo.lock` projects are scanned for crates, using adjacent `Cargo.toml` root dependencies plus literal and segment `*`/`?` Cargo workspace member manifests such as `crates/*`, `crates/app-*`, `tools/?li`, and `crates/*/plugins/*` when available, honoring workspace `exclude` entries, `crate.workspace = true` dependency keys, workspace dependency package aliases, and table-form dependency sections such as `[dependencies.foo]`; traversal is iterative, retains every reachable crate, and stores at most 64 dependency paths per crate with a typed truncation diagnostic
 - Go `go.work` projects are scanned across workspace modules and apply workspace `replace` directives before module-level replacements; Go `go.mod` projects are scanned for required modules, Go `replace` directives, and adjacent `go.sum` module versions when available
 - Python `pylock.toml` and named `pylock.<name>.toml` projects are scanned for versioned PyPI package records and project-root-contained source-tree package records with local source metadata
 - Python `pyproject.toml` projects without a companion lockfile are scanned for exact PEP 621 `name==version` direct dependency pins
-- Python `uv.lock` projects are scanned for PyPI package dependencies recorded in the lockfile and project-root-contained `directory` or `editable` package source records
+- Python `uv.lock` projects are scanned for PyPI package dependencies, project-root-contained `directory` or `editable` package source records, and remote Git records resolved to a full immutable commit; immutable Git records remain in the graph with unavailable evidence and are never cloned or replaced with same-name PyPI evidence, while iterative graph traversal retains every reachable package and stores at most 64 dependency paths per package with a typed truncation diagnostic
 - Python PDM `pdm.lock` and `poetry.lock` projects are scanned for PyPI package dependencies recorded in the lockfile
 - Python Pipenv `Pipfile.lock` projects are scanned for exact `==version` PyPI package entries and project-root-contained local `path` or editable source entries in the `default` and `develop` sections
 - Python PDM `pdm.lock` projects use adjacent `pyproject.toml` root dependencies when available, infer roots from lockfile dependency references otherwise, and scan project-root-contained local `path` or relative `file:` source records
@@ -205,7 +213,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - local Cargo registry source and `vendor/<crate>` package evidence before unavailable fallback
 - local Go module cache, `vendor/<module>`, and project-root-contained local `replace` path evidence before unavailable fallback for `go.work` and `go.mod` scans
 - Python `.venv` and `venv` `*.dist-info/METADATA` package evidence, plus project-root-contained local source metadata and license files for `uv.lock`, `pylock.toml`, `requirements.txt`, `Pipfile.lock`, and `pdm.lock` local source entries, before unavailable fallback
-- exact-version PyPI release evidence for locked Python packages, using SHA-256-verified source distributions or wheels plus identity-checked `PKG-INFO`, `METADATA`, and license files
+- exact-version PyPI release evidence for locked Python packages, using SHA-256-verified source distributions or wheels plus identity-checked `PKG-INFO`, `METADATA`, and license files; a verified distribution that exceeds archive inspection limits remains `unknown` without aborting unrelated package findings
 - local Maven `.m2/repository` POMs for Maven parent/BOM version management and package license evidence, including bounded parent-POM license inheritance
 - exact-version Maven Central POM evidence for Maven and Gradle coordinates when local POM evidence is unavailable, plus project-declared HTTPS repositories whose exact hosts are explicitly allowed; all POM requests retain bounded parent inheritance, cache, offline, timeout, redirect, identity, and response-size checks
 - checksum-verified Maven JAR license-file fallback when the selected POM chain has no license name, requiring a same-repository SHA-256 sidecar and exact embedded `META-INF/maven/<groupId>/<artifactId>/pom.properties` identity before root or `META-INF` license files are trusted
@@ -280,7 +288,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - explicit waiver mode in CycloneDX SBOM metadata
 
 Central approval workflows, GitHub App checks, Go `go.work` use paths outside the project root, Go local `replace` paths outside the project root, full Go module parent graph
-reconstruction, unpinned or direct-reference `pyproject.toml` dependencies, uv, Pipenv, and PDM remote VCS entries, uv, Pipenv, and PDM local source paths outside the project root, remote VCS `requirements.txt` entries, unpinned requirements ranges without exact constraint pins,
+reconstruction, unpinned or short-reference uv remote VCS entries, Pipenv and PDM remote VCS entries, uv, Pipenv, and PDM local source paths outside the project root, remote VCS `requirements.txt` entries, unpinned requirements ranges without exact constraint pins,
 remote Maven parent/BOM fetching for dependency-version resolution, Maven transitive graph
 resolution, unapproved project-declared Maven repositories, Gradle graph reconstruction, Gradle version catalog rich versions, bundle aliases, plugin aliases, and usage-site configuration reconstruction, Bazel `MODULE.bazel` `include()` expansion, Bazel overrides, module extensions, `MODULE.bazel.lock` graph reconstruction, remote Bazel registry metadata fetching, Conan 1 graph lock support, Conan binary package ID and remote ConanCenter
 artifact fetching, unpinned or ranged Conda `environment.yml` specs, Conda environment transitive dependency reconstruction, explicit per-platform `conda-<platform>.lock` exports, remote Conda channel artifact fetching,
@@ -334,13 +342,17 @@ The remote scan path requires a Git executable available on `PATH`. Git
 submodules are never fetched: the default `--submodules ignore` mode skips their
 gitlinks and records bounded paths plus incomplete coverage in every report,
 while `--submodules reject` preserves strict failure. Private credentials, other
-hosts or protocols, symlinks, unsafe or oversized trees, and `--offline` are rejected. The temporary checkout is removed
+hosts or protocols, unsafe or oversized trees, and `--offline` are rejected.
+Symbolic links are removed without following their targets and recorded as
+incomplete coverage. Non-portable regular paths are excluded before checkout
+and reported separately. The temporary checkout is removed
 after the scan. Policy, waivers, cache, and report output stay rooted in the
 directory where Ohrisk was invoked; checkout-local policy and waivers are never
 trusted. When the repository root has no supported input, Ohrisk recursively
-selects the only nested dependency project. Multiple nested project roots remain
-ambiguous and require `--lockfile <relative-path>`; `--all` only merges inputs
-at one project root. Absolute and traversal paths are rejected. Remote repository input is supported by `scan`, not `ci`, `diff`, or
+selects one nested dependency project or merges multiple nested project roots
+into one repository-wide graph with per-lockfile provenance. Automatic fan-out
+is capped at 64 project roots and 128 inputs; `--lockfile <relative-path>` narrows
+the scan explicitly. Absolute and traversal paths are rejected. Remote repository input is supported by `scan`, not `ci`, `diff`, or
 the composite GitHub Action. See the [CLI command contract](docs/cli/command-contract.md#remote-repository-input)
 for exact limits.
 
@@ -365,7 +377,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.10.1
+npm install -g ohrisk@1.10.2
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
@@ -428,7 +440,7 @@ Supported dependency input files:
 - `go.mod` module requirements, Go `replace` directives, and adjacent `go.sum` module versions when available, using local Go module cache, `vendor/<module>`, and project-root-contained local replacement path evidence
 - `pylock.toml` and `pylock.<name>.toml` versioned package entries and project-root-contained source-tree records from the PyPA lockfile specification, using dependency references for audit paths and installed `.venv`/`venv` dist-info metadata or local source metadata and license files for local evidence
 - `pyproject.toml` exact PEP 621 direct dependency pins such as `name==version`, using installed `.venv`/`venv` dist-info metadata for local evidence
-- `uv.lock` package entries from Python uv projects plus project-root-contained `directory` and `editable` package source records, using installed `.venv`/`venv` dist-info metadata or local source metadata and license files for local evidence
+- `uv.lock` package entries from Python uv projects plus project-root-contained `directory` and `editable` records and remote Git records resolved to a full immutable commit, using installed `.venv`/`venv` dist-info metadata or local source metadata for ordinary packages while immutable Git records stay `unknown` until their exact commit license is verified manually
 - `Pipfile.lock` exact `==version` entries and project-root-contained local `path` or editable source entries from Python Pipenv projects, using installed `.venv`/`venv` dist-info metadata or local source metadata and license files for local evidence
 - `pdm.lock` package entries and project-root-contained local `path` or relative `file:` source records from Python PDM projects, using adjacent `pyproject.toml` root dependencies when available and installed `.venv`/`venv` dist-info metadata or local source metadata and license files for local evidence
 - `poetry.lock` package entries from Python Poetry projects, using adjacent `pyproject.toml` root dependencies when available and installed `.venv`/`venv` dist-info metadata for local evidence

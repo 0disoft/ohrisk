@@ -57,6 +57,21 @@ type PackageLockRootEntry = {
   packagePath?: string;
 };
 
+type PackageLockRecordIndex = {
+  byPackagePath: Map<string, PackageLockRecord>;
+  byNameAndVersion: Map<string, PackageLockRecord>;
+  byName: Map<string, PackageLockRecord[]>;
+};
+
+type PackageLockTraversalState = {
+  record: PackageLockRecord;
+  dependencyType: DependencyType;
+  direct: boolean;
+  path: string[];
+  packagePathTrail: string[];
+  requestedName?: string;
+};
+
 type PackageLockV1Dependency = {
   version?: unknown;
   resolved?: unknown;
@@ -66,6 +81,8 @@ type PackageLockV1Dependency = {
   dev?: unknown;
   optional?: unknown;
 };
+
+const NPM_MAX_PATHS_PER_PACKAGE = 64;
 
 export function parsePackageLockfile(
   lockfilePath: string,
@@ -142,11 +159,14 @@ export function parsePackageLockText(
     ...(rootName !== undefined ? { rootName } : {})
   });
   const nodeMap = new Map<string, DependencyNode>();
+  const recordIndex = indexPackageLockRecords(records);
+  const traversalStates: PackageLockTraversalState[] = [];
+  const pathLimitAffected = new Set<string>();
 
   for (const rootEntry of rootEntries) {
     for (const rootDependency of collectRootDependencies(rootEntry.pkg)) {
       const record = resolvePackageRecord(omitUndefined({
-        records,
+        recordIndex,
         name: rootDependency.name,
         range: rootDependency.range,
         parentPath: rootEntry.packagePath
@@ -156,23 +176,36 @@ export function parsePackageLockText(
         continue;
       }
 
-      walkDependency({
+      traversalStates.push({
         record,
         dependencyType: rootDependency.type,
         direct: true,
         path: [rootEntry.pathSegment],
-        records,
-        nodeMap,
-        seen: new Set(),
+        packagePathTrail: [],
         requestedName: rootDependency.name
       });
     }
   }
 
+  walkDependencies({
+    states: traversalStates,
+    recordIndex,
+    nodeMap,
+    pathLimitAffected
+  });
+
   return ok(omitUndefined({
     rootName,
     lockfilePath,
-    nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id))
+    nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    diagnostics: pathLimitAffected.size > 0
+      ? [{
+          code: "dependency_paths_truncated" as const,
+          affectedNodeCount: pathLimitAffected.size,
+          limit: NPM_MAX_PATHS_PER_PACKAGE,
+          message: "npm dependency paths were limited."
+        }]
+      : undefined
   }));
 }
 
@@ -369,8 +402,27 @@ function dependencyEntries(value: unknown, type: DependencyType): PackageLockDep
   }));
 }
 
+function indexPackageLockRecords(records: PackageLockRecord[]): PackageLockRecordIndex {
+  const byPackagePath = new Map<string, PackageLockRecord>();
+  const byNameAndVersion = new Map<string, PackageLockRecord>();
+  const byName = new Map<string, PackageLockRecord[]>();
+
+  for (const record of records) {
+    byPackagePath.set(record.packagePath, record);
+    const nameAndVersionKey = `${record.name}\0${record.version}`;
+    if (!byNameAndVersion.has(nameAndVersionKey)) {
+      byNameAndVersion.set(nameAndVersionKey, record);
+    }
+    const nameMatches = byName.get(record.name) ?? [];
+    nameMatches.push(record);
+    byName.set(record.name, nameMatches);
+  }
+
+  return { byPackagePath, byNameAndVersion, byName };
+}
+
 function resolvePackageRecord(input: {
-  records: PackageLockRecord[];
+  recordIndex: PackageLockRecordIndex;
   name: string;
   range: string;
   parentPath?: string;
@@ -381,100 +433,136 @@ function resolvePackageRecord(input: {
     : undefined;
   const topLevelPath = `node_modules/${reference.requestedName}`;
 
-  return input.records.find((record) => nestedPath && record.packagePath === nestedPath)
-    ?? input.records.find((record) => record.packagePath === topLevelPath)
-    ?? input.records.find((record) =>
-      record.name === reference.lookupName && record.version === reference.lookupRange
+  return (nestedPath ? input.recordIndex.byPackagePath.get(nestedPath) : undefined)
+    ?? input.recordIndex.byPackagePath.get(topLevelPath)
+    ?? input.recordIndex.byNameAndVersion.get(
+      `${reference.lookupName}\0${reference.lookupRange}`
     )
-    ?? onlyPackageRecordWithName(input.records, reference.lookupName);
+    ?? onlyPackageRecordWithName(input.recordIndex, reference.lookupName);
 }
 
-function onlyPackageRecordWithName(records: PackageLockRecord[], name: string): PackageLockRecord | undefined {
-  const matches = records.filter((record) => record.name === name);
+function onlyPackageRecordWithName(
+  recordIndex: PackageLockRecordIndex,
+  name: string
+): PackageLockRecord | undefined {
+  const matches = recordIndex.byName.get(name) ?? [];
   return matches.length === 1 ? matches[0] : undefined;
 }
 
-function walkDependency(input: {
-  record: PackageLockRecord;
-  dependencyType: DependencyType;
-  direct: boolean;
-  path: string[];
-  records: PackageLockRecord[];
+function walkDependencies(input: {
+  states: PackageLockTraversalState[];
+  recordIndex: PackageLockRecordIndex;
   nodeMap: Map<string, DependencyNode>;
-  seen: Set<string>;
-  requestedName?: string;
+  pathLimitAffected: Set<string>;
 }): void {
-  const seenKey = input.record.packagePath;
-  if (input.seen.has(seenKey)) {
-    return;
-  }
+  const stack = [...input.states].reverse();
+  const pathKeysByNodeId = new Map<string, Set<string>>();
+  const expandedPathTypesByNodeId = new Map<string, Set<string>>();
 
-  const nextSeen = new Set(input.seen);
-  nextSeen.add(seenKey);
-
-  const requestedName = input.requestedName ?? input.record.name;
-  const installName = dependencyInstallName({
-    requestedName,
-    actualName: input.record.name
-  });
-  const nextPath = [
-    ...input.path,
-    formatDependencyPathSegment({
-      requestedName,
-      actualName: input.record.name,
-      packageId: input.record.id
-    })
-  ];
-  const existing = input.nodeMap.get(input.record.id);
-
-  if (existing) {
-    existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType(existing.dependencyType, input.dependencyType);
-    const installNames = addUniqueInstallName({
-      current: existing.installNames,
-      installName
-    });
-    if (installNames !== undefined) {
-      existing.installNames = installNames;
-    }
-    existing.paths.push(nextPath);
-  } else {
-    input.nodeMap.set(input.record.id, {
-      id: input.record.id,
-      name: input.record.name,
-      version: input.record.version,
-      ecosystem: "npm",
-      ...(installName ? { installNames: [installName] } : {}),
-      ...(input.record.resolved ? { resolved: input.record.resolved } : {}),
-      ...(input.record.integrity ? { integrity: input.record.integrity } : {}),
-      dependencyType: input.dependencyType,
-      direct: input.direct,
-      paths: [nextPath]
-    });
-  }
-
-  for (const child of input.record.dependencies) {
-    const childRecord = resolvePackageRecord({
-      records: input.records,
-      name: child.name,
-      range: child.range,
-      parentPath: input.record.packagePath
-    });
-
-    if (!childRecord) {
+  while (stack.length > 0) {
+    const state = stack.pop();
+    if (!state || state.packagePathTrail.includes(state.record.packagePath)) {
       continue;
     }
 
-    walkDependency({
-      record: childRecord,
-      dependencyType: dependencyTypeForChildEdge(input.dependencyType, child.type),
-      direct: false,
-      path: nextPath,
-      records: input.records,
-      nodeMap: input.nodeMap,
-      seen: nextSeen,
-      requestedName: child.name
+    const requestedName = state.requestedName ?? state.record.name;
+    const installName = dependencyInstallName({
+      requestedName,
+      actualName: state.record.name
     });
+    const nextPath = [
+      ...state.path,
+      formatDependencyPathSegment({
+        requestedName,
+        actualName: state.record.name,
+        packageId: state.record.id
+      })
+    ];
+    const nextPackagePathTrail = [...state.packagePathTrail, state.record.packagePath];
+    const pathKey = JSON.stringify(nextPath);
+    const existing = input.nodeMap.get(state.record.id);
+    const previousDependencyType = existing?.dependencyType;
+    const mergedDependencyType = previousDependencyType
+      ? mergeDependencyType(previousDependencyType, state.dependencyType)
+      : state.dependencyType;
+    const dependencyTypeStrengthened = previousDependencyType !== undefined
+      && mergedDependencyType !== previousDependencyType;
+
+    const node = existing ?? {
+      id: state.record.id,
+      name: state.record.name,
+      version: state.record.version,
+      ecosystem: "npm",
+      ...(installName ? { installNames: [installName] } : {}),
+      ...(state.record.resolved ? { resolved: state.record.resolved } : {}),
+      ...(state.record.integrity ? { integrity: state.record.integrity } : {}),
+      dependencyType: mergedDependencyType,
+      direct: state.direct,
+      paths: []
+    };
+    node.direct = node.direct || state.direct;
+    node.dependencyType = mergedDependencyType;
+    const installNames = addUniqueInstallName({
+      current: node.installNames,
+      installName
+    });
+    if (installNames !== undefined) {
+      node.installNames = installNames;
+    }
+    if (!existing) {
+      input.nodeMap.set(state.record.id, node);
+    }
+
+    const pathKeys = pathKeysByNodeId.get(state.record.id) ?? new Set<string>();
+    let traversalPath: string[] | undefined;
+    if (pathKeys.has(pathKey)) {
+      traversalPath = dependencyTypeStrengthened ? nextPath : undefined;
+    } else if (pathKeys.size < NPM_MAX_PATHS_PER_PACKAGE) {
+      pathKeys.add(pathKey);
+      pathKeysByNodeId.set(state.record.id, pathKeys);
+      node.paths.push(nextPath);
+      traversalPath = nextPath;
+    } else {
+      input.pathLimitAffected.add(state.record.id);
+      traversalPath = dependencyTypeStrengthened ? node.paths[0] : undefined;
+    }
+
+    if (!traversalPath) {
+      continue;
+    }
+
+    const expansionKey = `${JSON.stringify(traversalPath)}\0${state.dependencyType}`;
+    const expandedPathTypes = expandedPathTypesByNodeId.get(state.record.id) ?? new Set<string>();
+    if (expandedPathTypes.has(expansionKey)) {
+      continue;
+    }
+    expandedPathTypes.add(expansionKey);
+    expandedPathTypesByNodeId.set(state.record.id, expandedPathTypes);
+
+    for (let index = state.record.dependencies.length - 1; index >= 0; index -= 1) {
+      const child = state.record.dependencies[index];
+      if (!child) {
+        continue;
+      }
+      const childRecord = resolvePackageRecord({
+        recordIndex: input.recordIndex,
+        name: child.name,
+        range: child.range,
+        parentPath: state.record.packagePath
+      });
+      if (!childRecord) {
+        continue;
+      }
+
+      stack.push({
+        record: childRecord,
+        dependencyType: dependencyTypeForChildEdge(state.dependencyType, child.type),
+        direct: false,
+        path: traversalPath,
+        packagePathTrail: nextPackagePathTrail,
+        requestedName: child.name
+      });
+    }
   }
 }
 

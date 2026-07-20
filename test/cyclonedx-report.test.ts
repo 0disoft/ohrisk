@@ -56,6 +56,16 @@ describe("renderCycloneDxReport", () => {
           skippedCount: 2,
           skippedPaths: ["framework", "tf-psa-crypto"],
           pathsTruncated: false
+        },
+        symbolicLinks: {
+          skippedCount: 1,
+          skippedPaths: [".claude/skills"],
+          pathsTruncated: false
+        },
+        nonPortablePaths: {
+          skippedCount: 1,
+          skippedPaths: ["fixtures/aux.hcl"],
+          pathsTruncated: false
         }
       }
     })) as {
@@ -90,6 +100,14 @@ describe("renderCycloneDxReport", () => {
     expect(payload.metadata.properties).toContainEqual({
       name: "ohrisk:skippedSubmodulePaths",
       value: '["framework","tf-psa-crypto"]'
+    });
+    expect(payload.metadata.properties).toContainEqual({
+      name: "ohrisk:skippedSymbolicLinkPaths",
+      value: '[".claude/skills"]'
+    });
+    expect(payload.metadata.properties).toContainEqual({
+      name: "ohrisk:skippedNonPortablePaths",
+      value: '["fixtures/aux.hcl"]'
     });
 
     expect(payload.dependencies).toContainEqual({

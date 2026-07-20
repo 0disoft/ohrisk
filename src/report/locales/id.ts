@@ -72,8 +72,12 @@ export const INDONESIAN_TEXT: HtmlReportText = {
     evidence: (files, warnings) => `${files} file, ${warnings} peringatan`,
     skippedSubmodules: (count, paths, pathsTruncated) =>
       `${count} submodul Git dilewati (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); cakupan belum lengkap.`,
-    skippedSubmoduleAction:
-      "Pindai submodul Git yang dilewati secara terpisah sebelum menganggap laporan ini lengkap.",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) =>
+      `${count} tautan simbolik dilewati tanpa mengikuti targetnya (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); cakupan belum lengkap.`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) =>
+      `${count} jalur non-portabel dilewati (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); cakupan belum lengkap.`,
+    incompleteRepositoryCoverageAction:
+      "Tinjau entri repositori yang dilewati dan pindai masukan dependensi yang terlewat secara terpisah sebelum menganggap laporan ini lengkap.",
     licenseConfidence: (high, medium, low) =>
       `${high} keyakinan tinggi, ${medium} keyakinan sedang, ${low} keyakinan rendah`,
     licenseIssues: (missing, malformed) => `${missing} hilang, ${malformed} salah format`,

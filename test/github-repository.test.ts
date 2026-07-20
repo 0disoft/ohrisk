@@ -1,9 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 import {
   checkoutArguments,
+  checkoutPathspec,
   cloneArguments,
   parseGitHubRepositoryUrl,
+  removeMaterializedSymbolicLinks,
   treeArguments,
   validateGitTree
 } from "../src/repository/github-repository";
@@ -65,9 +70,16 @@ describe("GitHub repository input", () => {
     expect(checkoutArguments("temporary-repository")).toEqual(expect.arrayContaining([
       "checkout",
       "--force",
-      "--detach",
+      "--pathspec-from-file=checkout-pathspec",
+      "--pathspec-file-nul",
       "HEAD"
     ]));
+    expect(checkoutPathspec([".claude/skills", "fixtures/aux.hcl"]).toString("utf8")).toBe([
+      ":(top,glob)**",
+      ":(top,exclude,literal).claude/skills",
+      ":(top,exclude,literal)fixtures/aux.hcl",
+      ""
+    ].join("\0"));
   });
 
   test("accepts a bounded portable regular-file tree", () => {
@@ -78,7 +90,13 @@ describe("GitHub repository input", () => {
     expect(validated).toEqual({
       ok: true,
       value: {
-        submodules: { total: 0, paths: [], pathsTruncated: false }
+        submodules: { total: 0, paths: [], pathsTruncated: false },
+        symbolicLinks: { total: 0, paths: [], pathsTruncated: false },
+        nonPortablePaths: { total: 0, paths: [], pathsTruncated: false },
+        checkoutExcludedPaths: [],
+        materializedSymbolicLinkPaths: [],
+        checkoutBytes: 170,
+        checkoutEntryCount: 2
       }
     });
   });
@@ -97,7 +115,13 @@ describe("GitHub repository input", () => {
           total: 2,
           paths: ["framework", "tf-psa-crypto"],
           pathsTruncated: false
-        }
+        },
+        symbolicLinks: { total: 0, paths: [], pathsTruncated: false },
+        nonPortablePaths: { total: 0, paths: [], pathsTruncated: false },
+        checkoutExcludedPaths: ["framework", "tf-psa-crypto"],
+        materializedSymbolicLinkPaths: [],
+        checkoutBytes: 42,
+        checkoutEntryCount: 1
       }
     });
 
@@ -115,20 +139,103 @@ describe("GitHub repository input", () => {
     expect(many.value.submodules.paths).toHaveLength(100);
   });
 
-  test("rejects symlinks, strict-mode submodules, unsafe names, and compatibility collisions", () => {
-    const cases = [
-      [treeEntry("120000", "blob", 6, "linked")],
-      [treeEntry("160000", "commit", 0, "vendor/module")],
-      [treeEntry("100644", "blob", 1, "NUL.txt")],
-      [treeEntry("100644", "blob", 1, "dir/name. ")],
-      [
-        treeEntry("100644", "blob", 1, "Docs/readme.md"),
-        treeEntry("100644", "blob", 1, "docs/guide.md")
+  test("skips symbolic links without following targets and bounds reported paths", () => {
+    const validated = validateGitTree(treeBuffer([
+      treeEntry("120000", "blob", 17, ".claude/skills"),
+      treeEntry("120000", "blob", 14, "linked-lockfile"),
+      treeEntry("100644", "blob", 42, "pnpm-lock.yaml")
+    ]));
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) throw new Error(validated.error.message);
+    expect(validated.value.symbolicLinks).toEqual({
+      total: 2,
+      paths: [".claude/skills", "linked-lockfile"],
+      pathsTruncated: false
+    });
+    expect(validated.value.materializedSymbolicLinkPaths).toEqual([
+      ".claude/skills",
+      "linked-lockfile"
+    ]);
+    expect(validated.value.checkoutExcludedPaths).toEqual([
+      ".claude/skills",
+      "linked-lockfile"
+    ]);
+    expect(validated.value.checkoutBytes).toBe(42);
+    expect(validated.value.checkoutEntryCount).toBe(1);
+
+    const many = validateGitTree(treeBuffer(
+      Array.from({ length: 101 }, (_, index) =>
+        treeEntry("120000", "blob", 8, `links/link-${index}`)
+      )
+    ));
+    expect(many.ok).toBe(true);
+    if (!many.ok) throw new Error(many.error.message);
+    expect(many.value.symbolicLinks).toMatchObject({ total: 101, pathsTruncated: true });
+    expect(many.value.symbolicLinks.paths).toHaveLength(100);
+    expect(many.value.materializedSymbolicLinkPaths).toHaveLength(101);
+  });
+
+  test("removes materialized symbolic-link entries without touching regular inputs", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-symbolic-links-"));
+    try {
+      const linkedPath = path.join(repositoryRoot, ".claude", "skills");
+      mkdirSync(path.dirname(linkedPath), { recursive: true });
+      writeFileSync(linkedPath, "../.agents/skills", "utf8");
+      writeFileSync(path.join(repositoryRoot, "pnpm-lock.yaml"), "lockfileVersion: '9.0'", "utf8");
+
+      const removed = removeMaterializedSymbolicLinks(repositoryRoot, [".claude/skills"]);
+      expect(removed).toEqual({ ok: true, value: undefined });
+      expect(existsSync(linkedPath)).toBe(false);
+      expect(existsSync(path.join(repositoryRoot, "pnpm-lock.yaml"))).toBe(true);
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects unsafe symbolic-link cleanup paths and non-file materializations", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-symbolic-links-"));
+    try {
+      expect(removeMaterializedSymbolicLinks(repositoryRoot, ["../outside"]).ok).toBe(false);
+      mkdirSync(path.join(repositoryRoot, "linked-directory"));
+      const directory = removeMaterializedSymbolicLinks(repositoryRoot, ["linked-directory"]);
+      expect(directory.ok).toBe(false);
+      if (directory.ok) throw new Error("Expected directory materialization to fail.");
+      expect(directory.error.details?.reason).toBe("symbolic_link_materialized_as_special_entry");
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("skips non-portable regular paths while keeping portable dependency inputs", () => {
+    const validated = validateGitTree(treeBuffer([
+      treeEntry("100644", "blob", 1, "posthog/clickhouse/hcl/golden/local-multi/aux.hcl"),
+      treeEntry("100644", "blob", 1, "Docs/readme.md"),
+      treeEntry("100644", "blob", 1, "docs/guide.md"),
+      treeEntry("100644", "blob", 42, "pnpm-lock.yaml")
+    ]));
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) throw new Error(validated.error.message);
+    expect(validated.value.nonPortablePaths).toEqual({
+      total: 2,
+      paths: [
+        "posthog/clickhouse/hcl/golden/local-multi/aux.hcl",
+        "docs/guide.md"
       ],
-      [
-        treeEntry("100644", "blob", 1, "café.txt"),
-        treeEntry("100644", "blob", 1, "cafe\u0301.txt")
-      ]
+      pathsTruncated: false
+    });
+    expect(validated.value.checkoutExcludedPaths).toEqual([
+      "posthog/clickhouse/hcl/golden/local-multi/aux.hcl",
+      "docs/guide.md"
+    ]);
+    expect(validated.value.checkoutBytes).toBe(43);
+    expect(validated.value.checkoutEntryCount).toBe(2);
+  });
+
+  test("rejects strict-mode submodules and structurally unsafe names", () => {
+    const cases = [
+      [treeEntry("160000", "commit", 0, "vendor/module")],
+      [treeEntry("100644", "blob", 1, ".git/config")],
+      [treeEntry("100644", "blob", 1, "dir/../outside")]
     ];
 
     for (const entries of cases) {
@@ -151,7 +258,7 @@ describe("GitHub repository input", () => {
 
   test("rejects oversized files and malformed non-NUL-terminated tree output", () => {
     const oversized = validateGitTree(treeBuffer([
-      treeEntry("100644", "blob", (50 * 1024 * 1024) + 1, "large.bin")
+      treeEntry("100644", "blob", (100 * 1024 * 1024) + 1, "large.bin")
     ]));
     expect(oversized.ok).toBe(false);
     if (oversized.ok) throw new Error("Expected oversized tree to fail.");
@@ -164,6 +271,28 @@ describe("GitHub repository input", () => {
     expect(malformed.ok).toBe(false);
     if (malformed.ok) throw new Error("Expected malformed tree output to fail.");
     expect(malformed.error.details?.reason).toBe("malformed_tree_output");
+  });
+
+  test("accepts 625 MiB declared trees and rejects totals above 640 MiB", () => {
+    const withinLimit = validateGitTree(treeBuffer([
+      ...Array.from({ length: 6 }, (_, index) =>
+        treeEntry("100644", "blob", 100 * 1024 * 1024, `large/file-${index}.bin`)
+      ),
+      treeEntry("100644", "blob", 25 * 1024 * 1024, "large/remainder.bin")
+    ]));
+    expect(withinLimit.ok).toBe(true);
+
+    const overLimit = validateGitTree(treeBuffer([
+      ...Array.from({ length: 6 }, (_, index) =>
+        treeEntry("100644", "blob", 100 * 1024 * 1024, `large/file-${index}.bin`)
+      ),
+      treeEntry("100644", "blob", (40 * 1024 * 1024) + 1, "large/overflow.bin")
+    ]));
+    expect(overLimit.ok).toBe(false);
+    if (overLimit.ok) throw new Error("Expected the declared tree total to fail.");
+    expect(overLimit.error.code).toBe("REPOSITORY_LIMIT_EXCEEDED");
+    expect(overLimit.error.details?.reason).toBe("total_file_size");
+    expect(overLimit.error.details?.limit).toBe(640 * 1024 * 1024);
   });
 });
 

@@ -1,4 +1,4 @@
-export const OHRISK_REPORT_SCHEMA_VERSION = "3.2.0";
+export const OHRISK_REPORT_SCHEMA_VERSION = "3.3.0";
 
 export const OHRISK_COMMON_REPORT_SCHEMA =
   `urn:ohrisk:schema:common:${OHRISK_REPORT_SCHEMA_VERSION}`;

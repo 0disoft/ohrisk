@@ -72,8 +72,12 @@ export const TURKISH_TEXT: HtmlReportText = {
     evidence: (files, warnings) => `${files} dosya, ${warnings} uyarı`,
     skippedSubmodules: (count, paths, pathsTruncated) =>
       `${count} Git alt modülü atlandı (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); tarama kapsamı eksik.`,
-    skippedSubmoduleAction:
-      "Bu raporu tamamlanmış saymadan önce atlanan Git alt modüllerini ayrı ayrı tarayın.",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) =>
+      `${count} sembolik bağlantı hedefleri izlenmeden atlandı (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); tarama kapsamı eksik.`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) =>
+      `${count} taşınabilir olmayan yol atlandı (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); tarama kapsamı eksik.`,
+    incompleteRepositoryCoverageAction:
+      "Bu raporu tamamlanmış saymadan önce atlanan depo girdilerini inceleyin ve eksik bağımlılık girdilerini ayrı olarak tarayın.",
     licenseConfidence: (high, medium, low) =>
       `${high} yüksek güven, ${medium} orta güven, ${low} düşük güven`,
     licenseIssues: (missing, malformed) => `${missing} eksik, ${malformed} hatalı biçimli`,

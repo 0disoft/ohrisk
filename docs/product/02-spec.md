@@ -21,10 +21,15 @@ checkout afterward. Remote HTML scans default their report file to the host
 invocation directory. This input is CLI-only and is not part of `ci`, `diff`, or
 the composite GitHub Action contract. Submodule gitlinks are skipped by default
 with incomplete-coverage metadata in every report; strict rejection is available
-through `--submodules reject`. When the repository root has no supported input,
-Ohrisk automatically selects one unambiguous nested dependency project. Multiple
-nested project roots require a safe repository-relative `--lockfile`; `--all`
-continues to merge inputs only at one project root.
+through `--submodules reject`. Symbolic links are always skipped without
+following targets, reported separately as incomplete coverage, and cannot
+supply dependency inputs. Structurally safe regular files with non-portable
+names are excluded before checkout and reported separately; traversal and
+repository-control paths still fail. When the repository root has no supported input,
+Ohrisk automatically selects one nested dependency project or merges multiple
+nested projects into a repository-wide graph with lockfile provenance. Automatic
+fan-out is capped at 64 project roots and 128 inputs; `--lockfile` remains the
+explicit narrowing control.
 
 Maven license evidence uses local POMs, then Maven Central, then only those
 project-declared HTTPS repositories whose exact host is explicitly allowed by
@@ -53,9 +58,11 @@ evidence remains `unknown`; checksum or identity disagreement fails closed.
 ## Output Contract
 
 Supported formats are terminal text, JSON, Markdown, HTML, SARIF, and CycloneDX.
-Scan, diff, and explain JSON use strict packaged Draft 2020-12 schema 3.2.0
+Scan, diff, and explain JSON use strict packaged Draft 2020-12 schema 3.3.0
 contracts. Scan JSON includes typed evidence source and graph diagnostics plus
-optional remote repository and skipped-submodule coverage metadata; diff
+optional remote repository, skipped-submodule, skipped-symbolic-link, and
+skipped-non-portable-path
+coverage metadata; diff
 JSON records new, changed, and resolved findings plus current, baseline, added,
 and removed lockfile sets.
 Format-specific behavior is owned by `docs/report-formats.md` and matching tests.

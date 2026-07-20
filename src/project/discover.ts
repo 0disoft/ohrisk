@@ -2,6 +2,7 @@ import { closeSync, existsSync, openSync, readSync, readdirSync, statSync } from
 import path from "node:path";
 
 import { parsePackageJsonManifestFile } from "../graph/npm-package-json";
+import { parsePyprojectFile } from "../graph/python-pyproject";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 
@@ -84,8 +85,12 @@ export type DiscoverProjectOptions = {
   lockfilePath?: string;
   allLockfiles?: boolean;
   autoMergeSameRoot?: boolean;
+  autoMergeDescendantProjects?: boolean;
   searchMode?: "ancestors" | "tree";
 };
+
+const MAX_AUTO_MERGED_DESCENDANT_PROJECTS = 64;
+const MAX_AUTO_MERGED_DESCENDANT_INPUTS = 128;
 
 export function projectLockfiles(project: ProjectInput): ProjectLockfile[] {
   return project.lockfiles ?? [project.lockfile];
@@ -423,11 +428,11 @@ export function discoverProject(
           createError({
             code: "NO_SUPPORTED_LOCKFILE",
             category: "unsupported_input",
-            message: `No supported lockfile found. ${SUPPORTED_LOCKFILE_MESSAGE}`,
+            message: "Dependency files were found, but none could be selected as a supported input.",
             details: {
               rootDir: dir,
               foundLockfiles: lockfiles,
-              supportedLockfiles: supportedLockfileNames()
+              hint: "Run 'ohrisk help scan' to review supported dependency inputs."
             }
           })
         );
@@ -451,7 +456,8 @@ export function discoverProject(
       const descendantProject = discoverDescendantProject({
         rootDir: startDir,
         allLockfiles: options.allLockfiles ?? false,
-        autoMergeSameRoot: options.autoMergeSameRoot ?? false
+        autoMergeSameRoot: options.autoMergeSameRoot ?? false,
+        autoMergeDescendantProjects: options.autoMergeDescendantProjects ?? false
       });
       if (descendantProject) {
         return descendantProject;
@@ -463,10 +469,10 @@ export function discoverProject(
         createError({
           code: "NO_SUPPORTED_LOCKFILE",
           category: "unsupported_input",
-          message: `Project manifest found, but no supported lockfile exists. ${SUPPORTED_LOCKFILE_MESSAGE}`,
+          message: "Project manifest found, but no supported lockfile exists. Add or select a supported lockfile before scanning dependencies.",
           details: {
             rootDir: nearestManifestWithoutParentLockfile,
-            supportedLockfiles: supportedLockfileNames()
+            hint: "Run 'ohrisk help scan' to review supported dependency inputs."
           }
         })
       );
@@ -489,10 +495,10 @@ export function discoverProject(
     createError({
       code: "NO_SUPPORTED_LOCKFILE",
       category: "unsupported_input",
-      message: `No supported lockfile found. ${SUPPORTED_LOCKFILE_MESSAGE}`,
+      message: "No dependency project was detected. Ohrisk scans dependency manifests, lockfiles, and SBOM files.",
       details: {
         startDir,
-        supportedLockfiles: supportedLockfileNames()
+        hint: "Run 'ohrisk help scan' to review supported dependency inputs."
       }
     })
   );
@@ -502,6 +508,7 @@ function discoverDescendantProject(input: {
   rootDir: string;
   allLockfiles: boolean;
   autoMergeSameRoot: boolean;
+  autoMergeDescendantProjects: boolean;
 }): Result<ProjectInput, OhriskError> | undefined {
   const projects = new Map<string, Map<string, ProjectLockfile>>();
   const pendingDirectories = [input.rootDir];
@@ -560,6 +567,30 @@ function discoverDescendantProject(input: {
   }
 
   if (candidates.length > 1) {
+    if (input.autoMergeDescendantProjects) {
+      const lockfiles = candidates.flatMap((candidate) => candidate.lockfiles);
+      if (candidates.length > MAX_AUTO_MERGED_DESCENDANT_PROJECTS) {
+        return err(descendantProjectLimitError(
+          "dependency_project_count",
+          candidates.length,
+          MAX_AUTO_MERGED_DESCENDANT_PROJECTS
+        ));
+      }
+      if (lockfiles.length > MAX_AUTO_MERGED_DESCENDANT_INPUTS) {
+        return err(descendantProjectLimitError(
+          "dependency_input_count",
+          lockfiles.length,
+          MAX_AUTO_MERGED_DESCENDANT_INPUTS
+        ));
+      }
+
+      return ok({
+        rootDir: input.rootDir,
+        lockfile: lockfiles[0]!,
+        lockfiles
+      });
+    }
+
     return err(
       createError({
         code: "MULTIPLE_LOCKFILES",
@@ -609,12 +640,29 @@ function discoverDescendantProject(input: {
   });
 }
 
+function descendantProjectLimitError(
+  reason: "dependency_project_count" | "dependency_input_count",
+  actual: number,
+  limit: number
+): OhriskError {
+  return createError({
+    code: "REPOSITORY_LIMIT_EXCEEDED",
+    category: "unsupported_input",
+    message: "The repository exceeds the remote dependency-project discovery limits.",
+    details: { reason, actual, limit }
+  });
+}
+
 function projectRelativePath(rootDir: string, targetPath: string): string {
   const relativePath = path.relative(rootDir, targetPath).replace(/\\/g, "/");
   return relativePath === "" ? "." : relativePath;
 }
 
 function isConcreteAutoDiscoveryInput(lockfile: ProjectLockfile): boolean {
+  if (lockfile.kind === "pyproject-toml") {
+    return parsePyprojectFile(lockfile.path).ok;
+  }
+
   if (
     lockfile.kind !== "cyclonedx-json"
     && lockfile.kind !== "cyclonedx-xml"
@@ -947,6 +995,12 @@ function supportedKindForLockfilePath(lockfilePath: string): SupportedLockfileKi
   }
 
   return SUPPORTED_LOCKFILES[lockfileName];
+}
+
+export function projectRootForLockfile(
+  lockfile: ProjectLockfile
+): string {
+  return rootDirForLockfilePath(lockfile.path, lockfile.kind);
 }
 
 function rootDirForLockfilePath(

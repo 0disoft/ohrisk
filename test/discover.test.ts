@@ -2435,6 +2435,96 @@ describe("discoverProject", () => {
     }
   });
 
+  test("merges bounded descendant projects only when repository-wide discovery is enabled", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-repository-wide-"));
+    const docsRoot = path.join(repositoryRoot, "docs");
+    const toolsRoot = path.join(repositoryRoot, "tools");
+
+    try {
+      mkdirSync(docsRoot, { recursive: true });
+      mkdirSync(toolsRoot, { recursive: true });
+      writeFileSync(path.join(docsRoot, "requirements.txt"), "sphinx==8.2.3\n", "utf8");
+      writeFileSync(path.join(toolsRoot, "go.mod"), "module example.com/tools\n\ngo 1.24\n", "utf8");
+
+      const result = discoverProject({
+        cwd: repositoryRoot,
+        searchMode: "tree",
+        autoMergeDescendantProjects: true
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value.rootDir).toBe(repositoryRoot);
+      expect(result.value.lockfiles).toEqual([
+        { kind: "requirements-txt", path: path.join(docsRoot, "requirements.txt") },
+        { kind: "go-mod", path: path.join(toolsRoot, "go.mod") }
+      ]);
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("skips unresolved pyproject manifests during automatic repository discovery", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-pyproject-range-"));
+    const playgroundRoot = path.join(repositoryRoot, "infra", "ml", "playground");
+    const serverRoot = path.join(repositoryRoot, "server");
+
+    try {
+      mkdirSync(playgroundRoot, { recursive: true });
+      mkdirSync(serverRoot, { recursive: true });
+      writeFileSync(path.join(playgroundRoot, "pyproject.toml"), [
+        "[project]",
+        "name = \"playground\"",
+        "dependencies = [\"ipykernel>=6.29.5\"]"
+      ].join("\n"), "utf8");
+      writeFileSync(path.join(serverRoot, "go.mod"), "module example.com/server\n\ngo 1.24\n", "utf8");
+
+      const result = discoverProject({
+        cwd: repositoryRoot,
+        searchMode: "tree",
+        autoMergeDescendantProjects: true
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value.lockfiles ?? [result.value.lockfile]).toEqual([
+        { kind: "go-mod", path: path.join(serverRoot, "go.mod") }
+      ]);
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("bounds repository-wide descendant project fan-out", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-project-limit-"));
+
+    try {
+      for (let index = 0; index < 65; index += 1) {
+        const projectRoot = path.join(repositoryRoot, `project-${index.toString().padStart(2, "0")}`);
+        mkdirSync(projectRoot, { recursive: true });
+        writeFileSync(path.join(projectRoot, "package.json"), JSON.stringify({
+          name: `project-${index}`,
+          version: "1.0.0"
+        }), "utf8");
+      }
+
+      const result = discoverProject({
+        cwd: repositoryRoot,
+        searchMode: "tree",
+        autoMergeDescendantProjects: true
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("Expected repository-wide discovery to enforce its project limit.");
+      expect(result.error).toMatchObject({
+        code: "REPOSITORY_LIMIT_EXCEEDED",
+        details: { reason: "dependency_project_count", actual: 65, limit: 64 }
+      });
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
+    }
+  });
+
   test("merges multiple inputs only when one descendant project root is unambiguous", () => {
     const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-all-"));
     const docsRoot = path.join(repositoryRoot, "docs");

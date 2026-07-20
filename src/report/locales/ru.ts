@@ -72,8 +72,12 @@ export const RUSSIAN_TEXT: HtmlReportText = {
     evidence: (files, warnings) => `${files} файлов, ${warnings} предупреждений`,
     skippedSubmodules: (count, paths, pathsTruncated) =>
       `Пропущено подмодулей Git: ${count} (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); охват неполный.`,
-    skippedSubmoduleAction:
-      "Проверьте пропущенные подмодули Git отдельно, прежде чем считать этот отчет полным.",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) =>
+      `Пропущено символических ссылок без перехода к целям: ${count} (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); охват неполный.`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) =>
+      `Пропущено непереносимых путей: ${count} (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); охват неполный.`,
+    incompleteRepositoryCoverageAction:
+      "Проверьте пропущенные элементы репозитория и отдельно просканируйте исключенные входные данные зависимостей, прежде чем считать этот отчет полным.",
     licenseConfidence: (high, medium, low) =>
       `${high} с высокой уверенностью, ${medium} со средней уверенностью, ${low} с низкой уверенностью`,
     licenseIssues: (missing, malformed) => `${missing} отсутствует, ${malformed} с неверным форматом`,

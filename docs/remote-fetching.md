@@ -29,9 +29,19 @@ Remote fetching is limited to these explicit adapters:
 The repository adapter accepts only `github.com` owner/repository URLs, disables
 credential prompts, submodule fetching, and symlink checkout, rejects non-portable or
 oversized trees before checkout, caps temporary storage, applies a two-minute
-work budget, and removes its owned staging directory. It does not accept private
+clone budget, a 30-second tree-inspection budget, and a three-minute checkout
+budget, and removes its owned staging directory. It does not accept private
 repository credentials or arbitrary Git hosts. The host invocation directory,
 not the clone, owns policy, waivers, cache, and report output.
+
+The declared tree is capped at 50,000 entries, 100 MiB per blob, and 640 MiB in
+aggregate. The complete temporary clone, packfiles, index, pathspec, and checkout
+remain subject to the independent 1 GiB staging ceiling.
+Clone transfer is monitored while Git writes unknown pack data. After tree
+inspection, checkout capacity is checked from the current staging size, declared
+portable-file bytes, and bounded per-entry filesystem overhead; final staging
+size is checked again after checkout. This avoids repeatedly walking a large
+materializing tree while keeping the same hard ceiling.
 
 Submodule gitlinks are skipped by default without resolving `.gitmodules` URLs
 or making additional network requests. Every report records the total skipped
@@ -40,12 +50,28 @@ coverage guidance. `--submodules reject` restores strict failure on the first
 gitlink. Recursive fetching is intentionally unsupported because it would widen
 the allowed repository, host, credential, recursion, storage, and timeout scope.
 
+Symbolic-link blobs are also skipped, but are never resolved or followed. Their
+validated repository-relative paths are retained only long enough to remove the
+regular-file materializations produced by `core.symlinks=false`; the checkout is
+then revalidated and fails closed if a link or unexpected special entry remains.
+Reports record a bounded path list and incomplete coverage separately from
+submodules. A skipped symbolic link cannot act as a dependency manifest or
+lockfile, even when its filename would otherwise be supported.
+
+Regular blobs that are structurally safe but cannot be represented consistently
+on supported filesystems are excluded before checkout with NUL-delimited literal
+Git pathspecs. This includes Windows-reserved names, unsupported characters or
+suffixes, overlong segments, and case or Unicode normalization collisions.
+Reports expose these paths separately as incomplete coverage. Traversal, `.git`
+segments, malformed paths, and unsupported Git entry types still fail closed.
+
 When the repository root has no supported input, remote scans recursively inspect
 only the already validated checkout. One nested dependency project is selected
-automatically. Multiple nested project roots remain ambiguous and require
-`--lockfile <repository-relative-path>`. Once one root is selected, remote scans
-automatically merge every supported input at that root instead of silently
-preferring one ecosystem. An SBOM with unresolved uppercase `@BUILD_VARIABLE@`
+automatically; multiple nested project roots are merged into one repository-wide
+graph with per-lockfile provenance. Automatic discovery is capped at 64 project
+roots and 128 dependency inputs. `--lockfile <repository-relative-path>` narrows
+the scan to one explicit input. Inputs at every selected root are merged instead
+of silently preferring one ecosystem. An SBOM with unresolved uppercase `@BUILD_VARIABLE@`
 placeholders is a build template and is not an automatic candidate. The adapter
 rejects absolute paths, empty or dot segments, and
 traversal before resolving an explicit path. This selects existing repository
@@ -62,6 +88,15 @@ Other ecosystems use local caches, vendored source, lockfile-embedded evidence,
 or local package metadata. Another remote ecosystem adapter is not enabled until
 it implements the same target, integrity, cache, credential, and resource
 boundary.
+
+`uv.lock` Git source records are identity-only inputs, not another remote
+adapter. Ohrisk accepts one only when uv's resolved source ends in a full 40- or
+64-hex Git commit, retains the package and dependency paths, and emits
+unavailable evidence that requires manual license verification at that commit.
+It does not contact the VCS host, clone the source, persist its URL, or query
+PyPI for a same-name package. A branch, tag, short revision, missing resolved
+commit, or malformed remote source fails closed. Rejected-source diagnostics
+strip credentials, query strings, fragments, and absolute local source paths.
 
 ## Target and Redirect Rules
 
@@ -152,6 +187,13 @@ validated. Non-yanked wheels are preferred, then non-yanked source
 distributions, keeping the archive surface smaller when equivalent wheel
 metadata is available. Yanked files are considered only for an exact pinned
 release and are reported with a warning.
+
+After the distribution digest is verified, an archive resource-limit rejection
+is isolated to that package as unavailable evidence. The entry, expansion,
+compression-ratio, materialization, and work limits are not raised, and no
+metadata or license bytes from the rejected archive are trusted. Integrity
+mismatches, malformed archives, identity mismatches, and unsafe paths still fail
+the scan.
 
 Maven POM evidence is requested by exact-version path and is bounded to 2 MiB
 per POM and eight inherited parent levels. Parent requests are

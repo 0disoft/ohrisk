@@ -294,6 +294,28 @@ describe("PyPI release evidence", () => {
     expect(result.error.code).toBe("PACKAGE_INTEGRITY_CHECK_FAILED");
   });
 
+  test("isolates a verified PyPI wheel that exceeds archive inspection limits", async () => {
+    const wheel = withOversizedFirstZipEntry(exampleWheel("MIT"));
+    const metadata = pypiMetadata(wheel);
+    const result = await collectGraphEvidence({
+      graph: graphFor("pypi"),
+      projectRoot: process.cwd(),
+      allowLocalProjectEvidence: false,
+      fetchArtifact: async (url) => okResponse(url === PYPI_METADATA_URL ? metadata : wheel)
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value).toEqual([{
+      packageId: "example-pkg@1.2.3",
+      files: [],
+      source: "unavailable",
+      warnings: [
+        "Remote Python distribution exceeded Ohrisk's bounded archive inspection limit (entryBytes); its contents were not used as license evidence."
+      ]
+    }]);
+  });
+
   test("does not follow PyPI distribution redirects to another public host", async () => {
     const wheel = exampleWheel("MIT");
     const metadata = pypiMetadata(wheel);
@@ -417,6 +439,19 @@ function exampleWheel(license: string): Buffer {
     ].join("\n"),
     "example_pkg-1.2.3.dist-info/licenses/LICENSE.txt": "Apache License fixture text."
   });
+}
+
+function withOversizedFirstZipEntry(wheel: Buffer): Buffer {
+  const oversizedEntryBytes = (50 * 1024 * 1024) + 1;
+  const patched = Buffer.from(wheel);
+  patched.writeUInt32LE(oversizedEntryBytes, 22);
+
+  const centralHeaderOffset = patched.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+  if (centralHeaderOffset < 0) {
+    throw new Error("Fixture ZIP did not contain a central directory entry.");
+  }
+  patched.writeUInt32LE(oversizedEntryBytes, centralHeaderOffset + 24);
+  return patched;
 }
 
 function pythonMetadata(license: string): string {

@@ -72,8 +72,12 @@ export const GERMAN_TEXT: HtmlReportText = {
     evidence: (files, warnings) => `${files} Dateien, ${warnings} Warnungen`,
     skippedSubmodules: (count, paths, pathsTruncated) =>
       `${count} Git-Submodule übersprungen (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); die Abdeckung ist unvollständig.`,
-    skippedSubmoduleAction:
-      "Prüfen Sie die übersprungenen Git-Submodule separat, bevor Sie diesen Bericht als vollständig betrachten.",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) =>
+      `${count} symbolische Links ohne Verfolgen der Ziele übersprungen (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); die Abdeckung ist unvollständig.`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) =>
+      `${count} nicht portable Pfade übersprungen (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); die Abdeckung ist unvollständig.`,
+    incompleteRepositoryCoverageAction:
+      "Prüfen Sie übersprungene Repository-Einträge und untersuchen Sie ausgelassene Abhängigkeitseingaben separat, bevor Sie diesen Bericht als vollständig betrachten.",
     licenseConfidence: (high, medium, low) =>
       `${high} hohe Sicherheit, ${medium} mittlere Sicherheit, ${low} niedrige Sicherheit`,
     licenseIssues: (missing, malformed) => `${missing} fehlend, ${malformed} fehlerhaft formatiert`,

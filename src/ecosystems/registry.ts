@@ -7,6 +7,7 @@ import { mergeDependencyGraphs, type SourcedDependencyGraph } from "../graph/mer
 import { parseProjectLockfile } from "../graph/project-lockfile";
 import type { DependencyGraph, PackageEcosystem } from "../graph/types";
 import {
+  projectRootForLockfile,
   projectLockfiles,
   type ProjectInput,
   type ProjectLockfile,
@@ -171,7 +172,7 @@ export function parseProjectDependencyGraph(
   const parsedGraphs: SourcedDependencyGraph[] = [];
 
   for (const lockfile of discoverProjectLockfiles(project)) {
-    const parsed = parseSingleLockfile(project, lockfile);
+    const parsed = parseSingleLockfile(lockfile);
     if (isErr(parsed)) {
       return parsed;
     }
@@ -193,7 +194,6 @@ export function parseProjectDependencyGraph(
 }
 
 function parseSingleLockfile(
-  project: ProjectInput,
   lockfile: ProjectLockfile
 ): Result<DependencyGraph, OhriskError> {
   const ecosystemAdapter = ecosystemAdapterForLockfile(lockfile.kind);
@@ -212,7 +212,7 @@ function parseSingleLockfile(
   }
 
   return ecosystemAdapter.parse({
-    rootDir: project.rootDir,
+    rootDir: projectRootForLockfile(lockfile),
     lockfile
   });
 }

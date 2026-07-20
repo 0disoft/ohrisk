@@ -543,6 +543,16 @@ async function runScan(
           skippedCount: cloned.value.submodules.total,
           skippedPaths: cloned.value.submodules.paths,
           pathsTruncated: cloned.value.submodules.pathsTruncated
+        },
+        symbolicLinks: {
+          skippedCount: cloned.value.symbolicLinks.total,
+          skippedPaths: cloned.value.symbolicLinks.paths,
+          pathsTruncated: cloned.value.symbolicLinks.pathsTruncated
+        },
+        nonPortablePaths: {
+          skippedCount: cloned.value.nonPortablePaths.total,
+          skippedPaths: cloned.value.nonPortablePaths.paths,
+          pathsTruncated: cloned.value.nonPortablePaths.pathsTruncated
         }
       }
     });
@@ -584,6 +594,7 @@ async function runScanAt(input: {
     ...(command.archivePath ? { archivePath: command.archivePath } : {}),
     ...(input.repository ? { projectSearchMode: "tree" as const } : {}),
     ...(input.repository ? { autoMergeSameRoot: true } : {}),
+    ...(input.repository ? { autoMergeDescendantProjects: true } : {}),
     allLockfiles: command.allLockfiles ?? false,
     ...(command.policyPath ? { policyPath: command.policyPath } : {}),
     offline: command.offline ?? false,
@@ -696,6 +707,7 @@ async function scanProject(input: {
   archivePath?: string;
   projectSearchMode?: "ancestors" | "tree";
   autoMergeSameRoot?: boolean;
+  autoMergeDescendantProjects?: boolean;
   allLockfiles: boolean;
   policyPath?: string;
   offline: boolean;
@@ -727,6 +739,7 @@ async function scanProject(input: {
         ...(input.lockfilePath ? { lockfilePath: input.lockfilePath } : {}),
         ...(input.projectSearchMode ? { projectSearchMode: input.projectSearchMode } : {}),
         ...(input.autoMergeSameRoot ? { autoMergeSameRoot: true } : {}),
+        ...(input.autoMergeDescendantProjects ? { autoMergeDescendantProjects: true } : {}),
         allLockfiles: input.allLockfiles,
         prodOnly: input.prodOnly,
         ...(input.progress ? { progress: input.progress } : {})
@@ -824,6 +837,7 @@ function loadProjectGraph(input: {
   lockfilePath?: string;
   projectSearchMode?: "ancestors" | "tree";
   autoMergeSameRoot?: boolean;
+  autoMergeDescendantProjects?: boolean;
   allLockfiles?: boolean;
   prodOnly: boolean;
   progress?: ScanProgressReporter;
@@ -837,6 +851,7 @@ function loadProjectGraph(input: {
     ...(input.lockfilePath ? { lockfilePath: input.lockfilePath } : {}),
     ...(input.projectSearchMode ? { searchMode: input.projectSearchMode } : {}),
     ...(input.autoMergeSameRoot ? { autoMergeSameRoot: true } : {}),
+    ...(input.autoMergeDescendantProjects ? { autoMergeDescendantProjects: true } : {}),
     ...(input.allLockfiles ? { allLockfiles: true } : {})
   });
 

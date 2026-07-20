@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: fa3afb1897f9f5b420e4139a1d8010e28b490fbc08f6b340803d2d3aaf5f660f
+// ohrisk-action-source-sha256: d9379e5291f000ec80772f5c37c4f9c759746c7529ada680e90a64fdfffbc884
 // ohrisk-action-build-platform: win32
 import { createRequire } from "node:module";
 var __create = Object.create;
@@ -16553,7 +16553,8 @@ import {
   lstatSync,
   mkdtempSync,
   readdirSync,
-  rmSync
+  rmSync,
+  writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -16574,16 +16575,19 @@ var GITHUB_HOSTNAME = "github.com";
 var OWNER_PATTERN = /^(?!-)[A-Za-z0-9-]{1,39}(?<!-)$/;
 var REPOSITORY_PATTERN = /^(?![.-])[A-Za-z0-9._-]{1,100}(?<!\.)$/;
 var CLONE_TIMEOUT_MS = 120000;
+var TREE_INSPECTION_TIMEOUT_MS = 30000;
+var CHECKOUT_TIMEOUT_MS = 180000;
 var MAX_TREE_ENTRIES = 50000;
-var MAX_TREE_BYTES = 256 * 1024 * 1024;
-var MAX_FILE_BYTES = 50 * 1024 * 1024;
-var MAX_STAGING_BYTES = 512 * 1024 * 1024;
+var MAX_TREE_BYTES = 640 * 1024 * 1024;
+var MAX_FILE_BYTES = 100 * 1024 * 1024;
+var MAX_STAGING_BYTES = 1024 * 1024 * 1024;
 var MAX_PATH_BYTES = 4096;
 var MAX_PATH_SEGMENTS = 64;
 var MAX_SEGMENT_BYTES = 255;
 var MAX_GIT_STDOUT_BYTES = 64 * 1024 * 1024;
 var MAX_GIT_STDERR_BYTES = 64 * 1024;
-var MAX_REPORTED_SUBMODULE_PATHS = 100;
+var MAX_REPORTED_SKIPPED_PATHS = 100;
+var PROJECTED_ENTRY_OVERHEAD_BYTES = 4 * 1024;
 var RESERVED_WINDOWS_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
 function parseGitHubRepositoryUrl(value) {
   const trimmed = value.trim();
@@ -16616,14 +16620,13 @@ function parseGitHubRepositoryUrl(value) {
 var cloneGitHubRepository = async (repository, options) => {
   const stagingRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-repository-"));
   const repositoryRoot = path.join(stagingRoot, "repository");
-  const deadline = Date.now() + CLONE_TIMEOUT_MS;
   const cleanup = createOwnedCleanup(stagingRoot);
   try {
     const cloned = await runGit({
       args: cloneArguments(repository.url, repositoryRoot),
       cwd: stagingRoot,
       stagingRoot,
-      timeoutMs: remainingTime(deadline)
+      timeoutMs: CLONE_TIMEOUT_MS
     });
     const cloneFailure = gitFailure(cloned, "clone");
     if (cloneFailure) {
@@ -16634,7 +16637,8 @@ var cloneGitHubRepository = async (repository, options) => {
       args: treeArguments(repositoryRoot),
       cwd: stagingRoot,
       stagingRoot,
-      timeoutMs: remainingTime(deadline)
+      timeoutMs: TREE_INSPECTION_TIMEOUT_MS,
+      monitorStagingSize: false
     });
     const treeFailure = gitFailure(tree, "inspect");
     if (treeFailure) {
@@ -16646,16 +16650,35 @@ var cloneGitHubRepository = async (repository, options) => {
       cleanup();
       return validatedTree;
     }
+    const checkoutPathspecPath = path.join(stagingRoot, "checkout-pathspec");
+    writeFileSync(checkoutPathspecPath, checkoutPathspec(validatedTree.value.checkoutExcludedPaths), { mode: 384 });
+    const currentStagingBytes = directorySize(stagingRoot, MAX_STAGING_BYTES);
+    const projectedStagingBytes = currentStagingBytes + validatedTree.value.checkoutBytes + validatedTree.value.checkoutEntryCount * PROJECTED_ENTRY_OVERHEAD_BYTES;
+    if (projectedStagingBytes > MAX_STAGING_BYTES) {
+      cleanup();
+      return err(repositoryLimitError("projected_staging_size", projectedStagingBytes, MAX_STAGING_BYTES));
+    }
     const checkedOut = await runGit({
-      args: checkoutArguments(repositoryRoot),
+      args: checkoutArguments(repositoryRoot, checkoutPathspecPath),
       cwd: stagingRoot,
       stagingRoot,
-      timeoutMs: remainingTime(deadline)
+      timeoutMs: CHECKOUT_TIMEOUT_MS,
+      monitorStagingSize: false
     });
     const checkoutFailure = gitFailure(checkedOut, "checkout");
     if (checkoutFailure) {
       cleanup();
       return err(checkoutFailure);
+    }
+    const removedSymbolicLinks = removeMaterializedSymbolicLinks(repositoryRoot, validatedTree.value.materializedSymbolicLinkPaths);
+    if (isErr(removedSymbolicLinks)) {
+      cleanup();
+      return removedSymbolicLinks;
+    }
+    const finalStagingBytes = directorySize(stagingRoot, MAX_STAGING_BYTES);
+    if (finalStagingBytes > MAX_STAGING_BYTES) {
+      cleanup();
+      return err(repositoryLimitError("materialized_staging_size", finalStagingBytes, MAX_STAGING_BYTES));
     }
     const materialized = validateMaterializedTree(repositoryRoot);
     if (isErr(materialized)) {
@@ -16665,6 +16688,8 @@ var cloneGitHubRepository = async (repository, options) => {
     return ok({
       rootDir: repositoryRoot,
       submodules: validatedTree.value.submodules,
+      symbolicLinks: validatedTree.value.symbolicLinks,
+      nonPortablePaths: validatedTree.value.nonPortablePaths,
       cleanup
     });
   } catch (cause) {
@@ -16708,16 +16733,24 @@ function treeArguments(repositoryRoot) {
     "HEAD"
   ];
 }
-function checkoutArguments(repositoryRoot) {
+function checkoutArguments(repositoryRoot, pathspecFile = "checkout-pathspec") {
   return [
     ...safeGitConfiguration(),
     "-C",
     repositoryRoot,
     "checkout",
     "--force",
-    "--detach",
+    `--pathspec-from-file=${pathspecFile}`,
+    "--pathspec-file-nul",
     "HEAD"
   ];
+}
+function checkoutPathspec(excludedPaths) {
+  return Buffer.from([
+    ":(top,glob)**",
+    ...excludedPaths.map((repositoryPath) => `:(top,exclude,literal)${repositoryPath}`),
+    ""
+  ].join("\x00"), "utf8");
 }
 function validateGitTree(treeOutput, options = { submodules: "reject" }) {
   if (treeOutput.length > 0 && treeOutput[treeOutput.length - 1] !== 0) {
@@ -16728,8 +16761,14 @@ function validateGitTree(treeOutput, options = { submodules: "reject" }) {
     return err(repositoryLimitError("entry_count", entries.length, MAX_TREE_ENTRIES));
   }
   let totalBytes = 0;
+  let checkoutBytes = 0;
+  let checkoutEntryCount = 0;
   let submoduleCount = 0;
   const submodulePaths = [];
+  const symbolicLinkPaths = [];
+  const materializedSymbolicLinkPaths = [];
+  const nonPortablePaths = [];
+  const checkoutExcludedPaths = new Set;
   const compatiblePaths = new Map;
   const decoder = new TextDecoder("utf-8", { fatal: true });
   for (const rawEntry of entries) {
@@ -16748,10 +16787,11 @@ function validateGitTree(treeOutput, options = { submodules: "reject" }) {
     } catch {
       return err(repositoryTreeError("path_not_utf8"));
     }
-    const pathValidation = validateRepositoryPath(repositoryPath, compatiblePaths);
+    const pathValidation = classifyRepositoryPath(repositoryPath, compatiblePaths);
     if (isErr(pathValidation)) {
       return pathValidation;
     }
+    const nonPortablePath = pathValidation.value === "non_portable";
     if (mode === "160000") {
       if (type !== "commit") {
         return err(repositoryTreeError("unsupported_entry", repositoryPath));
@@ -16759,14 +16799,26 @@ function validateGitTree(treeOutput, options = { submodules: "reject" }) {
       if (options.submodules === "reject") {
         return err(repositoryTreeError("submodule", repositoryPath));
       }
+      checkoutExcludedPaths.add(repositoryPath);
       submoduleCount += 1;
-      if (submodulePaths.length < MAX_REPORTED_SUBMODULE_PATHS) {
+      if (submodulePaths.length < MAX_REPORTED_SKIPPED_PATHS) {
         submodulePaths.push(repositoryPath);
       }
       continue;
     }
-    if (type !== "blob" || mode === "120000") {
-      return err(repositoryTreeError(mode === "120000" ? "symbolic_link" : "unsupported_entry", repositoryPath));
+    if (mode === "120000") {
+      if (type !== "blob") {
+        return err(repositoryTreeError("unsupported_entry", repositoryPath));
+      }
+      symbolicLinkPaths.push(repositoryPath);
+      checkoutExcludedPaths.add(repositoryPath);
+      if (!nonPortablePath)
+        materializedSymbolicLinkPaths.push(repositoryPath);
+    } else if (type !== "blob") {
+      return err(repositoryTreeError("unsupported_entry", repositoryPath));
+    } else if (nonPortablePath) {
+      nonPortablePaths.push(repositoryPath);
+      checkoutExcludedPaths.add(repositoryPath);
     }
     const size = Number(sizeText);
     if (!Number.isSafeInteger(size) || size < 0) {
@@ -16779,14 +16831,66 @@ function validateGitTree(treeOutput, options = { submodules: "reject" }) {
     if (!Number.isSafeInteger(totalBytes) || totalBytes > MAX_TREE_BYTES) {
       return err(repositoryLimitError("total_file_size", totalBytes, MAX_TREE_BYTES));
     }
+    if (mode !== "120000" && !nonPortablePath) {
+      checkoutBytes += size;
+      checkoutEntryCount += 1;
+    }
   }
   return ok({
     submodules: {
       total: submoduleCount,
       paths: submodulePaths,
       pathsTruncated: submoduleCount > submodulePaths.length
-    }
+    },
+    symbolicLinks: {
+      total: symbolicLinkPaths.length,
+      paths: symbolicLinkPaths.slice(0, MAX_REPORTED_SKIPPED_PATHS),
+      pathsTruncated: symbolicLinkPaths.length > MAX_REPORTED_SKIPPED_PATHS
+    },
+    nonPortablePaths: {
+      total: nonPortablePaths.length,
+      paths: nonPortablePaths.slice(0, MAX_REPORTED_SKIPPED_PATHS),
+      pathsTruncated: nonPortablePaths.length > MAX_REPORTED_SKIPPED_PATHS
+    },
+    checkoutExcludedPaths: [...checkoutExcludedPaths],
+    materializedSymbolicLinkPaths,
+    checkoutBytes,
+    checkoutEntryCount
   });
+}
+function removeMaterializedSymbolicLinks(repositoryRoot, repositoryPaths) {
+  for (const repositoryPath of repositoryPaths) {
+    const pathValidation = validateRepositoryPath(repositoryPath, new Map);
+    if (isErr(pathValidation)) {
+      return pathValidation;
+    }
+    const entryPath = path.resolve(repositoryRoot, ...repositoryPath.split("/"));
+    const relativePath = path.relative(repositoryRoot, entryPath);
+    if (relativePath === "" || relativePath === ".." || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)) {
+      return err(repositoryTreeError("symbolic_link_path_outside_repository", repositoryPath));
+    }
+    try {
+      const stats = lstatSync(entryPath, { throwIfNoEntry: false });
+      if (!stats)
+        continue;
+      if (!stats.isFile() && !stats.isSymbolicLink()) {
+        return err(repositoryTreeError("symbolic_link_materialized_as_special_entry", repositoryPath));
+      }
+      rmSync(entryPath, { force: true });
+    } catch (cause) {
+      return err(createError({
+        code: "REPOSITORY_CHECKOUT_FAILED",
+        category: "filesystem",
+        message: "Failed to remove a skipped symbolic link from the temporary checkout.",
+        details: {
+          reason: "symbolic_link_cleanup_failed",
+          path: repositoryPath,
+          cause: sanitizeGitDiagnostic(cause instanceof Error ? cause.message : String(cause))
+        }
+      }));
+    }
+  }
+  return ok(undefined);
 }
 function safeGitConfiguration() {
   return [
@@ -16809,6 +16913,12 @@ function safeGitConfiguration() {
   ];
 }
 function validateRepositoryPath(repositoryPath, compatiblePaths) {
+  const classification = classifyRepositoryPath(repositoryPath, compatiblePaths);
+  if (isErr(classification))
+    return classification;
+  return classification.value === "portable" ? ok(undefined) : err(repositoryTreeError("invalid_path_segment", repositoryPath));
+}
+function classifyRepositoryPath(repositoryPath, compatiblePaths) {
   const pathBytes = Buffer.byteLength(repositoryPath, "utf8");
   const segments = repositoryPath.split("/");
   if (repositoryPath === "" || repositoryPath.startsWith("/") || repositoryPath.includes("\\") || pathBytes > MAX_PATH_BYTES || segments.length > MAX_PATH_SEGMENTS) {
@@ -16816,18 +16926,21 @@ function validateRepositoryPath(repositoryPath, compatiblePaths) {
   }
   let prefix = "";
   for (const segment of segments) {
-    if (segment === "" || segment === "." || segment === ".." || segment.toLowerCase() === ".git" || Buffer.byteLength(segment, "utf8") > MAX_SEGMENT_BYTES || /[\u0000-\u001f\u007f<>:"|?*]/u.test(segment) || /[. ]$/u.test(segment) || RESERVED_WINDOWS_NAME.test(segment)) {
+    if (segment === "" || segment === "." || segment === ".." || segment.toLowerCase() === ".git") {
       return err(repositoryTreeError("invalid_path_segment", repositoryPath));
+    }
+    if (Buffer.byteLength(segment, "utf8") > MAX_SEGMENT_BYTES || /[\u0000-\u001f\u007f<>:"|?*]/u.test(segment) || /[. ]$/u.test(segment) || RESERVED_WINDOWS_NAME.test(segment)) {
+      return ok("non_portable");
     }
     prefix = prefix ? `${prefix}/${segment}` : segment;
     const compatibilityKey = prefix.normalize("NFC").toLowerCase();
     const existing = compatiblePaths.get(compatibilityKey);
     if (existing !== undefined && existing !== prefix) {
-      return err(repositoryTreeError("path_collision", repositoryPath));
+      return ok("non_portable");
     }
     compatiblePaths.set(compatibilityKey, prefix);
   }
-  return ok(undefined);
+  return ok("portable");
 }
 function validateMaterializedTree(repositoryRoot) {
   const pending = [repositoryRoot];
@@ -16904,7 +17017,8 @@ async function runGit(input) {
         return;
       settled = true;
       clearTimeout(timeout);
-      clearInterval(sizeMonitor);
+      if (sizeMonitor)
+        clearInterval(sizeMonitor);
       resolve(result);
     };
     const stop = () => {
@@ -16914,7 +17028,7 @@ async function runGit(input) {
       timedOut = true;
       stop();
     }, input.timeoutMs);
-    const sizeMonitor = setInterval(() => {
+    const sizeMonitor = input.monitorStagingSize === false ? undefined : setInterval(() => {
       if (directorySize(input.stagingRoot, MAX_STAGING_BYTES) > MAX_STAGING_BYTES) {
         sizeLimitExceeded = true;
         stop();
@@ -17035,9 +17149,6 @@ function emptyGitFailure(input) {
     sizeLimitExceeded: false,
     outputLimitExceeded: false
   };
-}
-function remainingTime(deadline) {
-  return Math.max(0, deadline - Date.now());
 }
 function createOwnedCleanup(stagingRoot) {
   let cleaned = false;
@@ -18384,7 +18495,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.10.1";
+var OHRISK_VERSION = "1.10.2";
 
 // src/archive/archive-project.ts
 import path46 from "node:path";
@@ -26908,6 +27019,7 @@ function isRecord10(value) {
 }
 
 // src/graph/npm-package-lock.ts
+var NPM_MAX_PATHS_PER_PACKAGE = 64;
 function parsePackageLockfile(lockfilePath, options = {}) {
   const lockfileLabel = packageLockLabel(lockfilePath);
   const lockfileText = readInputTextFile({
@@ -26961,10 +27073,13 @@ function parsePackageLockText(input, lockfilePath = "package-lock.json") {
     ...rootName !== undefined ? { rootName } : {}
   });
   const nodeMap = new Map;
+  const recordIndex = indexPackageLockRecords(records);
+  const traversalStates = [];
+  const pathLimitAffected = new Set;
   for (const rootEntry of rootEntries) {
     for (const rootDependency of collectRootDependencies3(rootEntry.pkg)) {
       const record = resolvePackageRecord2(omitUndefined({
-        records,
+        recordIndex,
         name: rootDependency.name,
         range: rootDependency.range,
         parentPath: rootEntry.packagePath
@@ -26972,22 +27087,32 @@ function parsePackageLockText(input, lockfilePath = "package-lock.json") {
       if (!record) {
         continue;
       }
-      walkDependency3({
+      traversalStates.push({
         record,
         dependencyType: rootDependency.type,
         direct: true,
         path: [rootEntry.pathSegment],
-        records,
-        nodeMap,
-        seen: new Set,
+        packagePathTrail: [],
         requestedName: rootDependency.name
       });
     }
   }
+  walkDependencies({
+    states: traversalStates,
+    recordIndex,
+    nodeMap,
+    pathLimitAffected
+  });
   return ok(omitUndefined({
     rootName,
     lockfilePath,
-    nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id))
+    nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    diagnostics: pathLimitAffected.size > 0 ? [{
+      code: "dependency_paths_truncated",
+      affectedNodeCount: pathLimitAffected.size,
+      limit: NPM_MAX_PATHS_PER_PACKAGE,
+      message: "npm dependency paths were limited."
+    }] : undefined
   }));
 }
 function parsePackageLockV1(input) {
@@ -27133,82 +27258,130 @@ function dependencyEntries2(value, type) {
     type
   }));
 }
+function indexPackageLockRecords(records) {
+  const byPackagePath = new Map;
+  const byNameAndVersion = new Map;
+  const byName = new Map;
+  for (const record of records) {
+    byPackagePath.set(record.packagePath, record);
+    const nameAndVersionKey = `${record.name}\x00${record.version}`;
+    if (!byNameAndVersion.has(nameAndVersionKey)) {
+      byNameAndVersion.set(nameAndVersionKey, record);
+    }
+    const nameMatches = byName.get(record.name) ?? [];
+    nameMatches.push(record);
+    byName.set(record.name, nameMatches);
+  }
+  return { byPackagePath, byNameAndVersion, byName };
+}
 function resolvePackageRecord2(input) {
   const reference = resolveNpmDependencyReference(input.name, input.range);
   const nestedPath = input.parentPath ? `${input.parentPath}/node_modules/${reference.requestedName}` : undefined;
   const topLevelPath = `node_modules/${reference.requestedName}`;
-  return input.records.find((record) => nestedPath && record.packagePath === nestedPath) ?? input.records.find((record) => record.packagePath === topLevelPath) ?? input.records.find((record) => record.name === reference.lookupName && record.version === reference.lookupRange) ?? onlyPackageRecordWithName(input.records, reference.lookupName);
+  return (nestedPath ? input.recordIndex.byPackagePath.get(nestedPath) : undefined) ?? input.recordIndex.byPackagePath.get(topLevelPath) ?? input.recordIndex.byNameAndVersion.get(`${reference.lookupName}\x00${reference.lookupRange}`) ?? onlyPackageRecordWithName(input.recordIndex, reference.lookupName);
 }
-function onlyPackageRecordWithName(records, name) {
-  const matches = records.filter((record) => record.name === name);
+function onlyPackageRecordWithName(recordIndex, name) {
+  const matches = recordIndex.byName.get(name) ?? [];
   return matches.length === 1 ? matches[0] : undefined;
 }
-function walkDependency3(input) {
-  const seenKey = input.record.packagePath;
-  if (input.seen.has(seenKey)) {
-    return;
-  }
-  const nextSeen = new Set(input.seen);
-  nextSeen.add(seenKey);
-  const requestedName = input.requestedName ?? input.record.name;
-  const installName = dependencyInstallName({
-    requestedName,
-    actualName: input.record.name
-  });
-  const nextPath = [
-    ...input.path,
-    formatDependencyPathSegment({
+function walkDependencies(input) {
+  const stack = [...input.states].reverse();
+  const pathKeysByNodeId = new Map;
+  const expandedPathTypesByNodeId = new Map;
+  while (stack.length > 0) {
+    const state = stack.pop();
+    if (!state || state.packagePathTrail.includes(state.record.packagePath)) {
+      continue;
+    }
+    const requestedName = state.requestedName ?? state.record.name;
+    const installName = dependencyInstallName({
       requestedName,
-      actualName: input.record.name,
-      packageId: input.record.id
-    })
-  ];
-  const existing = input.nodeMap.get(input.record.id);
-  if (existing) {
-    existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType13(existing.dependencyType, input.dependencyType);
+      actualName: state.record.name
+    });
+    const nextPath = [
+      ...state.path,
+      formatDependencyPathSegment({
+        requestedName,
+        actualName: state.record.name,
+        packageId: state.record.id
+      })
+    ];
+    const nextPackagePathTrail = [...state.packagePathTrail, state.record.packagePath];
+    const pathKey = JSON.stringify(nextPath);
+    const existing = input.nodeMap.get(state.record.id);
+    const previousDependencyType = existing?.dependencyType;
+    const mergedDependencyType = previousDependencyType ? mergeDependencyType13(previousDependencyType, state.dependencyType) : state.dependencyType;
+    const dependencyTypeStrengthened = previousDependencyType !== undefined && mergedDependencyType !== previousDependencyType;
+    const node = existing ?? {
+      id: state.record.id,
+      name: state.record.name,
+      version: state.record.version,
+      ecosystem: "npm",
+      ...installName ? { installNames: [installName] } : {},
+      ...state.record.resolved ? { resolved: state.record.resolved } : {},
+      ...state.record.integrity ? { integrity: state.record.integrity } : {},
+      dependencyType: mergedDependencyType,
+      direct: state.direct,
+      paths: []
+    };
+    node.direct = node.direct || state.direct;
+    node.dependencyType = mergedDependencyType;
     const installNames = addUniqueInstallName({
-      current: existing.installNames,
+      current: node.installNames,
       installName
     });
     if (installNames !== undefined) {
-      existing.installNames = installNames;
+      node.installNames = installNames;
     }
-    existing.paths.push(nextPath);
-  } else {
-    input.nodeMap.set(input.record.id, {
-      id: input.record.id,
-      name: input.record.name,
-      version: input.record.version,
-      ecosystem: "npm",
-      ...installName ? { installNames: [installName] } : {},
-      ...input.record.resolved ? { resolved: input.record.resolved } : {},
-      ...input.record.integrity ? { integrity: input.record.integrity } : {},
-      dependencyType: input.dependencyType,
-      direct: input.direct,
-      paths: [nextPath]
-    });
-  }
-  for (const child of input.record.dependencies) {
-    const childRecord = resolvePackageRecord2({
-      records: input.records,
-      name: child.name,
-      range: child.range,
-      parentPath: input.record.packagePath
-    });
-    if (!childRecord) {
+    if (!existing) {
+      input.nodeMap.set(state.record.id, node);
+    }
+    const pathKeys = pathKeysByNodeId.get(state.record.id) ?? new Set;
+    let traversalPath;
+    if (pathKeys.has(pathKey)) {
+      traversalPath = dependencyTypeStrengthened ? nextPath : undefined;
+    } else if (pathKeys.size < NPM_MAX_PATHS_PER_PACKAGE) {
+      pathKeys.add(pathKey);
+      pathKeysByNodeId.set(state.record.id, pathKeys);
+      node.paths.push(nextPath);
+      traversalPath = nextPath;
+    } else {
+      input.pathLimitAffected.add(state.record.id);
+      traversalPath = dependencyTypeStrengthened ? node.paths[0] : undefined;
+    }
+    if (!traversalPath) {
       continue;
     }
-    walkDependency3({
-      record: childRecord,
-      dependencyType: dependencyTypeForChildEdge4(input.dependencyType, child.type),
-      direct: false,
-      path: nextPath,
-      records: input.records,
-      nodeMap: input.nodeMap,
-      seen: nextSeen,
-      requestedName: child.name
-    });
+    const expansionKey = `${JSON.stringify(traversalPath)}\x00${state.dependencyType}`;
+    const expandedPathTypes = expandedPathTypesByNodeId.get(state.record.id) ?? new Set;
+    if (expandedPathTypes.has(expansionKey)) {
+      continue;
+    }
+    expandedPathTypes.add(expansionKey);
+    expandedPathTypesByNodeId.set(state.record.id, expandedPathTypes);
+    for (let index = state.record.dependencies.length - 1;index >= 0; index -= 1) {
+      const child = state.record.dependencies[index];
+      if (!child) {
+        continue;
+      }
+      const childRecord = resolvePackageRecord2({
+        recordIndex: input.recordIndex,
+        name: child.name,
+        range: child.range,
+        parentPath: state.record.packagePath
+      });
+      if (!childRecord) {
+        continue;
+      }
+      stack.push({
+        record: childRecord,
+        dependencyType: dependencyTypeForChildEdge4(state.dependencyType, child.type),
+        direct: false,
+        path: traversalPath,
+        packagePathTrail: nextPackagePathTrail,
+        requestedName: child.name
+      });
+    }
   }
 }
 function walkV1Dependency(input) {
@@ -27413,7 +27586,7 @@ function parsePnpmLockText(input, lockfilePath = "pnpm-lock.yaml", options = {})
       if (!record) {
         continue;
       }
-      walkDependency4({
+      walkDependency3({
         record,
         dependencyType: rootDependency.type,
         direct: true,
@@ -27746,7 +27919,7 @@ function resolvePackageRecord3(input) {
 function normalizePnpmReference(value) {
   return value.replace(/^\//, "").replace(/\(.+\)$/, "").split("_")[0] ?? value;
 }
-function walkDependency4(input) {
+function walkDependency3(input) {
   if (input.seen.has(input.record.key)) {
     return;
   }
@@ -27800,7 +27973,7 @@ function walkDependency4(input) {
     if (!childRecord) {
       continue;
     }
-    walkDependency4({
+    walkDependency3({
       record: childRecord,
       dependencyType: dependencyTypeForChildEdge5(input.dependencyType, child.type),
       direct: false,
@@ -27935,7 +28108,7 @@ function parseYarnLockText(input) {
       if (!record) {
         continue;
       }
-      walkDependency5({
+      walkDependency4({
         record,
         dependencyType: rootDependency.type,
         direct: true,
@@ -28466,7 +28639,7 @@ function dependencyDescriptorCandidates(input) {
   }
   return [...candidates].filter((candidate) => !candidate.endsWith("@"));
 }
-function walkDependency5(input) {
+function walkDependency4(input) {
   if (input.seen.has(input.record.key)) {
     return;
   }
@@ -28521,7 +28694,7 @@ function walkDependency5(input) {
     if (!childRecord) {
       continue;
     }
-    walkDependency5({
+    walkDependency4({
       record: childRecord,
       dependencyType: dependencyTypeForChildEdge6(input.dependencyType, child.type),
       direct: false,
@@ -32138,6 +32311,7 @@ var UV_LOCK_LOCAL_SOURCE_ERRORS = {
   readCode: "UV_LOCK_READ_FAILED",
   displayName: "uv.lock"
 };
+var UV_MAX_PATHS_PER_PACKAGE = 64;
 function parseUvLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -32184,41 +32358,50 @@ function parseUvLockText(input, lockfilePath = "uv.lock", options = {}) {
     }
     const roots = records.filter((record) => record.virtual);
     const nodeMap = new Map;
+    const recordIndex = indexUvPackageRecords(records);
+    const traversalStates = [];
+    const pathLimitAffected = new Set;
     if (roots.length === 0) {
       for (const record of records) {
-        walkUvDependency({
+        traversalStates.push({
           record,
           dependencyType: "unknown",
           direct: true,
-          path: ["<root>"],
-          records,
-          nodeMap,
-          seen: new Set
+          path: ["<root>"]
         });
       }
     } else {
       for (const root of roots) {
         for (const dependency of root.dependencies) {
-          const record = resolveUvPackageRecord(records, dependency.name);
+          const record = resolveUvPackageRecord(recordIndex, dependency.name);
           if (!record) {
             continue;
           }
-          walkUvDependency({
+          traversalStates.push({
             record,
             dependencyType: dependency.type,
             direct: true,
-            path: [root.name],
-            records,
-            nodeMap,
-            seen: new Set
+            path: [root.name]
           });
         }
       }
     }
+    walkUvDependencies({
+      states: traversalStates,
+      recordIndex,
+      nodeMap,
+      pathLimitAffected
+    });
     return ok(omitUndefined({
       rootName: roots[0]?.name,
       lockfilePath,
       nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+      diagnostics: pathLimitAffected.size > 0 ? [{
+        code: "dependency_paths_truncated",
+        affectedNodeCount: pathLimitAffected.size,
+        limit: UV_MAX_PATHS_PER_PACKAGE,
+        message: "uv dependency paths were limited."
+      }] : undefined,
       ...embeddedEvidenceFromUvRecords(records)
     }));
   } catch (cause) {
@@ -32269,10 +32452,11 @@ function parseUvPackageRecords(input, options) {
           lockfilePath: options.lockfilePath,
           packageName: current.name,
           reason: current.unsupportedSource.reason,
-          source: current.unsupportedSource.value,
+          source: safeUvSourceForErrorDetails(current.unsupportedSource.value, current.unsupportedSource.reason),
           supportedSourceForms: [
             "locked PyPI package record",
-            "project-root-contained local source path"
+            "project-root-contained local source path",
+            "remote VCS source pinned to a full commit"
           ]
         }
       }));
@@ -32305,7 +32489,13 @@ function parseUvPackageRecords(input, options) {
       version: current.version,
       id: `${current.name}@${current.version}`,
       virtual: current.virtual,
-      dependencies: current.dependencies
+      dependencies: current.dependencies,
+      ...current.remoteVcsCommit ? {
+        evidence: unavailableRemoteVcsEvidence({
+          packageId: `${current.name}@${current.version}`,
+          commit: current.remoteVcsCommit
+        })
+      } : {}
     });
     return ok(undefined);
   };
@@ -32368,6 +32558,8 @@ function parseUvPackageRecords(input, options) {
         if (source !== undefined) {
           if (source.unsupportedSource) {
             current.unsupportedSource = source.unsupportedSource;
+          } else if (source.remoteVcsCommit) {
+            current.remoteVcsCommit = source.remoteVcsCommit;
           } else if (source.sourcePath) {
             current.sourcePath = source.sourcePath;
             if (source.sourcePath === ".") {
@@ -32461,6 +32653,12 @@ function readUvSourceAssignment(line) {
   if (remoteSource === undefined) {
     return;
   }
+  if (remoteSource.sourceKey === "git") {
+    const remoteVcsCommit = immutableGitCommitFromUvSource(remoteSource.value);
+    if (remoteVcsCommit) {
+      return { remoteVcsCommit };
+    }
+  }
   return {
     unsupportedSource: {
       value: remoteSource.value,
@@ -32492,7 +32690,7 @@ function readInlineTableStringValue(line, key) {
 function classifyUnsupportedPythonSource2(value, sourceKey) {
   const source = value.trim();
   if (sourceKey === "git" || /^(?:git|hg|svn|bzr)\+(?:https?|ssh|git):\/\//i.test(source)) {
-    return "unsupported_remote_vcs_source";
+    return "unpinned_remote_vcs_source";
   }
   if (path37.isAbsolute(source) || source.startsWith("file://")) {
     return "unsupported_absolute_source_path";
@@ -32503,8 +32701,8 @@ function classifyUnsupportedPythonSource2(value, sourceKey) {
   return "unsupported_source_entry";
 }
 function unsupportedUvSourceMessage(reason) {
-  if (reason === "unsupported_remote_vcs_source") {
-    return "Failed to parse uv.lock package source. Remote VCS package sources are not supported yet; use locked PyPI package records or project-root-contained local source paths.";
+  if (reason === "unpinned_remote_vcs_source") {
+    return "Failed to parse uv.lock package source. Remote VCS records must resolve to a full immutable Git commit; branches, tags, short revisions, and unresolved URLs are not reproducible enough to scan.";
   }
   if (reason === "unsupported_absolute_source_path") {
     return "Failed to parse uv.lock package source. Local source paths must be relative and stay inside the project root.";
@@ -32513,6 +32711,54 @@ function unsupportedUvSourceMessage(reason) {
     return "Failed to parse uv.lock package source. Direct remote package URLs are not supported yet; use locked PyPI package records or project-root-contained local source paths.";
   }
   return "Failed to parse uv.lock package source. Use a locked PyPI package record or a project-root-contained local source path.";
+}
+function immutableGitCommitFromUvSource(value) {
+  const source = value.trim();
+  if (source.length === 0 || source.length > 4096 || /[\u0000-\u001f\u007f]/.test(source) || !/^(?:git\+)?(?:https?|ssh|git):\/\//i.test(source)) {
+    return;
+  }
+  const fragmentIndex = source.lastIndexOf("#");
+  if (fragmentIndex < 0 || fragmentIndex === source.length - 1) {
+    return;
+  }
+  const commit = source.slice(fragmentIndex + 1);
+  return /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(commit) ? commit.toLowerCase() : undefined;
+}
+function unavailableRemoteVcsEvidence(input) {
+  return {
+    packageId: input.packageId,
+    metadataSource: "uv.lock remote VCS source",
+    files: [],
+    source: "unavailable",
+    warnings: [
+      `Remote VCS dependency is pinned to immutable commit ${input.commit}, but Ohrisk does not fetch VCS package evidence. Verify this dependency's license from that commit before approval.`
+    ]
+  };
+}
+function safeUvSourceForErrorDetails(value, reason) {
+  if (reason === "unsupported_absolute_source_path") {
+    return "<absolute source path>";
+  }
+  if (reason !== "unpinned_remote_vcs_source" && reason !== "unsupported_remote_source") {
+    return value;
+  }
+  const trimmed = value.trim();
+  const gitPrefix = trimmed.toLowerCase().startsWith("git+") ? "git+" : "";
+  const parseable = gitPrefix ? trimmed.slice(gitPrefix.length) : trimmed;
+  try {
+    const parsed = new URL(parseable);
+    if (parsed.username !== "") {
+      parsed.username = "redacted";
+    }
+    if (parsed.password !== "") {
+      parsed.password = "redacted";
+    }
+    parsed.search = "";
+    parsed.hash = "";
+    return `${gitPrefix}${parsed.toString()}`;
+  } catch {
+    return "<remote source>";
+  }
 }
 function stripTomlComment8(line) {
   let inString = false;
@@ -32537,48 +32783,92 @@ function stripTomlComment8(line) {
   }
   return line;
 }
-function walkUvDependency(input) {
-  if (input.seen.has(input.record.id)) {
-    return;
-  }
-  const nextSeen = new Set(input.seen);
-  nextSeen.add(input.record.id);
-  const nextPath = [...input.path, input.record.id];
-  const existing = input.nodeMap.get(input.record.id);
-  if (existing) {
-    existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType20(existing.dependencyType, input.dependencyType);
-    existing.paths.push(nextPath);
-  } else {
-    input.nodeMap.set(input.record.id, {
-      id: input.record.id,
-      name: input.record.name,
-      version: input.record.version,
-      ecosystem: "pypi",
-      dependencyType: input.dependencyType,
-      direct: input.direct,
-      paths: [nextPath]
-    });
-  }
-  for (const dependency of input.record.dependencies) {
-    const record = resolveUvPackageRecord(input.records, dependency.name);
-    if (!record) {
+function walkUvDependencies(input) {
+  const stack = [...input.states].reverse();
+  const pathKeysByNodeId = new Map;
+  const expandedPathTypesByNodeId = new Map;
+  while (stack.length > 0) {
+    const state = stack.pop();
+    if (!state || state.path.includes(state.record.id)) {
       continue;
     }
-    walkUvDependency({
-      record,
-      dependencyType: dependencyTypeForChildEdge10(input.dependencyType, dependency.type),
-      direct: false,
-      path: nextPath,
-      records: input.records,
-      nodeMap: input.nodeMap,
-      seen: nextSeen
-    });
+    const nextPath = [...state.path, state.record.id];
+    const pathKey = JSON.stringify(nextPath);
+    const existing = input.nodeMap.get(state.record.id);
+    const previousDependencyType = existing?.dependencyType;
+    const mergedDependencyType = previousDependencyType ? mergeDependencyType20(previousDependencyType, state.dependencyType) : state.dependencyType;
+    const dependencyTypeStrengthened = previousDependencyType !== undefined && mergedDependencyType !== previousDependencyType;
+    const node = existing ?? {
+      id: state.record.id,
+      name: state.record.name,
+      version: state.record.version,
+      ecosystem: "pypi",
+      dependencyType: mergedDependencyType,
+      direct: state.direct,
+      paths: []
+    };
+    node.direct = node.direct || state.direct;
+    node.dependencyType = mergedDependencyType;
+    if (!existing) {
+      input.nodeMap.set(state.record.id, node);
+    }
+    const pathKeys = pathKeysByNodeId.get(state.record.id) ?? new Set;
+    let traversalPath;
+    if (pathKeys.has(pathKey)) {
+      traversalPath = dependencyTypeStrengthened ? nextPath : undefined;
+    } else if (pathKeys.size < UV_MAX_PATHS_PER_PACKAGE) {
+      pathKeys.add(pathKey);
+      pathKeysByNodeId.set(state.record.id, pathKeys);
+      node.paths.push(nextPath);
+      traversalPath = nextPath;
+    } else {
+      input.pathLimitAffected.add(state.record.id);
+      traversalPath = dependencyTypeStrengthened ? node.paths[0] : undefined;
+    }
+    if (!traversalPath) {
+      continue;
+    }
+    const expansionKey = `${JSON.stringify(traversalPath)}\x00${state.dependencyType}`;
+    const expandedPathTypes = expandedPathTypesByNodeId.get(state.record.id) ?? new Set;
+    if (expandedPathTypes.has(expansionKey)) {
+      continue;
+    }
+    expandedPathTypes.add(expansionKey);
+    expandedPathTypesByNodeId.set(state.record.id, expandedPathTypes);
+    for (let index = state.record.dependencies.length - 1;index >= 0; index -= 1) {
+      const dependency = state.record.dependencies[index];
+      if (!dependency) {
+        continue;
+      }
+      const record = resolveUvPackageRecord(input.recordIndex, dependency.name);
+      if (!record) {
+        continue;
+      }
+      stack.push({
+        record,
+        dependencyType: dependencyTypeForChildEdge10(state.dependencyType, dependency.type),
+        direct: false,
+        path: traversalPath
+      });
+    }
   }
 }
-function resolveUvPackageRecord(records, name) {
+function indexUvPackageRecords(records) {
+  const byName = new Map;
+  for (const record of records) {
+    if (record.virtual) {
+      continue;
+    }
+    const normalized = normalizePythonPackageName6(record.name);
+    const matches = byName.get(normalized) ?? [];
+    matches.push(record);
+    byName.set(normalized, matches);
+  }
+  return byName;
+}
+function resolveUvPackageRecord(recordIndex, name) {
   const normalized = normalizePythonPackageName6(name);
-  const matches = records.filter((record) => !record.virtual && normalizePythonPackageName6(record.name) === normalized);
+  const matches = recordIndex.get(normalized) ?? [];
   return matches.length === 1 ? matches[0] : undefined;
 }
 function embeddedEvidenceFromUvRecords(records) {
@@ -33125,6 +33415,7 @@ function mergeDependencyType21(left, right) {
 // src/graph/rust-cargo-lock.ts
 import { existsSync as existsSync15, readdirSync as readdirSync4 } from "node:fs";
 import path40 from "node:path";
+var CARGO_MAX_PATHS_PER_PACKAGE = 64;
 function parseCargoLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -33181,6 +33472,9 @@ function parseCargoLockText(input, lockfilePath = "Cargo.lock", options = {}) {
       records
     }));
     const nodeMap = new Map;
+    const recordIndex = indexCargoPackageRecords(records);
+    const traversalStates = [];
+    const pathLimitAffected = new Set;
     for (const rootDependency of rootDependencies) {
       const record = resolveCargoPackageRecord(records, omitUndefined({
         name: rootDependency.name,
@@ -33189,20 +33483,31 @@ function parseCargoLockText(input, lockfilePath = "Cargo.lock", options = {}) {
       if (!record) {
         continue;
       }
-      walkCargoDependency({
+      traversalStates.push({
         record,
         dependencyType: rootDependency.type,
         direct: true,
-        path: [rootName],
-        records,
-        nodeMap,
-        seen: new Set
+        path: [rootName]
       });
     }
+    walkCargoDependencies({
+      states: traversalStates,
+      recordIndex,
+      nodeMap,
+      pathLimitAffected
+    });
     return ok({
       rootName,
       lockfilePath,
-      nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id))
+      nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+      ...pathLimitAffected.size > 0 ? {
+        diagnostics: [{
+          code: "dependency_paths_truncated",
+          affectedNodeCount: pathLimitAffected.size,
+          limit: CARGO_MAX_PATHS_PER_PACKAGE,
+          message: "Cargo dependency paths were limited."
+        }]
+      } : {}
     });
   } catch (cause) {
     return err(createError({
@@ -33725,45 +34030,89 @@ function cargoRootDependencyVersion(rootPackage, dependencyName) {
   const dependency = rootPackage?.dependencies.find((edge) => edge.name === dependencyName);
   return dependency?.version ? { version: dependency.version } : {};
 }
-function walkCargoDependency(input) {
-  if (input.seen.has(input.record.id)) {
-    return;
-  }
-  const nextSeen = new Set(input.seen);
-  nextSeen.add(input.record.id);
-  const nextPath = [...input.path, input.record.id];
-  const existing = input.nodeMap.get(input.record.id);
-  if (existing) {
-    existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType22(existing.dependencyType, input.dependencyType);
-    existing.paths.push(nextPath);
-  } else {
-    input.nodeMap.set(input.record.id, omitUndefined({
-      id: input.record.id,
-      name: input.record.name,
-      version: input.record.version,
-      ecosystem: "cargo",
-      resolved: input.record.source,
-      dependencyType: input.dependencyType,
-      direct: input.direct,
-      paths: [nextPath]
-    }));
-  }
-  for (const dependency of input.record.dependencies) {
-    const record = resolveCargoPackageRecord(input.records, dependency);
-    if (!record) {
+function walkCargoDependencies(input) {
+  const stack = [...input.states].reverse();
+  const pathKeysByNodeId = new Map;
+  const expandedPathTypesByNodeId = new Map;
+  while (stack.length > 0) {
+    const state = stack.pop();
+    if (!state || state.path.includes(state.record.id)) {
       continue;
     }
-    walkCargoDependency({
-      record,
-      dependencyType: input.dependencyType,
-      direct: false,
-      path: nextPath,
-      records: input.records,
-      nodeMap: input.nodeMap,
-      seen: nextSeen
+    const nextPath = [...state.path, state.record.id];
+    const pathKey = JSON.stringify(nextPath);
+    const existing = input.nodeMap.get(state.record.id);
+    const previousDependencyType = existing?.dependencyType;
+    const mergedDependencyType = previousDependencyType ? mergeDependencyType22(previousDependencyType, state.dependencyType) : state.dependencyType;
+    const dependencyTypeStrengthened = previousDependencyType !== undefined && mergedDependencyType !== previousDependencyType;
+    const node = existing ?? omitUndefined({
+      id: state.record.id,
+      name: state.record.name,
+      version: state.record.version,
+      ecosystem: "cargo",
+      resolved: state.record.source,
+      dependencyType: mergedDependencyType,
+      direct: state.direct,
+      paths: []
     });
+    node.direct = node.direct || state.direct;
+    node.dependencyType = mergedDependencyType;
+    if (!existing) {
+      input.nodeMap.set(state.record.id, node);
+    }
+    const pathKeys = pathKeysByNodeId.get(state.record.id) ?? new Set;
+    let traversalPath;
+    if (pathKeys.has(pathKey)) {
+      traversalPath = dependencyTypeStrengthened ? nextPath : undefined;
+    } else if (pathKeys.size < CARGO_MAX_PATHS_PER_PACKAGE) {
+      pathKeys.add(pathKey);
+      pathKeysByNodeId.set(state.record.id, pathKeys);
+      node.paths.push(nextPath);
+      traversalPath = nextPath;
+    } else {
+      input.pathLimitAffected.add(state.record.id);
+      traversalPath = dependencyTypeStrengthened ? node.paths[0] : undefined;
+    }
+    if (!traversalPath) {
+      continue;
+    }
+    const expansionKey = `${JSON.stringify(traversalPath)}\x00${state.dependencyType}`;
+    const expandedPathTypes = expandedPathTypesByNodeId.get(state.record.id) ?? new Set;
+    if (expandedPathTypes.has(expansionKey)) {
+      continue;
+    }
+    expandedPathTypes.add(expansionKey);
+    expandedPathTypesByNodeId.set(state.record.id, expandedPathTypes);
+    for (let index = state.record.dependencies.length - 1;index >= 0; index -= 1) {
+      const dependency = state.record.dependencies[index];
+      if (!dependency) {
+        continue;
+      }
+      const record = resolveCargoPackageRecordFromIndex(input.recordIndex, dependency);
+      if (!record) {
+        continue;
+      }
+      stack.push({
+        record,
+        dependencyType: state.dependencyType,
+        direct: false,
+        path: traversalPath
+      });
+    }
   }
+}
+function indexCargoPackageRecords(records) {
+  const byName = new Map;
+  for (const record of records) {
+    const matches = byName.get(record.name) ?? [];
+    matches.push(record);
+    byName.set(record.name, matches);
+  }
+  return byName;
+}
+function resolveCargoPackageRecordFromIndex(recordIndex, dependency) {
+  const matches = (recordIndex.get(dependency.name) ?? []).filter((record) => dependency.version === undefined || record.version === dependency.version);
+  return matches.length === 1 ? matches[0] : undefined;
 }
 function resolveCargoPackageRecord(records, dependency) {
   const matches = records.filter((record) => record.name === dependency.name && (dependency.version === undefined || record.version === dependency.version));
@@ -36103,6 +36452,8 @@ function parseLockfileTextForKind(input) {
 // src/project/discover.ts
 import { closeSync as closeSync2, existsSync as existsSync17, openSync as openSync2, readSync as readSync2, readdirSync as readdirSync6, statSync as statSync5 } from "node:fs";
 import path45 from "node:path";
+var MAX_AUTO_MERGED_DESCENDANT_PROJECTS = 64;
+var MAX_AUTO_MERGED_DESCENDANT_INPUTS = 128;
 function projectLockfiles(project) {
   return project.lockfiles ?? [project.lockfile];
 }
@@ -36383,11 +36734,11 @@ function discoverProject(options = {}) {
         return err(createError({
           code: "NO_SUPPORTED_LOCKFILE",
           category: "unsupported_input",
-          message: `No supported lockfile found. ${SUPPORTED_LOCKFILE_MESSAGE}`,
+          message: "Dependency files were found, but none could be selected as a supported input.",
           details: {
             rootDir: dir,
             foundLockfiles: lockfiles,
-            supportedLockfiles: supportedLockfileNames()
+            hint: "Run 'ohrisk help scan' to review supported dependency inputs."
           }
         }));
       }
@@ -36405,7 +36756,8 @@ function discoverProject(options = {}) {
       const descendantProject = discoverDescendantProject({
         rootDir: startDir,
         allLockfiles: options.allLockfiles ?? false,
-        autoMergeSameRoot: options.autoMergeSameRoot ?? false
+        autoMergeSameRoot: options.autoMergeSameRoot ?? false,
+        autoMergeDescendantProjects: options.autoMergeDescendantProjects ?? false
       });
       if (descendantProject) {
         return descendantProject;
@@ -36415,10 +36767,10 @@ function discoverProject(options = {}) {
       return err(createError({
         code: "NO_SUPPORTED_LOCKFILE",
         category: "unsupported_input",
-        message: `Project manifest found, but no supported lockfile exists. ${SUPPORTED_LOCKFILE_MESSAGE}`,
+        message: "Project manifest found, but no supported lockfile exists. Add or select a supported lockfile before scanning dependencies.",
         details: {
           rootDir: nearestManifestWithoutParentLockfile,
-          supportedLockfiles: supportedLockfileNames()
+          hint: "Run 'ohrisk help scan' to review supported dependency inputs."
         }
       }));
     }
@@ -36436,10 +36788,10 @@ function discoverProject(options = {}) {
   return err(createError({
     code: "NO_SUPPORTED_LOCKFILE",
     category: "unsupported_input",
-    message: `No supported lockfile found. ${SUPPORTED_LOCKFILE_MESSAGE}`,
+    message: "No dependency project was detected. Ohrisk scans dependency manifests, lockfiles, and SBOM files.",
     details: {
       startDir,
-      supportedLockfiles: supportedLockfileNames()
+      hint: "Run 'ohrisk help scan' to review supported dependency inputs."
     }
   }));
 }
@@ -36482,6 +36834,20 @@ function discoverDescendantProject(input) {
     return;
   }
   if (candidates.length > 1) {
+    if (input.autoMergeDescendantProjects) {
+      const lockfiles = candidates.flatMap((candidate2) => candidate2.lockfiles);
+      if (candidates.length > MAX_AUTO_MERGED_DESCENDANT_PROJECTS) {
+        return err(descendantProjectLimitError("dependency_project_count", candidates.length, MAX_AUTO_MERGED_DESCENDANT_PROJECTS));
+      }
+      if (lockfiles.length > MAX_AUTO_MERGED_DESCENDANT_INPUTS) {
+        return err(descendantProjectLimitError("dependency_input_count", lockfiles.length, MAX_AUTO_MERGED_DESCENDANT_INPUTS));
+      }
+      return ok({
+        rootDir: input.rootDir,
+        lockfile: lockfiles[0],
+        lockfiles
+      });
+    }
     return err(createError({
       code: "MULTIPLE_LOCKFILES",
       category: "unsupported_input",
@@ -36514,11 +36880,22 @@ function discoverDescendantProject(input) {
     ...selectedLockfiles.length > 1 ? { lockfiles: selectedLockfiles } : {}
   });
 }
+function descendantProjectLimitError(reason, actual, limit) {
+  return createError({
+    code: "REPOSITORY_LIMIT_EXCEEDED",
+    category: "unsupported_input",
+    message: "The repository exceeds the remote dependency-project discovery limits.",
+    details: { reason, actual, limit }
+  });
+}
 function projectRelativePath(rootDir, targetPath) {
   const relativePath = path45.relative(rootDir, targetPath).replace(/\\/g, "/");
   return relativePath === "" ? "." : relativePath;
 }
 function isConcreteAutoDiscoveryInput(lockfile) {
+  if (lockfile.kind === "pyproject-toml") {
+    return parsePyprojectFile(lockfile.path).ok;
+  }
   if (lockfile.kind !== "cyclonedx-json" && lockfile.kind !== "cyclonedx-xml" && lockfile.kind !== "spdx-json" && lockfile.kind !== "spdx-rdf" && lockfile.kind !== "spdx-tag-value") {
     return true;
   }
@@ -36745,6 +37122,9 @@ function supportedKindForLockfilePath(lockfilePath) {
     return "cyclonedx-xml";
   }
   return SUPPORTED_LOCKFILES[lockfileName];
+}
+function projectRootForLockfile(lockfile) {
+  return rootDirForLockfilePath(lockfile.path, lockfile.kind);
 }
 function rootDirForLockfilePath(lockfilePath, kind) {
   if (kind === "gradle-version-catalog" && path45.basename(path45.dirname(lockfilePath)) === "gradle") {
@@ -38309,7 +38689,7 @@ import {
   renameSync,
   rmSync as rmSync2,
   statSync as statSync7,
-  writeFileSync
+  writeFileSync as writeFileSync2
 } from "node:fs";
 import os from "node:os";
 import path47 from "node:path";
@@ -38788,7 +39168,7 @@ function writeIfAbsent(filePath, bytes) {
   }
   const temporaryPath = temporaryCachePath(filePath);
   try {
-    writeFileSync(temporaryPath, bytes, { flag: "wx", mode: 384 });
+    writeFileSync2(temporaryPath, bytes, { flag: "wx", mode: 384 });
     try {
       renameSync(temporaryPath, filePath);
     } catch {
@@ -38804,7 +39184,7 @@ function replaceAtomic(filePath, bytes) {
   mkdirSync(path47.dirname(filePath), { recursive: true });
   const temporaryPath = temporaryCachePath(filePath);
   try {
-    writeFileSync(temporaryPath, bytes, { flag: "wx", mode: 384 });
+    writeFileSync2(temporaryPath, bytes, { flag: "wx", mode: 384 });
     renameSync(temporaryPath, filePath);
   } finally {
     removeQuietly(temporaryPath);
@@ -38839,7 +39219,7 @@ function ensureCacheMarker(rootDir) {
       if (rootExisted && readdirSync7(rootDir).length > 0) {
         throw new Error("Artifact cache directory is not empty and has no ownership marker.");
       }
-      writeFileSync(markerPath, CACHE_MARKER_CONTENT, { flag: "wx", mode: 384 });
+      writeFileSync2(markerPath, CACHE_MARKER_CONTENT, { flag: "wx", mode: 384 });
     }
     return true;
   } catch {
@@ -44011,7 +44391,7 @@ function collectRegisteredEcosystemEvidence(input) {
 function parseProjectDependencyGraph(project) {
   const parsedGraphs = [];
   for (const lockfile of discoverProjectLockfiles(project)) {
-    const parsed = parseSingleLockfile(project, lockfile);
+    const parsed = parseSingleLockfile(lockfile);
     if (isErr(parsed)) {
       return parsed;
     }
@@ -44028,7 +44408,7 @@ function parseProjectDependencyGraph(project) {
   }
   return ok(mergeDependencyGraphs(parsedGraphs));
 }
-function parseSingleLockfile(project, lockfile) {
+function parseSingleLockfile(lockfile) {
   const ecosystemAdapter = ecosystemAdapterForLockfile(lockfile.kind);
   if (!ecosystemAdapter) {
     return err(createError({
@@ -44042,7 +44422,7 @@ function parseSingleLockfile(project, lockfile) {
     }));
   }
   return ecosystemAdapter.parse({
-    rootDir: project.rootDir,
+    rootDir: projectRootForLockfile(lockfile),
     lockfile
   });
 }
@@ -46352,7 +46732,7 @@ async function collectRemotePythonDistributionEvidence(input) {
     if (!verified.ok) {
       return err(verified.error);
     }
-    return collectPythonDistributionEvidence({
+    const collected = collectPythonDistributionEvidence({
       packageId: input.node.id,
       packageName: input.node.name,
       version: input.node.version,
@@ -46362,6 +46742,10 @@ async function collectRemotePythonDistributionEvidence(input) {
       ...input.registryMetadataLicense ? { registryMetadataLicense: input.registryMetadataLicense } : {},
       ...input.yanked !== undefined ? { yanked: input.yanked } : {}
     });
+    if (!collected.ok && collected.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
+      return ok(unavailableRemoteArchiveLimitEvidence(input.node.id, collected.error));
+    }
+    return collected;
   } catch (cause) {
     return err(createRemoteArtifactExceptionError({
       code: urlError.code,
@@ -46876,6 +47260,17 @@ function unavailableOversizedTarballEvidence(packageId) {
     source: "unavailable",
     warnings: [
       "Package tarball evidence exceeded Ohrisk's size limit and was not scanned."
+    ]
+  };
+}
+function unavailableRemoteArchiveLimitEvidence(packageId, error) {
+  const limit = typeof error.details?.limit === "string" ? ` (${error.details.limit})` : "";
+  return {
+    packageId,
+    files: [],
+    source: "unavailable",
+    warnings: [
+      `Remote Python distribution exceeded Ohrisk's bounded archive inspection limit${limit}; its contents were not used as license evidence.`
     ]
   };
 }
@@ -49797,6 +50192,30 @@ function repositoryProperties(repository) {
     {
       name: "ohrisk:submodulePathsTruncated",
       value: String(repository.submodules.pathsTruncated)
+    },
+    {
+      name: "ohrisk:skippedSymbolicLinkCount",
+      value: String(repository.symbolicLinks.skippedCount)
+    },
+    {
+      name: "ohrisk:skippedSymbolicLinkPaths",
+      value: JSON.stringify(repository.symbolicLinks.skippedPaths)
+    },
+    {
+      name: "ohrisk:symbolicLinkPathsTruncated",
+      value: String(repository.symbolicLinks.pathsTruncated)
+    },
+    {
+      name: "ohrisk:skippedNonPortablePathCount",
+      value: String(repository.nonPortablePaths.skippedCount)
+    },
+    {
+      name: "ohrisk:skippedNonPortablePaths",
+      value: JSON.stringify(repository.nonPortablePaths.skippedPaths)
+    },
+    {
+      name: "ohrisk:nonPortablePathsTruncated",
+      value: String(repository.nonPortablePaths.pathsTruncated)
     }
   ];
 }
@@ -50013,7 +50432,7 @@ function formatThresholdSummary(summary) {
 }
 
 // src/report/schema.ts
-var OHRISK_REPORT_SCHEMA_VERSION = "3.2.0";
+var OHRISK_REPORT_SCHEMA_VERSION = "3.3.0";
 var OHRISK_COMMON_REPORT_SCHEMA = `urn:ohrisk:schema:common:${OHRISK_REPORT_SCHEMA_VERSION}`;
 var OHRISK_SCAN_REPORT_SCHEMA = `urn:ohrisk:schema:scan-report:${OHRISK_REPORT_SCHEMA_VERSION}`;
 var OHRISK_DIFF_REPORT_SCHEMA = `urn:ohrisk:schema:diff-report:${OHRISK_REPORT_SCHEMA_VERSION}`;
@@ -50307,7 +50726,13 @@ function renderSarifReport(input) {
             ohriskSubmoduleMode: input.repository.submodules.mode,
             ohriskSkippedSubmoduleCount: input.repository.submodules.skippedCount,
             ohriskSkippedSubmodulePaths: input.repository.submodules.skippedPaths,
-            ohriskSubmodulePathsTruncated: input.repository.submodules.pathsTruncated
+            ohriskSubmodulePathsTruncated: input.repository.submodules.pathsTruncated,
+            ohriskSkippedSymbolicLinkCount: input.repository.symbolicLinks.skippedCount,
+            ohriskSkippedSymbolicLinkPaths: input.repository.symbolicLinks.skippedPaths,
+            ohriskSymbolicLinkPathsTruncated: input.repository.symbolicLinks.pathsTruncated,
+            ohriskSkippedNonPortablePathCount: input.repository.nonPortablePaths.skippedCount,
+            ohriskSkippedNonPortablePaths: input.repository.nonPortablePaths.skippedPaths,
+            ohriskNonPortablePathsTruncated: input.repository.nonPortablePaths.pathsTruncated
           } : {},
           ...input.project.source ? {
             ohriskArchiveName: input.project.source.displayPath,
@@ -50535,7 +50960,9 @@ var ENGLISH_TEXT = {
     dependencies: (total, direct, transitive) => `${total} total, ${direct} direct, ${transitive} transitive`,
     evidence: (files, warnings) => `${files} files, ${warnings} warnings`,
     skippedSubmodules: (count, paths, pathsTruncated) => `${count} Git submodule${count === 1 ? "" : "s"} skipped (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); coverage is incomplete.`,
-    skippedSubmoduleAction: "Scan the skipped Git submodules separately before treating this report as complete.",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) => `${count} symbolic link${count === 1 ? "" : "s"} skipped without following targets (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); coverage is incomplete.`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) => `${count} non-portable path${count === 1 ? "" : "s"} skipped (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); coverage is incomplete.`,
+    incompleteRepositoryCoverageAction: "Review skipped repository entries and scan any omitted dependency inputs separately before treating this report as complete.",
     licenseConfidence: (high, medium, low) => `${high} high-confidence, ${medium} medium-confidence, ${low} low-confidence`,
     licenseIssues: (missing, malformed2) => `${missing} missing, ${malformed2} malformed`,
     risks: (risks) => `${risks.high} high, ${risks.review} review, ${risks.unknown} unknown, ${risks.low} low`,
@@ -50699,7 +51126,9 @@ var KOREAN_TEXT = {
     dependencies: (total, direct, transitive) => `총 ${total}개, 직접 ${direct}개, 전이 ${transitive}개`,
     evidence: (files, warnings) => `파일 ${files}개, 경고 ${warnings}개`,
     skippedSubmodules: (count, paths, pathsTruncated) => `Git 서브모듈 ${count}개 제외됨 (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); 검사 범위가 불완전합니다.`,
-    skippedSubmoduleAction: "이 보고서를 완전한 검사로 취급하기 전에 제외된 Git 서브모듈을 별도로 검사하세요.",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) => `심볼릭 링크 ${count}개를 대상을 따라가지 않고 제외함 (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); 검사 범위가 불완전합니다.`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) => `호환되지 않는 경로 ${count}개 제외됨 (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); 검사 범위가 불완전합니다.`,
+    incompleteRepositoryCoverageAction: "이 보고서를 완전한 검사로 취급하기 전에 제외된 저장소 항목을 검토하고 누락된 의존성 입력을 별도로 검사하세요.",
     licenseConfidence: (high, medium, low) => `높은 신뢰도 ${high}개, 중간 신뢰도 ${medium}개, 낮은 신뢰도 ${low}개`,
     licenseIssues: (missing, malformed2) => `누락 ${missing}개, 형식 오류 ${malformed2}개`,
     risks: (risks) => `높음 ${risks.high}개, 검토 ${risks.review}개, 불명 ${risks.unknown}개, 낮음 ${risks.low}개`,
@@ -50947,7 +51376,9 @@ var SPANISH_TEXT = {
     dependencies: (total, direct, transitive) => `${total} en total, ${direct} directas, ${transitive} transitivas`,
     evidence: (files, warnings) => `${files} archivos, ${warnings} advertencias`,
     skippedSubmodules: (count, paths, pathsTruncated) => `Se omitieron ${count} submódulos de Git (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); la cobertura está incompleta.`,
-    skippedSubmoduleAction: "Analice por separado los submódulos de Git omitidos antes de considerar completo este informe.",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) => `Se omitieron ${count} enlaces simbólicos sin seguir sus destinos (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); la cobertura está incompleta.`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) => `Se omitieron ${count} rutas no portables (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); la cobertura está incompleta.`,
+    incompleteRepositoryCoverageAction: "Revise las entradas del repositorio omitidas y analice por separado cualquier entrada de dependencias excluida antes de considerar completo este informe.",
     licenseConfidence: (high, medium, low) => `${high} de alta confianza, ${medium} de confianza media, ${low} de baja confianza`,
     licenseIssues: (missing, malformed2) => `${missing} faltantes, ${malformed2} mal formadas`,
     risks: (risks) => `${risks.high} altos, ${risks.review} revisión, ${risks.unknown} desconocidos, ${risks.low} bajos`,
@@ -51198,7 +51629,9 @@ var FRENCH_TEXT = {
     dependencies: (total, direct, transitive) => `${total} au total, ${direct} directes, ${transitive} transitives`,
     evidence: (files, warnings) => `${files} fichiers, ${warnings} avertissements`,
     skippedSubmodules: (count, paths, pathsTruncated) => `${count} sous-modules Git ignorés (${paths.join(", ")}${pathsTruncated ? ", …" : ""}) ; la couverture est incomplète.`,
-    skippedSubmoduleAction: "Analysez séparément les sous-modules Git ignorés avant de considérer ce rapport comme complet.",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) => `${count} liens symboliques ignorés sans suivre leur cible (${paths.join(", ")}${pathsTruncated ? ", …" : ""}) ; la couverture est incomplète.`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) => `${count} chemins non portables ignorés (${paths.join(", ")}${pathsTruncated ? ", …" : ""}) ; la couverture est incomplète.`,
+    incompleteRepositoryCoverageAction: "Examinez les entrées de dépôt ignorées et analysez séparément les entrées de dépendances omises avant de considérer ce rapport comme complet.",
     licenseConfidence: (high, medium, low) => `${high} confiance élevée, ${medium} confiance moyenne, ${low} confiance faible`,
     licenseIssues: (missing, malformed2) => `${missing} manquantes, ${malformed2} mal formées`,
     risks: (risks) => `${risks.high} élevés, ${risks.review} revue, ${risks.unknown} inconnus, ${risks.low} faibles`,
@@ -51449,7 +51882,9 @@ var CHINESE_TEXT = {
     dependencies: (total, direct, transitive) => `共 ${total} 个，直接 ${direct} 个，传递 ${transitive} 个`,
     evidence: (files, warnings) => `${files} 个文件，${warnings} 个警告`,
     skippedSubmodules: (count, paths, pathsTruncated) => `已跳过 ${count} 个 Git 子模块（${paths.join("、")}${pathsTruncated ? "、…" : ""}）；扫描范围不完整。`,
-    skippedSubmoduleAction: "在将此报告视为完整报告之前，请单独扫描被跳过的 Git 子模块。",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) => `已跳过 ${count} 个符号链接且未跟随其目标（${paths.join("、")}${pathsTruncated ? "、…" : ""}）；扫描范围不完整。`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) => `已跳过 ${count} 个不可移植路径（${paths.join("、")}${pathsTruncated ? "、…" : ""}）；扫描范围不完整。`,
+    incompleteRepositoryCoverageAction: "在将此报告视为完整报告之前，请检查被跳过的仓库条目，并单独扫描遗漏的依赖输入。",
     licenseConfidence: (high, medium, low) => `高置信度 ${high} 个，中置信度 ${medium} 个，低置信度 ${low} 个`,
     licenseIssues: (missing, malformed2) => `缺失 ${missing} 个，格式错误 ${malformed2} 个`,
     risks: (risks) => `高 ${risks.high} 个，需审查 ${risks.review} 个，未知 ${risks.unknown} 个，低 ${risks.low} 个`,
@@ -51700,7 +52135,9 @@ var HINDI_TEXT = {
     dependencies: (total, direct, transitive) => `कुल ${total}, प्रत्यक्ष ${direct}, पारगामी ${transitive}`,
     evidence: (files, warnings) => `${files} फ़ाइलें, ${warnings} चेतावनियाँ`,
     skippedSubmodules: (count, paths, pathsTruncated) => `${count} Git सबमॉड्यूल छोड़े गए (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); स्कैन कवरेज अधूरा है।`,
-    skippedSubmoduleAction: "इस रिपोर्ट को पूर्ण मानने से पहले छोड़े गए Git सबमॉड्यूल को अलग से स्कैन करें।",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) => `${count} सिम्बॉलिक लिंक उनके लक्ष्य का अनुसरण किए बिना छोड़े गए (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); स्कैन कवरेज अधूरा है।`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) => `${count} गैर-पोर्टेबल पथ छोड़े गए (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); स्कैन कवरेज अधूरा है।`,
+    incompleteRepositoryCoverageAction: "इस रिपोर्ट को पूर्ण मानने से पहले छोड़ी गई रिपॉज़िटरी प्रविष्टियों की समीक्षा करें और छूटे हुए निर्भरता इनपुट को अलग से स्कैन करें।",
     licenseConfidence: (high, medium, low) => `${high} उच्च भरोसा, ${medium} मध्यम भरोसा, ${low} कम भरोसा`,
     licenseIssues: (missing, malformed2) => `${missing} अनुपस्थित, ${malformed2} गलत प्रारूप`,
     risks: (risks) => `${risks.high} उच्च, ${risks.review} समीक्षा, ${risks.unknown} अज्ञात, ${risks.low} कम`,
@@ -51951,7 +52388,9 @@ var JAPANESE_TEXT = {
     dependencies: (total, direct, transitive) => `合計 ${total}、直接 ${direct}、推移 ${transitive}`,
     evidence: (files, warnings) => `${files} ファイル、${warnings} 警告`,
     skippedSubmodules: (count, paths, pathsTruncated) => `Git サブモジュール ${count} 件を除外しました（${paths.join("、")}${pathsTruncated ? "、…" : ""}）。スキャン範囲は不完全です。`,
-    skippedSubmoduleAction: "このレポートを完全なものとして扱う前に、除外された Git サブモジュールを個別にスキャンしてください。",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) => `シンボリックリンク ${count} 件をリンク先をたどらずに除外しました（${paths.join("、")}${pathsTruncated ? "、…" : ""}）。スキャン範囲は不完全です。`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) => `移植できないパス ${count} 件を除外しました（${paths.join("、")}${pathsTruncated ? "、…" : ""}）。スキャン範囲は不完全です。`,
+    incompleteRepositoryCoverageAction: "このレポートを完全なものとして扱う前に、除外されたリポジトリエントリを確認し、漏れた依存関係入力を個別にスキャンしてください。",
     licenseConfidence: (high, medium, low) => `高信頼 ${high}、中信頼 ${medium}、低信頼 ${low}`,
     licenseIssues: (missing, malformed2) => `不足 ${missing}、形式不正 ${malformed2}`,
     risks: (risks) => `高 ${risks.high}、レビュー ${risks.review}、不明 ${risks.unknown}、低 ${risks.low}`,
@@ -52202,7 +52641,9 @@ var INDONESIAN_TEXT = {
     dependencies: (total, direct, transitive) => `${total} total, ${direct} langsung, ${transitive} transitif`,
     evidence: (files, warnings) => `${files} file, ${warnings} peringatan`,
     skippedSubmodules: (count, paths, pathsTruncated) => `${count} submodul Git dilewati (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); cakupan belum lengkap.`,
-    skippedSubmoduleAction: "Pindai submodul Git yang dilewati secara terpisah sebelum menganggap laporan ini lengkap.",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) => `${count} tautan simbolik dilewati tanpa mengikuti targetnya (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); cakupan belum lengkap.`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) => `${count} jalur non-portabel dilewati (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); cakupan belum lengkap.`,
+    incompleteRepositoryCoverageAction: "Tinjau entri repositori yang dilewati dan pindai masukan dependensi yang terlewat secara terpisah sebelum menganggap laporan ini lengkap.",
     licenseConfidence: (high, medium, low) => `${high} keyakinan tinggi, ${medium} keyakinan sedang, ${low} keyakinan rendah`,
     licenseIssues: (missing, malformed2) => `${missing} hilang, ${malformed2} salah format`,
     risks: (risks) => `${risks.high} tinggi, ${risks.review} review, ${risks.unknown} tidak diketahui, ${risks.low} rendah`,
@@ -52453,7 +52894,9 @@ var TURKISH_TEXT = {
     dependencies: (total, direct, transitive) => `${total} toplam, ${direct} doğrudan, ${transitive} geçişli`,
     evidence: (files, warnings) => `${files} dosya, ${warnings} uyarı`,
     skippedSubmodules: (count, paths, pathsTruncated) => `${count} Git alt modülü atlandı (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); tarama kapsamı eksik.`,
-    skippedSubmoduleAction: "Bu raporu tamamlanmış saymadan önce atlanan Git alt modüllerini ayrı ayrı tarayın.",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) => `${count} sembolik bağlantı hedefleri izlenmeden atlandı (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); tarama kapsamı eksik.`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) => `${count} taşınabilir olmayan yol atlandı (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); tarama kapsamı eksik.`,
+    incompleteRepositoryCoverageAction: "Bu raporu tamamlanmış saymadan önce atlanan depo girdilerini inceleyin ve eksik bağımlılık girdilerini ayrı olarak tarayın.",
     licenseConfidence: (high, medium, low) => `${high} yüksek güven, ${medium} orta güven, ${low} düşük güven`,
     licenseIssues: (missing, malformed2) => `${missing} eksik, ${malformed2} hatalı biçimli`,
     risks: (risks) => `${risks.high} yüksek, ${risks.review} inceleme, ${risks.unknown} bilinmeyen, ${risks.low} düşük`,
@@ -52704,7 +53147,9 @@ var RUSSIAN_TEXT = {
     dependencies: (total, direct, transitive) => `всего ${total}, прямых ${direct}, транзитивных ${transitive}`,
     evidence: (files, warnings) => `${files} файлов, ${warnings} предупреждений`,
     skippedSubmodules: (count, paths, pathsTruncated) => `Пропущено подмодулей Git: ${count} (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); охват неполный.`,
-    skippedSubmoduleAction: "Проверьте пропущенные подмодули Git отдельно, прежде чем считать этот отчет полным.",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) => `Пропущено символических ссылок без перехода к целям: ${count} (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); охват неполный.`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) => `Пропущено непереносимых путей: ${count} (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); охват неполный.`,
+    incompleteRepositoryCoverageAction: "Проверьте пропущенные элементы репозитория и отдельно просканируйте исключенные входные данные зависимостей, прежде чем считать этот отчет полным.",
     licenseConfidence: (high, medium, low) => `${high} с высокой уверенностью, ${medium} со средней уверенностью, ${low} с низкой уверенностью`,
     licenseIssues: (missing, malformed2) => `${missing} отсутствует, ${malformed2} с неверным форматом`,
     risks: (risks) => `${risks.high} высокий, ${risks.review} проверка, ${risks.unknown} неизвестный, ${risks.low} низкий`,
@@ -52955,7 +53400,9 @@ var GERMAN_TEXT = {
     dependencies: (total, direct, transitive) => `${total} insgesamt, ${direct} direkt, ${transitive} transitiv`,
     evidence: (files, warnings) => `${files} Dateien, ${warnings} Warnungen`,
     skippedSubmodules: (count, paths, pathsTruncated) => `${count} Git-Submodule übersprungen (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); die Abdeckung ist unvollständig.`,
-    skippedSubmoduleAction: "Prüfen Sie die übersprungenen Git-Submodule separat, bevor Sie diesen Bericht als vollständig betrachten.",
+    skippedSymbolicLinks: (count, paths, pathsTruncated) => `${count} symbolische Links ohne Verfolgen der Ziele übersprungen (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); die Abdeckung ist unvollständig.`,
+    skippedNonPortablePaths: (count, paths, pathsTruncated) => `${count} nicht portable Pfade übersprungen (${paths.join(", ")}${pathsTruncated ? ", …" : ""}); die Abdeckung ist unvollständig.`,
+    incompleteRepositoryCoverageAction: "Prüfen Sie übersprungene Repository-Einträge und untersuchen Sie ausgelassene Abhängigkeitseingaben separat, bevor Sie diesen Bericht als vollständig betrachten.",
     licenseConfidence: (high, medium, low) => `${high} hohe Sicherheit, ${medium} mittlere Sicherheit, ${low} niedrige Sicherheit`,
     licenseIssues: (missing, malformed2) => `${missing} fehlend, ${malformed2} fehlerhaft formatiert`,
     risks: (risks) => `${risks.high} hoch, ${risks.review} Prüfung, ${risks.unknown} unbekannt, ${risks.low} niedrig`,
@@ -54267,8 +54714,6 @@ function summarizeFindingFilters(riskFindings) {
 }
 function normalizeFindingSearchText(finding, profile, text3) {
   return [
-    finding.id,
-    finding.fingerprint,
     finding.packageId,
     finding.severity,
     text3.messages.severity(finding.severity),
@@ -54325,8 +54770,8 @@ function formatWaiverTarget(waiver) {
   return `fingerprint: ${waiver.fingerprint ?? "unknown"}`;
 }
 function nextActionFor2(findings, repository) {
-  if (repository && repository.submodules.skippedCount > 0) {
-    return "Scan the skipped Git submodules separately before treating this report as complete.";
+  if (repository && hasIncompleteRepositoryCoverage(repository)) {
+    return "Review skipped repository entries and scan any omitted dependency inputs separately before treating this report as complete.";
   }
   if (findings.some((finding) => finding.recommendation === "replace")) {
     return "Replace or escalate high-risk dependencies before shipping.";
@@ -54346,34 +54791,60 @@ function nextActionFor2(findings, repository) {
   return "No action needed for this profile.";
 }
 function localizedNextAction(input, text3) {
-  return input.repository && input.repository.submodules.skippedCount > 0 ? text3.messages.skippedSubmoduleAction : text3.messages.nextAction(input.riskFindings);
+  return input.repository && hasIncompleteRepositoryCoverage(input.repository) ? text3.messages.incompleteRepositoryCoverageAction : text3.messages.nextAction(input.riskFindings);
 }
 function renderRepositoryCoverageLines(repository) {
-  if (!repository || repository.submodules.skippedCount === 0) {
+  if (!repository || !hasIncompleteRepositoryCoverage(repository)) {
     return [];
   }
-  return [`Scan coverage: ${formatSkippedSubmoduleSummary(repository)}`];
+  return [`Scan coverage: ${formatSkippedRepositoryEntrySummary(repository)}`];
 }
 function renderMarkdownRepositoryCoverageLines(repository) {
-  if (!repository || repository.submodules.skippedCount === 0) {
+  if (!repository || !hasIncompleteRepositoryCoverage(repository)) {
     return [];
   }
-  return [`- Scan coverage: ${formatMarkdownTableCell(formatSkippedSubmoduleSummary(repository))}`];
+  return [`- Scan coverage: ${formatMarkdownTableCell(formatSkippedRepositoryEntrySummary(repository))}`];
 }
 function renderHtmlRepositoryCoverageCard(repository, text3) {
-  if (!repository || repository.submodules.skippedCount === 0) {
+  if (!repository || !hasIncompleteRepositoryCoverage(repository)) {
     return [];
+  }
+  const summaries = [];
+  if (repository.submodules.skippedCount > 0) {
+    summaries.push(text3.messages.skippedSubmodules(repository.submodules.skippedCount, repository.submodules.skippedPaths, repository.submodules.pathsTruncated));
+  }
+  if (repository.symbolicLinks.skippedCount > 0) {
+    summaries.push(text3.messages.skippedSymbolicLinks(repository.symbolicLinks.skippedCount, repository.symbolicLinks.skippedPaths, repository.symbolicLinks.pathsTruncated));
+  }
+  if (repository.nonPortablePaths.skippedCount > 0) {
+    summaries.push(text3.messages.skippedNonPortablePaths(repository.nonPortablePaths.skippedCount, repository.nonPortablePaths.skippedPaths, repository.nonPortablePaths.pathsTruncated));
   }
   return [[
     text3.labels.scanCoverage,
-    text3.messages.skippedSubmodules(repository.submodules.skippedCount, repository.submodules.skippedPaths, repository.submodules.pathsTruncated)
+    summaries.join(" ")
   ]];
 }
-function formatSkippedSubmoduleSummary(repository) {
-  const { skippedCount, skippedPaths, pathsTruncated } = repository.submodules;
-  const pathList = skippedPaths.join(", ");
-  const suffix = pathsTruncated ? ", …" : "";
-  return `${skippedCount} Git submodule${skippedCount === 1 ? "" : "s"} skipped (${pathList}${suffix}); coverage is incomplete.`;
+function hasIncompleteRepositoryCoverage(repository) {
+  return repository.submodules.skippedCount > 0 || repository.symbolicLinks.skippedCount > 0 || repository.nonPortablePaths.skippedCount > 0;
+}
+function formatSkippedRepositoryEntrySummary(repository) {
+  const summaries = [];
+  if (repository.submodules.skippedCount > 0) {
+    summaries.push(formatSkippedEntrySummary(repository.submodules, "Git submodule", "Git submodules"));
+  }
+  if (repository.symbolicLinks.skippedCount > 0) {
+    summaries.push(formatSkippedEntrySummary(repository.symbolicLinks, "symbolic link", "symbolic links"));
+  }
+  if (repository.nonPortablePaths.skippedCount > 0) {
+    summaries.push(formatSkippedEntrySummary(repository.nonPortablePaths, "non-portable path", "non-portable paths"));
+  }
+  return `${summaries.join("; ")}; coverage is incomplete.`;
+}
+function formatSkippedEntrySummary(summary, singular, plural) {
+  const pathList = summary.skippedPaths.join(", ");
+  const suffix = summary.pathsTruncated ? ", …" : "";
+  const label = summary.skippedCount === 1 ? singular : plural;
+  return `${summary.skippedCount} ${label} skipped (${pathList}${suffix})`;
 }
 
 // src/report/open-report.ts
@@ -54566,7 +55037,7 @@ import {
   realpathSync as realpathSync7,
   renameSync as renameSync2,
   rmSync as rmSync3,
-  writeFileSync as writeFileSync2
+  writeFileSync as writeFileSync3
 } from "node:fs";
 import { randomBytes as randomBytes2 } from "node:crypto";
 import path81 from "node:path";
@@ -54621,7 +55092,7 @@ function writeValidatedReportFile(input) {
   try {
     tempPath = createReportTempPath(input.validatedPath.realParent, input.resolvedPath);
     tempFileDescriptor = openSync5(tempPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 384);
-    writeFileSync2(tempFileDescriptor, `${input.contents}
+    writeFileSync3(tempFileDescriptor, `${input.contents}
 `, "utf8");
     fsyncSync(tempFileDescriptor);
     closeSync5(tempFileDescriptor);
@@ -55096,6 +55567,16 @@ async function runScan(command, io) {
           skippedCount: cloned.value.submodules.total,
           skippedPaths: cloned.value.submodules.paths,
           pathsTruncated: cloned.value.submodules.pathsTruncated
+        },
+        symbolicLinks: {
+          skippedCount: cloned.value.symbolicLinks.total,
+          skippedPaths: cloned.value.symbolicLinks.paths,
+          pathsTruncated: cloned.value.symbolicLinks.pathsTruncated
+        },
+        nonPortablePaths: {
+          skippedCount: cloned.value.nonPortablePaths.total,
+          skippedPaths: cloned.value.nonPortablePaths.paths,
+          pathsTruncated: cloned.value.nonPortablePaths.pathsTruncated
         }
       }
     });
@@ -55123,6 +55604,7 @@ async function runScanAt(input) {
     ...command.archivePath ? { archivePath: command.archivePath } : {},
     ...input.repository ? { projectSearchMode: "tree" } : {},
     ...input.repository ? { autoMergeSameRoot: true } : {},
+    ...input.repository ? { autoMergeDescendantProjects: true } : {},
     allLockfiles: command.allLockfiles ?? false,
     ...command.policyPath ? { policyPath: command.policyPath } : {},
     offline: command.offline ?? false,
@@ -55219,6 +55701,7 @@ async function scanProject(input) {
     ...input.lockfilePath ? { lockfilePath: input.lockfilePath } : {},
     ...input.projectSearchMode ? { projectSearchMode: input.projectSearchMode } : {},
     ...input.autoMergeSameRoot ? { autoMergeSameRoot: true } : {},
+    ...input.autoMergeDescendantProjects ? { autoMergeDescendantProjects: true } : {},
     allLockfiles: input.allLockfiles,
     prodOnly: input.prodOnly,
     ...input.progress ? { progress: input.progress } : {}
@@ -55293,6 +55776,7 @@ function loadProjectGraph(input) {
     ...input.lockfilePath ? { lockfilePath: input.lockfilePath } : {},
     ...input.projectSearchMode ? { searchMode: input.projectSearchMode } : {},
     ...input.autoMergeSameRoot ? { autoMergeSameRoot: true } : {},
+    ...input.autoMergeDescendantProjects ? { autoMergeDescendantProjects: true } : {},
     ...input.allLockfiles ? { allLockfiles: true } : {}
   });
   if (isErr(discovered)) {

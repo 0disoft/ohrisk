@@ -70,28 +70,48 @@ from `PATH` without a shell or interactive credential prompt, uses a depth-one s
 submodule recursion and symlink checkout, inspects the Git tree before checkout, and removes its
 owned temporary directory after success or failure.
 
+Symbolic-link entries are never followed. Ohrisk records their safe repository-relative paths,
+removes their checkout materializations before project discovery, verifies that no symbolic link
+or unexpected special entry remains, and marks every report as incomplete coverage. A symbolic
+link cannot supply a lockfile or manifest.
+
 When a repository has no supported input at its root, Ohrisk searches only
-inside the validated checkout. It automatically selects the dependency project
-when exactly one nested project root contains supported input. For example, a
-plain Mbed TLS scan selects `docs/requirements.txt`. If multiple nested project
-roots are found, Ohrisk reports their safe relative paths and requires
-`--lockfile <repository-relative-path>` instead of guessing. When one root is
-selected, every supported input at that root is merged automatically; the scan
-does not prefer one ecosystem and silently omit the others.
+inside the validated checkout. It automatically selects one nested dependency
+project, or merges every supported input across multiple nested project roots
+for a repository-wide scan. For example, a plain Mbed TLS scan selects
+`docs/requirements.txt`, while an Ente-style monorepo keeps `mobile`, `server`,
+and `web` inputs in one graph with per-lockfile provenance. Automatic fan-out is
+limited to 64 project roots and 128 dependency inputs. `--lockfile` still narrows
+the scan to one explicitly selected repository-relative input. Inputs at each
+selected root are merged without preferring one ecosystem and silently omitting
+the others. Standalone `pyproject.toml` manifests participate in automatic
+discovery only when their dependency entries are exact `name==version` pins;
+ranges and direct references require a resolved lockfile and are not treated as
+concrete automatic inputs.
 SBOM files containing unresolved uppercase `@BUILD_VARIABLE@` placeholders are
 treated as build templates rather than concrete automatic-discovery candidates.
 Absolute, empty-segment, dot-segment, and traversal paths are rejected before
 resolution inside the validated temporary checkout.
 
-The pre-checkout tree allows at most 50,000 regular files, 50 MiB per file, 256 MiB total file
-content, 4,096 UTF-8 bytes and 64 segments per path, and 255 UTF-8 bytes per segment. Symlinks,
-special entries, Windows-reserved or otherwise non-portable names, and case or Unicode
-normalization collisions are rejected. Submodule gitlinks are skipped without fetching in the
+The pre-checkout tree allows at most 50,000 entries, 100 MiB per blob, 640 MiB total blob
+content, 4,096 UTF-8 bytes and 64 segments per path, and 255 UTF-8 bytes per segment. Symbolic
+links are skipped without following their targets. Regular files with Windows-reserved names,
+unsupported characters or suffixes, overlong segments, or case/Unicode normalization collisions
+are excluded through a NUL-delimited literal Git pathspec before checkout and reported as
+non-portable paths. Structural traversal, `.git` segments, and other special entries are rejected.
+Submodule gitlinks are skipped without fetching in the
 default `--submodules ignore` mode. Reports include the total skipped count, at most 100 safe
-relative submodule paths, and whether that path list was truncated; `--submodules reject` instead
-fails with the first detected path. Temporary clone storage is capped at 512 MiB and the full
-clone/inspection/checkout sequence has a two-minute work budget. These are fail-closed limits, not
+relative paths for each skipped entry type, including non-portable files, and whether each path list was truncated;
+`--submodules reject` instead
+fails with the first detected path. Temporary clone storage is capped at 1 GiB and the full
+operation uses separate hard stage budgets: two minutes for clone, 30 seconds for tree inspection,
+and three minutes for checkout. These are fail-closed limits, not
 truncation rules.
+
+When no supported dependency manifest, lockfile, or SBOM exists, `NO_SUPPORTED_LOCKFILE` reports
+that no dependency project was detected and points to `ohrisk help scan`; it does not print the
+entire supported-input catalog. A detected project manifest without a lockfile receives a distinct
+message telling the user to add or select a supported lockfile.
 
 Policy and waiver files in the cloned repository are untrusted and are not auto-loaded. The
 directory where Ohrisk was invoked remains the configuration, waiver, cache, and report-output
@@ -134,6 +154,30 @@ resolved are treated as direct dependencies. Inline or following pip-compile
 unambiguously to another pin in the same parsed requirements set. A `-r` source
 marks a direct requirement; a `-c` constraint alone does not. Cycles, excessive
 depth, and excessive path fan-out cannot make graph reconstruction unbounded.
+
+For `Cargo.lock`, graph traversal is iterative and retains every reachable
+crate while storing at most 64 dependency paths per crate. Additional paths are
+reported through a `dependency_paths_truncated` graph diagnostic rather than
+expanding path combinations without a bound.
+
+For modern npm `package-lock.json` and `npm-shrinkwrap.json`, graph traversal is
+also iterative and retains every reachable package while storing at most 64
+dependency paths per package. Additional paths use the same typed truncation
+diagnostic instead of expanding path combinations without a bound.
+
+For `uv.lock`, a remote Git package record is retained only when uv's resolved
+source ends in a full 40- or 64-hex commit. Ohrisk does not fetch that VCS source
+or substitute PyPI evidence for the same package name; the package receives
+unavailable evidence and remains an `unknown` finding until the exact commit is
+reviewed. Branches, tags, short revisions, unresolved URLs, and malformed remote
+sources fail closed, and rejected-source diagnostics redact credentials and URL
+parameters.
+
+`uv.lock` dependency traversal is iterative and retains every reachable package
+while storing at most 64 dependency paths per package. Additional paths are
+reported through the same `dependency_paths_truncated` graph diagnostic used by
+Cargo and modern npm graphs, preventing combinatorial path expansion from
+inflating finding identities and reports without silently dropping packages.
 
 ## Output Requirements
 

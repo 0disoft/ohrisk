@@ -38,6 +38,15 @@ type CargoRootDependency = {
   type: DependencyType;
 };
 
+type CargoTraversalState = {
+  record: CargoPackageRecord;
+  dependencyType: DependencyType;
+  direct: boolean;
+  path: string[];
+};
+
+const CARGO_MAX_PATHS_PER_PACKAGE = 64;
+
 export type CargoWorkspaceMemberManifestPath = {
   memberPath: string;
   manifestPath: string;
@@ -124,6 +133,9 @@ export function parseCargoLockText(
       records
     }));
     const nodeMap = new Map<string, DependencyNode>();
+    const recordIndex = indexCargoPackageRecords(records);
+    const traversalStates: CargoTraversalState[] = [];
+    const pathLimitAffected = new Set<string>();
 
     for (const rootDependency of rootDependencies) {
       const record = resolveCargoPackageRecord(records, omitUndefined({
@@ -134,21 +146,35 @@ export function parseCargoLockText(
         continue;
       }
 
-      walkCargoDependency({
+      traversalStates.push({
         record,
         dependencyType: rootDependency.type,
         direct: true,
-        path: [rootName],
-        records,
-        nodeMap,
-        seen: new Set()
+        path: [rootName]
       });
     }
+
+    walkCargoDependencies({
+      states: traversalStates,
+      recordIndex,
+      nodeMap,
+      pathLimitAffected
+    });
 
     return ok({
       rootName,
       lockfilePath,
-      nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id))
+      nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+      ...(pathLimitAffected.size > 0
+        ? {
+            diagnostics: [{
+              code: "dependency_paths_truncated",
+              affectedNodeCount: pathLimitAffected.size,
+              limit: CARGO_MAX_PATHS_PER_PACKAGE,
+              message: "Cargo dependency paths were limited."
+            }]
+          }
+        : {})
     });
   } catch (cause) {
     return err(
@@ -882,57 +908,114 @@ function cargoRootDependencyVersion(
   return dependency?.version ? { version: dependency.version } : {};
 }
 
-function walkCargoDependency(input: {
-  record: CargoPackageRecord;
-  dependencyType: DependencyType;
-  direct: boolean;
-  path: string[];
-  records: CargoPackageRecord[];
+function walkCargoDependencies(input: {
+  states: CargoTraversalState[];
+  recordIndex: ReadonlyMap<string, CargoPackageRecord[]>;
   nodeMap: Map<string, DependencyNode>;
-  seen: Set<string>;
+  pathLimitAffected: Set<string>;
 }): void {
-  if (input.seen.has(input.record.id)) {
-    return;
-  }
+  const stack = [...input.states].reverse();
+  const pathKeysByNodeId = new Map<string, Set<string>>();
+  const expandedPathTypesByNodeId = new Map<string, Set<string>>();
 
-  const nextSeen = new Set(input.seen);
-  nextSeen.add(input.record.id);
-  const nextPath = [...input.path, input.record.id];
-  const existing = input.nodeMap.get(input.record.id);
-
-  if (existing) {
-    existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType(existing.dependencyType, input.dependencyType);
-    existing.paths.push(nextPath);
-  } else {
-    input.nodeMap.set(input.record.id, omitUndefined<DependencyNode>({
-      id: input.record.id,
-      name: input.record.name,
-      version: input.record.version,
-      ecosystem: "cargo",
-      resolved: input.record.source,
-      dependencyType: input.dependencyType,
-      direct: input.direct,
-      paths: [nextPath]
-    }));
-  }
-
-  for (const dependency of input.record.dependencies) {
-    const record = resolveCargoPackageRecord(input.records, dependency);
-    if (!record) {
+  while (stack.length > 0) {
+    const state = stack.pop();
+    if (!state || state.path.includes(state.record.id)) {
       continue;
     }
 
-    walkCargoDependency({
-      record,
-      dependencyType: input.dependencyType,
-      direct: false,
-      path: nextPath,
-      records: input.records,
-      nodeMap: input.nodeMap,
-      seen: nextSeen
+    const nextPath = [...state.path, state.record.id];
+    const pathKey = JSON.stringify(nextPath);
+    const existing = input.nodeMap.get(state.record.id);
+    const previousDependencyType = existing?.dependencyType;
+    const mergedDependencyType = previousDependencyType
+      ? mergeDependencyType(previousDependencyType, state.dependencyType)
+      : state.dependencyType;
+    const dependencyTypeStrengthened = previousDependencyType !== undefined
+      && mergedDependencyType !== previousDependencyType;
+
+    const node = existing ?? omitUndefined<DependencyNode>({
+      id: state.record.id,
+      name: state.record.name,
+      version: state.record.version,
+      ecosystem: "cargo",
+      resolved: state.record.source,
+      dependencyType: mergedDependencyType,
+      direct: state.direct,
+      paths: []
     });
+    node.direct = node.direct || state.direct;
+    node.dependencyType = mergedDependencyType;
+    if (!existing) {
+      input.nodeMap.set(state.record.id, node);
+    }
+
+    const pathKeys = pathKeysByNodeId.get(state.record.id) ?? new Set<string>();
+    let traversalPath: string[] | undefined;
+    if (pathKeys.has(pathKey)) {
+      traversalPath = dependencyTypeStrengthened ? nextPath : undefined;
+    } else if (pathKeys.size < CARGO_MAX_PATHS_PER_PACKAGE) {
+      pathKeys.add(pathKey);
+      pathKeysByNodeId.set(state.record.id, pathKeys);
+      node.paths.push(nextPath);
+      traversalPath = nextPath;
+    } else {
+      input.pathLimitAffected.add(state.record.id);
+      traversalPath = dependencyTypeStrengthened ? node.paths[0] : undefined;
+    }
+
+    if (!traversalPath) {
+      continue;
+    }
+
+    const expansionKey = `${JSON.stringify(traversalPath)}\0${state.dependencyType}`;
+    const expandedPathTypes = expandedPathTypesByNodeId.get(state.record.id) ?? new Set<string>();
+    if (expandedPathTypes.has(expansionKey)) {
+      continue;
+    }
+    expandedPathTypes.add(expansionKey);
+    expandedPathTypesByNodeId.set(state.record.id, expandedPathTypes);
+
+    for (let index = state.record.dependencies.length - 1; index >= 0; index -= 1) {
+      const dependency = state.record.dependencies[index];
+      if (!dependency) {
+        continue;
+      }
+      const record = resolveCargoPackageRecordFromIndex(input.recordIndex, dependency);
+      if (!record) {
+        continue;
+      }
+
+      stack.push({
+        record,
+        dependencyType: state.dependencyType,
+        direct: false,
+        path: traversalPath
+      });
+    }
   }
+}
+
+function indexCargoPackageRecords(
+  records: CargoPackageRecord[]
+): Map<string, CargoPackageRecord[]> {
+  const byName = new Map<string, CargoPackageRecord[]>();
+  for (const record of records) {
+    const matches = byName.get(record.name) ?? [];
+    matches.push(record);
+    byName.set(record.name, matches);
+  }
+  return byName;
+}
+
+function resolveCargoPackageRecordFromIndex(
+  recordIndex: ReadonlyMap<string, CargoPackageRecord[]>,
+  dependency: { name: string; version?: string }
+): CargoPackageRecord | undefined {
+  const matches = (recordIndex.get(dependency.name) ?? []).filter((record) =>
+    dependency.version === undefined || record.version === dependency.version
+  );
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 function resolveCargoPackageRecord(
