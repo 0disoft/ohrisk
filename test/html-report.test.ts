@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { LicenseEvidence } from "../src/evidence/types";
 import type { DependencyGraph } from "../src/graph/types";
 import type { NormalizedLicense } from "../src/license/types";
+import { buildFindingFingerprint, buildFindingId } from "../src/policy/finding-id";
 import type { RiskFinding } from "../src/policy/types";
 import type { RiskWaiver, WaivedRiskFinding } from "../src/policy/waivers";
 import type { ProjectInput } from "../src/project/discover";
@@ -48,6 +49,38 @@ function unknownCacheFinding(input: {
     ],
     paths: input.paths ?? [["fixture-app", input.packageId]],
     recommendation: "collect-evidence"
+  };
+}
+
+function canonicalLongFinding(): RiskFinding {
+  const sharedPath = Array.from({ length: 80 }, (_value, index) => `shared-package-${index}@1.0.0`);
+  const paths = Array.from({ length: 64 }, (_value, index) => [
+    "fixture</script><script>alert(1)</script>",
+    ...sharedPath,
+    `leaf-package-${index}@1.0.0`
+  ]);
+  const base = {
+    packageId: "large-package@1.0.0",
+    severity: "unknown" as const,
+    reason: "License evidence requires review.",
+    action: "Collect license evidence before approving this package.",
+    dependencyType: "production" as const,
+    dependencyScope: "transitive" as const,
+    evidence: ["package metadata license: Custom"],
+    paths,
+    recommendation: "collect-evidence" as const
+  };
+  const id = buildFindingId(base);
+  return {
+    ...base,
+    id,
+    fingerprint: buildFindingFingerprint({
+      id,
+      severity: base.severity,
+      recommendation: base.recommendation,
+      reason: base.reason,
+      evidence: base.evidence
+    })
   };
 }
 
@@ -314,6 +347,10 @@ class FakeElement {
   }
 
   private matches(selector: string): boolean {
+    const idMatch = selector.match(/^#([A-Za-z0-9_-]+)$/);
+    if (idMatch?.[1]) {
+      return this.attributes.get("id") === idMatch[1];
+    }
     const match = selector.match(/^\[(data-[a-z0-9-]+)\]$/);
     return match?.[1] ? this.dataAttributes.has(match[1]) : false;
   }
@@ -383,10 +420,10 @@ function makeFindingCard(input: {
       findingCard: "",
       severity: input.severity,
       dependencyScope: input.dependencyScope,
-      recommendation: input.recommendation,
-      searchText: input.searchText
+      recommendation: input.recommendation
     }
   });
+  card.textContent = input.searchText;
   const container = new FakeElement({ data: { collapsible: "" } });
   const content = new FakeElement({
     classes: ["collapsible-content", "is-collapsed"],
@@ -451,10 +488,9 @@ describe("HTML scan report", () => {
     expect(output).toContain('<option value="direct">direct (1)</option>');
     expect(output).toContain('<option value="replace">replace (1)</option>');
     expect(output).toContain('<article class="finding-card" data-finding-card data-severity="high" data-dependency-scope="direct" data-recommendation="replace"');
-    const searchText = output.match(/data-search-text="([^"]*)"/)?.[1];
-    expect(searchText).toContain("risk&lt;script&gt;@1.0.0");
-    expect(searchText).toContain("package.json license: custom &lt;unsafe&gt;");
-    expect(searchText).not.toContain("::production::direct::");
+    expect(output).not.toContain("data-search-text");
+    expect(output).toContain("const searchTexts = new Map(cards.map");
+    expect(output).toContain("searchTexts.get(card)");
     expect(output).toContain("<dt>Severity</dt>");
     expect(output).toContain("<dt>Package</dt>");
     expect(output).toContain("<dt>Dependency</dt>");
@@ -491,29 +527,79 @@ describe("HTML scan report", () => {
     expect(output).not.toContain("'quotes'");
   });
 
-  test("does not duplicate large finding identities in the HTML search index", () => {
-    const longFingerprint = `large-fingerprint-token::${"x".repeat(10_000)}`;
-    const longIdentityFinding: RiskFinding = {
-      ...finding,
-      id: "large-finding-id-token::production::direct::fixture>large-package@1.0.0",
-      fingerprint: longFingerprint,
-      packageId: "large-package@1.0.0",
-      reason: "License evidence requires review.",
-      evidence: ["package metadata license: Custom"]
-    };
+  test("stores long fingerprints once outside rendered cards and excludes them from search", () => {
+    const longIdentityFinding = canonicalLongFinding();
+    const longFingerprint = longIdentityFinding.fingerprint;
     const output = renderScanReport(scanInput({
       riskFindings: [longIdentityFinding],
       waivedFindings: [],
       expiredWaivers: [],
       unmatchedWaivers: []
     }));
-    const searchText = output.match(/data-search-text="([^"]*)"/)?.[1];
+    const fingerprintData = output.match(
+      /<script type="application\/json" id="ohrisk-fingerprint-data">\n\s*([^\n]+)\n\s*<\/script>/
+    )?.[1];
 
-    expect(searchText).toContain("large-package@1.0.0");
-    expect(searchText).toContain("license evidence requires review");
-    expect(searchText).not.toContain("large-finding-id-token");
-    expect(searchText).not.toContain("large-fingerprint-token");
-    expect(output.split(longFingerprint)).toHaveLength(2);
+    expect(output).not.toContain("data-search-text");
+    expect(fingerprintData).toBeDefined();
+    const parsed = JSON.parse(fingerprintData ?? "{}") as {
+      v: number;
+      s: string[];
+      p: Array<[number, number]>;
+      f: unknown[];
+    };
+    expect(parsed.v).toBe(1);
+    expect(parsed.s.length).toBeGreaterThan(0);
+    expect(parsed.p.length).toBeLessThan(longIdentityFinding.paths.flat().length);
+    expect(Array.isArray(parsed.f[0])).toBe(true);
+    expect(output).not.toContain("</script><script>alert(1)</script>");
+    expect(output).not.toContain(longFingerprint);
+    expect(fingerprintData?.length ?? 0).toBeLessThan(longFingerprint.length / 4);
+    expect(output).toContain('data-fingerprint-index="0"');
+    expect(output).toContain("deferredFingerprint.textContent = fingerprint");
+  });
+
+  test("hydrates a deferred fingerprint only when its card value is expanded", () => {
+    const longFinding = canonicalLongFinding();
+    const longFingerprint = longFinding.fingerprint;
+    const deferredFingerprint = new FakeElement({ data: { fingerprintIndex: "0" } });
+    deferredFingerprint.textContent = "deferred-fingerprint::preview…";
+    const root = new FakeElement();
+    const fingerprintData = new FakeElement();
+    fingerprintData.setAttribute("id", "ohrisk-fingerprint-data");
+    const report = renderScanReport(scanInput({ riskFindings: [longFinding] }));
+    fingerprintData.textContent = report.match(
+      /<script type="application\/json" id="ohrisk-fingerprint-data">\n\s*([^\n]+)\n\s*<\/script>/
+    )?.[1] ?? "{}";
+    const card = makeFindingCard({
+      severity: "high",
+      dependencyScope: "direct",
+      recommendation: "replace",
+      searchText: "risk package"
+    });
+    card.content.appendChild(deferredFingerprint);
+    root.appendChild(fingerprintData);
+    root.appendChild(card.card);
+
+    const document = new FakeDocument(root);
+    const window = new FakeWindow();
+    const animationFrames: FakeListener[] = [];
+    const requestAnimationFrame = (callback: FakeListener): number => {
+      animationFrames.push(callback);
+      return animationFrames.length;
+    };
+    const script = extractInlineScript(report);
+
+    new Function("document", "window", "requestAnimationFrame", script)(
+      document,
+      window,
+      requestAnimationFrame
+    );
+
+    expect(deferredFingerprint.textContent).toBe("deferred-fingerprint::preview…");
+    card.toggle.dispatchEvent("click");
+    expect(deferredFingerprint.textContent).toBe(longFingerprint);
+    expect(deferredFingerprint.getAttribute("data-fingerprint-index")).toBeNull();
   });
 
   test("renders empty states when no findings or waivers exist", () => {

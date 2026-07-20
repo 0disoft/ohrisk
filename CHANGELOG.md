@@ -2,6 +2,11 @@
 
 ## 1.11.0 - 2026-07-20
 
+- Large standalone HTML reports now derive search text from visible cards at
+  runtime and encode long fingerprints through shared string and path-prefix
+  dictionaries. Expanding a fingerprint reconstructs the exact canonical value,
+  preserving waiver compatibility while substantially reducing large-monorepo
+  report size.
 - Go module ZIP fetching now retries one narrowly classified transient response
   or non-timeout network failure. Permanent responses, full timeouts, security
   rejections, and integrity failures are never retried, while a recovered

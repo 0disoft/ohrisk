@@ -268,7 +268,9 @@ The current implementation is the first local dependency-risk vertical slice:
 - SARIF 2.1.0 reports for code scanning upload
 - waived findings in SARIF output as externally suppressed results
 - Markdown reports for PR comments and release notes
-- browser-friendly HTML reports for local review
+- browser-friendly self-contained HTML reports for local review, with runtime
+  search indexing and exact on-demand reconstruction of compacted long
+  fingerprints so large monorepo reports do not duplicate multi-megabyte paths
 - CycloneDX 1.5 JSON SBOM reports with dependency relationships and Ohrisk risk decision properties
 - stable finding IDs for PR comments and local waiver workflows
 - local `.ohrisk-waivers.json` waivers by finding ID or fingerprint

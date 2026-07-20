@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 12a1621c78114684fff51387dddc4317232367a884942f4044eea89db7d077e2
+// ohrisk-action-source-sha256: a18e1d9cbcb8aa2be9f1bcd1e223ee6407610b42842f975c6f01b2a7f9c93b3a
 // ohrisk-action-build-platform: win32
 import { createRequire } from "node:module";
 var __create = Object.create;
@@ -54233,6 +54233,8 @@ var HTML_REPORT_CONTENT_SECURITY_POLICY = [
 ].join("; ");
 
 // src/report/scan-report.ts
+var HTML_DEFERRED_FINGERPRINT_MIN_CHARS = 512;
+var HTML_FINGERPRINT_PREVIEW_CHARS = 240;
 function renderScanReport(input) {
   const summary = buildScanSummary(input);
   const nextAction = nextActionFor2(input.riskFindings, input.repository);
@@ -54314,6 +54316,7 @@ function renderHtmlReport(input, summary) {
   const waiverDriftSummary = buildWaiverDriftSummary(input);
   const text3 = htmlReportText(input.reportLanguage);
   const title = text3.title;
+  const deferredFingerprintData = buildHtmlDeferredFingerprintData(input.riskFindings);
   return [
     "<!doctype html>",
     `<html lang="${escapeHtml(text3.htmlLang)}">`,
@@ -54372,7 +54375,7 @@ function renderHtmlReport(input, summary) {
     ]),
     "      </dl>",
     "    </section>",
-    ...renderHtmlFindingsSection(input.riskFindings, input.profile, text3),
+    ...renderHtmlFindingsSection(input.riskFindings, input.profile, text3, deferredFingerprintData.indexes),
     ...renderHtmlWaivedFindingsSection(input.waivedFindings, text3),
     ...renderHtmlExpiredWaiversSection(input.expiredWaivers, text3),
     ...renderHtmlUnmatchedWaiversSection(input.unmatchedWaivers, text3),
@@ -54381,6 +54384,7 @@ function renderHtmlReport(input, summary) {
     `      <p>${escapeHtml(localizedNextAction(input, text3))}</p>`,
     "    </section>",
     "  </main>",
+    ...renderHtmlDeferredFingerprintData(deferredFingerprintData.payload),
     "  <script>",
     ...renderHtmlFilterScript(text3).map((line) => `    ${line}`),
     "  </script>",
@@ -54547,7 +54551,7 @@ function evidenceRecoveryHintFor(input, findings) {
   }
   return;
 }
-function renderHtmlFindingsSection(findings, profile, text3) {
+function renderHtmlFindingsSection(findings, profile, text3, deferredFingerprintIndexes) {
   if (findings.length === 0) {
     return [
       '    <section aria-labelledby="findings-heading">',
@@ -54585,7 +54589,7 @@ function renderHtmlFindingsSection(findings, profile, text3) {
     "      </div>",
     `      <p class="empty" data-finding-filter-empty hidden>${escapeHtml(text3.messages.noMatchingFindings)}</p>`,
     '      <div class="finding-list">',
-    ...findings.flatMap((finding, index) => renderHtmlFindingCard(finding, index, profile, text3)),
+    ...findings.flatMap((finding, index) => renderHtmlFindingCard(finding, index, profile, text3, deferredFingerprintIndexes.has(index))),
     "      </div>",
     "    </section>"
   ];
@@ -54612,11 +54616,11 @@ function renderRecommendationFilterOptions(counts, text3) {
   ];
   return recommendations.filter((recommendation) => counts[recommendation] > 0).map((recommendation) => `            <option value="${recommendation}">${escapeHtml(`${text3.messages.recommendation(recommendation)} (${counts[recommendation]})`)}</option>`);
 }
-function renderHtmlFindingCard(finding, index, profile, text3) {
+function renderHtmlFindingCard(finding, index, profile, text3, deferFingerprint) {
   const titleId = `finding-${index + 1}-title`;
-  const searchText = normalizeFindingSearchText(finding, profile, text3);
+  const fingerprintHtml = renderHtmlFingerprintValue(finding.fingerprint, index, deferFingerprint);
   return [
-    `        <article class="finding-card" data-finding-card data-severity="${escapeHtml(finding.severity)}" data-dependency-scope="${escapeHtml(finding.dependencyScope)}" data-recommendation="${escapeHtml(finding.recommendation)}" data-search-text="${escapeHtml(searchText)}" aria-labelledby="${titleId}">`,
+    `        <article class="finding-card" data-finding-card data-severity="${escapeHtml(finding.severity)}" data-dependency-scope="${escapeHtml(finding.dependencyScope)}" data-recommendation="${escapeHtml(finding.recommendation)}" aria-labelledby="${titleId}">`,
     '          <div class="finding-card-header">',
     "            <div>",
     `              <h3 class="finding-title" id="${titleId}"><code>${escapeHtml(finding.packageId)}</code></h3>`,
@@ -54632,9 +54636,96 @@ function renderHtmlFindingCard(finding, index, profile, text3) {
     ...renderFindingDetail(text3.labels.action, escapeHtml(text3.messages.findingAction(finding)), text3, true),
     ...renderFindingDetail(text3.labels.findingPath, `<code class="wrap-value">${escapeHtml(formatPath(finding.paths[0]))}</code>`, text3, true),
     ...renderFindingDetail(text3.labels.evidenceDetail, escapeHtml(finding.evidence.join("; ")), text3, true),
-    ...renderFindingDetail(text3.labels.fingerprint, `<code class="wrap-value">${escapeHtml(finding.fingerprint)}</code>`, text3, true),
+    ...renderFindingDetail(text3.labels.fingerprint, fingerprintHtml, text3, true),
     "          </dl>",
     "        </article>"
+  ];
+}
+function renderHtmlFingerprintValue(fingerprint, index, deferred) {
+  if (!deferred) {
+    return `<code class="wrap-value">${escapeHtml(fingerprint)}</code>`;
+  }
+  const preview = `${fingerprint.slice(0, HTML_FINGERPRINT_PREVIEW_CHARS)}…`;
+  return `<code class="wrap-value" data-fingerprint-index="${index}">${escapeHtml(preview)}</code>`;
+}
+function buildHtmlDeferredFingerprintData(findings) {
+  const indexes = new Set;
+  const strings = [];
+  const stringIndexes = new Map;
+  const paths = [];
+  const pathIndexes = new Map;
+  const records = [];
+  const addString = (value) => {
+    const existing = stringIndexes.get(value);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const index = strings.length;
+    strings.push(value);
+    stringIndexes.set(value, index);
+    return index;
+  };
+  const addPath = (segments) => {
+    let parent = -1;
+    for (const segment of segments) {
+      const segmentIndex = addString(segment);
+      const key = `${parent}:${segmentIndex}`;
+      const existing = pathIndexes.get(key);
+      if (existing !== undefined) {
+        parent = existing;
+        continue;
+      }
+      const pathIndex = paths.length;
+      paths.push([parent, segmentIndex]);
+      pathIndexes.set(key, pathIndex);
+      parent = pathIndex;
+    }
+    return parent;
+  };
+  for (const [index, finding] of findings.entries()) {
+    if (finding.fingerprint.length < HTML_DEFERRED_FINGERPRINT_MIN_CHARS) {
+      records.push(null);
+      continue;
+    }
+    indexes.add(index);
+    const canonicalId = buildFindingId({
+      packageId: finding.packageId,
+      dependencyType: finding.dependencyType,
+      dependencyScope: finding.dependencyScope,
+      paths: finding.paths
+    });
+    const canonicalFingerprint = buildFindingFingerprint({
+      id: canonicalId,
+      severity: finding.severity,
+      recommendation: finding.recommendation,
+      reason: finding.reason,
+      evidence: finding.evidence
+    });
+    records.push(canonicalFingerprint === finding.fingerprint ? [
+      addString(finding.packageId),
+      finding.dependencyType,
+      finding.dependencyScope,
+      finding.paths.map(addPath),
+      finding.severity,
+      finding.recommendation,
+      addString(finding.reason),
+      finding.evidence.map(addString)
+    ] : finding.fingerprint);
+  }
+  return {
+    indexes,
+    payload: indexes.size === 0 ? undefined : { v: 1, s: strings, p: paths, f: records }
+  };
+}
+function renderHtmlDeferredFingerprintData(payload) {
+  if (!payload) {
+    return [];
+  }
+  const serialized = JSON.stringify(payload).replace(/</gu, "\\u003c").replace(/\u2028/gu, "\\u2028").replace(/\u2029/gu, "\\u2029");
+  return [
+    '  <script type="application/json" id="ohrisk-fingerprint-data">',
+    `    ${serialized}`,
+    "  </script>"
   ];
 }
 function renderFindingDetail(label, valueHtml, text3, collapsible = false) {
@@ -54671,6 +54762,75 @@ function renderHtmlFilterScript(text3) {
     "  const actionFilter = document.querySelector('[data-finding-action-filter]');",
     "  const status = document.querySelector('[data-finding-filter-status]');",
     "  const empty = document.querySelector('[data-finding-filter-empty]');",
+    "  const searchTexts = new Map(cards.map((card) => [card, (card.textContent || '').replace(/\\s+/g, ' ').toLowerCase()]));",
+    "  const fingerprintData = document.querySelector('#ohrisk-fingerprint-data');",
+    "  let fingerprintPayload = { s: [], p: [], f: [] };",
+    "  if (fingerprintData) {",
+    "    try {",
+    "      const parsed = JSON.parse(fingerprintData.textContent || '[]');",
+    "      if (parsed && parsed.v === 1 && Array.isArray(parsed.s) && Array.isArray(parsed.p) && Array.isArray(parsed.f)) {",
+    "        fingerprintPayload = parsed;",
+    "      }",
+    "    } catch {",
+    "      fingerprintPayload = { s: [], p: [], f: [] };",
+    "    }",
+    "  }",
+    "  const decodedPaths = new Map();",
+    "  const decodePath = (pathIndex) => {",
+    "    if (decodedPaths.has(pathIndex)) {",
+    "      return decodedPaths.get(pathIndex);",
+    "    }",
+    "    const segments = [];",
+    "    let current = pathIndex;",
+    "    while (Number.isInteger(current) && current >= 0) {",
+    "      const node = fingerprintPayload.p[current];",
+    "      if (!Array.isArray(node) || node.length !== 2) {",
+    "        return null;",
+    "      }",
+    "      const segment = fingerprintPayload.s[node[1]];",
+    "      if (typeof segment !== 'string') {",
+    "        return null;",
+    "      }",
+    "      segments.push(segment);",
+    "      current = node[0];",
+    "    }",
+    "    segments.reverse();",
+    "    decodedPaths.set(pathIndex, segments);",
+    "    return segments;",
+    "  };",
+    "  const encodeFindingComponent = (value) => String(value).replace(/%/g, '%25').replace(/:/g, '%3A').replace(/>/g, '%3E').replace(/\\|/g, '%7C');",
+    "  const decodeFingerprint = (fingerprintIndex) => {",
+    "    const record = fingerprintPayload.f[fingerprintIndex];",
+    "    if (typeof record === 'string') {",
+    "      return record;",
+    "    }",
+    "    if (!Array.isArray(record) || record.length !== 8) {",
+    "      return null;",
+    "    }",
+    "    const packageId = fingerprintPayload.s[record[0]];",
+    "    const reason = fingerprintPayload.s[record[6]];",
+    "    if (typeof packageId !== 'string' || typeof reason !== 'string' || !Array.isArray(record[3]) || !Array.isArray(record[7])) {",
+    "      return null;",
+    "    }",
+    "    const paths = record[3].map((pathIndex) => decodePath(pathIndex));",
+    "    const evidence = record[7].map((stringIndex) => fingerprintPayload.s[stringIndex]);",
+    "    if (paths.some((path) => !Array.isArray(path)) || evidence.some((item) => typeof item !== 'string')) {",
+    "      return null;",
+    "    }",
+    "    const findingId = [",
+    "      encodeFindingComponent(packageId),",
+    "      encodeFindingComponent(record[1]),",
+    "      encodeFindingComponent(record[2]),",
+    "      paths.map((path) => path.map(encodeFindingComponent).join('>')).join('|')",
+    "    ].join('::');",
+    "    return [",
+    "      findingId,",
+    "      encodeFindingComponent(record[4]),",
+    "      encodeFindingComponent(record[5]),",
+    "      encodeFindingComponent(reason),",
+    "      evidence.map(encodeFindingComponent).join('|')",
+    "    ].join('::');",
+    "  };",
     "",
     "  const updateFindings = () => {",
     "    const selectedSeverities = new Set(severityFilters.filter((filter) => filter.checked).map((filter) => filter.value));",
@@ -54683,7 +54843,7 @@ function renderHtmlFilterScript(text3) {
     "      const severityMatches = selectedSeverities.has(card.dataset.severity || '');",
     "      const dependencyMatches = dependencyScope === 'all' || card.dataset.dependencyScope === dependencyScope;",
     "      const recommendationMatches = recommendation === 'all' || card.dataset.recommendation === recommendation;",
-    "      const searchMatches = searchText === '' || (card.dataset.searchText || '').includes(searchText);",
+    "      const searchMatches = searchText === '' || (searchTexts.get(card) || '').includes(searchText);",
     "      const visible = severityMatches && dependencyMatches && recommendationMatches && searchMatches;",
     "      card.hidden = !visible;",
     "      if (visible) {",
@@ -54750,7 +54910,7 @@ function renderHtmlFilterScript(text3) {
     "    if (!content || !toggle) {",
     "      return;",
     "    }",
-    "    const overflowed = isCollapsibleOverflowing(content);",
+    "    const overflowed = content.querySelector('[data-fingerprint-index]') ? true : isCollapsibleOverflowing(content);",
     "    if (overflowed === null) {",
     "      return;",
     "    }",
@@ -54790,6 +54950,15 @@ function renderHtmlFilterScript(text3) {
     "    toggle.addEventListener('click', () => {",
     "      const expanded = toggle.getAttribute('aria-expanded') === 'true';",
     "      const nextExpanded = !expanded;",
+    "      const deferredFingerprint = content.querySelector('[data-fingerprint-index]');",
+    "      if (nextExpanded && deferredFingerprint) {",
+    "        const fingerprintIndex = Number.parseInt(deferredFingerprint.dataset.fingerprintIndex || '', 10);",
+    "        const fingerprint = decodeFingerprint(fingerprintIndex);",
+    "        if (typeof fingerprint === 'string') {",
+    "          deferredFingerprint.textContent = fingerprint;",
+    "          deferredFingerprint.removeAttribute('data-fingerprint-index');",
+    "        }",
+    "      }",
     "      toggle.setAttribute('aria-expanded', String(nextExpanded));",
     "      toggle.setAttribute('aria-label', nextExpanded ? toggle.dataset.collapseLabel || messages.collapseFallback : toggle.dataset.expandLabel || messages.expandFallback);",
     "      toggle.textContent = nextExpanded ? messages.collapseText : '...';",
@@ -55317,25 +55486,6 @@ function summarizeFindingFilters(riskFindings) {
       "collect-evidence": 0
     }
   });
-}
-function normalizeFindingSearchText(finding, profile, text3) {
-  return [
-    finding.packageId,
-    finding.severity,
-    text3.messages.severity(finding.severity),
-    finding.reason,
-    text3.messages.findingReason(finding, profile),
-    finding.action,
-    text3.messages.findingAction(finding),
-    finding.dependencyType,
-    text3.messages.dependencyType(finding.dependencyType),
-    finding.dependencyScope,
-    text3.messages.dependencyScope(finding.dependencyScope),
-    finding.recommendation,
-    text3.messages.recommendation(finding.recommendation),
-    finding.evidence.join(" "),
-    formatPath(finding.paths[0])
-  ].join(" ").replace(/\s+/g, " ").toLowerCase();
 }
 function renderThresholdLines2(thresholdSummary) {
   const thresholdLine = formatThresholdSummary(thresholdSummary);
