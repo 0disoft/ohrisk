@@ -6,7 +6,7 @@ import path from "node:path";
 import { parseGoWorkFile } from "../src/graph/go-work";
 
 describe("parseGoWorkFile", () => {
-  test("parses dependencies from every workspace module", () => {
+  test("parses current requirements from every workspace module", () => {
     const projectRoot = mkdtempSync("ohrisk-go-work-");
 
     try {
@@ -37,7 +37,10 @@ describe("parseGoWorkFile", () => {
               "",
               "require github.com/acme/ok v0.2.0"
             ].join("\n"),
-            goSum: "github.com/acme/transitive v0.1.0 h1:abc\n"
+            goSum: [
+              `github.com/acme/ok v0.2.0 h1:${"A".repeat(43)}=`,
+              `github.com/acme/transitive v0.1.0 h1:${"B".repeat(43)}=`
+            ].join("\n")
           }
         }
       });
@@ -52,18 +55,18 @@ describe("parseGoWorkFile", () => {
       expect(result.value.lockfilePath).toBe(path.join(projectRoot, "go.work"));
       expect(result.value.nodes.map((node) => node.id)).toEqual([
         "github.com/acme/ok@v0.2.0",
-        "github.com/acme/risk@v1.0.0",
-        "github.com/acme/transitive@v0.1.0"
+        "github.com/acme/risk@v1.0.0"
       ]);
       expect(result.value.nodes.find((node) => node.id === "github.com/acme/risk@v1.0.0"))
         .toMatchObject({
           direct: true,
           paths: [[path.basename(projectRoot), "example.com/app", "github.com/acme/risk@v1.0.0"]]
         });
-      expect(result.value.nodes.find((node) => node.id === "github.com/acme/transitive@v0.1.0"))
+      expect(result.value.nodes.find((node) => node.id === "github.com/acme/ok@v0.2.0"))
         .toMatchObject({
-          direct: false,
-          paths: [[path.basename(projectRoot), "example.com/worker", "github.com/acme/transitive@v0.1.0"]]
+          integrity: `h1:${"A".repeat(43)}=`,
+          direct: true,
+          paths: [[path.basename(projectRoot), "example.com/worker", "github.com/acme/ok@v0.2.0"]]
         });
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });

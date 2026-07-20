@@ -206,6 +206,7 @@ function strongerEvidenceSource(
   const rank: Record<LicenseEvidence["source"], number> = {
     local: 5,
     tarball: 4,
+    registry: 3,
     sbom: 3,
     unavailable: 1
   };

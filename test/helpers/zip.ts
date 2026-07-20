@@ -16,6 +16,7 @@ export function createZipEntries(
     data: Buffer | Uint8Array | string;
     directory?: boolean;
     encrypted?: boolean;
+    descriptor?: boolean;
     method?: number;
   }[],
   options: { deflate?: boolean } = {}
@@ -34,7 +35,7 @@ export function createZipEntries(
         : Buffer.from(entry.data);
     const compressionMethod = entry.method ?? (options.deflate ? 8 : 0);
     const compressed = compressionMethod === 8 ? deflateRawSync(data) : data;
-    const flags = 0x0800 | (entry.encrypted ? 0x0001 : 0);
+    const flags = 0x0800 | (entry.encrypted ? 0x0001 : 0) | (entry.descriptor ? 0x0008 : 0);
     const checksum = crc32(data);
     const localHeader = Buffer.alloc(30);
 
@@ -43,13 +44,20 @@ export function createZipEntries(
     localHeader.writeUInt16LE(flags, 6);
     localHeader.writeUInt16LE(compressionMethod, 8);
     localHeader.writeUInt32LE(0, 10);
-    localHeader.writeUInt32LE(checksum, 14);
-    localHeader.writeUInt32LE(compressed.length, 18);
-    localHeader.writeUInt32LE(data.length, 22);
+    localHeader.writeUInt32LE(entry.descriptor ? 0 : checksum, 14);
+    localHeader.writeUInt32LE(entry.descriptor ? 0 : compressed.length, 18);
+    localHeader.writeUInt32LE(entry.descriptor ? 0 : data.length, 22);
     localHeader.writeUInt16LE(fileName.length, 26);
     localHeader.writeUInt16LE(0, 28);
 
-    localParts.push(localHeader, fileName, compressed);
+    const descriptor = entry.descriptor ? Buffer.alloc(16) : undefined;
+    if (descriptor) {
+      descriptor.writeUInt32LE(0x08074b50, 0);
+      descriptor.writeUInt32LE(checksum, 4);
+      descriptor.writeUInt32LE(compressed.length, 8);
+      descriptor.writeUInt32LE(data.length, 12);
+    }
+    localParts.push(localHeader, fileName, compressed, ...(descriptor ? [descriptor] : []));
 
     const centralHeader = Buffer.alloc(46);
     centralHeader.writeUInt32LE(0x02014b50, 0);
@@ -70,7 +78,7 @@ export function createZipEntries(
     centralHeader.writeUInt32LE(localOffset, 42);
 
     centralParts.push(centralHeader, fileName);
-    localOffset += localHeader.length + fileName.length + compressed.length;
+    localOffset += localHeader.length + fileName.length + compressed.length + (descriptor?.length ?? 0);
   }
 
   const centralDirectory = Buffer.concat(centralParts);

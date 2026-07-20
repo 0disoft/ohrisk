@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import type { LookupOptions } from "node:dns";
 import { lookup } from "node:dns/promises";
 import {
   closeSync,
@@ -25,6 +26,7 @@ import {
   type ArtifactCacheResponseMetadata
 } from "./cache";
 import { collectRegisteredEcosystemEvidence } from "../ecosystems/registry";
+import { collectGoModuleZipEvidence } from "./go-module-zip";
 import { collectLocalPackageEvidence } from "./local-package";
 import { collectMavenJarEvidence } from "./maven-jar";
 import {
@@ -88,10 +90,7 @@ type ArtifactHostResolution = {
 };
 
 type ArtifactHostResolver = (hostname: string) => Promise<ArtifactHostResolution[]>;
-type ArtifactLookupOptions = number | {
-  all?: boolean;
-  family?: number;
-};
+type ArtifactLookupOptions = number | LookupOptions;
 type SecureArtifactLookupSelection = {
   all: true;
   resolutions: ArtifactHostResolution[];
@@ -153,6 +152,8 @@ const MAVEN_CENTRAL_BASE_URL = "https://repo.maven.apache.org/maven2";
 const MAVEN_CENTRAL_HOSTS = new Set(["repo.maven.apache.org"]);
 const MAVEN_JAR_MAX_BYTES = 32 * 1024 * 1024;
 const MAVEN_CHECKSUM_MAX_BYTES = 256;
+const GO_MODULE_PROXY_BASE_URL = "https://proxy.golang.org";
+const GO_MODULE_PROXY_HOSTS = new Set(["proxy.golang.org", "storage.googleapis.com"]);
 const ARTIFACT_HOST_RESOLUTION_CACHE_TTL_MS = 60_000;
 const ARTIFACT_HOST_RESOLUTION_CACHE_MAX_ENTRIES = 256;
 
@@ -376,7 +377,7 @@ async function collectNodeEvidence(input: {
     : undefined;
   if (ecosystemEvidence) {
     if (
-      input.node.ecosystem !== "maven"
+      (input.node.ecosystem !== "maven" && input.node.ecosystem !== "go")
       || !ecosystemEvidence.ok
       || ecosystemEvidence.value.source !== "unavailable"
     ) {
@@ -481,6 +482,19 @@ async function collectNodeEvidence(input: {
 
   if (input.node.ecosystem === "maven") {
     return input.collectMavenEvidence(input.node);
+  }
+
+  if (input.node.ecosystem === "go") {
+    return collectRemoteGoModuleEvidence({
+      node: input.node,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      artifactMaxBytes: input.tarballMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      allowedHosts: input.allowedHosts
+    });
   }
 
   if (input.node.ecosystem === "npm" && shouldCollectNpmRegistryEvidence({
@@ -636,6 +650,145 @@ function collectLocalPathEvidence(input: {
     evidence: evidence.value,
     integrity: input.node.integrity
   }));
+}
+
+async function collectRemoteGoModuleEvidence(input: {
+  node: DependencyNode;
+  fetchArtifact: ArtifactFetcher;
+  resolveArtifactHost: ArtifactHostResolver | undefined;
+  fetchTimeoutMs: number;
+  artifactMaxBytes: number;
+  offline: boolean;
+  artifactCache: ArtifactCache | undefined;
+  allowedHosts: ReadonlySet<string>;
+}): Promise<Result<LicenseEvidence, OhriskError>> {
+  const coordinates = remoteGoModuleCoordinates(input.node);
+  if (!coordinates) {
+    return ok(unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: input.node.resolved
+        ? "Go local replacement evidence is unavailable during a remote repository scan."
+        : "Go module coordinates were not safe for the fixed public module proxy."
+    }));
+  }
+  if (!input.node.integrity || !/^h1:[A-Za-z0-9+/]{43}=$/u.test(input.node.integrity)) {
+    return ok({
+      packageId: input.node.id,
+      files: [],
+      source: "unavailable",
+      warnings: [
+        "Go module source was not fetched because go.sum did not contain an exact h1 checksum for the module zip."
+      ]
+    });
+  }
+
+  const resolved = goModuleProxyZipUrl(coordinates.modulePath, coordinates.version);
+  if (!resolved) {
+    return ok(unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: "Go module path or version could not be encoded safely for the fixed public module proxy."
+    }));
+  }
+  const zip = await readRemoteArtifactBytes({
+    code: "TARBALL_FETCH_FAILED",
+    packageId: input.node.id,
+    url: resolved,
+    blockedMessage: "Go module proxy URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve the Go module proxy host.",
+    fetchFailureMessage: "Failed to fetch Go module zip.",
+    tooLargeMessage: "Go module zip response exceeded the maximum supported size.",
+    unreadableMessage: "Go module zip response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find the Go module zip in the artifact cache.",
+    details: {
+      modulePath: coordinates.modulePath,
+      version: coordinates.version,
+      proxy: GO_MODULE_PROXY_BASE_URL
+    },
+    maxBytes: input.artifactMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: GO_MODULE_PROXY_HOSTS,
+    urlDetailKey: "resolved"
+  });
+  if (!zip.ok) {
+    return zip;
+  }
+
+  return collectGoModuleZipEvidence({
+    packageId: input.node.id,
+    modulePath: coordinates.modulePath,
+    version: coordinates.version,
+    checksum: input.node.integrity,
+    zip: zip.value,
+    artifactMaxBytes: input.artifactMaxBytes
+  });
+}
+
+function remoteGoModuleCoordinates(node: DependencyNode): {
+  modulePath: string;
+  version: string;
+} | undefined {
+  if (!node.resolved) {
+    return { modulePath: node.name, version: node.version };
+  }
+  if (!node.resolved.startsWith("go-module:")) {
+    return undefined;
+  }
+  const specifier = node.resolved.slice("go-module:".length);
+  const separator = specifier.lastIndexOf("@");
+  if (separator <= 0 || separator === specifier.length - 1) {
+    return undefined;
+  }
+  return {
+    modulePath: specifier.slice(0, separator),
+    version: specifier.slice(separator + 1)
+  };
+}
+
+export function goModuleProxyZipUrl(modulePath: string, version: string): string | undefined {
+  const escapedModulePath = escapeGoProxyModulePath(modulePath);
+  const escapedVersion = escapeGoProxyVersion(version);
+  return escapedModulePath && escapedVersion
+    ? `${GO_MODULE_PROXY_BASE_URL}/${escapedModulePath}/@v/${escapedVersion}.zip`
+    : undefined;
+}
+
+function escapeGoProxyModulePath(modulePath: string): string | undefined {
+  if (
+    modulePath === ""
+    || modulePath.startsWith("/")
+    || modulePath.endsWith("/")
+    || !/^[A-Za-z0-9.!_~+\-/]+$/u.test(modulePath)
+  ) {
+    return undefined;
+  }
+  const segments = modulePath.split("/");
+  if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+    return undefined;
+  }
+  return escapeGoProxyText(modulePath);
+}
+
+function escapeGoProxyVersion(version: string): string | undefined {
+  return /^v[A-Za-z0-9.!_~+\-]+$/u.test(version) ? escapeGoProxyText(version) : undefined;
+}
+
+function escapeGoProxyText(value: string): string {
+  let escaped = "";
+  for (const character of value) {
+    if (character === "!") {
+      escaped += "!!";
+    } else if (character >= "A" && character <= "Z") {
+      escaped += `!${character.toLowerCase()}`;
+    } else {
+      escaped += character;
+    }
+  }
+  return escaped;
 }
 
 function readLocalArtifactStats(input: {
@@ -2960,7 +3113,12 @@ function createRemoteArtifactExceptionError(input: {
 function safeUrlForErrorDetails(value: string): string {
   try {
     const url = new URL(value);
-    if (url.username === "" && url.password === "") {
+    if (
+      url.username === ""
+      && url.password === ""
+      && url.search === ""
+      && url.hash === ""
+    ) {
       return redactUrlCredentialsInText(value);
     }
 
@@ -2970,6 +3128,9 @@ function safeUrlForErrorDetails(value: string): string {
     if (url.password !== "") {
       url.password = "redacted";
     }
+
+    url.search = "";
+    url.hash = "";
 
     return url.toString();
   } catch {
@@ -3562,7 +3723,10 @@ export function secureArtifactLookup(
     family?: number
   ) => void
 ): void {
-  createSecureArtifactLookup(defaultArtifactHostResolver)(hostname, options, callback);
+  const lookupOptions: LookupOptions = typeof options === "number"
+    ? { family: options }
+    : options;
+  createSecureArtifactLookup(defaultArtifactHostResolver)(hostname, lookupOptions, callback);
 }
 
 function createSecureArtifactLookup(
@@ -3687,7 +3851,12 @@ function normalizeArtifactLookupOptions(options: ArtifactLookupOptions | undefin
   all: boolean;
   family: number | undefined;
 } {
-  const family = typeof options === "number" ? options : options?.family;
+  const rawFamily = typeof options === "number" ? options : options?.family;
+  const family = rawFamily === "IPv4"
+    ? 4
+    : rawFamily === "IPv6"
+      ? 6
+      : rawFamily;
   return {
     all: typeof options === "object" && options?.all === true,
     family: family === 4 || family === 6 ? family : undefined

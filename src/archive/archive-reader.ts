@@ -35,6 +35,7 @@ const ZIP_EOCD_BYTES = 22;
 const ZIP_MAX_COMMENT_BYTES = 0xffff;
 const ZIP64_UINT16 = 0xffff;
 const ZIP64_UINT32 = 0xffffffff;
+const ZIP_DATA_DESCRIPTOR_SIGNATURE = 0x08074b50;
 
 export const DEFAULT_ARCHIVE_LIMITS: Readonly<ArchiveLimits> = Object.freeze({
   inputBytes: 256 * 1024 * 1024,
@@ -96,6 +97,8 @@ type ZipIndexedEntry = Omit<IndexedEntry, "materialize"> & {
   method: number;
   dataStart: number;
   dataEnd: number;
+  localOffset: number;
+  recordEnd: number;
 };
 
 type ParsedPax = {
@@ -365,13 +368,7 @@ function parseZip(bytes: Buffer, budget: Budget, archiveName: string): IndexedEn
         format: "zip"
       });
     }
-    if ((flags & 0x0008) !== 0) {
-      fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "ZIP data descriptors are not supported.", {
-        basename: archiveName,
-        format: "zip"
-      });
-    }
-    if ((flags & ~0x0806) !== 0) {
+    if ((flags & ~0x080e) !== 0) {
       fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "ZIP entry flags are not supported.", {
         basename: archiveName,
         format: "zip"
@@ -453,13 +450,16 @@ function parseZip(bytes: Buffer, budget: Budget, archiveName: string): IndexedEn
       flags,
       method,
       dataStart: local.dataStart,
-      dataEnd: local.dataEnd
+      dataEnd: local.dataEnd,
+      localOffset,
+      recordEnd: local.recordEnd
     });
     offset += recordLength;
   }
   if (offset !== centralEnd) {
     malformed(archiveName, "ZIP central directory entry count does not match its size.", "zip");
   }
+  validateZipLocalRecordLayout(entries, centralOffset, archiveName);
 
   return entries.map((entry): IndexedEntry => ({
     path: entry.path,
@@ -482,7 +482,7 @@ function parseZipLocalHeader(input: {
   size: number;
   archiveName: string;
   entryPath: string;
-}): { dataStart: number; dataEnd: number } {
+}): { dataStart: number; dataEnd: number; recordEnd: number } {
   requireRange(input.bytes, input.localOffset, 30, input.archiveName, input.entryPath);
   if (readU32(input.bytes, input.localOffset, input.archiveName) !== ZIP_LOCAL_SIGNATURE) {
     integrity(input.archiveName, input.entryPath, "ZIP local header signature does not match.", "zip");
@@ -514,7 +514,67 @@ function parseZipLocalHeader(input: {
   if (dataEnd > input.centralOffset || dataEnd > input.bytes.length) {
     malformed(input.archiveName, "ZIP entry data extends beyond its data area.", "zip", input.entryPath);
   }
-  return { dataStart, dataEnd };
+  const recordEnd = usesDescriptor
+    ? parseZipDataDescriptor({
+        bytes: input.bytes,
+        offset: dataEnd,
+        centralOffset: input.centralOffset,
+        crc: input.crc,
+        compressedSize: input.compressedSize,
+        size: input.size,
+        archiveName: input.archiveName,
+        entryPath: input.entryPath
+      })
+    : dataEnd;
+  return { dataStart, dataEnd, recordEnd };
+}
+
+function parseZipDataDescriptor(input: {
+  bytes: Buffer;
+  offset: number;
+  centralOffset: number;
+  crc: number;
+  compressedSize: number;
+  size: number;
+  archiveName: string;
+  entryPath: string;
+}): number {
+  requireRange(input.bytes, input.offset, 16, input.archiveName, input.entryPath);
+  if (input.offset + 16 > input.centralOffset) {
+    malformed(input.archiveName, "ZIP data descriptor extends beyond its data area.", "zip", input.entryPath);
+  }
+  if (readU32(input.bytes, input.offset, input.archiveName) !== ZIP_DATA_DESCRIPTOR_SIGNATURE) {
+    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Unsigned ZIP data descriptors are not supported.", {
+      basename: input.archiveName,
+      entryPath: input.entryPath,
+      format: "zip"
+    });
+  }
+  const crc = readU32(input.bytes, input.offset + 4, input.archiveName);
+  const compressedSize = readU32(input.bytes, input.offset + 8, input.archiveName);
+  const size = readU32(input.bytes, input.offset + 12, input.archiveName);
+  if (crc !== input.crc || compressedSize !== input.compressedSize || size !== input.size) {
+    integrity(input.archiveName, input.entryPath, "ZIP data descriptor does not match central metadata.", "zip");
+  }
+  return input.offset + 16;
+}
+
+function validateZipLocalRecordLayout(
+  entries: ZipIndexedEntry[],
+  centralOffset: number,
+  archiveName: string
+): void {
+  const sorted = [...entries].sort((left, right) => left.localOffset - right.localOffset);
+  for (let index = 0; index < sorted.length; index += 1) {
+    const entry = sorted[index];
+    if (!entry) {
+      continue;
+    }
+    const nextOffset = sorted[index + 1]?.localOffset ?? centralOffset;
+    if (entry.recordEnd > nextOffset) {
+      malformed(archiveName, "ZIP local records overlap.", "zip", entry.path);
+    }
+  }
 }
 
 function materializeZipEntry(
@@ -528,7 +588,7 @@ function materializeZipEntry(
     const compressed = bytes.subarray(entry.dataStart, entry.dataEnd);
     const output = entry.method === 0
       ? Buffer.from(compressed)
-      : inflateRawSync(compressed, { maxOutputLength: entry.size });
+      : inflateRawSync(compressed, { maxOutputLength: Math.max(1, entry.size) });
     if (output.length !== entry.size) {
       integrity(archiveName, entry.path, "ZIP entry expanded size does not match metadata.", "zip");
     }

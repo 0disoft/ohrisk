@@ -38,6 +38,12 @@ Ohrisk may inspect a bounded JAR only after a same-repository SHA-256 checksum
 and exact embedded Maven identity are verified. Missing or unusable optional JAR
 evidence remains `unknown`; checksum or identity disagreement fails closed.
 
+Go license evidence uses local module cache, vendored source, or contained local
+replacement paths first. When those are unavailable, an exact module ZIP may be
+fetched only from the fixed public Go proxy and trusted only after its `go.sum`
+`h1` checksum and requested module/version root are verified. Local replacements
+and modules without an exact ZIP checksum are never sent to the proxy.
+
 ## Commands
 
 - `ohrisk scan`: non-failing local scan and report generation.
@@ -69,7 +75,8 @@ Format-specific behavior is owned by `docs/report-formats.md` and matching tests
 
 ## Cache Contract
 
-Remote npm evidence uses a shared content-addressed cache with bounded freshness,
+Remote package evidence, including npm, PyPI, Maven, and Go artifacts, uses a
+shared content-addressed cache with bounded freshness,
 conditional HTTP revalidation, offline stale reads, and automatic LRU size
 control. Cache location, cleanup commands, and credential boundaries are owned by
 `docs/cache-and-registries.md` and `docs/remote-fetching.md`.

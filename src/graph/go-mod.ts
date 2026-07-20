@@ -15,6 +15,7 @@ import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
 export type GoModuleRecord = {
   modulePath: string;
   version: string;
+  checksum?: string;
   dependencyType: DependencyType;
   direct: boolean;
   replacement?: GoReplacementTarget;
@@ -100,10 +101,14 @@ export function parseGoModText(
     );
     const replacementOverrideGroups = options.replacementOverrideGroups ?? [];
 
+    const goSumRecords = options.goSumText ? parseGoSumRecords(options.goSumText) : [];
+    const goSumById = new Map(goSumRecords.map((record) => [goRecordId(record), record]));
     const records = new Map<string, GoModuleRecord>();
-    for (const record of goMod.value.records.map((record) =>
-      applyGoReplacement(record, localReplacements, replacementOverrideGroups)
-    )) {
+    for (const originalRecord of goMod.value.records) {
+      const record = withGoModuleChecksum(
+        applyGoReplacement(originalRecord, localReplacements, replacementOverrideGroups),
+        goSumById
+      );
       records.set(goRecordId(record), record);
     }
 
@@ -116,20 +121,24 @@ export function parseGoModText(
         )
     );
 
-    if (options.goSumText) {
-      for (const goSumRecord of parseGoSumRecords(options.goSumText)) {
+    if (options.goSumText && shouldIncludeGoSumOnlyModules(goMod.value.goVersion)) {
+      for (const goSumRecord of goSumRecords) {
         if (replacementTargetIds.has(goRecordId(goSumRecord))) {
           continue;
         }
 
-        const record = applyGoReplacement(goSumRecord, localReplacements, replacementOverrideGroups);
+        const record = withGoModuleChecksum(
+          applyGoReplacement(goSumRecord, localReplacements, replacementOverrideGroups),
+          goSumById
+        );
         const id = goRecordId(record);
         const existing = records.get(id);
         records.set(id, existing
           ? {
               ...existing,
               direct: existing.direct || record.direct,
-              dependencyType: mergeDependencyType(existing.dependencyType, record.dependencyType)
+              dependencyType: mergeDependencyType(existing.dependencyType, record.dependencyType),
+              ...(existing.checksum ? {} : record.checksum ? { checksum: record.checksum } : {})
             }
           : record);
       }
@@ -150,6 +159,7 @@ export function parseGoModText(
             version: record.version,
             ecosystem: "go",
             ...(record.replacement ? { resolved: goReplacementResolvedSpecifier(record.replacement) } : {}),
+            ...(record.checksum ? { integrity: record.checksum } : {}),
             dependencyType: record.dependencyType,
             direct: record.direct,
             paths: [[rootName, id]]
@@ -208,12 +218,14 @@ export function parseGoModRecords(
   goModPath: string
 ): Result<{
   modulePath?: string;
+  goVersion?: string;
   records: GoModuleRecord[];
   replacements: GoReplaceDirective[];
 }, OhriskError> {
   const records: GoModuleRecord[] = [];
   const replacements: GoReplaceDirective[] = [];
   let modulePath: string | undefined;
+  let goVersion: string | undefined;
   let block: "require" | "replace" | undefined;
 
   for (const [index, rawLine] of input.split(/\r?\n/).entries()) {
@@ -267,6 +279,11 @@ export function parseGoModRecords(
       continue;
     }
 
+    if (line.startsWith("go ")) {
+      goVersion = line.slice("go ".length).trim();
+      continue;
+    }
+
     if (line.startsWith("require ")) {
       const record = parseRequireLine(line.slice("require ".length).trim(), rawLine);
       if (record) {
@@ -294,9 +311,23 @@ export function parseGoModRecords(
 
   return ok({
     ...(modulePath !== undefined ? { modulePath } : {}),
+    ...(goVersion !== undefined ? { goVersion } : {}),
     records,
     replacements
   });
+}
+
+function shouldIncludeGoSumOnlyModules(goVersion: string | undefined): boolean {
+  if (!goVersion) {
+    return true;
+  }
+  const match = /^(\d+)\.(\d+)(?:\.\d+)?$/u.exec(goVersion);
+  if (!match) {
+    return true;
+  }
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  return major < 1 || (major === 1 && minor < 17);
 }
 
 function parseRequireLine(line: string, rawLine: string): GoModuleRecord | undefined {
@@ -434,7 +465,7 @@ function parseGoSumRecords(input: string): GoModuleRecord[] {
       continue;
     }
 
-    const [modulePath, rawVersion] = line.split(/\s+/, 2);
+    const [modulePath, rawVersion, rawChecksum] = line.split(/\s+/, 3);
     if (!modulePath || !rawVersion) {
       continue;
     }
@@ -442,16 +473,46 @@ function parseGoSumRecords(input: string): GoModuleRecord[] {
     const version = rawVersion.endsWith("/go.mod")
       ? rawVersion.slice(0, -"/go.mod".length)
       : rawVersion;
-    const record = {
+    const checksum = rawVersion.endsWith("/go.mod")
+      ? undefined
+      : normalizeGoChecksum(rawChecksum);
+    const record: GoModuleRecord = {
       modulePath,
       version,
+      ...(checksum ? { checksum } : {}),
       dependencyType: "production" as const,
       direct: false
     };
-    records.set(goRecordId(record), record);
+    const id = goRecordId(record);
+    const existing = records.get(id);
+    records.set(id, existing?.checksum && !record.checksum ? existing : {
+      ...existing,
+      ...record,
+      ...(record.checksum ? { checksum: record.checksum } : {})
+    });
   }
 
   return [...records.values()];
+}
+
+function normalizeGoChecksum(value: string | undefined): string | undefined {
+  return value && /^h1:[A-Za-z0-9+/]{43}=$/u.test(value) ? value : undefined;
+}
+
+function withGoModuleChecksum(
+  record: GoModuleRecord,
+  goSumById: ReadonlyMap<string, GoModuleRecord>
+): GoModuleRecord {
+  if (record.replacement?.kind === "local") {
+    const { checksum: _, ...withoutChecksum } = record;
+    return withoutChecksum;
+  }
+
+  const evidenceId = record.replacement?.kind === "module"
+    ? `${record.replacement.modulePath}@${record.replacement.version}`
+    : goRecordId(record);
+  const checksum = goSumById.get(evidenceId)?.checksum;
+  return checksum ? { ...record, checksum } : record;
 }
 
 function replaceDirectiveError(input: {

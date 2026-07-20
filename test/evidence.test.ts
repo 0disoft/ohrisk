@@ -584,7 +584,7 @@ describe("collectGraphEvidence", () => {
   test("filters secure DNS lookup arrays by requested address family", () => {
     const selection = selectSecureArtifactLookupResponse("registry.npmjs.org", {
       all: true,
-      family: 4
+      family: "IPv4"
     }, [
       {
         address: "104.16.0.35",
@@ -3405,7 +3405,7 @@ describe("collectGraphEvidence", () => {
           statusText: "Found",
           headers: {
             get: (name) => name.toLowerCase() === "location"
-              ? "https://cdn.example.test/redirect-local-remote/-/redirect-local-remote-1.0.0.tgz"
+              ? "https://cdn.example.test/redirect-local-remote/-/redirect-local-remote-1.0.0.tgz?Signature=sensitive#fragment"
               : null
           },
           arrayBuffer: async () => new ArrayBuffer(0)

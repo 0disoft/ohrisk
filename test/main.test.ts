@@ -5921,7 +5921,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
     }
   });
 
-  test("diff reads baseline go.sum for Go module versions", async () => {
+  test("diff reads baseline go.sum for Go module checksums", async () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-go-diff-"));
     const goMod = [
       "module example.com/fixture-go-diff",
@@ -5931,8 +5931,8 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       "require github.com/acme/risk v1.0.0"
     ].join("\n");
     const goSum = [
-      "github.com/acme/risk v1.0.0 h1:abc",
-      "github.com/acme/transitive v0.2.0 h1:def"
+      `github.com/acme/risk v1.0.0 h1:${"A".repeat(43)}=`,
+      `github.com/acme/transitive v0.2.0 h1:${"B".repeat(43)}=`
     ].join("\n");
 
     try {
@@ -5965,8 +5965,8 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         baselineFindingCount: number;
         newFindingCount: number;
       };
-      expect(payload.currentFindingCount).toBe(2);
-      expect(payload.baselineFindingCount).toBe(2);
+      expect(payload.currentFindingCount).toBe(1);
+      expect(payload.baselineFindingCount).toBe(1);
       expect(payload.newFindingCount).toBe(0);
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
@@ -5989,8 +5989,8 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       "require github.com/acme/risk v1.0.0"
     ].join("\n");
     const goSum = [
-      "github.com/acme/risk v1.0.0 h1:abc",
-      "github.com/acme/transitive v0.2.0 h1:def"
+      `github.com/acme/risk v1.0.0 h1:${"A".repeat(43)}=`,
+      `github.com/acme/transitive v0.2.0 h1:${"B".repeat(43)}=`
     ].join("\n");
 
     try {
@@ -6029,8 +6029,8 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         baselineFindingCount: number;
         newFindingCount: number;
       };
-      expect(payload.currentFindingCount).toBe(2);
-      expect(payload.baselineFindingCount).toBe(2);
+      expect(payload.currentFindingCount).toBe(1);
+      expect(payload.baselineFindingCount).toBe(1);
       expect(payload.newFindingCount).toBe(0);
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });

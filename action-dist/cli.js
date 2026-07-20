@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 95ef776b1243dd02cfee039b21351f8c9ab31ff944e65c55d536587a7fb9ee99
+// ohrisk-action-source-sha256: babbffbfeea3dd7124e8e6f4e7f1dc7e22735b710f3b9652bea2d80c1b6aebcf
 // ohrisk-action-build-platform: win32
 import { createRequire } from "node:module";
 var __create = Object.create;
@@ -18495,7 +18495,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.10.2";
+var OHRISK_VERSION = "1.11.0";
 
 // src/archive/archive-project.ts
 import path46 from "node:path";
@@ -18928,6 +18928,7 @@ function strongerEvidenceSource(left, right) {
   const rank = {
     local: 5,
     tarball: 4,
+    registry: 3,
     sbom: 3,
     unavailable: 1
   };
@@ -23426,23 +23427,27 @@ function parseGoModText(input, goModPath = "go.mod", options = {}) {
     }
     const localReplacements = normalizeGoReplacementDirectives(goMod.value.replacements, options.localReplacementBaseDir, options.localReplacementRootDir);
     const replacementOverrideGroups = options.replacementOverrideGroups ?? [];
+    const goSumRecords = options.goSumText ? parseGoSumRecords(options.goSumText) : [];
+    const goSumById = new Map(goSumRecords.map((record) => [goRecordId(record), record]));
     const records = new Map;
-    for (const record of goMod.value.records.map((record2) => applyGoReplacement(record2, localReplacements, replacementOverrideGroups))) {
+    for (const originalRecord of goMod.value.records) {
+      const record = withGoModuleChecksum(applyGoReplacement(originalRecord, localReplacements, replacementOverrideGroups), goSumById);
       records.set(goRecordId(record), record);
     }
     const replacementTargetIds = new Set([...records.values()].flatMap((record) => record.replacement?.kind === "module" ? [`${record.replacement.modulePath}@${record.replacement.version}`] : []));
-    if (options.goSumText) {
-      for (const goSumRecord of parseGoSumRecords(options.goSumText)) {
+    if (options.goSumText && shouldIncludeGoSumOnlyModules(goMod.value.goVersion)) {
+      for (const goSumRecord of goSumRecords) {
         if (replacementTargetIds.has(goRecordId(goSumRecord))) {
           continue;
         }
-        const record = applyGoReplacement(goSumRecord, localReplacements, replacementOverrideGroups);
+        const record = withGoModuleChecksum(applyGoReplacement(goSumRecord, localReplacements, replacementOverrideGroups), goSumById);
         const id = goRecordId(record);
         const existing = records.get(id);
         records.set(id, existing ? {
           ...existing,
           direct: existing.direct || record.direct,
-          dependencyType: mergeDependencyType8(existing.dependencyType, record.dependencyType)
+          dependencyType: mergeDependencyType8(existing.dependencyType, record.dependencyType),
+          ...existing.checksum ? {} : record.checksum ? { checksum: record.checksum } : {}
         } : record);
       }
     }
@@ -23458,6 +23463,7 @@ function parseGoModText(input, goModPath = "go.mod", options = {}) {
           version: record.version,
           ecosystem: "go",
           ...record.replacement ? { resolved: goReplacementResolvedSpecifier(record.replacement) } : {},
+          ...record.checksum ? { integrity: record.checksum } : {},
           dependencyType: record.dependencyType,
           direct: record.direct,
           paths: [[rootName, id]]
@@ -23502,6 +23508,7 @@ function parseGoModRecords(input, goModPath) {
   const records = [];
   const replacements = [];
   let modulePath;
+  let goVersion;
   let block;
   for (const [index, rawLine] of input.split(/\r?\n/).entries()) {
     const line = stripGoLineComment(rawLine).trim();
@@ -23547,6 +23554,10 @@ function parseGoModRecords(input, goModPath) {
       modulePath = line.slice("module ".length).trim();
       continue;
     }
+    if (line.startsWith("go ")) {
+      goVersion = line.slice("go ".length).trim();
+      continue;
+    }
     if (line.startsWith("require ")) {
       const record = parseRequireLine(line.slice("require ".length).trim(), rawLine);
       if (record) {
@@ -23572,9 +23583,22 @@ function parseGoModRecords(input, goModPath) {
   }
   return ok({
     ...modulePath !== undefined ? { modulePath } : {},
+    ...goVersion !== undefined ? { goVersion } : {},
     records,
     replacements
   });
+}
+function shouldIncludeGoSumOnlyModules(goVersion) {
+  if (!goVersion) {
+    return true;
+  }
+  const match = /^(\d+)\.(\d+)(?:\.\d+)?$/u.exec(goVersion);
+  if (!match) {
+    return true;
+  }
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  return major < 1 || major === 1 && minor < 17;
 }
 function parseRequireLine(line, rawLine) {
   const parts = splitGoDirectiveFields(line);
@@ -23690,20 +23714,40 @@ function parseGoSumRecords(input) {
     if (line === "") {
       continue;
     }
-    const [modulePath, rawVersion] = line.split(/\s+/, 2);
+    const [modulePath, rawVersion, rawChecksum] = line.split(/\s+/, 3);
     if (!modulePath || !rawVersion) {
       continue;
     }
     const version = rawVersion.endsWith("/go.mod") ? rawVersion.slice(0, -"/go.mod".length) : rawVersion;
+    const checksum = rawVersion.endsWith("/go.mod") ? undefined : normalizeGoChecksum(rawChecksum);
     const record = {
       modulePath,
       version,
+      ...checksum ? { checksum } : {},
       dependencyType: "production",
       direct: false
     };
-    records.set(goRecordId(record), record);
+    const id = goRecordId(record);
+    const existing = records.get(id);
+    records.set(id, existing?.checksum && !record.checksum ? existing : {
+      ...existing,
+      ...record,
+      ...record.checksum ? { checksum: record.checksum } : {}
+    });
   }
   return [...records.values()];
+}
+function normalizeGoChecksum(value) {
+  return value && /^h1:[A-Za-z0-9+/]{43}=$/u.test(value) ? value : undefined;
+}
+function withGoModuleChecksum(record, goSumById) {
+  if (record.replacement?.kind === "local") {
+    const { checksum: _, ...withoutChecksum } = record;
+    return withoutChecksum;
+  }
+  const evidenceId = record.replacement?.kind === "module" ? `${record.replacement.modulePath}@${record.replacement.version}` : goRecordId(record);
+  const checksum = goSumById.get(evidenceId)?.checksum;
+  return checksum ? { ...record, checksum } : record;
 }
 function replaceDirectiveError(input) {
   return err(createError({
@@ -38163,6 +38207,7 @@ var ZIP_EOCD_BYTES = 22;
 var ZIP_MAX_COMMENT_BYTES = 65535;
 var ZIP64_UINT16 = 65535;
 var ZIP64_UINT32 = 4294967295;
+var ZIP_DATA_DESCRIPTOR_SIGNATURE = 134695760;
 var DEFAULT_ARCHIVE_LIMITS = Object.freeze({
   inputBytes: 256 * 1024 * 1024,
   entries: 50000,
@@ -38398,13 +38443,7 @@ function parseZip(bytes, budget, archiveName) {
         format: "zip"
       });
     }
-    if ((flags & 8) !== 0) {
-      fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "ZIP data descriptors are not supported.", {
-        basename: archiveName,
-        format: "zip"
-      });
-    }
-    if ((flags & ~2054) !== 0) {
+    if ((flags & ~2062) !== 0) {
       fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "ZIP entry flags are not supported.", {
         basename: archiveName,
         format: "zip"
@@ -38474,13 +38513,16 @@ function parseZip(bytes, budget, archiveName) {
       flags,
       method,
       dataStart: local.dataStart,
-      dataEnd: local.dataEnd
+      dataEnd: local.dataEnd,
+      localOffset,
+      recordEnd: local.recordEnd
     });
     offset += recordLength;
   }
   if (offset !== centralEnd) {
     malformed(archiveName, "ZIP central directory entry count does not match its size.", "zip");
   }
+  validateZipLocalRecordLayout(entries, centralOffset, archiveName);
   return entries.map((entry) => ({
     path: entry.path,
     type: entry.type,
@@ -38515,12 +38557,55 @@ function parseZipLocalHeader(input) {
   if (dataEnd > input.centralOffset || dataEnd > input.bytes.length) {
     malformed(input.archiveName, "ZIP entry data extends beyond its data area.", "zip", input.entryPath);
   }
-  return { dataStart, dataEnd };
+  const recordEnd = usesDescriptor ? parseZipDataDescriptor({
+    bytes: input.bytes,
+    offset: dataEnd,
+    centralOffset: input.centralOffset,
+    crc: input.crc,
+    compressedSize: input.compressedSize,
+    size: input.size,
+    archiveName: input.archiveName,
+    entryPath: input.entryPath
+  }) : dataEnd;
+  return { dataStart, dataEnd, recordEnd };
+}
+function parseZipDataDescriptor(input) {
+  requireRange(input.bytes, input.offset, 16, input.archiveName, input.entryPath);
+  if (input.offset + 16 > input.centralOffset) {
+    malformed(input.archiveName, "ZIP data descriptor extends beyond its data area.", "zip", input.entryPath);
+  }
+  if (readU32(input.bytes, input.offset, input.archiveName) !== ZIP_DATA_DESCRIPTOR_SIGNATURE) {
+    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Unsigned ZIP data descriptors are not supported.", {
+      basename: input.archiveName,
+      entryPath: input.entryPath,
+      format: "zip"
+    });
+  }
+  const crc = readU32(input.bytes, input.offset + 4, input.archiveName);
+  const compressedSize = readU32(input.bytes, input.offset + 8, input.archiveName);
+  const size = readU32(input.bytes, input.offset + 12, input.archiveName);
+  if (crc !== input.crc || compressedSize !== input.compressedSize || size !== input.size) {
+    integrity(input.archiveName, input.entryPath, "ZIP data descriptor does not match central metadata.", "zip");
+  }
+  return input.offset + 16;
+}
+function validateZipLocalRecordLayout(entries, centralOffset, archiveName) {
+  const sorted = [...entries].sort((left, right) => left.localOffset - right.localOffset);
+  for (let index = 0;index < sorted.length; index += 1) {
+    const entry = sorted[index];
+    if (!entry) {
+      continue;
+    }
+    const nextOffset = sorted[index + 1]?.localOffset ?? centralOffset;
+    if (entry.recordEnd > nextOffset) {
+      malformed(archiveName, "ZIP local records overlap.", "zip", entry.path);
+    }
+  }
 }
 function materializeZipEntry(bytes, entry, archiveName, budget, startedAt) {
   try {
     const compressed = bytes.subarray(entry.dataStart, entry.dataEnd);
-    const output = entry.method === 0 ? Buffer.from(compressed) : inflateRawSync(compressed, { maxOutputLength: entry.size });
+    const output = entry.method === 0 ? Buffer.from(compressed) : inflateRawSync(compressed, { maxOutputLength: Math.max(1, entry.size) });
     if (output.length !== entry.size) {
       integrity(archiveName, entry.path, "ZIP entry expanded size does not match metadata.", "zip");
     }
@@ -39845,7 +39930,7 @@ function cacheOperationError(message, rootDir, cause) {
 }
 
 // src/evidence/collect.ts
-import { createHash as createHash3, timingSafeEqual } from "node:crypto";
+import { createHash as createHash4, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import {
   closeSync as closeSync4,
@@ -44954,6 +45039,163 @@ function adapter(id, lockfileKinds, packageEcosystems) {
   };
 }
 
+// src/evidence/go-module-zip.ts
+import { createHash as createHash3, timingSafeEqual } from "node:crypto";
+var GO_MODULE_ZIP_MAX_ENTRIES = 50000;
+var GO_MODULE_ZIP_ENTRY_MAX_BYTES = 50 * 1024 * 1024;
+var GO_MODULE_ZIP_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
+var GO_MODULE_ZIP_MATERIALIZED_MAX_BYTES = 256 * 1024 * 1024;
+var GO_MODULE_LICENSE_MAX_BYTES = 2 * 1024 * 1024;
+var GO_MODULE_LICENSE_FILE_LIMIT = 16;
+var GO_H1_DIGEST_BYTES = 32;
+function collectGoModuleZipEvidence(input) {
+  const archive = readArchiveBytes({
+    displayName: `${safeGoModuleDisplayName(input.modulePath)}@${input.version}.zip`,
+    bytes: input.zip,
+    formatHint: "zip",
+    limits: {
+      inputBytes: input.artifactMaxBytes,
+      entries: GO_MODULE_ZIP_MAX_ENTRIES,
+      entryBytes: GO_MODULE_ZIP_ENTRY_MAX_BYTES,
+      expandedBytes: GO_MODULE_ZIP_EXPANDED_MAX_BYTES,
+      materializedBytes: GO_MODULE_ZIP_MATERIALIZED_MAX_BYTES
+    }
+  });
+  if (!archive.ok) {
+    if (archive.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
+      return ok(unavailableGoModuleEvidence(input.packageId, `Checksum-identified Go module zip exceeded bounded archive limits (${archive.error.code}); its contents were not trusted.`));
+    }
+    return err(archive.error);
+  }
+  const rootPrefix = `${input.modulePath}@${input.version}/`;
+  const fileNames = archive.value.entries.map((entry) => entry.type === "directory" ? `${entry.path}/` : entry.path);
+  const unexpectedPath = fileNames.find((fileName) => !fileName.startsWith(rootPrefix));
+  if (unexpectedPath) {
+    return err(goModuleEvidenceError({
+      packageId: input.packageId,
+      message: "Go module zip did not use the requested module path and version prefix.",
+      details: {
+        reason: "go_module_zip_identity_mismatch",
+        expectedPrefix: rootPrefix,
+        observedPath: unexpectedPath
+      }
+    }));
+  }
+  const computedChecksum = hashGoModuleArchive({
+    packageId: input.packageId,
+    entries: archive.value.entries,
+    readEntry: archive.value.readEntry
+  });
+  if (!computedChecksum.ok) {
+    return computedChecksum;
+  }
+  if (!equalGoChecksums(input.checksum, computedChecksum.value)) {
+    return err(createError({
+      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
+      category: "unsupported_input",
+      message: "Go module zip checksum did not match go.sum.",
+      details: {
+        packageId: input.packageId,
+        modulePath: input.modulePath,
+        version: input.version,
+        integrity: input.checksum,
+        computed: computedChecksum.value
+      }
+    }));
+  }
+  const evidencePaths = archive.value.entries.filter((entry) => entry.type === "file").map((entry) => entry.path).filter((entryPath) => isGoModuleRootEvidencePath(entryPath, rootPrefix)).slice(0, GO_MODULE_LICENSE_FILE_LIMIT);
+  const files = [];
+  for (const evidencePath of evidencePaths) {
+    const kind = classifyEvidenceFile(evidencePath);
+    if (!kind) {
+      continue;
+    }
+    const text3 = archive.value.readText(evidencePath, GO_MODULE_LICENSE_MAX_BYTES);
+    if (!text3.ok) {
+      return err(text3.error);
+    }
+    files.push({
+      path: evidencePath.slice(rootPrefix.length),
+      kind,
+      text: text3.value
+    });
+  }
+  return ok({
+    packageId: input.packageId,
+    files,
+    source: "tarball",
+    warnings: files.length > 0 ? [] : ["Checksum-verified Go module zip did not contain a root license evidence file."]
+  });
+}
+function hashGoModuleArchive(input) {
+  const summary = createHash3("sha256");
+  const entries = [...input.entries].sort((left, right) => {
+    const leftName = left.type === "directory" ? `${left.path}/` : left.path;
+    const rightName = right.type === "directory" ? `${right.path}/` : right.path;
+    return leftName < rightName ? -1 : leftName > rightName ? 1 : 0;
+  });
+  for (const entry of entries) {
+    const fileName = entry.type === "directory" ? `${entry.path}/` : entry.path;
+    if (fileName.includes(`
+`)) {
+      return err(goModuleEvidenceError({
+        packageId: input.packageId,
+        message: "Go module zip contained a newline in an entry path.",
+        details: { reason: "go_module_zip_newline_path" }
+      }));
+    }
+    const data = entry.type === "directory" ? ok(Buffer.alloc(0)) : input.readEntry(entry.path);
+    if (!data.ok) {
+      return data;
+    }
+    const fileDigest = createHash3("sha256").update(data.value).digest("hex");
+    summary.update(`${fileDigest}  ${fileName}
+`, "utf8");
+  }
+  return ok(`h1:${summary.digest("base64")}`);
+}
+function equalGoChecksums(expected, computed) {
+  const expectedDigest = decodeGoChecksum(expected);
+  const computedDigest = decodeGoChecksum(computed);
+  return expectedDigest !== undefined && computedDigest !== undefined && expectedDigest.length === computedDigest.length && timingSafeEqual(expectedDigest, computedDigest);
+}
+function decodeGoChecksum(value) {
+  if (!/^h1:[A-Za-z0-9+/]{43}=$/u.test(value)) {
+    return;
+  }
+  const digest = Buffer.from(value.slice("h1:".length), "base64");
+  return digest.length === GO_H1_DIGEST_BYTES ? digest : undefined;
+}
+function isGoModuleRootEvidencePath(entryPath, rootPrefix) {
+  if (!entryPath.startsWith(rootPrefix)) {
+    return false;
+  }
+  const relativePath = entryPath.slice(rootPrefix.length);
+  return relativePath !== "" && !relativePath.includes("/") && classifyEvidenceFile(relativePath) !== undefined;
+}
+function unavailableGoModuleEvidence(packageId, warning) {
+  return {
+    packageId,
+    files: [],
+    source: "unavailable",
+    warnings: [warning]
+  };
+}
+function goModuleEvidenceError(input) {
+  return createError({
+    code: "PACKAGE_EVIDENCE_READ_FAILED",
+    category: "unsupported_input",
+    message: input.message,
+    details: {
+      packageId: input.packageId,
+      ...input.details
+    }
+  });
+}
+function safeGoModuleDisplayName(modulePath) {
+  return modulePath.replace(/[^A-Za-z0-9._-]+/gu, "_").slice(-120) || "go-module";
+}
+
 // src/evidence/maven-jar.ts
 var MAVEN_JAR_MAX_BYTES = 100 * 1024 * 1024;
 var MAVEN_JAR_MAX_ENTRIES = 50000;
@@ -45914,6 +46156,8 @@ var MAVEN_CENTRAL_BASE_URL = "https://repo.maven.apache.org/maven2";
 var MAVEN_CENTRAL_HOSTS = new Set(["repo.maven.apache.org"]);
 var MAVEN_JAR_MAX_BYTES2 = 32 * 1024 * 1024;
 var MAVEN_CHECKSUM_MAX_BYTES = 256;
+var GO_MODULE_PROXY_BASE_URL = "https://proxy.golang.org";
+var GO_MODULE_PROXY_HOSTS = new Set(["proxy.golang.org", "storage.googleapis.com"]);
 var ARTIFACT_HOST_RESOLUTION_CACHE_TTL_MS = 60000;
 var ARTIFACT_HOST_RESOLUTION_CACHE_MAX_ENTRIES = 256;
 var SUPPORTED_INTEGRITY_DIGEST_BYTES = {
@@ -46058,7 +46302,7 @@ async function collectNodeEvidence(input) {
     projectRoot: input.projectRoot
   }) : undefined;
   if (ecosystemEvidence) {
-    if (input.node.ecosystem !== "maven" || !ecosystemEvidence.ok || ecosystemEvidence.value.source !== "unavailable") {
+    if (input.node.ecosystem !== "maven" && input.node.ecosystem !== "go" || !ecosystemEvidence.ok || ecosystemEvidence.value.source !== "unavailable") {
       return ecosystemEvidence;
     }
   }
@@ -46143,6 +46387,18 @@ async function collectNodeEvidence(input) {
   }
   if (input.node.ecosystem === "maven") {
     return input.collectMavenEvidence(input.node);
+  }
+  if (input.node.ecosystem === "go") {
+    return collectRemoteGoModuleEvidence({
+      node: input.node,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      artifactMaxBytes: input.tarballMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      allowedHosts: input.allowedHosts
+    });
   }
   if (input.node.ecosystem === "npm" && shouldCollectNpmRegistryEvidence({
     node: input.node,
@@ -46266,6 +46522,116 @@ function collectLocalPathEvidence(input) {
     evidence: evidence.value,
     integrity: input.node.integrity
   }));
+}
+async function collectRemoteGoModuleEvidence(input) {
+  const coordinates = remoteGoModuleCoordinates(input.node);
+  if (!coordinates) {
+    return ok(unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: input.node.resolved ? "Go local replacement evidence is unavailable during a remote repository scan." : "Go module coordinates were not safe for the fixed public module proxy."
+    }));
+  }
+  if (!input.node.integrity || !/^h1:[A-Za-z0-9+/]{43}=$/u.test(input.node.integrity)) {
+    return ok({
+      packageId: input.node.id,
+      files: [],
+      source: "unavailable",
+      warnings: [
+        "Go module source was not fetched because go.sum did not contain an exact h1 checksum for the module zip."
+      ]
+    });
+  }
+  const resolved = goModuleProxyZipUrl(coordinates.modulePath, coordinates.version);
+  if (!resolved) {
+    return ok(unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: "Go module path or version could not be encoded safely for the fixed public module proxy."
+    }));
+  }
+  const zip = await readRemoteArtifactBytes({
+    code: "TARBALL_FETCH_FAILED",
+    packageId: input.node.id,
+    url: resolved,
+    blockedMessage: "Go module proxy URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve the Go module proxy host.",
+    fetchFailureMessage: "Failed to fetch Go module zip.",
+    tooLargeMessage: "Go module zip response exceeded the maximum supported size.",
+    unreadableMessage: "Go module zip response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find the Go module zip in the artifact cache.",
+    details: {
+      modulePath: coordinates.modulePath,
+      version: coordinates.version,
+      proxy: GO_MODULE_PROXY_BASE_URL
+    },
+    maxBytes: input.artifactMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: GO_MODULE_PROXY_HOSTS,
+    urlDetailKey: "resolved"
+  });
+  if (!zip.ok) {
+    return zip;
+  }
+  return collectGoModuleZipEvidence({
+    packageId: input.node.id,
+    modulePath: coordinates.modulePath,
+    version: coordinates.version,
+    checksum: input.node.integrity,
+    zip: zip.value,
+    artifactMaxBytes: input.artifactMaxBytes
+  });
+}
+function remoteGoModuleCoordinates(node) {
+  if (!node.resolved) {
+    return { modulePath: node.name, version: node.version };
+  }
+  if (!node.resolved.startsWith("go-module:")) {
+    return;
+  }
+  const specifier = node.resolved.slice("go-module:".length);
+  const separator = specifier.lastIndexOf("@");
+  if (separator <= 0 || separator === specifier.length - 1) {
+    return;
+  }
+  return {
+    modulePath: specifier.slice(0, separator),
+    version: specifier.slice(separator + 1)
+  };
+}
+function goModuleProxyZipUrl(modulePath, version) {
+  const escapedModulePath = escapeGoProxyModulePath(modulePath);
+  const escapedVersion = escapeGoProxyVersion(version);
+  return escapedModulePath && escapedVersion ? `${GO_MODULE_PROXY_BASE_URL}/${escapedModulePath}/@v/${escapedVersion}.zip` : undefined;
+}
+function escapeGoProxyModulePath(modulePath) {
+  if (modulePath === "" || modulePath.startsWith("/") || modulePath.endsWith("/") || !/^[A-Za-z0-9.!_~+\-/]+$/u.test(modulePath)) {
+    return;
+  }
+  const segments = modulePath.split("/");
+  if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+    return;
+  }
+  return escapeGoProxyText(modulePath);
+}
+function escapeGoProxyVersion(version) {
+  return /^v[A-Za-z0-9.!_~+\-]+$/u.test(version) ? escapeGoProxyText(version) : undefined;
+}
+function escapeGoProxyText(value) {
+  let escaped = "";
+  for (const character of value) {
+    if (character === "!") {
+      escaped += "!!";
+    } else if (character >= "A" && character <= "Z") {
+      escaped += `!${character.toLowerCase()}`;
+    } else {
+      escaped += character;
+    }
+  }
+  return escaped;
 }
 function readLocalArtifactStats(input) {
   try {
@@ -46637,8 +47003,8 @@ async function collectRemoteMavenJarEvidence(input) {
     return jarBytes.error.category === "network" ? ok(undefined) : jarBytes;
   }
   const expected = Buffer.from(checksum, "hex");
-  const observed = createHash3("sha256").update(jarBytes.value).digest();
-  if (expected.length !== observed.length || !timingSafeEqual(expected, observed)) {
+  const observed = createHash4("sha256").update(jarBytes.value).digest();
+  if (expected.length !== observed.length || !timingSafeEqual2(expected, observed)) {
     return err(createError({
       code: "PACKAGE_INTEGRITY_CHECK_FAILED",
       category: "unsupported_input",
@@ -48000,7 +48366,7 @@ function createRemoteArtifactExceptionError(input) {
 function safeUrlForErrorDetails(value) {
   try {
     const url = new URL(value);
-    if (url.username === "" && url.password === "") {
+    if (url.username === "" && url.password === "" && url.search === "" && url.hash === "") {
       return redactUrlCredentialsInText(value);
     }
     if (url.username !== "") {
@@ -48009,6 +48375,8 @@ function safeUrlForErrorDetails(value) {
     if (url.password !== "") {
       url.password = "redacted";
     }
+    url.search = "";
+    url.hash = "";
     return url.toString();
   } catch {
     return redactUrlCredentialsInText(value);
@@ -48199,10 +48567,10 @@ function verifyPackageIntegrity(input) {
   }
   const computed = [];
   for (const entry of supported) {
-    const actualDigest = createHash3(entry.algorithm).update(input.tarball).digest();
+    const actualDigest = createHash4(entry.algorithm).update(input.tarball).digest();
     const actual = `${entry.algorithm}-${actualDigest.toString("base64")}`;
     computed.push(actual);
-    if (actualDigest.byteLength === entry.digest.byteLength && timingSafeEqual(actualDigest, entry.digest)) {
+    if (actualDigest.byteLength === entry.digest.byteLength && timingSafeEqual2(actualDigest, entry.digest)) {
       return ok(undefined);
     }
   }
@@ -48423,7 +48791,8 @@ async function defaultArtifactHostResolver(hostname) {
   });
 }
 function secureArtifactLookup(hostname, options, callback) {
-  createSecureArtifactLookup(defaultArtifactHostResolver)(hostname, options, callback);
+  const lookupOptions = typeof options === "number" ? { family: options } : options;
+  createSecureArtifactLookup(defaultArtifactHostResolver)(hostname, lookupOptions, callback);
 }
 function createSecureArtifactLookup(resolveArtifactHost) {
   return (hostname, options, callback) => {
@@ -48506,7 +48875,8 @@ function selectSecureArtifactLookupResponse(hostname, options, resolutions) {
   });
 }
 function normalizeArtifactLookupOptions(options) {
-  const family = typeof options === "number" ? options : options?.family;
+  const rawFamily = typeof options === "number" ? options : options?.family;
+  const family = rawFamily === "IPv4" ? 4 : rawFamily === "IPv6" ? 6 : rawFamily;
   return {
     all: typeof options === "object" && options?.all === true,
     family: family === 4 || family === 6 ? family : undefined

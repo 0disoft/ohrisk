@@ -148,14 +148,18 @@ Cargo graph 순회는 반복형으로 수행하며 도달 가능한 crate를 모
 evidence는 로컬 Cargo registry source나 `vendor/<crate>`에서
 읽는다. 아직 crates.io 원격 artifact fetch는 지원하지 않는다.
 Go는 `go.work` workspace module, workspace `replace` directive, 각 module의
-`go.mod` require, module-level `replace` directive, 옆의 `go.sum` module version을
+`go.mod` require, module-level `replace` directive, 옆의 `go.sum` module ZIP checksum을
 스캔한다. `go.work`의 `replace`는 module `go.mod`의 `replace`보다 먼저 적용한다.
 module-to-module `replace`는 원래 require identity를 유지하되
 replacement module/version의 로컬 cache evidence를 읽고, 프로젝트 root 안의 local
 path `replace`는 해당 경로의 license evidence를 읽는다. evidence는 로컬 Go module
-cache, `vendor/<module>`, 프로젝트 root 안 local replacement path에서 읽는다. 프로젝트
-root 밖 `go.work use` path, 프로젝트 root 밖 local `replace` path, 전체 Go module parent graph 복원, Go proxy 원격 artifact
-fetch는 아직 지원하지 않는다.
+cache, `vendor/<module>`, 프로젝트 root 안 local replacement path에서 먼저 읽는다.
+로컬 evidence가 없으면 `go.sum`의 정확한 `h1` checksum이 있는 모듈만 고정된 공개
+`proxy.golang.org`에서 내려받고, 전체 ZIP checksum을 검증한 뒤 root license 파일을
+읽는다. Go 1.17 이상에서는 현재 `go.mod` require graph만 의존성으로 사용하고,
+예전 다운로드 기록까지 남아 있는 `go.sum` 전체를 현재 의존성으로 오인하지 않는다.
+프로젝트 root 밖 `go.work use` path, 프로젝트 root 밖 local `replace` path, 임의 또는
+비공개 Go proxy는 아직 지원하지 않는다.
 Python은 standalone `pyproject.toml`의 정확한 PEP 621 `name==version` 직접 의존성, PyPA `pylock.toml`/`pylock.<name>.toml`, `uv.lock`, Pipenv `Pipfile.lock`, PDM `pdm.lock`, `poetry.lock`에 기록된 PyPI 패키지를
 스캔하고, 로컬 `.venv`/`venv`의 `*.dist-info/METADATA`와 license 파일을
 evidence로 읽는다. `uv.lock`은 프로젝트 root 안 `directory`/`editable`

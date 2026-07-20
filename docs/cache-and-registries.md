@@ -1,6 +1,6 @@
 # Cache and Registry Configuration
 
-Ohrisk stores fetched npm registry metadata, PyPI release metadata, Maven Central POM metadata, and package artifacts in a shared,
+Ohrisk stores fetched npm registry metadata, PyPI release metadata, Maven POM metadata, checksum-verified Go module ZIPs, and package artifacts in a shared,
 content-addressed cache. The URL index contains only a SHA-256 URL key, object
 digest, byte size, access timestamps, expiration metadata, and optional HTTP
 validators. Raw URLs, credentials, authorization headers, and token values are
@@ -38,6 +38,11 @@ repository URL already declared in the scanned `pom.xml`; it does not construct
 or discover arbitrary repository URLs. Maven Central remains the default. A
 permitted Maven repository may supply bounded POM evidence and, only with a
 same-repository SHA-256 sidecar plus exact embedded identity, JAR license files.
+
+Go module ZIPs always use the fixed public `proxy.golang.org` adapter and the
+exact `go.sum` `h1` checksum. `--registry-url` and `--allow-host` do not replace
+or widen that proxy; official redirects remain limited to
+`storage.googleapis.com` and receive no registry credentials.
 
 Cache objects are verified by size and SHA-256 before use. Corrupt, truncated,
 or mismatched entries are deleted and treated as misses. Writes use private

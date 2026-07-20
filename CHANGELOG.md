@@ -1,6 +1,19 @@
 # Changelog
 
-## 1.10.2 - 2026-07-18
+## 1.11.0 - 2026-07-20
+
+- Added checksum-verified Go module ZIP license evidence through the fixed
+  public Go proxy. Ohrisk now requires the exact `go.sum` `h1` checksum,
+  validates the complete module ZIP and requested module/version root, and
+  inspects only root license files without forwarding npm credentials.
+- Go 1.17 and later scans now use the complete `go.mod` requirement graph and
+  treat `go.sum` as a checksum ledger, avoiding historical module downloads that
+  previously made large repositories such as Signoz time out.
+- The bounded ZIP reader now accepts signed data descriptors and exact empty
+  deflate streams used by real Go module archives while rejecting descriptor
+  drift, overlaps, malformed archives, and unsupported unsigned descriptors.
+- Redirect diagnostics now omit query strings and fragments so signed artifact
+  URLs cannot leak through errors.
 
 - Large npm monorepo scans now use exact registry SPDX metadata for transitive
   packages, while direct packages and missing or non-SPDX declarations retain

@@ -288,14 +288,46 @@ describe("archive reader", () => {
       bytes: createZipEntries([{ path: "file.txt", data: "x", method: 12 }])
     }))).toBe("ARCHIVE_COMPRESSION_UNSUPPORTED");
 
-    const descriptor = createZip({ "descriptor.txt": "x" });
-    descriptor.writeUInt16LE(descriptor.readUInt16LE(6) | 0x0008, 6);
-    const centralOffset = 30 + Buffer.byteLength("descriptor.txt") + 1;
-    descriptor.writeUInt16LE(descriptor.readUInt16LE(centralOffset + 8) | 0x0008, centralOffset + 8);
-    expect(errorCode(readArchiveBytes({
+  });
+
+  test("accepts signed ZIP data descriptors and rejects descriptor drift", () => {
+    const descriptor = createZipEntries([
+      {
+        path: "descriptor.txt",
+        data: "x",
+        descriptor: true
+      },
+      {
+        path: "empty.txt",
+        data: "",
+        descriptor: true
+      }
+    ], { deflate: true });
+    const accepted = readArchiveBytes({
       displayName: "descriptor.zip",
       bytes: descriptor
-    }))).toBe("ARCHIVE_FORMAT_UNSUPPORTED");
+    });
+    expect(accepted.ok).toBe(true);
+    if (!accepted.ok) {
+      throw new Error(accepted.error.message);
+    }
+    expect(accepted.value.readText("descriptor.txt")).toEqual(expect.objectContaining({
+      ok: true,
+      value: "x"
+    }));
+    expect(accepted.value.readText("empty.txt")).toEqual(expect.objectContaining({
+      ok: true,
+      value: ""
+    }));
+
+    const damaged = Buffer.from(descriptor);
+    const descriptorOffset = descriptor.indexOf(Buffer.from("504b0708", "hex"));
+    expect(descriptorOffset).toBeGreaterThan(0);
+    damaged.writeUInt32LE(2, descriptorOffset + 12);
+    expect(errorCode(readArchiveBytes({
+      displayName: "descriptor-drift.zip",
+      bytes: damaged
+    }))).toBe("ARCHIVE_INTEGRITY_FAILED");
   });
 
   test("rejects TAR checksum damage and incomplete end markers", () => {

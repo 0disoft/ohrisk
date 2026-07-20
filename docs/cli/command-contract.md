@@ -118,7 +118,7 @@ directory where Ohrisk was invoked remains the configuration, waiver, cache, and
 root. General package-cache, install-tree, and vendored-source evidence from the temporary checkout
 is disabled. Project-contained source metadata and license files explicitly referenced by a selected
 Python lockfile local-source record are parser inputs and remain bounded by the validated checkout;
-lockfile-embedded evidence and the bounded npm/PyPI/Maven remote package-evidence pipeline also remain
+lockfile-embedded evidence and the bounded npm/PyPI/Maven/Go remote package-evidence pipeline also remain
 available. Shareable reports and errors redact the temporary checkout path.
 
 ## Multiple Lockfiles
@@ -178,6 +178,16 @@ while storing at most 64 dependency paths per package. Additional paths are
 reported through the same `dependency_paths_truncated` graph diagnostic used by
 Cargo and modern npm graphs, preventing combinatorial path expansion from
 inflating finding identities and reports without silently dropping packages.
+
+For Go 1.17 and later, `go.mod` requirements define the current dependency
+graph and adjacent `go.sum` entries are used only as module ZIP checksum records.
+Older or versionless modules conservatively retain `go.sum`-only fallback nodes.
+After local cache, vendor, and contained replacement evidence is exhausted,
+Ohrisk may fetch an exact module ZIP only from the fixed public Go proxy when
+the matching ZIP `h1` checksum exists. It verifies the complete Go checksum and
+requested module/version root before trusting root license files. Local
+replacements, missing checksums, and caller-selected private proxies are not
+fetched.
 
 For `*.csproj`, Ohrisk scans direct `PackageReference` and `PackageDownload`
 items. `PackageReference` may use a matching literal central `PackageVersion`;

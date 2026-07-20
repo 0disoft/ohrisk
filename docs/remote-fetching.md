@@ -28,6 +28,9 @@ Remote fetching is limited to these explicit adapters:
   when its exact host is explicitly allowed by policy or `--allow-host`;
 - a bounded Maven JAR license-file fallback only when the selected repository
   publishes a SHA-256 sidecar and the JAR contains exact embedded Maven identity.
+- exact Go module ZIPs from the fixed public `proxy.golang.org` endpoint when
+  `go.sum` supplies the module ZIP's exact `h1` checksum; only root license
+  files from the checksum-verified archive are evidence.
 
 The repository adapter accepts only `github.com` owner/repository URLs, disables
 credential prompts, submodule fetching, and symlink checkout, rejects non-portable or
@@ -88,7 +91,7 @@ version match a module in the same reactor are project components and are not
 reported again as external packages.
 
 Other ecosystems use local caches, vendored source, lockfile-embedded evidence,
-or local package metadata. Another remote ecosystem adapter is not enabled until
+or local package metadata. Any further remote ecosystem adapter is not enabled until
 it implements the same target, integrity, cache, credential, and resource
 boundary.
 
@@ -100,6 +103,15 @@ and continue through the local-package or integrity-verified tarball path.
 An npm package resolved from Git or another non-registry source is never replaced
 with a same-name registry artifact: its integrity identifies different bytes,
 so absent local evidence remains unavailable instead of mixing identities.
+
+Go module evidence remains local-first. A module or module-to-module replacement
+may use the fixed public proxy only when the adjacent `go.sum` contains the exact
+module ZIP `h1` checksum for the evidence identity. Local path replacements are
+never sent to the proxy. Missing or malformed ZIP checksums produce unavailable
+evidence without a request, and a checksum mismatch fails the scan. For modules
+declaring Go 1.17 or later, `go.mod` is the complete requirement graph and
+`go.sum` is used only as the checksum ledger; older or versionless modules retain
+the conservative `go.sum`-only dependency fallback.
 
 `uv.lock` Git source records are identity-only inputs, not another remote
 adapter. Ohrisk accepts one only when uv's resolved source ends in a full 40- or
@@ -123,6 +135,14 @@ connected socket address before trusting the response. Redirects are followed
 manually, capped, and fully revalidated. A bearer token is attached only to the
 exact configured registry hostname and is never forwarded to another redirect
 host.
+
+Go module requests are constructed only under `https://proxy.golang.org` using
+the module proxy's uppercase and exclamation-mark escaping. The official proxy
+may redirect ZIP downloads to the exact `storage.googleapis.com` host. That
+redirect is revalidated like every other target, receives no npm token or other
+credential, and signed query strings or fragments are omitted from diagnostics.
+Callers cannot replace the fixed proxy or widen this adapter through
+`--registry-url`.
 
 Within one scan, successful public DNS answers are reused for at most 60 seconds
 and 256 exact hostnames. The cache is scan-local, does not retain failures, and
@@ -180,6 +200,11 @@ Cache validators are attached only to the first validated request and are not
 forwarded across redirects. The same rule already applies to registry bearer
 tokens, preventing request-specific state from crossing host boundaries.
 
+Checksum-identified Go module ZIPs use the same content-addressed cache,
+conditional revalidation, offline stale-entry behavior, size ceiling, and LRU
+control as other remote artifacts. Offline cache misses remain unavailable and
+never trigger DNS or HTTP work.
+
 `--offline` performs no DNS lookup or network request. It may use a valid stale
 entry because revalidation is impossible by definition, but a missing,
 corrupt, or oversized entry is reported as unavailable evidence instead of
@@ -198,6 +223,14 @@ exact PyPI release response supplies its SHA-256 digest, Ohrisk verifies the
 downloaded bytes before trusting package evidence. Without supported integrity
 metadata, Ohrisk does not fetch or trust the artifact and records unavailable
 evidence with a warning.
+
+For Go, the integrity source is the exact module ZIP `h1` record in `go.sum`.
+Ohrisk computes the Go checksum over every sorted ZIP entry name and content,
+requires the requested `<module>@<version>/` root prefix, and then inspects only
+root `LICENSE`, `LICENCE`, `COPYING`, `NOTICE`, and recognized variants. ZIP
+entry, expansion, materialization, time, and response limits remain enforced.
+A safely rejected archive limit affects only that package; malformed archives,
+unexpected roots, or checksum drift fail closed.
 
 PyPI uses fixed public `pypi.org` release metadata and
 `files.pythonhosted.org` distribution URLs. It never receives npm registry
