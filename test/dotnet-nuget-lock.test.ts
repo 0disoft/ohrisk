@@ -217,6 +217,20 @@ describe("parseNugetProjectAssetsText", () => {
 });
 
 describe("parseDotnetProjectText", () => {
+  test("rejects dependency-free projects when selected explicitly", () => {
+    const result = parseDotnetProjectText(
+      "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>",
+      "Empty.App.csproj"
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected a dependency-free .NET project to fail.");
+    }
+
+    expect(result.error.code).toBe("DOTNET_PROJECT_PARSE_FAILED");
+  });
+
   test("parses direct PackageReference dependencies from a .csproj file", () => {
     const result = parseDotnetProjectText(
       [

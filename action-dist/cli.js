@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 976751ed78b279a684de35a3b42e36f92dd8ed5ffc1ca0a3a548443f8bc7c5ad
+// ohrisk-action-source-sha256: e3d5608f45f73610c30dc1a43469b77c23000bab63242d84bc5087e78c565851
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18538,7 +18538,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.12.1";
+var OHRISK_VERSION = "1.12.2";
 
 // src/archive/archive-project.ts
 import path46 from "node:path";
@@ -22438,6 +22438,16 @@ function parseDotnetProjectFile(projectFilePath, options = {}) {
   return parseDotnetProjectText(projectFileText.value, projectFilePath, omitUndefined({
     centralPackageVersions: centralPackageVersions.value
   }));
+}
+function isDotnetProjectAutoDiscoveryCandidate(projectFilePath, options = {}) {
+  const projectFileText = readInputTextFile({
+    filePath: projectFilePath,
+    maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES
+  });
+  if (!projectFileText.ok) {
+    return true;
+  }
+  return /<Package(?:Reference|Download)\b/i.test(projectFileText.value);
 }
 function parseNugetPackagesConfigFile(packagesConfigPath, options = {}) {
   const packagesConfigText = readInputTextFile({
@@ -37647,6 +37657,12 @@ function projectRelativePath(rootDir, targetPath) {
   return relativePath === "" ? "." : relativePath;
 }
 function isConcreteAutoDiscoveryInput(lockfile) {
+  if (lockfile.kind === "dotnet-project") {
+    return isDotnetProjectAutoDiscoveryCandidate(lockfile.path);
+  }
+  if (lockfile.kind === "yarn-lock") {
+    return isFile3(path45.join(path45.dirname(lockfile.path), "package.json"));
+  }
   if (lockfile.kind === "pyproject-toml") {
     return parsePyprojectFile(lockfile.path).ok;
   }

@@ -1,6 +1,7 @@
 import { closeSync, existsSync, openSync, readSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
+import { isDotnetProjectAutoDiscoveryCandidate } from "../graph/dotnet-nuget-lock";
 import { parseGradleVersionCatalogFile } from "../graph/java-gradle-version-catalog";
 import { parseCondaEnvironmentFile } from "../graph/conda-environment";
 import { parsePackageJsonManifestFile } from "../graph/npm-package-json";
@@ -663,6 +664,14 @@ function projectRelativePath(rootDir: string, targetPath: string): string {
 }
 
 function isConcreteAutoDiscoveryInput(lockfile: ProjectLockfile): boolean {
+  if (lockfile.kind === "dotnet-project") {
+    return isDotnetProjectAutoDiscoveryCandidate(lockfile.path);
+  }
+
+  if (lockfile.kind === "yarn-lock") {
+    return isFile(path.join(path.dirname(lockfile.path), "package.json"));
+  }
+
   if (lockfile.kind === "pyproject-toml") {
     return parsePyprojectFile(lockfile.path).ok;
   }

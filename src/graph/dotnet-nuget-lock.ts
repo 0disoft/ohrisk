@@ -122,6 +122,22 @@ export function parseDotnetProjectFile(
   }));
 }
 
+export function isDotnetProjectAutoDiscoveryCandidate(
+  projectFilePath: string,
+  options: { maxBytes?: number } = {}
+): boolean {
+  const projectFileText = readInputTextFile({
+    filePath: projectFilePath,
+    maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES
+  });
+
+  if (!projectFileText.ok) {
+    return true;
+  }
+
+  return /<Package(?:Reference|Download)\b/i.test(projectFileText.value);
+}
+
 export function parseNugetPackagesConfigFile(
   packagesConfigPath: string,
   options: { maxBytes?: number } = {}

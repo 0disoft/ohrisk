@@ -1,1 +1,1 @@
-export const OHRISK_VERSION = "1.12.1";
+export const OHRISK_VERSION = "1.12.2";

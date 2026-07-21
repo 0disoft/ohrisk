@@ -2531,6 +2531,84 @@ describe("discoverProject", () => {
     }
   });
 
+  test("skips dependency-free .NET projects during automatic repository discovery", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-empty-dotnet-"));
+    const appRoot = path.join(repositoryRoot, "app");
+    const serverRoot = path.join(repositoryRoot, "server");
+    const projectPath = path.join(appRoot, "Empty.App.csproj");
+
+    try {
+      mkdirSync(appRoot, { recursive: true });
+      mkdirSync(serverRoot, { recursive: true });
+      writeFileSync(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>\n", "utf8");
+      writeFileSync(path.join(serverRoot, "go.mod"), "module example.com/server\n\ngo 1.24\n", "utf8");
+
+      const automaticResult = discoverProject({
+        cwd: repositoryRoot,
+        searchMode: "tree",
+        autoMergeDescendantProjects: true
+      });
+
+      expect(automaticResult.ok).toBe(true);
+      if (!automaticResult.ok) throw new Error(automaticResult.error.message);
+      expect(automaticResult.value.lockfiles ?? [automaticResult.value.lockfile]).toEqual([
+        { kind: "go-mod", path: path.join(serverRoot, "go.mod") }
+      ]);
+
+      const explicitResult = discoverProject({
+        cwd: repositoryRoot,
+        lockfilePath: path.relative(repositoryRoot, projectPath)
+      });
+      expect(explicitResult.ok).toBe(true);
+      if (!explicitResult.ok) throw new Error(explicitResult.error.message);
+      expect(explicitResult.value.lockfile).toEqual({
+        kind: "dotnet-project",
+        path: projectPath
+      });
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("skips orphaned Yarn locks during automatic repository discovery", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-orphan-yarn-"));
+    const generatedRoot = path.join(repositoryRoot, "kotlin-js-store");
+    const serverRoot = path.join(repositoryRoot, "server");
+    const lockfilePath = path.join(generatedRoot, "yarn.lock");
+
+    try {
+      mkdirSync(generatedRoot, { recursive: true });
+      mkdirSync(serverRoot, { recursive: true });
+      writeFileSync(lockfilePath, "# generated without a root package manifest\n", "utf8");
+      writeFileSync(path.join(serverRoot, "go.mod"), "module example.com/server\n\ngo 1.24\n", "utf8");
+
+      const automaticResult = discoverProject({
+        cwd: repositoryRoot,
+        searchMode: "tree",
+        autoMergeDescendantProjects: true
+      });
+
+      expect(automaticResult.ok).toBe(true);
+      if (!automaticResult.ok) throw new Error(automaticResult.error.message);
+      expect(automaticResult.value.lockfiles ?? [automaticResult.value.lockfile]).toEqual([
+        { kind: "go-mod", path: path.join(serverRoot, "go.mod") }
+      ]);
+
+      const explicitResult = discoverProject({
+        cwd: repositoryRoot,
+        lockfilePath: path.relative(repositoryRoot, lockfilePath)
+      });
+      expect(explicitResult.ok).toBe(true);
+      if (!explicitResult.ok) throw new Error(explicitResult.error.message);
+      expect(explicitResult.value.lockfile).toEqual({
+        kind: "yarn-lock",
+        path: lockfilePath
+      });
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
+    }
+  });
+
   test("skips unresolved pyproject manifests during automatic repository discovery", () => {
     const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-pyproject-range-"));
     const playgroundRoot = path.join(repositoryRoot, "infra", "ml", "playground");

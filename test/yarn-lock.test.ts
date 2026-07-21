@@ -126,6 +126,25 @@ describe("parseYarnLockfile", () => {
     expect(result.error.code).toBe("YARN_PACKAGE_JSON_PARSE_FAILED");
   });
 
+  test("rejects a Yarn lock selected without its root package manifest", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-yarn-missing-package-"));
+    const lockfilePath = path.join(projectRoot, "yarn.lock");
+
+    try {
+      writeFileSync(lockfilePath, "# yarn lockfile v1\n", "utf8");
+      const result = parseYarnLockfile(lockfilePath);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected a missing Yarn package.json to fail.");
+      }
+
+      expect(result.error.code).toBe("YARN_PACKAGE_JSON_READ_FAILED");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("rejects oversized Yarn lockfiles before parsing", () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-yarn-lock-size-"));
     const lockfilePath = path.join(projectRoot, "yarn.lock");

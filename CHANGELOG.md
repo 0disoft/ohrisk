@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.12.2 - 2026-07-21
+
+- Skipped dependency-free `.csproj` files and orphaned `yarn.lock` files during
+  repository-wide automatic discovery. Concrete sibling projects continue to
+  scan, while explicit `--lockfile` selection remains strict and reports the
+  missing dependency input.
+
 ## 1.12.1 - 2026-07-21
 
 - Made the packaged CLI and checked-in GitHub Action bundle reproducible across
