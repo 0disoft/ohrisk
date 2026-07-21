@@ -25,9 +25,12 @@ bun run verify:release
 
 This runs the scoped TypeScript typecheck for release packaging scripts and
 report output writing, the full Bun test suite, builds the Node-compatible CLI
-bundle, verifies the npm package contents with a dry-run pack, then installs the
+bundle, requires a fresh bundle to match the checked-in Action bundle byte for
+byte, verifies the npm package contents with a dry-run pack, then installs the
 packed tarball into a temporary npm consumer project and runs the packaged
-`ohrisk` bin through Node.js.
+`ohrisk` bin through Node.js. The release-check matrix runs the same gate on
+Linux, Windows, and macOS so platform-specific bundle drift fails before
+publication.
 
 ## Automated Publish
 
@@ -36,8 +39,8 @@ file's example tag when needed, push `main`, then push a version tag matching
 `package.json`:
 
 ```bash
-git tag v1.12.0
-git push origin v1.12.0
+git tag v1.12.1
+git push origin v1.12.1
 ```
 
 The publish workflow verifies that the tag version matches `package.json`, runs
@@ -55,9 +58,9 @@ locally after confirming npm authentication:
 ```bash
 npm whoami
 npm publish --access public --provenance
-npm view ohrisk@1.12.0 version
-npm view ohrisk@1.12.0 dist.tarball
-npm view ohrisk@1.12.0 dist.integrity
+npm view ohrisk@1.12.1 version
+npm view ohrisk@1.12.1 dist.tarball
+npm view ohrisk@1.12.1 dist.integrity
 ```
 
 After manual recovery, create or update the matching GitHub Release using the

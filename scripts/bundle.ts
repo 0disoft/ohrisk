@@ -6,6 +6,8 @@ import path from "node:path";
 export const CLI_ENTRYPOINT = "src/cli/main.ts";
 export const CLI_BUNDLE_FILENAME = "cli.js";
 export const ACTION_BUNDLE_FINGERPRINT_PREFIX = "// ohrisk-action-source-sha256: ";
+export const CLI_BUNDLE_VIRTUAL_DIRNAME = "/__ohrisk_bundle__";
+export const CLI_BUNDLE_VIRTUAL_FILENAME = `${CLI_BUNDLE_VIRTUAL_DIRNAME}/${CLI_BUNDLE_FILENAME}`;
 
 export async function buildCliBundle(outdir: string): Promise<string> {
   const sourceFingerprint = actionBundleSourceFingerprint();
@@ -15,7 +17,11 @@ export async function buildCliBundle(outdir: string): Promise<string> {
     outdir,
     packages: "bundle",
     target: "node",
-    banner: `${ACTION_BUNDLE_FINGERPRINT_PREFIX}${sourceFingerprint}\n// ohrisk-action-build-platform: ${process.platform}`
+    banner: `${ACTION_BUNDLE_FINGERPRINT_PREFIX}${sourceFingerprint}`,
+    define: {
+      __dirname: JSON.stringify(CLI_BUNDLE_VIRTUAL_DIRNAME),
+      __filename: JSON.stringify(CLI_BUNDLE_VIRTUAL_FILENAME)
+    }
   });
 
   if (!result.success) {
@@ -26,8 +32,28 @@ export async function buildCliBundle(outdir: string): Promise<string> {
   }
 
   const bundlePath = path.join(outdir, CLI_BUNDLE_FILENAME);
+  assertPortableCliBundle(bundlePath);
   chmodSync(bundlePath, 0o755);
   return bundlePath;
+}
+
+export function assertPortableCliBundle(bundlePath: string): void {
+  const source = readFileSync(bundlePath, "utf8");
+  const forbiddenFragments = [
+    "// ohrisk-action-build-platform:",
+    process.cwd(),
+    process.cwd().replace(/\\/g, "/"),
+    JSON.stringify(process.cwd()).slice(1, -1)
+  ];
+  const leakedFragment = forbiddenFragments.find(
+    (fragment) => fragment !== "" && source.includes(fragment)
+  );
+
+  if (leakedFragment !== undefined) {
+    throw new Error(
+      `CLI bundle contains platform-specific build metadata or an absolute build path: ${leakedFragment}`
+    );
+  }
 }
 
 export function actionBundleSourceFingerprint(): string {

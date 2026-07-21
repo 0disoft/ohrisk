@@ -102,12 +102,16 @@ describe("package metadata", () => {
     expect(buildScript).toContain('copyFileSync(packageBundle, "action-dist/cli.js")');
     expect(bundleScript).toContain('packages: "bundle"');
     expect(bundleScript).toContain('target: "node"');
+    expect(bundleScript).toContain("CLI_BUNDLE_VIRTUAL_DIRNAME");
+    expect(bundleScript).toContain("assertPortableCliBundle(bundlePath)");
+    expect(bundleScript).not.toContain("${process.platform}");
     expect(bundleScript).toContain("assertBuiltCliVersion");
     expect(actionCheck).toContain("action-dist/cli.js is stale");
     expect(actionCheck).toContain("actionBundleSourceFingerprint()");
     expect(actionCheck).toContain("assertBuiltCliVersion(freshBundle, packageVersion)");
     expect(actionCheck).toContain("assertBuiltCliVersion(checkedInBundle, packageVersion)");
-    expect(actionCheck).not.toContain("normalizedFreshBytes");
+    expect(actionCheck).toContain("freshBytes.equals(checkedInBytes)");
+    expect(actionCheck).toContain("not byte-for-byte reproducible");
     expect(readme).toContain("the packaged CLI runs on Node.js");
     expect(readme).toContain("npm install -g ohrisk");
     expect(readme).toContain("pnpm dlx ohrisk scan");

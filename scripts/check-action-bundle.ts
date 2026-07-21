@@ -19,6 +19,7 @@ if (!existsSync(checkedInBundle)) {
 const workspace = mkdtempSync(path.join(tmpdir(), "ohrisk-action-bundle-"));
 try {
   const freshBundle = await buildCliBundle(workspace);
+  const freshBytes = readFileSync(freshBundle);
   const checkedInBytes = readFileSync(checkedInBundle);
   const checkedInSourceFingerprint = readSourceFingerprint(checkedInBytes);
   const expectedSourceFingerprint = actionBundleSourceFingerprint();
@@ -28,6 +29,16 @@ try {
         "action-dist/cli.js is stale. Run bun run build:action.",
         `checked-in source sha256: ${checkedInSourceFingerprint ?? "missing"}`,
         `expected source sha256:   ${expectedSourceFingerprint}`
+      ].join("\n")
+    );
+  }
+
+  if (!freshBytes.equals(checkedInBytes)) {
+    throw new Error(
+      [
+        "action-dist/cli.js is not byte-for-byte reproducible. Run bun run build:action and commit the result.",
+        `fresh sha256:      ${sha256(freshBytes)}`,
+        `checked-in sha256: ${sha256(checkedInBytes)}`
       ].join("\n")
     );
   }

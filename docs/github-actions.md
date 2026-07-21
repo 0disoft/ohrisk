@@ -10,14 +10,16 @@ license evidence early; they do not replace legal review.
 ## Bundled action
 
 The repository's composite action runs its checked-in CLI bundle and supports
-`scan`, `ci`, and `diff`. A diff invocation requires a baseline ref:
+`scan`, `ci`, and `diff`. Its release gate rebuilds the CLI on Linux, Windows,
+and macOS and requires every build to match the checked-in bundle byte for
+byte. A diff invocation requires a baseline ref:
 
 ```yaml
 - uses: actions/checkout@v7
   with:
     fetch-depth: 0
 
-- uses: 0disoft/ohrisk@v1.12.0
+- uses: 0disoft/ohrisk@v1.12.1
   with:
     command: diff
     baseline-ref: origin/main
@@ -34,7 +36,7 @@ To scan a source archive directly, pass a checked-in or downloaded
 repository-relative regular file to `archive`:
 
 ```yaml
-- uses: 0disoft/ohrisk@v1.12.0
+- uses: 0disoft/ohrisk@v1.12.1
   with:
     command: ci
     archive: artifacts/source.tar.gz
@@ -76,7 +78,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install -g ohrisk@1.12.0
+      - run: npm install -g ohrisk@1.12.1
 
       - run: ohrisk diff origin/main --prod --fail-on high
 ```
@@ -114,7 +116,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install -g ohrisk@1.12.0
+      - run: npm install -g ohrisk@1.12.1
 
       - name: Generate Ohrisk report
         run: |
@@ -189,7 +191,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install -g ohrisk@1.12.0
+      - run: npm install -g ohrisk@1.12.1
 
       - run: |
           mkdir -p reports

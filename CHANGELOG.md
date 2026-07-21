@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.12.1 - 2026-07-21
+
+- Made the packaged CLI and checked-in GitHub Action bundle reproducible across
+  operating systems by removing the build-platform banner and replacing
+  dependency-injected build-machine paths with stable virtual paths. Release
+  verification now requires a freshly built bundle to match
+  `action-dist/cli.js` byte for byte.
+
 ## 1.12.0 - 2026-07-21
 
 - Resolved exact Maven Central parent and imported-BOM POMs when a filesystem

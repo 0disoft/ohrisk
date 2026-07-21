@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 1ed10b8f510349383dffc52923926d92ca02469f29d238996a2818bbe71760d3
-// ohrisk-action-build-platform: win32
+// ohrisk-action-source-sha256: 976751ed78b279a684de35a3b42e36f92dd8ed5ffc1ca0a3a548443f8bc7c5ad
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -6978,7 +6977,6 @@ var require_public_api = __commonJS((exports) => {
 
 // node_modules/.bun/@yarnpkg+lockfile@1.1.0/node_modules/@yarnpkg/lockfile/index.js
 var require_lockfile = __commonJS((exports, module) => {
-  var __dirname = "C:\\Users\\cherr\\Documents\\workspace\\zerodi-wd1\\projects\\hobby\\opensource\\ohrisk\\node_modules\\.bun\\@yarnpkg+lockfile@1.1.0\\node_modules\\@yarnpkg\\lockfile", __filename = "C:\\Users\\cherr\\Documents\\workspace\\zerodi-wd1\\projects\\hobby\\opensource\\ohrisk\\node_modules\\.bun\\@yarnpkg+lockfile@1.1.0\\node_modules\\@yarnpkg\\lockfile\\index.js";
   module.exports = function(modules) {
     var installedModules = {};
     function __webpack_require__(moduleId) {
@@ -8109,9 +8107,9 @@ var require_lockfile = __commonJS((exports, module) => {
       const YARN_BIN_PATH = exports2.YARN_BIN_PATH = getYarnBinPath();
       function getYarnBinPath() {
         if (isWebpackBundle) {
-          return __filename;
+          return "/__ohrisk_bundle__/cli.js";
         } else {
-          return path27.join(__dirname, "..", "bin", "yarn.js");
+          return path27.join("/__ohrisk_bundle__", "..", "bin", "yarn.js");
         }
       }
       const NODE_MODULES_FOLDER = exports2.NODE_MODULES_FOLDER = "node_modules";
@@ -18540,7 +18538,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.12.0";
+var OHRISK_VERSION = "1.12.1";
 
 // src/archive/archive-project.ts
 import path46 from "node:path";
