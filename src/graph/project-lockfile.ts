@@ -41,6 +41,7 @@ import {
 import {
   parseMavenPomFile,
   parseMavenPomText,
+  type MavenExternalPomDocument,
   type MavenProjectPomReader
 } from "./java-maven-pom";
 import { parseJuliaManifestFile, parseJuliaManifestText } from "./julia-manifest";
@@ -124,6 +125,7 @@ export type LockfileTextParseInput = {
 
 export type ProjectLockfileParseOptions = {
   pythonLocalSourceRootDir?: string;
+  mavenExternalPoms?: ReadonlyMap<string, MavenExternalPomDocument>;
 };
 
 export function parseProjectLockfile(
@@ -170,7 +172,8 @@ export function parseProjectLockfile(
       return parseBazelModuleFile(project.lockfile.path);
     case "maven-pom":
       return parseMavenPomFile(project.lockfile.path, {
-        projectRoot: project.rootDir
+        projectRoot: project.rootDir,
+        ...(options.mavenExternalPoms ? { externalPoms: options.mavenExternalPoms } : {})
       });
     case "nuget-lock":
       return parseNugetLockfile(project.lockfile.path);

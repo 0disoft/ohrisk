@@ -30,6 +30,7 @@ import { collectRegisteredEcosystemEvidence } from "../ecosystems/registry";
 import { collectGoModuleZipEvidence } from "./go-module-zip";
 import { collectLocalPackageEvidence } from "./local-package";
 import { collectMavenJarEvidence } from "./maven-jar";
+import type { MissingExternalMavenPom } from "../graph/java-maven-pom";
 import {
   MAVEN_LICENSE_PARENT_MAX_DEPTH,
   MAVEN_POM_METADATA_MAX_BYTES,
@@ -80,7 +81,7 @@ type RemoteArtifactRead = {
   notModified: boolean;
 };
 
-type ArtifactFetcher = (
+export type ArtifactFetcher = (
   url: string,
   options?: ArtifactFetchOptions
 ) => Promise<ArtifactFetchResponse>;
@@ -90,7 +91,7 @@ type ArtifactHostResolution = {
   family: number;
 };
 
-type ArtifactHostResolver = (hostname: string) => Promise<ArtifactHostResolution[]>;
+export type ArtifactHostResolver = (hostname: string) => Promise<ArtifactHostResolution[]>;
 type ArtifactLookupOptions = number | LookupOptions;
 type SecureArtifactLookupSelection = {
   all: true;
@@ -138,6 +139,11 @@ export type EvidenceCollectionProgress = {
   total: number;
   packageId: string;
   concurrency: number;
+};
+
+export type RemoteMavenModelPom = MissingExternalMavenPom & {
+  source: string;
+  text: string;
 };
 
 const ARTIFACT_FETCH_TIMEOUT_MS = 30_000;
@@ -322,6 +328,94 @@ export async function collectGraphEvidence(input: {
   }
 
   return ok(evidence);
+}
+
+export async function fetchMavenCentralModelPoms(input: {
+  requests: MissingExternalMavenPom[];
+  fetchArtifact?: ArtifactFetcher;
+  resolveArtifactHost?: ArtifactHostResolver;
+  fetchTimeoutMs?: number;
+  pomMaxBytes?: number;
+  offline?: boolean;
+  cacheDir?: string;
+}): Promise<Result<RemoteMavenModelPom[], OhriskError>> {
+  if (input.requests.length === 0) {
+    return ok([]);
+  }
+
+  const uncachedArtifactHostResolver = input.resolveArtifactHost
+    ?? (input.fetchArtifact ? undefined : defaultArtifactHostResolver);
+  const resolveArtifactHost = uncachedArtifactHostResolver
+    ? createCachingArtifactHostResolver(uncachedArtifactHostResolver)
+    : undefined;
+  const fetchArtifact = input.fetchArtifact
+    ?? createDefaultArtifactFetcher(resolveArtifactHost ?? defaultArtifactHostResolver);
+  const artifactCache = input.cacheDir ? createArtifactCache(input.cacheDir) : undefined;
+  const documents: RemoteMavenModelPom[] = [];
+
+  try {
+    for (const request of input.requests) {
+      const repositoryPath = mavenPomRepositoryPath(request);
+      if (!repositoryPath) {
+        return err(createError({
+          code: "MAVEN_POM_PARSE_FAILED",
+          category: "unsupported_input",
+          message: "Remote Maven parent or BOM coordinates were not safe exact repository coordinates.",
+          details: {
+            dependency: request.dependency,
+            reason: "unsafe_remote_maven_coordinates"
+          }
+        }));
+      }
+
+      const pomUrl = `${MAVEN_CENTRAL_BASE_URL}/${repositoryPath}`;
+      const pomBytes = await readRemoteArtifactBytes({
+        code: "REGISTRY_METADATA_FETCH_FAILED",
+        packageId: request.dependency,
+        url: pomUrl,
+        blockedMessage: "Maven Central parent or BOM URL targets an unsupported or blocked host.",
+        resolveFailureMessage: "Failed to resolve Maven Central host for parent or BOM metadata.",
+        fetchFailureMessage: "Failed to fetch Maven Central parent or BOM POM metadata.",
+        tooLargeMessage: "Maven Central parent or BOM POM exceeded the maximum supported size.",
+        unreadableMessage: "Maven Central parent or BOM POM did not expose a readable body stream.",
+        offlineMissMessage: "Offline mode could not find Maven parent or BOM metadata in the artifact cache.",
+        details: {
+          registryUrl: pomUrl,
+          coordinates: request.dependency,
+          usage: request.usage
+        },
+        maxBytes: input.pomMaxBytes ?? MAVEN_POM_METADATA_MAX_BYTES,
+        fetchArtifact,
+        resolveArtifactHost,
+        fetchTimeoutMs: input.fetchTimeoutMs ?? ARTIFACT_FETCH_TIMEOUT_MS,
+        offline: input.offline ?? false,
+        artifactCache,
+        allowedHosts: new Set(),
+        permittedHosts: MAVEN_CENTRAL_HOSTS,
+        urlDetailKey: "registryUrl"
+      });
+      if (!pomBytes.ok) {
+        return pomBytes;
+      }
+
+      const text = pomBytes.value.toString("utf8");
+      const identity = parseMavenPomLicenseMetadata({
+        packageId: request.dependency,
+        requested: request,
+        source: pomUrl,
+        text
+      });
+      if (!identity.ok) {
+        return identity;
+      }
+
+      documents.push({ ...request, source: pomUrl, text });
+    }
+
+    return ok(documents);
+  } finally {
+    artifactCache?.maintain();
+  }
 }
 
 function isRecoverableRemoteEvidenceError(error: OhriskError): boolean {
@@ -2849,9 +2943,14 @@ async function fetchArtifactWithManualRedirects(input: {
         ? { headers: input.requestHeaders }
         : {})
     });
-    const responseWithUrl = {
-      ...response,
-      url: currentUrl
+    const responseWithUrl: ArtifactFetchResponse = {
+      ok: response.ok,
+      status: response.status,
+      statusText: response.statusText,
+      url: currentUrl,
+      arrayBuffer: () => response.arrayBuffer(),
+      ...(response.headers === undefined ? {} : { headers: response.headers }),
+      ...(response.body === undefined ? {} : { body: response.body })
     };
 
     if (!isRedirectResponse(responseWithUrl)) {

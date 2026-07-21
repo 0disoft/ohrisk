@@ -3,6 +3,11 @@ import {
   type EcosystemEvidenceInput
 } from "../evidence/ecosystem-collectors";
 import type { LicenseEvidence } from "../evidence/types";
+import {
+  missingExternalMavenPoms,
+  type MavenExternalPomDocument,
+  type MissingExternalMavenPom
+} from "../graph/java-maven-pom";
 import { mergeDependencyGraphs, type SourcedDependencyGraph } from "../graph/merge";
 import { parseProjectLockfile } from "../graph/project-lockfile";
 import type { DependencyGraph, PackageEcosystem } from "../graph/types";
@@ -32,7 +37,14 @@ export type EcosystemAdapter = {
 
 export type EcosystemParseContext = {
   scanRootDir: string;
+  mavenExternalPoms?: ReadonlyMap<string, MavenExternalPomDocument>;
 };
+
+export type RemoteMavenPomFetcher = (
+  requests: MissingExternalMavenPom[]
+) => Promise<Result<Array<MissingExternalMavenPom & MavenExternalPomDocument>, OhriskError>>;
+
+const MAX_REMOTE_MAVEN_MODEL_POMS = 32;
 
 const DEFAULT_ADAPTERS: readonly EcosystemAdapter[] = [
   adapter("javascript", ["bun", "package-lock", "npm-shrinkwrap", "pnpm-lock", "deno-lock", "yarn-lock", "package-json"], ["npm"]),
@@ -174,12 +186,13 @@ export function collectRegisteredEcosystemEvidence(
 }
 
 export function parseProjectDependencyGraph(
-  project: ProjectInput
+  project: ProjectInput,
+  context: { mavenExternalPoms?: ReadonlyMap<string, MavenExternalPomDocument> } = {}
 ): Result<DependencyGraph, OhriskError> {
   const parsedGraphs: SourcedDependencyGraph[] = [];
 
   for (const lockfile of discoverProjectLockfiles(project)) {
-    const parsed = parseSingleLockfile(lockfile, project.rootDir);
+    const parsed = parseSingleLockfile(lockfile, project.rootDir, context);
     if (isErr(parsed)) {
       return parsed;
     }
@@ -200,9 +213,78 @@ export function parseProjectDependencyGraph(
   return ok(mergeDependencyGraphs(parsedGraphs));
 }
 
+export async function parseProjectDependencyGraphWithRemoteMavenPoms(input: {
+  project: ProjectInput;
+  fetchRemotePoms: RemoteMavenPomFetcher;
+  onFetch?: (requests: MissingExternalMavenPom[]) => void;
+  maxRemotePoms?: number;
+}): Promise<Result<DependencyGraph, OhriskError>> {
+  const externalPoms = new Map<string, MavenExternalPomDocument>();
+  const maxRemotePoms = input.maxRemotePoms ?? MAX_REMOTE_MAVEN_MODEL_POMS;
+
+  while (true) {
+    const parsed = parseProjectDependencyGraph(input.project, {
+      ...(externalPoms.size > 0 ? { mavenExternalPoms: externalPoms } : {})
+    });
+    if (parsed.ok) {
+      return parsed;
+    }
+
+    const missing = missingExternalMavenPoms(parsed.error)
+      .filter((request) => !externalPoms.has(request.dependency));
+    if (missing.length === 0) {
+      return parsed;
+    }
+    if (externalPoms.size + missing.length > maxRemotePoms) {
+      return err(createError({
+        code: "MAVEN_POM_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Remote Maven parent and BOM resolution exceeded the supported document limit.",
+        details: {
+          reason: "remote_maven_model_count",
+          actual: externalPoms.size + missing.length,
+          limit: maxRemotePoms
+        }
+      }));
+    }
+
+    input.onFetch?.(missing);
+    const fetched = await input.fetchRemotePoms(missing);
+    if (!fetched.ok) {
+      return fetched;
+    }
+
+    const requested = new Set(missing.map((request) => request.dependency));
+    let added = 0;
+    for (const document of fetched.value) {
+      if (!requested.has(document.dependency) || externalPoms.has(document.dependency)) {
+        continue;
+      }
+      externalPoms.set(document.dependency, {
+        source: document.source,
+        text: document.text
+      });
+      added += 1;
+    }
+    if (added !== missing.length) {
+      return err(createError({
+        code: "MAVEN_POM_PARSE_FAILED",
+        category: "internal",
+        message: "Remote Maven model resolution returned an incomplete document set.",
+        details: {
+          reason: "remote_maven_model_incomplete",
+          requested: missing.length,
+          received: added
+        }
+      }));
+    }
+  }
+}
+
 function parseSingleLockfile(
   lockfile: ProjectLockfile,
-  scanRootDir: string
+  scanRootDir: string,
+  context: { mavenExternalPoms?: ReadonlyMap<string, MavenExternalPomDocument> } = {}
 ): Result<DependencyGraph, OhriskError> {
   const ecosystemAdapter = ecosystemAdapterForLockfile(lockfile.kind);
   if (!ecosystemAdapter) {
@@ -224,7 +306,10 @@ function parseSingleLockfile(
       rootDir: projectRootForLockfile(lockfile),
       lockfile
     },
-    { scanRootDir }
+    {
+      scanRootDir,
+      ...(context.mavenExternalPoms ? { mavenExternalPoms: context.mavenExternalPoms } : {})
+    }
   );
 }
 
@@ -243,7 +328,8 @@ function adapter(
     discover: (project) => projectLockfiles(project)
       .filter((lockfile) => lockfileKindSet.has(lockfile.kind)),
     parse: (project, context) => parseProjectLockfile(project, {
-      pythonLocalSourceRootDir: context?.scanRootDir
+      pythonLocalSourceRootDir: context?.scanRootDir,
+      ...(context?.mavenExternalPoms ? { mavenExternalPoms: context.mavenExternalPoms } : {})
     }),
     collectEvidence: (input) => packageEcosystemSet.has(input.node.ecosystem)
       ? collectEcosystemEvidence(input)

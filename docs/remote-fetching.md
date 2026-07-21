@@ -23,6 +23,8 @@ Remote fetching is limited to these explicit adapters:
   license files.
 - Maven Central POM metadata for an exact Maven coordinate and version when
   local POM evidence is unavailable;
+- exact Maven Central parent and imported-BOM POMs needed to resolve
+  `dependencyManagement` versions during filesystem `scan` and `ci` runs;
 - a bounded parent-POM chain used only to inherit package license names;
 - exact-version POM metadata from a project-declared HTTPS Maven repository only
   when its exact host is explicitly allowed by policy or `--allow-host`;
@@ -173,6 +175,13 @@ match the requested artifact identity; malformed XML, identity mismatches,
 parent cycles, unsafe parent coordinates, excessive parent depth, and oversized
 POMs fail closed.
 
+Filesystem `scan` and `ci` inputs may resolve at most 32 exact Maven Central
+parent or imported-BOM model POMs. Resolution reparses the project only after
+every requested document is present and identity-checked, and fails the scan if
+the complete model cannot be proven. `diff`, archive inputs, and project-declared
+or alternate Maven repositories do not use remote model resolution; those paths
+continue to require locally available model POMs.
+
 Project `pom.xml` files may contribute at most 32 bounded repository URLs after
 profile sections are removed and local properties are resolved. A contributed
 URL is not authority to contact its host: it must use HTTPS, contain no URL
@@ -210,6 +219,11 @@ Checksum-identified Go module ZIPs use the same content-addressed cache,
 conditional revalidation, offline stale-entry behavior, size ceiling, and LRU
 control as other remote artifacts. Offline cache misses remain unavailable and
 never trigger DNS or HTTP work.
+
+Exact Maven Central model POMs use the same cache and offline rules. An offline
+filesystem `scan` or `ci` run may resolve parent/BOM versions from valid cached
+POM bytes, while a missing, corrupt, oversized, or identity-mismatched entry
+fails the model resolution without DNS or HTTP work.
 
 The fixed Go proxy adapter retries one short-lived failure after a bounded
 200-millisecond delay. Retryable responses are limited to HTTP 408, 425, 429,
@@ -263,8 +277,9 @@ metadata or license bytes from the rejected archive are trusted. Integrity
 mismatches, malformed archives, identity mismatches, and unsafe paths still fail
 the scan.
 
-Maven POM evidence is requested by exact-version path and is bounded to 2 MiB
-per POM and eight inherited parent levels. Parent requests are
+Maven POM evidence and dependency-model POMs are requested by exact-version path
+and bounded to 2 MiB per POM and eight inherited parent/BOM levels. Model
+resolution additionally caps the scan at 32 remote documents. Requests are
 deduplicated within a scan and use the same persistent cache, conditional
 revalidation, offline behavior, timeout, DNS, connected-address, and response
 stream limits as other remote metadata.

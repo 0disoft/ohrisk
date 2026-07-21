@@ -20,8 +20,15 @@ import {
   openArtifactCacheForManagement,
   type ArtifactCacheStatus
 } from "../evidence/cache";
-import { collectGraphEvidence, type EvidenceCollectionProgress } from "../evidence/collect";
-import { parseProjectDependencyGraph } from "../ecosystems/registry";
+import {
+  collectGraphEvidence,
+  fetchMavenCentralModelPoms,
+  type EvidenceCollectionProgress
+} from "../evidence/collect";
+import {
+  parseProjectDependencyGraph,
+  parseProjectDependencyGraphWithRemoteMavenPoms
+} from "../ecosystems/registry";
 import type { LicenseEvidence } from "../evidence/types";
 import {
   listGitRefFiles,
@@ -725,33 +732,41 @@ async function scanProject(input: {
   workspaceRoot?: string;
   progress?: ScanProgressReporter;
 }): Promise<Result<ScanResult, OhriskError>> {
-  const loaded = input.archivePath
-    ? loadArchiveProjectGraph({
-        cwd: input.cwd,
-        archivePath: input.archivePath,
-        allLockfiles: input.allLockfiles,
-        prodOnly: input.prodOnly,
-        now: input.now,
-        ...(input.progress ? { progress: input.progress } : {})
-      })
-    : loadProjectGraph({
-        cwd: input.cwd,
-        ...(input.lockfilePath ? { lockfilePath: input.lockfilePath } : {}),
-        ...(input.projectSearchMode ? { projectSearchMode: input.projectSearchMode } : {}),
-        ...(input.autoMergeSameRoot ? { autoMergeSameRoot: true } : {}),
-        ...(input.autoMergeDescendantProjects ? { autoMergeDescendantProjects: true } : {}),
-        allLockfiles: input.allLockfiles,
-        prodOnly: input.prodOnly,
-        ...(input.progress ? { progress: input.progress } : {})
-      });
-
-  if (isErr(loaded)) {
-    return loaded;
+  let project: ProjectInput;
+  let scanGraph: DependencyGraph | undefined;
+  if (input.archivePath) {
+    const loaded = loadArchiveProjectGraph({
+      cwd: input.cwd,
+      archivePath: input.archivePath,
+      allLockfiles: input.allLockfiles,
+      prodOnly: input.prodOnly,
+      now: input.now,
+      ...(input.progress ? { progress: input.progress } : {})
+    });
+    if (isErr(loaded)) {
+      return loaded;
+    }
+    project = loaded.value.project;
+    scanGraph = loaded.value.scanGraph;
+  } else {
+    const discovered = discoverFilesystemProject({
+      cwd: input.cwd,
+      ...(input.lockfilePath ? { lockfilePath: input.lockfilePath } : {}),
+      ...(input.projectSearchMode ? { projectSearchMode: input.projectSearchMode } : {}),
+      ...(input.autoMergeSameRoot ? { autoMergeSameRoot: true } : {}),
+      ...(input.autoMergeDescendantProjects ? { autoMergeDescendantProjects: true } : {}),
+      allLockfiles: input.allLockfiles,
+      ...(input.progress ? { progress: input.progress } : {})
+    });
+    if (isErr(discovered)) {
+      return discovered;
+    }
+    project = discovered.value;
   }
 
   const policy = readPolicyConfig({
     projectRoot: input.configurationRoot
-      ?? (loaded.value.project.source ? input.cwd : loaded.value.project.rootDir),
+      ?? (project.source ? input.cwd : project.rootDir),
     ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
     ...(input.policyPath ? { policyPath: input.policyPath } : {})
   });
@@ -761,7 +776,7 @@ async function scanProject(input: {
 
   const evidenceRuntime = resolveEvidenceRuntimeOptions({
     cwd: input.runtimeRoot ?? input.cwd,
-    projectRoot: loaded.value.project.rootDir,
+    projectRoot: project.rootDir,
     policy: policy.value,
     offline: input.offline,
     ...(input.cacheDir ? { cacheDir: input.cacheDir } : {}),
@@ -776,8 +791,37 @@ async function scanProject(input: {
     return evidenceRuntime;
   }
 
+  if (!scanGraph) {
+    const graph = await parseProjectDependencyGraphWithRemoteMavenPoms({
+      project,
+      fetchRemotePoms: (requests) => fetchMavenCentralModelPoms({
+        requests,
+        offline: evidenceRuntime.value.offline,
+        ...(evidenceRuntime.value.timeoutMs === undefined
+          ? {}
+          : { fetchTimeoutMs: evidenceRuntime.value.timeoutMs }),
+        ...(evidenceRuntime.value.cacheDir === undefined
+          ? {}
+          : { cacheDir: evidenceRuntime.value.cacheDir })
+      }),
+      ...(input.progress
+        ? {
+            onFetch: (requests) => input.progress?.(
+              SCAN_PROGRESS_READ_LOCKFILE_PERCENT,
+              `Resolving ${requests.length} Maven parent/BOM POM${requests.length === 1 ? "" : "s"}...`
+            )
+          }
+        : {})
+    });
+    if (isErr(graph)) {
+      return graph;
+    }
+    scanGraph = filterGraphForProdOnly(graph.value, input.prodOnly);
+  }
+
   return evaluateProjectScan({
-    ...loaded.value,
+    project,
+    scanGraph,
     profile: input.profile,
     policy: policy.value,
     evidenceRuntime: evidenceRuntime.value,
@@ -785,7 +829,7 @@ async function scanProject(input: {
     now: input.now,
     ...(input.configurationRoot
       ? { configurationRoot: input.configurationRoot }
-      : loaded.value.project.source
+      : project.source
         ? { configurationRoot: input.cwd }
         : {}),
     ...(input.allowLocalProjectEvidence !== undefined
@@ -845,6 +889,33 @@ function loadProjectGraph(input: {
   project: ProjectInput;
   scanGraph: DependencyGraph;
 }, OhriskError> {
+  const discovered = discoverFilesystemProject(input);
+  if (isErr(discovered)) {
+    return discovered;
+  }
+  const graph = parseProjectDependencyGraph(discovered.value);
+
+  if (isErr(graph)) {
+    return graph;
+  }
+
+  const scanGraph = filterGraphForProdOnly(graph.value, input.prodOnly);
+
+  return ok({
+    project: discovered.value,
+    scanGraph
+  });
+}
+
+function discoverFilesystemProject(input: {
+  cwd: string;
+  lockfilePath?: string;
+  projectSearchMode?: "ancestors" | "tree";
+  autoMergeSameRoot?: boolean;
+  autoMergeDescendantProjects?: boolean;
+  allLockfiles?: boolean;
+  progress?: ScanProgressReporter;
+}): Result<ProjectInput, OhriskError> {
   input.progress?.(SCAN_PROGRESS_DISCOVER_PERCENT, "Discovering project...");
   const discovered = discoverProject({
     cwd: input.cwd,
@@ -866,18 +937,7 @@ function loadProjectGraph(input: {
       ? `Reading ${lockfileCount} lockfiles...`
       : `Reading ${path.basename(discovered.value.lockfile.path)}...`
   );
-  const graph = parseProjectDependencyGraph(discovered.value);
-
-  if (isErr(graph)) {
-    return graph;
-  }
-
-  const scanGraph = filterGraphForProdOnly(graph.value, input.prodOnly);
-
-  return ok({
-    project: discovered.value,
-    scanGraph
-  });
+  return discovered;
 }
 
 async function evaluateProjectScan(input: {

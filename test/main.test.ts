@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { main, type CliIO } from "../src/cli/main";
 import { createArtifactCache } from "../src/evidence/cache";
+import { fetchMavenCentralModelPoms } from "../src/evidence/collect";
 import { createReportOpener } from "../src/report/open-report";
 import { createError } from "../src/shared/errors";
 import { err, ok } from "../src/shared/result";
@@ -2766,6 +2767,82 @@ describe("main", () => {
       expect(output).toContain("- [high] com.acme:risk@1.0.0");
       expect(output).toContain("path: fixture-maven-bom -> com.acme:risk@1.0.0");
       expect(output).toContain("source: local; pom.xml license: AGPL-3.0-only");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("resolves Java Maven imported BOM versions from the offline artifact cache", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-maven-remote-bom-project-"));
+    const cacheDir = path.join(projectRoot, "artifact-cache");
+    const dependency = "org.junit:junit-bom@5.14.4";
+
+    try {
+      writeFileSync(
+        path.join(projectRoot, "pom.xml"),
+        [
+          "<project>",
+          "  <groupId>org.example</groupId>",
+          "  <artifactId>fixture-maven-bom</artifactId>",
+          "  <version>1.0.0</version>",
+          "  <dependencyManagement><dependencies>",
+          "    <dependency>",
+          "      <groupId>org.junit</groupId>",
+          "      <artifactId>junit-bom</artifactId>",
+          "      <version>5.14.4</version>",
+          "      <type>pom</type><scope>import</scope>",
+          "    </dependency>",
+          "  </dependencies></dependencyManagement>",
+          "  <dependencies><dependency>",
+          "    <groupId>org.junit.jupiter</groupId>",
+          "    <artifactId>junit-jupiter-engine</artifactId>",
+          "  </dependency></dependencies>",
+          "</project>"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const seeded = await fetchMavenCentralModelPoms({
+        cacheDir,
+        requests: [{
+          usage: "imported_bom",
+          dependency,
+          groupId: "org.junit",
+          artifactId: "junit-bom",
+          version: "5.14.4"
+        }],
+        fetchArtifact: async () => new Response([
+          "<project>",
+          "  <groupId>org.junit</groupId>",
+          "  <artifactId>junit-bom</artifactId>",
+          "  <version>5.14.4</version>",
+          "  <dependencyManagement><dependencies>",
+          "    <dependency>",
+          "      <groupId>org.junit.jupiter</groupId>",
+          "      <artifactId>junit-jupiter-engine</artifactId>",
+          "      <version>5.14.4</version>",
+          "    </dependency>",
+          "  </dependencies></dependencyManagement>",
+          "</project>"
+        ].join("\n"), {
+          headers: { "cache-control": "public, max-age=3600" }
+        })
+      });
+      expect(seeded.ok).toBe(true);
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main([
+        "scan",
+        "--offline",
+        "--cache-dir",
+        cacheDir
+      ], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+      const output = stdout.join("\n");
+      expect(output).toContain("Lockfile: pom.xml (maven-pom)");
+      expect(output).toContain("org.junit.jupiter:junit-jupiter-engine@5.14.4");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }

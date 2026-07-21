@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { collectGraphEvidence } from "../src/evidence/collect";
+import { collectGraphEvidence, fetchMavenCentralModelPoms } from "../src/evidence/collect";
 import { normalizeLicenseEvidence } from "../src/license/normalize";
 import type { DependencyGraph, DependencyNode } from "../src/graph/types";
 import { createZip } from "./helpers/zip";
@@ -18,6 +18,65 @@ const CUSTOM_DEMO_JAR_URL = `${CUSTOM_REPOSITORY_URL}/org/example/demo/1.2.3/dem
 const CUSTOM_DEMO_JAR_CHECKSUM_URL = `${CUSTOM_DEMO_JAR_URL}.sha256`;
 
 describe("Maven Central evidence", () => {
+  test("fetches exact Maven Central BOM model documents", async () => {
+    const requests: string[] = [];
+    const result = await fetchMavenCentralModelPoms({
+      requests: [{
+        usage: "imported_bom",
+        dependency: "org.junit:junit-bom@5.14.4",
+        groupId: "org.junit",
+        artifactId: "junit-bom",
+        version: "5.14.4"
+      }],
+      fetchArtifact: async (url) => {
+        requests.push(url);
+        return okResponse([
+          "<project>",
+          "  <groupId>org.junit</groupId>",
+          "  <artifactId>junit-bom</artifactId>",
+          "  <version>5.14.4</version>",
+          "</project>"
+        ].join("\n"));
+      }
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(requests).toEqual([
+      "https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.14.4/junit-bom-5.14.4.pom"
+    ]);
+    expect(result.value).toEqual([expect.objectContaining({
+      dependency: "org.junit:junit-bom@5.14.4",
+      source: requests[0]
+    })]);
+  });
+
+  test("rejects a Maven Central model document with mismatched identity", async () => {
+    const result = await fetchMavenCentralModelPoms({
+      requests: [{
+        usage: "parent",
+        dependency: "org.example:expected-parent@1.0.0",
+        groupId: "org.example",
+        artifactId: "expected-parent",
+        version: "1.0.0"
+      }],
+      fetchArtifact: async () => okResponse([
+        "<project>",
+        "  <groupId>org.example</groupId>",
+        "  <artifactId>different-parent</artifactId>",
+        "  <version>1.0.0</version>",
+        "</project>"
+      ].join("\n"))
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected Maven model identity mismatch.");
+    expect(result.error).toMatchObject({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      details: { reason: "identity_mismatch" }
+    });
+  });
+
   test("uses a project-declared Maven repository only when its exact host is allowed", async () => {
     const requests: string[] = [];
     const result = await collectGraphEvidence({

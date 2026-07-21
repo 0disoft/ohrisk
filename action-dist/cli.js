@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 74268479626369e83edff6c3bfb7ff0035fb7bde7500521d6d361773c10d6be4
+// ohrisk-action-source-sha256: 1ed10b8f510349383dffc52923926d92ca02469f29d238996a2818bbe71760d3
 // ohrisk-action-build-platform: win32
 import { createRequire } from "node:module";
 var __create = Object.create;
@@ -18540,7 +18540,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.11.2";
+var OHRISK_VERSION = "1.12.0";
 
 // src/archive/archive-project.ts
 import path46 from "node:path";
@@ -25324,7 +25324,8 @@ function parseMavenPomText(input, pomPath = "pom.xml", options = {}) {
       maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES,
       maxExternalPomDepth: options.maxExternalPomDepth ?? 8,
       visitedExternalPoms: new Set,
-      missingExternalPoms: []
+      missingExternalPoms: [],
+      ...options.externalPoms ? { externalPoms: options.externalPoms } : {}
     };
     const moduleState = {
       projectRoot: path20.resolve(projectRoot),
@@ -25348,6 +25349,9 @@ function parseMavenPomText(input, pomPath = "pom.xml", options = {}) {
     const rootModule = parsedModules.value[0];
     const rootName = rootModule?.rootName ?? "<maven-project>";
     const mavenRepositoryUrls = [...new Set(parsedModules.value.flatMap((module) => module.repositoryUrls))].sort();
+    if (options.externalPoms && context.missingExternalPoms.length > 0) {
+      return err(missingExternalMavenModelError(pomPath, context));
+    }
     return ok({
       rootName,
       lockfilePath: pomPath,
@@ -25696,14 +25700,16 @@ function readExternalMavenPomModel(coordinates, pomPath, context, depth, usage =
     artifactId: coordinates.artifactId,
     version: coordinates.version
   });
-  if (!externalPomPath) {
+  const visitedKey = mavenDependencyId(coordinates);
+  const externalPomDocument = externalPomPath ? undefined : context.externalPoms?.get(visitedKey);
+  if (!externalPomPath && !externalPomDocument) {
     recordMissingExternalMavenPom(context, {
       usage,
-      dependency: mavenDependencyId(coordinates)
+      dependency: visitedKey,
+      ...coordinates
     });
     return ok(undefined);
   }
-  const visitedKey = mavenDependencyId(coordinates);
   if (context.visitedExternalPoms.has(visitedKey)) {
     return err(createError({
       code: "MAVEN_POM_PARSE_FAILED",
@@ -25715,10 +25721,10 @@ function readExternalMavenPomModel(coordinates, pomPath, context, depth, usage =
       }
     }));
   }
-  const externalPom = readInputTextFile({
+  const externalPom = externalPomPath ? readInputTextFile({
     filePath: externalPomPath,
     maxBytes: context.maxBytes
-  });
+  }) : ok(externalPomDocument.text);
   if (!externalPom.ok) {
     return err(createError({
       code: "MAVEN_POM_READ_FAILED",
@@ -25726,7 +25732,7 @@ function readExternalMavenPomModel(coordinates, pomPath, context, depth, usage =
       message: externalPom.error.kind === "too_large" ? "External Maven parent or BOM POM exceeded the maximum supported size." : "Failed to read external Maven parent or BOM POM.",
       details: {
         lockfilePath: pomPath,
-        pomPath: externalPomPath,
+        ...externalPomPath ? { pomPath: externalPomPath } : {},
         dependency: visitedKey,
         ...inputFileReadErrorDetails(externalPom.error)
       }
@@ -25734,7 +25740,27 @@ function readExternalMavenPomModel(coordinates, pomPath, context, depth, usage =
   }
   context.visitedExternalPoms.add(visitedKey);
   try {
-    return readMavenPomModel(stripUnsupportedMavenSections(externalPom.value), externalPomPath, context, depth);
+    const model = readMavenPomModel(stripUnsupportedMavenSections(externalPom.value), externalPomPath ?? externalPomDocument.source, context, depth);
+    if (!model.ok || externalPomPath) {
+      return model;
+    }
+    if (model.value.groupId !== coordinates.groupId || model.value.rootName !== coordinates.artifactId || model.value.version !== coordinates.version) {
+      return err(createError({
+        code: "MAVEN_POM_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Remote Maven parent or BOM POM did not match the requested package identity.",
+        details: {
+          lockfilePath: pomPath,
+          dependency: visitedKey,
+          source: externalPomDocument.source,
+          reason: "remote_maven_identity_mismatch",
+          ...model.value.groupId ? { metadataGroupId: model.value.groupId } : {},
+          ...model.value.rootName ? { metadataArtifactId: model.value.rootName } : {},
+          ...model.value.version ? { metadataVersion: model.value.version } : {}
+        }
+      }));
+    }
+    return model;
   } finally {
     context.visitedExternalPoms.delete(visitedKey);
   }
@@ -25977,6 +26003,40 @@ function recordMissingExternalMavenPom(context, missing) {
   }
   context.missingExternalPoms.push(missing);
 }
+function missingExternalMavenPoms(error) {
+  const entries = error.details?.missingExternalPoms;
+  if (error.code !== "MAVEN_POM_PARSE_FAILED" || !Array.isArray(entries)) {
+    return [];
+  }
+  const parsed = new Map;
+  for (const entry of entries) {
+    if (!isRecord9(entry)) {
+      continue;
+    }
+    const usage = entry.usage;
+    const groupId = entry.groupId;
+    const artifactId = entry.artifactId;
+    const version = entry.version;
+    const dependency = entry.dependency;
+    if (usage !== "parent" && usage !== "imported_bom" || typeof groupId !== "string" || typeof artifactId !== "string" || typeof version !== "string" || typeof dependency !== "string" || !mavenPomRepositoryPath({ groupId, artifactId, version })) {
+      continue;
+    }
+    parsed.set(dependency, { usage, groupId, artifactId, version, dependency });
+  }
+  return [...parsed.values()].sort((left, right) => left.dependency.localeCompare(right.dependency));
+}
+function missingExternalMavenModelError(pomPath, context) {
+  return createError({
+    code: "MAVEN_POM_PARSE_FAILED",
+    category: "unsupported_input",
+    message: "Failed to resolve the complete Maven parent and imported BOM model.",
+    details: {
+      lockfilePath: pomPath,
+      reason: "missing_external_maven_model",
+      ...mavenResolutionDetails(context)
+    }
+  });
+}
 function mavenResolutionDetails(context) {
   return {
     searchedRepositoryRoots: context.repositoryRoots,
@@ -26049,6 +26109,9 @@ function normalizePomText(text3) {
 }
 function decodeXmlEntities(text3) {
   return text3.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+}
+function isRecord9(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/graph/julia-manifest.ts
@@ -26585,7 +26648,7 @@ function parseNixFlakeLockText(input, lockfilePath = "flake.lock") {
       }
     }));
   }
-  if (!isRecord9(parsed) || !isRecord9(parsed.nodes)) {
+  if (!isRecord10(parsed) || !isRecord10(parsed.nodes)) {
     return nixLockShapeError({
       lockfilePath,
       reason: "missing_nodes_object"
@@ -26593,7 +26656,7 @@ function parseNixFlakeLockText(input, lockfilePath = "flake.lock") {
   }
   const rootNodeKey = typeof parsed.root === "string" ? parsed.root : "root";
   const rootNode = parsed.nodes[rootNodeKey];
-  if (!isRecord9(rootNode)) {
+  if (!isRecord10(rootNode)) {
     return nixLockShapeError({
       lockfilePath,
       reason: "missing_root_node",
@@ -26614,7 +26677,7 @@ function parseNixFlakeLockText(input, lockfilePath = "flake.lock") {
       continue;
     }
     const node = parsed.nodes[nodeKey];
-    if (!isRecord9(node) || !isRecord9(node.locked)) {
+    if (!isRecord10(node) || !isRecord10(node.locked)) {
       continue;
     }
     const identity2 = nixNodeIdentity({
@@ -26664,7 +26727,7 @@ function collectReachableNixPaths(input) {
     existing.push(currentPath);
     pathsByNode.set(currentNodeKey, existing);
     const node = input.nodes[currentNodeKey];
-    if (!isRecord9(node) || !isRecord9(node.inputs)) {
+    if (!isRecord10(node) || !isRecord10(node.inputs)) {
       continue;
     }
     for (const target of Object.values(node.inputs).flatMap(nixInputTargets)) {
@@ -26760,7 +26823,7 @@ function nixLockShapeError(input) {
     details: input
   }));
 }
-function isRecord9(value) {
+function isRecord10(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -27135,7 +27198,7 @@ function parsePackageJsonManifestText(text3, packageJsonPath = "package.json") {
       }
     }));
   }
-  if (!isRecord10(parsed)) {
+  if (!isRecord11(parsed)) {
     return err(createError({
       code: "PACKAGE_JSON_PARSE_FAILED",
       category: "unsupported_input",
@@ -27170,7 +27233,7 @@ function hasManifestEntries(value) {
   if (Array.isArray(value)) {
     return value.length > 0;
   }
-  if (isRecord10(value)) {
+  if (isRecord11(value)) {
     return Object.keys(value).length > 0;
   }
   return true;
@@ -27182,7 +27245,7 @@ function packageNameOrDirectory(value, packageJsonPath) {
   const parent = path25.basename(path25.dirname(packageJsonPath));
   return parent === "" ? "." : parent;
 }
-function isRecord10(value) {
+function isRecord11(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -29698,7 +29761,7 @@ function parseComposerLockJson(input, lockfilePath) {
       }
     }));
   }
-  if (!isRecord11(parsed)) {
+  if (!isRecord12(parsed)) {
     return composerLockShapeError(lockfilePath);
   }
   let records;
@@ -29731,7 +29794,7 @@ function readComposerPackageRecords(value, dependencyType, lockfilePath) {
     throw new Error(`Invalid composer package list in ${lockfilePath}.`);
   }
   return value.map((item) => {
-    if (!isRecord11(item) || typeof item.name !== "string" || typeof item.version !== "string") {
+    if (!isRecord12(item) || typeof item.name !== "string" || typeof item.version !== "string") {
       throw new Error(`Invalid composer package entry in ${lockfilePath}.`);
     }
     return {
@@ -29778,7 +29841,7 @@ function readComposerRootDependencies(input) {
 function parseComposerJsonRootDependencies(input) {
   try {
     const parsed = JSON.parse(input);
-    if (!isRecord11(parsed)) {
+    if (!isRecord12(parsed)) {
       return [];
     }
     return [
@@ -29795,19 +29858,19 @@ function readComposerProjectName(input) {
   }
   try {
     const parsed = JSON.parse(input);
-    return isRecord11(parsed) && typeof parsed.name === "string" ? parsed.name : undefined;
+    return isRecord12(parsed) && typeof parsed.name === "string" ? parsed.name : undefined;
   } catch {
     return;
   }
 }
 function readComposerRootDependencyObject(value, type) {
-  if (!isRecord11(value)) {
+  if (!isRecord12(value)) {
     return [];
   }
   return Object.keys(value).filter((name) => isComposerPackageName(name)).map((name) => ({ name, type }));
 }
 function readComposerDependencyNames(value) {
-  if (!isRecord11(value)) {
+  if (!isRecord12(value)) {
     return [];
   }
   return Object.keys(value).filter(isComposerPackageName).sort();
@@ -29913,7 +29976,7 @@ function dependencyTypeRank15(type) {
       return 0;
   }
 }
-function isRecord11(value) {
+function isRecord12(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -31053,7 +31116,7 @@ function parsePipfileLockText(input, lockfilePath = "Pipfile.lock", options = {}
 function parsePipfileLockJson(input, lockfilePath) {
   try {
     const parsed = JSON.parse(input);
-    if (isRecord12(parsed)) {
+    if (isRecord13(parsed)) {
       return ok(parsed);
     }
   } catch (cause) {
@@ -31080,12 +31143,12 @@ function readPipfileLockSection(input) {
   if (input.value === undefined) {
     return ok([]);
   }
-  if (!isRecord12(input.value)) {
+  if (!isRecord13(input.value)) {
     return pipfileLockSectionError(input);
   }
   const records = [];
   for (const [rawName, rawEntry] of Object.entries(input.value)) {
-    if (!isRecord12(rawEntry)) {
+    if (!isRecord13(rawEntry)) {
       return pipfileLockEntryError({
         ...input,
         packageName: rawName
@@ -31254,7 +31317,7 @@ function dependencyTypeRank17(type) {
       return 0;
   }
 }
-function isRecord12(value) {
+function isRecord13(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function classifyUnsupportedPipfileSource(value) {
@@ -33665,7 +33728,7 @@ function readOptionalDescription(input) {
   return ok(descriptionText.value);
 }
 function readRPackageRecords(parsed, lockfilePath) {
-  if (!isRecord13(parsed) || !isRecord13(parsed.Packages)) {
+  if (!isRecord14(parsed) || !isRecord14(parsed.Packages)) {
     return renvLockShapeError({
       lockfilePath,
       reason: "missing_packages_object"
@@ -33673,7 +33736,7 @@ function readRPackageRecords(parsed, lockfilePath) {
   }
   const records = new Map;
   for (const [lockfileName, value] of Object.entries(parsed.Packages)) {
-    if (!isRecord13(value)) {
+    if (!isRecord14(value)) {
       return renvLockShapeError({
         lockfilePath,
         packageName: lockfileName,
@@ -33763,7 +33826,7 @@ function renvLockShapeError(input) {
     details: input
   }));
 }
-function isRecord13(value) {
+function isRecord14(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -35059,7 +35122,7 @@ function parseSpdxJsonText(input, lockfilePath = "spdx.json") {
   return parseSpdxDocument(parsed.value, lockfilePath);
 }
 function parseSpdxDocument(document2, lockfilePath) {
-  if (!isRecord14(document2) || !Array.isArray(document2.packages)) {
+  if (!isRecord15(document2) || !Array.isArray(document2.packages)) {
     return spdxShapeError(lockfilePath);
   }
   const packages = readSpdxPackageRecords(document2.packages);
@@ -35120,7 +35183,7 @@ function parseSpdxJson(input, lockfilePath) {
 function readSpdxPackageRecords(value) {
   const records = [];
   for (const pkg of value) {
-    if (!isRecord14(pkg) || typeof pkg.SPDXID !== "string") {
+    if (!isRecord15(pkg) || typeof pkg.SPDXID !== "string") {
       continue;
     }
     const purl = readSpdxPackageUrl(pkg.externalRefs);
@@ -35145,7 +35208,7 @@ function readSpdxPackageUrl(value) {
     return;
   }
   for (const ref of value) {
-    if (!isRecord14(ref) || ref.referenceCategory !== "PACKAGE-MANAGER" || ref.referenceType !== "purl" || typeof ref.referenceLocator !== "string") {
+    if (!isRecord15(ref) || ref.referenceCategory !== "PACKAGE-MANAGER" || ref.referenceType !== "purl" || typeof ref.referenceLocator !== "string") {
       continue;
     }
     const purl = parsePackageUrl(ref.referenceLocator);
@@ -35197,7 +35260,7 @@ function readSpdxDependencyMap(value, packages) {
   const unsupportedFields = new Set;
   const unsupportedReasons = new Set;
   for (const [index, relationship] of value.entries()) {
-    if (isRecord14(relationship) && (relationship.relationshipType === "DEPENDS_ON" || relationship.relationshipType === "DEPENDENCY_OF")) {
+    if (isRecord15(relationship) && (relationship.relationshipType === "DEPENDS_ON" || relationship.relationshipType === "DEPENDENCY_OF")) {
       if (typeof relationship.spdxElementId !== "string") {
         unsupportedIndexes.add(index);
         unsupportedFields.add("spdxElementId");
@@ -35210,7 +35273,7 @@ function readSpdxDependencyMap(value, packages) {
         unsupportedReasons.add("unsupported_spdx_dependency_relationships");
       }
     }
-    if (isRecord14(relationship) && relationship.relationshipType === "DESCRIBES") {
+    if (isRecord15(relationship) && relationship.relationshipType === "DESCRIBES") {
       if (typeof relationship.spdxElementId !== "string") {
         unsupportedIndexes.add(index);
         unsupportedFields.add("spdxElementId");
@@ -35223,7 +35286,7 @@ function readSpdxDependencyMap(value, packages) {
         unsupportedReasons.add("unsupported_spdx_describes_relationships");
       }
     }
-    if (!isRecord14(relationship) || typeof relationship.spdxElementId !== "string" || typeof relationship.relatedSpdxElement !== "string" || typeof relationship.relationshipType !== "string") {
+    if (!isRecord15(relationship) || typeof relationship.spdxElementId !== "string" || typeof relationship.relatedSpdxElement !== "string" || typeof relationship.relationshipType !== "string") {
       continue;
     }
     if (relationship.relationshipType === "DEPENDS_ON") {
@@ -35254,7 +35317,7 @@ function readSpdxRootRefs(input) {
   }
   if (Array.isArray(input.document.relationships)) {
     for (const relationship of input.document.relationships) {
-      if (isRecord14(relationship) && relationship.relationshipType === "DESCRIBES" && typeof relationship.relatedSpdxElement === "string" && packageIds.has(relationship.relatedSpdxElement)) {
+      if (isRecord15(relationship) && relationship.relationshipType === "DESCRIBES" && typeof relationship.relatedSpdxElement === "string" && packageIds.has(relationship.relatedSpdxElement)) {
         roots.add(relationship.relatedSpdxElement);
       }
     }
@@ -35375,7 +35438,7 @@ function dependencyTypeRank21(type) {
       return 0;
   }
 }
-function isRecord14(value) {
+function isRecord15(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -35915,11 +35978,11 @@ function readSwiftPackagePins(parsed, lockfilePath) {
   }
   const pins = [];
   for (const [index, value] of rawPins.entries()) {
-    if (!isRecord15(value)) {
+    if (!isRecord16(value)) {
       return swiftPinParseError(lockfilePath, index);
     }
     const name = swiftPinName(value);
-    const version = isRecord15(value.state) ? swiftPinVersion(value.state) : undefined;
+    const version = isRecord16(value.state) ? swiftPinVersion(value.state) : undefined;
     if (!name || !version) {
       return swiftPinParseError(lockfilePath, index, name);
     }
@@ -35942,13 +36005,13 @@ function readSwiftPackagePins(parsed, lockfilePath) {
   return ok(deduplicateSwiftPins(pins));
 }
 function swiftResolvedPins(parsed) {
-  if (!isRecord15(parsed)) {
+  if (!isRecord16(parsed)) {
     return;
   }
   if (Array.isArray(parsed.pins)) {
     return parsed.pins;
   }
-  return isRecord15(parsed.object) && Array.isArray(parsed.object.pins) ? parsed.object.pins : undefined;
+  return isRecord16(parsed.object) && Array.isArray(parsed.object.pins) ? parsed.object.pins : undefined;
 }
 function swiftPinName(pin) {
   for (const field of ["identity", "package"]) {
@@ -36007,7 +36070,7 @@ function swiftPinParseError(lockfilePath, index, packageName) {
     }
   }));
 }
-function isRecord15(value) {
+function isRecord16(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -36261,7 +36324,7 @@ function parseUnityPackagesLockText(input, lockfilePath = path43.join("Packages"
   });
 }
 function readUnityPackageRecords(parsed, lockfilePath) {
-  if (!isRecord16(parsed) || !isRecord16(parsed.dependencies)) {
+  if (!isRecord17(parsed) || !isRecord17(parsed.dependencies)) {
     return unityPackagesLockShapeError({
       lockfilePath,
       reason: "missing_dependencies_object"
@@ -36269,7 +36332,7 @@ function readUnityPackageRecords(parsed, lockfilePath) {
   }
   const records = new Map;
   for (const [packageName, value] of Object.entries(parsed.dependencies)) {
-    if (!isUnityPackageName(packageName) || !isRecord16(value)) {
+    if (!isUnityPackageName(packageName) || !isRecord17(value)) {
       return unityPackagesLockShapeError({
         lockfilePath,
         packageName,
@@ -36317,7 +36380,7 @@ function unityDependencyNames(value, lockfilePath, packageName) {
   if (value === undefined) {
     return ok([]);
   }
-  if (!isRecord16(value)) {
+  if (!isRecord17(value)) {
     return unityPackagesLockShapeError({
       lockfilePath,
       packageName,
@@ -36387,7 +36450,7 @@ function unityPackagesLockShapeError(input) {
     details: input
   }));
 }
-function isRecord16(value) {
+function isRecord17(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -36451,7 +36514,7 @@ function parseVcpkgJsonText(input, manifestPath = "vcpkg.json", options = {}) {
       }
     }));
   }
-  if (!isRecord17(parsed)) {
+  if (!isRecord18(parsed)) {
     return vcpkgManifestShapeError({
       manifestPath,
       reason: "root_not_object"
@@ -36568,7 +36631,7 @@ function readVcpkgManifestDependency(input) {
       dependencyType: "production"
     });
   }
-  if (!isRecord17(input.dependency)) {
+  if (!isRecord18(input.dependency)) {
     return vcpkgManifestShapeError({
       manifestPath: input.manifestPath,
       field: "dependencies",
@@ -36604,7 +36667,7 @@ function readVcpkgOverrides(manifest, manifestPath) {
   }
   const overrides = new Map;
   for (const [index, override] of manifest.overrides.entries()) {
-    if (!isRecord17(override)) {
+    if (!isRecord18(override)) {
       return vcpkgManifestShapeError({
         manifestPath,
         field: "overrides",
@@ -36867,7 +36930,7 @@ function isFile2(pathname) {
     return false;
   }
 }
-function isRecord17(value) {
+function isRecord18(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -36913,7 +36976,8 @@ function parseProjectLockfile(project, options = {}) {
       return parseBazelModuleFile(project.lockfile.path);
     case "maven-pom":
       return parseMavenPomFile(project.lockfile.path, {
-        projectRoot: project.rootDir
+        projectRoot: project.rootDir,
+        ...options.mavenExternalPoms ? { externalPoms: options.mavenExternalPoms } : {}
       });
     case "nuget-lock":
       return parseNugetLockfile(project.lockfile.path);
@@ -40697,7 +40761,7 @@ function findBazelLocalPathSourceDir(input) {
     if (!sourceJson.ok) {
       return err(sourceJson.error);
     }
-    if (!isRecord18(sourceJson.value) || sourceJson.value.type !== "local_path" || typeof sourceJson.value.path !== "string") {
+    if (!isRecord19(sourceJson.value) || sourceJson.value.type !== "local_path" || typeof sourceJson.value.path !== "string") {
       continue;
     }
     const registryJson = readBazelRegistryJson({
@@ -40766,7 +40830,7 @@ function readBazelRegistryJson(input) {
   if (!registryJson.ok) {
     return err(registryJson.error);
   }
-  return ok(isRecord18(registryJson.value) && typeof registryJson.value.module_base_path === "string" ? registryJson.value.module_base_path : undefined);
+  return ok(isRecord19(registryJson.value) && typeof registryJson.value.module_base_path === "string" ? registryJson.value.module_base_path : undefined);
 }
 function resolveBazelLocalPathSourceDir(input) {
   if (path50.isAbsolute(input.sourcePath)) {
@@ -40862,7 +40926,7 @@ function isReadableDirectory2(pathname) {
     return false;
   }
 }
-function isRecord18(value) {
+function isRecord19(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -41122,13 +41186,13 @@ function readPodspecLicense(input) {
   }
 }
 function podspecLicenseFromJson(parsed) {
-  if (!isRecord19(parsed)) {
+  if (!isRecord20(parsed)) {
     return;
   }
   if (typeof parsed.license === "string" && parsed.license.trim() !== "") {
     return parsed.license.trim();
   }
-  if (isRecord19(parsed.license)) {
+  if (isRecord20(parsed.license)) {
     const type = parsed.license.type;
     if (typeof type === "string" && type.trim() !== "") {
       return type.trim();
@@ -41192,7 +41256,7 @@ function isPathInside4(parent, child) {
   const relative2 = path52.relative(parent, child);
   return relative2 === "" || !relative2.startsWith("..") && !path52.isAbsolute(relative2);
 }
-function isRecord19(value) {
+function isRecord20(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -41330,7 +41394,7 @@ function readCondaPackageIndex(input) {
   } catch {
     return ok(undefined);
   }
-  if (!isRecord20(parsed)) {
+  if (!isRecord21(parsed)) {
     return ok(undefined);
   }
   return ok(omitUndefined({
@@ -41415,7 +41479,7 @@ function isReadableDirectory5(pathname) {
 function readString(value) {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 }
-function isRecord20(value) {
+function isRecord21(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -41923,7 +41987,7 @@ function findMetaEntry(entries, fileName) {
   return entries.find((entry) => entry.path === fileName || entry.path.endsWith(`/${fileName}`));
 }
 function parseCpanMetaObject(value) {
-  if (!isRecord21(value)) {
+  if (!isRecord22(value)) {
     return { licenses: [] };
   }
   return omitUndefined({
@@ -41990,7 +42054,7 @@ function parseTarEntries(input) {
 function readString2(value) {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 }
-function isRecord21(value) {
+function isRecord22(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isPathInside7(root, candidate) {
@@ -42427,14 +42491,14 @@ function readChartYamlLicense(input) {
   }
   try {
     const parsed = $parse(text3.value);
-    if (!isRecord22(parsed)) {
+    if (!isRecord23(parsed)) {
       return;
     }
     if (typeof parsed.license === "string" && parsed.license.trim() !== "") {
       return parsed.license.trim();
     }
     const annotations = parsed.annotations;
-    if (!isRecord22(annotations)) {
+    if (!isRecord23(annotations)) {
       return;
     }
     for (const key of ["artifacthub.io/license", "license", "licenses"]) {
@@ -42501,7 +42565,7 @@ function isReadableDirectory10(pathname) {
     return false;
   }
 }
-function isRecord22(value) {
+function isRecord23(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -43752,11 +43816,11 @@ function findPackageConfigPackageDir(input) {
   } catch {
     return;
   }
-  if (!isRecord23(parsed) || !Array.isArray(parsed.packages)) {
+  if (!isRecord24(parsed) || !Array.isArray(parsed.packages)) {
     return;
   }
   for (const item of parsed.packages) {
-    if (!isRecord23(item) || item.name !== input.packageName || typeof item.rootUri !== "string") {
+    if (!isRecord24(item) || item.name !== input.packageName || typeof item.rootUri !== "string") {
       continue;
     }
     const candidate = resolvePackageConfigRootUri({
@@ -43826,7 +43890,7 @@ function readPubspec(input) {
   } catch {
     return ok(undefined);
   }
-  if (!isRecord23(parsed) || typeof parsed.license !== "string" || parsed.license.trim() === "") {
+  if (!isRecord24(parsed) || typeof parsed.license !== "string" || parsed.license.trim() === "") {
     return ok(undefined);
   }
   return ok({
@@ -43892,7 +43956,7 @@ function isPathInside12(parent, child) {
   const relative2 = path65.relative(parent, child);
   return relative2 === "" || !relative2.startsWith("..") && !path65.isAbsolute(relative2);
 }
-function isRecord23(value) {
+function isRecord24(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -45328,6 +45392,7 @@ function collectEcosystemEvidence(input) {
 }
 
 // src/ecosystems/registry.ts
+var MAX_REMOTE_MAVEN_MODEL_POMS = 32;
 var DEFAULT_ADAPTERS = [
   adapter("javascript", ["bun", "package-lock", "npm-shrinkwrap", "pnpm-lock", "deno-lock", "yarn-lock", "package-json"], ["npm"]),
   adapter("rust", ["cargo-lock"], ["cargo"]),
@@ -45437,10 +45502,10 @@ function collectRegisteredEcosystemEvidence(input) {
   }
   return;
 }
-function parseProjectDependencyGraph(project) {
+function parseProjectDependencyGraph(project, context = {}) {
   const parsedGraphs = [];
   for (const lockfile of discoverProjectLockfiles(project)) {
-    const parsed = parseSingleLockfile(lockfile, project.rootDir);
+    const parsed = parseSingleLockfile(lockfile, project.rootDir, context);
     if (isErr(parsed)) {
       return parsed;
     }
@@ -45457,7 +45522,64 @@ function parseProjectDependencyGraph(project) {
   }
   return ok(mergeDependencyGraphs(parsedGraphs));
 }
-function parseSingleLockfile(lockfile, scanRootDir) {
+async function parseProjectDependencyGraphWithRemoteMavenPoms(input) {
+  const externalPoms = new Map;
+  const maxRemotePoms = input.maxRemotePoms ?? MAX_REMOTE_MAVEN_MODEL_POMS;
+  while (true) {
+    const parsed = parseProjectDependencyGraph(input.project, {
+      ...externalPoms.size > 0 ? { mavenExternalPoms: externalPoms } : {}
+    });
+    if (parsed.ok) {
+      return parsed;
+    }
+    const missing = missingExternalMavenPoms(parsed.error).filter((request) => !externalPoms.has(request.dependency));
+    if (missing.length === 0) {
+      return parsed;
+    }
+    if (externalPoms.size + missing.length > maxRemotePoms) {
+      return err(createError({
+        code: "MAVEN_POM_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Remote Maven parent and BOM resolution exceeded the supported document limit.",
+        details: {
+          reason: "remote_maven_model_count",
+          actual: externalPoms.size + missing.length,
+          limit: maxRemotePoms
+        }
+      }));
+    }
+    input.onFetch?.(missing);
+    const fetched = await input.fetchRemotePoms(missing);
+    if (!fetched.ok) {
+      return fetched;
+    }
+    const requested = new Set(missing.map((request) => request.dependency));
+    let added = 0;
+    for (const document2 of fetched.value) {
+      if (!requested.has(document2.dependency) || externalPoms.has(document2.dependency)) {
+        continue;
+      }
+      externalPoms.set(document2.dependency, {
+        source: document2.source,
+        text: document2.text
+      });
+      added += 1;
+    }
+    if (added !== missing.length) {
+      return err(createError({
+        code: "MAVEN_POM_PARSE_FAILED",
+        category: "internal",
+        message: "Remote Maven model resolution returned an incomplete document set.",
+        details: {
+          reason: "remote_maven_model_incomplete",
+          requested: missing.length,
+          received: added
+        }
+      }));
+    }
+  }
+}
+function parseSingleLockfile(lockfile, scanRootDir, context = {}) {
   const ecosystemAdapter = ecosystemAdapterForLockfile(lockfile.kind);
   if (!ecosystemAdapter) {
     return err(createError({
@@ -45473,7 +45595,10 @@ function parseSingleLockfile(lockfile, scanRootDir) {
   return ecosystemAdapter.parse({
     rootDir: projectRootForLockfile(lockfile),
     lockfile
-  }, { scanRootDir });
+  }, {
+    scanRootDir,
+    ...context.mavenExternalPoms ? { mavenExternalPoms: context.mavenExternalPoms } : {}
+  });
 }
 function adapter(id, lockfileKinds, packageEcosystems) {
   const lockfileKindSet = new Set(lockfileKinds);
@@ -45484,7 +45609,8 @@ function adapter(id, lockfileKinds, packageEcosystems) {
     packageEcosystems,
     discover: (project) => projectLockfiles(project).filter((lockfile) => lockfileKindSet.has(lockfile.kind)),
     parse: (project, context) => parseProjectLockfile(project, {
-      pythonLocalSourceRootDir: context?.scanRootDir
+      pythonLocalSourceRootDir: context?.scanRootDir,
+      ...context?.mavenExternalPoms ? { mavenExternalPoms: context.mavenExternalPoms } : {}
     }),
     collectEvidence: (input) => packageEcosystemSet.has(input.node.ecosystem) ? collectEcosystemEvidence(input) : undefined
   };
@@ -45787,7 +45913,7 @@ function parsePyPiReleaseMetadata(input) {
       cause: cause instanceof Error ? cause.message : String(cause)
     }));
   }
-  if (!isRecord24(document2) || !isRecord24(document2.info) || !Array.isArray(document2.urls)) {
+  if (!isRecord25(document2) || !isRecord25(document2.info) || !Array.isArray(document2.urls)) {
     return err(pypiMetadataError(input, "PyPI release metadata did not have the expected shape."));
   }
   const infoName = document2.info.name;
@@ -45922,13 +46048,13 @@ function pythonDistributionArchiveFormat(filename) {
   return;
 }
 function readPyPiReleaseArtifact(value) {
-  if (!isRecord24(value)) {
+  if (!isRecord25(value)) {
     return;
   }
   const filename = value.filename;
   const url = value.url;
   const packageType = value.packagetype;
-  const sha2562 = isRecord24(value.digests) ? value.digests.sha256 : undefined;
+  const sha2562 = isRecord25(value.digests) ? value.digests.sha256 : undefined;
   if (typeof filename !== "string" || filename === "" || filename.includes("/") || filename.includes("\\") || !pythonDistributionArchiveFormat(filename) || typeof url !== "string" || url === "" || !isOfficialPyPiArtifactUrl(url) || packageType !== "sdist" && packageType !== "bdist_wheel" || typeof sha2562 !== "string" || !/^[a-f0-9]{64}$/iu.test(sha2562)) {
     return;
   }
@@ -46085,7 +46211,7 @@ function safeArtifactFilename(value) {
   const normalized = value.replace(/\\/gu, "/");
   return normalized.split("/").pop() || "python-distribution";
 }
-function isRecord24(value) {
+function isRecord25(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -46733,6 +46859,75 @@ async function collectGraphEvidence(input) {
     return err(failure.error);
   }
   return ok(evidence);
+}
+async function fetchMavenCentralModelPoms(input) {
+  if (input.requests.length === 0) {
+    return ok([]);
+  }
+  const uncachedArtifactHostResolver = input.resolveArtifactHost ?? (input.fetchArtifact ? undefined : defaultArtifactHostResolver);
+  const resolveArtifactHost = uncachedArtifactHostResolver ? createCachingArtifactHostResolver(uncachedArtifactHostResolver) : undefined;
+  const fetchArtifact = input.fetchArtifact ?? createDefaultArtifactFetcher(resolveArtifactHost ?? defaultArtifactHostResolver);
+  const artifactCache = input.cacheDir ? createArtifactCache(input.cacheDir) : undefined;
+  const documents = [];
+  try {
+    for (const request of input.requests) {
+      const repositoryPath = mavenPomRepositoryPath(request);
+      if (!repositoryPath) {
+        return err(createError({
+          code: "MAVEN_POM_PARSE_FAILED",
+          category: "unsupported_input",
+          message: "Remote Maven parent or BOM coordinates were not safe exact repository coordinates.",
+          details: {
+            dependency: request.dependency,
+            reason: "unsafe_remote_maven_coordinates"
+          }
+        }));
+      }
+      const pomUrl = `${MAVEN_CENTRAL_BASE_URL}/${repositoryPath}`;
+      const pomBytes = await readRemoteArtifactBytes({
+        code: "REGISTRY_METADATA_FETCH_FAILED",
+        packageId: request.dependency,
+        url: pomUrl,
+        blockedMessage: "Maven Central parent or BOM URL targets an unsupported or blocked host.",
+        resolveFailureMessage: "Failed to resolve Maven Central host for parent or BOM metadata.",
+        fetchFailureMessage: "Failed to fetch Maven Central parent or BOM POM metadata.",
+        tooLargeMessage: "Maven Central parent or BOM POM exceeded the maximum supported size.",
+        unreadableMessage: "Maven Central parent or BOM POM did not expose a readable body stream.",
+        offlineMissMessage: "Offline mode could not find Maven parent or BOM metadata in the artifact cache.",
+        details: {
+          registryUrl: pomUrl,
+          coordinates: request.dependency,
+          usage: request.usage
+        },
+        maxBytes: input.pomMaxBytes ?? MAVEN_POM_METADATA_MAX_BYTES,
+        fetchArtifact,
+        resolveArtifactHost,
+        fetchTimeoutMs: input.fetchTimeoutMs ?? ARTIFACT_FETCH_TIMEOUT_MS,
+        offline: input.offline ?? false,
+        artifactCache,
+        allowedHosts: new Set,
+        permittedHosts: MAVEN_CENTRAL_HOSTS,
+        urlDetailKey: "registryUrl"
+      });
+      if (!pomBytes.ok) {
+        return pomBytes;
+      }
+      const text3 = pomBytes.value.toString("utf8");
+      const identity2 = parseMavenPomLicenseMetadata({
+        packageId: request.dependency,
+        requested: request,
+        source: pomUrl,
+        text: text3
+      });
+      if (!identity2.ok) {
+        return identity2;
+      }
+      documents.push({ ...request, source: pomUrl, text: text3 });
+    }
+    return ok(documents);
+  } finally {
+    artifactCache?.maintain();
+  }
 }
 function isRecoverableRemoteEvidenceError(error) {
   return error.category === "network" && (error.code === "REGISTRY_METADATA_FETCH_FAILED" || error.code === "TARBALL_FETCH_FAILED");
@@ -47961,7 +48156,7 @@ function installedPackageMatchesNode(input) {
       return false;
     }
     const packageJson = JSON.parse(packageJsonText.value);
-    return isRecord25(packageJson) && packageJson.name === input.node.name && packageJson.version === input.node.version;
+    return isRecord26(packageJson) && packageJson.name === input.node.name && packageJson.version === input.node.version;
   } catch {
     return false;
   }
@@ -48621,8 +48816,13 @@ async function fetchArtifactWithManualRedirects(input) {
       ...redirectCount === 0 && input.requestHeaders ? { headers: input.requestHeaders } : {}
     });
     const responseWithUrl = {
-      ...response,
-      url: currentUrl
+      ok: response.ok,
+      status: response.status,
+      statusText: response.statusText,
+      url: currentUrl,
+      arrayBuffer: () => response.arrayBuffer(),
+      ...response.headers === undefined ? {} : { headers: response.headers },
+      ...response.body === undefined ? {} : { body: response.body }
     };
     if (!isRedirectResponse(responseWithUrl)) {
       return ok(responseWithUrl);
@@ -49262,23 +49462,23 @@ function readRegistryTarballUrl(metadata, version) {
     return;
   }
   const dist = versionMetadata.dist;
-  if (isRecord25(dist) && typeof dist.tarball === "string") {
+  if (isRecord26(dist) && typeof dist.tarball === "string") {
     return dist.tarball;
   }
   return;
 }
 function readRegistryVersionMetadata(metadata, version) {
-  if (!isRecord25(metadata)) {
+  if (!isRecord26(metadata)) {
     return;
   }
-  if (metadata.version === version || !isRecord25(metadata.versions)) {
+  if (metadata.version === version || !isRecord26(metadata.versions)) {
     return metadata;
   }
   const versions = metadata.versions;
   const versionMetadata = versions[version];
-  return isRecord25(versionMetadata) ? versionMetadata : undefined;
+  return isRecord26(versionMetadata) ? versionMetadata : undefined;
 }
-function isRecord25(value) {
+function isRecord26(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function normalizeAllowedArtifactHosts(hosts) {
@@ -50293,7 +50493,7 @@ function readPolicyFile(input) {
   return ok(merged);
 }
 function parsePolicyDocument(value, filePath) {
-  if (!isRecord26(value)) {
+  if (!isRecord27(value)) {
     return err(policyParseError({
       message: "Policy root must be a YAML object.",
       filePath
@@ -50310,7 +50510,7 @@ function parsePolicyDocument(value, filePath) {
   if (!extendsPaths.ok)
     return extendsPaths;
   const licenses = value.licenses === undefined ? {} : value.licenses;
-  if (!isRecord26(licenses)) {
+  if (!isRecord27(licenses)) {
     return err(policyParseError({ message: "licenses must be a YAML object.", filePath }));
   }
   const allow = readStringList(licenses.allow, "licenses.allow", filePath);
@@ -50329,7 +50529,7 @@ function parsePolicyDocument(value, filePath) {
   if (!profiles.ok)
     return profiles;
   const network = value.network === undefined ? {} : value.network;
-  if (!isRecord26(network)) {
+  if (!isRecord27(network)) {
     return err(policyParseError({ message: "network must be a YAML object.", filePath }));
   }
   const allowedHosts = readStringList(network.allowedHosts, "network.allowedHosts", filePath);
@@ -50493,13 +50693,13 @@ function readProfilePolicies(value, filePath) {
   if (value === undefined) {
     return ok(new Map);
   }
-  if (!isRecord26(value)) {
+  if (!isRecord27(value)) {
     return err(policyParseError({ message: "profiles must be a YAML object.", filePath }));
   }
   const supportedProfiles = new Set(USAGE_PROFILES);
   const result = new Map;
   for (const [profileName, rawProfile] of Object.entries(value)) {
-    if (!supportedProfiles.has(profileName) || !isRecord26(rawProfile)) {
+    if (!supportedProfiles.has(profileName) || !isRecord27(rawProfile)) {
       return err(policyParseError({
         message: "profiles keys must be supported usage profiles with object values.",
         filePath,
@@ -50507,7 +50707,7 @@ function readProfilePolicies(value, filePath) {
       }));
     }
     const licenses = rawProfile.licenses === undefined ? {} : rawProfile.licenses;
-    if (!isRecord26(licenses)) {
+    if (!isRecord27(licenses)) {
       return err(policyParseError({
         message: `profiles.${profileName}.licenses must be a YAML object.`,
         filePath
@@ -50537,7 +50737,7 @@ function readProfilePolicies(value, filePath) {
 function readSeverityOverrides(value, filePath, field = "licenses.severity") {
   if (value === undefined)
     return ok({});
-  if (!isRecord26(value)) {
+  if (!isRecord27(value)) {
     return err(policyParseError({
       message: `${field} must be a YAML object.`,
       filePath
@@ -50559,12 +50759,12 @@ function readSeverityOverrides(value, filePath, field = "licenses.severity") {
 function readPackageRules(value, filePath, field = "packages") {
   if (value === undefined)
     return ok({});
-  if (!isRecord26(value)) {
+  if (!isRecord27(value)) {
     return err(policyParseError({ message: `${field} must be a YAML object.`, filePath }));
   }
   const result = {};
   for (const [packagePattern, rawRule] of Object.entries(value)) {
-    if (packagePattern.trim() === "" || !isRecord26(rawRule)) {
+    if (packagePattern.trim() === "" || !isRecord27(rawRule)) {
       return err(policyParseError({
         message: "Each packages entry must be an object keyed by a package ID, Package URL, or glob.",
         filePath,
@@ -50623,12 +50823,12 @@ function readPackageRules(value, filePath, field = "packages") {
 function readRegistryAuth(value, filePath) {
   if (value === undefined)
     return ok({});
-  if (!isRecord26(value)) {
+  if (!isRecord27(value)) {
     return err(policyParseError({ message: "network.auth must be a YAML object.", filePath }));
   }
   const result = {};
   for (const [host, rawAuth] of Object.entries(value)) {
-    if (!isRecord26(rawAuth) || typeof rawAuth.tokenEnv !== "string" || !ENV_NAME_PATTERN.test(rawAuth.tokenEnv)) {
+    if (!isRecord27(rawAuth) || typeof rawAuth.tokenEnv !== "string" || !ENV_NAME_PATTERN.test(rawAuth.tokenEnv)) {
       return err(policyParseError({
         message: "Each network.auth entry requires a valid tokenEnv environment variable name.",
         filePath,
@@ -50761,7 +50961,7 @@ function escapeRegExp9(value) {
 function unique2(values) {
   return [...new Set(values)];
 }
-function isRecord26(value) {
+function isRecord27(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isRemoteReference(value) {
@@ -51204,7 +51404,7 @@ function applyRiskWaivers(input) {
   };
 }
 function parseWaivers(value) {
-  if (!isRecord27(value)) {
+  if (!isRecord28(value)) {
     return err("Ohrisk waiver file must be an object with a waivers array.");
   }
   const unknownRootKeys = unknownKeys(value, WAIVER_ROOT_KEYS);
@@ -51225,7 +51425,7 @@ function parseWaivers(value) {
   return ok(waivers);
 }
 function parseWaiver(value, index) {
-  if (!isRecord27(value)) {
+  if (!isRecord28(value)) {
     return err(`Waiver at index ${index} must be an object.`);
   }
   const unknownWaiverKeys = unknownKeys(value, WAIVER_KEYS);
@@ -51279,7 +51479,7 @@ function isIsoDate(value) {
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
-function isRecord27(value) {
+function isRecord28(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -57005,28 +57205,39 @@ function hasWaiverDrift(input) {
   return input.expiredWaivers.length > 0 || input.unmatchedWaivers.length > 0;
 }
 async function scanProject(input) {
-  const loaded = input.archivePath ? loadArchiveProjectGraph({
-    cwd: input.cwd,
-    archivePath: input.archivePath,
-    allLockfiles: input.allLockfiles,
-    prodOnly: input.prodOnly,
-    now: input.now,
-    ...input.progress ? { progress: input.progress } : {}
-  }) : loadProjectGraph({
-    cwd: input.cwd,
-    ...input.lockfilePath ? { lockfilePath: input.lockfilePath } : {},
-    ...input.projectSearchMode ? { projectSearchMode: input.projectSearchMode } : {},
-    ...input.autoMergeSameRoot ? { autoMergeSameRoot: true } : {},
-    ...input.autoMergeDescendantProjects ? { autoMergeDescendantProjects: true } : {},
-    allLockfiles: input.allLockfiles,
-    prodOnly: input.prodOnly,
-    ...input.progress ? { progress: input.progress } : {}
-  });
-  if (isErr(loaded)) {
-    return loaded;
+  let project;
+  let scanGraph;
+  if (input.archivePath) {
+    const loaded = loadArchiveProjectGraph({
+      cwd: input.cwd,
+      archivePath: input.archivePath,
+      allLockfiles: input.allLockfiles,
+      prodOnly: input.prodOnly,
+      now: input.now,
+      ...input.progress ? { progress: input.progress } : {}
+    });
+    if (isErr(loaded)) {
+      return loaded;
+    }
+    project = loaded.value.project;
+    scanGraph = loaded.value.scanGraph;
+  } else {
+    const discovered = discoverFilesystemProject({
+      cwd: input.cwd,
+      ...input.lockfilePath ? { lockfilePath: input.lockfilePath } : {},
+      ...input.projectSearchMode ? { projectSearchMode: input.projectSearchMode } : {},
+      ...input.autoMergeSameRoot ? { autoMergeSameRoot: true } : {},
+      ...input.autoMergeDescendantProjects ? { autoMergeDescendantProjects: true } : {},
+      allLockfiles: input.allLockfiles,
+      ...input.progress ? { progress: input.progress } : {}
+    });
+    if (isErr(discovered)) {
+      return discovered;
+    }
+    project = discovered.value;
   }
   const policy = readPolicyConfig({
-    projectRoot: input.configurationRoot ?? (loaded.value.project.source ? input.cwd : loaded.value.project.rootDir),
+    projectRoot: input.configurationRoot ?? (project.source ? input.cwd : project.rootDir),
     ...input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {},
     ...input.policyPath ? { policyPath: input.policyPath } : {}
   });
@@ -57035,7 +57246,7 @@ async function scanProject(input) {
   }
   const evidenceRuntime = resolveEvidenceRuntimeOptions({
     cwd: input.runtimeRoot ?? input.cwd,
-    projectRoot: loaded.value.project.rootDir,
+    projectRoot: project.rootDir,
     policy: policy.value,
     offline: input.offline,
     ...input.cacheDir ? { cacheDir: input.cacheDir } : {},
@@ -57049,14 +57260,33 @@ async function scanProject(input) {
   if (isErr(evidenceRuntime)) {
     return evidenceRuntime;
   }
+  if (!scanGraph) {
+    const graph = await parseProjectDependencyGraphWithRemoteMavenPoms({
+      project,
+      fetchRemotePoms: (requests) => fetchMavenCentralModelPoms({
+        requests,
+        offline: evidenceRuntime.value.offline,
+        ...evidenceRuntime.value.timeoutMs === undefined ? {} : { fetchTimeoutMs: evidenceRuntime.value.timeoutMs },
+        ...evidenceRuntime.value.cacheDir === undefined ? {} : { cacheDir: evidenceRuntime.value.cacheDir }
+      }),
+      ...input.progress ? {
+        onFetch: (requests) => input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, `Resolving ${requests.length} Maven parent/BOM POM${requests.length === 1 ? "" : "s"}...`)
+      } : {}
+    });
+    if (isErr(graph)) {
+      return graph;
+    }
+    scanGraph = filterGraphForProdOnly(graph.value, input.prodOnly);
+  }
   return evaluateProjectScan({
-    ...loaded.value,
+    project,
+    scanGraph,
     profile: input.profile,
     policy: policy.value,
     evidenceRuntime: evidenceRuntime.value,
     applyWaivers: input.applyWaivers,
     now: input.now,
-    ...input.configurationRoot ? { configurationRoot: input.configurationRoot } : loaded.value.project.source ? { configurationRoot: input.cwd } : {},
+    ...input.configurationRoot ? { configurationRoot: input.configurationRoot } : project.source ? { configurationRoot: input.cwd } : {},
     ...input.allowLocalProjectEvidence !== undefined ? { allowLocalProjectEvidence: input.allowLocalProjectEvidence } : {},
     ...input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {},
     ...input.progress ? { progress: input.progress } : {}
@@ -57086,6 +57316,21 @@ function loadArchiveProjectGraph(input) {
   });
 }
 function loadProjectGraph(input) {
+  const discovered = discoverFilesystemProject(input);
+  if (isErr(discovered)) {
+    return discovered;
+  }
+  const graph = parseProjectDependencyGraph(discovered.value);
+  if (isErr(graph)) {
+    return graph;
+  }
+  const scanGraph = filterGraphForProdOnly(graph.value, input.prodOnly);
+  return ok({
+    project: discovered.value,
+    scanGraph
+  });
+}
+function discoverFilesystemProject(input) {
   input.progress?.(SCAN_PROGRESS_DISCOVER_PERCENT, "Discovering project...");
   const discovered = discoverProject({
     cwd: input.cwd,
@@ -57100,15 +57345,7 @@ function loadProjectGraph(input) {
   }
   const lockfileCount = discovered.value.lockfiles?.length ?? 1;
   input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, lockfileCount > 1 ? `Reading ${lockfileCount} lockfiles...` : `Reading ${path83.basename(discovered.value.lockfile.path)}...`);
-  const graph = parseProjectDependencyGraph(discovered.value);
-  if (isErr(graph)) {
-    return graph;
-  }
-  const scanGraph = filterGraphForProdOnly(graph.value, input.prodOnly);
-  return ok({
-    project: discovered.value,
-    scanGraph
-  });
+  return discovered;
 }
 async function evaluateProjectScan(input) {
   const evidenceProgress = input.progress ? createEvidenceProgressReporter({

@@ -138,9 +138,15 @@ POMs. Module paths, nesting depth, total module count, file size, cycles, and
 missing module POMs fail closed. Child modules inherit matching aggregator
 parent properties and `dependencyManagement`; exact reactor-internal module
 dependencies are excluded from the external package graph. External parent and
-imported BOM resolution for dependency versions remains limited to already
-available local Maven repository POMs. Package license evidence may fall back to
-exact-version Maven Central POMs and a bounded inherited parent-POM chain.
+imported BOM versions use already available local Maven repository POMs first.
+Filesystem `scan` and `ci` runs may then fetch at most 32 exact, identity-checked
+Maven Central model POMs, each bounded to 2 MiB and eight parent/BOM levels, and
+reuse them from the artifact cache in `--offline` mode. Incomplete model
+resolution fails closed. `diff`, archive inputs, and project-declared or
+alternate Maven repositories remain local-only for dependency-model resolution.
+Package license evidence may separately fall back to exact-version Maven Central
+POMs, explicitly allowed project repositories, and a bounded inherited
+parent-POM chain.
 
 `diff <ref> --all` independently discovers the supported input set in the
 current worktree and the baseline git tree, parses each set with the same

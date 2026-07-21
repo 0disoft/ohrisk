@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.11.2
+npm install -g ohrisk@1.12.0
 cd your-project
 ohrisk scan
 ```
@@ -180,7 +180,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - Python PDM `pdm.lock` projects use adjacent `pyproject.toml` root dependencies when available, infer roots from lockfile dependency references otherwise, and scan project-root-contained local `path` or relative `file:` source records
 - Python `requirements.txt` files are scanned for pinned PyPI packages, project-root-contained local source entries, editable local source entries, nested `-r` requirement files, and exact `-c` constraint pins; pip-compile `# via` annotations restore direct/transitive package paths when every named parent is present
 - Java Gradle `gradle.lockfile` and legacy `gradle/dependency-locks` directory projects are scanned for Maven coordinates recorded in dependency locking output; explicit `gradle/dependency-locks/*.lockfile` files are also accepted. Java Gradle `gradle/libs.versions.toml` projects are scanned for exact Maven library aliases from compact notation, `module` plus exact `version`, or `module` plus `version.ref`
-- Java Maven `pom.xml` projects are scanned for direct dependencies with explicit, property-resolved, same-file `dependencyManagement`, or local `.m2/repository` parent/imported-BOM `dependencyManagement` versions
+- Java Maven `pom.xml` projects are scanned for direct dependencies with explicit, property-resolved, same-file `dependencyManagement`, local `.m2/repository`, or exact Maven Central parent/imported-BOM `dependencyManagement` versions; remote model resolution is limited to 32 identity-checked POMs of at most 2 MiB each and eight parent/BOM levels, and is reusable through the artifact cache in `--offline` mode
 - Bazel `MODULE.bazel` projects are scanned for direct `bazel_dep` entries with literal exact `version` strings; nodep `repo_name = None` entries, `include()` expansion, overrides, module extensions, and `MODULE.bazel.lock` resolution output fail closed instead of being partial-scanned
 - .NET NuGet `packages.lock.json` and restored `obj/project.assets.json` projects are scanned for direct and transitive package dependencies; .NET NuGet `packages.config` and `*.csproj` files are scanned for direct `PackageReference` and `PackageDownload` items, including central `PackageVersion` entries and exact `PackageDownload` ranges resolved from unconditional same-file properties
 - Conan 2 `conan.lock` projects are scanned for recipe references from `requires`, `build_requires`, and `python_requires`; Conan binary package IDs, settings, options, user/channel, and recipe revisions are not modeled in Package URLs yet
@@ -215,6 +215,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - Python `.venv` and `venv` `*.dist-info/METADATA` package evidence, plus project-root-contained local source metadata and license files for `uv.lock`, `pylock.toml`, `requirements.txt`, `Pipfile.lock`, and `pdm.lock` local source entries, before unavailable fallback
 - exact-version PyPI release evidence for locked Python packages, using SHA-256-verified source distributions or wheels plus identity-checked `PKG-INFO`, `METADATA`, and license files; a verified distribution that exceeds archive inspection limits remains `unknown` without aborting unrelated package findings
 - local Maven `.m2/repository` POMs for Maven parent/BOM version management and package license evidence, including bounded parent-POM license inheritance
+- exact Maven Central parent/imported-BOM POMs for dependency-version resolution during filesystem `scan` and `ci` runs, with a 32-document scan limit, 2 MiB per-POM limit, eight-level model depth, exact identity checks, cache reuse, and fail-closed incomplete-model handling
 - exact-version Maven Central POM evidence for Maven and Gradle coordinates when local POM evidence is unavailable, plus project-declared HTTPS repositories whose exact hosts are explicitly allowed; all POM requests retain bounded parent inheritance, cache, offline, timeout, redirect, identity, and response-size checks
 - checksum-verified Maven JAR license-file fallback when the selected POM chain has no license name, requiring a same-repository SHA-256 sidecar and exact embedded `META-INF/maven/<groupId>/<artifactId>/pom.properties` identity before root or `META-INF` license files are trusted
 - Bazel module license evidence uses local Bazel registry `local_path` sources from file-based registries when present; remote Bazel registry metadata fetching is not scanned yet
@@ -294,7 +295,7 @@ The current implementation is the first local dependency-risk vertical slice:
 
 Central approval workflows, GitHub App checks, Go `go.work` use paths outside the project root, Go local `replace` paths outside the project root, pre-1.17 Go module graph reconstruction beyond the conservative `go.sum` fallback
 reconstruction, unpinned or short-reference uv remote VCS entries, Pipenv and PDM remote VCS entries, uv, Pipenv, and PDM local source paths outside the project root, remote VCS `requirements.txt` entries, unpinned requirements ranges without exact constraint pins,
-remote Maven parent/BOM fetching for dependency-version resolution, Maven transitive graph
+remote parent/BOM model resolution from project-declared or alternate Maven repositories, remote Maven model resolution for `diff` and archive inputs, Maven transitive graph
 resolution, unapproved project-declared Maven repositories, Gradle graph reconstruction, Gradle version catalog rich versions, bundle aliases, plugin aliases, and usage-site configuration reconstruction, Bazel `MODULE.bazel` `include()` expansion, Bazel overrides, module extensions, `MODULE.bazel.lock` graph reconstruction, remote Bazel registry metadata fetching, Conan 1 graph lock support, Conan binary package ID and remote ConanCenter
 artifact fetching, unpinned or ranged Conda `environment.yml` specs, Conda environment transitive dependency reconstruction, explicit per-platform `conda-<platform>.lock` exports, remote Conda channel artifact fetching,
 Conda build/channel/subdir Package URL qualifiers, Terraform module scanning, remote Terraform Registry metadata fetching, Helm transitive chart graph
@@ -381,7 +382,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.11.2
+npm install -g ohrisk@1.12.0
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
@@ -451,7 +452,7 @@ Supported dependency input files:
 - pinned `requirements.txt` entries such as `name==version`, local source entries such as `-e ./local-package`, `./local-package`, `file:./local-package`, and `name @ file:./local-package`, nested `-r` requirement files, and exact `-c` constraint pins for ranged entries, using pip-compile `# via` annotations for bounded dependency-path reconstruction and installed `.venv`/`venv` dist-info metadata or project-root-contained local source metadata and license files for local evidence
 - `gradle.lockfile`, legacy `gradle/dependency-locks` directories, and explicit `gradle/dependency-locks/*.lockfile` Maven coordinates from Java Gradle dependency locking, using local `.m2/repository` POM metadata or exact-version Maven Central POM fallback for evidence
 - `gradle/libs.versions.toml` Maven library aliases with exact versions or `version.ref` values from the same catalog, using local `.m2/repository` POM metadata or exact-version Maven Central POM fallback for evidence
-- Maven `pom.xml` direct dependencies with explicit versions or versions resolved from local `<properties>`, same-file `dependencyManagement`, or local `.m2/repository` parent/imported-BOM `dependencyManagement`; reactor-internal module dependencies are excluded, and package licenses use local POM metadata, Maven Central, or explicitly allowed project-declared repositories with bounded parent inheritance and checksum/identity-verified JAR fallback
+- Maven `pom.xml` direct dependencies with explicit versions or versions resolved from local `<properties>`, same-file `dependencyManagement`, local `.m2/repository`, or exact Maven Central parent/imported-BOM `dependencyManagement` during filesystem `scan` and `ci`; reactor-internal module dependencies are excluded, and package licenses use local POM metadata, Maven Central, or explicitly allowed project-declared repositories with bounded parent inheritance and checksum/identity-verified JAR fallback
 - Bazel `MODULE.bazel` direct `bazel_dep` entries with literal exact versions, failing closed on graph-expanding constructs and using local Bazel registry `local_path` source evidence when present
 - .NET NuGet `packages.lock.json` package entries, restored `obj/project.assets.json` package graph entries, `packages.config` package entries, and direct `*.csproj` `PackageReference` or `PackageDownload` entries, resolving central versions from the nearest `Directory.Packages.props` and exact `PackageDownload` ranges from unconditional same-file properties when present, and using local NuGet cache `.nuspec` metadata for evidence
 - Conan 2 `conan.lock` recipe references from `requires`, `build_requires`, and `python_requires`, using local Conan cache `conanfile.py` metadata and license files for evidence

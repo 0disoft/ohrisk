@@ -674,6 +674,110 @@ describe("parseMavenPomText", () => {
     });
   });
 
+  test("resolves dependency versions from preloaded remote Maven BOM models", () => {
+    const result = parseMavenPomText(
+      [
+        "<project>",
+        "  <groupId>org.example</groupId>",
+        "  <artifactId>fixture-maven</artifactId>",
+        "  <version>1.0.0</version>",
+        "  <dependencyManagement>",
+        "    <dependencies>",
+        "      <dependency>",
+        "        <groupId>org.junit</groupId>",
+        "        <artifactId>junit-bom</artifactId>",
+        "        <version>5.14.4</version>",
+        "        <type>pom</type>",
+        "        <scope>import</scope>",
+        "      </dependency>",
+        "    </dependencies>",
+        "  </dependencyManagement>",
+        "  <dependencies>",
+        "    <dependency>",
+        "      <groupId>org.junit.jupiter</groupId>",
+        "      <artifactId>junit-jupiter-engine</artifactId>",
+        "    </dependency>",
+        "  </dependencies>",
+        "</project>"
+      ].join("\n"),
+      "pom.xml",
+      {
+        externalPoms: new Map([[
+          "org.junit:junit-bom@5.14.4",
+          {
+            source: "https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.14.4/junit-bom-5.14.4.pom",
+            text: [
+              "<project>",
+              "  <groupId>org.junit</groupId>",
+              "  <artifactId>junit-bom</artifactId>",
+              "  <version>5.14.4</version>",
+              "  <dependencyManagement>",
+              "    <dependencies>",
+              "      <dependency>",
+              "        <groupId>org.junit.jupiter</groupId>",
+              "        <artifactId>junit-jupiter-engine</artifactId>",
+              "        <version>5.14.4</version>",
+              "      </dependency>",
+              "    </dependencies>",
+              "  </dependencyManagement>",
+              "</project>"
+            ].join("\n")
+          }
+        ]])
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.nodes).toContainEqual(expect.objectContaining({
+      id: "org.junit.jupiter:junit-jupiter-engine@5.14.4"
+    }));
+  });
+
+  test("rejects a preloaded remote BOM with mismatched identity", () => {
+    const result = parseMavenPomText(
+      [
+        "<project>",
+        "  <artifactId>fixture-maven</artifactId>",
+        "  <dependencyManagement>",
+        "    <dependencies>",
+        "      <dependency>",
+        "        <groupId>org.example</groupId>",
+        "        <artifactId>example-bom</artifactId>",
+        "        <version>1.0.0</version>",
+        "        <type>pom</type>",
+        "        <scope>import</scope>",
+        "      </dependency>",
+        "    </dependencies>",
+        "  </dependencyManagement>",
+        "</project>"
+      ].join("\n"),
+      "pom.xml",
+      {
+        externalPoms: new Map([[
+          "org.example:example-bom@1.0.0",
+          {
+            source: "https://repo.maven.apache.org/maven2/org/example/example-bom/1.0.0/example-bom-1.0.0.pom",
+            text: [
+              "<project>",
+              "  <groupId>org.example</groupId>",
+              "  <artifactId>other-bom</artifactId>",
+              "  <version>1.0.0</version>",
+              "</project>"
+            ].join("\n")
+          }
+        ]])
+      }
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected remote Maven identity mismatch.");
+    expect(result.error).toMatchObject({
+      code: "MAVEN_POM_PARSE_FAILED",
+      details: { reason: "remote_maven_identity_mismatch" }
+    });
+  });
+
   test("rejects unresolved property versions", () => {
     const result = parseMavenPomText(
       [

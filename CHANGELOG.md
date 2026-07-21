@@ -1,6 +1,15 @@
 # Changelog
 
-## 1.11.2 - 2026-07-21
+## 1.12.0 - 2026-07-21
+
+- Resolved exact Maven Central parent and imported-BOM POMs when a filesystem
+  `scan` or `ci` input needs external `dependencyManagement` versions. Model
+  resolution is identity-checked, cached, offline-capable, limited to 32 remote
+  POMs of at most 2 MiB each and eight parent/BOM levels, and remains fail-closed
+  when the complete model cannot be proven.
+- Preserved standard Fetch `Response` fields while normalizing manually handled
+  redirects, so injected or adapter-provided Fetch responses retain their status,
+  headers, body, and cache metadata.
 
 - Used package license declarations embedded in `composer.lock` as local
   evidence. Composer repository scans no longer report every package as

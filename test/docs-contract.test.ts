@@ -130,7 +130,16 @@ describe("documentation contract", () => {
     expect(remoteBoundary).toContain("Symbolic-link blobs are also skipped");
     expect(normalizedRemoteBoundary).toContain("cannot act as a dependency manifest or lockfile");
     expect(remoteBoundary).toContain("https://repo.maven.apache.org/maven2/");
-    expect(remoteBoundary).toContain("eight inherited parent levels");
+    expect(remoteBoundary).toContain("eight inherited parent/BOM levels");
+    expect(normalizedRemoteBoundary).toContain(
+      "Filesystem `scan` and `ci` inputs may resolve at most 32 exact Maven Central parent or imported-BOM model POMs"
+    );
+    expect(normalizedRemoteBoundary).toContain(
+      "`diff`, archive inputs, and project-declared or alternate Maven repositories do not use remote model resolution"
+    );
+    expect(normalizedCommandContract).toContain(
+      "each bounded to 2 MiB and eight parent/BOM levels"
+    );
     expect(remoteBoundary).toContain("exact host is explicitly allowed by policy or `--allow-host`");
     expect(remoteBoundary).toContain("publishes a SHA-256 sidecar");
     expect(remoteBoundary).toContain("META-INF/maven/<groupId>/<artifactId>/pom.properties");

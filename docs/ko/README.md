@@ -205,11 +205,16 @@ Maven `pom.xml`은 project root 안의 `<module>` POM을 제한된 깊이와 개
 aggregator parent의
 `<properties>`, same-file `dependencyManagement`, 또는 로컬 `.m2/repository`에 이미
 있는 parent/imported BOM POM의 `dependencyManagement`로 해석되는 경우를 지원한다.
+일반 filesystem `scan`과 `ci`는 로컬에 없는 exact parent/imported BOM을 고정된
+Maven Central에서 최대 32개까지 자동 조회한다. 각 POM은 2 MiB, 전체 model depth는
+8단계로 제한되고 identity가 일치해야 하며 cache를 통한 `--offline` 재사용도
+지원한다. 완전한 model을 증명하지 못하면 일부 graph를 꾸며내지 않고 실패한다.
 package license는 현재 POM 또는 최대 8단계 parent POM의 `<licenses>`를 상속해서
 읽으며, 로컬 POM이 없으면 Maven Central exact-version 경로를 먼저 사용한다.
 project가 선언한 외부 Maven repository는 정확한 host가 명시적으로 허용된 경우에만
 POM evidence와 checksum/identity 검증을 통과한 JAR license evidence에 사용한다.
-dependency version 해석을 위한 원격 parent/BOM fetching, 허용되지 않은 외부 Maven repository resolution,
+`diff`, 압축파일 입력, project가 선언한 외부 또는 대체 Maven repository의 원격
+parent/BOM model 해석, 허용되지 않은 외부 Maven repository resolution,
 Maven 전이 그래프 해석, Gradle 그래프 복원, Gradle version
 catalog rich version, bundle alias, plugin alias, usage-site configuration 복원은 아직 지원하지 않는다.
 Bazel은 `MODULE.bazel`의 직접 `bazel_dep` 중 literal exact `version`이 있는 entry를

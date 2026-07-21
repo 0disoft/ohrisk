@@ -3,7 +3,12 @@ import { realpathSync } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
-import { findMavenPomInRepository, mavenRepositoryRoots } from "../shared/maven-repository";
+import {
+  findMavenPomInRepository,
+  mavenPomRepositoryPath,
+  mavenRepositoryRoots,
+  type MavenCoordinates
+} from "../shared/maven-repository";
 import { err, ok, type Result } from "../shared/result";
 import {
   inputFileReadErrorCategory,
@@ -32,9 +37,15 @@ type MavenPomModel = MavenPomProject & {
   managedVersions: Map<string, string>;
 };
 
-type MavenPomParseOptions = {
+export type MavenExternalPomDocument = {
+  source: string;
+  text: string;
+};
+
+export type MavenPomParseOptions = {
   projectRoot?: string;
   mavenRepositoryRoots?: string[];
+  externalPoms?: ReadonlyMap<string, MavenExternalPomDocument>;
   maxBytes?: number;
   maxExternalPomDepth?: number;
   maxModuleDepth?: number;
@@ -58,15 +69,10 @@ type MavenPomParseContext = {
   maxExternalPomDepth: number;
   visitedExternalPoms: Set<string>;
   missingExternalPoms: MissingExternalMavenPom[];
+  externalPoms?: ReadonlyMap<string, MavenExternalPomDocument>;
 };
 
-type MavenPomCoordinates = {
-  groupId: string;
-  artifactId: string;
-  version: string;
-};
-
-type MissingExternalMavenPom = {
+export type MissingExternalMavenPom = MavenCoordinates & {
   usage: "parent" | "imported_bom";
   dependency: string;
 };
@@ -141,7 +147,8 @@ export function parseMavenPomText(
       maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES,
       maxExternalPomDepth: options.maxExternalPomDepth ?? 8,
       visitedExternalPoms: new Set(),
-      missingExternalPoms: []
+      missingExternalPoms: [],
+      ...(options.externalPoms ? { externalPoms: options.externalPoms } : {})
     };
     const moduleState: MavenModuleParseState = {
       projectRoot: path.resolve(projectRoot),
@@ -169,6 +176,10 @@ export function parseMavenPomText(
     const mavenRepositoryUrls = [...new Set(
       parsedModules.value.flatMap((module) => module.repositoryUrls)
     )].sort();
+
+    if (options.externalPoms && context.missingExternalPoms.length > 0) {
+      return err(missingExternalMavenModelError(pomPath, context));
+    }
 
     return ok({
       rootName,
@@ -651,7 +662,7 @@ function matchesDeclaredMavenParent(text: string, candidate: MavenPomModel): boo
 }
 
 function readExternalMavenPomModel(
-  coordinates: MavenPomCoordinates,
+  coordinates: MavenCoordinates,
   pomPath: string,
   context: MavenPomParseContext,
   depth: number,
@@ -663,16 +674,20 @@ function readExternalMavenPomModel(
     artifactId: coordinates.artifactId,
     version: coordinates.version
   });
+  const visitedKey = mavenDependencyId(coordinates);
+  const externalPomDocument = externalPomPath
+    ? undefined
+    : context.externalPoms?.get(visitedKey);
 
-  if (!externalPomPath) {
+  if (!externalPomPath && !externalPomDocument) {
     recordMissingExternalMavenPom(context, {
       usage,
-      dependency: mavenDependencyId(coordinates)
+      dependency: visitedKey,
+      ...coordinates
     });
     return ok(undefined);
   }
 
-  const visitedKey = mavenDependencyId(coordinates);
   if (context.visitedExternalPoms.has(visitedKey)) {
     return err(
       createError({
@@ -687,37 +702,63 @@ function readExternalMavenPomModel(
     );
   }
 
-  const externalPom = readInputTextFile({
-    filePath: externalPomPath,
-    maxBytes: context.maxBytes
-  });
+  const externalPom = externalPomPath
+    ? readInputTextFile({
+        filePath: externalPomPath,
+        maxBytes: context.maxBytes
+      })
+    : ok(externalPomDocument!.text);
 
   if (!externalPom.ok) {
-    return err(
-      createError({
-        code: "MAVEN_POM_READ_FAILED",
-        category: inputFileReadErrorCategory(externalPom.error),
-        message: externalPom.error.kind === "too_large"
-          ? "External Maven parent or BOM POM exceeded the maximum supported size."
-          : "Failed to read external Maven parent or BOM POM.",
-        details: {
-          lockfilePath: pomPath,
-          pomPath: externalPomPath,
-          dependency: visitedKey,
-          ...inputFileReadErrorDetails(externalPom.error)
-        }
-      })
-    );
+    return err(createError({
+      code: "MAVEN_POM_READ_FAILED",
+      category: inputFileReadErrorCategory(externalPom.error),
+      message: externalPom.error.kind === "too_large"
+        ? "External Maven parent or BOM POM exceeded the maximum supported size."
+        : "Failed to read external Maven parent or BOM POM.",
+      details: {
+        lockfilePath: pomPath,
+        ...(externalPomPath ? { pomPath: externalPomPath } : {}),
+        dependency: visitedKey,
+        ...inputFileReadErrorDetails(externalPom.error)
+      }
+    }));
   }
 
   context.visitedExternalPoms.add(visitedKey);
   try {
-    return readMavenPomModel(
+    const model = readMavenPomModel(
       stripUnsupportedMavenSections(externalPom.value),
-      externalPomPath,
+      externalPomPath ?? externalPomDocument!.source,
       context,
       depth
     );
+    if (!model.ok || externalPomPath) {
+      return model;
+    }
+
+    if (
+      model.value.groupId !== coordinates.groupId
+      || model.value.rootName !== coordinates.artifactId
+      || model.value.version !== coordinates.version
+    ) {
+      return err(createError({
+        code: "MAVEN_POM_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Remote Maven parent or BOM POM did not match the requested package identity.",
+        details: {
+          lockfilePath: pomPath,
+          dependency: visitedKey,
+          source: externalPomDocument!.source,
+          reason: "remote_maven_identity_mismatch",
+          ...(model.value.groupId ? { metadataGroupId: model.value.groupId } : {}),
+          ...(model.value.rootName ? { metadataArtifactId: model.value.rootName } : {}),
+          ...(model.value.version ? { metadataVersion: model.value.version } : {})
+        }
+      }));
+    }
+
+    return model;
   } finally {
     context.visitedExternalPoms.delete(visitedKey);
   }
@@ -981,7 +1022,7 @@ function readXmlTagText(text: string, tag: string): string | undefined {
   return normalized && normalized.length > 0 ? normalized : undefined;
 }
 
-function readMavenParentCoordinates(text: string): MavenPomCoordinates | undefined {
+function readMavenParentCoordinates(text: string): MavenCoordinates | undefined {
   const parentText = text.match(/<parent\b[^>]*>([\s\S]*?)<\/parent>/i)?.[1];
   if (!parentText) {
     return undefined;
@@ -1028,7 +1069,7 @@ function mavenCoordinateKey(groupId: string, artifactId: string): string {
   return `${groupId}:${artifactId}`;
 }
 
-function mavenDependencyId(coordinates: MavenPomCoordinates): string {
+function mavenDependencyId(coordinates: MavenCoordinates): string {
   return `${coordinates.groupId}:${coordinates.artifactId}@${coordinates.version}`;
 }
 
@@ -1043,6 +1084,54 @@ function recordMissingExternalMavenPom(
   }
 
   context.missingExternalPoms.push(missing);
+}
+
+export function missingExternalMavenPoms(error: OhriskError): MissingExternalMavenPom[] {
+  const entries = error.details?.missingExternalPoms;
+  if (error.code !== "MAVEN_POM_PARSE_FAILED" || !Array.isArray(entries)) {
+    return [];
+  }
+
+  const parsed = new Map<string, MissingExternalMavenPom>();
+  for (const entry of entries) {
+    if (!isRecord(entry)) {
+      continue;
+    }
+    const usage = entry.usage;
+    const groupId = entry.groupId;
+    const artifactId = entry.artifactId;
+    const version = entry.version;
+    const dependency = entry.dependency;
+    if (
+      (usage !== "parent" && usage !== "imported_bom")
+      || typeof groupId !== "string"
+      || typeof artifactId !== "string"
+      || typeof version !== "string"
+      || typeof dependency !== "string"
+      || !mavenPomRepositoryPath({ groupId, artifactId, version })
+    ) {
+      continue;
+    }
+    parsed.set(dependency, { usage, groupId, artifactId, version, dependency });
+  }
+
+  return [...parsed.values()].sort((left, right) => left.dependency.localeCompare(right.dependency));
+}
+
+function missingExternalMavenModelError(
+  pomPath: string,
+  context: MavenPomParseContext
+): OhriskError {
+  return createError({
+    code: "MAVEN_POM_PARSE_FAILED",
+    category: "unsupported_input",
+    message: "Failed to resolve the complete Maven parent and imported BOM model.",
+    details: {
+      lockfilePath: pomPath,
+      reason: "missing_external_maven_model",
+      ...mavenResolutionDetails(context)
+    }
+  });
 }
 
 function mavenResolutionDetails(context: MavenPomParseContext): Record<string, unknown> {
@@ -1139,4 +1228,8 @@ function decodeXmlEntities(text: string): string {
     .replace(/&quot;/g, "\"")
     .replace(/&apos;/g, "'")
     .replace(/&amp;/g, "&");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
