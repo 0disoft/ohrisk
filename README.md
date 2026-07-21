@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.11.1
+npm install -g ohrisk@1.11.2
 cd your-project
 ohrisk scan
 ```
@@ -184,8 +184,8 @@ The current implementation is the first local dependency-risk vertical slice:
 - Bazel `MODULE.bazel` projects are scanned for direct `bazel_dep` entries with literal exact `version` strings; nodep `repo_name = None` entries, `include()` expansion, overrides, module extensions, and `MODULE.bazel.lock` resolution output fail closed instead of being partial-scanned
 - .NET NuGet `packages.lock.json` and restored `obj/project.assets.json` projects are scanned for direct and transitive package dependencies; .NET NuGet `packages.config` and `*.csproj` files are scanned for direct `PackageReference` and `PackageDownload` items, including central `PackageVersion` entries and exact `PackageDownload` ranges resolved from unconditional same-file properties
 - Conan 2 `conan.lock` projects are scanned for recipe references from `requires`, `build_requires`, and `python_requires`; Conan binary package IDs, settings, options, user/channel, and recipe revisions are not modeled in Package URLs yet
-- Conda `environment.yml` and `environment.yaml` projects are scanned for exact Conda `name=version` pins and exact pip `name==version` pins; Conda `conda-lock.yml` and `conda-lock.yaml` projects are scanned for resolved `conda` and `pip` package entries and are preferred when both an environment spec and conda-lock output are present
-- vcpkg `vcpkg.json` projects are scanned from installed `vcpkg_installed/vcpkg/status` records when available, or from exact top-level `overrides` when installed status is absent; baseline and `version>=` constraints are not treated as resolved package versions
+- Conda `environment.yml` and `environment.yaml` projects are scanned for exact Conda `name=version` pins and exact pip `name==version` pins; Conda `conda-lock.yml` and `conda-lock.yaml` projects are scanned for resolved `conda` and `pip` package entries and are preferred when both an environment spec and conda-lock output are present; unpinned environment files are skipped only during repository-wide automatic discovery while explicit `--lockfile` selection remains strict
+- vcpkg `vcpkg.json` projects are scanned from installed `vcpkg_installed/vcpkg/status` records when available, or from exact top-level `overrides` when installed status is absent; baseline and `version>=` constraints are not treated as resolved package versions, and unresolved manifests are skipped only during repository-wide automatic discovery while explicit `--lockfile` selection remains strict
 - Terraform `.terraform.lock.hcl` projects are scanned for locked provider versions; provider constraints and platform hashes are not modeled in Package URLs yet
 - Helm `Chart.lock` and `Chart.yaml` projects are scanned for chart dependency entries; `Chart.lock` is preferred when both files are present
 - Nix `flake.lock` projects are scanned for reachable flake inputs from the root input graph; Nix derivation package graphs are not reconstructed
@@ -202,7 +202,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - Elixir Mix `mix.lock` projects are scanned for resolved Hex package pins; adjacent root `mix.exs` literal `only:` dependency options are used for production/development root classification when available, while mix.lock dependency graph reconstruction and remote Hex.pm artifact fetch are not scanned yet
 - Erlang Rebar3 `rebar.lock` projects are scanned for Hex `pkg` pins; depth-0 Hex pins are classified as production roots, while git/path deps, plugin locks, profile-specific test deps, and Rebar dependency tree reconstruction are not scanned yet
 - Ruby Bundler `Gemfile.lock` projects are scanned for direct and transitive gem dependencies
-- PHP Composer `composer.lock` projects are scanned for production and development package dependencies, using adjacent `composer.json` root dependencies when available
+- PHP Composer `composer.lock` projects are scanned for production and development package dependencies, using adjacent `composer.json` root dependencies when available and package license declarations embedded in the lockfile as local evidence
 - CycloneDX JSON/XML, SPDX JSON/RDF, and SPDX tag-value SBOM files are scanned for Package URL-backed package identities, dependency relationships, and embedded license evidence
 - explicit `--lockfile` SBOM paths are sniffed by content when their filename does not use a supported SBOM name or suffix
 - npm alias dependency resolution, including pnpm alias package keys, with alias context preserved in dependency paths
@@ -236,7 +236,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - local CocoaPods `Pods/<pod>` source and `Pods/Local Podspecs/<pod>.podspec.json` evidence before unavailable fallback for `Podfile.lock` packages
 - local Elixir/Erlang `deps/<package>` source and `mix.exs` or `rebar.config` license metadata before unavailable fallback for Hex packages
 - local Bundler/RubyGems install path gemspec evidence before unavailable fallback for `Gemfile.lock` gems
-- local Composer `vendor/<vendor>/<package>/composer.json` evidence before unavailable fallback for `composer.lock` packages
+- Composer `composer.lock` package license declarations, followed by local `vendor/<vendor>/<package>/composer.json` evidence when lockfile metadata is absent
 - remote HTTPS package tarball evidence when the lockfile points to a tarball with supported integrity metadata, with plaintext HTTP, credential-bearing URLs, obvious local, private, special-purpose, and DNS-resolved internal hosts blocked before fetch, connected socket addresses rechecked by the default fetcher, redirects followed only after each target is validated, and transient network failures recorded as unavailable package evidence so other packages can still be scanned
 - fixed `proxy.golang.org` module ZIP evidence for Go dependencies with an exact `go.sum` `h1` checksum, including official `storage.googleapis.com` redirects, one bounded transient-failure retry, full module-ZIP checksum verification, and root license-file inspection without npm credentials
 - a shared content-addressed artifact cache with HTTP freshness metadata, conditional `ETag`/`Last-Modified` revalidation, valid stale-entry support in `--offline` mode, and automatic 2 GiB LRU trimming
@@ -381,7 +381,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.11.1
+npm install -g ohrisk@1.11.2
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
@@ -472,7 +472,7 @@ Supported dependency input files:
 - CocoaPods `Podfile.lock` pod entries, using local `Pods/` source and `Pods/Local Podspecs` metadata for evidence
 - Elixir Mix `mix.lock` Hex package pins, using adjacent root `mix.exs` literal `only:` options for production/development classification and local `deps/` package source and `mix.exs` metadata for evidence; Erlang Rebar3 `rebar.lock` Hex package pins, using depth-0 production root classification and local `deps/` package source and `rebar.config` metadata for evidence
 - Ruby Bundler `Gemfile.lock` gem entries, using literal companion `Gemfile` group blocks and inline `group:` options for development classification and local Bundler/RubyGems gemspec metadata for evidence
-- PHP Composer `composer.lock` package entries, using adjacent `composer.json` root dependencies when available and local `vendor/` package metadata for evidence
+- PHP Composer `composer.lock` package entries, using adjacent `composer.json` root dependencies when available, embedded lockfile licenses first, and local `vendor/` package metadata when lockfile license metadata is absent
 - CycloneDX JSON/XML SBOM package entries with Package URL identities, dependency relationships, and embedded license evidence; traversal is iterative, retains every reachable component, stores at most 64 paths per component, and summarizes paths deeper than 256 components with typed graph diagnostics
 - SPDX JSON/RDF and tag-value SBOM package entries with Package URL external refs, dependency relationships, and embedded license evidence
 - Yarn classic/Berry `yarn.lock` with root and workspace dependency sets from `package.json` manifests, plus local `.yarn/cache` zip evidence for Berry/PnP installs

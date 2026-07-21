@@ -2,6 +2,7 @@ import { omitUndefined } from "../shared/object";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
+import type { LicenseEvidence } from "../evidence/types";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 import {
@@ -18,6 +19,7 @@ type ComposerPackageRecord = {
   id: string;
   dependencyType: DependencyType;
   dependencies: string[];
+  license?: string | string[];
 };
 
 type ComposerRootDependency = {
@@ -99,10 +101,18 @@ export function parseComposerLockText(
     });
   }
 
+  const nodes = [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id));
+  const embeddedEvidence = composerLockEmbeddedEvidence({
+    records: parsed.value,
+    nodeIds: new Set(nodes.map((node) => node.id)),
+    metadataSource: path.basename(lockfilePath)
+  });
+
   return ok({
     rootName,
     lockfilePath,
-    nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id))
+    nodes,
+    ...(embeddedEvidence.length > 0 ? { embeddedEvidence } : {})
   });
 }
 
@@ -213,9 +223,48 @@ function readComposerPackageRecords(
       version: item.version,
       id: `${item.name}@${item.version}`,
       dependencyType,
-      dependencies: readComposerDependencyNames(item.require)
+      dependencies: readComposerDependencyNames(item.require),
+      ...readComposerPackageLicense(item.license)
     };
   });
+}
+
+function readComposerPackageLicense(value: unknown): Pick<ComposerPackageRecord, "license"> {
+  if (typeof value === "string" && value.trim() !== "") {
+    return { license: value.trim() };
+  }
+
+  if (Array.isArray(value)) {
+    const licenses = value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter((item) => item !== "");
+    if (licenses.length > 0) {
+      return { license: [...new Set(licenses)] };
+    }
+  }
+
+  return {};
+}
+
+function composerLockEmbeddedEvidence(input: {
+  records: ComposerPackageRecord[];
+  nodeIds: ReadonlySet<string>;
+  metadataSource: string;
+}): LicenseEvidence[] {
+  return input.records
+    .filter((record) => input.nodeIds.has(record.id) && record.license !== undefined)
+    .map((record): LicenseEvidence => ({
+      packageId: record.id,
+      ...(typeof record.license === "string"
+        ? { metadataLicense: record.license }
+        : { metadataLicenses: record.license }),
+      metadataSource: input.metadataSource,
+      files: [],
+      source: "local",
+      warnings: []
+    }))
+    .sort((left, right) => left.packageId.localeCompare(right.packageId));
 }
 
 function readComposerRootDependencies(input: {
@@ -371,7 +420,12 @@ function deduplicateComposerRecords(records: ComposerPackageRecord[]): ComposerP
       ? {
           ...existing,
           dependencyType: mergeDependencyType(existing.dependencyType, record.dependencyType),
-          dependencies: [...new Set([...existing.dependencies, ...record.dependencies])].sort()
+          dependencies: [...new Set([...existing.dependencies, ...record.dependencies])].sort(),
+          ...(existing.license !== undefined
+            ? { license: existing.license }
+            : record.license !== undefined
+              ? { license: record.license }
+              : {})
         }
       : record);
   }

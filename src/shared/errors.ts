@@ -195,7 +195,7 @@ export function formatError(error: OhriskError): string {
 
 function formatDetail(value: unknown): string {
   if (Array.isArray(value)) {
-    return value.length === 0 ? "none" : value.join(", ");
+    return value.length === 0 ? "none" : value.map(formatDetail).join(", ");
   }
 
   if (typeof value === "string") {

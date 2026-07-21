@@ -7465,14 +7465,8 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
 
   test("prints actionable findings for a PHP Composer composer.lock project", async () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-composer-project-"));
-    const safeDir = path.join(projectRoot, "vendor", "acme", "safe");
-    const riskDir = path.join(projectRoot, "vendor", "acme", "risk");
-    const devDir = path.join(projectRoot, "vendor", "acme", "dev-tool");
 
     try {
-      mkdirSync(safeDir, { recursive: true });
-      mkdirSync(riskDir, { recursive: true });
-      mkdirSync(devDir, { recursive: true });
       writeFileSync(
         path.join(projectRoot, "composer.json"),
         JSON.stringify({
@@ -7493,6 +7487,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
             {
               name: "acme/safe",
               version: "1.0.0",
+              license: ["MIT"],
               require: {
                 php: ">=8.2",
                 "acme/risk": "^2.0"
@@ -7500,30 +7495,20 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
             },
             {
               name: "acme/risk",
-              version: "2.0.0"
+              version: "2.0.0",
+              license: ["AGPL-3.0-only"]
             }
           ],
           "packages-dev": [
             {
               name: "acme/dev-tool",
-              version: "3.0.0"
+              version: "3.0.0",
+              license: ["GPL-3.0-only"]
             }
           ]
         }),
         "utf8"
       );
-      writeFileSync(path.join(safeDir, "composer.json"), JSON.stringify({ license: "MIT" }), "utf8");
-      writeFileSync(
-        path.join(riskDir, "composer.json"),
-        JSON.stringify({ license: "AGPL-3.0-only" }),
-        "utf8"
-      );
-      writeFileSync(
-        path.join(devDir, "composer.json"),
-        JSON.stringify({ license: "GPL-3.0-only" }),
-        "utf8"
-      );
-
       const { io, stdout, stderr } = createTestIO(projectRoot);
       const exitCode = await main(["scan", "--prod"], io);
 
@@ -7535,7 +7520,9 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       expect(output).toContain("Lockfile: composer.lock (composer-lock)");
       expect(output).toContain("- [high] acme/risk@2.0.0");
       expect(output).toContain("path: acme/app -> acme/safe@1.0.0 -> acme/risk@2.0.0");
-      expect(output).toContain("composer.json license: AGPL-3.0-only");
+      expect(output).toContain("license: AGPL-3.0-only");
+      expect(output).toContain("composer.lock licenses field");
+      expect(output).not.toContain("Remote package evidence is not configured for the composer ecosystem.");
       expect(output).not.toContain("acme/dev-tool@3.0.0");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });

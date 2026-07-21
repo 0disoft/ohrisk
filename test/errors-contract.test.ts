@@ -3,6 +3,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { createError, formatError } from "../src/shared/errors";
+
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const srcRoot = path.join(repoRoot, "src");
 
@@ -16,6 +18,24 @@ describe("error code contract", () => {
     ).sort();
 
     expect([...new Set(emittedCodes)]).toEqual([...new Set(declaredCodes)]);
+  });
+
+  test("formats structured array details without JavaScript object coercion", () => {
+    const formatted = formatError(createError({
+      code: "MAVEN_POM_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Fixture failure.",
+      details: {
+        missingExternalPoms: [
+          { usage: "parent", dependency: "org.example:parent@1.0.0" }
+        ]
+      }
+    }));
+
+    expect(formatted).toContain(
+      'missingExternalPoms: {"usage":"parent","dependency":"org.example:parent@1.0.0"}'
+    );
+    expect(formatted).not.toContain("[object Object]");
   });
 });
 

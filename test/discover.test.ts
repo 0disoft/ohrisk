@@ -2596,6 +2596,67 @@ describe("discoverProject", () => {
     }
   });
 
+  test("skips unresolved vcpkg manifests during automatic repository discovery", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-vcpkg-manifest-"));
+    const nativeRoot = path.join(repositoryRoot, "native");
+    const serverRoot = path.join(repositoryRoot, "server");
+
+    try {
+      mkdirSync(nativeRoot, { recursive: true });
+      mkdirSync(serverRoot, { recursive: true });
+      writeFileSync(path.join(nativeRoot, "vcpkg.json"), JSON.stringify({
+        name: "unresolved-native-project",
+        dependencies: ["openssl"]
+      }), "utf8");
+      writeFileSync(path.join(serverRoot, "go.mod"), "module example.com/server\n\ngo 1.24\n", "utf8");
+
+      const result = discoverProject({
+        cwd: repositoryRoot,
+        searchMode: "tree",
+        autoMergeDescendantProjects: true
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value.lockfiles ?? [result.value.lockfile]).toEqual([
+        { kind: "go-mod", path: path.join(serverRoot, "go.mod") }
+      ]);
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("skips unpinned Conda environments during automatic repository discovery", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-conda-environment-"));
+    const docsRoot = path.join(repositoryRoot, "docs");
+    const serverRoot = path.join(repositoryRoot, "server");
+
+    try {
+      mkdirSync(docsRoot, { recursive: true });
+      mkdirSync(serverRoot, { recursive: true });
+      writeFileSync(path.join(docsRoot, "environment.yml"), [
+        "name: documentation",
+        "dependencies:",
+        "  - arrow-cpp"
+      ].join("\n"), "utf8");
+      writeFileSync(path.join(serverRoot, "go.mod"), "module example.com/server\n\ngo 1.24\n", "utf8");
+
+      const result = discoverProject({
+        cwd: repositoryRoot,
+        searchMode: "tree",
+        autoMergeDescendantProjects: true
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value.lockfiles ?? [result.value.lockfile]).toEqual([
+        { kind: "go-mod", path: path.join(serverRoot, "go.mod") }
+      ]);
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
+    }
+  });
+
   test("bounds repository-wide descendant project fan-out", () => {
     const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-project-limit-"));
 

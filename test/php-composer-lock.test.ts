@@ -9,6 +9,7 @@ describe("parseComposerLockText", () => {
         {
           name: "vendor/app-lib",
           version: "1.0.0",
+          license: ["MIT", "Apache-2.0"],
           require: {
             "php": ">=8.2",
             "vendor/transitive-lib": "^2.0"
@@ -16,13 +17,15 @@ describe("parseComposerLockText", () => {
         },
         {
           name: "vendor/transitive-lib",
-          version: "2.0.0"
+          version: "2.0.0",
+          license: ["BSD-2-Clause"]
         }
       ],
       "packages-dev": [
         {
           name: "vendor/dev-tool",
-          version: "3.0.0"
+          version: "3.0.0",
+          license: "GPL-3.0-only"
         }
       ]
     });
@@ -70,6 +73,32 @@ describe("parseComposerLockText", () => {
         direct: false,
         paths: [["vendor/root", "vendor/app-lib@1.0.0", "vendor/transitive-lib@2.0.0"]]
       });
+    expect(result.value.embeddedEvidence).toEqual([
+      {
+        packageId: "vendor/app-lib@1.0.0",
+        metadataLicenses: ["MIT", "Apache-2.0"],
+        metadataSource: "composer.lock",
+        files: [],
+        source: "local",
+        warnings: []
+      },
+      {
+        packageId: "vendor/dev-tool@3.0.0",
+        metadataLicense: "GPL-3.0-only",
+        metadataSource: "composer.lock",
+        files: [],
+        source: "local",
+        warnings: []
+      },
+      {
+        packageId: "vendor/transitive-lib@2.0.0",
+        metadataLicenses: ["BSD-2-Clause"],
+        metadataSource: "composer.lock",
+        files: [],
+        source: "local",
+        warnings: []
+      }
+    ]);
   });
 
   test("stops walking dependency cycles without dropping reachable paths", () => {

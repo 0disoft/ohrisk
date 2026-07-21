@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: e6acfde6314989b2159765f896738a442f59400bb0c4a7ab761c6656bec8598b
+// ohrisk-action-source-sha256: 74268479626369e83edff6c3bfb7ff0035fb7bde7500521d6d361773c10d6be4
 // ohrisk-action-build-platform: win32
 import { createRequire } from "node:module";
 var __create = Object.create;
@@ -16514,7 +16514,7 @@ function formatError(error) {
 }
 function formatDetail(value) {
   if (Array.isArray(value)) {
-    return value.length === 0 ? "none" : value.join(", ");
+    return value.length === 0 ? "none" : value.map(formatDetail).join(", ");
   }
   if (typeof value === "string") {
     return value;
@@ -18540,7 +18540,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.11.1";
+var OHRISK_VERSION = "1.11.2";
 
 // src/archive/archive-project.ts
 import path46 from "node:path";
@@ -29648,10 +29648,17 @@ function parseComposerLockText(input, lockfilePath = "composer.lock", options = 
       seen: new Set
     });
   }
+  const nodes = [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id));
+  const embeddedEvidence = composerLockEmbeddedEvidence({
+    records: parsed.value,
+    nodeIds: new Set(nodes.map((node) => node.id)),
+    metadataSource: path29.basename(lockfilePath)
+  });
   return ok({
     rootName,
     lockfilePath,
-    nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id))
+    nodes,
+    ...embeddedEvidence.length > 0 ? { embeddedEvidence } : {}
   });
 }
 function readOptionalComposerJson(input) {
@@ -29732,9 +29739,32 @@ function readComposerPackageRecords(value, dependencyType, lockfilePath) {
       version: item.version,
       id: `${item.name}@${item.version}`,
       dependencyType,
-      dependencies: readComposerDependencyNames(item.require)
+      dependencies: readComposerDependencyNames(item.require),
+      ...readComposerPackageLicense(item.license)
     };
   });
+}
+function readComposerPackageLicense(value) {
+  if (typeof value === "string" && value.trim() !== "") {
+    return { license: value.trim() };
+  }
+  if (Array.isArray(value)) {
+    const licenses = value.filter((item) => typeof item === "string").map((item) => item.trim()).filter((item) => item !== "");
+    if (licenses.length > 0) {
+      return { license: [...new Set(licenses)] };
+    }
+  }
+  return {};
+}
+function composerLockEmbeddedEvidence(input) {
+  return input.records.filter((record) => input.nodeIds.has(record.id) && record.license !== undefined).map((record) => ({
+    packageId: record.id,
+    ...typeof record.license === "string" ? { metadataLicense: record.license } : { metadataLicenses: record.license },
+    metadataSource: input.metadataSource,
+    files: [],
+    source: "local",
+    warnings: []
+  })).sort((left, right) => left.packageId.localeCompare(right.packageId));
 }
 function readComposerRootDependencies(input) {
   if (input.composerJsonText) {
@@ -29847,7 +29877,8 @@ function deduplicateComposerRecords(records) {
     seen.set(record.id, existing ? {
       ...existing,
       dependencyType: mergeDependencyType16(existing.dependencyType, record.dependencyType),
-      dependencies: [...new Set([...existing.dependencies, ...record.dependencies])].sort()
+      dependencies: [...new Set([...existing.dependencies, ...record.dependencies])].sort(),
+      ...existing.license !== undefined ? { license: existing.license } : record.license !== undefined ? { license: record.license } : {}
     } : record);
   }
   return [...seen.values()];
@@ -37562,6 +37593,12 @@ function isConcreteAutoDiscoveryInput(lockfile) {
   }
   if (lockfile.kind === "gradle-version-catalog") {
     return parseGradleVersionCatalogFile(lockfile.path).ok;
+  }
+  if (lockfile.kind === "vcpkg-json") {
+    return parseVcpkgJsonFile(lockfile.path).ok;
+  }
+  if (lockfile.kind === "conda-environment") {
+    return parseCondaEnvironmentFile(lockfile.path).ok;
   }
   if (lockfile.kind !== "cyclonedx-json" && lockfile.kind !== "cyclonedx-xml" && lockfile.kind !== "spdx-json" && lockfile.kind !== "spdx-rdf" && lockfile.kind !== "spdx-tag-value") {
     return true;

@@ -2,9 +2,11 @@ import { closeSync, existsSync, openSync, readSync, readdirSync, statSync } from
 import path from "node:path";
 
 import { parseGradleVersionCatalogFile } from "../graph/java-gradle-version-catalog";
+import { parseCondaEnvironmentFile } from "../graph/conda-environment";
 import { parsePackageJsonManifestFile } from "../graph/npm-package-json";
 import { parsePyprojectFile } from "../graph/python-pyproject";
 import { parseRequirementsFile } from "../graph/python-requirements";
+import { parseVcpkgJsonFile } from "../graph/vcpkg-json";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 
@@ -671,6 +673,14 @@ function isConcreteAutoDiscoveryInput(lockfile: ProjectLockfile): boolean {
 
   if (lockfile.kind === "gradle-version-catalog") {
     return parseGradleVersionCatalogFile(lockfile.path).ok;
+  }
+
+  if (lockfile.kind === "vcpkg-json") {
+    return parseVcpkgJsonFile(lockfile.path).ok;
+  }
+
+  if (lockfile.kind === "conda-environment") {
+    return parseCondaEnvironmentFile(lockfile.path).ok;
   }
 
   if (

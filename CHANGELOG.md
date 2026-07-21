@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.11.2 - 2026-07-21
+
+- Used package license declarations embedded in `composer.lock` as local
+  evidence. Composer repository scans no longer report every package as
+  unknown merely because `vendor/` is absent and remote Packagist evidence is
+  intentionally unavailable.
+- Skipped unresolved `vcpkg.json` manifests and unpinned Conda environment
+  files during repository-wide automatic discovery while preserving strict
+  validation for explicit `--lockfile` selection. Partial native or
+  environment manifests no longer abort concrete sibling dependency projects.
+- Rendered structured error-detail arrays as JSON values instead of JavaScript
+  object coercions such as `[object Object]`, including missing Maven
+  parent/BOM diagnostics.
+
 ## 1.11.1 - 2026-07-20
 
 - Allowed nested `uv.lock` projects in repository-wide scans to resolve sibling
