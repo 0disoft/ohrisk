@@ -187,7 +187,35 @@ describe("remote NuGet package evidence", () => {
     expect(fetchCount).toBe(0);
     expect(evidence.ok).toBe(true);
     if (!evidence.ok) throw new Error(evidence.error.message);
-    expect(evidence.value[0]).toMatchObject({ source: "unavailable" });
+    expect(evidence.value[0]).toMatchObject({
+      source: "unavailable",
+      warnings: [
+        "NuGet package source was not fetched because this non-local input did not contain an exact SHA-512 package content hash. For a repository URL, commit a generated packages.lock.json with contentHash entries; otherwise clone or extract, restore, and scan the local checkout."
+      ]
+    });
+  });
+
+  test("explains how a local hashless NuGet input can gain verifiable evidence", async () => {
+    let fetchCount = 0;
+    const evidence = await collectGraphEvidence({
+      graph: nugetGraph("Ohrisk.Remediation.Probe.Uncached", "1.0.0"),
+      projectRoot: ".",
+      allowLocalProjectEvidence: true,
+      fetchArtifact: async () => {
+        fetchCount += 1;
+        throw new Error("Hashless NuGet evidence must not fetch remote bytes.");
+      }
+    });
+
+    expect(fetchCount).toBe(0);
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) throw new Error(evidence.error.message);
+    expect(evidence.value[0]).toMatchObject({
+      source: "unavailable",
+      warnings: [
+        "NuGet package source was not fetched because the selected dependency input did not contain an exact SHA-512 package content hash. Restore the project, then rerun Ohrisk against the local checkout; use --lockfile obj/project.assets.json or a generated packages.lock.json when available."
+      ]
+    });
   });
 
   test("fails closed when the nuget.org catalog hash differs from the lock hash", async () => {

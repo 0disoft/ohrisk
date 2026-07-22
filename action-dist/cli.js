@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 8850d8bd75d87e416613ff6a5d2a7359b10117a915d7e9cc37b49f384b548a75
+// ohrisk-action-source-sha256: b6cfa472cb461c0b4a053a924087341f863f086851dd6830e64f1d7229fa50cc
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -47701,6 +47701,7 @@ async function collectNodeEvidence(input) {
   if (input.node.ecosystem === "nuget") {
     return collectRemoteNugetPackageEvidence({
       node: input.node,
+      allowLocalProjectEvidence: input.allowLocalProjectEvidence,
       fetchArtifact: input.fetchArtifact,
       resolveArtifactHost: input.resolveArtifactHost,
       fetchTimeoutMs: input.fetchTimeoutMs,
@@ -47875,9 +47876,7 @@ async function collectRemoteNugetPackageEvidence(input) {
       packageId: input.node.id,
       files: [],
       source: "unavailable",
-      warnings: [
-        "NuGet package source was not fetched because the selected dependency input did not contain an exact SHA-512 package content hash."
-      ]
+      warnings: [nugetMissingIntegrityWarning(input.allowLocalProjectEvidence)]
     });
   }
   const service = await input.loadServiceIndex(input.node.id);
@@ -48055,6 +48054,12 @@ async function collectRemoteNugetPackageEvidence(input) {
     nupkg: nupkg.value,
     artifactMaxBytes: input.artifactMaxBytes
   });
+}
+function nugetMissingIntegrityWarning(allowLocalProjectEvidence) {
+  if (allowLocalProjectEvidence) {
+    return "NuGet package source was not fetched because the selected dependency input did not contain an exact SHA-512 package content hash. Restore the project, then rerun Ohrisk against the local checkout; use --lockfile obj/project.assets.json or a generated packages.lock.json when available.";
+  }
+  return "NuGet package source was not fetched because this non-local input did not contain an exact SHA-512 package content hash. For a repository URL, commit a generated packages.lock.json with contentHash entries; otherwise clone or extract, restore, and scan the local checkout.";
 }
 async function readNugetRegistryBytes(input) {
   const response = await readRemoteArtifactBytes({

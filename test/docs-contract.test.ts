@@ -146,6 +146,8 @@ describe("documentation contract", () => {
     expect(normalizedCommandContract).toContain("bounded npm/PyPI/Maven/Go/NuGet remote package-evidence pipeline");
     expect(remoteBoundary).toContain("https://proxy.golang.org");
     expect(remoteBoundary).toContain("module ZIP's exact `h1` checksum");
+    expect(remoteBoundary).toContain("For a repository URL, generate and commit");
+    expect(remoteBoundary).toContain("Ohrisk never restores an untrusted project during a scan");
     expect(normalizedCommandContract).toContain("exact reactor-internal module dependencies are excluded");
     expect(reportFormats).toContain("`scan --html <github-url>` writes `<repository>-ohrisk.html`");
     expect(reportFormats).toContain("restriction scope: documentation in <path>");

@@ -10,7 +10,9 @@
   license evidence. Inputs without a package hash, private feeds, arbitrary
   license URLs, credentials, and cross-host redirects remain outside the adapter
   boundary, while the complete metadata and package chain is reusable from the
-  artifact cache in offline mode.
+  artifact cache in offline mode. Hashless-input warnings now distinguish
+  repository URLs from local checkouts and give the matching lockfile or restore
+  remediation without weakening the package-integrity requirement.
 
 ## 1.12.2 - 2026-07-21
 

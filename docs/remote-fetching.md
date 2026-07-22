@@ -193,6 +193,15 @@ project manifests remain unavailable rather than being substituted with a
 same-name public package. Private feeds, caller-selected NuGet endpoints,
 arbitrary license URLs, and cross-host redirects are not fetched.
 
+When a hashless NuGet input remains unavailable, Ohrisk gives remediation that
+matches the input boundary. For a repository URL, generate and commit
+`packages.lock.json` with its `contentHash` entries so a future remote scan can
+bind nuget.org evidence to repository-owned integrity. For a local checkout,
+restore the project and rerun Ohrisk locally, selecting
+`obj/project.assets.json` explicitly when it is available. Archive inputs must
+likewise be extracted and restored locally or rebuilt with a hash-bearing lock;
+Ohrisk never restores an untrusted project during a scan.
+
 Filesystem `scan` and `ci` inputs may resolve at most 32 exact Maven Central
 parent or imported-BOM model POMs. Resolution reparses the project only after
 every requested document is present and identity-checked, and fails the scan if

@@ -649,6 +649,7 @@ async function collectNodeEvidence(input: {
   if (input.node.ecosystem === "nuget") {
     return collectRemoteNugetPackageEvidence({
       node: input.node,
+      allowLocalProjectEvidence: input.allowLocalProjectEvidence,
       fetchArtifact: input.fetchArtifact,
       resolveArtifactHost: input.resolveArtifactHost,
       fetchTimeoutMs: input.fetchTimeoutMs,
@@ -850,6 +851,7 @@ function createNugetServiceIndexLoader(input: {
 
 async function collectRemoteNugetPackageEvidence(input: {
   node: DependencyNode;
+  allowLocalProjectEvidence: boolean;
   fetchArtifact: ArtifactFetcher;
   resolveArtifactHost: ArtifactHostResolver | undefined;
   fetchTimeoutMs: number;
@@ -881,9 +883,7 @@ async function collectRemoteNugetPackageEvidence(input: {
       packageId: input.node.id,
       files: [],
       source: "unavailable",
-      warnings: [
-        "NuGet package source was not fetched because the selected dependency input did not contain an exact SHA-512 package content hash."
-      ]
+      warnings: [nugetMissingIntegrityWarning(input.allowLocalProjectEvidence)]
     });
   }
 
@@ -1069,6 +1069,14 @@ async function collectRemoteNugetPackageEvidence(input: {
     nupkg: nupkg.value,
     artifactMaxBytes: input.artifactMaxBytes
   });
+}
+
+function nugetMissingIntegrityWarning(allowLocalProjectEvidence: boolean): string {
+  if (allowLocalProjectEvidence) {
+    return "NuGet package source was not fetched because the selected dependency input did not contain an exact SHA-512 package content hash. Restore the project, then rerun Ohrisk against the local checkout; use --lockfile obj/project.assets.json or a generated packages.lock.json when available.";
+  }
+
+  return "NuGet package source was not fetched because this non-local input did not contain an exact SHA-512 package content hash. For a repository URL, commit a generated packages.lock.json with contentHash entries; otherwise clone or extract, restore, and scan the local checkout.";
 }
 
 async function readNugetRegistryBytes(input: {
