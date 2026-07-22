@@ -140,7 +140,9 @@ record.
 Maven aggregator `pom.xml` inputs recursively scan project-contained `<module>`
 POMs. Module paths, nesting depth, total module count, file size, cycles, and
 missing module POMs fail closed. Child modules inherit matching aggregator
-parent properties and `dependencyManagement`; exact reactor-internal module
+parent properties and `dependencyManagement`; property expressions in project,
+dependency, and managed dependency coordinates are resolved before matching;
+exact reactor-internal module
 dependencies are excluded from the external package graph. External parent and
 imported BOM versions use already available local Maven repository POMs first.
 Filesystem `scan` and `ci` runs may then fetch at most 32 exact, identity-checked
@@ -182,6 +184,12 @@ For modern npm `package-lock.json` and `npm-shrinkwrap.json`, graph traversal is
 also iterative and retains every reachable package while storing at most 64
 dependency paths per package. Additional paths use the same typed truncation
 diagnostic instead of expanding path combinations without a bound.
+
+For modern Dart and Flutter `pubspec.lock`, exact pub.dev hosted records retain
+their archive SHA-256 and fixed archive URL. Remote evidence verifies the full
+archive digest plus root `pubspec.yaml` name/version before trusting bounded
+root license files. Custom hosted registries, Git/path sources, and hashless
+legacy hosted records remain local-only.
 
 For `pnpm-lock.yaml`, every importer remains a graph root and every reachable
 package remains in the result, while each package stores at most 64 dependency

@@ -37,6 +37,11 @@ Remote fetching is limited to these explicit adapters:
   endpoint when `Cargo.lock` supplies the crate SHA-256 checksum; Cargo.toml
   identity and package-root license files are trusted only after the complete
   archive checksum matches.
+- exact pub.dev package archives from the fixed `pub.dev` endpoint when a
+  modern hosted `pubspec.lock` record supplies the archive SHA-256; the complete
+  archive digest and root `pubspec.yaml` name/version must match before bounded
+  root license files are trusted. Custom hosted registries, Git/path sources,
+  and hashless legacy lock records are not fetched.
 - exact public nuget.org packages selected through the V3 service index,
   flat-container version index, registration metadata, and catalog leaf, only
   when the selected dependency input contains the package SHA-512; the NUPKG is
@@ -246,6 +251,11 @@ Checksum-identified Go module ZIPs use the same content-addressed cache,
 conditional revalidation, offline stale-entry behavior, size ceiling, and LRU
 control as other remote artifacts. Offline cache misses remain unavailable and
 never trigger DNS or HTTP work.
+
+Checksum-identified pub.dev archives use the same content-addressed cache,
+conditional revalidation, offline stale-entry behavior, size ceiling, and LRU
+control as other remote artifacts. An offline cache miss remains unavailable
+and cannot trigger DNS or HTTP work.
 
 NuGet service metadata, version indexes, registration pages, catalog leaves,
 and lock-and-catalog-SHA-512-verified NUPKG bytes use the same cache and offline rules. A complete

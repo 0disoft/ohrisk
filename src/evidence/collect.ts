@@ -55,7 +55,7 @@ import {
   parsePyPiReleaseMetadata,
   pythonDistributionArchiveFormat
 } from "./pypi-package";
-import { collectTarballEvidence } from "./tarball";
+import { collectPubTarballEvidence, collectTarballEvidence } from "./tarball";
 import type { LicenseEvidence } from "./types";
 import { collectZipPackageEvidence } from "./zip-package";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
@@ -169,6 +169,7 @@ const MAX_ARTIFACT_REDIRECTS = 5;
 const DEFAULT_EVIDENCE_CONCURRENCY = 8;
 const PYPI_METADATA_HOSTS = new Set(["pypi.org"]);
 const PYPI_DISTRIBUTION_HOSTS = new Set(["files.pythonhosted.org"]);
+const PUB_DEV_ARCHIVE_HOSTS = new Set(["pub.dev"]);
 const NUGET_SERVICE_INDEX_URL = "https://api.nuget.org/v3/index.json";
 const NUGET_ORG_HOSTS = new Set(["api.nuget.org"]);
 const MAVEN_CENTRAL_BASE_URL = "https://repo.maven.apache.org/maven2";
@@ -659,6 +660,37 @@ async function collectNodeEvidence(input: {
       artifactCache: input.artifactCache,
       allowedHosts: input.allowedHosts,
       loadServiceIndex: input.loadNugetServiceIndex
+    });
+  }
+
+  if (input.node.ecosystem === "pub" && input.node.resolved) {
+    return collectRemoteTarballEvidence({
+      packageId: input.node.id,
+      resolved: input.node.resolved,
+      ...(input.node.integrity ? { integrity: input.node.integrity } : {}),
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      tarballMaxBytes: input.tarballMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      allowedHosts: input.allowedHosts,
+      permittedHosts: PUB_DEV_ARCHIVE_HOSTS,
+      urlError: {
+        code: "TARBALL_FETCH_FAILED",
+        message: "Dart pub package archive URL targets an unsupported or blocked host.",
+        resolveFailureMessage: "Failed to resolve the pub.dev package archive host.",
+        details: {
+          packageId: input.node.id,
+          resolved: safeUrlForErrorDetails(input.node.resolved)
+        }
+      },
+      collectEvidence: (tarball) => collectPubTarballEvidence({
+        packageId: input.node.id,
+        packageName: input.node.name,
+        version: input.node.version,
+        tarball
+      })
     });
   }
 
@@ -2555,6 +2587,8 @@ async function collectRemoteTarballEvidence(input: {
   offline: boolean;
   artifactCache: ArtifactCache | undefined;
   allowedHosts: ReadonlySet<string>;
+  permittedHosts?: ReadonlySet<string>;
+  collectEvidence?: (tarball: Buffer) => Result<LicenseEvidence, OhriskError>;
   urlError?: {
     code: "REGISTRY_METADATA_FETCH_FAILED" | "TARBALL_FETCH_FAILED";
     message: string;
@@ -2577,7 +2611,8 @@ async function collectRemoteTarballEvidence(input: {
     resolved: input.resolved,
     message: urlError.message,
     details: urlError.details,
-    allowedHosts: input.allowedHosts
+    allowedHosts: input.allowedHosts,
+    ...(input.permittedHosts ? { permittedHosts: input.permittedHosts } : {})
   });
   if (!urlValidation.ok) {
     return err(urlValidation.error);
@@ -2594,7 +2629,8 @@ async function collectRemoteTarballEvidence(input: {
         details: urlError.details,
         resolveArtifactHost: input.resolveArtifactHost,
         timeoutMs: input.fetchTimeoutMs,
-        allowedHosts: input.allowedHosts
+        allowedHosts: input.allowedHosts,
+        ...(input.permittedHosts ? { permittedHosts: input.permittedHosts } : {})
       });
       if (!preflight.ok) {
         return err(preflight.error);
@@ -2622,6 +2658,7 @@ async function collectRemoteTarballEvidence(input: {
       offline: input.offline,
       artifactCache: input.artifactCache,
       allowedHosts: input.allowedHosts,
+      ...(input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}),
       urlDetailKey: "resolved"
     });
 
@@ -2642,10 +2679,12 @@ async function collectRemoteTarballEvidence(input: {
       return err(verified.error);
     }
 
-    const evidence = collectTarballEvidence({
-      packageId: input.packageId,
-      tarball: tarball.value
-    });
+    const evidence = input.collectEvidence
+      ? input.collectEvidence(tarball.value)
+      : collectTarballEvidence({
+          packageId: input.packageId,
+          tarball: tarball.value
+        });
     if (!evidence.ok) {
       if (isPackageTarballTooLargeError(evidence.error)) {
         return ok(unavailableOversizedTarballEvidence(input.packageId));

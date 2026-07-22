@@ -3,6 +3,48 @@ import { describe, expect, test } from "bun:test";
 import { parsePubspecLockText } from "../src/graph/dart-pubspec-lock";
 
 describe("parsePubspecLockText", () => {
+  test("preserves exact pub.dev archive identity from modern hosted lock records", () => {
+    const sha256 = "ab".repeat(32);
+    const result = parsePubspecLockText([
+      "packages:",
+      "  risk_package:",
+      "    dependency: \"direct main\"",
+      "    description:",
+      "      name: risk_package",
+      `      sha256: ${sha256}`,
+      "      url: \"https://pub.dev\"",
+      "    source: hosted",
+      "    version: \"1.0.0+1\""
+    ].join("\n"));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.nodes[0]).toMatchObject({
+      id: "risk_package@1.0.0+1",
+      resolved: "https://pub.dev/api/archives/risk_package-1.0.0%2B1.tar.gz",
+      integrity: `sha256-${Buffer.from(sha256, "hex").toString("base64")}`
+    });
+  });
+
+  test("does not turn custom hosted registries into pub.dev downloads", () => {
+    const result = parsePubspecLockText([
+      "packages:",
+      "  private_package:",
+      "    dependency: \"direct main\"",
+      "    description:",
+      "      name: private_package",
+      `      sha256: ${"cd".repeat(32)}`,
+      "      url: \"https://packages.example.test\"",
+      "    source: hosted",
+      "    version: \"1.0.0\""
+    ].join("\n"));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.nodes[0]).not.toHaveProperty("resolved");
+    expect(result.value.nodes[0]).not.toHaveProperty("integrity");
+  });
+
   test("parses Dart pubspec.lock package entries", () => {
     const result = parsePubspecLockText(
       [

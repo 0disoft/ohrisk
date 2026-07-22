@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: b6cfa472cb461c0b4a053a924087341f863f086851dd6830e64f1d7229fa50cc
+// ohrisk-action-source-sha256: 52cfb7cd7e92761abaeb19cbb9690600a47ee03fe230a44407dd142f89506ccf
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -21695,6 +21695,7 @@ function unsupportedCycloneDxXmlDependencyError(lockfilePath, details) {
 
 // src/graph/dart-pubspec-lock.ts
 import path8 from "node:path";
+var PUB_DEV_ORIGIN = "https://pub.dev";
 function parsePubspecLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -21741,6 +21742,8 @@ function parsePubspecLockText(input, lockfilePath = "pubspec.lock") {
       name: record.name,
       version: record.version,
       ecosystem: "pub",
+      ...record.resolved ? { resolved: record.resolved } : {},
+      ...record.integrity ? { integrity: record.integrity } : {},
       dependencyType: record.dependencyType,
       direct: record.direct,
       paths: [[rootName, record.id]]
@@ -21771,12 +21774,14 @@ function readPubPackageRecords(parsed, lockfilePath) {
       return pubPackageParseError(lockfilePath, packageName);
     }
     const dependency = typeof value.dependency === "string" ? value.dependency.toLowerCase() : "";
+    const remoteArtifact = source === "hosted" ? readPubDevArtifact(value.description, packageName, value.version) : undefined;
     records.push({
       name: packageName,
       version: value.version,
       id: `${packageName}@${value.version}`,
       dependencyType: dependencyTypeForPubDependency(dependency),
-      direct: dependency.startsWith("direct")
+      direct: dependency.startsWith("direct"),
+      ...remoteArtifact ?? {}
     });
   }
   if (records.length === 0) {
@@ -21790,6 +21795,21 @@ function readPubPackageRecords(parsed, lockfilePath) {
     }));
   }
   return ok(deduplicatePubRecords(records));
+}
+function readPubDevArtifact(description, packageName, version) {
+  if (!isRecord5(description)) {
+    return;
+  }
+  const describedName = typeof description.name === "string" ? description.name.trim() : undefined;
+  const sourceUrl = typeof description.url === "string" ? description.url.replace(/\/+$/u, "") : undefined;
+  const sha256 = typeof description.sha256 === "string" ? description.sha256.trim().toLowerCase() : undefined;
+  if (describedName !== packageName || sourceUrl !== PUB_DEV_ORIGIN || !sha256 || !/^[0-9a-f]{64}$/u.test(sha256)) {
+    return;
+  }
+  return {
+    resolved: `${PUB_DEV_ORIGIN}/api/archives/${encodeURIComponent(packageName)}-${encodeURIComponent(version)}.tar.gz`,
+    integrity: `sha256-${Buffer.from(sha256, "hex").toString("base64")}`
+  };
 }
 function dependencyTypeForPubDependency(dependency) {
   if (dependency === "direct dev") {
@@ -25548,7 +25568,10 @@ function readMavenProjectModules(input) {
       moduleState: input.moduleState,
       depth: input.depth + 1,
       ancestry: [...input.ancestry, rootName],
-      declaredModuleParent: model.value
+      declaredModuleParent: {
+        model: model.value,
+        pomPath: input.pomPath
+      }
     });
     if (!parsedChild.ok) {
       return parsedChild;
@@ -25745,8 +25768,12 @@ function readMavenPomModel(text3, pomPath, context, depth, declaredModuleParent)
   });
 }
 function readMavenParentModel(text3, pomPath, context, depth, declaredModuleParent) {
-  if (declaredModuleParent && matchesDeclaredMavenParent(text3, declaredModuleParent)) {
-    return ok(declaredModuleParent);
+  if (declaredModuleParent && (matchesDeclaredMavenParent(text3, declaredModuleParent.model) || relativePathTargetsDeclaredMavenParent({
+    text: text3,
+    pomPath,
+    parentPomPath: declaredModuleParent.pomPath
+  }))) {
+    return ok(declaredModuleParent.model);
   }
   const parent = readMavenParentCoordinates(text3);
   if (!parent) {
@@ -25754,12 +25781,37 @@ function readMavenParentModel(text3, pomPath, context, depth, declaredModulePare
   }
   return readExternalMavenPomModel(parent, pomPath, context, depth + 1);
 }
+function relativePathTargetsDeclaredMavenParent(input) {
+  const parentText = input.text.match(/<parent\b[^>]*>([\s\S]*?)<\/parent>/i)?.[1];
+  if (!parentText || /<relativePath\b[^>]*\/\s*>/i.test(parentText)) {
+    return false;
+  }
+  const relativePath = readXmlTagText2(parentText, "relativePath") ?? "../pom.xml";
+  if (path20.isAbsolute(relativePath) || path20.win32.isAbsolute(relativePath)) {
+    return false;
+  }
+  const resolvedParentPom = path20.resolve(path20.dirname(input.pomPath), relativePath);
+  if (comparableFilesystemPath(resolvedParentPom) === comparableFilesystemPath(input.parentPomPath)) {
+    return true;
+  }
+  const expectedRelativePath = path20.relative(path20.dirname(input.pomPath), input.parentPomPath);
+  return comparableMavenRelativePath(relativePath) === comparableMavenRelativePath(expectedRelativePath);
+}
+function comparableFilesystemPath(value) {
+  const resolved = path20.resolve(value);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+function comparableMavenRelativePath(value) {
+  const normalized = path20.posix.normalize(value.replace(/\\/g, "/"));
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
 function matchesDeclaredMavenParent(text3, candidate) {
   const parentText = text3.match(/<parent\b[^>]*>([\s\S]*?)<\/parent>/i)?.[1];
   if (!parentText || !candidate.rootName) {
     return false;
   }
-  const artifactId = readXmlTagText2(parentText, "artifactId");
+  const rawArtifactId = readXmlTagText2(parentText, "artifactId");
+  const artifactId = rawArtifactId ? resolveMavenExpression(rawArtifactId, candidate.properties) : undefined;
   if (artifactId !== candidate.rootName) {
     return false;
   }
@@ -25816,11 +25868,17 @@ function readExternalMavenPomModel(coordinates, pomPath, context, depth, usage =
   }
   context.visitedExternalPoms.add(visitedKey);
   try {
+    const missingExternalPomCountBeforeParse = context.missingExternalPoms.length;
     const model = readMavenPomModel(stripUnsupportedMavenSections(externalPom.value), externalPomPath ?? externalPomDocument.source, context, depth);
     if (!model.ok || externalPomPath) {
       return model;
     }
+    const identityIsIncomplete = !model.value.groupId || !model.value.rootName || !model.value.version;
+    const discoveredAdditionalParentOrBom = context.missingExternalPoms.length > missingExternalPomCountBeforeParse;
     if (model.value.groupId !== coordinates.groupId || model.value.rootName !== coordinates.artifactId || model.value.version !== coordinates.version) {
+      if (identityIsIncomplete && discoveredAdditionalParentOrBom) {
+        return model;
+      }
       return err(createError({
         code: "MAVEN_POM_PARSE_FAILED",
         category: "unsupported_input",
@@ -25866,7 +25924,8 @@ function readMavenPomProject(text3, parent) {
     properties.set(key, value);
   }
   const groupId = readXmlTagText2(projectCoordinatesText, "groupId") ?? parent?.groupId;
-  const artifactId = readXmlTagText2(projectCoordinatesText, "artifactId");
+  const rawArtifactId = readXmlTagText2(projectCoordinatesText, "artifactId");
+  const artifactId = rawArtifactId ? resolveMavenExpression(rawArtifactId, properties) : undefined;
   const rawVersion = readXmlTagText2(projectCoordinatesText, "version");
   const version = rawVersion ? resolveMavenExpression(rawVersion, properties) : parent?.version;
   if (groupId) {
@@ -25897,8 +25956,10 @@ function readMavenPomDependencies(text3, model, pomPath, context) {
     const dependencyBlocks = section[1]?.matchAll(/<dependency\b[^>]*>([\s\S]*?)<\/dependency>/gi) ?? [];
     for (const block of dependencyBlocks) {
       const dependencyText = block[1] ?? "";
-      const groupId = readXmlTagText2(dependencyText, "groupId");
-      const artifactId = readXmlTagText2(dependencyText, "artifactId");
+      const rawGroupId = readXmlTagText2(dependencyText, "groupId");
+      const rawArtifactId = readXmlTagText2(dependencyText, "artifactId");
+      const groupId = rawGroupId ? resolveMavenExpression(rawGroupId, model.properties) : undefined;
+      const artifactId = rawArtifactId ? resolveMavenExpression(rawArtifactId, model.properties) : undefined;
       const rawVersion = readXmlTagText2(dependencyText, "version");
       if (!groupId || !artifactId) {
         return err(createError({
@@ -25966,8 +26027,10 @@ function readMavenDependencyManagementVersions(text3, properties, pomPath, conte
     const dependencyBlocks = section[1]?.matchAll(/<dependency\b[^>]*>([\s\S]*?)<\/dependency>/gi) ?? [];
     for (const block of dependencyBlocks) {
       const dependencyText = block[1] ?? "";
-      const groupId = readXmlTagText2(dependencyText, "groupId");
-      const artifactId = readXmlTagText2(dependencyText, "artifactId");
+      const rawGroupId = readXmlTagText2(dependencyText, "groupId");
+      const rawArtifactId = readXmlTagText2(dependencyText, "artifactId");
+      const groupId = rawGroupId ? resolveMavenExpression(rawGroupId, properties) : undefined;
+      const artifactId = rawArtifactId ? resolveMavenExpression(rawArtifactId, properties) : undefined;
       const rawVersion = readXmlTagText2(dependencyText, "version");
       const type = readXmlTagText2(dependencyText, "type")?.toLowerCase();
       const scope = readXmlTagText2(dependencyText, "scope")?.toLowerCase();
@@ -26012,7 +26075,7 @@ function stripXmlSections(text3, tags) {
   return tags.reduce((current, tag) => stripXmlSection(current, tag), text3);
 }
 function stripXmlSection(text3, tag) {
-  return text3.replace(new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?<\\/${tag}>`, "gi"), "");
+  return text3.replace(new RegExp(`<${tag}(?=[\\s>])[^>]*>[\\s\\S]*?<\\/${tag}>`, "gi"), "");
 }
 function readPomProperties(text3) {
   const properties = new Map;
@@ -46892,6 +46955,74 @@ function collectTarballEvidence(input) {
     }));
   }
 }
+function collectPubTarballEvidence(input) {
+  const unpacked = gunzipTarballWithLimit({
+    packageId: input.packageId,
+    tarball: input.tarball,
+    maxBytes: input.unpackedMaxBytes ?? PACKAGE_TARBALL_UNPACKED_MAX_BYTES
+  });
+  if (!unpacked.ok) {
+    return err(unpacked.error);
+  }
+  try {
+    const entries = parseTarEntries2({
+      tarball: unpacked.value,
+      maxEntries: input.maxEntries ?? PACKAGE_TARBALL_MAX_ENTRIES
+    });
+    const packageRoot = findMetadataRoot(entries, "pubspec.yaml");
+    const pubspecEntry = packageRoot === undefined ? undefined : entries.find((entry) => normalizePackagePath(entry.path, packageRoot) === "pubspec.yaml");
+    if (packageRoot === undefined || !pubspecEntry) {
+      return err(createError({
+        code: "TARBALL_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Dart pub package archive is missing a unique root pubspec.yaml.",
+        details: { packageId: input.packageId }
+      }));
+    }
+    const pubspec = readPubArchivePubspec({
+      packageId: input.packageId,
+      data: pubspecEntry.data
+    });
+    if (!pubspec.ok) {
+      return pubspec;
+    }
+    if (pubspec.value.name !== input.packageName || pubspec.value.version !== input.version) {
+      return err(createError({
+        code: "TARBALL_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Dart pub package archive did not match the locked package identity.",
+        details: {
+          packageId: input.packageId,
+          expectedName: input.packageName,
+          expectedVersion: input.version,
+          metadataName: pubspec.value.name,
+          metadataVersion: pubspec.value.version
+        }
+      }));
+    }
+    const files = collectTarEvidenceFiles(entries, packageRoot);
+    return ok({
+      packageId: input.packageId,
+      ...pubspec.value.license ? {
+        metadataLicense: pubspec.value.license,
+        metadataSource: "pubspec.yaml"
+      } : {},
+      files,
+      source: "tarball",
+      warnings: files.length === 0 ? ["No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Dart pub package archive."] : []
+    });
+  } catch (cause) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse Dart pub package archive evidence.",
+      details: {
+        packageId: input.packageId,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
 function gunzipTarballWithLimit(input) {
   try {
     return ok(gunzipSync3(input.tarball, { maxOutputLength: input.maxBytes }));
@@ -46920,6 +47051,31 @@ function readPackageJson2(input) {
       code: "PACKAGE_JSON_PARSE_FAILED",
       category: "unsupported_input",
       message: "Failed to parse package.json from package tarball.",
+      details: {
+        packageId: input.packageId,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
+function readPubArchivePubspec(input) {
+  try {
+    const parsed = $parse(input.data.toString("utf8"));
+    if (!isObjectRecord7(parsed)) {
+      throw new Error("Expected pubspec.yaml to contain an object.");
+    }
+    const name = typeof parsed.name === "string" ? parsed.name.trim() : "";
+    const version = typeof parsed.version === "string" ? parsed.version.trim() : "";
+    if (name === "" || version === "") {
+      throw new Error("Expected pubspec.yaml to declare name and version.");
+    }
+    const license = typeof parsed.license === "string" && parsed.license.trim() !== "" ? parsed.license.trim() : undefined;
+    return ok({ name, version, ...license ? { license } : {} });
+  } catch (cause) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse pubspec.yaml from Dart pub package archive.",
       details: {
         packageId: input.packageId,
         cause: cause instanceof Error ? cause.message : String(cause)
@@ -46974,6 +47130,16 @@ function findPackageRoot(entries) {
     return "package";
   }
   return roots[0];
+}
+function findMetadataRoot(entries, filename) {
+  if (entries.some((entry) => entry.path === filename)) {
+    return "";
+  }
+  const roots = [...new Set(entries.map((entry) => {
+    const separator = entry.path.indexOf("/");
+    return separator > 0 && entry.path.slice(separator + 1) === filename ? entry.path.slice(0, separator) : undefined;
+  }).filter((root) => root !== undefined))];
+  return roots.length === 1 ? roots[0] : undefined;
 }
 function collectTarEvidenceFiles(entries, packageRoot) {
   return entries.map((entry) => {
@@ -47348,6 +47514,7 @@ var MAX_ARTIFACT_REDIRECTS = 5;
 var DEFAULT_EVIDENCE_CONCURRENCY = 8;
 var PYPI_METADATA_HOSTS = new Set(["pypi.org"]);
 var PYPI_DISTRIBUTION_HOSTS = new Set(["files.pythonhosted.org"]);
+var PUB_DEV_ARCHIVE_HOSTS = new Set(["pub.dev"]);
 var NUGET_SERVICE_INDEX_URL = "https://api.nuget.org/v3/index.json";
 var NUGET_ORG_HOSTS = new Set(["api.nuget.org"]);
 var MAVEN_CENTRAL_BASE_URL = "https://repo.maven.apache.org/maven2";
@@ -47711,6 +47878,36 @@ async function collectNodeEvidence(input) {
       artifactCache: input.artifactCache,
       allowedHosts: input.allowedHosts,
       loadServiceIndex: input.loadNugetServiceIndex
+    });
+  }
+  if (input.node.ecosystem === "pub" && input.node.resolved) {
+    return collectRemoteTarballEvidence({
+      packageId: input.node.id,
+      resolved: input.node.resolved,
+      ...input.node.integrity ? { integrity: input.node.integrity } : {},
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      tarballMaxBytes: input.tarballMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      allowedHosts: input.allowedHosts,
+      permittedHosts: PUB_DEV_ARCHIVE_HOSTS,
+      urlError: {
+        code: "TARBALL_FETCH_FAILED",
+        message: "Dart pub package archive URL targets an unsupported or blocked host.",
+        resolveFailureMessage: "Failed to resolve the pub.dev package archive host.",
+        details: {
+          packageId: input.node.id,
+          resolved: safeUrlForErrorDetails(input.node.resolved)
+        }
+      },
+      collectEvidence: (tarball) => collectPubTarballEvidence({
+        packageId: input.node.id,
+        packageName: input.node.name,
+        version: input.node.version,
+        tarball
+      })
     });
   }
   if (input.node.ecosystem === "npm" && shouldCollectNpmRegistryEvidence({
@@ -49187,7 +49384,8 @@ async function collectRemoteTarballEvidence(input) {
     resolved: input.resolved,
     message: urlError.message,
     details: urlError.details,
-    allowedHosts: input.allowedHosts
+    allowedHosts: input.allowedHosts,
+    ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
   });
   if (!urlValidation.ok) {
     return err(urlValidation.error);
@@ -49203,7 +49401,8 @@ async function collectRemoteTarballEvidence(input) {
         details: urlError.details,
         resolveArtifactHost: input.resolveArtifactHost,
         timeoutMs: input.fetchTimeoutMs,
-        allowedHosts: input.allowedHosts
+        allowedHosts: input.allowedHosts,
+        ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
       });
       if (!preflight.ok) {
         return err(preflight.error);
@@ -49230,6 +49429,7 @@ async function collectRemoteTarballEvidence(input) {
       offline: input.offline,
       artifactCache: input.artifactCache,
       allowedHosts: input.allowedHosts,
+      ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {},
       urlDetailKey: "resolved"
     });
     if (!tarball.ok) {
@@ -49247,7 +49447,7 @@ async function collectRemoteTarballEvidence(input) {
     if (!verified.ok) {
       return err(verified.error);
     }
-    const evidence = collectTarballEvidence({
+    const evidence = input.collectEvidence ? input.collectEvidence(tarball.value) : collectTarballEvidence({
       packageId: input.packageId,
       tarball: tarball.value
     });

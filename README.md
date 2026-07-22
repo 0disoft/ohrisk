@@ -195,7 +195,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - Haskell Stack `stack.yaml.lock` projects are scanned for completed Hackage package pins; local Stack package database license metadata is used when present, while snapshot package expansion, git/path extra-deps, direct/transitive graph reconstruction, and Hackage metadata fetch are not scanned yet
 - Perl Carton `cpanfile.snapshot` projects are scanned for Carton snapshot v1 distribution pins and dependency paths inferred from `provides` and `requirements`; local Carton cache archive `META.json` or `META.yml` license metadata is used when present, while MetaCPAN artifact fetch is not scanned yet
 - LuaRocks `luarocks.lock` projects are scanned for literal `dependencies` table package pins; local `.rockspec` files in the project root or local rocks tree are used for literal string or string-table license metadata when present, while dependency graph reconstruction and LuaRocks metadata fetch are not scanned yet
-- Dart and Flutter `pubspec.lock` projects are scanned for concrete Pub package versions recorded in the lockfile
+- Dart and Flutter `pubspec.lock` projects are scanned for concrete Pub package versions recorded in the lockfile; modern pub.dev hosted records retain their archive SHA-256 for verified remote evidence, while custom registries and Git/path sources remain local-only
 - Swift Package Manager `Package.resolved` projects are scanned for pinned packages with resolved versions, revisions, or branches; Package.resolved does not expose parent dependency graphs, so packages are reported as root-level pins with unknown dependency type
 - Carthage `Cartfile.resolved` projects are scanned for resolved GitHub, git, and binary pins; Cartfile.resolved does not expose parent dependency graphs, so packages are reported as root-level pins with unknown dependency type
 - CocoaPods `Podfile.lock` projects are scanned for resolved pods; subspecs are collapsed to their root pod identity and dependency type is reported as unknown because Podfile.lock does not encode production/development groups
@@ -231,7 +231,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - local Julia depot `Project.toml` metadata and license file evidence before unavailable fallback for `Manifest.toml` packages
 - local Stack `.stack-work/install` package database metadata before unavailable fallback for Hackage packages
 - local Carton cache archive `META.json` or `META.yml` metadata before unavailable fallback for CPAN distributions
-- local Dart Pub cache package source evidence before unavailable fallback for `pubspec.lock` packages
+- local Dart Pub cache package source evidence before exact pub.dev fallback for modern hosted `pubspec.lock` records; remote archives are trusted only after the lockfile SHA-256 and `pubspec.yaml` package identity match
 - local SwiftPM `.build/checkouts` and Xcode `SourcePackages/checkouts` package source evidence before unavailable fallback for `Package.resolved` packages
 - local Carthage `Carthage/Checkouts` package source evidence before unavailable fallback for `Cartfile.resolved` packages
 - local CocoaPods `Pods/<pod>` source and `Pods/Local Podspecs/<pod>.podspec.json` evidence before unavailable fallback for `Podfile.lock` packages
@@ -305,7 +305,7 @@ vcpkg feature/platform selection reconstruction, remote vcpkg registry metadata 
 Carthage parent graph reconstruction, remote Swift package checkout fetching,
 Carthage remote checkout or binary framework license fetching, CocoaPods remote podspec or source
 fetching, Mix and Rebar3 dependency graph reconstruction, Rebar3 git/path deps, Rebar3 plugin locks, remote Hex.pm artifact fetching,
-Composer plugin/platform repository resolution, alternate Cargo registries and Cargo Git/path source fetching, arbitrary or private Go proxies, Maven source archives or JARs without a same-repository SHA-256 sidecar and embedded exact identity, private or alternate NuGet feeds, pub.dev, RubyGems, or Packagist artifact
+Composer plugin/platform repository resolution, alternate Cargo registries and Cargo Git/path source fetching, arbitrary or private Go proxies, Maven source archives or JARs without a same-repository SHA-256 sidecar and embedded exact identity, private or alternate NuGet feeds, custom Dart Pub registries and Dart Git/path sources, RubyGems, or Packagist artifact
 fetching are not part of this slice yet.
 
 ## Usage

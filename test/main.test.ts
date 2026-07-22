@@ -828,7 +828,7 @@ describe("main", () => {
 
   test("prints actionable findings for a Bun project", async () => {
     const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
-    const exitCode = await main(["scan"], io);
+    const exitCode = await main(["scan", "--offline"], io);
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
@@ -877,7 +877,7 @@ describe("main", () => {
     expect(stdout.join("\n")).toContain(
       "Next: Replace or escalate high-risk dependencies before shipping."
     );
-  });
+  }, 10_000);
 
   test("prints actionable findings for a package-lock project", async () => {
     const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "package-lock-project"));

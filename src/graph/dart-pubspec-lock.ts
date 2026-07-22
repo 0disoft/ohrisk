@@ -17,7 +17,11 @@ type PubPackageRecord = {
   id: string;
   dependencyType: DependencyType;
   direct: boolean;
+  resolved?: string;
+  integrity?: string;
 };
+
+const PUB_DEV_ORIGIN = "https://pub.dev";
 
 export function parsePubspecLockfile(
   lockfilePath: string,
@@ -83,6 +87,8 @@ export function parsePubspecLockText(
         name: record.name,
         version: record.version,
         ecosystem: "pub",
+        ...(record.resolved ? { resolved: record.resolved } : {}),
+        ...(record.integrity ? { integrity: record.integrity } : {}),
         dependencyType: record.dependencyType,
         direct: record.direct,
         paths: [[rootName, record.id]]
@@ -124,12 +130,16 @@ function readPubPackageRecords(
     }
 
     const dependency = typeof value.dependency === "string" ? value.dependency.toLowerCase() : "";
+    const remoteArtifact = source === "hosted"
+      ? readPubDevArtifact(value.description, packageName, value.version)
+      : undefined;
     records.push({
       name: packageName,
       version: value.version,
       id: `${packageName}@${value.version}`,
       dependencyType: dependencyTypeForPubDependency(dependency),
-      direct: dependency.startsWith("direct")
+      direct: dependency.startsWith("direct"),
+      ...(remoteArtifact ?? {})
     });
   }
 
@@ -147,6 +157,40 @@ function readPubPackageRecords(
   }
 
   return ok(deduplicatePubRecords(records));
+}
+
+function readPubDevArtifact(
+  description: unknown,
+  packageName: string,
+  version: string
+): Pick<PubPackageRecord, "resolved" | "integrity"> | undefined {
+  if (!isRecord(description)) {
+    return undefined;
+  }
+
+  const describedName = typeof description.name === "string"
+    ? description.name.trim()
+    : undefined;
+  const sourceUrl = typeof description.url === "string"
+    ? description.url.replace(/\/+$/u, "")
+    : undefined;
+  const sha256 = typeof description.sha256 === "string"
+    ? description.sha256.trim().toLowerCase()
+    : undefined;
+
+  if (
+    describedName !== packageName
+    || sourceUrl !== PUB_DEV_ORIGIN
+    || !sha256
+    || !/^[0-9a-f]{64}$/u.test(sha256)
+  ) {
+    return undefined;
+  }
+
+  return {
+    resolved: `${PUB_DEV_ORIGIN}/api/archives/${encodeURIComponent(packageName)}-${encodeURIComponent(version)}.tar.gz`,
+    integrity: `sha256-${Buffer.from(sha256, "hex").toString("base64")}`
+  };
 }
 
 function dependencyTypeForPubDependency(dependency: string): DependencyType {

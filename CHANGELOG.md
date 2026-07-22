@@ -2,6 +2,16 @@
 
 ## 1.13.0 - 2026-07-22
 
+- Added exact pub.dev archive evidence for modern `pubspec.lock` hosted records.
+  Ohrisk now uses the lockfile SHA-256 against the fixed pub.dev archive URL,
+  verifies the complete download and `pubspec.yaml` package identity, and reads
+  bounded root license files. Custom hosted registries, Git/path sources, and
+  hashless legacy lock records remain unavailable instead of being redirected
+  to pub.dev.
+- Resolved Maven property expressions in project, dependency, and
+  `dependencyManagement` coordinates. Large reactor builds such as Apache Spark
+  now match inherited managed versions under their concrete Scala artifact
+  names instead of reporting a missing version for the literal `${...}` name.
 - Added exact public nuget.org evidence after local NuGet cache lookup. Ohrisk
   discovers V3 endpoints from the service index, selects the normalized locked
   version, requires the selected dependency input SHA-512 to match the catalog

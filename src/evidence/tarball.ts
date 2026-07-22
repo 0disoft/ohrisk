@@ -1,4 +1,5 @@
 import { gunzipSync } from "node:zlib";
+import { parse as parseYaml } from "yaml";
 
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
@@ -87,6 +88,93 @@ export function collectTarballEvidence(input: {
   }
 }
 
+export function collectPubTarballEvidence(input: {
+  packageId: string;
+  packageName: string;
+  version: string;
+  tarball: Buffer | Uint8Array;
+  unpackedMaxBytes?: number;
+  maxEntries?: number;
+}): Result<LicenseEvidence, OhriskError> {
+  const unpacked = gunzipTarballWithLimit({
+    packageId: input.packageId,
+    tarball: input.tarball,
+    maxBytes: input.unpackedMaxBytes ?? PACKAGE_TARBALL_UNPACKED_MAX_BYTES
+  });
+  if (!unpacked.ok) {
+    return err(unpacked.error);
+  }
+
+  try {
+    const entries = parseTarEntries({
+      tarball: unpacked.value,
+      maxEntries: input.maxEntries ?? PACKAGE_TARBALL_MAX_ENTRIES
+    });
+    const packageRoot = findMetadataRoot(entries, "pubspec.yaml");
+    const pubspecEntry = packageRoot === undefined
+      ? undefined
+      : entries.find((entry) => normalizePackagePath(entry.path, packageRoot) === "pubspec.yaml");
+
+    if (packageRoot === undefined || !pubspecEntry) {
+      return err(createError({
+        code: "TARBALL_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Dart pub package archive is missing a unique root pubspec.yaml.",
+        details: { packageId: input.packageId }
+      }));
+    }
+
+    const pubspec = readPubArchivePubspec({
+      packageId: input.packageId,
+      data: pubspecEntry.data
+    });
+    if (!pubspec.ok) {
+      return pubspec;
+    }
+
+    if (pubspec.value.name !== input.packageName || pubspec.value.version !== input.version) {
+      return err(createError({
+        code: "TARBALL_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Dart pub package archive did not match the locked package identity.",
+        details: {
+          packageId: input.packageId,
+          expectedName: input.packageName,
+          expectedVersion: input.version,
+          metadataName: pubspec.value.name,
+          metadataVersion: pubspec.value.version
+        }
+      }));
+    }
+
+    const files = collectTarEvidenceFiles(entries, packageRoot);
+    return ok({
+      packageId: input.packageId,
+      ...(pubspec.value.license
+        ? {
+            metadataLicense: pubspec.value.license,
+            metadataSource: "pubspec.yaml"
+          }
+        : {}),
+      files,
+      source: "tarball",
+      warnings: files.length === 0
+        ? ["No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Dart pub package archive."]
+        : []
+    });
+  } catch (cause) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse Dart pub package archive evidence.",
+      details: {
+        packageId: input.packageId,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
+
 function gunzipTarballWithLimit(input: {
   packageId: string;
   tarball: Buffer | Uint8Array;
@@ -133,6 +221,39 @@ function readPackageJson(input: {
         }
       })
     );
+  }
+}
+
+function readPubArchivePubspec(input: {
+  packageId: string;
+  data: Buffer;
+}): Result<{ name: string; version: string; license?: string }, OhriskError> {
+  try {
+    const parsed = parseYaml(input.data.toString("utf8")) as unknown;
+    if (!isObjectRecord(parsed)) {
+      throw new Error("Expected pubspec.yaml to contain an object.");
+    }
+
+    const name = typeof parsed.name === "string" ? parsed.name.trim() : "";
+    const version = typeof parsed.version === "string" ? parsed.version.trim() : "";
+    if (name === "" || version === "") {
+      throw new Error("Expected pubspec.yaml to declare name and version.");
+    }
+
+    const license = typeof parsed.license === "string" && parsed.license.trim() !== ""
+      ? parsed.license.trim()
+      : undefined;
+    return ok({ name, version, ...(license ? { license } : {}) });
+  } catch (cause) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse pubspec.yaml from Dart pub package archive.",
+      details: {
+        packageId: input.packageId,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
   }
 }
 
@@ -201,6 +322,23 @@ function findPackageRoot(entries: TarEntry[]): string | undefined {
   }
 
   return roots[0];
+}
+
+function findMetadataRoot(entries: TarEntry[], filename: string): string | undefined {
+  if (entries.some((entry) => entry.path === filename)) {
+    return "";
+  }
+
+  const roots = [...new Set(entries
+    .map((entry) => {
+      const separator = entry.path.indexOf("/");
+      return separator > 0 && entry.path.slice(separator + 1) === filename
+        ? entry.path.slice(0, separator)
+        : undefined;
+    })
+    .filter((root): root is string => root !== undefined))];
+
+  return roots.length === 1 ? roots[0] : undefined;
 }
 
 function collectTarEvidenceFiles(entries: TarEntry[], packageRoot: string): LicenseEvidenceFile[] {

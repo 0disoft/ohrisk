@@ -264,6 +264,90 @@ describe("parseMavenPomText", () => {
     expect(result.value.nodes.map((node) => node.id)).not.toContain("com.hidden:managed-only@1.0.0");
   });
 
+  test("resolves property expressions in Maven dependency coordinates", () => {
+    const result = parseMavenPomText([
+      "<project>",
+      "  <groupId>org.apache.spark</groupId>",
+      "  <artifactId>spark-parent_${scala.binary.version}</artifactId>",
+      "  <version>5.0.0-SNAPSHOT</version>",
+      "  <properties><scala.binary.version>2.13</scala.binary.version></properties>",
+      "  <dependencyManagement>",
+      "    <dependencies>",
+      "      <dependency>",
+      "        <groupId>org.apache.spark</groupId>",
+      "        <artifactId>spark-tags_${scala.binary.version}</artifactId>",
+      "        <version>${project.version}</version>",
+      "      </dependency>",
+      "    </dependencies>",
+      "  </dependencyManagement>",
+      "  <dependencies>",
+      "    <dependency>",
+      "      <groupId>org.apache.spark</groupId>",
+      "      <artifactId>spark-tags_${scala.binary.version}</artifactId>",
+      "    </dependency>",
+      "  </dependencies>",
+      "</project>"
+    ].join("\n"));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.rootName).toBe("spark-parent_2.13");
+    expect(result.value.nodes).toContainEqual(expect.objectContaining({
+      id: "org.apache.spark:spark-tags_2.13@5.0.0-SNAPSHOT"
+    }));
+  });
+
+  test("inherits resolved coordinate properties in Maven reactor modules", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-maven-spark-module-"));
+    const moduleRoot = path.join(projectRoot, "common", "sketch");
+
+    try {
+      mkdirSync(moduleRoot, { recursive: true });
+      writeFileSync(path.join(projectRoot, "pom.xml"), [
+        "<project>",
+        "  <parent><groupId>org.apache</groupId><artifactId>apache</artifactId><version>34</version></parent>",
+        "  <groupId>org.apache.spark</groupId>",
+        "  <artifactId>spark-parent_2.13</artifactId>",
+        "  <version>5.0.0-SNAPSHOT</version>",
+        "  <modules><module>common/sketch</module></modules>",
+        "  <properties>",
+        "    <scala.binary.version>2.13</scala.binary.version>",
+        "    <build.testJarPhase>prepare-package</build.testJarPhase>",
+        "  </properties>",
+        "  <dependencyManagement><dependencies><dependency>",
+        "    <groupId>org.apache.spark</groupId>",
+        "    <artifactId>spark-tags_${scala.binary.version}</artifactId>",
+        "    <version>${project.version}</version>",
+        "  </dependency></dependencies></dependencyManagement>",
+        "</project>"
+      ].join("\n"), "utf8");
+      writeFileSync(path.join(moduleRoot, "pom.xml"), [
+        "<project>",
+        "  <parent>",
+        "    <groupId>org.apache.spark</groupId>",
+        "    <artifactId>spark-parent_2.13</artifactId>",
+        "    <version>5.0.0-SNAPSHOT</version>",
+        "    <relativePath>../../pom.xml</relativePath>",
+        "  </parent>",
+        "  <artifactId>spark-sketch_2.13</artifactId>",
+        "  <dependencies><dependency>",
+        "    <groupId>org.apache.spark</groupId>",
+        "    <artifactId>spark-tags_${scala.binary.version}</artifactId>",
+        "  </dependency></dependencies>",
+        "</project>"
+      ].join("\n"), "utf8");
+
+      const result = parseMavenPomFile(path.join(projectRoot, "pom.xml"));
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value.nodes).toContainEqual(expect.objectContaining({
+        id: "org.apache.spark:spark-tags_2.13@5.0.0-SNAPSHOT"
+      }));
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("resolves dependencyManagement versions from a local Maven parent POM", () => {
     const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-maven-parent-repo-"));
 
@@ -775,6 +859,54 @@ describe("parseMavenPomText", () => {
     expect(result.error).toMatchObject({
       code: "MAVEN_POM_PARSE_FAILED",
       details: { reason: "remote_maven_identity_mismatch" }
+    });
+  });
+
+  test("defers remote BOM identity until an inherited parent model is available", () => {
+    const result = parseMavenPomText(
+      [
+        "<project>",
+        "  <artifactId>fixture-maven</artifactId>",
+        "  <dependencyManagement><dependencies><dependency>",
+        "    <groupId>com.fasterxml.jackson</groupId>",
+        "    <artifactId>jackson-bom</artifactId>",
+        "    <version>2.22.0</version>",
+        "    <type>pom</type><scope>import</scope>",
+        "  </dependency></dependencies></dependencyManagement>",
+        "</project>"
+      ].join("\n"),
+      "pom.xml",
+      {
+        externalPoms: new Map([[
+          "com.fasterxml.jackson:jackson-bom@2.22.0",
+          {
+            source: "https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-bom/2.22.0/jackson-bom-2.22.0.pom",
+            text: [
+              "<project>",
+              "  <parent>",
+              "    <groupId>com.fasterxml.jackson</groupId>",
+              "    <artifactId>jackson-parent</artifactId>",
+              "    <version>2.22</version>",
+              "  </parent>",
+              "  <artifactId>jackson-bom</artifactId>",
+              "  <version>2.22.0</version>",
+              "</project>"
+            ].join("\n")
+          }
+        ]])
+      }
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected the missing remote parent to remain unresolved.");
+    expect(result.error).toMatchObject({
+      code: "MAVEN_POM_PARSE_FAILED",
+      details: {
+        reason: "missing_external_maven_model",
+        missingExternalPoms: [expect.objectContaining({
+          dependency: "com.fasterxml.jackson:jackson-parent@2.22"
+        })]
+      }
     });
   });
 

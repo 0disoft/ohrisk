@@ -96,6 +96,11 @@ type MavenModuleParseState = {
   parsedModuleCount: number;
 };
 
+type DeclaredMavenModuleParent = {
+  model: MavenPomModel;
+  pomPath: string;
+};
+
 const MAVEN_REPOSITORY_MAX_COUNT = 32;
 const MAVEN_REPOSITORY_URL_MAX_CHARS = 2_048;
 
@@ -209,7 +214,7 @@ function readMavenProjectModules(input: {
   moduleState: MavenModuleParseState;
   depth: number;
   ancestry: string[];
-  declaredModuleParent?: MavenPomModel;
+  declaredModuleParent?: DeclaredMavenModuleParent;
 }): Result<ParsedMavenModule[], OhriskError> {
   if (input.depth > input.moduleState.maxModuleDepth) {
     return err(createError({
@@ -336,7 +341,10 @@ function readMavenProjectModules(input: {
       moduleState: input.moduleState,
       depth: input.depth + 1,
       ancestry: [...input.ancestry, rootName],
-      declaredModuleParent: model.value
+      declaredModuleParent: {
+        model: model.value,
+        pomPath: input.pomPath
+      }
     });
     if (!parsedChild.ok) {
       return parsedChild;
@@ -569,7 +577,7 @@ function readMavenPomModel(
   pomPath: string,
   context: MavenPomParseContext,
   depth: number,
-  declaredModuleParent?: MavenPomModel
+  declaredModuleParent?: DeclaredMavenModuleParent
 ): Result<MavenPomModel, OhriskError> {
   if (depth > context.maxExternalPomDepth) {
     return err(
@@ -623,10 +631,20 @@ function readMavenParentModel(
   pomPath: string,
   context: MavenPomParseContext,
   depth: number,
-  declaredModuleParent?: MavenPomModel
+  declaredModuleParent?: DeclaredMavenModuleParent
 ): Result<MavenPomModel | undefined, OhriskError> {
-  if (declaredModuleParent && matchesDeclaredMavenParent(text, declaredModuleParent)) {
-    return ok(declaredModuleParent);
+  if (
+    declaredModuleParent
+    && (
+      matchesDeclaredMavenParent(text, declaredModuleParent.model)
+      || relativePathTargetsDeclaredMavenParent({
+        text,
+        pomPath,
+        parentPomPath: declaredModuleParent.pomPath
+      })
+    )
+  ) {
+    return ok(declaredModuleParent.model);
   }
 
   const parent = readMavenParentCoordinates(text);
@@ -637,13 +655,57 @@ function readMavenParentModel(
   return readExternalMavenPomModel(parent, pomPath, context, depth + 1);
 }
 
+function relativePathTargetsDeclaredMavenParent(input: {
+  text: string;
+  pomPath: string;
+  parentPomPath: string;
+}): boolean {
+  const parentText = input.text.match(/<parent\b[^>]*>([\s\S]*?)<\/parent>/i)?.[1];
+  if (!parentText || /<relativePath\b[^>]*\/\s*>/i.test(parentText)) {
+    return false;
+  }
+
+  const relativePath = readXmlTagText(parentText, "relativePath") ?? "../pom.xml";
+  if (path.isAbsolute(relativePath) || path.win32.isAbsolute(relativePath)) {
+    return false;
+  }
+
+  const resolvedParentPom = path.resolve(path.dirname(input.pomPath), relativePath);
+  if (
+    comparableFilesystemPath(resolvedParentPom)
+    === comparableFilesystemPath(input.parentPomPath)
+  ) {
+    return true;
+  }
+
+  const expectedRelativePath = path.relative(
+    path.dirname(input.pomPath),
+    input.parentPomPath
+  );
+  return comparableMavenRelativePath(relativePath)
+    === comparableMavenRelativePath(expectedRelativePath);
+}
+
+function comparableFilesystemPath(value: string): string {
+  const resolved = path.resolve(value);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+function comparableMavenRelativePath(value: string): string {
+  const normalized = path.posix.normalize(value.replace(/\\/g, "/"));
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
 function matchesDeclaredMavenParent(text: string, candidate: MavenPomModel): boolean {
   const parentText = text.match(/<parent\b[^>]*>([\s\S]*?)<\/parent>/i)?.[1];
   if (!parentText || !candidate.rootName) {
     return false;
   }
 
-  const artifactId = readXmlTagText(parentText, "artifactId");
+  const rawArtifactId = readXmlTagText(parentText, "artifactId");
+  const artifactId = rawArtifactId
+    ? resolveMavenExpression(rawArtifactId, candidate.properties)
+    : undefined;
   if (artifactId !== candidate.rootName) {
     return false;
   }
@@ -727,6 +789,7 @@ function readExternalMavenPomModel(
 
   context.visitedExternalPoms.add(visitedKey);
   try {
+    const missingExternalPomCountBeforeParse = context.missingExternalPoms.length;
     const model = readMavenPomModel(
       stripUnsupportedMavenSections(externalPom.value),
       externalPomPath ?? externalPomDocument!.source,
@@ -737,11 +800,20 @@ function readExternalMavenPomModel(
       return model;
     }
 
+    const identityIsIncomplete = !model.value.groupId
+      || !model.value.rootName
+      || !model.value.version;
+    const discoveredAdditionalParentOrBom = context.missingExternalPoms.length
+      > missingExternalPomCountBeforeParse;
     if (
       model.value.groupId !== coordinates.groupId
       || model.value.rootName !== coordinates.artifactId
       || model.value.version !== coordinates.version
     ) {
+      if (identityIsIncomplete && discoveredAdditionalParentOrBom) {
+        return model;
+      }
+
       return err(createError({
         code: "MAVEN_POM_PARSE_FAILED",
         category: "unsupported_input",
@@ -794,7 +866,10 @@ function readMavenPomProject(text: string, parent: MavenPomModel | undefined): M
   }
 
   const groupId = readXmlTagText(projectCoordinatesText, "groupId") ?? parent?.groupId;
-  const artifactId = readXmlTagText(projectCoordinatesText, "artifactId");
+  const rawArtifactId = readXmlTagText(projectCoordinatesText, "artifactId");
+  const artifactId = rawArtifactId
+    ? resolveMavenExpression(rawArtifactId, properties)
+    : undefined;
   const rawVersion = readXmlTagText(projectCoordinatesText, "version");
   const version = rawVersion
     ? resolveMavenExpression(rawVersion, properties)
@@ -836,8 +911,14 @@ function readMavenPomDependencies(
     const dependencyBlocks = section[1]?.matchAll(/<dependency\b[^>]*>([\s\S]*?)<\/dependency>/gi) ?? [];
     for (const block of dependencyBlocks) {
       const dependencyText = block[1] ?? "";
-      const groupId = readXmlTagText(dependencyText, "groupId");
-      const artifactId = readXmlTagText(dependencyText, "artifactId");
+      const rawGroupId = readXmlTagText(dependencyText, "groupId");
+      const rawArtifactId = readXmlTagText(dependencyText, "artifactId");
+      const groupId = rawGroupId
+        ? resolveMavenExpression(rawGroupId, model.properties)
+        : undefined;
+      const artifactId = rawArtifactId
+        ? resolveMavenExpression(rawArtifactId, model.properties)
+        : undefined;
       const rawVersion = readXmlTagText(dependencyText, "version");
 
       if (!groupId || !artifactId) {
@@ -929,8 +1010,14 @@ function readMavenDependencyManagementVersions(
     const dependencyBlocks = section[1]?.matchAll(/<dependency\b[^>]*>([\s\S]*?)<\/dependency>/gi) ?? [];
     for (const block of dependencyBlocks) {
       const dependencyText = block[1] ?? "";
-      const groupId = readXmlTagText(dependencyText, "groupId");
-      const artifactId = readXmlTagText(dependencyText, "artifactId");
+      const rawGroupId = readXmlTagText(dependencyText, "groupId");
+      const rawArtifactId = readXmlTagText(dependencyText, "artifactId");
+      const groupId = rawGroupId
+        ? resolveMavenExpression(rawGroupId, properties)
+        : undefined;
+      const artifactId = rawArtifactId
+        ? resolveMavenExpression(rawArtifactId, properties)
+        : undefined;
       const rawVersion = readXmlTagText(dependencyText, "version");
       const type = readXmlTagText(dependencyText, "type")?.toLowerCase();
       const scope = readXmlTagText(dependencyText, "scope")?.toLowerCase();
@@ -995,7 +1082,10 @@ function stripXmlSections(text: string, tags: string[]): string {
 }
 
 function stripXmlSection(text: string, tag: string): string {
-  return text.replace(new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?<\\/${tag}>`, "gi"), "");
+  return text.replace(
+    new RegExp(`<${tag}(?=[\\s>])[^>]*>[\\s\\S]*?<\\/${tag}>`, "gi"),
+    ""
+  );
 }
 
 function readPomProperties(text: string): Map<string, string> {

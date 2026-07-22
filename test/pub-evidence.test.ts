@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
 
 import { collectPubPackageEvidence } from "../src/evidence/pub-package";
+import { collectGraphEvidence } from "../src/evidence/collect";
+import { createTarGz } from "./helpers/tar";
 
 describe("collectPubPackageEvidence", () => {
   test("reads license evidence from Dart package_config root URIs", () => {
@@ -117,4 +120,134 @@ describe("collectPubPackageEvidence", () => {
       rmSync(projectRoot, { recursive: true, force: true });
     }
   });
+
+  test("fetches hash-verified pub.dev archives and validates package identity", async () => {
+    const archive = createTarGz({
+      "pubspec.yaml": [
+        "name: risk_package",
+        "version: 1.0.0",
+        "license: Apache-2.0"
+      ].join("\n"),
+      "LICENSE": "Apache License\nVersion 2.0, January 2004\n"
+    });
+    const fetchedUrls: string[] = [];
+    const evidence = await collectGraphEvidence({
+      graph: pubGraph({
+        resolved: "https://pub.dev/api/archives/risk_package-1.0.0.tar.gz",
+        integrity: sha256Integrity(archive)
+      }),
+      projectRoot: ".",
+      allowLocalProjectEvidence: false,
+      resolveArtifactHost: async () => [{ address: "1.1.1.1", family: 4 }],
+      fetchArtifact: async (url) => {
+        fetchedUrls.push(url);
+        return artifactResponse(archive, url);
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) throw new Error(evidence.error.message);
+    expect(fetchedUrls).toEqual([
+      "https://pub.dev/api/archives/risk_package-1.0.0.tar.gz"
+    ]);
+    expect(evidence.value[0]).toMatchObject({
+      packageId: "risk_package@1.0.0",
+      metadataLicense: "Apache-2.0",
+      metadataSource: "pubspec.yaml",
+      source: "tarball",
+      warnings: []
+    });
+    expect(evidence.value[0]?.files.map((file) => file.path)).toEqual(["LICENSE"]);
+  });
+
+  test("fails closed when a pub.dev archive digest does not match the lockfile", async () => {
+    const archive = createTarGz({
+      "pubspec.yaml": "name: risk_package\nversion: 1.0.0\n",
+      "LICENSE": "MIT License\n"
+    });
+    const evidence = await collectGraphEvidence({
+      graph: pubGraph({
+        resolved: "https://pub.dev/api/archives/risk_package-1.0.0.tar.gz",
+        integrity: `sha256-${Buffer.alloc(32).toString("base64")}`
+      }),
+      projectRoot: ".",
+      allowLocalProjectEvidence: false,
+      resolveArtifactHost: async () => [{ address: "1.1.1.1", family: 4 }],
+      fetchArtifact: async (url) => artifactResponse(archive, url)
+    });
+
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) throw new Error("Expected pub.dev integrity mismatch.");
+    expect(evidence.error.code).toBe("PACKAGE_INTEGRITY_CHECK_FAILED");
+  });
+
+  test("blocks private pub.dev DNS answers before fetching", async () => {
+    let fetchCount = 0;
+    const evidence = await collectGraphEvidence({
+      graph: pubGraph({
+        resolved: "https://pub.dev/api/archives/risk_package-1.0.0.tar.gz",
+        integrity: `sha256-${Buffer.alloc(32).toString("base64")}`
+      }),
+      projectRoot: ".",
+      allowLocalProjectEvidence: false,
+      resolveArtifactHost: async () => [{ address: "10.0.0.8", family: 4 }],
+      fetchArtifact: async (url) => {
+        fetchCount += 1;
+        return artifactResponse(Buffer.alloc(0), url);
+      }
+    });
+
+    expect(fetchCount).toBe(0);
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) throw new Error("Expected private pub.dev address rejection.");
+    expect(evidence.error).toMatchObject({
+      code: "TARBALL_FETCH_FAILED",
+      details: { artifactHost: "pub.dev", reason: "private_ipv4" }
+    });
+  });
 });
+
+function pubGraph(input: { resolved: string; integrity: string }) {
+  return {
+    lockfilePath: "pubspec.lock",
+    nodes: [{
+      id: "risk_package@1.0.0",
+      name: "risk_package",
+      version: "1.0.0",
+      ecosystem: "pub" as const,
+      resolved: input.resolved,
+      integrity: input.integrity,
+      dependencyType: "production" as const,
+      direct: true,
+      paths: [["root", "risk_package@1.0.0"]]
+    }]
+  };
+}
+
+function sha256Integrity(bytes: Buffer): string {
+  return `sha256-${createHash("sha256").update(bytes).digest("base64")}`;
+}
+
+function artifactResponse(bytes: Buffer, url: string) {
+  return {
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    url,
+    headers: {
+      get: (name: string) => name.toLowerCase() === "content-length"
+        ? String(bytes.length)
+        : null
+    },
+    body: new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      }
+    }),
+    arrayBuffer: async () => bytes.buffer.slice(
+      bytes.byteOffset,
+      bytes.byteOffset + bytes.byteLength
+    ) as ArrayBuffer
+  };
+}
