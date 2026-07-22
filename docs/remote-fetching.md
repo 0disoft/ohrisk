@@ -37,6 +37,11 @@ Remote fetching is limited to these explicit adapters:
   endpoint when `Cargo.lock` supplies the crate SHA-256 checksum; Cargo.toml
   identity and package-root license files are trusted only after the complete
   archive checksum matches.
+- exact public nuget.org packages selected through the V3 service index,
+  flat-container version index, registration metadata, and catalog leaf, only
+  when the selected dependency input contains the package SHA-512; the NUPKG is
+  trusted only after the lock and catalog digests, byte size, package identity,
+  structurally parsed nuspec identity, and bounded ZIP structure all match.
 
 The repository adapter accepts only `github.com` owner/repository URLs, disables
 credential prompts, submodule fetching, and symlink checkout, rejects non-portable or
@@ -175,6 +180,19 @@ match the requested artifact identity; malformed XML, identity mismatches,
 parent cycles, unsafe parent coordinates, excessive parent depth, and oversized
 POMs fail closed.
 
+NuGet remote evidence starts only after local NuGet cache evidence is
+unavailable and only when `packages.lock.json` or `project.assets.json` preserves
+an exact package SHA-512. The service index, registration metadata, catalog leaf, and NUPKG
+must remain on the exact `api.nuget.org` HTTPS host and never receive npm
+registry credentials. The flat-container version index supplies the normalized
+exact version used in package URLs. Registration metadata must point to that
+same flat-container package, and the catalog package ID, version, SHA-512, and
+byte size must agree with the selected input before Ohrisk reads the root nuspec
+or license files. Hashless inputs such as `packages.config` and standalone
+project manifests remain unavailable rather than being substituted with a
+same-name public package. Private feeds, caller-selected NuGet endpoints,
+arbitrary license URLs, and cross-host redirects are not fetched.
+
 Filesystem `scan` and `ci` inputs may resolve at most 32 exact Maven Central
 parent or imported-BOM model POMs. Resolution reparses the project only after
 every requested document is present and identity-checked, and fails the scan if
@@ -220,6 +238,11 @@ conditional revalidation, offline stale-entry behavior, size ceiling, and LRU
 control as other remote artifacts. Offline cache misses remain unavailable and
 never trigger DNS or HTTP work.
 
+NuGet service metadata, version indexes, registration pages, catalog leaves,
+and lock-and-catalog-SHA-512-verified NUPKG bytes use the same cache and offline rules. A complete
+cached chain can reproduce package evidence offline; any missing link remains
+unavailable and cannot trigger DNS or HTTP work.
+
 Exact Maven Central model POMs use the same cache and offline rules. An offline
 filesystem `scan` or `ci` run may resolve parent/BOM versions from valid cached
 POM bytes, while a missing, corrupt, oversized, or identity-mismatched entry
@@ -247,11 +270,12 @@ resolver becomes unavailable evidence for one package instead of permanently
 consuming an evidence worker. The CLI exposes bounded `--timeout` and `--jobs`
 values; policy cannot expand hard safety ceilings.
 
-When a remote package artifact has supported lockfile integrity metadata, or an
-exact PyPI release response supplies its SHA-256 digest, Ohrisk verifies the
-downloaded bytes before trusting package evidence. Without supported integrity
-metadata, Ohrisk does not fetch or trust the artifact and records unavailable
-evidence with a warning.
+When a remote package artifact has supported lockfile integrity metadata, an
+exact PyPI release response supplies its SHA-256 digest, or a NuGet dependency
+input SHA-512 matches the nuget.org catalog SHA-512 and byte size, Ohrisk verifies the downloaded
+bytes before trusting package evidence. Without a supported integrity source,
+Ohrisk does not fetch or trust the artifact and records unavailable evidence
+with a warning.
 
 For Go, the integrity source is the exact module ZIP `h1` record in `go.sum`.
 Ohrisk computes the Go checksum over every sorted ZIP entry name and content,

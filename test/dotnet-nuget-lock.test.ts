@@ -10,6 +10,8 @@ import {
 
 describe("parseNugetLockText", () => {
   test("parses direct and transitive NuGet dependencies", () => {
+    const riskIntegrity = `sha512-${Buffer.alloc(64, 1).toString("base64")}`;
+    const transitiveIntegrity = `sha512-${Buffer.alloc(64, 2).toString("base64")}`;
     const result = parseNugetLockText(
       JSON.stringify({
         version: 1,
@@ -19,13 +21,15 @@ describe("parseNugetLockText", () => {
               type: "Direct",
               requested: "[1.0.0, )",
               resolved: "1.0.0",
+              contentHash: riskIntegrity,
               dependencies: {
                 "Transitive.Package": "2.0.0"
               }
             },
             "Transitive.Package": {
               type: "Transitive",
-              resolved: "2.0.0"
+              resolved: "2.0.0",
+              contentHash: transitiveIntegrity
             }
           }
         }
@@ -46,6 +50,7 @@ describe("parseNugetLockText", () => {
     expect(result.value.nodes.find((node) => node.id === "Risk.Package@1.0.0"))
       .toMatchObject({
         ecosystem: "nuget",
+        integrity: riskIntegrity,
         dependencyType: "production",
         direct: true,
         paths: [["fixture-dotnet", "Risk.Package@1.0.0"]]
@@ -53,6 +58,7 @@ describe("parseNugetLockText", () => {
     expect(result.value.nodes.find((node) => node.id === "Transitive.Package@2.0.0"))
       .toMatchObject({
         ecosystem: "nuget",
+        integrity: transitiveIntegrity,
         dependencyType: "production",
         direct: false,
         paths: [["fixture-dotnet", "Risk.Package@1.0.0", "Transitive.Package@2.0.0"]]
@@ -129,10 +135,37 @@ describe("parseNugetLockText", () => {
 
     expect(result.error.code).toBe("NUGET_LOCK_PARSE_FAILED");
   });
+
+  test("rejects malformed NuGet content hashes", () => {
+    const result = parseNugetLockText(
+      JSON.stringify({
+        version: 1,
+        dependencies: {
+          net8: {
+            "Risk.Package": {
+              type: "Direct",
+              resolved: "1.0.0",
+              contentHash: "sha512-not-base64"
+            }
+          }
+        }
+      }),
+      "packages.lock.json"
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected malformed NuGet content hash to fail.");
+    expect(result.error).toMatchObject({
+      code: "NUGET_LOCK_PARSE_FAILED",
+      details: { field: "contentHash", reason: "invalid_sha512" }
+    });
+  });
 });
 
 describe("parseNugetProjectAssetsText", () => {
   test("parses restored NuGet assets with direct and transitive dependencies", () => {
+    const riskIntegrity = `sha512-${Buffer.alloc(64, 3).toString("base64")}`;
+    const transitiveIntegrity = `sha512-${Buffer.alloc(64, 4).toString("base64")}`;
     const result = parseNugetProjectAssetsText(
       JSON.stringify({
         version: 3,
@@ -151,10 +184,12 @@ describe("parseNugetProjectAssetsText", () => {
         },
         libraries: {
           "Risk.Package/1.0.0": {
-            type: "package"
+            type: "package",
+            sha512: riskIntegrity
           },
           "Transitive.Package/2.0.0": {
-            type: "package"
+            type: "package",
+            sha512: transitiveIntegrity
           }
         },
         projectFileDependencyGroups: {
@@ -179,6 +214,7 @@ describe("parseNugetProjectAssetsText", () => {
     expect(result.value.nodes.find((node) => node.id === "Risk.Package@1.0.0"))
       .toMatchObject({
         ecosystem: "nuget",
+        integrity: riskIntegrity,
         dependencyType: "production",
         direct: true,
         paths: [["fixture-dotnet", "Risk.Package@1.0.0"]]
@@ -186,6 +222,7 @@ describe("parseNugetProjectAssetsText", () => {
     expect(result.value.nodes.find((node) => node.id === "Transitive.Package@2.0.0"))
       .toMatchObject({
         ecosystem: "nuget",
+        integrity: transitiveIntegrity,
         dependencyType: "production",
         direct: false,
         paths: [["fixture-dotnet", "Risk.Package@1.0.0", "Transitive.Package@2.0.0"]]

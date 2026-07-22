@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.13.0 - 2026-07-22
+
+- Added exact public nuget.org evidence after local NuGet cache lookup. Ohrisk
+  discovers V3 endpoints from the service index, selects the normalized locked
+  version, requires the selected dependency input SHA-512 to match the catalog
+  SHA-512, verifies that digest and byte size against the downloaded NUPKG,
+  checks package and structurally parsed nuspec identity, and reads bounded
+  license evidence. Inputs without a package hash, private feeds, arbitrary
+  license URLs, credentials, and cross-host redirects remain outside the adapter
+  boundary, while the complete metadata and package chain is reusable from the
+  artifact cache in offline mode.
+
 ## 1.12.2 - 2026-07-21
 
 - Skipped dependency-free `.csproj` files and orphaned `yarn.lock` files during

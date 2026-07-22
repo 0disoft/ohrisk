@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: e3d5608f45f73610c30dc1a43469b77c23000bab63242d84bc5087e78c565851
+// ohrisk-action-source-sha256: 8850d8bd75d87e416613ff6a5d2a7359b10117a915d7e9cc37b49f384b548a75
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -16476,7 +16476,7 @@ function acquireLiveStreamLease(stream) {
 }
 // src/cli/main.ts
 import { readdirSync as readdirSync32, realpathSync as realpathSync8, statSync as statSync34 } from "node:fs";
-import path83 from "node:path";
+import path84 from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // src/cli/args.ts
@@ -18538,7 +18538,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.12.2";
+var OHRISK_VERSION = "1.13.0";
 
 // src/archive/archive-project.ts
 import path46 from "node:path";
@@ -22564,17 +22564,37 @@ function parseNugetLockJson(input, lockfilePath) {
       if (typeof value.resolved !== "string" || value.resolved.trim() === "") {
         return nugetDependencyParseError(lockfilePath, targetName, packageName);
       }
+      const integrity = readNugetSha512Integrity(value.contentHash);
+      if (value.contentHash !== undefined && !integrity) {
+        return nugetIntegrityParseError({
+          code: "NUGET_LOCK_PARSE_FAILED",
+          lockfilePath,
+          packageName,
+          field: "contentHash"
+        });
+      }
       const record = {
         name: packageName,
         version: value.resolved,
         id: `${packageName}@${value.resolved}`,
         dependencyType: "production",
         direct: type === "direct",
+        ...integrity ? { integrity } : {},
         dependencies: readNugetDependencyNames(value.dependencies)
       };
       const existing = records.get(record.id);
+      if (existing?.integrity && record.integrity && existing.integrity !== record.integrity) {
+        return nugetIntegrityParseError({
+          code: "NUGET_LOCK_PARSE_FAILED",
+          lockfilePath,
+          packageName,
+          field: "contentHash",
+          reason: "conflicting_content_hashes"
+        });
+      }
       records.set(record.id, existing ? {
         ...existing,
+        ...existing.integrity ?? record.integrity ? { integrity: existing.integrity ?? record.integrity } : {},
         direct: existing.direct || record.direct,
         dependencyType: mergeDependencyType6(existing.dependencyType, record.dependencyType),
         dependencies: [...new Set([...existing.dependencies, ...record.dependencies])].sort()
@@ -22701,6 +22721,15 @@ function parseNugetProjectAssetsJson(input, assetsPath) {
         return nugetAssetsEntryParseError(assetsPath, packageKey);
       }
       const id = `${identity2.name}@${identity2.version}`;
+      const integrity = readNugetSha512Integrity(value.sha512);
+      if (value.sha512 !== undefined && !integrity) {
+        return nugetIntegrityParseError({
+          code: "NUGET_ASSETS_PARSE_FAILED",
+          lockfilePath: assetsPath,
+          packageName: identity2.name,
+          field: "sha512"
+        });
+      }
       if (!records.has(id)) {
         upsertNugetPackageRecord(records, {
           name: identity2.name,
@@ -22708,8 +22737,21 @@ function parseNugetProjectAssetsJson(input, assetsPath) {
           id,
           dependencyType: "production",
           direct: directNames.has(identity2.name.toLowerCase()),
+          ...integrity ? { integrity } : {},
           dependencies: []
         });
+      } else if (integrity) {
+        const existing = records.get(id);
+        if (existing.integrity && existing.integrity !== integrity) {
+          return nugetIntegrityParseError({
+            code: "NUGET_ASSETS_PARSE_FAILED",
+            lockfilePath: assetsPath,
+            packageName: identity2.name,
+            field: "sha512",
+            reason: "conflicting_content_hashes"
+          });
+        }
+        records.set(id, { ...existing, integrity });
       }
     }
   }
@@ -22895,6 +22937,7 @@ function upsertNugetPackageRecord(records, record) {
   const existing = records.get(record.id);
   records.set(record.id, existing ? {
     ...existing,
+    ...existing.integrity ?? record.integrity ? { integrity: existing.integrity ?? record.integrity } : {},
     direct: existing.direct || record.direct,
     dependencyType: mergeDependencyType6(existing.dependencyType, record.dependencyType),
     dependencies: [...new Set([...existing.dependencies, ...record.dependencies])].sort()
@@ -23071,6 +23114,7 @@ function walkNugetDependency(input) {
       name: input.record.name,
       version: input.record.version,
       ecosystem: "nuget",
+      ...input.record.integrity ? { integrity: input.record.integrity } : {},
       dependencyType: input.dependencyType,
       direct: input.direct,
       paths: [nextPath]
@@ -23116,6 +23160,30 @@ function nugetAssetsEntryParseError(assetsPath, packageKey) {
     details: {
       lockfilePath: assetsPath,
       packageKey
+    }
+  }));
+}
+function readNugetSha512Integrity(value) {
+  if (typeof value !== "string") {
+    return;
+  }
+  const encoded = value.startsWith("sha512-") ? value.slice("sha512-".length) : value;
+  if (!/^[A-Za-z0-9+/]+={0,2}$/u.test(encoded) || encoded.length % 4 !== 0) {
+    return;
+  }
+  const digest = Buffer.from(encoded, "base64");
+  return digest.length === 64 && digest.toString("base64") === encoded ? `sha512-${encoded}` : undefined;
+}
+function nugetIntegrityParseError(input) {
+  return err(createError({
+    code: input.code,
+    category: "unsupported_input",
+    message: `Failed to parse NuGet package integrity from ${input.field}.`,
+    details: {
+      lockfilePath: input.lockfilePath,
+      packageName: input.packageName,
+      field: input.field,
+      reason: input.reason ?? "invalid_sha512"
     }
   }));
 }
@@ -40217,7 +40285,7 @@ function cacheOperationError(message, rootDir, cause) {
 }
 
 // src/evidence/collect.ts
-import { createHash as createHash5, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
+import { createHash as createHash6, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import {
   closeSync as closeSync4,
@@ -40230,9 +40298,10 @@ import {
 } from "node:fs";
 import { request as httpsRequest } from "node:https";
 import { isIP as isIP2 } from "node:net";
-import path75 from "node:path";
+import path76 from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
+import { gunzipSync as gunzipSync4 } from "node:zlib";
 
 // src/evidence/cargo-crate.ts
 import { createHash as createHash3, timingSafeEqual } from "node:crypto";
@@ -43654,18 +43723,88 @@ function readNuspecMetadata(input) {
       }
     }));
   }
-  return ok(parseNuspecMetadata(text3.value));
+  return parseNuspecMetadata({
+    packageId: input.packageId,
+    text: text3.value
+  });
 }
-function parseNuspecMetadata(text3) {
-  const licenseMatch = text3.match(/<license\b([^>]*)>([\s\S]*?)<\/license>/i);
-  const license = licenseMatch?.[2] ? normalizeXmlText(licenseMatch[2]) : undefined;
-  const licenseType = licenseMatch?.[1]?.match(/\btype\s*=\s*"([^"]+)"/i)?.[1]?.toLowerCase();
-  const licenseUrl = text3.match(/<licenseUrl\b[^>]*>([\s\S]*?)<\/licenseUrl>/i)?.[1];
-  return {
-    ...license ? { license } : {},
+function parseNuspecMetadata(input) {
+  const document2 = parseXmlDocument(input.text, "<NuGet package nuspec>", (_path, cause) => err(createError({
+    code: "PACKAGE_EVIDENCE_READ_FAILED",
+    category: "unsupported_input",
+    message: "NuGet nuspec metadata was malformed.",
+    details: { packageId: input.packageId, cause }
+  })));
+  if (!document2.ok) {
+    return document2;
+  }
+  if (document2.value.name.toLowerCase() !== "package") {
+    return err(nuspecStructureError(input.packageId, "NuGet nuspec root element was not package.", {
+      reason: "nuspec_root_invalid"
+    }));
+  }
+  const metadataNodes = childNodesCaseInsensitive(document2.value, "metadata");
+  if (metadataNodes.length !== 1) {
+    return err(nuspecStructureError(input.packageId, "NuGet nuspec did not contain exactly one metadata element.", {
+      reason: metadataNodes.length === 0 ? "nuspec_metadata_missing" : "nuspec_metadata_ambiguous",
+      metadataCount: metadataNodes.length
+    }));
+  }
+  const metadata = metadataNodes[0];
+  const id = readUniqueChildText(metadata, "id", input.packageId);
+  if (!id.ok)
+    return id;
+  const version = readUniqueChildText(metadata, "version", input.packageId);
+  if (!version.ok)
+    return version;
+  const license = readUniqueChild(metadata, "license", input.packageId);
+  if (!license.ok)
+    return license;
+  const licenseUrl = readUniqueChildText(metadata, "licenseUrl", input.packageId);
+  if (!licenseUrl.ok)
+    return licenseUrl;
+  const licenseText = license.value?.text.trim();
+  const licenseType = readAttributeCaseInsensitive(license.value, "type")?.trim().toLowerCase();
+  return ok({
+    ...id.value ? { id: id.value } : {},
+    ...version.value ? { version: version.value } : {},
+    ...licenseText ? { license: licenseText } : {},
     ...licenseType ? { licenseType } : {},
-    ...licenseUrl ? { licenseUrl: normalizeXmlText(licenseUrl) } : {}
-  };
+    ...licenseUrl.value ? { licenseUrl: licenseUrl.value } : {}
+  });
+}
+function readUniqueChildText(parent, name, packageId) {
+  const child = readUniqueChild(parent, name, packageId);
+  return child.ok ? ok(child.value?.text.trim() || undefined) : child;
+}
+function readUniqueChild(parent, name, packageId) {
+  const children = childNodesCaseInsensitive(parent, name);
+  if (children.length > 1) {
+    return err(nuspecStructureError(packageId, `NuGet nuspec metadata contained duplicate ${name} elements.`, {
+      reason: "nuspec_metadata_element_ambiguous",
+      element: name,
+      count: children.length
+    }));
+  }
+  return ok(children[0]);
+}
+function childNodesCaseInsensitive(node, name) {
+  const normalized = name.toLowerCase();
+  return node.children.filter((child) => child.name.toLowerCase() === normalized);
+}
+function readAttributeCaseInsensitive(node, name) {
+  if (!node)
+    return;
+  const normalized = name.toLowerCase();
+  return Object.entries(node.attributes).find(([key]) => key.toLowerCase() === normalized)?.[1];
+}
+function nuspecStructureError(packageId, message, details) {
+  return createError({
+    code: "PACKAGE_EVIDENCE_READ_FAILED",
+    category: "unsupported_input",
+    message,
+    details: { packageId, ...details }
+  });
 }
 function readNugetEvidenceFiles(input) {
   const candidates = evidenceFileCandidates10(input.packageDir);
@@ -43723,12 +43862,6 @@ function evidenceFileCandidates10(dir) {
   } catch {
     return [];
   }
-}
-function normalizeXmlText(text3) {
-  return decodeXmlEntities2(text3.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
-}
-function decodeXmlEntities2(text3) {
-  return text3.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
 }
 function isReadableDirectory14(dir) {
   try {
@@ -45912,8 +46045,480 @@ function isPackageLicenseEvidencePath(filePath) {
   return segments.length === 2 && segments[0]?.toUpperCase() === "META-INF" && classifyEvidenceFile(segments[1] ?? "") !== undefined;
 }
 
-// src/evidence/pypi-package.ts
+// src/evidence/nuget-nupkg.ts
+import { createHash as createHash5, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
 import path74 from "node:path";
+
+// src/evidence/nuget-registry.ts
+var NUGET_ORG_HOST = "api.nuget.org";
+var SHA512_DIGEST_BYTES = 64;
+function parseNugetServiceIndex(input) {
+  const document2 = parseJsonRecord(input, "NuGet service index");
+  if (!document2.ok) {
+    return document2;
+  }
+  if (!Array.isArray(document2.value.resources)) {
+    return err(nugetMetadataError(input, "NuGet service index did not contain a resources array."));
+  }
+  const packageBaseUrl = findServiceResource(document2.value.resources, ["PackageBaseAddress/3.0.0"]);
+  const registrationsBaseUrl = findServiceResource(document2.value.resources, ["RegistrationsBaseUrl/3.6.0"]);
+  if (!packageBaseUrl || !registrationsBaseUrl) {
+    return err(nugetMetadataError(input, "NuGet service index did not expose the required V3 resources.", {
+      reason: "required_service_resource_missing"
+    }));
+  }
+  const packageBase = validateNugetOrgUrl(packageBaseUrl, "service_package_base", true);
+  const registrationsBase = validateNugetOrgUrl(registrationsBaseUrl, "service_registrations_base", true);
+  if (!packageBase.ok) {
+    return err(nugetMetadataError(input, packageBase.message, packageBase.details));
+  }
+  if (!registrationsBase.ok) {
+    return err(nugetMetadataError(input, registrationsBase.message, registrationsBase.details));
+  }
+  return ok({
+    packageBaseUrl: packageBase.url,
+    registrationsBaseUrl: registrationsBase.url
+  });
+}
+function parseNugetPackageVersions(input) {
+  const document2 = parseJsonRecord(input, "NuGet package version index");
+  if (!document2.ok) {
+    return document2;
+  }
+  if (!Array.isArray(document2.value.versions)) {
+    return err(nugetMetadataError(input, "NuGet package version index did not contain a versions array."));
+  }
+  const requested = normalizeNugetVersion(input.requestedVersion);
+  if (!requested) {
+    return err(nugetMetadataError(input, "NuGet dependency version was not a safe exact version.", {
+      reason: "unsafe_exact_version",
+      requestedVersion: input.requestedVersion
+    }));
+  }
+  const matches = document2.value.versions.filter((value) => typeof value === "string").filter((value) => normalizeNugetVersion(value) === requested);
+  const unique2 = [...new Set(matches)];
+  if (unique2.length !== 1) {
+    return err(nugetMetadataError(input, "NuGet package version index did not identify exactly one requested version.", {
+      reason: unique2.length === 0 ? "version_not_found" : "version_ambiguous",
+      requestedVersion: input.requestedVersion,
+      matchCount: unique2.length
+    }));
+  }
+  return ok(unique2[0]);
+}
+function parseNugetRegistrationIndex(input) {
+  const document2 = parseJsonRecord(input, "NuGet registration index");
+  if (!document2.ok) {
+    return document2;
+  }
+  if (!Array.isArray(document2.value.items)) {
+    return err(nugetMetadataError(input, "NuGet registration index did not contain registration pages."));
+  }
+  for (const page of document2.value.items) {
+    if (!isRecord25(page)) {
+      continue;
+    }
+    if (Array.isArray(page.items)) {
+      const leaf = findRegistrationLeaf(input, page.items);
+      if (!leaf.ok || leaf.value) {
+        return leaf.ok ? ok({ kind: "leaf", leaf: leaf.value }) : leaf;
+      }
+      continue;
+    }
+    if (!registrationPageContainsVersion(page, input.normalizedVersion)) {
+      continue;
+    }
+    const pageUrl = typeof page["@id"] === "string" ? page["@id"] : undefined;
+    const validated = pageUrl ? validateNugetOrgUrl(pageUrl, "registration_page", false) : { ok: false, message: "NuGet registration page did not include a safe URL.", details: { reason: "registration_page_url_missing" } };
+    if (!validated.ok) {
+      return err(nugetMetadataError(input, validated.message, validated.details));
+    }
+    return ok({ kind: "page", pageUrl: validated.url });
+  }
+  return err(nugetMetadataError(input, "NuGet registration index did not contain the requested package version.", {
+    reason: "registration_version_not_found",
+    normalizedVersion: input.normalizedVersion
+  }));
+}
+function parseNugetRegistrationPage(input) {
+  const document2 = parseJsonRecord(input, "NuGet registration page");
+  if (!document2.ok) {
+    return document2;
+  }
+  if (!Array.isArray(document2.value.items)) {
+    return err(nugetMetadataError(input, "NuGet registration page did not contain registration leaves."));
+  }
+  const leaf = findRegistrationLeaf(input, document2.value.items);
+  if (!leaf.ok) {
+    return leaf;
+  }
+  if (!leaf.value) {
+    return err(nugetMetadataError(input, "NuGet registration page did not contain the requested package version.", {
+      reason: "registration_version_not_found",
+      normalizedVersion: input.normalizedVersion
+    }));
+  }
+  return ok(leaf.value);
+}
+function parseNugetCatalogPackage(input) {
+  const document2 = parseJsonRecord(input, "NuGet catalog leaf");
+  if (!document2.ok) {
+    return document2;
+  }
+  const id = document2.value.id;
+  const version = document2.value.version;
+  const packageHash = document2.value.packageHash;
+  const packageHashAlgorithm = document2.value.packageHashAlgorithm;
+  const packageSize = document2.value.packageSize;
+  const digest = typeof packageHash === "string" ? decodeCanonicalBase64(packageHash) : undefined;
+  if (typeof id !== "string" || id.toLowerCase() !== input.packageName.toLowerCase() || typeof version !== "string" || normalizeNugetVersion(version) !== input.normalizedVersion) {
+    return err(nugetMetadataError(input, "NuGet catalog leaf identity did not match the requested package.", {
+      reason: "catalog_identity_mismatch",
+      ...typeof id === "string" ? { observedName: id } : {},
+      ...typeof version === "string" ? { observedVersion: version } : {}
+    }));
+  }
+  if (typeof packageHashAlgorithm !== "string" || packageHashAlgorithm.toUpperCase() !== "SHA512" || !digest || digest.length !== SHA512_DIGEST_BYTES) {
+    return err(nugetMetadataError(input, "NuGet catalog leaf did not contain a valid SHA-512 package hash.", {
+      reason: "catalog_hash_invalid",
+      ...typeof packageHashAlgorithm === "string" ? { packageHashAlgorithm } : {}
+    }));
+  }
+  if (!Number.isSafeInteger(packageSize) || packageSize <= 0) {
+    return err(nugetMetadataError(input, "NuGet catalog leaf did not contain a valid package size.", {
+      reason: "catalog_package_size_invalid"
+    }));
+  }
+  return ok({ packageHash, packageSize });
+}
+function normalizeNugetVersion(value) {
+  if (value.length === 0 || value.length > 256) {
+    return;
+  }
+  const match = value.trim().match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u);
+  if (!match) {
+    return;
+  }
+  const numeric = [match[1], match[2] ?? "0", match[3] ?? "0", match[4] ?? "0"].map((part) => BigInt(part).toString());
+  const core = numeric[3] === "0" ? numeric.slice(0, 3) : numeric;
+  const prerelease = match[5]?.split(".").map((part) => /^\d+$/u.test(part) ? BigInt(part).toString() : part.toLowerCase()).join(".");
+  return `${core.join(".")}${prerelease ? `-${prerelease}` : ""}`.toLowerCase();
+}
+function findRegistrationLeaf(input, items) {
+  const matches = items.filter((item2) => {
+    if (!isRecord25(item2) || !isRecord25(item2.catalogEntry)) {
+      return false;
+    }
+    return typeof item2.catalogEntry.id === "string" && item2.catalogEntry.id.toLowerCase() === input.packageName.toLowerCase() && typeof item2.catalogEntry.version === "string" && normalizeNugetVersion(item2.catalogEntry.version) === input.normalizedVersion;
+  });
+  if (matches.length > 1) {
+    return err(nugetMetadataError(input, "NuGet registration metadata contained duplicate package versions.", {
+      reason: "registration_version_ambiguous",
+      matchCount: matches.length
+    }));
+  }
+  const item = matches[0];
+  if (!isRecord25(item) || !isRecord25(item.catalogEntry)) {
+    return ok(undefined);
+  }
+  const catalogUrl = typeof item.catalogEntry["@id"] === "string" ? item.catalogEntry["@id"] : undefined;
+  const packageContentUrl = typeof item.packageContent === "string" ? item.packageContent : undefined;
+  const validatedCatalog = catalogUrl ? validateNugetOrgUrl(catalogUrl, "catalog_leaf", false) : { ok: false, message: "NuGet registration leaf did not include a catalog URL.", details: { reason: "catalog_url_missing" } };
+  if (!validatedCatalog.ok) {
+    return err(nugetMetadataError(input, validatedCatalog.message, validatedCatalog.details));
+  }
+  const validatedContent = packageContentUrl ? validateNugetOrgUrl(packageContentUrl, "package_content", false) : { ok: false, message: "NuGet registration leaf did not include a package content URL.", details: { reason: "package_content_url_missing" } };
+  if (!validatedContent.ok) {
+    return err(nugetMetadataError(input, validatedContent.message, validatedContent.details));
+  }
+  if (validatedContent.url !== input.expectedPackageContentUrl) {
+    return err(nugetMetadataError(input, "NuGet registration package URL did not match the discovered flat-container URL.", {
+      reason: "package_content_url_mismatch",
+      expectedPackageContentUrl: input.expectedPackageContentUrl,
+      observedPackageContentUrl: validatedContent.url
+    }));
+  }
+  return ok({
+    catalogUrl: validatedCatalog.url,
+    packageContentUrl: validatedContent.url
+  });
+}
+function registrationPageContainsVersion(page, version) {
+  const lower = typeof page.lower === "string" ? normalizeNugetVersion(page.lower) : undefined;
+  const upper = typeof page.upper === "string" ? normalizeNugetVersion(page.upper) : undefined;
+  if (!lower || !upper) {
+    return false;
+  }
+  return compareNugetVersions(lower, version) <= 0 && compareNugetVersions(version, upper) <= 0;
+}
+function compareNugetVersions(left, right) {
+  const parsedLeft = splitNormalizedVersion(left);
+  const parsedRight = splitNormalizedVersion(right);
+  if (!parsedLeft || !parsedRight) {
+    return left.localeCompare(right);
+  }
+  for (let index = 0;index < 4; index += 1) {
+    const leftPart = parsedLeft.numeric[index] ?? 0n;
+    const rightPart = parsedRight.numeric[index] ?? 0n;
+    if (leftPart !== rightPart) {
+      return leftPart < rightPart ? -1 : 1;
+    }
+  }
+  if (!parsedLeft.prerelease && !parsedRight.prerelease)
+    return 0;
+  if (!parsedLeft.prerelease)
+    return 1;
+  if (!parsedRight.prerelease)
+    return -1;
+  const length = Math.max(parsedLeft.prerelease.length, parsedRight.prerelease.length);
+  for (let index = 0;index < length; index += 1) {
+    const leftPart = parsedLeft.prerelease[index];
+    const rightPart = parsedRight.prerelease[index];
+    if (leftPart === undefined)
+      return -1;
+    if (rightPart === undefined)
+      return 1;
+    if (leftPart === rightPart)
+      continue;
+    const leftNumeric = /^\d+$/u.test(leftPart);
+    const rightNumeric = /^\d+$/u.test(rightPart);
+    if (leftNumeric && rightNumeric) {
+      return BigInt(leftPart) < BigInt(rightPart) ? -1 : 1;
+    }
+    if (leftNumeric !== rightNumeric)
+      return leftNumeric ? -1 : 1;
+    return leftPart < rightPart ? -1 : 1;
+  }
+  return 0;
+}
+function splitNormalizedVersion(value) {
+  const match = value.match(/^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?(?:-(.+))?$/u);
+  if (!match)
+    return;
+  return {
+    numeric: [match[1], match[2], match[3], match[4] ?? "0"].map((part) => BigInt(part)),
+    ...match[5] ? { prerelease: match[5].split(".") } : {}
+  };
+}
+function findServiceResource(resources, acceptedTypes) {
+  for (const resource of resources) {
+    if (!isRecord25(resource) || typeof resource["@id"] !== "string")
+      continue;
+    const types = Array.isArray(resource["@type"]) ? resource["@type"] : [resource["@type"]];
+    if (types.some((type) => typeof type === "string" && acceptedTypes.includes(type))) {
+      return resource["@id"];
+    }
+  }
+  return;
+}
+function validateNugetOrgUrl(value, usage, requireTrailingSlash) {
+  try {
+    const url = new URL(value);
+    const supportedPath = url.pathname.startsWith("/v3/") || (usage === "service_package_base" || usage === "package_content") && url.pathname.startsWith("/v3-flatcontainer/");
+    if (url.protocol !== "https:" || url.hostname.toLowerCase() !== NUGET_ORG_HOST || url.port !== "" || url.username !== "" || url.password !== "" || url.search !== "" || url.hash !== "" || !supportedPath || requireTrailingSlash && !url.pathname.endsWith("/")) {
+      return { ok: false, message: "NuGet service metadata included an unsupported URL.", details: { reason: "unsupported_nuget_url", usage } };
+    }
+    return { ok: true, url: url.toString() };
+  } catch {
+    return { ok: false, message: "NuGet service metadata included a malformed URL.", details: { reason: "malformed_nuget_url", usage } };
+  }
+}
+function decodeCanonicalBase64(value) {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/u.test(value) || value.length % 4 !== 0) {
+    return;
+  }
+  const bytes = Buffer.from(value, "base64");
+  return bytes.toString("base64") === value ? bytes : undefined;
+}
+function parseJsonRecord(input, label) {
+  try {
+    const document2 = JSON.parse(input.text);
+    return isRecord25(document2) ? ok(document2) : err(nugetMetadataError(input, `${label} was not a JSON object.`));
+  } catch (cause) {
+    return err(nugetMetadataError(input, `${label} was not valid JSON.`, {
+      cause: cause instanceof Error ? cause.message : String(cause)
+    }));
+  }
+}
+function nugetMetadataError(input, message, details = {}) {
+  return createError({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    category: "unsupported_input",
+    message,
+    details: {
+      packageId: input.packageId,
+      ...input.packageName ? { packageName: input.packageName } : {},
+      ...details
+    }
+  });
+}
+function isRecord25(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// src/evidence/nuget-nupkg.ts
+var NUGET_NUPKG_MAX_ENTRIES = 50000;
+var NUGET_NUPKG_ENTRY_MAX_BYTES = 50 * 1024 * 1024;
+var NUGET_NUPKG_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
+var NUGET_NUPKG_MATERIALIZED_MAX_BYTES = 128 * 1024 * 1024;
+var NUGET_NUSPEC_MAX_BYTES2 = 1024 * 1024;
+var NUGET_LICENSE_MAX_BYTES = 2 * 1024 * 1024;
+var NUGET_LICENSE_FILE_LIMIT2 = 50;
+var SHA512_DIGEST_BYTES2 = 64;
+function collectNugetNupkgEvidence(input) {
+  const integrity2 = verifyNugetNupkgIntegrity(input);
+  if (!integrity2.ok) {
+    return integrity2;
+  }
+  const archive = readArchiveBytes({
+    displayName: `${safeDisplayPart(input.packageName)}.${safeDisplayPart(input.normalizedVersion)}.nupkg`,
+    bytes: input.nupkg,
+    formatHint: "zip",
+    limits: {
+      inputBytes: input.artifactMaxBytes,
+      entries: NUGET_NUPKG_MAX_ENTRIES,
+      entryBytes: NUGET_NUPKG_ENTRY_MAX_BYTES,
+      expandedBytes: NUGET_NUPKG_EXPANDED_MAX_BYTES,
+      materializedBytes: NUGET_NUPKG_MATERIALIZED_MAX_BYTES
+    }
+  });
+  if (!archive.ok) {
+    if (archive.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
+      return ok(unavailableNugetEvidence(input.packageId, `SHA-512-verified NuGet package exceeded bounded archive limits (${archive.error.code}); its contents were not trusted.`));
+    }
+    return err(archive.error);
+  }
+  const nuspecEntries = archive.value.entries.filter((entry) => entry.type === "file" && !entry.path.includes("/") && entry.path.toLowerCase().endsWith(".nuspec"));
+  if (nuspecEntries.length !== 1) {
+    return err(nugetPackageError(input, "NuGet package did not contain exactly one root nuspec manifest.", {
+      reason: nuspecEntries.length === 0 ? "nuspec_missing" : "nuspec_ambiguous",
+      nuspecCount: nuspecEntries.length
+    }));
+  }
+  const nuspecPath = nuspecEntries[0]?.path;
+  const nuspecText = archive.value.readText(nuspecPath, NUGET_NUSPEC_MAX_BYTES2);
+  if (!nuspecText.ok) {
+    return err(nuspecText.error);
+  }
+  const metadataResult = parseNuspecMetadata({
+    packageId: input.packageId,
+    text: nuspecText.value
+  });
+  if (!metadataResult.ok) {
+    return metadataResult;
+  }
+  const metadata = metadataResult.value;
+  if (!metadata.id || metadata.id.toLowerCase() !== input.packageName.toLowerCase() || !metadata.version || normalizeNugetVersion(metadata.version) !== input.normalizedVersion) {
+    return err(nugetPackageError(input, "NuGet nuspec identity did not match the requested package.", {
+      reason: "nuspec_identity_mismatch",
+      ...metadata.id ? { observedName: metadata.id } : {},
+      ...metadata.version ? { observedVersion: metadata.version } : {}
+    }));
+  }
+  const evidencePaths = new Map;
+  const declaredLicenseFile = metadata.licenseType === "file" ? normalizeDeclaredArchivePath(metadata.license) : undefined;
+  if (declaredLicenseFile) {
+    evidencePaths.set(declaredLicenseFile, "license");
+  }
+  for (const entry of archive.value.entries.filter((candidate) => candidate.type === "file").sort((left, right) => left.path.localeCompare(right.path))) {
+    const kind = classifyEvidenceFile(entry.path);
+    if (kind && !evidencePaths.has(entry.path)) {
+      evidencePaths.set(entry.path, kind);
+    }
+  }
+  const entryPathsByFoldedPath = new Map(archive.value.entries.filter((entry) => entry.type === "file").map((entry) => [entry.path.toLowerCase(), entry.path]));
+  const warnings = [];
+  const files = [];
+  for (const [candidatePath, kind] of [...evidencePaths.entries()].slice(0, NUGET_LICENSE_FILE_LIMIT2)) {
+    const entryPath = entryPathsByFoldedPath.get(candidatePath.toLowerCase());
+    if (!entryPath) {
+      warnings.push(`NuGet nuspec declared missing license file ${candidatePath}.`);
+      continue;
+    }
+    const text3 = archive.value.readText(entryPath, NUGET_LICENSE_MAX_BYTES);
+    if (!text3.ok) {
+      warnings.push(`Skipped ${entryPath}: NuGet license evidence exceeded bounded text limits.`);
+      continue;
+    }
+    files.push({ path: entryPath, kind, text: text3.value });
+  }
+  if (files.length === 0) {
+    warnings.push("SHA-512-verified NuGet package did not contain a license evidence file.");
+  }
+  if (!metadata.license && metadata.licenseUrl) {
+    warnings.push(`NuGet nuspec declared only a licenseUrl: ${metadata.licenseUrl}`);
+  } else if (!metadata.license) {
+    warnings.push("NuGet nuspec did not declare a package license.");
+  } else if (metadata.licenseType !== "expression" && metadata.licenseType !== "file") {
+    warnings.push("NuGet nuspec license declaration used an unsupported type and was not trusted as an expression.");
+  } else if (metadata.licenseType === "file" && !declaredLicenseFile) {
+    warnings.push("NuGet nuspec declared an unsafe license file path and it was not read.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...metadata.license && metadata.licenseType === "expression" ? { metadataLicense: metadata.license, metadataSource: "nuspec" } : {},
+    files,
+    source: "tarball",
+    warnings
+  });
+}
+function verifyNugetNupkgIntegrity(input) {
+  const expected = decodeCanonicalSha512(input.expectedSha512);
+  const actual = createHash5("sha512").update(input.nupkg).digest();
+  if (input.nupkg.byteLength !== input.expectedSize || !expected || expected.length !== actual.length || !timingSafeEqual3(expected, actual)) {
+    return err(createError({
+      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
+      category: "unsupported_input",
+      message: "NuGet package content did not match the nuget.org catalog identity.",
+      details: {
+        packageId: input.packageId,
+        expectedSize: input.expectedSize,
+        observedSize: input.nupkg.byteLength,
+        computed: `sha512-${actual.toString("base64")}`
+      }
+    }));
+  }
+  return ok(undefined);
+}
+function decodeCanonicalSha512(value) {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/u.test(value) || value.length % 4 !== 0) {
+    return;
+  }
+  const digest = Buffer.from(value, "base64");
+  return digest.length === SHA512_DIGEST_BYTES2 && digest.toString("base64") === value ? digest : undefined;
+}
+function normalizeDeclaredArchivePath(value) {
+  if (!value || value.includes("\\")) {
+    return;
+  }
+  const normalized = path74.posix.normalize(value);
+  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/") || normalized !== value || /[\u0000-\u001f\u007f-\u009f:]/u.test(normalized)) {
+    return;
+  }
+  return normalized;
+}
+function unavailableNugetEvidence(packageId, warning) {
+  return { packageId, files: [], source: "unavailable", warnings: [warning] };
+}
+function safeDisplayPart(value) {
+  return value.replace(/[^A-Za-z0-9._+-]/gu, "_").slice(0, 120) || "package";
+}
+function nugetPackageError(input, message, details) {
+  return createError({
+    code: "PACKAGE_EVIDENCE_READ_FAILED",
+    category: "unsupported_input",
+    message,
+    details: {
+      packageId: input.packageId,
+      packageName: input.packageName,
+      version: input.version,
+      ...details
+    }
+  });
+}
+
+// src/evidence/pypi-package.ts
+import path75 from "node:path";
 var PYPI_METADATA_LICENSE_MAX_CHARS = 200;
 var PYTHON_DISTRIBUTION_METADATA_MAX_BYTES = 1024 * 1024;
 var PYTHON_DISTRIBUTION_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
@@ -45927,7 +46532,7 @@ function parsePyPiReleaseMetadata(input) {
       cause: cause instanceof Error ? cause.message : String(cause)
     }));
   }
-  if (!isRecord25(document2) || !isRecord25(document2.info) || !Array.isArray(document2.urls)) {
+  if (!isRecord26(document2) || !isRecord26(document2.info) || !Array.isArray(document2.urls)) {
     return err(pypiMetadataError(input, "PyPI release metadata did not have the expected shape."));
   }
   const infoName = document2.info.name;
@@ -46062,13 +46667,13 @@ function pythonDistributionArchiveFormat(filename) {
   return;
 }
 function readPyPiReleaseArtifact(value) {
-  if (!isRecord25(value)) {
+  if (!isRecord26(value)) {
     return;
   }
   const filename = value.filename;
   const url = value.url;
   const packageType = value.packagetype;
-  const sha2562 = isRecord25(value.digests) ? value.digests.sha256 : undefined;
+  const sha2562 = isRecord26(value.digests) ? value.digests.sha256 : undefined;
   if (typeof filename !== "string" || filename === "" || filename.includes("/") || filename.includes("\\") || !pythonDistributionArchiveFormat(filename) || typeof url !== "string" || url === "" || !isOfficialPyPiArtifactUrl(url) || packageType !== "sdist" && packageType !== "bdist_wheel" || typeof sha2562 !== "string" || !/^[a-f0-9]{64}$/iu.test(sha2562)) {
     return;
   }
@@ -46193,7 +46798,7 @@ function relativeEvidencePath(entryPath, packageRoot) {
   return packageRoot && entryPath.startsWith(`${packageRoot}/`) ? entryPath.slice(packageRoot.length + 1) : entryPath;
 }
 function archiveDirname2(entryPath) {
-  const dirname = path74.posix.dirname(entryPath);
+  const dirname = path75.posix.dirname(entryPath);
   return dirname === "." ? "" : dirname;
 }
 function joinArchivePath2(left, right) {
@@ -46225,7 +46830,7 @@ function safeArtifactFilename(value) {
   const normalized = value.replace(/\\/gu, "/");
   return normalized.split("/").pop() || "python-distribution";
 }
-function isRecord25(value) {
+function isRecord26(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -46403,11 +47008,11 @@ function readLicenseFields2(packageJson) {
 function isObjectRecord7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function normalizePackagePath(path75, packageRoot) {
+function normalizePackagePath(path76, packageRoot) {
   if (packageRoot === "") {
-    return path75;
+    return path76;
   }
-  return path75.startsWith(`${packageRoot}/`) ? path75.slice(packageRoot.length + 1) : path75;
+  return path76.startsWith(`${packageRoot}/`) ? path76.slice(packageRoot.length + 1) : path76;
 }
 function readNullTerminated2(buffer, start, length) {
   const slice = buffer.subarray(start, start + length);
@@ -46743,6 +47348,8 @@ var MAX_ARTIFACT_REDIRECTS = 5;
 var DEFAULT_EVIDENCE_CONCURRENCY = 8;
 var PYPI_METADATA_HOSTS = new Set(["pypi.org"]);
 var PYPI_DISTRIBUTION_HOSTS = new Set(["files.pythonhosted.org"]);
+var NUGET_SERVICE_INDEX_URL = "https://api.nuget.org/v3/index.json";
+var NUGET_ORG_HOSTS = new Set(["api.nuget.org"]);
 var MAVEN_CENTRAL_BASE_URL = "https://repo.maven.apache.org/maven2";
 var MAVEN_CENTRAL_HOSTS = new Set(["repo.maven.apache.org"]);
 var MAVEN_JAR_MAX_BYTES2 = 32 * 1024 * 1024;
@@ -46803,6 +47410,15 @@ async function collectGraphEvidence(input) {
     allowedHosts,
     repositoryUrls: input.graph.mavenRepositoryUrls ?? []
   });
+  const loadNugetServiceIndex = createNugetServiceIndexLoader({
+    fetchArtifact,
+    resolveArtifactHost,
+    fetchTimeoutMs,
+    registryMetadataMaxBytes,
+    offline: input.offline ?? false,
+    artifactCache,
+    allowedHosts
+  });
   const collectNext = async () => {
     while (!failure) {
       const index = nextIndex;
@@ -46831,7 +47447,8 @@ async function collectGraphEvidence(input) {
         npmRegistryUrl: input.npmRegistryUrl,
         allowedHosts,
         loadYarnCacheIndex,
-        collectMavenEvidence
+        collectMavenEvidence,
+        loadNugetServiceIndex
       });
       if (!collected.ok) {
         if (isRecoverableRemoteEvidenceError(collected.error)) {
@@ -46971,7 +47588,7 @@ async function collectNodeEvidence(input) {
     projectRoot: input.projectRoot
   }) : undefined;
   if (ecosystemEvidence) {
-    if (input.node.ecosystem !== "maven" && input.node.ecosystem !== "go" && input.node.ecosystem !== "cargo" || !ecosystemEvidence.ok || ecosystemEvidence.value.source !== "unavailable") {
+    if (input.node.ecosystem !== "maven" && input.node.ecosystem !== "go" && input.node.ecosystem !== "cargo" && input.node.ecosystem !== "nuget" || !ecosystemEvidence.ok || ecosystemEvidence.value.source !== "unavailable") {
       return ecosystemEvidence;
     }
   }
@@ -47079,6 +47696,20 @@ async function collectNodeEvidence(input) {
       offline: input.offline,
       artifactCache: input.artifactCache,
       allowedHosts: input.allowedHosts
+    });
+  }
+  if (input.node.ecosystem === "nuget") {
+    return collectRemoteNugetPackageEvidence({
+      node: input.node,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      registryMetadataMaxBytes: input.registryMetadataMaxBytes,
+      artifactMaxBytes: input.tarballMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      allowedHosts: input.allowedHosts,
+      loadServiceIndex: input.loadNugetServiceIndex
     });
   }
   if (input.node.ecosystem === "npm" && shouldCollectNpmRegistryEvidence({
@@ -47203,6 +47834,271 @@ function collectLocalPathEvidence(input) {
     evidence: evidence.value,
     integrity: input.node.integrity
   }));
+}
+function createNugetServiceIndexLoader(input) {
+  let pending;
+  return (packageId) => {
+    pending ??= (async () => {
+      const bytes = await readNugetRegistryBytes({
+        packageId,
+        url: NUGET_SERVICE_INDEX_URL,
+        label: "service index",
+        maxBytes: input.registryMetadataMaxBytes,
+        fetchArtifact: input.fetchArtifact,
+        resolveArtifactHost: input.resolveArtifactHost,
+        fetchTimeoutMs: input.fetchTimeoutMs,
+        offline: input.offline,
+        artifactCache: input.artifactCache,
+        allowedHosts: input.allowedHosts
+      });
+      return bytes.ok ? parseNugetServiceIndex({ packageId, text: bytes.value.toString("utf8") }) : bytes;
+    })();
+    return pending;
+  };
+}
+async function collectRemoteNugetPackageEvidence(input) {
+  if (!/^[A-Za-z0-9._-]{1,100}$/u.test(input.node.name)) {
+    return ok(unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: "NuGet package ID was not safe for the public nuget.org V3 API."
+    }));
+  }
+  if (!normalizeNugetVersion(input.node.version)) {
+    return ok(unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: "NuGet dependency version was not a safe exact version."
+    }));
+  }
+  const lockDigest = input.node.integrity ? parseSupportedIntegrityEntries(input.node.integrity).find((entry) => entry.algorithm === "sha512")?.digest : undefined;
+  if (!lockDigest) {
+    return ok({
+      packageId: input.node.id,
+      files: [],
+      source: "unavailable",
+      warnings: [
+        "NuGet package source was not fetched because the selected dependency input did not contain an exact SHA-512 package content hash."
+      ]
+    });
+  }
+  const service = await input.loadServiceIndex(input.node.id);
+  if (!service.ok) {
+    return service;
+  }
+  const lowerName = input.node.name.toLowerCase();
+  const encodedName = encodeURIComponent(lowerName);
+  const versionsUrl = `${service.value.packageBaseUrl}${encodedName}/index.json`;
+  const versionsBytes = await readNugetRegistryBytes({
+    packageId: input.node.id,
+    url: versionsUrl,
+    label: "package version index",
+    maxBytes: input.registryMetadataMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts
+  });
+  if (!versionsBytes.ok) {
+    return versionsBytes;
+  }
+  const normalizedVersion = parseNugetPackageVersions({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    requestedVersion: input.node.version,
+    text: versionsBytes.value.toString("utf8")
+  });
+  if (!normalizedVersion.ok) {
+    return normalizedVersion;
+  }
+  const encodedVersion = encodeURIComponent(normalizedVersion.value);
+  const packageContentUrl = `${service.value.packageBaseUrl}${encodedName}/${encodedVersion}/${encodedName}.${encodedVersion}.nupkg`;
+  const registrationUrl = `${service.value.registrationsBaseUrl}${encodedName}/index.json`;
+  const registrationBytes = await readNugetRegistryBytes({
+    packageId: input.node.id,
+    url: registrationUrl,
+    label: "registration index",
+    maxBytes: input.registryMetadataMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts
+  });
+  if (!registrationBytes.ok) {
+    return registrationBytes;
+  }
+  const lookup2 = parseNugetRegistrationIndex({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    normalizedVersion: normalizedVersion.value,
+    expectedPackageContentUrl: packageContentUrl,
+    text: registrationBytes.value.toString("utf8")
+  });
+  if (!lookup2.ok) {
+    return lookup2;
+  }
+  let registrationLeaf;
+  if (lookup2.value.kind === "leaf") {
+    registrationLeaf = lookup2.value.leaf;
+  } else {
+    const pageBytes = await readNugetRegistryBytes({
+      packageId: input.node.id,
+      url: lookup2.value.pageUrl,
+      label: "registration page",
+      maxBytes: input.registryMetadataMaxBytes,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      allowedHosts: input.allowedHosts
+    });
+    if (!pageBytes.ok) {
+      return pageBytes;
+    }
+    const page = parseNugetRegistrationPage({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      normalizedVersion: normalizedVersion.value,
+      expectedPackageContentUrl: packageContentUrl,
+      text: pageBytes.value.toString("utf8")
+    });
+    if (!page.ok) {
+      return page;
+    }
+    registrationLeaf = page.value;
+  }
+  const catalogBytes = await readNugetRegistryBytes({
+    packageId: input.node.id,
+    url: registrationLeaf.catalogUrl,
+    label: "catalog leaf",
+    maxBytes: input.registryMetadataMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts
+  });
+  if (!catalogBytes.ok) {
+    return catalogBytes;
+  }
+  const catalog = parseNugetCatalogPackage({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    normalizedVersion: normalizedVersion.value,
+    text: catalogBytes.value.toString("utf8")
+  });
+  if (!catalog.ok) {
+    return catalog;
+  }
+  const catalogDigest = Buffer.from(catalog.value.packageHash, "base64");
+  if (catalogDigest.length !== lockDigest.length || !timingSafeEqual4(catalogDigest, lockDigest)) {
+    return err(createError({
+      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
+      category: "unsupported_input",
+      message: "NuGet catalog package hash did not match the selected dependency input.",
+      details: {
+        packageId: input.node.id,
+        packageName: input.node.name,
+        version: normalizedVersion.value,
+        reason: "nuget_catalog_lock_hash_mismatch"
+      }
+    }));
+  }
+  if (catalog.value.packageSize > input.artifactMaxBytes) {
+    return ok({
+      packageId: input.node.id,
+      files: [],
+      source: "unavailable",
+      warnings: [
+        "NuGet package source was not fetched because the catalog-declared package size exceeded the configured artifact limit."
+      ]
+    });
+  }
+  const nupkg = await readRemoteArtifactBytes({
+    code: "TARBALL_FETCH_FAILED",
+    packageId: input.node.id,
+    url: registrationLeaf.packageContentUrl,
+    blockedMessage: "NuGet package content URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve the nuget.org package content host.",
+    fetchFailureMessage: "Failed to fetch NuGet package content.",
+    tooLargeMessage: "NuGet package content exceeded the maximum supported size.",
+    unreadableMessage: "NuGet package content did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find NuGet package content in the artifact cache.",
+    details: {
+      packageName: input.node.name,
+      version: normalizedVersion.value
+    },
+    maxBytes: Math.min(input.artifactMaxBytes, catalog.value.packageSize),
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: NUGET_ORG_HOSTS,
+    urlDetailKey: "resolved"
+  });
+  if (!nupkg.ok) {
+    return nupkg;
+  }
+  return collectNugetNupkgEvidence({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    version: input.node.version,
+    normalizedVersion: normalizedVersion.value,
+    expectedSha512: catalog.value.packageHash,
+    expectedSize: catalog.value.packageSize,
+    nupkg: nupkg.value,
+    artifactMaxBytes: input.artifactMaxBytes
+  });
+}
+async function readNugetRegistryBytes(input) {
+  const response = await readRemoteArtifactBytes({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    packageId: input.packageId,
+    url: input.url,
+    blockedMessage: `NuGet ${input.label} URL targets an unsupported or blocked host.`,
+    resolveFailureMessage: `Failed to resolve the nuget.org ${input.label} host.`,
+    fetchFailureMessage: `Failed to fetch NuGet ${input.label}.`,
+    tooLargeMessage: `NuGet ${input.label} exceeded the maximum supported size.`,
+    unreadableMessage: `NuGet ${input.label} did not expose a readable body stream.`,
+    offlineMissMessage: `Offline mode could not find NuGet ${input.label} in the artifact cache.`,
+    details: { registryUrl: input.url },
+    maxBytes: input.maxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: NUGET_ORG_HOSTS,
+    urlDetailKey: "registryUrl"
+  });
+  if (!response.ok || !isGzipBytes(response.value)) {
+    return response;
+  }
+  try {
+    return ok(gunzipSync4(response.value, { maxOutputLength: input.maxBytes }));
+  } catch (cause) {
+    return err(createError({
+      code: "REGISTRY_METADATA_FETCH_FAILED",
+      category: "unsupported_input",
+      message: `NuGet ${input.label} gzip response was malformed or exceeded the maximum supported size.`,
+      details: {
+        packageId: input.packageId,
+        registryUrl: safeUrlForErrorDetails(input.url),
+        maxBytes: input.maxBytes,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
+function isGzipBytes(bytes) {
+  return bytes.length >= 2 && bytes[0] === 31 && bytes[1] === 139;
 }
 async function collectRemoteGoModuleEvidence(input) {
   const coordinates = remoteGoModuleCoordinates(input.node);
@@ -47749,8 +48645,8 @@ async function collectRemoteMavenJarEvidence(input) {
     return jarBytes.error.category === "network" ? ok(undefined) : jarBytes;
   }
   const expected = Buffer.from(checksum, "hex");
-  const observed = createHash5("sha256").update(jarBytes.value).digest();
-  if (expected.length !== observed.length || !timingSafeEqual3(expected, observed)) {
+  const observed = createHash6("sha256").update(jarBytes.value).digest();
+  if (expected.length !== observed.length || !timingSafeEqual4(expected, observed)) {
     return err(createError({
       code: "PACKAGE_INTEGRITY_CHECK_FAILED",
       category: "unsupported_input",
@@ -48062,21 +48958,21 @@ function resolveLocalArtifact(input) {
   }
   if (!localPath && input.resolved.startsWith("file:")) {
     const specifier = decodeFilePathSpecifier(input.resolved.slice("file:".length));
-    localPath = path75.resolve(input.projectRoot, specifier);
+    localPath = path76.resolve(input.projectRoot, specifier);
   }
   if (!localPath && input.resolved.startsWith("workspace:")) {
     const specifier = decodeFilePathSpecifier(input.resolved.slice("workspace:".length));
     if (isWorkspaceLocalPathSpecifier(specifier)) {
-      localPath = path75.resolve(input.projectRoot, specifier);
+      localPath = path76.resolve(input.projectRoot, specifier);
     }
   }
-  if (!localPath && (input.resolved.startsWith(".") || path75.isAbsolute(input.resolved))) {
-    localPath = path75.resolve(input.projectRoot, input.resolved);
+  if (!localPath && (input.resolved.startsWith(".") || path76.isAbsolute(input.resolved))) {
+    localPath = path76.resolve(input.projectRoot, input.resolved);
   }
   if (!localPath) {
     return ok(undefined);
   }
-  const artifactPath = path75.resolve(localPath);
+  const artifactPath = path76.resolve(localPath);
   return ok(artifactPath);
 }
 function resolveFileUrl(value) {
@@ -48120,10 +49016,10 @@ function resolveNodeModulesPackageCandidates(input) {
   if (!segments) {
     return [];
   }
-  const candidates = [path75.join(input.projectRoot, "node_modules", ...segments)];
+  const candidates = [path76.join(input.projectRoot, "node_modules", ...segments)];
   const bunStoreSegment = bunIsolatedStoreSegment(input.packageName, input.version);
   if (bunStoreSegment) {
-    candidates.push(path75.join(input.projectRoot, "node_modules", ".bun", bunStoreSegment, "node_modules", ...segments));
+    candidates.push(path76.join(input.projectRoot, "node_modules", ".bun", bunStoreSegment, "node_modules", ...segments));
   }
   return candidates;
 }
@@ -48163,14 +49059,14 @@ function isReadableDirectory23(filePath) {
 function installedPackageMatchesNode(input) {
   try {
     const packageJsonText = readTextFileWithLimit({
-      filePath: path75.join(input.packagePath, "package.json"),
+      filePath: path76.join(input.packagePath, "package.json"),
       maxBytes: input.maxBytes
     });
     if (!packageJsonText.ok) {
       return false;
     }
     const packageJson = JSON.parse(packageJsonText.value);
-    return isRecord26(packageJson) && packageJson.name === input.node.name && packageJson.version === input.node.version;
+    return isRecord27(packageJson) && packageJson.name === input.node.name && packageJson.version === input.node.version;
   } catch {
     return false;
   }
@@ -48191,7 +49087,7 @@ function collectYarnCachePackageEvidence(input) {
     if (!filename.startsWith(filenamePrefix)) {
       continue;
     }
-    const cachePath = path75.join(loadedIndex.value.cacheDir, filename);
+    const cachePath = path76.join(loadedIndex.value.cacheDir, filename);
     const stats = readLocalArtifactStats({
       filePath: cachePath,
       packageId: input.node.id,
@@ -48239,7 +49135,7 @@ function createYarnCacheIndexLoader(projectRoot) {
     if (loaded) {
       return loaded;
     }
-    const cacheDir = path75.join(projectRoot, ".yarn", "cache");
+    const cacheDir = path76.join(projectRoot, ".yarn", "cache");
     if (!existsSync44(cacheDir) || !isReadableDirectory23(cacheDir)) {
       loaded = ok(undefined);
       return loaded;
@@ -48622,7 +49518,7 @@ function isSupportedLocalTarballPath(artifactPath) {
   return normalizedPath.endsWith(".tgz") || normalizedPath.endsWith(".tar.gz");
 }
 function resolveTrustedWorkspaceRoot(workspaceRoot) {
-  const resolvedPath = path75.resolve(workspaceRoot);
+  const resolvedPath = path76.resolve(workspaceRoot);
   try {
     const realPath = realpathSync4(resolvedPath);
     if (!statSync32(realPath).isDirectory()) {
@@ -48655,15 +49551,15 @@ function realpathLocalArtifactRoots(input) {
   ]);
 }
 function resolveLocalArtifactRoot(projectRoot) {
-  return findNearestGitRoot(projectRoot) ?? path75.resolve(projectRoot);
+  return findNearestGitRoot(projectRoot) ?? path76.resolve(projectRoot);
 }
 function findNearestGitRoot(startPath) {
-  let currentPath = path75.resolve(startPath);
+  let currentPath = path76.resolve(startPath);
   while (true) {
-    if (existsSync44(path75.join(currentPath, ".git"))) {
+    if (existsSync44(path76.join(currentPath, ".git"))) {
       return currentPath;
     }
-    const parentPath = path75.dirname(currentPath);
+    const parentPath = path76.dirname(currentPath);
     if (parentPath === currentPath) {
       return;
     }
@@ -48671,8 +49567,8 @@ function findNearestGitRoot(startPath) {
   }
 }
 function isPathInsideOrEqual5(childPath, parentPath) {
-  const relativePath = path75.relative(parentPath, childPath);
-  return relativePath === "" || !relativePath.startsWith("..") && !path75.isAbsolute(relativePath);
+  const relativePath = path76.relative(parentPath, childPath);
+  return relativePath === "" || !relativePath.startsWith("..") && !path76.isAbsolute(relativePath);
 }
 function isPathInsideAnyRoot(childPath, parentPaths) {
   return parentPaths.some((parentPath) => isPathInsideOrEqual5(childPath, parentPath));
@@ -49374,10 +50270,10 @@ function verifyPackageIntegrity(input) {
   }
   const computed = [];
   for (const entry of supported) {
-    const actualDigest = createHash5(entry.algorithm).update(input.tarball).digest();
+    const actualDigest = createHash6(entry.algorithm).update(input.tarball).digest();
     const actual = `${entry.algorithm}-${actualDigest.toString("base64")}`;
     computed.push(actual);
-    if (actualDigest.byteLength === entry.digest.byteLength && timingSafeEqual3(actualDigest, entry.digest)) {
+    if (actualDigest.byteLength === entry.digest.byteLength && timingSafeEqual4(actualDigest, entry.digest)) {
       return ok(undefined);
     }
   }
@@ -49476,23 +50372,23 @@ function readRegistryTarballUrl(metadata, version) {
     return;
   }
   const dist = versionMetadata.dist;
-  if (isRecord26(dist) && typeof dist.tarball === "string") {
+  if (isRecord27(dist) && typeof dist.tarball === "string") {
     return dist.tarball;
   }
   return;
 }
 function readRegistryVersionMetadata(metadata, version) {
-  if (!isRecord26(metadata)) {
+  if (!isRecord27(metadata)) {
     return;
   }
-  if (metadata.version === version || !isRecord26(metadata.versions)) {
+  if (metadata.version === version || !isRecord27(metadata.versions)) {
     return metadata;
   }
   const versions = metadata.versions;
   const versionMetadata = versions[version];
-  return isRecord26(versionMetadata) ? versionMetadata : undefined;
+  return isRecord27(versionMetadata) ? versionMetadata : undefined;
 }
-function isRecord26(value) {
+function isRecord27(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function normalizeAllowedArtifactHosts(hosts) {
@@ -49725,7 +50621,7 @@ async function readIncomingMessageToBuffer(message) {
 import { Buffer as Buffer2 } from "node:buffer";
 import { execFileSync } from "node:child_process";
 import { realpathSync as realpathSync5 } from "node:fs";
-import path76 from "node:path";
+import path77 from "node:path";
 var GIT_FILE_LIST_MAX_BYTES = 16 * 1024 * 1024;
 var GIT_FILE_LIST_MAX_ENTRIES = 1e5;
 var readGitRefFile = (input) => {
@@ -49762,7 +50658,7 @@ var listGitRefFiles = (input) => {
   if (!context.ok) {
     return context;
   }
-  const projectRelativePath2 = path76.relative(context.value.gitRoot, context.value.projectRoot);
+  const projectRelativePath2 = path77.relative(context.value.gitRoot, context.value.projectRoot);
   if (isOutsideRelativePath(projectRelativePath2)) {
     return err(projectRootOutsideGitError(input.projectRoot));
   }
@@ -49814,7 +50710,7 @@ var listGitRefFiles = (input) => {
   }
 };
 function resolveGitProjectContext(projectRoot, ref) {
-  const resolvedProjectRoot = realpathSync5(path76.resolve(projectRoot));
+  const resolvedProjectRoot = realpathSync5(path77.resolve(projectRoot));
   let gitRoot;
   try {
     const gitRootRelativePath = execFileSync("git", [
@@ -49826,14 +50722,14 @@ function resolveGitProjectContext(projectRoot, ref) {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"]
     }).trim();
-    gitRoot = realpathSync5(path76.resolve(resolvedProjectRoot, gitRootRelativePath || "."));
+    gitRoot = realpathSync5(path77.resolve(resolvedProjectRoot, gitRootRelativePath || "."));
   } catch (cause) {
     return err(readFailedError({
       input: { ref, relativePath: "." },
       cause
     }));
   }
-  if (isOutsideRelativePath(path76.relative(gitRoot, resolvedProjectRoot))) {
+  if (isOutsideRelativePath(path77.relative(gitRoot, resolvedProjectRoot))) {
     return err(projectRootOutsideGitError(resolvedProjectRoot));
   }
   return ok({ gitRoot, projectRoot: resolvedProjectRoot });
@@ -49889,9 +50785,9 @@ function readProcessErrorText(cause) {
   return cause instanceof Error ? cause.message : String(cause);
 }
 function toGitObjectPath(input) {
-  const projectRelativePath2 = path76.relative(input.gitRoot, input.projectRoot);
-  const lockfileRelativePath = path76.normalize(input.relativePath);
-  if (isOutsideRelativePath(projectRelativePath2) || isOutsideRelativePath(lockfileRelativePath) || path76.isAbsolute(input.relativePath)) {
+  const projectRelativePath2 = path77.relative(input.gitRoot, input.projectRoot);
+  const lockfileRelativePath = path77.normalize(input.relativePath);
+  if (isOutsideRelativePath(projectRelativePath2) || isOutsideRelativePath(lockfileRelativePath) || path77.isAbsolute(input.relativePath)) {
     return err(createError({
       code: "GIT_REF_PATH_OUTSIDE_PROJECT",
       category: "invalid_input",
@@ -49901,10 +50797,10 @@ function toGitObjectPath(input) {
       }
     }));
   }
-  return ok(normalizeGitPath(path76.join(projectRelativePath2, lockfileRelativePath)));
+  return ok(normalizeGitPath(path77.join(projectRelativePath2, lockfileRelativePath)));
 }
 function normalizeGitRelativePath(value) {
-  const normalized = path76.posix.normalize(value.replace(/\\/g, "/"));
+  const normalized = path77.posix.normalize(value.replace(/\\/g, "/"));
   if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/")) {
     return;
   }
@@ -49915,7 +50811,7 @@ function normalizeGitPath(value) {
   return normalized === "." ? "" : normalized;
 }
 function isOutsideRelativePath(relativePath) {
-  return relativePath === ".." || relativePath.startsWith(`..${path76.sep}`) || path76.isAbsolute(relativePath);
+  return relativePath === ".." || relativePath.startsWith(`..${path77.sep}`) || path77.isAbsolute(relativePath);
 }
 function isObjectRecord9(value) {
   return typeof value === "object" && value !== null;
@@ -50338,7 +51234,7 @@ function encodeFindingComponent(value) {
 // src/policy/config.ts
 import { existsSync as existsSync45, readFileSync as readFileSync3, realpathSync as realpathSync6, statSync as statSync33 } from "node:fs";
 import { isIP as isIP3 } from "node:net";
-import path77 from "node:path";
+import path78 from "node:path";
 var POLICY_FILENAME = ".ohrisk.yml";
 var POLICY_VERSION = 1;
 var POLICY_MAX_BYTES = 1024 * 1024;
@@ -50391,7 +51287,7 @@ function readPolicyConfig(input) {
   if (!boundaryRoot.ok) {
     return boundaryRoot;
   }
-  const requestedPath = input.policyPath ? path77.resolve(input.projectRoot, input.policyPath) : path77.join(input.projectRoot, POLICY_FILENAME);
+  const requestedPath = input.policyPath ? path78.resolve(input.projectRoot, input.policyPath) : path78.join(input.projectRoot, POLICY_FILENAME);
   if (!existsSync45(requestedPath)) {
     if (input.policyPath) {
       return err(policyReadError({
@@ -50478,7 +51374,7 @@ function readPolicyFile(input) {
       }));
     }
     const inherited = readPolicyFile({
-      filePath: path77.resolve(path77.dirname(trustedPath.value), inheritedPath),
+      filePath: path78.resolve(path78.dirname(trustedPath.value), inheritedPath),
       boundaryRoot: input.boundaryRoot,
       visited: nextVisited,
       depth: input.depth + 1
@@ -50507,7 +51403,7 @@ function readPolicyFile(input) {
   return ok(merged);
 }
 function parsePolicyDocument(value, filePath) {
-  if (!isRecord27(value)) {
+  if (!isRecord28(value)) {
     return err(policyParseError({
       message: "Policy root must be a YAML object.",
       filePath
@@ -50524,7 +51420,7 @@ function parsePolicyDocument(value, filePath) {
   if (!extendsPaths.ok)
     return extendsPaths;
   const licenses = value.licenses === undefined ? {} : value.licenses;
-  if (!isRecord27(licenses)) {
+  if (!isRecord28(licenses)) {
     return err(policyParseError({ message: "licenses must be a YAML object.", filePath }));
   }
   const allow = readStringList(licenses.allow, "licenses.allow", filePath);
@@ -50543,7 +51439,7 @@ function parsePolicyDocument(value, filePath) {
   if (!profiles.ok)
     return profiles;
   const network = value.network === undefined ? {} : value.network;
-  if (!isRecord27(network)) {
+  if (!isRecord28(network)) {
     return err(policyParseError({ message: "network must be a YAML object.", filePath }));
   }
   const allowedHosts = readStringList(network.allowedHosts, "network.allowedHosts", filePath);
@@ -50707,13 +51603,13 @@ function readProfilePolicies(value, filePath) {
   if (value === undefined) {
     return ok(new Map);
   }
-  if (!isRecord27(value)) {
+  if (!isRecord28(value)) {
     return err(policyParseError({ message: "profiles must be a YAML object.", filePath }));
   }
   const supportedProfiles = new Set(USAGE_PROFILES);
   const result = new Map;
   for (const [profileName, rawProfile] of Object.entries(value)) {
-    if (!supportedProfiles.has(profileName) || !isRecord27(rawProfile)) {
+    if (!supportedProfiles.has(profileName) || !isRecord28(rawProfile)) {
       return err(policyParseError({
         message: "profiles keys must be supported usage profiles with object values.",
         filePath,
@@ -50721,7 +51617,7 @@ function readProfilePolicies(value, filePath) {
       }));
     }
     const licenses = rawProfile.licenses === undefined ? {} : rawProfile.licenses;
-    if (!isRecord27(licenses)) {
+    if (!isRecord28(licenses)) {
       return err(policyParseError({
         message: `profiles.${profileName}.licenses must be a YAML object.`,
         filePath
@@ -50751,7 +51647,7 @@ function readProfilePolicies(value, filePath) {
 function readSeverityOverrides(value, filePath, field = "licenses.severity") {
   if (value === undefined)
     return ok({});
-  if (!isRecord27(value)) {
+  if (!isRecord28(value)) {
     return err(policyParseError({
       message: `${field} must be a YAML object.`,
       filePath
@@ -50773,12 +51669,12 @@ function readSeverityOverrides(value, filePath, field = "licenses.severity") {
 function readPackageRules(value, filePath, field = "packages") {
   if (value === undefined)
     return ok({});
-  if (!isRecord27(value)) {
+  if (!isRecord28(value)) {
     return err(policyParseError({ message: `${field} must be a YAML object.`, filePath }));
   }
   const result = {};
   for (const [packagePattern, rawRule] of Object.entries(value)) {
-    if (packagePattern.trim() === "" || !isRecord27(rawRule)) {
+    if (packagePattern.trim() === "" || !isRecord28(rawRule)) {
       return err(policyParseError({
         message: "Each packages entry must be an object keyed by a package ID, Package URL, or glob.",
         filePath,
@@ -50837,12 +51733,12 @@ function readPackageRules(value, filePath, field = "packages") {
 function readRegistryAuth(value, filePath) {
   if (value === undefined)
     return ok({});
-  if (!isRecord27(value)) {
+  if (!isRecord28(value)) {
     return err(policyParseError({ message: "network.auth must be a YAML object.", filePath }));
   }
   const result = {};
   for (const [host, rawAuth] of Object.entries(value)) {
-    if (!isRecord27(rawAuth) || typeof rawAuth.tokenEnv !== "string" || !ENV_NAME_PATTERN.test(rawAuth.tokenEnv)) {
+    if (!isRecord28(rawAuth) || typeof rawAuth.tokenEnv !== "string" || !ENV_NAME_PATTERN.test(rawAuth.tokenEnv)) {
       return err(policyParseError({
         message: "Each network.auth entry requires a valid tokenEnv environment variable name.",
         filePath,
@@ -50892,8 +51788,8 @@ function readStringList(value, field, filePath, allowSingle = false) {
 function trustedPolicyPath(filePath, boundaryRoot) {
   try {
     const realPath = realpathSync6(filePath);
-    const relative2 = path77.relative(boundaryRoot, realPath);
-    if (relative2.startsWith("..") || path77.isAbsolute(relative2)) {
+    const relative2 = path78.relative(boundaryRoot, realPath);
+    if (relative2.startsWith("..") || path78.isAbsolute(relative2)) {
       return err(policyReadError({
         message: "Policy files and inherited policy files must stay inside the workspace root.",
         filePath: realPath,
@@ -50947,8 +51843,8 @@ function policyParseError(input) {
   });
 }
 function safeRelativePath(root, filePath) {
-  const relative2 = path77.relative(root, filePath);
-  return relative2 === "" ? path77.basename(filePath) : relative2.split(path77.sep).join("/");
+  const relative2 = path78.relative(root, filePath);
+  return relative2 === "" ? path78.basename(filePath) : relative2.split(path78.sep).join("/");
 }
 function normalizeHostname(host) {
   const trimmed = host.trim().toLowerCase().replace(/\.$/, "");
@@ -50975,7 +51871,7 @@ function escapeRegExp9(value) {
 function unique2(values) {
   return [...new Set(values)];
 }
-function isRecord27(value) {
+function isRecord28(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isRemoteReference(value) {
@@ -51335,13 +52231,13 @@ function severityRank2(severity) {
 
 // src/policy/waivers.ts
 import { existsSync as existsSync46 } from "node:fs";
-import path78 from "node:path";
+import path79 from "node:path";
 var DEFAULT_WAIVER_FILE_NAME = ".ohrisk-waivers.json";
 var WAIVER_FILE_MAX_BYTES = 1024 * 1024;
 var WAIVER_ROOT_KEYS = new Set(["waivers"]);
 var WAIVER_KEYS = new Set(["id", "fingerprint", "reason", "expiresOn"]);
 function readRiskWaivers(projectRoot, options) {
-  const waiverPath = path78.join(projectRoot, DEFAULT_WAIVER_FILE_NAME);
+  const waiverPath = path79.join(projectRoot, DEFAULT_WAIVER_FILE_NAME);
   if (!existsSync46(waiverPath)) {
     return ok([]);
   }
@@ -51418,7 +52314,7 @@ function applyRiskWaivers(input) {
   };
 }
 function parseWaivers(value) {
-  if (!isRecord28(value)) {
+  if (!isRecord29(value)) {
     return err("Ohrisk waiver file must be an object with a waivers array.");
   }
   const unknownRootKeys = unknownKeys(value, WAIVER_ROOT_KEYS);
@@ -51439,7 +52335,7 @@ function parseWaivers(value) {
   return ok(waivers);
 }
 function parseWaiver(value, index) {
-  if (!isRecord28(value)) {
+  if (!isRecord29(value)) {
     return err(`Waiver at index ${index} must be an object.`);
   }
   const unknownWaiverKeys = unknownKeys(value, WAIVER_KEYS);
@@ -51493,12 +52389,12 @@ function isIsoDate(value) {
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
-function isRecord28(value) {
+function isRecord29(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/report/cyclonedx-report.ts
-import path79 from "node:path";
+import path80 from "node:path";
 function renderCycloneDxReport(input) {
   const licensesByPackageId = new Map(input.normalizedLicenses.map((license) => [license.packageId, license]));
   const findingsByPackageId = new Map(input.riskFindings.map((finding) => [finding.packageId, finding]));
@@ -51618,11 +52514,11 @@ function archiveProperties(project) {
   ];
 }
 function projectRelativePath2(projectRoot, targetPath) {
-  const relativePath = path79.relative(projectRoot, targetPath);
-  if (relativePath && !relativePath.startsWith("..") && !path79.isAbsolute(relativePath)) {
+  const relativePath = path80.relative(projectRoot, targetPath);
+  if (relativePath && !relativePath.startsWith("..") && !path80.isAbsolute(relativePath)) {
     return relativePath.replace(/\\/g, "/");
   }
-  return path79.basename(targetPath);
+  return path80.basename(targetPath);
 }
 function renderComponent(input) {
   const licenses = input.license ? renderLicenses(input.license) : [];
@@ -51725,8 +52621,8 @@ function directChildRefsByNodeId(nodes) {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const childIdsByNodeId = new Map;
   for (const candidate of nodes) {
-    for (const path80 of candidate.paths) {
-      const packagePath = path80.map(packageIdFromPathSegment);
+    for (const path81 of candidate.paths) {
+      const packagePath = path81.map(packageIdFromPathSegment);
       for (let index = 0;index < packagePath.length - 1; index += 1) {
         const parentId = packagePath[index];
         const childId = packagePath[index + 1];
@@ -52058,7 +52954,7 @@ function formatNormalizedExpression(license) {
 }
 
 // src/report/sarif-report.ts
-import path80 from "node:path";
+import path81 from "node:path";
 var SARIF_SCHEMA_URL = "https://json.schemastore.org/sarif-2.1.0.json";
 var RULES = [
   ruleFor("high", "High license risk", "A dependency has license evidence that is high risk for the selected profile."),
@@ -52130,7 +53026,7 @@ function renderSarifReport(input) {
   }, null, 2);
 }
 function sarifLockfileUri(input) {
-  const relativePath = path80.relative(input.project.rootDir, input.project.lockfile.path).replace(/\\/g, "/") || path80.basename(input.project.lockfile.path);
+  const relativePath = path81.relative(input.project.rootDir, input.project.lockfile.path).replace(/\\/g, "/") || path81.basename(input.project.lockfile.path);
   if (!input.project.source) {
     return relativePath;
   }
@@ -52275,7 +53171,7 @@ function securitySeverityFor(severity) {
 }
 
 // src/report/scan-report.ts
-import path81 from "node:path";
+import path82 from "node:path";
 
 // src/report/locales/en.ts
 var ENGLISH_TEXT = {
@@ -55947,18 +56843,18 @@ function disabledPolicySummary() {
   };
 }
 function displayProjectPath(project, targetPath) {
-  const relativePath = path81.relative(project.rootDir, targetPath);
-  if (relativePath && !relativePath.startsWith("..") && !path81.isAbsolute(relativePath)) {
+  const relativePath = path82.relative(project.rootDir, targetPath);
+  if (relativePath && !relativePath.startsWith("..") && !path82.isAbsolute(relativePath)) {
     const normalizedPath = relativePath.replace(/\\/g, "/");
     return project.source ? `${project.source.displayPath}!/${archiveEntryPath(project, normalizedPath)}` : normalizedPath;
   }
-  return path81.basename(targetPath);
+  return path82.basename(targetPath);
 }
 function displayLockfilePath(project) {
   return displayProjectPath(project, project.lockfile.path);
 }
 function displayLockfileDirectoryPath(project) {
-  const directoryPath = path81.dirname(displayLockfilePath(project));
+  const directoryPath = path82.dirname(displayLockfilePath(project));
   return directoryPath === "" ? "." : directoryPath;
 }
 function markdownProjectLabel(input) {
@@ -56570,10 +57466,10 @@ import {
   writeFileSync as writeFileSync3
 } from "node:fs";
 import { randomBytes as randomBytes2 } from "node:crypto";
-import path82 from "node:path";
+import path83 from "node:path";
 var writeReportFile = (input) => {
-  const resolvedCwd = path82.resolve(input.cwd);
-  const resolvedPath = path82.resolve(resolvedCwd, input.outputPath);
+  const resolvedCwd = path83.resolve(input.cwd);
+  const resolvedPath = path83.resolve(resolvedCwd, input.outputPath);
   if (!isProjectRelativeOutputPath(input.outputPath) || !isPathInsideOrEqual6(resolvedPath, resolvedCwd)) {
     return err(createError({
       code: "REPORT_OUTPUT_PATH_OUTSIDE_PROJECT",
@@ -56587,7 +57483,7 @@ var writeReportFile = (input) => {
     }));
   }
   try {
-    mkdirSync2(path82.dirname(resolvedPath), { recursive: true });
+    mkdirSync2(path83.dirname(resolvedPath), { recursive: true });
     const validatedPath = validateResolvedReportPath({
       outputPath: input.outputPath,
       projectRoot: resolvedCwd,
@@ -56676,7 +57572,7 @@ function writeValidatedReportFile(input) {
 }
 function validateResolvedReportPath(input) {
   const realProjectRoot = realpathSync7(input.projectRoot);
-  const realParent = realpathSync7(path82.dirname(input.resolvedPath));
+  const realParent = realpathSync7(path83.dirname(input.resolvedPath));
   const existingOutputIsSymlink = isSymbolicLinkPath(input.resolvedPath);
   if (existingOutputIsSymlink || !isPathInsideOrEqual6(realParent, realProjectRoot)) {
     return err(createError({
@@ -56700,9 +57596,9 @@ function validateResolvedReportPath(input) {
   });
 }
 function createReportTempPath(realParent, resolvedPath) {
-  const baseName = path82.basename(resolvedPath);
+  const baseName = path83.basename(resolvedPath);
   const suffix = randomBytes2(8).toString("hex");
-  return path82.join(realParent, `.ohrisk-report-${process.pid}-${Date.now()}-${suffix}-${baseName}.tmp`);
+  return path83.join(realParent, `.ohrisk-report-${process.pid}-${Date.now()}-${suffix}-${baseName}.tmp`);
 }
 function promoteTempReportFile(tempPath, resolvedPath) {
   try {
@@ -56740,20 +57636,20 @@ function isSymbolicLinkPath(filePath) {
   }
 }
 function isProjectRelativeOutputPath(outputPath) {
-  if (outputPath.includes("\x00") || path82.isAbsolute(outputPath) || path82.win32.isAbsolute(outputPath) || path82.posix.isAbsolute(outputPath) || /^[A-Za-z]:/.test(outputPath)) {
+  if (outputPath.includes("\x00") || path83.isAbsolute(outputPath) || path83.win32.isAbsolute(outputPath) || path83.posix.isAbsolute(outputPath) || /^[A-Za-z]:/.test(outputPath)) {
     return false;
   }
   return outputPath.split(/[\\/]+/).every((segment) => segment !== "" && segment !== "." && segment !== "..");
 }
 function isPathInsideOrEqual6(childPath, parentPath) {
-  const relativePath = path82.relative(parentPath, childPath);
-  return relativePath === "" || !relativePath.startsWith("..") && !path82.isAbsolute(relativePath);
+  const relativePath = path83.relative(parentPath, childPath);
+  return relativePath === "" || !relativePath.startsWith("..") && !path83.isAbsolute(relativePath);
 }
 function isSameRealPath(leftPath, rightPath) {
   if (process.platform === "win32") {
-    return path82.normalize(leftPath).toLowerCase() === path82.normalize(rightPath).toLowerCase();
+    return path83.normalize(leftPath).toLowerCase() === path83.normalize(rightPath).toLowerCase();
   }
-  return path82.normalize(leftPath) === path82.normalize(rightPath);
+  return path83.normalize(leftPath) === path83.normalize(rightPath);
 }
 
 // src/cli/main.ts
@@ -56796,9 +57692,9 @@ async function main(argv = process.argv.slice(2), io = defaultIO()) {
 function runCache(command, io) {
   const env = io.env ?? process.env;
   const configuredCacheDir = command.cacheDir ?? env.OHRISK_CACHE_DIR;
-  const cacheDir = configuredCacheDir ? path83.resolve(io.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(env);
+  const cacheDir = configuredCacheDir ? path84.resolve(io.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(env);
   const cache = openArtifactCacheForManagement(cacheDir);
-  const location = configuredCacheDir ? path83.relative(io.cwd, cacheDir) || "." : cacheDir;
+  const location = configuredCacheDir ? path84.relative(io.cwd, cacheDir) || "." : cacheDir;
   if (command.action === "status") {
     const status = cache.status();
     if (!status.ok) {
@@ -57358,7 +58254,7 @@ function discoverFilesystemProject(input) {
     return discovered;
   }
   const lockfileCount = discovered.value.lockfiles?.length ?? 1;
-  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, lockfileCount > 1 ? `Reading ${lockfileCount} lockfiles...` : `Reading ${path83.basename(discovered.value.lockfile.path)}...`);
+  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, lockfileCount > 1 ? `Reading ${lockfileCount} lockfiles...` : `Reading ${path84.basename(discovered.value.lockfile.path)}...`);
   return discovered;
 }
 async function evaluateProjectScan(input) {
@@ -57529,7 +58425,7 @@ function resolveEvidenceRuntimeOptions(input) {
     }
   }
   const configuredCacheDir = input.cacheDir ?? input.env.OHRISK_CACHE_DIR;
-  const cacheDir = configuredCacheDir ? path83.resolve(input.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(input.env);
+  const cacheDir = configuredCacheDir ? path84.resolve(input.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(input.env);
   return ok({
     offline: input.offline,
     cacheDir,
@@ -57717,7 +58613,7 @@ function loadBaselineProjectGraph(input) {
     if (baselineLockfiles.length === 0 && listed.value.includes("package.json")) {
       baselineLockfiles = [{
         kind: "package-json",
-        path: path83.join(projectRoot, "package.json")
+        path: path84.join(projectRoot, "package.json")
       }];
     }
   } else {
@@ -57726,7 +58622,7 @@ function loadBaselineProjectGraph(input) {
   if (baselineLockfiles.length === 0) {
     return ok({
       graph: {
-        rootName: path83.basename(projectRoot),
+        rootName: path84.basename(projectRoot),
         lockfilePath: `${input.baselineRef}:<none>`,
         lockfilePaths: [],
         nodes: []
@@ -57742,7 +58638,7 @@ function loadBaselineProjectGraph(input) {
       lockfile,
       baselineRef: input.baselineRef,
       readRefFile: input.readRefFile,
-      rootNameHint: input.currentProject.scanGraph.rootName ?? path83.basename(projectRoot),
+      rootNameHint: input.currentProject.scanGraph.rootName ?? path84.basename(projectRoot),
       ...baselineFiles ? { baselineFiles } : {}
     });
     if (isErr(parsed)) {
@@ -57778,7 +58674,7 @@ function parseBaselineLockfileGraph(input) {
   if (isErr(baselineLockfile)) {
     return baselineLockfile;
   }
-  const lockfileDirectory = path83.posix.dirname(relativeLockfilePath);
+  const lockfileDirectory = path84.posix.dirname(relativeLockfilePath);
   const relativeCompanionPath = (filename) => lockfileDirectory === "." ? filename : `${lockfileDirectory}/${filename}`;
   const packageJsonRelativePath = relativeCompanionPath("package.json");
   const baselinePackageJson = input.lockfile.kind === "yarn-lock" ? input.readRefFile({
@@ -57909,7 +58805,7 @@ function parseBaselineLockfileGraph(input) {
     ...input.lockfile.kind === "cargo-lock" ? { cargoRootName: input.rootNameHint } : {},
     ...baselineGoSum.value ? { goSumText: baselineGoSum.value } : {},
     ...baselineGoWorkModules.value?.length ? { goWorkModuleInputs: baselineGoWorkModules.value } : {},
-    goWorkDir: path83.dirname(input.lockfile.path),
+    goWorkDir: path84.dirname(input.lockfile.path),
     ...baselineComposerJson.value ? { composerJsonText: baselineComposerJson.value } : {},
     ...baselineDirectoryPackagesProps.value?.text ? { directoryPackagesPropsText: baselineDirectoryPackagesProps.value.text } : {},
     ...baselineDirectoryPackagesProps.value?.path ? { directoryPackagesPropsPath: baselineDirectoryPackagesProps.value.path } : {},
@@ -57947,8 +58843,8 @@ function diffLockfileKey(lockfile) {
   return `${lockfile.kind}\x00${lockfile.path}`;
 }
 function projectRelativeLockfilePath(projectRoot, lockfilePath) {
-  const relativePath = path83.relative(projectRoot, lockfilePath).replace(/\\/g, "/");
-  return relativePath === "" ? path83.basename(lockfilePath) : relativePath;
+  const relativePath = path84.relative(projectRoot, lockfilePath).replace(/\\/g, "/");
+  return relativePath === "" ? path84.basename(lockfilePath) : relativePath;
 }
 function readBaselinePrimaryLockfile(input) {
   if (isGradleDependencyLocksDirectory(input.lockfilePath)) {
@@ -57968,7 +58864,7 @@ function readBaselineGradleDependencyLocksDirectory(input) {
       const prefix = `${normalizedDirectory}/`;
       entries = [...input.baselineFiles].filter((entry) => entry.startsWith(prefix)).map((entry) => entry.slice(prefix.length)).filter((entry) => !entry.includes("/") && entry.toLowerCase().endsWith(".lockfile")).sort();
     } else {
-      entries = readdirSync32(input.lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile5(path83.join(input.lockfilePath, entry))).sort();
+      entries = readdirSync32(input.lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile5(path84.join(input.lockfilePath, entry))).sort();
     }
   } catch (cause) {
     return err(createError({
@@ -58013,7 +58909,7 @@ function readBaselineGradleDependencyLocksDirectory(input) {
 `));
 }
 function baselineLockfilePathForKind(input) {
-  return input.kind === "gradle-lock" ? path83.join(input.rootName, input.relativeLockfilePath) : `${input.baselineRef}:${input.relativeLockfilePath}`;
+  return input.kind === "gradle-lock" ? path84.join(input.rootName, input.relativeLockfilePath) : `${input.baselineRef}:${input.relativeLockfilePath}`;
 }
 function readBaselineCargoMemberManifests(input) {
   const memberManifestPaths = input.baselineFiles ? findCargoWorkspaceMemberManifestPathsFromRelativePaths({
@@ -58079,7 +58975,7 @@ function readBaselineYarnWorkspacePackageJsons(input) {
 }
 function createBaselineRequirementsIncludedFileReader(input) {
   return ({ includePath, fromFilePath, directive }) => {
-    if (path83.isAbsolute(includePath)) {
+    if (path84.isAbsolute(includePath)) {
       return err(createError({
         code: "REQUIREMENTS_PARSE_FAILED",
         category: "unsupported_input",
@@ -58092,7 +58988,7 @@ function createBaselineRequirementsIncludedFileReader(input) {
       }));
     }
     const fromRelativePath = stripBaselineRefPrefix(fromFilePath, input.baselineRef);
-    const includedRelativePath = normalizeBaselineRelativePath(path83.join(path83.dirname(fromRelativePath), includePath));
+    const includedRelativePath = normalizeBaselineRelativePath(path84.join(path84.dirname(fromRelativePath), includePath));
     if (!includedRelativePath) {
       return err(createError({
         code: "REQUIREMENTS_PARSE_FAILED",
@@ -58152,7 +59048,7 @@ function baselinePythonLocalSourceErrorsForKind(kind) {
 }
 function createBaselinePythonLocalSourceFileReader(input) {
   return ({ sourcePath, relativeFilePath, fromFilePath }) => {
-    if (path83.isAbsolute(sourcePath)) {
+    if (path84.isAbsolute(sourcePath)) {
       return err(createError({
         code: input.errors.parseCode,
         category: "unsupported_input",
@@ -58165,7 +59061,7 @@ function createBaselinePythonLocalSourceFileReader(input) {
       }));
     }
     const fromRelativePath = stripBaselineRefPrefix(fromFilePath, input.baselineRef);
-    const sourceRelativePath = normalizeBaselineRelativePath(path83.join(path83.dirname(fromRelativePath), sourcePath));
+    const sourceRelativePath = normalizeBaselineRelativePath(path84.join(path84.dirname(fromRelativePath), sourcePath));
     if (!sourceRelativePath) {
       return err(createError({
         code: input.errors.parseCode,
@@ -58178,7 +59074,7 @@ function createBaselinePythonLocalSourceFileReader(input) {
         }
       }));
     }
-    const sourceFileRelativePath = normalizeBaselineRelativePath(path83.join(sourceRelativePath, relativeFilePath));
+    const sourceFileRelativePath = normalizeBaselineRelativePath(path84.join(sourceRelativePath, relativeFilePath));
     if (!sourceFileRelativePath) {
       return err(createError({
         code: input.errors.parseCode,
@@ -58211,18 +59107,18 @@ function stripBaselineRefPrefix(filePath, baselineRef) {
   return filePath.startsWith(prefix) ? filePath.slice(prefix.length) : filePath;
 }
 function normalizeBaselineRelativePath(relativePath) {
-  const normalized = path83.normalize(relativePath).replace(/\\/g, "/");
-  if (normalized === "." || normalized.startsWith("../") || normalized === ".." || path83.isAbsolute(normalized)) {
+  const normalized = path84.normalize(relativePath).replace(/\\/g, "/");
+  if (normalized === "." || normalized.startsWith("../") || normalized === ".." || path84.isAbsolute(normalized)) {
     return;
   }
   return normalized;
 }
 function isGradleDependencyLocksDirectory(lockfilePath) {
-  const segments = path83.normalize(lockfilePath).split(path83.sep);
+  const segments = path84.normalize(lockfilePath).split(path84.sep);
   return segments.length >= 2 && segments[segments.length - 1] === "dependency-locks" && segments[segments.length - 2] === "gradle";
 }
 function findBaselineDirectoryPackagesPropsPath(input) {
-  let current = path83.posix.dirname(projectRelativeLockfilePath(input.projectRoot, input.projectFilePath));
+  let current = path84.posix.dirname(projectRelativeLockfilePath(input.projectRoot, input.projectFilePath));
   while (true) {
     const candidate = current === "." ? "Directory.Packages.props" : `${current}/Directory.Packages.props`;
     if (input.baselineFiles.has(candidate)) {
@@ -58231,7 +59127,7 @@ function findBaselineDirectoryPackagesPropsPath(input) {
     if (current === ".") {
       return;
     }
-    const parent = path83.posix.dirname(current);
+    const parent = path84.posix.dirname(current);
     current = parent === current ? "." : parent;
   }
 }
@@ -58240,7 +59136,7 @@ function readBaselineDirectoryPackagesProps(input) {
     projectRoot: input.project.rootDir,
     projectFilePath: input.project.lockfile.path,
     baselineFiles: input.baselineFiles
-  }) : normalizeBaselineRelativePath(path83.relative(input.project.rootDir, findNearestDirectoryPackagesPropsPath(input.project.lockfile.path) ?? ""));
+  }) : normalizeBaselineRelativePath(path84.relative(input.project.rootDir, findNearestDirectoryPackagesPropsPath(input.project.lockfile.path) ?? ""));
   if (!relativePath) {
     return ok(undefined);
   }
@@ -58662,7 +59558,7 @@ function resolveWorkspaceRootPath(input) {
   if (!input.workspaceRootPath) {
     return ok(undefined);
   }
-  const resolvedPath = path83.resolve(input.cwd, input.workspaceRootPath);
+  const resolvedPath = path84.resolve(input.cwd, input.workspaceRootPath);
   try {
     const realPath = realpathSync8(resolvedPath);
     if (!statSync34(realPath).isDirectory()) {
@@ -58674,7 +59570,7 @@ function resolveWorkspaceRootPath(input) {
   }
 }
 function workspaceRootInvalidError2(workspaceRootPath) {
-  const absolute = path83.isAbsolute(workspaceRootPath);
+  const absolute = path84.isAbsolute(workspaceRootPath);
   return createError({
     code: "INVALID_ARGUMENT",
     category: "invalid_input",
@@ -58692,7 +59588,7 @@ function isCliEntrypoint(metaUrl, argvPath) {
   try {
     return realpathSync8(fileURLToPath4(metaUrl)) === realpathSync8(argvPath);
   } catch {
-    return path83.resolve(fileURLToPath4(metaUrl)) === path83.resolve(argvPath);
+    return path84.resolve(fileURLToPath4(metaUrl)) === path84.resolve(argvPath);
   }
 }
 function isFile5(pathname) {

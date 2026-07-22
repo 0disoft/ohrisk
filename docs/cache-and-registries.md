@@ -1,6 +1,7 @@
 # Cache and Registry Configuration
 
-Ohrisk stores fetched npm registry metadata, PyPI release metadata, Maven POM metadata, checksum-verified Go module ZIPs, and package artifacts in a shared,
+Ohrisk stores fetched npm registry metadata, PyPI release metadata, Maven POM metadata,
+NuGet V3 metadata, checksum-verified Go module ZIPs, SHA-512-verified NUPKGs, and package artifacts in a shared,
 content-addressed cache. The URL index contains only a SHA-256 URL key, object
 digest, byte size, access timestamps, expiration metadata, and optional HTTP
 validators. Raw URLs, credentials, authorization headers, and token values are
@@ -48,6 +49,13 @@ Go module ZIPs always use the fixed public `proxy.golang.org` adapter and the
 exact `go.sum` `h1` checksum. `--registry-url` and `--allow-host` do not replace
 or widen that proxy; official redirects remain limited to
 `storage.googleapis.com` and receive no registry credentials.
+
+NuGet remote evidence always uses service-discovered resources on the fixed
+public `api.nuget.org` host. `--registry-url` and `--allow-host` do not replace
+or widen this adapter. NUPKG bytes are cached only through the same bounded
+artifact path and are rechecked against both the selected dependency-input
+SHA-512 and the nuget.org catalog SHA-512 and byte size before their nuspec or
+license files are trusted. Hashless NuGet inputs never use this public fallback.
 
 Cache objects are verified by size and SHA-256 before use. Corrupt, truncated,
 or mismatched entries are deleted and treated as misses. Writes use private

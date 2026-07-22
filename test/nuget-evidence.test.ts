@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { collectNugetPackageEvidence } from "../src/evidence/nuget-package";
+import { collectNugetPackageEvidence, parseNuspecMetadata } from "../src/evidence/nuget-package";
 import { normalizeLicenseEvidence } from "../src/license/normalize";
 
 describe("collectNugetPackageEvidence", () => {
@@ -150,5 +150,69 @@ describe("collectNugetPackageEvidence", () => {
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
+  });
+});
+
+describe("parseNuspecMetadata", () => {
+  test("ignores commented and nested fake license elements", () => {
+    const parsed = parseNuspecMetadata({
+      packageId: "Risk.Package@1.0.0",
+      text: [
+        "<package>",
+        "  <!-- <metadata><license type=\"expression\">AGPL-3.0-only</license></metadata> -->",
+        "  <metadata>",
+        "    <id>Risk.Package</id>",
+        "    <version>1.0.0</version>",
+        "    <repository><license type=\"expression\">GPL-3.0-only</license></repository>",
+        "    <license type=\"expression\">MIT</license>",
+        "  </metadata>",
+        "</package>"
+      ].join("\n")
+    });
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) throw new Error(parsed.error.message);
+    expect(parsed.value).toEqual({
+      id: "Risk.Package",
+      version: "1.0.0",
+      license: "MIT",
+      licenseType: "expression"
+    });
+  });
+
+  test("rejects duplicate direct nuspec identity or license elements", () => {
+    const parsed = parseNuspecMetadata({
+      packageId: "Risk.Package@1.0.0",
+      text: [
+        "<package><metadata>",
+        "<id>Risk.Package</id><id>Other.Package</id>",
+        "<version>1.0.0</version>",
+        "<license type=\"expression\">MIT</license>",
+        "<license type=\"expression\">Apache-2.0</license>",
+        "</metadata></package>"
+      ].join("")
+    });
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) throw new Error("Expected duplicate nuspec metadata to fail.");
+    expect(parsed.error).toMatchObject({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      details: { reason: "nuspec_metadata_element_ambiguous" }
+    });
+  });
+
+  test("rejects DTD and external-entity declarations", () => {
+    const parsed = parseNuspecMetadata({
+      packageId: "Risk.Package@1.0.0",
+      text: [
+        "<!DOCTYPE package [<!ENTITY license SYSTEM \"file:///etc/passwd\">]>",
+        "<package><metadata><id>Risk.Package</id><version>1.0.0</version>",
+        "<license type=\"expression\">&license;</license></metadata></package>"
+      ].join("")
+    });
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) throw new Error("Expected nuspec DTD to fail.");
+    expect(parsed.error.code).toBe("PACKAGE_EVIDENCE_READ_FAILED");
   });
 });

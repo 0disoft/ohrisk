@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
+import { parseXmlDocument, type XmlNode } from "../graph/xml";
 import { createError, type OhriskError } from "../shared/errors";
 import {
   readTextFileWithLimit,
@@ -16,7 +17,9 @@ const NUGET_NUSPEC_MAX_BYTES = 1024 * 1024;
 const NUGET_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 const NUGET_LICENSE_FILE_LIMIT = 50;
 
-type NuspecMetadata = {
+export type NuspecMetadata = {
+  id?: string;
+  version?: string;
   license?: string;
   licenseType?: string;
   licenseUrl?: string;
@@ -190,20 +193,110 @@ function readNuspecMetadata(input: {
     );
   }
 
-  return ok(parseNuspecMetadata(text.value));
+  return parseNuspecMetadata({
+    packageId: input.packageId,
+    text: text.value
+  });
 }
 
-function parseNuspecMetadata(text: string): NuspecMetadata {
-  const licenseMatch = text.match(/<license\b([^>]*)>([\s\S]*?)<\/license>/i);
-  const license = licenseMatch?.[2] ? normalizeXmlText(licenseMatch[2]) : undefined;
-  const licenseType = licenseMatch?.[1]?.match(/\btype\s*=\s*"([^"]+)"/i)?.[1]?.toLowerCase();
-  const licenseUrl = text.match(/<licenseUrl\b[^>]*>([\s\S]*?)<\/licenseUrl>/i)?.[1];
+export function parseNuspecMetadata(input: {
+  packageId: string;
+  text: string;
+}): Result<NuspecMetadata, OhriskError> {
+  const document = parseXmlDocument(
+    input.text,
+    "<NuGet package nuspec>",
+    (_path, cause) => err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "unsupported_input",
+      message: "NuGet nuspec metadata was malformed.",
+      details: { packageId: input.packageId, cause }
+    }))
+  );
+  if (!document.ok) {
+    return document;
+  }
+  if (document.value.name.toLowerCase() !== "package") {
+    return err(nuspecStructureError(input.packageId, "NuGet nuspec root element was not package.", {
+      reason: "nuspec_root_invalid"
+    }));
+  }
+  const metadataNodes = childNodesCaseInsensitive(document.value, "metadata");
+  if (metadataNodes.length !== 1) {
+    return err(nuspecStructureError(input.packageId, "NuGet nuspec did not contain exactly one metadata element.", {
+      reason: metadataNodes.length === 0 ? "nuspec_metadata_missing" : "nuspec_metadata_ambiguous",
+      metadataCount: metadataNodes.length
+    }));
+  }
+  const metadata = metadataNodes[0] as XmlNode;
+  const id = readUniqueChildText(metadata, "id", input.packageId);
+  if (!id.ok) return id;
+  const version = readUniqueChildText(metadata, "version", input.packageId);
+  if (!version.ok) return version;
+  const license = readUniqueChild(metadata, "license", input.packageId);
+  if (!license.ok) return license;
+  const licenseUrl = readUniqueChildText(metadata, "licenseUrl", input.packageId);
+  if (!licenseUrl.ok) return licenseUrl;
+  const licenseText = license.value?.text.trim();
+  const licenseType = readAttributeCaseInsensitive(license.value, "type")?.trim().toLowerCase();
 
-  return {
-    ...(license ? { license } : {}),
+  return ok({
+    ...(id.value ? { id: id.value } : {}),
+    ...(version.value ? { version: version.value } : {}),
+    ...(licenseText ? { license: licenseText } : {}),
     ...(licenseType ? { licenseType } : {}),
-    ...(licenseUrl ? { licenseUrl: normalizeXmlText(licenseUrl) } : {})
-  };
+    ...(licenseUrl.value ? { licenseUrl: licenseUrl.value } : {})
+  });
+}
+
+function readUniqueChildText(
+  parent: XmlNode,
+  name: string,
+  packageId: string
+): Result<string | undefined, OhriskError> {
+  const child = readUniqueChild(parent, name, packageId);
+  return child.ok ? ok(child.value?.text.trim() || undefined) : child;
+}
+
+function readUniqueChild(
+  parent: XmlNode,
+  name: string,
+  packageId: string
+): Result<XmlNode | undefined, OhriskError> {
+  const children = childNodesCaseInsensitive(parent, name);
+  if (children.length > 1) {
+    return err(nuspecStructureError(packageId, `NuGet nuspec metadata contained duplicate ${name} elements.`, {
+      reason: "nuspec_metadata_element_ambiguous",
+      element: name,
+      count: children.length
+    }));
+  }
+  return ok(children[0]);
+}
+
+function childNodesCaseInsensitive(node: XmlNode, name: string): XmlNode[] {
+  const normalized = name.toLowerCase();
+  return node.children.filter((child) => child.name.toLowerCase() === normalized);
+}
+
+function readAttributeCaseInsensitive(node: XmlNode | undefined, name: string): string | undefined {
+  if (!node) return undefined;
+  const normalized = name.toLowerCase();
+  return Object.entries(node.attributes)
+    .find(([key]) => key.toLowerCase() === normalized)?.[1];
+}
+
+function nuspecStructureError(
+  packageId: string,
+  message: string,
+  details: Record<string, unknown>
+): OhriskError {
+  return createError({
+    code: "PACKAGE_EVIDENCE_READ_FAILED",
+    category: "unsupported_input",
+    message,
+    details: { packageId, ...details }
+  });
 }
 
 function readNugetEvidenceFiles(input: {
@@ -288,21 +381,6 @@ function evidenceFileCandidates(dir: string): Array<{
   } catch {
     return [];
   }
-}
-
-function normalizeXmlText(text: string): string {
-  return decodeXmlEntities(text.replace(/<[^>]+>/g, " "))
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function decodeXmlEntities(text: string): string {
-  return text
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, "\"")
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, "&");
 }
 
 function isReadableDirectory(dir: string): boolean {

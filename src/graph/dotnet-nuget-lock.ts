@@ -16,6 +16,7 @@ type NugetPackageRecord = {
   name: string;
   version: string;
   id: string;
+  integrity?: string;
   dependencyType: DependencyType;
   direct: boolean;
   dependencies: string[];
@@ -305,18 +306,41 @@ function parseNugetLockJson(
         return nugetDependencyParseError(lockfilePath, targetName, packageName);
       }
 
+      const integrity = readNugetSha512Integrity(value.contentHash);
+      if (value.contentHash !== undefined && !integrity) {
+        return nugetIntegrityParseError({
+          code: "NUGET_LOCK_PARSE_FAILED",
+          lockfilePath,
+          packageName,
+          field: "contentHash"
+        });
+      }
+
       const record = {
         name: packageName,
         version: value.resolved,
         id: `${packageName}@${value.resolved}`,
         dependencyType: "production" as const,
         direct: type === "direct",
+        ...(integrity ? { integrity } : {}),
         dependencies: readNugetDependencyNames(value.dependencies)
       };
       const existing = records.get(record.id);
+      if (existing?.integrity && record.integrity && existing.integrity !== record.integrity) {
+        return nugetIntegrityParseError({
+          code: "NUGET_LOCK_PARSE_FAILED",
+          lockfilePath,
+          packageName,
+          field: "contentHash",
+          reason: "conflicting_content_hashes"
+        });
+      }
       records.set(record.id, existing
         ? {
             ...existing,
+            ...(existing.integrity ?? record.integrity
+              ? { integrity: existing.integrity ?? record.integrity }
+              : {}),
             direct: existing.direct || record.direct,
             dependencyType: mergeDependencyType(existing.dependencyType, record.dependencyType),
             dependencies: [...new Set([...existing.dependencies, ...record.dependencies])].sort()
@@ -481,6 +505,15 @@ function parseNugetProjectAssetsJson(
       }
 
       const id = `${identity.name}@${identity.version}`;
+      const integrity = readNugetSha512Integrity(value.sha512);
+      if (value.sha512 !== undefined && !integrity) {
+        return nugetIntegrityParseError({
+          code: "NUGET_ASSETS_PARSE_FAILED",
+          lockfilePath: assetsPath,
+          packageName: identity.name,
+          field: "sha512"
+        });
+      }
       if (!records.has(id)) {
         upsertNugetPackageRecord(records, {
           name: identity.name,
@@ -488,8 +521,21 @@ function parseNugetProjectAssetsJson(
           id,
           dependencyType: "production",
           direct: directNames.has(identity.name.toLowerCase()),
+          ...(integrity ? { integrity } : {}),
           dependencies: []
         });
+      } else if (integrity) {
+        const existing = records.get(id) as NugetPackageRecord;
+        if (existing.integrity && existing.integrity !== integrity) {
+          return nugetIntegrityParseError({
+            code: "NUGET_ASSETS_PARSE_FAILED",
+            lockfilePath: assetsPath,
+            packageName: identity.name,
+            field: "sha512",
+            reason: "conflicting_content_hashes"
+          });
+        }
+        records.set(id, { ...existing, integrity });
       }
     }
   }
@@ -749,6 +795,9 @@ function upsertNugetPackageRecord(
   records.set(record.id, existing
     ? {
         ...existing,
+        ...(existing.integrity ?? record.integrity
+          ? { integrity: existing.integrity ?? record.integrity }
+          : {}),
         direct: existing.direct || record.direct,
         dependencyType: mergeDependencyType(existing.dependencyType, record.dependencyType),
         dependencies: [...new Set([...existing.dependencies, ...record.dependencies])].sort()
@@ -989,6 +1038,7 @@ function walkNugetDependency(input: {
       name: input.record.name,
       version: input.record.version,
       ecosystem: "nuget",
+      ...(input.record.integrity ? { integrity: input.record.integrity } : {}),
       dependencyType: input.dependencyType,
       direct: input.direct,
       paths: [nextPath]
@@ -1052,6 +1102,40 @@ function nugetAssetsEntryParseError(
       }
     })
   );
+}
+
+function readNugetSha512Integrity(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const encoded = value.startsWith("sha512-") ? value.slice("sha512-".length) : value;
+  if (!/^[A-Za-z0-9+/]+={0,2}$/u.test(encoded) || encoded.length % 4 !== 0) {
+    return undefined;
+  }
+  const digest = Buffer.from(encoded, "base64");
+  return digest.length === 64 && digest.toString("base64") === encoded
+    ? `sha512-${encoded}`
+    : undefined;
+}
+
+function nugetIntegrityParseError(input: {
+  code: "NUGET_LOCK_PARSE_FAILED" | "NUGET_ASSETS_PARSE_FAILED";
+  lockfilePath: string;
+  packageName: string;
+  field: string;
+  reason?: string;
+}): Result<never, OhriskError> {
+  return err(createError({
+    code: input.code,
+    category: "unsupported_input",
+    message: `Failed to parse NuGet package integrity from ${input.field}.`,
+    details: {
+      lockfilePath: input.lockfilePath,
+      packageName: input.packageName,
+      field: input.field,
+      reason: input.reason ?? "invalid_sha512"
+    }
+  }));
 }
 
 function mergeDependencyType(left: DependencyType, right: DependencyType): DependencyType {

@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.12.2
+npm install -g ohrisk@1.13.0
 cd your-project
 ohrisk scan
 ```
@@ -219,7 +219,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - exact-version Maven Central POM evidence for Maven and Gradle coordinates when local POM evidence is unavailable, plus project-declared HTTPS repositories whose exact hosts are explicitly allowed; all POM requests retain bounded parent inheritance, cache, offline, timeout, redirect, identity, and response-size checks
 - checksum-verified Maven JAR license-file fallback when the selected POM chain has no license name, requiring a same-repository SHA-256 sidecar and exact embedded `META-INF/maven/<groupId>/<artifactId>/pom.properties` identity before root or `META-INF` license files are trusted
 - Bazel module license evidence uses local Bazel registry `local_path` sources from file-based registries when present; remote Bazel registry metadata fetching is not scanned yet
-- local NuGet package cache `.nuspec` evidence before unavailable fallback for `packages.lock.json`, `obj/project.assets.json`, `packages.config`, and `*.csproj` packages
+- local NuGet package cache `.nuspec` evidence before exact public nuget.org fallback for hashed `packages.lock.json` and `obj/project.assets.json` packages; remote NUPKG evidence requires the selected input SHA-512 to match the catalog SHA-512, service-index discovery, exact normalized version selection, byte-size verification, matching package and structurally parsed nuspec identity, and bounded ZIP inspection; hashless `packages.config` and standalone `*.csproj` inputs remain unavailable
 - local Conan cache `conanfile.py` metadata and package source license evidence before unavailable fallback for `conan.lock` recipes
 - local Conda package cache `info/index.json` metadata and license files before unavailable fallback for `environment.yml`, `environment.yaml`, `conda-lock.yml`, and `conda-lock.yaml` Conda packages
 - local vcpkg `vcpkg_installed/<triplet>/share/<port>/copyright` evidence before unavailable fallback for `vcpkg.json` packages
@@ -305,7 +305,7 @@ vcpkg feature/platform selection reconstruction, remote vcpkg registry metadata 
 Carthage parent graph reconstruction, remote Swift package checkout fetching,
 Carthage remote checkout or binary framework license fetching, CocoaPods remote podspec or source
 fetching, Mix and Rebar3 dependency graph reconstruction, Rebar3 git/path deps, Rebar3 plugin locks, remote Hex.pm artifact fetching,
-Composer plugin/platform repository resolution, alternate Cargo registries and Cargo Git/path source fetching, arbitrary or private Go proxies, Maven source archives or JARs without a same-repository SHA-256 sidecar and embedded exact identity, NuGet, pub.dev, RubyGems, or Packagist artifact
+Composer plugin/platform repository resolution, alternate Cargo registries and Cargo Git/path source fetching, arbitrary or private Go proxies, Maven source archives or JARs without a same-repository SHA-256 sidecar and embedded exact identity, private or alternate NuGet feeds, pub.dev, RubyGems, or Packagist artifact
 fetching are not part of this slice yet.
 
 ## Usage
@@ -382,7 +382,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.12.2
+npm install -g ohrisk@1.13.0
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
@@ -454,7 +454,7 @@ Supported dependency input files:
 - `gradle/libs.versions.toml` Maven library aliases with exact versions or `version.ref` values from the same catalog, using local `.m2/repository` POM metadata or exact-version Maven Central POM fallback for evidence
 - Maven `pom.xml` direct dependencies with explicit versions or versions resolved from local `<properties>`, same-file `dependencyManagement`, local `.m2/repository`, or exact Maven Central parent/imported-BOM `dependencyManagement` during filesystem `scan` and `ci`; reactor-internal module dependencies are excluded, and package licenses use local POM metadata, Maven Central, or explicitly allowed project-declared repositories with bounded parent inheritance and checksum/identity-verified JAR fallback
 - Bazel `MODULE.bazel` direct `bazel_dep` entries with literal exact versions, failing closed on graph-expanding constructs and using local Bazel registry `local_path` source evidence when present
-- .NET NuGet `packages.lock.json` package entries, restored `obj/project.assets.json` package graph entries, `packages.config` package entries, and direct `*.csproj` `PackageReference` or `PackageDownload` entries, resolving central versions from the nearest `Directory.Packages.props` and exact `PackageDownload` ranges from unconditional same-file properties when present, and using local NuGet cache `.nuspec` metadata for evidence
+- .NET NuGet `packages.lock.json` package entries, restored `obj/project.assets.json` package graph entries, `packages.config` package entries, and direct `*.csproj` `PackageReference` or `PackageDownload` entries, resolving central versions from the nearest `Directory.Packages.props` and exact `PackageDownload` ranges from unconditional same-file properties when present, and using local NuGet cache `.nuspec` metadata before lock-and-catalog-SHA-512-verified public nuget.org NUPKG evidence for hashed inputs
 - Conan 2 `conan.lock` recipe references from `requires`, `build_requires`, and `python_requires`, using local Conan cache `conanfile.py` metadata and license files for evidence
 - Conda `environment.yml` and `environment.yaml` exact package pins plus Conda `conda-lock.yml` and `conda-lock.yaml` package entries, using local Conda package cache `info/index.json` metadata and license files for Conda package evidence
 - vcpkg `vcpkg.json` manifest dependencies resolved from installed `vcpkg_installed/vcpkg/status` records or exact top-level overrides, using installed `vcpkg_installed/<triplet>/share/<port>/copyright` files for evidence

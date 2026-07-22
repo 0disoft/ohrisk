@@ -143,7 +143,7 @@ describe("documentation contract", () => {
     expect(remoteBoundary).toContain("exact host is explicitly allowed by policy or `--allow-host`");
     expect(remoteBoundary).toContain("publishes a SHA-256 sidecar");
     expect(remoteBoundary).toContain("META-INF/maven/<groupId>/<artifactId>/pom.properties");
-    expect(normalizedCommandContract).toContain("bounded npm/PyPI/Maven/Go remote package-evidence pipeline");
+    expect(normalizedCommandContract).toContain("bounded npm/PyPI/Maven/Go/NuGet remote package-evidence pipeline");
     expect(remoteBoundary).toContain("https://proxy.golang.org");
     expect(remoteBoundary).toContain("module ZIP's exact `h1` checksum");
     expect(normalizedCommandContract).toContain("exact reactor-internal module dependencies are excluded");
