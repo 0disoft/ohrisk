@@ -22,7 +22,7 @@ type ZonValue =
   | { kind: "string"; value: string }
   | { kind: "bool"; value: boolean }
   | { kind: "ident"; value: string }
-  | { kind: "struct"; fields: Map<string, ZonValue> }
+  | { kind: "struct"; fields: Map<string, ZonValue>; positional: ZonValue[] }
   | { kind: "number"; value: string }
   | { kind: "empty" };
 
@@ -405,7 +405,7 @@ function parseValue(state: ParseState): Result<ZonValue, OhriskError> {
       return parseStruct(state);
     case "empty_struct":
       state.index += 1;
-      return ok({ kind: "struct", fields: new Map() });
+      return ok({ kind: "struct", fields: new Map(), positional: [] });
     case "string":
       state.index += 1;
       return ok({ kind: "string", value: token.value });
@@ -434,6 +434,7 @@ function parseStruct(state: ParseState): Result<ZonValue, OhriskError> {
 
   state.index += 1;
   const fields = new Map<string, ZonValue>();
+  const positional: ZonValue[] = [];
 
   while (true) {
     skipCommas(state);
@@ -444,15 +445,15 @@ function parseStruct(state: ParseState): Result<ZonValue, OhriskError> {
 
     if (next.type === "brace_close") {
       state.index += 1;
-      return ok({ kind: "struct", fields });
+      return ok({ kind: "struct", fields, positional });
     }
 
     if (next.type !== "dot_ident") {
-      // Positional value (e.g. .{""} or .{123}) — parse and skip.
-      const positional = parseValue(state);
-      if (!positional.ok) {
-        return positional;
+      const posValue = parseValue(state);
+      if (!posValue.ok) {
+        return posValue;
       }
+      positional.push(posValue.value);
       continue;
     }
 
@@ -461,7 +462,7 @@ function parseStruct(state: ParseState): Result<ZonValue, OhriskError> {
 
     const afterKey = peek(state);
     if (!afterKey || afterKey.type !== "equals") {
-      // Positional ident value (e.g. .{.foo}) — skip.
+      positional.push({ kind: "ident", value: key });
       continue;
     }
 
@@ -526,4 +527,68 @@ function zigZonParseError(reason: string): OhriskError {
     message: "Failed to parse build.zig.zon.",
     details: { reason }
   });
+}
+
+export type ZigManifestMetadata = {
+  name: string;
+  version: string;
+  fingerprint: bigint | undefined;
+  paths: string[] | undefined;
+};
+
+export function extractZigManifestMetadata(input: string): ZigManifestMetadata | undefined {
+  const tokens = tokenizeZon(input);
+  if (!tokens.ok) {
+    return undefined;
+  }
+
+  const parsed = parseZonValue(tokens.value);
+  if (!parsed.ok || parsed.value.kind !== "struct") {
+    return undefined;
+  }
+
+  const root = parsed.value;
+  const nameField = root.fields.get("name");
+  const name = nameField?.kind === "ident"
+    ? nameField.value
+    : nameField?.kind === "string"
+      ? nameField.value
+      : undefined;
+
+  const versionField = root.fields.get("version");
+  const version = versionField?.kind === "string" ? versionField.value : undefined;
+
+  const fingerprintField = root.fields.get("fingerprint");
+  let fingerprint: bigint | undefined;
+  if (fingerprintField?.kind === "number") {
+    const raw = fingerprintField.value;
+    if (raw.startsWith("0x") || raw.startsWith("0X")) {
+      const parsed = BigInt(raw);
+      if (parsed >= 0n) {
+        fingerprint = parsed;
+      }
+    }
+  }
+
+  if (!name || !version) {
+    return undefined;
+  }
+
+  return { name, version, fingerprint, paths: extractPaths(root) };
+}
+
+function extractPaths(root: Extract<ZonValue, { kind: "struct" }>): string[] | undefined {
+  const pathsField = root.fields.get("paths");
+  if (!pathsField || pathsField.kind !== "struct") {
+    return undefined;
+  }
+
+  const paths: string[] = [];
+  for (const pos of pathsField.positional) {
+    if (pos.kind === "string") {
+      paths.push(pos.value);
+    }
+  }
+
+  return paths;
 }

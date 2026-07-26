@@ -1,9 +1,10 @@
 import { test } from "bun:test";
-import { equal } from "node:assert";
+import { equal, ok as assertOk } from "node:assert";
 import { gzipSync } from "node:zlib";
 import { createHash } from "node:crypto";
 
 import { collectRemoteZigTarballEvidence } from "../src/evidence/zig-package";
+import { extractZigManifestMetadata } from "../src/graph/zig-zon";
 
 function createTarEntry(name: string, data: Buffer): Buffer {
   const header = Buffer.alloc(512, 0);
@@ -13,7 +14,6 @@ function createTarEntry(name: string, data: Buffer): Buffer {
   header.write(sizeOctal, 124, "ascii");
   header.write("0", 156, "ascii");
 
-  // Compute checksum with checksum field as spaces (8 bytes at offset 148)
   for (let i = 148; i < 156; i++) header[i] = 0x20;
   let checksum = 0;
   for (let i = 0; i < 512; i++) checksum += header[i];
@@ -26,24 +26,49 @@ function createTarEntry(name: string, data: Buffer): Buffer {
 
 function createTestTarball(entries: Array<{ name: string; data: Buffer }>): Buffer {
   const parts = entries.map((e) => createTarEntry(e.name, e.data));
-  const zeroBlock = Buffer.alloc(1024, 0); // two zero blocks = end of archive
+  const zeroBlock = Buffer.alloc(1024, 0);
   const tar = Buffer.concat([...parts, zeroBlock]);
   return gzipSync(tar);
 }
 
-function computeZigOldHash(files: Array<{ path: string; data: Buffer }>): string {
+function computeZigHashData(files: Array<{ path: string; data: Buffer }>): { digest: Buffer; totalSize: number } {
   const sorted = [...files].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   const perFileHashes: Buffer[] = [];
+  let totalSize = 0;
   for (const entry of sorted) {
     const hasher = createHash("sha256");
     hasher.update(entry.path);
     hasher.update(Buffer.from([0, 0]));
     hasher.update(entry.data);
     perFileHashes.push(hasher.digest());
+    totalSize += entry.data.length;
   }
   const overallHasher = createHash("sha256");
   for (const h of perFileHashes) overallHasher.update(h);
-  return "1220" + overallHasher.digest("hex");
+  return { digest: overallHasher.digest(), totalSize };
+}
+
+function computeZigOldHash(files: Array<{ path: string; data: Buffer }>): string {
+  return "1220" + computeZigHashData(files).digest.toString("hex");
+}
+
+function computeZigNewHash(
+  files: Array<{ path: string; data: Buffer }>,
+  name: string,
+  version: string,
+  fingerprint: bigint
+): string {
+  const { digest, totalSize } = computeZigHashData(files);
+  const id = Number(fingerprint & 0xFFFFFFFFn);
+  const saturatedSize = Math.min(totalSize, 0xFFFFFFFF);
+
+  const hashplus = Buffer.alloc(33);
+  hashplus.writeUInt32LE(id, 0);
+  hashplus.writeUInt32LE(saturatedSize, 4);
+  digest.subarray(0, 25).copy(hashplus, 8);
+
+  const hashplusB64 = hashplus.toString("base64url");
+  return `${name}-${version}-${hashplusB64}`;
 }
 
 test("collectRemoteZigTarballEvidence > verifies old-format hash and collects license evidence", () => {
@@ -75,6 +100,105 @@ test("collectRemoteZigTarballEvidence > verifies old-format hash and collects li
   equal(result.value.files[0]!.path, "LICENSE");
   equal(result.value.files[0]!.kind, "license");
   equal(result.value.warnings === undefined || result.value.warnings.length === 0, true);
+});
+
+test("collectRemoteZigTarballEvidence > verifies new-format hash with fingerprint from build.zig.zon", () => {
+  const licenseData = Buffer.from("MIT License\n\nCopyright (c) 2024 Test");
+  const buildZigData = Buffer.from('const std = @import("std");\n');
+
+  const zonContent = Buffer.from(`.{
+    .name = .mypkg,
+    .version = "1.2.3",
+    .fingerprint = 0xa1b2c3d4e5f6a7b8,
+    .dependencies = .{},
+}`);
+
+  const files = [
+    { path: "LICENSE", data: licenseData },
+    { path: "build.zig", data: buildZigData },
+    { path: "build.zig.zon", data: zonContent }
+  ];
+
+  const tarball = createTestTarball([
+    { name: "mypkg/LICENSE", data: licenseData },
+    { name: "mypkg/build.zig", data: buildZigData },
+    { name: "mypkg/build.zig.zon", data: zonContent }
+  ]);
+
+  const expectedHash = computeZigNewHash(files, "mypkg", "1.2.3", 0xa1b2c3d4e5f6a7b8n);
+
+  const result = collectRemoteZigTarballEvidence({
+    packageId: "mypkg@1.2.3",
+    packageName: "mypkg",
+    tarball,
+    expectedHash
+  });
+
+  equal(result.ok, true);
+  if (!result.ok) return;
+
+  equal(result.value.source, "tarball");
+  equal(result.value.files.length, 1);
+  equal(result.value.warnings === undefined || result.value.warnings.length === 0, true);
+});
+
+test("collectRemoteZigTarballEvidence > reports hash mismatch for new format with wrong fingerprint", () => {
+  const licenseData = Buffer.from("MIT License");
+  const zonContent = Buffer.from(`.{
+    .name = .mypkg,
+    .version = "1.0.0",
+    .fingerprint = 0x1111111111111111,
+    .dependencies = .{},
+}`);
+
+  const files = [
+    { path: "LICENSE", data: licenseData },
+    { path: "build.zig.zon", data: zonContent }
+  ];
+
+  const tarball = createTestTarball([
+    { name: "mypkg/LICENSE", data: licenseData },
+    { name: "mypkg/build.zig.zon", data: zonContent }
+  ]);
+
+  // Compute hash with a different fingerprint
+  const wrongHash = computeZigNewHash(files, "mypkg", "1.0.0", 0xdeadbeefdeadbeefn);
+
+  const result = collectRemoteZigTarballEvidence({
+    packageId: "mypkg@1.0.0",
+    packageName: "mypkg",
+    tarball,
+    expectedHash: wrongHash
+  });
+
+  equal(result.ok, true);
+  if (!result.ok) return;
+
+  equal(result.value.source, "tarball");
+  equal(result.value.warnings!.length > 0, true);
+  equal(result.value.warnings![0]!.includes("did not match"), true);
+});
+
+test("extractZigManifestMetadata > extracts name, version, and fingerprint", () => {
+  const zon = `.{\n    .name = .zls,\n    .version = "0.17.0-dev",\n    .fingerprint = 0xa66330b97eb969ae,\n    .dependencies = .{},\n}`;
+  const meta = extractZigManifestMetadata(zon);
+
+  assertOk(meta !== undefined);
+  if (!meta) return;
+  equal(meta.name, "zls");
+  equal(meta.version, "0.17.0-dev");
+  equal(meta.fingerprint, 0xa66330b97eb969aen);
+});
+
+test("extractZigManifestMetadata > returns undefined for manifest without fingerprint", () => {
+  const zon = `.{\n    .name = .nofp,\n    .version = "0.1.0",\n    .dependencies = .{},\n}`;
+  const meta = extractZigManifestMetadata(zon);
+
+  assertOk(meta !== undefined);
+  if (!meta) return;
+  equal(meta.name, "nofp");
+  equal(meta.version, "0.1.0");
+  equal(meta.fingerprint, undefined);
 });
 
 test("collectRemoteZigTarballEvidence > collects evidence with unverified warning for unknown hash format", () => {

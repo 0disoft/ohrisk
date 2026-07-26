@@ -15,7 +15,7 @@ import {
   type TarEntry
 } from "./tarball";
 import type { LicenseEvidence, LicenseEvidenceFile } from "./types";
-import { parseZigHash } from "../graph/zig-zon";
+import { parseZigHash, extractZigManifestMetadata, type ZigManifestMetadata } from "../graph/zig-zon";
 
 const ZIG_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 const ZIG_LICENSE_FILE_LIMIT = 50;
@@ -118,19 +118,27 @@ export function collectRemoteZigTarballEvidence(input: {
     }))
     .filter((entry) => entry.path.length > 0);
 
-  const computedHash = computeZigPackageHash(normalizedEntries);
+  const manifestMetadata = findManifestMetadata(normalizedEntries);
+
+  const computed = computeZigPackageHash(normalizedEntries, manifestMetadata);
   const expectedHash = input.expectedHash.trim();
 
-  const hashMatch = verifyZigHash(computedHash, expectedHash);
+  const hashMatch = verifyZigHash(computed, expectedHash, manifestMetadata);
   if (!hashMatch.ok) {
     return err(hashMatch.error);
   }
 
   const warnings: string[] = [];
   if (!hashMatch.value) {
-    warnings.push(
-      `Zig package hash format was not verifiable (expected: ${expectedHash.slice(0, 40)}…). Evidence collected without integrity verification.`
-    );
+    if (manifestMetadata) {
+      warnings.push(
+        `Zig package hash did not match the computed digest (expected: ${expectedHash.slice(0, 40)}…). Evidence collected without integrity verification.`
+      );
+    } else {
+      warnings.push(
+        `Zig package hash format was not verifiable: build.zig.zon with fingerprint was not found in the tarball (expected: ${expectedHash.slice(0, 40)}…). Evidence collected without integrity verification.`
+      );
+    }
   }
 
   const evidenceFiles = collectZigTarballEvidenceFiles(normalizedEntries, warnings);
@@ -147,10 +155,18 @@ export function collectRemoteZigTarballEvidence(input: {
   });
 }
 
+type ZigComputedHash = {
+  digest: Buffer;
+  totalSize: number;
+};
+
 function computeZigPackageHash(
-  entries: Array<{ path: string; data: Buffer }>
-): Buffer {
-  const sorted = [...entries].sort((left, right) =>
+  entries: Array<{ path: string; data: Buffer }>,
+  manifest: ZigManifestMetadata | undefined
+): ZigComputedHash {
+  const filtered = manifest?.paths ? filterEntriesByPaths(entries, manifest.paths) : entries;
+
+  const sorted = [...filtered].sort((left, right) =>
     left.path < right.path ? -1 : left.path > right.path ? 1 : 0
   );
 
@@ -172,13 +188,65 @@ function computeZigPackageHash(
     overallHasher.update(fileHash);
   }
 
-  const digest = overallHasher.digest();
-  return Buffer.concat([digest, Buffer.alloc(8)], 40);
+  return {
+    digest: overallHasher.digest(),
+    totalSize
+  };
+}
+
+function filterEntriesByPaths(
+  entries: Array<{ path: string; data: Buffer }>,
+  paths: string[]
+): Array<{ path: string; data: Buffer }> {
+  if (paths.length === 0) {
+    return entries;
+  }
+
+  // .paths = .{""} or .paths = .{"."} means include everything
+  if (paths.includes("") || paths.includes(".")) {
+    return entries;
+  }
+
+  const includeSet = new Set(paths);
+
+  return entries.filter((entry) => {
+    const normalized = normalizeZigPath(entry.path);
+
+    // Direct match
+    if (includeSet.has(normalized)) {
+      return true;
+    }
+
+    // Check if any included path is a parent directory
+    let dirname = normalized;
+    while (dirname.includes("/")) {
+      const lastSlash = dirname.lastIndexOf("/");
+      dirname = dirname.slice(0, lastSlash);
+      if (includeSet.has(dirname)) {
+        return true;
+      }
+    }
+
+    return false;
+  });
+}
+
+function findManifestMetadata(
+  entries: Array<{ path: string; data: Buffer }>
+): ZigManifestMetadata | undefined {
+  const zonEntry = entries.find((entry) => entry.path === "build.zig.zon");
+  if (!zonEntry) {
+    return undefined;
+  }
+
+  const zonText = zonEntry.data.toString("utf8");
+  return extractZigManifestMetadata(zonText);
 }
 
 function verifyZigHash(
-  computed: Buffer,
-  expected: string
+  computed: ZigComputedHash,
+  expected: string,
+  manifest: ZigManifestMetadata | undefined
 ): Result<boolean, OhriskError> {
   const parsed = parseZigHash(expected);
 
@@ -187,20 +255,34 @@ function verifyZigHash(
   }
 
   if (parsed.format === "old") {
-    const computedHex = computed.subarray(0, 32).toString("hex");
+    const computedHex = computed.digest.toString("hex");
     const expectedHex = parsed.digestHex.toLowerCase();
     return ok(computedHex === expectedHex);
   }
 
   // New format: name-version-base64url(id_le32 + size_le32 + digest[0:25])
-  // We can only verify the digest portion (first 25 bytes) and size.
-  // Full verification requires the package fingerprint (id field) from build.zig.zon,
-  // which is only known for the root package, not for dependencies.
-  // The hash field in .dependencies only stores the dependency's hash, not its fingerprint.
-  // So for new-format hashes, we verify the digest prefix and size, but cannot
-  // fully verify without the fingerprint. We return false (unverified) rather than
-  // failing, so evidence is still collected with a warning.
-  return ok(false);
+  if (!manifest || manifest.fingerprint === undefined) {
+    return ok(false);
+  }
+
+  // Extract package ID from fingerprint (lower 32 bits of the u64, LE)
+  const fingerprint = manifest.fingerprint;
+  const id = Number(fingerprint & 0xFFFFFFFFn);
+  const saturatedSize = Math.min(computed.totalSize, 0xFFFFFFFF);
+
+  // Build hashplus: id_le32 + size_le32 + digest[0:25]
+  const hashplus = Buffer.alloc(33);
+  hashplus.writeUInt32LE(id, 0);
+  hashplus.writeUInt32LE(saturatedSize, 4);
+  computed.digest.subarray(0, 25).copy(hashplus, 8);
+
+  // base64url encode (no padding)
+  const hashplusB64 = hashplus.toString("base64url");
+
+  // Construct expected: name-version-hashplus
+  const expectedHashString = `${manifest.name}-${manifest.version}-${hashplusB64}`;
+
+  return ok(expectedHashString === expected);
 }
 
 function normalizeZigPath(p: string): string {
