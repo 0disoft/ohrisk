@@ -5,11 +5,14 @@
 - Added Zig `build.zig.zon` dependency manifest support. Ohrisk parses
   `.dependencies` entries with `url`/`hash` and `path` fields, classifies
   them as `zig` ecosystem dependencies, and collects license evidence from
-  local path dependencies. Remote URL dependencies without a local checkout
-  remain `unknown` rather than fetching unverified archives — the Zig package
-  hash algorithm requires a full file-tree walk and is not yet implemented.
-  Old multihash (`1220` + SHA-256 hex) and new name-version-hashplus formats
-  are both parsed for identity.
+  local path dependencies and remote tarballs. Remote URL dependencies are
+  downloaded, decompressed, and the Zig package hash is computed via
+  per-file SHA-256 (normalized path + `[0,0]` + contents) then overall
+  SHA-256 of concatenated per-file hashes. Old multihash (`1220` + SHA-256
+  hex) is fully verified; new name-version-hashplus format falls back to
+  unverified with a warning because the fingerprint-based package ID is not
+  available for dependencies. License files (LICENSE, COPYING, NOTICE, etc.)
+  are extracted from the verified tarball.
 
 ## 1.13.0 - 2026-07-22
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: fe87c88d2f425f63e368a45b949d095d81a0631f629e3b38f17914c058763a16
+// ohrisk-action-source-sha256: cfe5ef0a29675865b5af2a76308f8a06c054919affac63fffb39461aa018f96e
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -40749,7 +40749,7 @@ function cacheOperationError(message, rootDir, cause) {
 }
 
 // src/evidence/collect.ts
-import { createHash as createHash6, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
+import { createHash as createHash7, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import {
   closeSync as closeSync4,
@@ -45847,10 +45847,333 @@ function isFile4(pathname) {
 }
 
 // src/evidence/zig-package.ts
+import { createHash as createHash4 } from "node:crypto";
 import { existsSync as existsSync44, readdirSync as readdirSync31, statSync as statSync32 } from "node:fs";
 import path75 from "node:path";
+
+// src/evidence/tarball.ts
+import { gunzipSync as gunzipSync3 } from "node:zlib";
+var PACKAGE_TARBALL_UNPACKED_MAX_BYTES = 100 * 1024 * 1024;
+var PACKAGE_TARBALL_MAX_ENTRIES = 50000;
+function collectTarballEvidence(input) {
+  const unpacked = gunzipTarballWithLimit({
+    packageId: input.packageId,
+    tarball: input.tarball,
+    maxBytes: input.unpackedMaxBytes ?? PACKAGE_TARBALL_UNPACKED_MAX_BYTES
+  });
+  if (!unpacked.ok) {
+    return err(unpacked.error);
+  }
+  try {
+    const entries = parseTarEntries2({
+      tarball: unpacked.value,
+      maxEntries: input.maxEntries ?? PACKAGE_TARBALL_MAX_ENTRIES
+    });
+    const packageRoot = findPackageRoot(entries);
+    const packageJsonEntry = packageRoot === undefined ? undefined : entries.find((entry) => normalizePackagePath(entry.path, packageRoot) === "package.json");
+    if (packageRoot === undefined || !packageJsonEntry) {
+      return err(createError({
+        code: "PACKAGE_JSON_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Package tarball is missing package.json.",
+        details: {
+          packageId: input.packageId
+        }
+      }));
+    }
+    const packageJson = readPackageJson2({
+      packageId: input.packageId,
+      data: packageJsonEntry.data
+    });
+    if (!packageJson.ok) {
+      return err(packageJson.error);
+    }
+    const files = collectTarEvidenceFiles(entries, packageRoot);
+    const warnings = files.length === 0 ? ["No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found."] : [];
+    return ok({
+      packageId: input.packageId,
+      ...readLicenseFields2(packageJson.value),
+      files,
+      source: "tarball",
+      warnings
+    });
+  } catch (cause) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse package tarball evidence.",
+      details: {
+        packageId: input.packageId,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
+function collectPubTarballEvidence(input) {
+  const unpacked = gunzipTarballWithLimit({
+    packageId: input.packageId,
+    tarball: input.tarball,
+    maxBytes: input.unpackedMaxBytes ?? PACKAGE_TARBALL_UNPACKED_MAX_BYTES
+  });
+  if (!unpacked.ok) {
+    return err(unpacked.error);
+  }
+  try {
+    const entries = parseTarEntries2({
+      tarball: unpacked.value,
+      maxEntries: input.maxEntries ?? PACKAGE_TARBALL_MAX_ENTRIES
+    });
+    const packageRoot = findMetadataRoot(entries, "pubspec.yaml");
+    const pubspecEntry = packageRoot === undefined ? undefined : entries.find((entry) => normalizePackagePath(entry.path, packageRoot) === "pubspec.yaml");
+    if (packageRoot === undefined || !pubspecEntry) {
+      return err(createError({
+        code: "TARBALL_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Dart pub package archive is missing a unique root pubspec.yaml.",
+        details: { packageId: input.packageId }
+      }));
+    }
+    const pubspec = readPubArchivePubspec({
+      packageId: input.packageId,
+      data: pubspecEntry.data
+    });
+    if (!pubspec.ok) {
+      return pubspec;
+    }
+    if (pubspec.value.name !== input.packageName || pubspec.value.version !== input.version) {
+      return err(createError({
+        code: "TARBALL_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Dart pub package archive did not match the locked package identity.",
+        details: {
+          packageId: input.packageId,
+          expectedName: input.packageName,
+          expectedVersion: input.version,
+          metadataName: pubspec.value.name,
+          metadataVersion: pubspec.value.version
+        }
+      }));
+    }
+    const files = collectTarEvidenceFiles(entries, packageRoot);
+    return ok({
+      packageId: input.packageId,
+      ...pubspec.value.license ? {
+        metadataLicense: pubspec.value.license,
+        metadataSource: "pubspec.yaml"
+      } : {},
+      files,
+      source: "tarball",
+      warnings: files.length === 0 ? ["No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Dart pub package archive."] : []
+    });
+  } catch (cause) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse Dart pub package archive evidence.",
+      details: {
+        packageId: input.packageId,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
+function gunzipTarballWithLimit(input) {
+  try {
+    return ok(gunzipSync3(input.tarball, { maxOutputLength: input.maxBytes }));
+  } catch (cause) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to decompress package tarball evidence.",
+      details: {
+        packageId: input.packageId,
+        maxUnpackedBytes: input.maxBytes,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
+function readPackageJson2(input) {
+  try {
+    const packageJson = JSON.parse(input.data.toString("utf8"));
+    if (!isObjectRecord7(packageJson)) {
+      throw new Error("Expected package.json to contain an object.");
+    }
+    return ok(packageJson);
+  } catch (cause) {
+    return err(createError({
+      code: "PACKAGE_JSON_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse package.json from package tarball.",
+      details: {
+        packageId: input.packageId,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
+function readPubArchivePubspec(input) {
+  try {
+    const parsed = $parse(input.data.toString("utf8"));
+    if (!isObjectRecord7(parsed)) {
+      throw new Error("Expected pubspec.yaml to contain an object.");
+    }
+    const name = typeof parsed.name === "string" ? parsed.name.trim() : "";
+    const version = typeof parsed.version === "string" ? parsed.version.trim() : "";
+    if (name === "" || version === "") {
+      throw new Error("Expected pubspec.yaml to declare name and version.");
+    }
+    const license = typeof parsed.license === "string" && parsed.license.trim() !== "" ? parsed.license.trim() : undefined;
+    return ok({ name, version, ...license ? { license } : {} });
+  } catch (cause) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse pubspec.yaml from Dart pub package archive.",
+      details: {
+        packageId: input.packageId,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
+function parseTarEntries2(input) {
+  const entries = [];
+  let offset = 0;
+  let observedEntries = 0;
+  while (offset + 512 <= input.tarball.length) {
+    const header = input.tarball.subarray(offset, offset + 512);
+    if (isZeroBlock3(header)) {
+      break;
+    }
+    observedEntries += 1;
+    if (observedEntries > input.maxEntries) {
+      throw new Error(`Package tarball exceeded the maximum entry count (${input.maxEntries}).`);
+    }
+    const name = readNullTerminated2(header, 0, 100);
+    const prefix = readNullTerminated2(header, 345, 155);
+    const type = readNullTerminated2(header, 156, 1) || "0";
+    const fullPath = prefix ? `${prefix}/${name}` : name;
+    assertValidHeaderChecksum(header, fullPath);
+    const size = parseOctal2(readNullTerminated2(header, 124, 12), "size");
+    const dataStart = offset + 512;
+    const dataEnd = dataStart + size;
+    if (!Number.isSafeInteger(dataEnd) || dataEnd < dataStart || dataEnd > input.tarball.length) {
+      throw new Error(`Tar entry ${fullPath || "(unnamed)"} extends beyond archive data.`);
+    }
+    if (type === "0" || type === "") {
+      entries.push({
+        path: fullPath,
+        type,
+        data: input.tarball.subarray(dataStart, dataEnd)
+      });
+    }
+    offset = dataStart + roundUpToBlock2(size);
+  }
+  return entries;
+}
+function findPackageRoot(entries) {
+  if (entries.some((entry) => entry.path === "package.json")) {
+    return "";
+  }
+  const roots = entries.map((entry) => {
+    const match = /^([^/]+)\/package\.json$/.exec(entry.path);
+    return match?.[1];
+  }).filter((root) => root !== undefined).sort();
+  if (roots.includes("package")) {
+    return "package";
+  }
+  return roots[0];
+}
+function findMetadataRoot(entries, filename) {
+  if (entries.some((entry) => entry.path === filename)) {
+    return "";
+  }
+  const roots = [...new Set(entries.map((entry) => {
+    const separator = entry.path.indexOf("/");
+    return separator > 0 && entry.path.slice(separator + 1) === filename ? entry.path.slice(0, separator) : undefined;
+  }).filter((root) => root !== undefined))];
+  return roots.length === 1 ? roots[0] : undefined;
+}
+function collectTarEvidenceFiles(entries, packageRoot) {
+  return entries.map((entry) => {
+    const normalized = normalizePackagePath(entry.path, packageRoot);
+    if (!isRootPackageFile(normalized)) {
+      return;
+    }
+    const kind = classifyEvidenceFile(normalized);
+    if (!kind) {
+      return;
+    }
+    return {
+      path: normalized,
+      kind,
+      text: entry.data.toString("utf8")
+    };
+  }).filter((entry) => entry !== undefined).sort((left, right) => left.path.localeCompare(right.path));
+}
+function isRootPackageFile(normalizedPath) {
+  return normalizedPath.length > 0 && !normalizedPath.includes("/");
+}
+function readLicenseFields2(packageJson) {
+  const license = packageJson.license;
+  const licenses = packageJson.licenses;
+  const legacyLicenseObject = isObjectRecord7(license) ? license : undefined;
+  return {
+    ...typeof license === "string" ? { packageJsonLicense: license } : {},
+    ...legacyLicenseObject !== undefined ? { packageJsonLicenses: legacyLicenseObject } : {},
+    ...licenses !== undefined ? { packageJsonLicenses: licenses } : {}
+  };
+}
+function isObjectRecord7(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function normalizePackagePath(path75, packageRoot) {
+  if (packageRoot === "") {
+    return path75;
+  }
+  return path75.startsWith(`${packageRoot}/`) ? path75.slice(packageRoot.length + 1) : path75;
+}
+function readNullTerminated2(buffer, start, length) {
+  const slice = buffer.subarray(start, start + length);
+  const end = slice.indexOf(0);
+  return slice.subarray(0, end === -1 ? slice.length : end).toString("utf8").trim();
+}
+function assertValidHeaderChecksum(header, entryPath) {
+  const expected = parseOctal2(readNullTerminated2(header, 148, 8), "checksum");
+  const checksumHeader = Buffer.from(header);
+  checksumHeader.fill(" ", 148, 156);
+  const actual = checksumHeader.reduce((sum, byte) => sum + byte, 0);
+  if (actual !== expected) {
+    throw new Error(`Tar entry ${entryPath || "(unnamed)"} has an invalid header checksum.`);
+  }
+}
+function parseOctal2(value, fieldName) {
+  const trimmed = value.trim();
+  if (trimmed === "") {
+    return 0;
+  }
+  if (!/^[0-7]+$/.test(trimmed)) {
+    throw new Error(`Tar entry contains an invalid octal ${fieldName}.`);
+  }
+  const parsed = Number.parseInt(trimmed, 8);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error(`Tar entry ${fieldName} is too large to parse safely.`);
+  }
+  return parsed;
+}
+function roundUpToBlock2(size) {
+  return Math.ceil(size / 512) * 512;
+}
+function isZeroBlock3(buffer) {
+  return buffer.every((byte) => byte === 0);
+}
+
+// src/evidence/zig-package.ts
 var ZIG_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var ZIG_LICENSE_FILE_LIMIT = 50;
+var ZIG_TARBALL_UNPACKED_MAX_BYTES = 100 * 1024 * 1024;
+var ZIG_TARBALL_MAX_ENTRIES = 50000;
 function collectZigPackageEvidence(input) {
   if (!input.resolved) {
     return ok({
@@ -45887,6 +46210,142 @@ function collectZigPackageEvidence(input) {
     source: "local",
     warnings
   });
+}
+function collectRemoteZigTarballEvidence(input) {
+  const unpacked = gunzipTarballWithLimit({
+    packageId: input.packageId,
+    tarball: input.tarball,
+    maxBytes: input.unpackedMaxBytes ?? ZIG_TARBALL_UNPACKED_MAX_BYTES
+  });
+  if (!unpacked.ok) {
+    return err(unpacked.error);
+  }
+  let entries;
+  try {
+    entries = parseTarEntries2({
+      tarball: unpacked.value,
+      maxEntries: input.maxEntries ?? ZIG_TARBALL_MAX_ENTRIES
+    });
+  } catch (cause) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse Zig package tarball entries.",
+      details: {
+        packageId: input.packageId,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+  const rootPrefix = detectTarRootPrefix(entries);
+  const normalizedEntries = entries.filter((entry) => entry.type === "0" || entry.type === "").map((entry) => ({
+    path: stripRootPrefix(entry.path, rootPrefix),
+    data: entry.data
+  })).filter((entry) => entry.path.length > 0);
+  const computedHash = computeZigPackageHash(normalizedEntries);
+  const expectedHash = input.expectedHash.trim();
+  const hashMatch = verifyZigHash(computedHash, expectedHash);
+  if (!hashMatch.ok) {
+    return err(hashMatch.error);
+  }
+  const warnings = [];
+  if (!hashMatch.value) {
+    warnings.push(`Zig package hash format was not verifiable (expected: ${expectedHash.slice(0, 40)}…). Evidence collected without integrity verification.`);
+  }
+  const evidenceFiles = collectZigTarballEvidenceFiles(normalizedEntries, warnings);
+  if (evidenceFiles.length === 0) {
+    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Zig package tarball.");
+  }
+  return ok({
+    packageId: input.packageId,
+    files: evidenceFiles,
+    source: "tarball",
+    warnings
+  });
+}
+function computeZigPackageHash(entries) {
+  const sorted = [...entries].sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
+  const perFileHashes = [];
+  let totalSize = 0;
+  for (const entry of sorted) {
+    const normalizedPath = normalizeZigPath(entry.path);
+    const hasher = createHash4("sha256");
+    hasher.update(normalizedPath);
+    hasher.update(Buffer.from([0, 0]));
+    hasher.update(entry.data);
+    perFileHashes.push(hasher.digest());
+    totalSize += entry.data.length;
+  }
+  const overallHasher = createHash4("sha256");
+  for (const fileHash of perFileHashes) {
+    overallHasher.update(fileHash);
+  }
+  const digest = overallHasher.digest();
+  return Buffer.concat([digest, Buffer.alloc(8)], 40);
+}
+function verifyZigHash(computed, expected) {
+  const parsed = parseZigHash(expected);
+  if (!parsed) {
+    return ok(false);
+  }
+  if (parsed.format === "old") {
+    const computedHex = computed.subarray(0, 32).toString("hex");
+    const expectedHex = parsed.digestHex.toLowerCase();
+    return ok(computedHex === expectedHex);
+  }
+  return ok(false);
+}
+function normalizeZigPath(p) {
+  return p.replace(/\\/g, "/");
+}
+function detectTarRootPrefix(entries) {
+  const roots = new Set;
+  for (const entry of entries) {
+    const separator = entry.path.indexOf("/");
+    if (separator > 0) {
+      roots.add(entry.path.slice(0, separator));
+    }
+  }
+  if (roots.size === 1) {
+    return [...roots][0];
+  }
+  return "";
+}
+function stripRootPrefix(tarPath, rootPrefix) {
+  if (!rootPrefix) {
+    return tarPath;
+  }
+  const prefix = rootPrefix + "/";
+  if (tarPath.startsWith(prefix)) {
+    return tarPath.slice(prefix.length);
+  }
+  if (tarPath === rootPrefix) {
+    return "";
+  }
+  return tarPath;
+}
+function collectZigTarballEvidenceFiles(entries, warnings) {
+  const files = [];
+  for (const entry of entries) {
+    const kind = classifyEvidenceFile(entry.path);
+    if (!kind) {
+      continue;
+    }
+    if (files.length >= ZIG_LICENSE_FILE_LIMIT) {
+      warnings.push(`Zig package evidence file limit reached at ${ZIG_LICENSE_FILE_LIMIT} files.`);
+      break;
+    }
+    if (entry.data.length > ZIG_EVIDENCE_FILE_MAX_BYTES) {
+      warnings.push(`Skipped Zig evidence file ${entry.path}: file exceeded ${ZIG_EVIDENCE_FILE_MAX_BYTES} bytes.`);
+      continue;
+    }
+    files.push({
+      path: entry.path,
+      kind,
+      text: entry.data.toString("utf8")
+    });
+  }
+  return files.sort((left, right) => left.path.localeCompare(right.path));
 }
 function resolveLocalZigPath(input) {
   if (looksRemote2(input.resolved)) {
@@ -46350,7 +46809,7 @@ function adapter(id, lockfileKinds, packageEcosystems) {
 }
 
 // src/evidence/go-module-zip.ts
-import { createHash as createHash4, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+import { createHash as createHash5, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
 var GO_MODULE_ZIP_MAX_ENTRIES = 50000;
 var GO_MODULE_ZIP_ENTRY_MAX_BYTES = 50 * 1024 * 1024;
 var GO_MODULE_ZIP_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
@@ -46438,7 +46897,7 @@ function collectGoModuleZipEvidence(input) {
   });
 }
 function hashGoModuleArchive(input) {
-  const summary = createHash4("sha256");
+  const summary = createHash5("sha256");
   const entries = [...input.entries].sort((left, right) => {
     const leftName = left.type === "directory" ? `${left.path}/` : left.path;
     const rightName = right.type === "directory" ? `${right.path}/` : right.path;
@@ -46458,7 +46917,7 @@ function hashGoModuleArchive(input) {
     if (!data.ok) {
       return data;
     }
-    const fileDigest = createHash4("sha256").update(data.value).digest("hex");
+    const fileDigest = createHash5("sha256").update(data.value).digest("hex");
     summary.update(`${fileDigest}  ${fileName}
 `, "utf8");
   }
@@ -46632,7 +47091,7 @@ function isPackageLicenseEvidencePath(filePath) {
 }
 
 // src/evidence/nuget-nupkg.ts
-import { createHash as createHash5, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
+import { createHash as createHash6, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
 import path76 from "node:path";
 
 // src/evidence/nuget-registry.ts
@@ -47050,7 +47509,7 @@ function collectNugetNupkgEvidence(input) {
 }
 function verifyNugetNupkgIntegrity(input) {
   const expected = decodeCanonicalSha512(input.expectedSha512);
-  const actual = createHash5("sha512").update(input.nupkg).digest();
+  const actual = createHash6("sha512").update(input.nupkg).digest();
   if (input.nupkg.byteLength !== input.expectedSize || !expected || expected.length !== actual.length || !timingSafeEqual3(expected, actual)) {
     return err(createError({
       code: "PACKAGE_INTEGRITY_CHECK_FAILED",
@@ -47418,324 +47877,6 @@ function safeArtifactFilename(value) {
 }
 function isRecord26(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// src/evidence/tarball.ts
-import { gunzipSync as gunzipSync3 } from "node:zlib";
-var PACKAGE_TARBALL_UNPACKED_MAX_BYTES = 100 * 1024 * 1024;
-var PACKAGE_TARBALL_MAX_ENTRIES = 50000;
-function collectTarballEvidence(input) {
-  const unpacked = gunzipTarballWithLimit({
-    packageId: input.packageId,
-    tarball: input.tarball,
-    maxBytes: input.unpackedMaxBytes ?? PACKAGE_TARBALL_UNPACKED_MAX_BYTES
-  });
-  if (!unpacked.ok) {
-    return err(unpacked.error);
-  }
-  try {
-    const entries = parseTarEntries2({
-      tarball: unpacked.value,
-      maxEntries: input.maxEntries ?? PACKAGE_TARBALL_MAX_ENTRIES
-    });
-    const packageRoot = findPackageRoot(entries);
-    const packageJsonEntry = packageRoot === undefined ? undefined : entries.find((entry) => normalizePackagePath(entry.path, packageRoot) === "package.json");
-    if (packageRoot === undefined || !packageJsonEntry) {
-      return err(createError({
-        code: "PACKAGE_JSON_PARSE_FAILED",
-        category: "unsupported_input",
-        message: "Package tarball is missing package.json.",
-        details: {
-          packageId: input.packageId
-        }
-      }));
-    }
-    const packageJson = readPackageJson2({
-      packageId: input.packageId,
-      data: packageJsonEntry.data
-    });
-    if (!packageJson.ok) {
-      return err(packageJson.error);
-    }
-    const files = collectTarEvidenceFiles(entries, packageRoot);
-    const warnings = files.length === 0 ? ["No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found."] : [];
-    return ok({
-      packageId: input.packageId,
-      ...readLicenseFields2(packageJson.value),
-      files,
-      source: "tarball",
-      warnings
-    });
-  } catch (cause) {
-    return err(createError({
-      code: "TARBALL_PARSE_FAILED",
-      category: "unsupported_input",
-      message: "Failed to parse package tarball evidence.",
-      details: {
-        packageId: input.packageId,
-        cause: cause instanceof Error ? cause.message : String(cause)
-      }
-    }));
-  }
-}
-function collectPubTarballEvidence(input) {
-  const unpacked = gunzipTarballWithLimit({
-    packageId: input.packageId,
-    tarball: input.tarball,
-    maxBytes: input.unpackedMaxBytes ?? PACKAGE_TARBALL_UNPACKED_MAX_BYTES
-  });
-  if (!unpacked.ok) {
-    return err(unpacked.error);
-  }
-  try {
-    const entries = parseTarEntries2({
-      tarball: unpacked.value,
-      maxEntries: input.maxEntries ?? PACKAGE_TARBALL_MAX_ENTRIES
-    });
-    const packageRoot = findMetadataRoot(entries, "pubspec.yaml");
-    const pubspecEntry = packageRoot === undefined ? undefined : entries.find((entry) => normalizePackagePath(entry.path, packageRoot) === "pubspec.yaml");
-    if (packageRoot === undefined || !pubspecEntry) {
-      return err(createError({
-        code: "TARBALL_PARSE_FAILED",
-        category: "unsupported_input",
-        message: "Dart pub package archive is missing a unique root pubspec.yaml.",
-        details: { packageId: input.packageId }
-      }));
-    }
-    const pubspec = readPubArchivePubspec({
-      packageId: input.packageId,
-      data: pubspecEntry.data
-    });
-    if (!pubspec.ok) {
-      return pubspec;
-    }
-    if (pubspec.value.name !== input.packageName || pubspec.value.version !== input.version) {
-      return err(createError({
-        code: "TARBALL_PARSE_FAILED",
-        category: "unsupported_input",
-        message: "Dart pub package archive did not match the locked package identity.",
-        details: {
-          packageId: input.packageId,
-          expectedName: input.packageName,
-          expectedVersion: input.version,
-          metadataName: pubspec.value.name,
-          metadataVersion: pubspec.value.version
-        }
-      }));
-    }
-    const files = collectTarEvidenceFiles(entries, packageRoot);
-    return ok({
-      packageId: input.packageId,
-      ...pubspec.value.license ? {
-        metadataLicense: pubspec.value.license,
-        metadataSource: "pubspec.yaml"
-      } : {},
-      files,
-      source: "tarball",
-      warnings: files.length === 0 ? ["No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Dart pub package archive."] : []
-    });
-  } catch (cause) {
-    return err(createError({
-      code: "TARBALL_PARSE_FAILED",
-      category: "unsupported_input",
-      message: "Failed to parse Dart pub package archive evidence.",
-      details: {
-        packageId: input.packageId,
-        cause: cause instanceof Error ? cause.message : String(cause)
-      }
-    }));
-  }
-}
-function gunzipTarballWithLimit(input) {
-  try {
-    return ok(gunzipSync3(input.tarball, { maxOutputLength: input.maxBytes }));
-  } catch (cause) {
-    return err(createError({
-      code: "TARBALL_PARSE_FAILED",
-      category: "unsupported_input",
-      message: "Failed to decompress package tarball evidence.",
-      details: {
-        packageId: input.packageId,
-        maxUnpackedBytes: input.maxBytes,
-        cause: cause instanceof Error ? cause.message : String(cause)
-      }
-    }));
-  }
-}
-function readPackageJson2(input) {
-  try {
-    const packageJson = JSON.parse(input.data.toString("utf8"));
-    if (!isObjectRecord7(packageJson)) {
-      throw new Error("Expected package.json to contain an object.");
-    }
-    return ok(packageJson);
-  } catch (cause) {
-    return err(createError({
-      code: "PACKAGE_JSON_PARSE_FAILED",
-      category: "unsupported_input",
-      message: "Failed to parse package.json from package tarball.",
-      details: {
-        packageId: input.packageId,
-        cause: cause instanceof Error ? cause.message : String(cause)
-      }
-    }));
-  }
-}
-function readPubArchivePubspec(input) {
-  try {
-    const parsed = $parse(input.data.toString("utf8"));
-    if (!isObjectRecord7(parsed)) {
-      throw new Error("Expected pubspec.yaml to contain an object.");
-    }
-    const name = typeof parsed.name === "string" ? parsed.name.trim() : "";
-    const version = typeof parsed.version === "string" ? parsed.version.trim() : "";
-    if (name === "" || version === "") {
-      throw new Error("Expected pubspec.yaml to declare name and version.");
-    }
-    const license = typeof parsed.license === "string" && parsed.license.trim() !== "" ? parsed.license.trim() : undefined;
-    return ok({ name, version, ...license ? { license } : {} });
-  } catch (cause) {
-    return err(createError({
-      code: "TARBALL_PARSE_FAILED",
-      category: "unsupported_input",
-      message: "Failed to parse pubspec.yaml from Dart pub package archive.",
-      details: {
-        packageId: input.packageId,
-        cause: cause instanceof Error ? cause.message : String(cause)
-      }
-    }));
-  }
-}
-function parseTarEntries2(input) {
-  const entries = [];
-  let offset = 0;
-  let observedEntries = 0;
-  while (offset + 512 <= input.tarball.length) {
-    const header = input.tarball.subarray(offset, offset + 512);
-    if (isZeroBlock3(header)) {
-      break;
-    }
-    observedEntries += 1;
-    if (observedEntries > input.maxEntries) {
-      throw new Error(`Package tarball exceeded the maximum entry count (${input.maxEntries}).`);
-    }
-    const name = readNullTerminated2(header, 0, 100);
-    const prefix = readNullTerminated2(header, 345, 155);
-    const type = readNullTerminated2(header, 156, 1) || "0";
-    const fullPath = prefix ? `${prefix}/${name}` : name;
-    assertValidHeaderChecksum(header, fullPath);
-    const size = parseOctal2(readNullTerminated2(header, 124, 12), "size");
-    const dataStart = offset + 512;
-    const dataEnd = dataStart + size;
-    if (!Number.isSafeInteger(dataEnd) || dataEnd < dataStart || dataEnd > input.tarball.length) {
-      throw new Error(`Tar entry ${fullPath || "(unnamed)"} extends beyond archive data.`);
-    }
-    if (type === "0" || type === "") {
-      entries.push({
-        path: fullPath,
-        type,
-        data: input.tarball.subarray(dataStart, dataEnd)
-      });
-    }
-    offset = dataStart + roundUpToBlock2(size);
-  }
-  return entries;
-}
-function findPackageRoot(entries) {
-  if (entries.some((entry) => entry.path === "package.json")) {
-    return "";
-  }
-  const roots = entries.map((entry) => {
-    const match = /^([^/]+)\/package\.json$/.exec(entry.path);
-    return match?.[1];
-  }).filter((root) => root !== undefined).sort();
-  if (roots.includes("package")) {
-    return "package";
-  }
-  return roots[0];
-}
-function findMetadataRoot(entries, filename) {
-  if (entries.some((entry) => entry.path === filename)) {
-    return "";
-  }
-  const roots = [...new Set(entries.map((entry) => {
-    const separator = entry.path.indexOf("/");
-    return separator > 0 && entry.path.slice(separator + 1) === filename ? entry.path.slice(0, separator) : undefined;
-  }).filter((root) => root !== undefined))];
-  return roots.length === 1 ? roots[0] : undefined;
-}
-function collectTarEvidenceFiles(entries, packageRoot) {
-  return entries.map((entry) => {
-    const normalized = normalizePackagePath(entry.path, packageRoot);
-    if (!isRootPackageFile(normalized)) {
-      return;
-    }
-    const kind = classifyEvidenceFile(normalized);
-    if (!kind) {
-      return;
-    }
-    return {
-      path: normalized,
-      kind,
-      text: entry.data.toString("utf8")
-    };
-  }).filter((entry) => entry !== undefined).sort((left, right) => left.path.localeCompare(right.path));
-}
-function isRootPackageFile(normalizedPath) {
-  return normalizedPath.length > 0 && !normalizedPath.includes("/");
-}
-function readLicenseFields2(packageJson) {
-  const license = packageJson.license;
-  const licenses = packageJson.licenses;
-  const legacyLicenseObject = isObjectRecord7(license) ? license : undefined;
-  return {
-    ...typeof license === "string" ? { packageJsonLicense: license } : {},
-    ...legacyLicenseObject !== undefined ? { packageJsonLicenses: legacyLicenseObject } : {},
-    ...licenses !== undefined ? { packageJsonLicenses: licenses } : {}
-  };
-}
-function isObjectRecord7(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function normalizePackagePath(path78, packageRoot) {
-  if (packageRoot === "") {
-    return path78;
-  }
-  return path78.startsWith(`${packageRoot}/`) ? path78.slice(packageRoot.length + 1) : path78;
-}
-function readNullTerminated2(buffer, start, length) {
-  const slice = buffer.subarray(start, start + length);
-  const end = slice.indexOf(0);
-  return slice.subarray(0, end === -1 ? slice.length : end).toString("utf8").trim();
-}
-function assertValidHeaderChecksum(header, entryPath) {
-  const expected = parseOctal2(readNullTerminated2(header, 148, 8), "checksum");
-  const checksumHeader = Buffer.from(header);
-  checksumHeader.fill(" ", 148, 156);
-  const actual = checksumHeader.reduce((sum, byte) => sum + byte, 0);
-  if (actual !== expected) {
-    throw new Error(`Tar entry ${entryPath || "(unnamed)"} has an invalid header checksum.`);
-  }
-}
-function parseOctal2(value, fieldName) {
-  const trimmed = value.trim();
-  if (trimmed === "") {
-    return 0;
-  }
-  if (!/^[0-7]+$/.test(trimmed)) {
-    throw new Error(`Tar entry contains an invalid octal ${fieldName}.`);
-  }
-  const parsed = Number.parseInt(trimmed, 8);
-  if (!Number.isSafeInteger(parsed)) {
-    throw new Error(`Tar entry ${fieldName} is too large to parse safely.`);
-  }
-  return parsed;
-}
-function roundUpToBlock2(size) {
-  return Math.ceil(size / 512) * 512;
-}
-function isZeroBlock3(buffer) {
-  return buffer.every((byte) => byte === 0);
 }
 
 // src/evidence/zip-package.ts
@@ -48278,7 +48419,7 @@ async function collectNodeEvidence(input) {
     projectRoot: input.projectRoot
   }) : undefined;
   if (ecosystemEvidence) {
-    if (input.node.ecosystem !== "maven" && input.node.ecosystem !== "go" && input.node.ecosystem !== "cargo" && input.node.ecosystem !== "nuget" || !ecosystemEvidence.ok || ecosystemEvidence.value.source !== "unavailable") {
+    if (input.node.ecosystem !== "maven" && input.node.ecosystem !== "go" && input.node.ecosystem !== "cargo" && input.node.ecosystem !== "nuget" && input.node.ecosystem !== "zig" || !ecosystemEvidence.ok || ecosystemEvidence.value.source !== "unavailable") {
       return ecosystemEvidence;
     }
   }
@@ -48430,6 +48571,35 @@ async function collectNodeEvidence(input) {
         packageName: input.node.name,
         version: input.node.version,
         tarball
+      })
+    });
+  }
+  if (input.node.ecosystem === "zig" && input.node.resolved && input.node.integrity) {
+    return collectRemoteTarballEvidence({
+      packageId: input.node.id,
+      resolved: input.node.resolved,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      tarballMaxBytes: input.tarballMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      allowedHosts: input.allowedHosts,
+      skipIntegrityCheck: true,
+      urlError: {
+        code: "TARBALL_FETCH_FAILED",
+        message: "Zig package archive URL targets an unsupported or blocked host.",
+        resolveFailureMessage: "Failed to resolve the Zig package archive host.",
+        details: {
+          packageId: input.node.id,
+          resolved: safeUrlForErrorDetails(input.node.resolved)
+        }
+      },
+      collectEvidence: (tarball) => collectRemoteZigTarballEvidence({
+        packageId: input.node.id,
+        packageName: input.node.name,
+        tarball,
+        expectedHash: input.node.integrity
       })
     });
   }
@@ -49370,7 +49540,7 @@ async function collectRemoteMavenJarEvidence(input) {
     return jarBytes.error.category === "network" ? ok(undefined) : jarBytes;
   }
   const expected = Buffer.from(checksum, "hex");
-  const observed = createHash6("sha256").update(jarBytes.value).digest();
+  const observed = createHash7("sha256").update(jarBytes.value).digest();
   if (expected.length !== observed.length || !timingSafeEqual4(expected, observed)) {
     return err(createError({
       code: "PACKAGE_INTEGRITY_CHECK_FAILED",
@@ -49913,7 +50083,7 @@ async function collectRemoteTarballEvidence(input) {
   if (!urlValidation.ok) {
     return err(urlValidation.error);
   }
-  if (!input.integrity) {
+  if (!input.integrity && !input.skipIntegrityCheck) {
     if (!input.offline) {
       const preflight = await preflightRemoteArtifactFetchTarget({
         code: urlError.code,
@@ -49961,14 +50131,16 @@ async function collectRemoteTarballEvidence(input) {
       }
       return err(tarball.error);
     }
-    const verified = verifyPackageIntegrity({
-      packageId: input.packageId,
-      resolved: input.resolved,
-      integrity: input.integrity,
-      tarball: tarball.value
-    });
-    if (!verified.ok) {
-      return err(verified.error);
+    if (!input.skipIntegrityCheck) {
+      const verified = verifyPackageIntegrity({
+        packageId: input.packageId,
+        resolved: input.resolved,
+        integrity: input.integrity,
+        tarball: tarball.value
+      });
+      if (!verified.ok) {
+        return err(verified.error);
+      }
     }
     const evidence = input.collectEvidence ? input.collectEvidence(tarball.value) : collectTarballEvidence({
       packageId: input.packageId,
@@ -50998,7 +51170,7 @@ function verifyPackageIntegrity(input) {
   }
   const computed = [];
   for (const entry of supported) {
-    const actualDigest = createHash6(entry.algorithm).update(input.tarball).digest();
+    const actualDigest = createHash7(entry.algorithm).update(input.tarball).digest();
     const actual = `${entry.algorithm}-${actualDigest.toString("base64")}`;
     computed.push(actual);
     if (actualDigest.byteLength === entry.digest.byteLength && timingSafeEqual4(actualDigest, entry.digest)) {

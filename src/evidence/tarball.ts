@@ -6,7 +6,7 @@ import { err, ok, type Result } from "../shared/result";
 import { classifyEvidenceFile } from "./license-files";
 import type { LicenseEvidence, LicenseEvidenceFile } from "./types";
 
-type TarEntry = {
+export type TarEntry = {
   path: string;
   type: string;
   data: Buffer;
@@ -175,7 +175,7 @@ export function collectPubTarballEvidence(input: {
   }
 }
 
-function gunzipTarballWithLimit(input: {
+export function gunzipTarballWithLimit(input: {
   packageId: string;
   tarball: Buffer | Uint8Array;
   maxBytes: number;
@@ -257,7 +257,7 @@ function readPubArchivePubspec(input: {
   }
 }
 
-function parseTarEntries(input: {
+export function parseTarEntries(input: {
   tarball: Buffer;
   maxEntries: number;
 }): TarEntry[] {

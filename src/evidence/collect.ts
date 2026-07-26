@@ -56,6 +56,7 @@ import {
   pythonDistributionArchiveFormat
 } from "./pypi-package";
 import { collectPubTarballEvidence, collectTarballEvidence } from "./tarball";
+import { collectRemoteZigTarballEvidence } from "./zig-package";
 import type { LicenseEvidence } from "./types";
 import { collectZipPackageEvidence } from "./zip-package";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
@@ -514,6 +515,7 @@ async function collectNodeEvidence(input: {
         && input.node.ecosystem !== "go"
         && input.node.ecosystem !== "cargo"
         && input.node.ecosystem !== "nuget"
+        && input.node.ecosystem !== "zig"
       )
       || !ecosystemEvidence.ok
       || ecosystemEvidence.value.source !== "unavailable"
@@ -690,6 +692,36 @@ async function collectNodeEvidence(input: {
         packageName: input.node.name,
         version: input.node.version,
         tarball
+      })
+    });
+  }
+
+  if (input.node.ecosystem === "zig" && input.node.resolved && input.node.integrity) {
+    return collectRemoteTarballEvidence({
+      packageId: input.node.id,
+      resolved: input.node.resolved,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      tarballMaxBytes: input.tarballMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      allowedHosts: input.allowedHosts,
+      skipIntegrityCheck: true,
+      urlError: {
+        code: "TARBALL_FETCH_FAILED",
+        message: "Zig package archive URL targets an unsupported or blocked host.",
+        resolveFailureMessage: "Failed to resolve the Zig package archive host.",
+        details: {
+          packageId: input.node.id,
+          resolved: safeUrlForErrorDetails(input.node.resolved)
+        }
+      },
+      collectEvidence: (tarball) => collectRemoteZigTarballEvidence({
+        packageId: input.node.id,
+        packageName: input.node.name,
+        tarball,
+        expectedHash: input.node.integrity!
       })
     });
   }
@@ -2595,6 +2627,7 @@ async function collectRemoteTarballEvidence(input: {
     resolveFailureMessage: string;
     details: Record<string, unknown>;
   };
+  skipIntegrityCheck?: boolean;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   const urlError = input.urlError ?? {
     code: "TARBALL_FETCH_FAILED" as const,
@@ -2618,7 +2651,7 @@ async function collectRemoteTarballEvidence(input: {
     return err(urlValidation.error);
   }
 
-  if (!input.integrity) {
+  if (!input.integrity && !input.skipIntegrityCheck) {
     if (!input.offline) {
       const preflight = await preflightRemoteArtifactFetchTarget({
         code: urlError.code,
@@ -2669,14 +2702,16 @@ async function collectRemoteTarballEvidence(input: {
       return err(tarball.error);
     }
 
-    const verified = verifyPackageIntegrity({
-      packageId: input.packageId,
-      resolved: input.resolved,
-      integrity: input.integrity,
-      tarball: tarball.value
-    });
-    if (!verified.ok) {
-      return err(verified.error);
+    if (!input.skipIntegrityCheck) {
+      const verified = verifyPackageIntegrity({
+        packageId: input.packageId,
+        resolved: input.resolved,
+        integrity: input.integrity,
+        tarball: tarball.value
+      });
+      if (!verified.ok) {
+        return err(verified.error);
+      }
     }
 
     const evidence = input.collectEvidence
