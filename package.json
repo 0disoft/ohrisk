@@ -1,6 +1,6 @@
 {
   "name": "ohrisk",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "description": "Catch open-source license risk before your PR ships.",
   "license": "MIT",
   "type": "module",
@@ -99,7 +99,8 @@
     "uv",
     "vcpkg",
     "version-catalog",
-    "yarn"
+    "yarn",
+    "zig"
   ],
   "publishConfig": {
     "access": "public"

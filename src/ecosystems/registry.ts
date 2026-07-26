@@ -72,6 +72,7 @@ const DEFAULT_ADAPTERS: readonly EcosystemAdapter[] = [
   adapter("elixir", ["mix-lock", "rebar-lock"], ["hex"]),
   adapter("ruby", ["gemfile-lock"], ["gem"]),
   adapter("php", ["composer-lock"], ["composer"]),
+  adapter("zig", ["zig-zon"], ["zig"]),
   adapter("sbom", ["cyclonedx-json", "cyclonedx-xml", "spdx-json", "spdx-rdf", "spdx-tag-value"], [])
 ];
 

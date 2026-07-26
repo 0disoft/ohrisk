@@ -153,7 +153,9 @@ export type OhriskErrorCode =
   | "POLICY_FILE_PARSE_FAILED"
   | "TARBALL_PARSE_FAILED"
   | "REGISTRY_METADATA_FETCH_FAILED"
-  | "TARBALL_FETCH_FAILED";
+  | "TARBALL_FETCH_FAILED"
+  | "ZIG_ZON_READ_FAILED"
+  | "ZIG_ZON_PARSE_FAILED";
 
 export type OhriskError = {
   code: OhriskErrorCode;

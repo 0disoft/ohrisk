@@ -26,7 +26,8 @@ export type PackageEcosystem =
   | "gem"
   | "composer"
   | "pub"
-  | "swift";
+  | "swift"
+  | "zig";
 
 export type DependencyType =
   | "production"

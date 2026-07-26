@@ -24,6 +24,7 @@ import { collectSwiftPackageEvidence } from "./swift-package";
 import { collectTerraformProviderEvidence } from "./terraform-provider";
 import { collectUnityPackageEvidence } from "./unity-package";
 import { collectVcpkgPackageEvidence } from "./vcpkg-package";
+import { collectZigPackageEvidence } from "./zig-package";
 import type { LicenseEvidence } from "./types";
 import type { DependencyNode } from "../graph/types";
 import type { OhriskError } from "../shared/errors";
@@ -190,6 +191,12 @@ const DEFAULT_ECOSYSTEM_EVIDENCE_COLLECTORS: EcosystemEvidenceCollectors = {
     packageId: node.id,
     packageName: node.name,
     projectRoot
+  }),
+  zig: ({ node, projectRoot }) => collectZigPackageEvidence({
+    packageId: node.id,
+    packageName: node.name,
+    projectRoot,
+    resolved: node.resolved
   })
 };
 

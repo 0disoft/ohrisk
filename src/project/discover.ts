@@ -63,7 +63,8 @@ export type SupportedLockfileKind =
   | "spdx-rdf"
   | "spdx-tag-value"
   | "yarn-lock"
-  | "package-json";
+  | "package-json"
+  | "zig-zon";
 
 export type ProjectLockfile = {
   kind: SupportedLockfileKind;
@@ -226,6 +227,7 @@ const SUPPORTED_LOCKFILES: Record<string, SupportedLockfileKind> = {
   "sbom.spdx.rdf.xml": "spdx-rdf",
   "sbom.spdx": "spdx-tag-value",
   "bom.spdx": "spdx-tag-value",
+  "build.zig.zon": "zig-zon",
   "yarn.lock": "yarn-lock"
 };
 
@@ -298,6 +300,7 @@ const KNOWN_LOCKFILES = [
   "sbom.spdx.rdf.xml",
   "sbom.spdx",
   "bom.spdx",
+  "build.zig.zon",
   "yarn.lock"
 ] as const;
 
@@ -357,10 +360,11 @@ const KNOWN_PROJECT_MANIFESTS = [
   "sbom.spdx.rdf",
   "sbom.spdx.rdf.xml",
   "sbom.spdx",
-  "bom.spdx"
+  "bom.spdx",
+  "build.zig.zon"
 ] as const;
 
-const SUPPORTED_LOCKFILE_MESSAGE = "Ohrisk currently supports dependency-free package.json manifests, bun.lock, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml, deno.lock, Cargo.lock, go.work, go.mod, Pipfile.lock, pdm.lock, poetry.lock, pyproject.toml, requirements.txt, uv.lock, pylock.toml, pylock.<name>.toml, gradle.lockfile, gradle/dependency-locks, gradle/dependency-locks/*.lockfile, gradle/libs.versions.toml, MODULE.bazel, pom.xml, packages.lock.json, obj/project.assets.json, packages.config, *.csproj, conan.lock, environment.yml, environment.yaml, conda-lock.yml, conda-lock.yaml, vcpkg.json, .terraform.lock.hcl, Chart.lock, Chart.yaml, flake.lock, Packages/packages-lock.json, renv.lock, Manifest.toml, stack.yaml.lock, cpanfile.snapshot, luarocks.lock, pubspec.lock, Package.resolved, Cartfile.resolved, Podfile.lock, mix.lock, rebar.lock, Gemfile.lock, composer.lock, CycloneDX JSON/XML, SPDX JSON/RDF, SPDX tag-value .spdx, and Yarn classic/Berry yarn.lock.";
+const SUPPORTED_LOCKFILE_MESSAGE = "Ohrisk currently supports dependency-free package.json manifests, bun.lock, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml, deno.lock, Cargo.lock, go.work, go.mod, Pipfile.lock, pdm.lock, poetry.lock, pyproject.toml, requirements.txt, uv.lock, pylock.toml, pylock.<name>.toml, gradle.lockfile, gradle/dependency-locks, gradle/dependency-locks/*.lockfile, gradle/libs.versions.toml, MODULE.bazel, pom.xml, packages.lock.json, obj/project.assets.json, packages.config, *.csproj, conan.lock, environment.yml, environment.yaml, conda-lock.yml, conda-lock.yaml, vcpkg.json, .terraform.lock.hcl, Chart.lock, Chart.yaml, flake.lock, Packages/packages-lock.json, renv.lock, Manifest.toml, stack.yaml.lock, cpanfile.snapshot, luarocks.lock, pubspec.lock, Package.resolved, Cartfile.resolved, Podfile.lock, mix.lock, rebar.lock, Gemfile.lock, composer.lock, CycloneDX JSON/XML, SPDX JSON/RDF, SPDX tag-value .spdx, Yarn classic/Berry yarn.lock, and build.zig.zon.";
 
 export function discoverProject(
   options: DiscoverProjectOptions = {}

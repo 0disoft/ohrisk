@@ -92,6 +92,7 @@ import {
   parseUnityPackagesLockText
 } from "./unity-packages-lock";
 import { parseVcpkgJsonFile, parseVcpkgJsonText } from "./vcpkg-json";
+import { parseZigZonFile, parseZigZonText } from "./zig-zon";
 import type { ProjectInput } from "../project/discover";
 import type { OhriskError } from "../shared/errors";
 import { isErr, type Result } from "../shared/result";
@@ -238,6 +239,8 @@ export function parseProjectLockfile(
       return parseSpdxTagValueFile(project.lockfile.path);
     case "yarn-lock":
       return parseYarnLockfile(project.lockfile.path);
+    case "zig-zon":
+      return parseZigZonFile(project.lockfile.path);
     case "package-json":
       return parsePackageJsonManifestFile(project.lockfile.path);
   }
@@ -404,6 +407,8 @@ export function parseLockfileTextForKind(
         packageJsonPath: input.packageJsonPath,
         workspacePackageJsonTexts: input.workspacePackageJsonTexts
       }));
+    case "zig-zon":
+      return parseZigZonText(input.text, input.lockfilePath);
     case "package-json":
       return parsePackageJsonManifestText(input.text, input.lockfilePath);
   }

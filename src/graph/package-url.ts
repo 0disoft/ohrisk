@@ -129,6 +129,8 @@ function genericPackageEcosystem(pathSegments: string[]): PackageEcosystem | und
       return "helm";
     case "nix":
       return "nix";
+    case "zig":
+      return "zig";
     case "unity":
       return "unity";
     default:
@@ -185,6 +187,10 @@ function packageNameForPurlPath(input: {
       return input.pathSegments[0] === "nix" && input.pathSegments.length >= 2
         ? input.pathSegments.slice(1).join("/")
         : undefined;
+    case "zig":
+      return input.pathSegments[0] === "zig" && input.pathSegments.length === 2
+        ? input.pathSegments[1]
+        : undefined;
     case "unity":
       return input.pathSegments[0] === "unity" && input.pathSegments.length === 2
         ? input.pathSegments[1]
@@ -215,6 +221,7 @@ function packageNameForPurlPath(input: {
     case "gem":
     case "pub":
     case "swift":
+    case "zig":
       return input.pathSegments.join("/");
   }
 }
@@ -303,6 +310,8 @@ export function packageUrl(node: DependencyNode): string {
       return `pkg:pub/${encodeURIComponent(node.name)}@${encodeURIComponent(node.version)}`;
     case "swift":
       return `pkg:swift/${encodeURIComponent(node.name)}@${encodeURIComponent(node.version)}`;
+    case "zig":
+      return `pkg:generic/zig/${encodeURIComponent(node.name)}@${encodeURIComponent(node.version)}`;
   }
 }
 

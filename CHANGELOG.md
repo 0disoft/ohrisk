@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.14.0 - 2026-07-26
+
+- Added Zig `build.zig.zon` dependency manifest support. Ohrisk parses
+  `.dependencies` entries with `url`/`hash` and `path` fields, classifies
+  them as `zig` ecosystem dependencies, and collects license evidence from
+  local path dependencies. Remote URL dependencies without a local checkout
+  remain `unknown` rather than fetching unverified archives — the Zig package
+  hash algorithm requires a full file-tree walk and is not yet implemented.
+  Old multihash (`1220` + SHA-256 hex) and new name-version-hashplus formats
+  are both parsed for identity.
+
 ## 1.13.0 - 2026-07-22
 
 - Added exact pub.dev archive evidence for modern `pubspec.lock` hosted records.
