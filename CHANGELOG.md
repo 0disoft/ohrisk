@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.14.0 - 2026-07-26
+## 1.14.0 - 2026-07-27
 
 - Added Zig `build.zig.zon` dependency manifest support. Ohrisk parses
   `.dependencies` entries with `url`/`hash` and `path` fields, classifies
@@ -11,12 +11,12 @@
   SHA-256 of concatenated per-file hashes. The `.paths` field in
   `build.zig.zon` is respected so only declared files contribute to the
   hash, matching `zig fetch` behavior. Old multihash (`1220` + SHA-256
-  hex) and new name-version-hashplus formats are both verified — the new
-  format is verified by extracting the `fingerprint` field from the
-  tarball's `build.zig.zon` to recover the package ID, then reconstructing
-  the expected hashplus (id_le32 + size_le32 + digest[0:25]). License
-  files (LICENSE, COPYING, NOTICE, etc.) are extracted from the verified
-  tarball.
+  hex) and new name-version-hashplus formats are both verified. New hashes
+  recover the package ID from the `fingerprint` field in `build.zig.zon`,
+  while manifestless tarballs use Zig's exact `N-V` placeholder and reserved
+  package ID. PAX global metadata headers are handled like `zig fetch`, and
+  license files (LICENSE, COPYING, NOTICE, etc.) are extracted only from the
+  verified tarball.
 
 ## 1.13.0 - 2026-07-22
 

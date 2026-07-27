@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "zigVersion": "0.16.0",
+  "packageName": "ohrisk_conformance",
+  "packageVersion": "1.2.3-dev.4+build.5",
+  "fingerprint": "0x3d99ed0612345678",
+  "paths": [
+    "build.zig",
+    "build.zig.zon",
+    "LICENSE",
+    "src"
+  ],
+  "hash": "ohrisk_conformance-1.2.3-dev.4+build.5-eFY0EoQBAAB_MRpn_FRtSlrQ2-o25FONo3ewuVTDL0uP"
+}

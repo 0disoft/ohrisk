@@ -1,4 +1,5 @@
 import path from "node:path";
+import { TextDecoder, TextEncoder } from "node:util";
 
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
@@ -19,12 +20,70 @@ type ZigDependency = {
 };
 
 type ZonValue =
-  | { kind: "string"; value: string }
+  | { kind: "string"; bytes: Buffer; text?: string }
   | { kind: "bool"; value: boolean }
-  | { kind: "ident"; value: string }
-  | { kind: "struct"; fields: Map<string, ZonValue>; positional: ZonValue[] }
+  | { kind: "ident"; value: string; quoted: boolean }
+  | {
+      kind: "struct";
+      fields: Map<string, ZonValue>;
+      fieldValues: Map<string, ZonValue[]>;
+      fieldCounts: Map<string, number>;
+      positional: ZonValue[];
+  }
   | { kind: "number"; value: string }
   | { kind: "empty" };
+
+const CRC32_TABLE = buildCrc32Table();
+const ZON_TEXT_ENCODER = new TextEncoder();
+const ZON_TEXT_DECODER = new TextDecoder("utf-8", { fatal: true });
+const ZIG_RESERVED_KEYWORDS = new Set([
+  "addrspace",
+  "align",
+  "allowzero",
+  "and",
+  "anyframe",
+  "anytype",
+  "asm",
+  "break",
+  "callconv",
+  "catch",
+  "comptime",
+  "const",
+  "continue",
+  "defer",
+  "else",
+  "enum",
+  "errdefer",
+  "error",
+  "export",
+  "extern",
+  "fn",
+  "for",
+  "if",
+  "inline",
+  "linksection",
+  "noalias",
+  "noinline",
+  "nosuspend",
+  "opaque",
+  "or",
+  "orelse",
+  "packed",
+  "pub",
+  "resume",
+  "return",
+  "struct",
+  "suspend",
+  "switch",
+  "test",
+  "threadlocal",
+  "try",
+  "union",
+  "unreachable",
+  "var",
+  "volatile",
+  "while"
+]);
 
 export function parseZigZonFile(
   lockfilePath: string,
@@ -72,15 +131,24 @@ export function parseZigZonText(
   if (root.kind !== "struct") {
     return zigZonShapeError({ lockfilePath, reason: "root_not_struct" });
   }
+  if (!isValidKnownZigManifest(root)) {
+    return zigZonShapeError({ lockfilePath, reason: "invalid_known_manifest_field" });
+  }
 
   const rootNameField = root.fields.get("name");
   const rootName = rootNameField?.kind === "ident"
     ? rootNameField.value
     : rootNameField?.kind === "string"
-      ? rootNameField.value
+      ? rootNameField.text
       : undefined;
 
   const dependenciesField = root.fields.get("dependencies");
+  if (dependenciesField && dependenciesField.kind !== "struct") {
+    return zigZonShapeError({ lockfilePath, reason: "dependencies_not_struct" });
+  }
+  if (dependenciesField?.kind === "struct" && dependenciesField.positional.length > 0) {
+    return zigZonShapeError({ lockfilePath, reason: "dependencies_contains_positional_values" });
+  }
   const dependencies = dependenciesField?.kind === "struct"
     ? dependenciesField.fields
     : new Map<string, ZonValue>();
@@ -88,7 +156,33 @@ export function parseZigZonText(
   const records: ZigDependency[] = [];
   for (const [depName, depValue] of dependencies) {
     if (depValue.kind !== "struct") {
-      continue;
+      return zigZonShapeError({
+        lockfilePath,
+        reason: `dependency_not_struct:${depName}`
+      });
+    }
+    if ([...depValue.fields.keys()].some((key) => !ZIG_DEPENDENCY_FIELDS.has(key))) {
+      return zigZonShapeError({
+        lockfilePath,
+        reason: `unsupported_dependency_field:${depName}`
+      });
+    }
+    if (depValue.positional.length > 0) {
+      return zigZonShapeError({
+        lockfilePath,
+        reason: `dependency_contains_positional_values:${depName}`
+      });
+    }
+    if (
+      hasFieldWithUnexpectedKind(depValue, "url", "string")
+      || hasFieldWithUnexpectedKind(depValue, "hash", "string")
+      || hasFieldWithUnexpectedKind(depValue, "path", "string")
+      || hasFieldWithUnexpectedKind(depValue, "lazy", "bool")
+    ) {
+      return zigZonShapeError({
+        lockfilePath,
+        reason: `dependency_field_type:${depName}`
+      });
     }
 
     const url = stringFieldValue(depValue, "url");
@@ -96,8 +190,13 @@ export function parseZigZonText(
     const depPath = stringFieldValue(depValue, "path");
     const lazy = boolFieldValue(depValue, "lazy");
 
-    if (!url && !depPath) {
-      continue;
+    const locationFieldCount = (depValue.fieldCounts.get("url") ?? 0)
+      + (depValue.fieldCounts.get("path") ?? 0);
+    if (locationFieldCount !== 1 || Boolean(url) === Boolean(depPath)) {
+      return zigZonShapeError({
+        lockfilePath,
+        reason: `dependency_location_cardinality:${depName}`
+      });
     }
 
     records.push({
@@ -135,7 +234,10 @@ export function parseZigZonText(
 function zigDepVersion(record: ZigDependency): string {
   if (record.hash) {
     const parsed = parseZigHash(record.hash);
-    if (parsed?.format === "new") {
+    if (
+      parsed?.format === "new"
+      && !isZigNakedTarballHashIdentity(parsed.name, parsed.version)
+    ) {
       return parsed.version || "unknown";
     }
   }
@@ -168,7 +270,14 @@ export function parseZigHash(hash: string): ZigHashParse {
   }
 
   const newMatch = ZIG_NEW_HASH_PATTERN.exec(hash);
-  if (newMatch) {
+  if (
+    newMatch
+    && isValidZigName(newMatch[1])
+    && (
+      isValidZigVersion(newMatch[2])
+      || isZigNakedTarballHashIdentity(newMatch[1], newMatch[2])
+    )
+  ) {
     return {
       format: "new",
       name: newMatch[1],
@@ -180,15 +289,30 @@ export function parseZigHash(hash: string): ZigHashParse {
   return null;
 }
 
-const ZIG_OLD_HASH_PATTERN = /^1220[0-9a-f]{64}$/i;
-const ZIG_NEW_HASH_PATTERN = /^(.+)-(.+?)-([A-Za-z0-9_-]{43,44})$/;
+const ZIG_OLD_HASH_PATTERN = /^1220[0-9a-f]{64}$/;
+const ZIG_NEW_HASH_PATTERN = /^([A-Za-z_][A-Za-z0-9_]*)-(.+)-([A-Za-z0-9_-]{44})$/;
+const ZIG_NAME_MAX_BYTES = 32;
+const ZIG_VERSION_MAX_BYTES = 32;
+const ZIG_ROOT_FIELDS = new Set([
+  "name",
+  "version",
+  "fingerprint",
+  "minimum_zig_version",
+  "dependencies",
+  "paths"
+]);
+const ZIG_DEPENDENCY_FIELDS = new Set(["url", "hash", "path", "lazy"]);
+
+function isZigNakedTarballHashIdentity(name: string, version: string): boolean {
+  return name === "N" && version === "V";
+}
 
 type Token =
   | { type: "struct_start" }
   | { type: "brace_close" }
-  | { type: "dot_ident"; value: string }
+  | { type: "dot_ident"; value: string; quoted: boolean }
   | { type: "equals" }
-  | { type: "string"; value: string }
+  | { type: "string"; bytes: Buffer; text?: string }
   | { type: "comma" }
   | { type: "true" }
   | { type: "false" }
@@ -251,7 +375,11 @@ function tokenizeZon(input: string): Result<Token[], OhriskError> {
         return err(result.error);
       }
 
-      tokens.push({ type: "string", value: result.value.text });
+      tokens.push({
+        type: "string",
+        bytes: result.value.bytes,
+        ...(result.value.text === undefined ? {} : { text: result.value.text })
+      });
       pos = result.value.end;
       continue;
     }
@@ -262,7 +390,11 @@ function tokenizeZon(input: string): Result<Token[], OhriskError> {
         return err(identResult.error);
       }
 
-      tokens.push({ type: "dot_ident", value: identResult.value.value });
+      tokens.push({
+        type: "dot_ident",
+        value: identResult.value.value,
+        quoted: identResult.value.quoted
+      });
       pos = identResult.value.end;
       continue;
     }
@@ -279,22 +411,16 @@ function tokenizeZon(input: string): Result<Token[], OhriskError> {
       continue;
     }
 
-    if (char === "0" && (input[pos + 1] === "x" || input[pos + 1] === "X")) {
-      let end = pos + 2;
-      while (end < len && /[0-9a-fA-F]/.test(input[end])) {
-        end += 1;
-      }
-      tokens.push({ type: "number", value: input.slice(pos, end) });
-      pos = end;
-      continue;
-    }
-
     if (/[0-9-]/.test(char)) {
       let end = pos;
-      while (end < len && /[0-9.eE+-]/.test(input[end])) {
+      while (end < len && /[0-9A-Za-z_.+-]/.test(input[end])) {
         end += 1;
       }
-      tokens.push({ type: "number", value: input.slice(pos, end) });
+      const numberLiteral = input.slice(pos, end);
+      if (!isSupportedZigNumberLiteral(numberLiteral)) {
+        return err(zigZonParseError("invalid_number_literal"));
+      }
+      tokens.push({ type: "number", value: numberLiteral });
       pos = end;
       continue;
     }
@@ -319,13 +445,17 @@ function tokenizeZon(input: string): Result<Token[], OhriskError> {
 function readStringLiteral(
   input: string,
   start: number
-): Result<{ text: string; end: number }, OhriskError> {
+): Result<{ bytes: Buffer; text?: string; end: number }, OhriskError> {
   let pos = start + 1;
   const len = input.length;
-  let result = "";
+  const bytes: number[] = [];
 
   while (pos < len) {
     const char = input[pos];
+
+    if (char.charCodeAt(0) < 0x20 || char.charCodeAt(0) === 0x7f) {
+      return err(zigZonParseError("raw_control_character_in_string"));
+    }
 
     if (char === "\\") {
       const next = input[pos + 1];
@@ -334,37 +464,108 @@ function readStringLiteral(
       }
 
       switch (next) {
-        case "n": result += "\n"; break;
-        case "r": result += "\r"; break;
-        case "t": result += "\t"; break;
-        case '"': result += '"'; break;
-        case "\\": result += "\\"; break;
-        case "'": result += "'"; break;
-        default: result += next; break;
+        case "n": bytes.push(0x0a); pos += 2; break;
+        case "r": bytes.push(0x0d); pos += 2; break;
+        case "t": bytes.push(0x09); pos += 2; break;
+        case '"': bytes.push(0x22); pos += 2; break;
+        case "\\": bytes.push(0x5c); pos += 2; break;
+        case "'": bytes.push(0x27); pos += 2; break;
+        case "x": {
+          const hex = input.slice(pos + 2, pos + 4);
+          if (!/^[0-9a-fA-F]{2}$/.test(hex)) {
+            return err(zigZonParseError("invalid_hex_escape"));
+          }
+          bytes.push(Number.parseInt(hex, 16));
+          pos += 4;
+          break;
+        }
+        case "u": {
+          if (input[pos + 2] !== "{") {
+            return err(zigZonParseError("invalid_unicode_escape"));
+          }
+          let end = pos + 3;
+          let codePoint = 0;
+          let digitCount = 0;
+          while (end < len && input[end] !== "}") {
+            const digit = Number.parseInt(input[end], 16);
+            if (!/[0-9a-fA-F]/.test(input[end]) || Number.isNaN(digit)) {
+              return err(zigZonParseError("invalid_unicode_escape"));
+            }
+            codePoint = codePoint * 16 + digit;
+            digitCount += 1;
+            if (codePoint > 0x10ffff) {
+              return err(zigZonParseError("invalid_unicode_codepoint"));
+            }
+            end += 1;
+          }
+          if (
+            digitCount === 0
+            || input[end] !== "}"
+            || (codePoint >= 0xd800 && codePoint <= 0xdfff)
+          ) {
+            return err(zigZonParseError("invalid_unicode_escape"));
+          }
+          bytes.push(...ZON_TEXT_ENCODER.encode(String.fromCodePoint(codePoint)));
+          pos = end + 1;
+          break;
+        }
+        default:
+          return err(zigZonParseError("unsupported_escape"));
       }
-
-      pos += 2;
       continue;
     }
 
     if (char === '"') {
-      return ok({ text: result, end: pos + 1 });
+      const rawBytes = Buffer.from(bytes);
+      try {
+        return ok({
+          bytes: rawBytes,
+          text: ZON_TEXT_DECODER.decode(rawBytes),
+          end: pos + 1
+        });
+      } catch {
+        return ok({ bytes: rawBytes, end: pos + 1 });
+      }
     }
 
-    result += char;
-    pos += 1;
+    const codePoint = input.codePointAt(pos);
+    if (codePoint === undefined) {
+      return err(zigZonParseError("unterminated_string"));
+    }
+    const rawCharacter = String.fromCodePoint(codePoint);
+    bytes.push(...ZON_TEXT_ENCODER.encode(rawCharacter));
+    pos += rawCharacter.length;
   }
 
   return err(zigZonParseError("unterminated_string"));
 }
 
+function isSupportedZigNumberLiteral(value: string): boolean {
+  return /^-?[0-9][0-9A-Za-z_]*(?:\.[0-9A-Za-z_]*)?(?:[eEpP][+-]?[0-9A-Za-z_]*)?$/.test(value)
+    && !value.includes("__")
+    && !value.endsWith("_")
+    && !/^-?0[xob]_/.test(value);
+}
+
 function readDotIdent(
   input: string,
   start: number
-): Result<{ value: string; end: number }, OhriskError> {
+): Result<{ value: string; quoted: boolean; end: number }, OhriskError> {
   let pos = start + 1;
   const len = input.length;
   let result = "";
+
+  if (input[pos] === "@" && input[pos + 1] === '"') {
+    const quoted = readStringLiteral(input, pos + 1);
+    if (!quoted.ok) {
+      return quoted;
+    }
+    return ok({
+      value: quoted.value.bytes.toString("latin1"),
+      quoted: true,
+      end: quoted.value.end
+    });
+  }
 
   while (pos < len) {
     const char = input[pos];
@@ -377,11 +578,11 @@ function readDotIdent(
     break;
   }
 
-  if (result === "") {
-    return err(zigZonParseError("empty_identifier"));
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(result) || ZIG_RESERVED_KEYWORDS.has(result)) {
+    return err(zigZonParseError("invalid_identifier"));
   }
 
-  return ok({ value: result, end: pos });
+  return ok({ value: result, quoted: false, end: pos });
 }
 
 type ParseState = {
@@ -389,12 +590,21 @@ type ParseState = {
   index: number;
 };
 
+const MAX_ZON_NESTING_DEPTH = 128;
+
 function parseZonValue(tokens: Token[]): Result<ZonValue, OhriskError> {
   const state: ParseState = { tokens, index: 0 };
-  return parseValue(state);
+  const parsed = parseValue(state, 0);
+  if (!parsed.ok) {
+    return parsed;
+  }
+  if (state.index !== tokens.length) {
+    return err(zigZonParseError("trailing_tokens"));
+  }
+  return parsed;
 }
 
-function parseValue(state: ParseState): Result<ZonValue, OhriskError> {
+function parseValue(state: ParseState, depth: number): Result<ZonValue, OhriskError> {
   const token = peek(state);
   if (!token) {
     return err(zigZonParseError("unexpected_end"));
@@ -402,13 +612,26 @@ function parseValue(state: ParseState): Result<ZonValue, OhriskError> {
 
   switch (token.type) {
     case "struct_start":
-      return parseStruct(state);
+      if (depth >= MAX_ZON_NESTING_DEPTH) {
+        return err(zigZonParseError("nesting_too_deep"));
+      }
+      return parseStruct(state, depth + 1);
     case "empty_struct":
       state.index += 1;
-      return ok({ kind: "struct", fields: new Map(), positional: [] });
+      return ok({
+        kind: "struct",
+        fields: new Map(),
+        fieldValues: new Map(),
+        fieldCounts: new Map(),
+        positional: []
+      });
     case "string":
       state.index += 1;
-      return ok({ kind: "string", value: token.value });
+      return ok({
+        kind: "string",
+        bytes: token.bytes,
+        ...(token.text === undefined ? {} : { text: token.text })
+      });
     case "true":
       state.index += 1;
       return ok({ kind: "bool", value: true });
@@ -417,7 +640,7 @@ function parseValue(state: ParseState): Result<ZonValue, OhriskError> {
       return ok({ kind: "bool", value: false });
     case "dot_ident":
       state.index += 1;
-      return ok({ kind: "ident", value: token.value });
+      return ok({ kind: "ident", value: token.value, quoted: token.quoted });
     case "number":
       state.index += 1;
       return ok({ kind: "number", value: token.value });
@@ -426,7 +649,7 @@ function parseValue(state: ParseState): Result<ZonValue, OhriskError> {
   }
 }
 
-function parseStruct(state: ParseState): Result<ZonValue, OhriskError> {
+function parseStruct(state: ParseState, depth: number): Result<ZonValue, OhriskError> {
   const token = peek(state);
   if (!token || token.type !== "struct_start") {
     return err(zigZonParseError("expected_struct"));
@@ -434,10 +657,12 @@ function parseStruct(state: ParseState): Result<ZonValue, OhriskError> {
 
   state.index += 1;
   const fields = new Map<string, ZonValue>();
+  const fieldValues = new Map<string, ZonValue[]>();
+  const fieldCounts = new Map<string, number>();
   const positional: ZonValue[] = [];
+  let needsComma = false;
 
   while (true) {
-    skipCommas(state);
     const next = peek(state);
     if (!next) {
       return err(zigZonParseError("unexpected_end_in_struct"));
@@ -445,34 +670,66 @@ function parseStruct(state: ParseState): Result<ZonValue, OhriskError> {
 
     if (next.type === "brace_close") {
       state.index += 1;
-      return ok({ kind: "struct", fields, positional });
+      return ok({ kind: "struct", fields, fieldValues, fieldCounts, positional });
     }
 
-    if (next.type !== "dot_ident") {
-      const posValue = parseValue(state);
+    if (needsComma) {
+      if (next.type !== "comma") {
+        return err(zigZonParseError("missing_comma"));
+      }
+      state.index += 1;
+      const afterComma = peek(state);
+      if (!afterComma) {
+        return err(zigZonParseError("unexpected_end_in_struct"));
+      }
+      if (afterComma.type === "comma") {
+        return err(zigZonParseError("repeated_comma"));
+      }
+      if (afterComma.type === "brace_close") {
+        state.index += 1;
+        return ok({ kind: "struct", fields, fieldValues, fieldCounts, positional });
+      }
+    } else if (next.type === "comma") {
+      return err(zigZonParseError("unexpected_comma"));
+    }
+
+    const valueStart = peek(state);
+    if (!valueStart) {
+      return err(zigZonParseError("unexpected_end_in_struct"));
+    }
+
+    if (valueStart.type !== "dot_ident") {
+      const posValue = parseValue(state, depth);
       if (!posValue.ok) {
         return posValue;
       }
       positional.push(posValue.value);
+      needsComma = true;
       continue;
     }
 
     state.index += 1;
-    const key = next.value;
+    const key = valueStart.value;
 
     const afterKey = peek(state);
     if (!afterKey || afterKey.type !== "equals") {
-      positional.push({ kind: "ident", value: key });
+      positional.push({ kind: "ident", value: key, quoted: valueStart.quoted });
+      needsComma = true;
       continue;
     }
 
     state.index += 1;
-    const value = parseValue(state);
+    const value = parseValue(state, depth);
     if (!value.ok) {
       return value;
     }
 
     fields.set(key, value.value);
+    const occurrences = fieldValues.get(key) ?? [];
+    occurrences.push(value.value);
+    fieldValues.set(key, occurrences);
+    fieldCounts.set(key, (fieldCounts.get(key) ?? 0) + 1);
+    needsComma = true;
   }
 }
 
@@ -480,10 +737,93 @@ function peek(state: ParseState): Token | undefined {
   return state.tokens[state.index];
 }
 
-function skipCommas(state: ParseState): void {
-  while (state.tokens[state.index]?.type === "comma") {
-    state.index += 1;
+type ZonStruct = Extract<ZonValue, { kind: "struct" }>;
+
+function isValidKnownZigManifest(root: ZonStruct): boolean {
+  if (
+    root.positional.length > 0
+    || [...root.fields.keys()].some((key) => !ZIG_ROOT_FIELDS.has(key))
+  ) {
+    return false;
   }
+
+  return everyFieldValue(root, "name", isValidZigNameValue)
+    && everyFieldValue(root, "version", isValidZigVersionValue)
+    && everyFieldValue(root, "fingerprint", isZigU64Literal)
+    && everyFieldValue(root, "minimum_zig_version", isValidZigVersionValue)
+    && everyFieldValue(root, "dependencies", isValidDependencyCollection)
+    && everyFieldValue(root, "paths", isValidPathsStruct);
+}
+
+function everyFieldValue(
+  struct: ZonStruct,
+  key: string,
+  predicate: (value: ZonValue) => boolean
+): boolean {
+  return (struct.fieldValues.get(key) ?? []).every(predicate);
+}
+
+function isUtf8String(value: ZonValue): boolean {
+  return value.kind === "string" && value.text !== undefined;
+}
+
+function isValidZigNameValue(value: ZonValue): boolean {
+  return value.kind === "ident" && !value.quoted && isValidZigName(value.value);
+}
+
+function isValidZigVersionValue(value: ZonValue): boolean {
+  return value.kind === "string"
+    && value.text !== undefined
+    && isValidZigVersion(value.text);
+}
+
+function isZigU64Literal(value: ZonValue): boolean {
+  if (value.kind !== "number") {
+    return false;
+  }
+  if (!/^(?:0x[0-9a-fA-F]+(?:_[0-9a-fA-F]+)*|0o[0-7]+(?:_[0-7]+)*|0b[01]+(?:_[01]+)*|[0-9]+(?:_[0-9]+)*)$/.test(value.value)) {
+    return false;
+  }
+  const normalized = value.value.replaceAll("_", "");
+  try {
+    const parsed = BigInt(normalized);
+    return parsed >= 0n && parsed <= 0xffffffffffffffffn;
+  } catch {
+    return false;
+  }
+}
+
+function isValidDependencyCollection(value: ZonValue): boolean {
+  if (value.kind !== "struct" || value.positional.length > 0) {
+    return false;
+  }
+  return [...value.fieldValues.values()]
+    .every((occurrences) => occurrences.every(isValidDependencyRecord));
+}
+
+function isValidDependencyRecord(value: ZonValue): boolean {
+  if (
+    value.kind !== "struct"
+    || value.positional.length > 0
+    || [...value.fields.keys()].some((key) => !ZIG_DEPENDENCY_FIELDS.has(key))
+  ) {
+    return false;
+  }
+
+  const locationCount = (value.fieldCounts.get("url") ?? 0)
+    + (value.fieldCounts.get("path") ?? 0);
+  return locationCount === 1
+    && everyFieldValue(value, "url", isUtf8String)
+    && everyFieldValue(value, "hash", isUtf8String)
+    && everyFieldValue(value, "path", isUtf8String)
+    && everyFieldValue(value, "lazy", (field) => field.kind === "bool");
+}
+
+function isValidPathsStruct(value: ZonValue): boolean {
+  return value.kind === "struct"
+    && value.fields.size === 0
+    && value.positional.every((entry) => entry.kind === "string")
+    && value.fieldValues.size === 0;
 }
 
 function stringFieldValue(
@@ -491,7 +831,7 @@ function stringFieldValue(
   key: string
 ): string | undefined {
   const field = struct.fields.get(key);
-  return field?.kind === "string" ? field.value : undefined;
+  return field?.kind === "string" ? field.text : undefined;
 }
 
 function boolFieldValue(
@@ -500,6 +840,14 @@ function boolFieldValue(
 ): boolean | undefined {
   const field = struct.fields.get(key);
   return field?.kind === "bool" ? field.value : undefined;
+}
+
+function hasFieldWithUnexpectedKind(
+  value: Extract<ZonValue, { kind: "struct" }>,
+  key: string,
+  expectedKind: ZonValue["kind"]
+): boolean {
+  return (value.fieldValues.get(key) ?? []).some((field) => field.kind !== expectedKind);
 }
 
 function rootProjectNameFromPath(lockfilePath: string): string {
@@ -536,8 +884,13 @@ export type ZigManifestMetadata = {
   paths: string[] | undefined;
 };
 
-export function extractZigManifestMetadata(input: string): ZigManifestMetadata | undefined {
-  const tokens = tokenizeZon(input);
+export function extractZigManifestMetadata(zonText: string): ZigManifestMetadata | undefined {
+  const manifestValidation = parseZigZonText(zonText, "build.zig.zon");
+  if (!manifestValidation.ok) {
+    return undefined;
+  }
+
+  const tokens = tokenizeZon(zonText);
   if (!tokens.ok) {
     return undefined;
   }
@@ -549,46 +902,146 @@ export function extractZigManifestMetadata(input: string): ZigManifestMetadata |
 
   const root = parsed.value;
   const nameField = root.fields.get("name");
-  const name = nameField?.kind === "ident"
-    ? nameField.value
-    : nameField?.kind === "string"
-      ? nameField.value
-      : undefined;
+  const name = nameField?.kind === "ident" ? nameField.value : undefined;
 
   const versionField = root.fields.get("version");
-  const version = versionField?.kind === "string" ? versionField.value : undefined;
+  const version = versionField?.kind === "string" ? versionField.text : undefined;
 
   const fingerprintField = root.fields.get("fingerprint");
   let fingerprint: bigint | undefined;
-  if (fingerprintField?.kind === "number") {
-    const raw = fingerprintField.value;
-    if (raw.startsWith("0x") || raw.startsWith("0X")) {
-      const parsed = BigInt(raw);
-      if (parsed >= 0n) {
-        fingerprint = parsed;
-      }
+  if (fingerprintField !== undefined) {
+    if (fingerprintField.kind !== "number") {
+      return undefined;
+    }
+    try {
+      fingerprint = BigInt(fingerprintField.value.replaceAll("_", ""));
+    } catch {
+      return undefined;
     }
   }
 
-  if (!name || !version) {
+  if (!name || !version || !isValidZigName(name) || !isValidZigVersion(version)) {
     return undefined;
   }
 
-  return { name, version, fingerprint, paths: extractPaths(root) };
+  if (fingerprint !== undefined && !isValidZigFingerprint(name, fingerprint)) {
+    return undefined;
+  }
+
+  const extractedPaths = extractPaths(root);
+  if (!extractedPaths.valid) {
+    return undefined;
+  }
+
+  return {
+    name,
+    version,
+    fingerprint,
+    paths: extractedPaths.paths
+  };
 }
 
-function extractPaths(root: Extract<ZonValue, { kind: "struct" }>): string[] | undefined {
+function isValidZigName(name: string): boolean {
+  return Buffer.byteLength(name, "utf8") <= ZIG_NAME_MAX_BYTES
+    && /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)
+    && !ZIG_RESERVED_KEYWORDS.has(name);
+}
+
+function isValidZigVersion(version: string): boolean {
+  if (Buffer.byteLength(version, "utf8") > ZIG_VERSION_MAX_BYTES) {
+    return false;
+  }
+
+  const extraIndex = version.search(/[-+]/);
+  const required = extraIndex === -1 ? version : version.slice(0, extraIndex);
+  const requiredParts = required.split(".");
+  if (requiredParts.length !== 3 || requiredParts.some((part) => !isValidSemanticVersionNumber(part))) {
+    return false;
+  }
+  if (extraIndex === -1) {
+    return true;
+  }
+
+  const extra = version.slice(extraIndex);
+  let prerelease: string | undefined;
+  let build: string | undefined;
+  if (extra.startsWith("-")) {
+    const buildIndex = extra.indexOf("+");
+    prerelease = extra.slice(1, buildIndex === -1 ? undefined : buildIndex);
+    build = buildIndex === -1 ? undefined : extra.slice(buildIndex + 1);
+  } else {
+    build = extra.slice(1);
+  }
+
+  if (prerelease !== undefined && !isValidSemanticIdentifiers(prerelease, true)) {
+    return false;
+  }
+  return build === undefined || isValidSemanticIdentifiers(build, false);
+}
+
+function isValidSemanticVersionNumber(value: string): boolean {
+  return /^(0|[1-9][0-9]*)$/.test(value)
+    && BigInt(value) <= 0xffffffffffffffffn;
+}
+
+function isValidSemanticIdentifiers(value: string, rejectLeadingZeroNumbers: boolean): boolean {
+  const identifiers = value.split(".");
+  return identifiers.every((identifier) =>
+    identifier.length > 0
+    && /^[0-9A-Za-z-]+$/.test(identifier)
+    && (!rejectLeadingZeroNumbers || !/^[0-9]+$/.test(identifier) || isValidSemanticVersionNumber(identifier))
+  );
+}
+
+function buildCrc32Table(): Uint32Array {
+  const table = new Uint32Array(256);
+  for (let index = 0; index < table.length; index += 1) {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = (value & 1) !== 0 ? (value >>> 1) ^ 0xedb88320 : value >>> 1;
+    }
+    table[index] = value >>> 0;
+  }
+  return table;
+}
+
+function crc32(bytes: Buffer): number {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc = (crc >>> 8) ^ (CRC32_TABLE[(crc ^ byte) & 0xff] ?? 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function isValidZigFingerprint(name: string, fingerprint: bigint): boolean {
+  if (fingerprint < 0n || fingerprint > 0xffffffffffffffffn) {
+    return false;
+  }
+  const id = Number(fingerprint & 0xffffffffn);
+  const checksum = Number((fingerprint >> 32n) & 0xffffffffn);
+  return id !== 0 && id !== 0xffffffff && checksum === crc32(Buffer.from(name, "utf8"));
+}
+
+function extractPaths(
+  root: Extract<ZonValue, { kind: "struct" }>
+):
+  | { valid: true; paths?: string[] }
+  | { valid: false } {
   const pathsField = root.fields.get("paths");
-  if (!pathsField || pathsField.kind !== "struct") {
-    return undefined;
+  if (!pathsField) {
+    return { valid: true };
+  }
+  if (pathsField.kind !== "struct" || pathsField.fields.size > 0) {
+    return { valid: false };
   }
 
   const paths: string[] = [];
   for (const pos of pathsField.positional) {
-    if (pos.kind === "string") {
-      paths.push(pos.value);
+    if (pos.kind !== "string") {
+      return { valid: false };
     }
+    paths.push(pos.bytes.toString("latin1"));
   }
 
-  return paths;
+  return { valid: true, paths };
 }

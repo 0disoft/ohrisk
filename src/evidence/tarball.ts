@@ -260,14 +260,17 @@ function readPubArchivePubspec(input: {
 export function parseTarEntries(input: {
   tarball: Buffer;
   maxEntries: number;
+  rejectNonRegular?: boolean;
 }): TarEntry[] {
   const entries: TarEntry[] = [];
+  const observedPaths = new Set<string>();
   let offset = 0;
   let observedEntries = 0;
-
+  let reachedEndMarker = false;
   while (offset + 512 <= input.tarball.length) {
     const header = input.tarball.subarray(offset, offset + 512);
     if (isZeroBlock(header)) {
+      reachedEndMarker = true;
       break;
     }
 
@@ -276,11 +279,33 @@ export function parseTarEntries(input: {
       throw new Error(`Package tarball exceeded the maximum entry count (${input.maxEntries}).`);
     }
 
-    const name = readNullTerminated(header, 0, 100);
-    const prefix = readNullTerminated(header, 345, 155);
+    const pathEncoding = input.rejectNonRegular ? "latin1" : "utf8";
+    const name = readNullTerminated(header, 0, 100, pathEncoding);
+    const prefix = readNullTerminated(header, 345, 155, pathEncoding);
     const type = readNullTerminated(header, 156, 1) || "0";
     const fullPath = prefix ? `${prefix}/${name}` : name;
     assertValidHeaderChecksum(header, fullPath);
+
+    const isGlobalPaxHeader = type === "g";
+    if (input.rejectNonRegular && !isGlobalPaxHeader) {
+      const pathSegments = fullPath.split("/");
+      if (
+        fullPath === ""
+        || fullPath.startsWith("/")
+        || /^[A-Za-z]:[\\/]/.test(fullPath)
+        || fullPath.includes("\\")
+        || fullPath.includes("//")
+        || fullPath.includes("\uFFFD")
+        || pathSegments.includes(".")
+        || pathSegments.includes("..")
+      ) {
+        throw new Error(`Zig package tarball contains an unsafe entry path: ${fullPath || "(unnamed)"}.`);
+      }
+      if (type !== "5" && observedPaths.has(fullPath)) {
+        throw new Error(`Zig package tarball contains a duplicate entry path: ${fullPath}.`);
+      }
+      observedPaths.add(fullPath);
+    }
 
     const size = parseOctal(readNullTerminated(header, 124, 12), "size");
     const dataStart = offset + 512;
@@ -290,15 +315,25 @@ export function parseTarEntries(input: {
       throw new Error(`Tar entry ${fullPath || "(unnamed)"} extends beyond archive data.`);
     }
 
-    if (type === "0" || type === "") {
+    if (type === "0" || type === "" || (input.rejectNonRegular && type === "5")) {
       entries.push({
         path: fullPath,
         type,
         data: input.tarball.subarray(dataStart, dataEnd)
       });
+    } else if (input.rejectNonRegular && type !== "5" && !isGlobalPaxHeader) {
+      throw new Error(`Zig package tarball contains unsupported entry type ${type} at ${fullPath}.`);
     }
 
-    offset = dataStart + roundUpToBlock(size);
+    const nextOffset = dataStart + roundUpToBlock(size);
+    if (!Number.isSafeInteger(nextOffset) || nextOffset < dataEnd || nextOffset > input.tarball.length) {
+      throw new Error(`Tar entry ${fullPath || "(unnamed)"} has truncated block padding.`);
+    }
+    offset = nextOffset;
+  }
+
+  if (!reachedEndMarker && offset < input.tarball.length) {
+    throw new Error("Package tarball has a trailing partial header block.");
   }
 
   return entries;
@@ -396,10 +431,15 @@ function normalizePackagePath(path: string, packageRoot: string): string {
   return path.startsWith(`${packageRoot}/`) ? path.slice(packageRoot.length + 1) : path;
 }
 
-function readNullTerminated(buffer: Buffer, start: number, length: number): string {
+function readNullTerminated(
+  buffer: Buffer,
+  start: number,
+  length: number,
+  encoding: BufferEncoding = "utf8"
+): string {
   const slice = buffer.subarray(start, start + length);
   const end = slice.indexOf(0);
-  return slice.subarray(0, end === -1 ? slice.length : end).toString("utf8").trim();
+  return slice.subarray(0, end === -1 ? slice.length : end).toString(encoding);
 }
 
 function assertValidHeaderChecksum(header: Buffer, entryPath: string): void {

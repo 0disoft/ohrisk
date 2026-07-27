@@ -47,6 +47,12 @@ Remote fetching is limited to these explicit adapters:
   when the selected dependency input contains the package SHA-512; the NUPKG is
   trusted only after the lock and catalog digests, byte size, package identity,
   structurally parsed nuspec identity, and bounded ZIP structure all match.
+- direct public HTTPS Zig package tarball URLs recorded in `build.zig.zon` only
+  when the same dependency record supplies an exact old- or new-format Zig
+  package hash. The complete bounded archive is verified with Zig's normalized
+  path, symlink, and `.paths` rules before any license file is trusted;
+  manifestless archives additionally require Zig's exact `N-V` placeholder and
+  reserved `0xffff` package ID.
 
 The repository adapter accepts only `github.com` owner/repository URLs, disables
 credential prompts, submodule fetching, and symlink checkout, rejects non-portable or
@@ -176,6 +182,14 @@ hostname. Host matching does not use suffix or substring rules. Allowlisting
 changes only hostname policy: DNS preflight, rejection of every blocked DNS
 answer, guarded socket lookup, connected-address checks, and per-redirect
 revalidation remain mandatory.
+
+Zig package URLs come only from literal `build.zig.zon` dependency records and
+must use HTTPS without URL credentials. Their hosts and every redirect are
+subject to the same hostname, public-address, and per-redirect checks. Ohrisk
+accepts only the known Zig manifest and dependency fields it can validate.
+Unknown fields withhold remote evidence rather than being partially interpreted.
+Ohrisk does not trust manifest identity or license files without a parseable Zig
+package hash or until the complete archive matches it.
 
 Maven Central requests use only `https://repo.maven.apache.org/maven2/` and
 never receive npm registry credentials. Group, artifact, and version segments

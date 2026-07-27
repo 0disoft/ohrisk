@@ -60,6 +60,7 @@ import { collectRemoteZigTarballEvidence } from "./zig-package";
 import type { LicenseEvidence } from "./types";
 import { collectZipPackageEvidence } from "./zip-package";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
+import { parseZigHash } from "../graph/zig-zon";
 import { parseSpdxExpression } from "../license/spdx";
 import { createError, type OhriskError } from "../shared/errors";
 import {
@@ -696,7 +697,12 @@ async function collectNodeEvidence(input: {
     });
   }
 
-  if (input.node.ecosystem === "zig" && input.node.resolved && input.node.integrity) {
+  if (
+    input.node.ecosystem === "zig"
+    && input.node.resolved
+    && input.node.integrity
+    && parseZigHash(input.node.integrity) !== null
+  ) {
     return collectRemoteTarballEvidence({
       packageId: input.node.id,
       resolved: input.node.resolved,
@@ -707,6 +713,7 @@ async function collectNodeEvidence(input: {
       offline: input.offline,
       artifactCache: input.artifactCache,
       allowedHosts: input.allowedHosts,
+      integrity: input.node.integrity,
       skipIntegrityCheck: true,
       urlError: {
         code: "TARBALL_FETCH_FAILED",

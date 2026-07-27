@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
+import { TextDecoder } from "node:util";
 
 import { createError, type OhriskError } from "../shared/errors";
 import {
@@ -20,6 +21,7 @@ import { parseZigHash, extractZigManifestMetadata, type ZigManifestMetadata } fr
 const ZIG_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 const ZIG_LICENSE_FILE_LIMIT = 50;
 const ZIG_TARBALL_UNPACKED_MAX_BYTES = 100 * 1024 * 1024;
+const ZIG_MANIFEST_DECODER = new TextDecoder("utf-8", { fatal: true });
 const ZIG_TARBALL_MAX_ENTRIES = 50_000;
 
 export function collectZigPackageEvidence(input: {
@@ -92,7 +94,8 @@ export function collectRemoteZigTarballEvidence(input: {
   try {
     entries = parseTarEntries({
       tarball: unpacked.value,
-      maxEntries: input.maxEntries ?? ZIG_TARBALL_MAX_ENTRIES
+      maxEntries: input.maxEntries ?? ZIG_TARBALL_MAX_ENTRIES,
+      rejectNonRegular: true
     });
   } catch (cause) {
     return err(
@@ -118,30 +121,54 @@ export function collectRemoteZigTarballEvidence(input: {
     }))
     .filter((entry) => entry.path.length > 0);
 
-  const manifestMetadata = findManifestMetadata(normalizedEntries);
+  const manifestLookup = findManifestMetadata(normalizedEntries);
+  if (manifestLookup.status === "invalid") {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: ["Zig package hash is not verifiable because the tarball contains an invalid build.zig.zon."]
+    });
+  }
+  const manifestMetadata = manifestLookup.status === "valid"
+    ? manifestLookup.metadata
+    : undefined;
+  const pathFilter = manifestMetadata?.paths
+    ? filterEntriesByPaths(normalizedEntries, manifestMetadata.paths)
+    : { entries: normalizedEntries };
+  if ("warning" in pathFilter) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: [pathFilter.warning]
+    });
+  }
+  const coveredEntries = pathFilter.entries;
 
-  const computed = computeZigPackageHash(normalizedEntries, manifestMetadata);
-  const expectedHash = input.expectedHash.trim();
+  const computed = computeZigPackageHash(coveredEntries);
+  const expectedHash = input.expectedHash;
 
-  const hashMatch = verifyZigHash(computed, expectedHash, manifestMetadata);
-  if (!hashMatch.ok) {
-    return err(hashMatch.error);
+  const verification = verifyZigHash({
+    packageId: input.packageId,
+    computed,
+    expected: expectedHash,
+    manifest: manifestMetadata
+  });
+  if (!verification.ok) {
+    return err(verification.error);
+  }
+  if (verification.value.status === "unverifiable") {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: [verification.value.warning]
+    });
   }
 
   const warnings: string[] = [];
-  if (!hashMatch.value) {
-    if (manifestMetadata) {
-      warnings.push(
-        `Zig package hash did not match the computed digest (expected: ${expectedHash.slice(0, 40)}…). Evidence collected without integrity verification.`
-      );
-    } else {
-      warnings.push(
-        `Zig package hash format was not verifiable: build.zig.zon with fingerprint was not found in the tarball (expected: ${expectedHash.slice(0, 40)}…). Evidence collected without integrity verification.`
-      );
-    }
-  }
-
-  const evidenceFiles = collectZigTarballEvidenceFiles(normalizedEntries, warnings);
+  const evidenceFiles = collectZigTarballEvidenceFiles(coveredEntries, warnings);
 
   if (evidenceFiles.length === 0) {
     warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Zig package tarball.");
@@ -161,22 +188,21 @@ type ZigComputedHash = {
 };
 
 function computeZigPackageHash(
-  entries: Array<{ path: string; data: Buffer }>,
-  manifest: ZigManifestMetadata | undefined
+  entries: Array<{ path: string; data: Buffer }>
 ): ZigComputedHash {
-  const filtered = manifest?.paths ? filterEntriesByPaths(entries, manifest.paths) : entries;
-
-  const sorted = [...filtered].sort((left, right) =>
-    left.path < right.path ? -1 : left.path > right.path ? 1 : 0
-  );
+  const sorted = entries
+    .map((entry) => ({ ...entry, normalizedPath: normalizeZigPath(entry.path) }))
+    .sort((left, right) => Buffer.compare(
+      Buffer.from(left.normalizedPath, "latin1"),
+      Buffer.from(right.normalizedPath, "latin1")
+    ));
 
   const perFileHashes: Buffer[] = [];
   let totalSize = 0;
 
   for (const entry of sorted) {
-    const normalizedPath = normalizeZigPath(entry.path);
     const hasher = createHash("sha256");
-    hasher.update(normalizedPath);
+    hasher.update(Buffer.from(entry.normalizedPath, "latin1"));
     hasher.update(Buffer.from([0, 0]));
     hasher.update(entry.data);
     perFileHashes.push(hasher.digest());
@@ -197,19 +223,32 @@ function computeZigPackageHash(
 function filterEntriesByPaths(
   entries: Array<{ path: string; data: Buffer }>,
   paths: string[]
-): Array<{ path: string; data: Buffer }> {
+):
+  | { entries: Array<{ path: string; data: Buffer }> }
+  | { warning: string } {
   if (paths.length === 0) {
-    return entries;
+    return { entries };
   }
 
-  // .paths = .{""} or .paths = .{"."} means include everything
-  if (paths.includes("") || paths.includes(".")) {
-    return entries;
+  const normalizedPaths: string[] = [];
+  for (const includePath of paths) {
+    const normalizedPath = normalizeManifestIncludePath(includePath);
+    if (normalizedPath === undefined) {
+      return {
+        warning: "Zig package hash is not verifiable because manifest .paths escapes the package root."
+      };
+    }
+    normalizedPaths.push(normalizedPath);
   }
 
-  const includeSet = new Set(paths);
+  // Paths resolving to the package root include everything.
+  if (normalizedPaths.includes("")) {
+    return { entries };
+  }
 
-  return entries.filter((entry) => {
+  const includeSet = new Set(normalizedPaths);
+
+  return { entries: entries.filter((entry) => {
     const normalized = normalizeZigPath(entry.path);
 
     // Direct match
@@ -228,61 +267,153 @@ function filterEntriesByPaths(
     }
 
     return false;
-  });
+  }) };
 }
 
-function findManifestMetadata(
-  entries: Array<{ path: string; data: Buffer }>
-): ZigManifestMetadata | undefined {
-  const zonEntry = entries.find((entry) => entry.path === "build.zig.zon");
-  if (!zonEntry) {
+function normalizeManifestIncludePath(includePath: string): string | undefined {
+  const normalized = normalizeZigPath(includePath);
+  if (normalized.startsWith("/") || /^[A-Za-z]:\//.test(normalized)) {
     return undefined;
   }
 
-  const zonText = zonEntry.data.toString("utf8");
-  return extractZigManifestMetadata(zonText);
+  const segments: string[] = [];
+  for (const segment of normalized.split("/")) {
+    if (segment === "" || segment === ".") {
+      continue;
+    }
+    if (segment === "..") {
+      if (segments.length === 0) {
+        return undefined;
+      }
+      segments.pop();
+      continue;
+    }
+    segments.push(segment);
+  }
+  return segments.join("/");
 }
 
-function verifyZigHash(
-  computed: ZigComputedHash,
-  expected: string,
-  manifest: ZigManifestMetadata | undefined
-): Result<boolean, OhriskError> {
-  const parsed = parseZigHash(expected);
+type ZigManifestLookup =
+  | { status: "absent" }
+  | { status: "invalid" }
+  | { status: "valid"; metadata: ZigManifestMetadata };
+
+function findManifestMetadata(
+  entries: Array<{ path: string; data: Buffer }>
+): ZigManifestLookup {
+  const zonEntry = entries.find((entry) => entry.path === "build.zig.zon");
+  if (!zonEntry) {
+    return { status: "absent" };
+  }
+
+  let zonText: string;
+  try {
+    zonText = ZIG_MANIFEST_DECODER.decode(zonEntry.data);
+  } catch {
+    return { status: "invalid" };
+  }
+  const metadata = extractZigManifestMetadata(zonText);
+  return metadata
+    ? { status: "valid", metadata }
+    : { status: "invalid" };
+}
+
+type ZigHashVerification =
+  | { status: "verified" }
+  | { status: "unverifiable"; warning: string };
+
+function verifyZigHash(input: {
+  packageId: string;
+  computed: ZigComputedHash;
+  expected: string;
+  manifest: ZigManifestMetadata | undefined;
+}): Result<ZigHashVerification, OhriskError> {
+  const parsed = parseZigHash(input.expected);
 
   if (!parsed) {
-    return ok(false);
+    return ok({
+      status: "unverifiable",
+      warning: `Zig package hash format is not verifiable: ${input.expected.slice(0, 40)}…`
+    });
   }
 
   if (parsed.format === "old") {
-    const computedHex = computed.digest.toString("hex");
+    const computedHex = input.computed.digest.toString("hex");
     const expectedHex = parsed.digestHex.toLowerCase();
-    return ok(computedHex === expectedHex);
+    return computedHex === expectedHex
+      ? ok({ status: "verified" })
+      : zigHashMismatch(input);
   }
 
   // New format: name-version-base64url(id_le32 + size_le32 + digest[0:25])
-  if (!manifest || manifest.fingerprint === undefined) {
-    return ok(false);
+  let name: string;
+  let version: string;
+  let id: number;
+
+  if (!input.manifest) {
+    if (parsed.name !== "N" || parsed.version !== "V") {
+      return ok({
+        status: "unverifiable",
+        warning: "Zig package hash is not verifiable because build.zig.zon with fingerprint was not found in the tarball."
+      });
+    }
+
+    // Zig uses this exact identity and ID for archives without build.zig.zon.
+    name = "N";
+    version = "V";
+    id = 0xffff;
+  } else if (!input.manifest.paths || input.manifest.paths.length === 0) {
+    return ok({
+      status: "unverifiable",
+      warning: "Zig package hash is not verifiable because build.zig.zon has no non-empty .paths field."
+    });
+  } else if (input.manifest.fingerprint === undefined) {
+    return ok({
+      status: "unverifiable",
+      warning: "Zig package hash is not verifiable because build.zig.zon with fingerprint was not found in the tarball."
+    });
+  } else {
+    name = input.manifest.name;
+    version = input.manifest.version;
+    // Extract package ID from fingerprint (lower 32 bits of the u64, LE)
+    id = Number(input.manifest.fingerprint & 0xFFFFFFFFn);
   }
 
-  // Extract package ID from fingerprint (lower 32 bits of the u64, LE)
-  const fingerprint = manifest.fingerprint;
-  const id = Number(fingerprint & 0xFFFFFFFFn);
-  const saturatedSize = Math.min(computed.totalSize, 0xFFFFFFFF);
+  const saturatedSize = Math.min(input.computed.totalSize, 0xFFFFFFFF);
 
   // Build hashplus: id_le32 + size_le32 + digest[0:25]
   const hashplus = Buffer.alloc(33);
   hashplus.writeUInt32LE(id, 0);
   hashplus.writeUInt32LE(saturatedSize, 4);
-  computed.digest.subarray(0, 25).copy(hashplus, 8);
+  input.computed.digest.subarray(0, 25).copy(hashplus, 8);
 
   // base64url encode (no padding)
   const hashplusB64 = hashplus.toString("base64url");
 
   // Construct expected: name-version-hashplus
-  const expectedHashString = `${manifest.name}-${manifest.version}-${hashplusB64}`;
+  const expectedHashString = `${name}-${version}-${hashplusB64}`;
 
-  return ok(expectedHashString === expected);
+  return expectedHashString === input.expected
+    ? ok({ status: "verified" })
+    : zigHashMismatch(input);
+}
+
+function zigHashMismatch(input: {
+  packageId: string;
+  computed: ZigComputedHash;
+  expected: string;
+}): Result<never, OhriskError> {
+  return err(createError({
+    code: "PACKAGE_INTEGRITY_CHECK_FAILED",
+    category: "unsupported_input",
+    message: "Zig package hash did not match build.zig.zon.",
+    details: {
+      packageId: input.packageId,
+      integrity: input.expected,
+      computedDigest: input.computed.digest.toString("hex"),
+      computedSize: input.computed.totalSize
+    }
+  }));
 }
 
 function normalizeZigPath(p: string): string {
@@ -290,19 +421,21 @@ function normalizeZigPath(p: string): string {
 }
 
 function detectTarRootPrefix(entries: TarEntry[]): string {
-  const roots = new Set<string>();
+  let root: string | undefined;
   for (const entry of entries) {
-    const separator = entry.path.indexOf("/");
-    if (separator > 0) {
-      roots.add(entry.path.slice(0, separator));
+    const normalizedPath = entry.path.replace(/\\/g, "/");
+    const separator = normalizedPath.indexOf("/");
+    if (separator <= 0) {
+      return "";
     }
+    const candidate = normalizedPath.slice(0, separator);
+    if (root !== undefined && candidate !== root) {
+      return "";
+    }
+    root = candidate;
   }
 
-  if (roots.size === 1) {
-    return [...roots][0]!;
-  }
-
-  return "";
+  return root ?? "";
 }
 
 function stripRootPrefix(tarPath: string, rootPrefix: string): string {

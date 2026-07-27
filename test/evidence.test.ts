@@ -1917,6 +1917,47 @@ describe("collectGraphEvidence", () => {
     })]);
   });
 
+  test("does not resolve or fetch Zig archives with unverifiable hashes", async () => {
+    let resolutionCount = 0;
+    let fetchCount = 0;
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "build.zig.zon",
+        nodes: [{
+          id: "zig-invalid-hash@unknown",
+          name: "zig-invalid-hash",
+          version: "unknown",
+          ecosystem: "zig",
+          resolved: "https://example.com/zig-invalid-hash.tar.gz",
+          integrity: "garbage",
+          dependencyType: "production",
+          direct: true,
+          paths: [["root", "zig-invalid-hash@unknown"]]
+        }]
+      },
+      projectRoot: bunProjectDir,
+      resolveArtifactHost: async () => {
+        resolutionCount += 1;
+        return [{ address: "93.184.216.34", family: 4 }];
+      },
+      fetchArtifact: async () => {
+        fetchCount += 1;
+        return okArtifactResponseFromBuffer(Buffer.alloc(0));
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+    expect(resolutionCount).toBe(0);
+    expect(fetchCount).toBe(0);
+    expect(evidence.value).toEqual([expect.objectContaining({
+      packageId: "zig-invalid-hash@unknown",
+      source: "unavailable"
+    })]);
+  });
+
   test("encodes scoped npm registry metadata URLs", async () => {
     const tarball = createTarGz({
       "package/package.json": JSON.stringify({
