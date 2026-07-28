@@ -21,13 +21,19 @@ Draft 2020-12 contracts live in `schemas/common.schema.json`,
 `schemas/scan-report.schema.json`, `schemas/diff-report.schema.json`, and
 `schemas/explain-report.schema.json`.
 
-Schema `3.4.0` is a closed contract. Report roots and structured nested objects
+Schema `3.5.0` is a closed contract. Report roots and structured nested objects
 reject unknown properties, while common `$defs` define findings, evidence,
 normalized licenses, policy summaries, waivers, thresholds, provenance, remote
 repository submodule coverage, and
 lockfile changes. Required-field, enum, array-item, path, and dependent-field
 rules are validated against real scan, diff, and explain output during release
 verification.
+
+Schema 3.5 adds the `conflicting-evidence` normalized-license signal. Python
+license classifiers are identified as classifiers in evidence text. A single
+distinct expression recognized from verified declared license files may replace
+a conflicting legacy classifier, but multiple distinct recognized file
+expressions fail closed with unknown severity and require evidence review.
 
 Schema 3.1 adds optional archive provenance to scan JSON: a safe relative name,
 format, SHA-256 digest, and canonical project root inside the archive. Archived
@@ -82,10 +88,11 @@ Structured output for scripting and CI automation.
 - **Input changes**: diff JSON includes `lockfileChanges.current`, `baseline`, `added`, and `removed` arrays with project-relative paths and lockfile kinds
 - **Diff classification**: `newFindings`, `changedFindings`, and `resolvedFindings` are separate; `findings` remains the combined new-and-changed threshold set
 - **Evidence diagnostics**: scan JSON groups package/file/warning counts by `local`, `registry`, `sbom`, `tarball`, and `unavailable`, with stable diagnostic codes and typed dependency-graph truncation diagnostics
+- **Python license provenance**: classifier-derived values use `<source> classifier: <expression>` evidence. Conflicting recognized license-file expressions add `conflicting-evidence`, produce unknown severity, and preserve every conflicting file match for review.
 - **Restriction scope evidence**: explicit commercial restrictions limited to documentation or data/corpora are preserved as `restriction scope: documentation in <path>` or `restriction scope: data in <path>` evidence without being treated as package-code restrictions
 - **Maven evidence corrections**: canonical SPDX aliases, allowed repository provenance, and checksum/identity-verified JAR evidence may change severity, reason, evidence, and therefore finding fingerprints. Fingerprint waivers for corrected Maven findings must be reviewed after upgrade; finding-ID waivers remain tied to the same package/path identity.
 - **Remote repository coverage**: remote scan JSON includes `repository.owner`, `repository.name`, bounded `repository.submodules` mode/count/paths, separate `repository.symbolicLinks`, and `repository.nonPortablePaths` skipped counts, relative paths, and path-list truncation state
-- **Schema validation**: scan, diff, and explain JSON must satisfy the packaged 3.4.0 schema; unknown object properties are rejected
+- **Schema validation**: scan, diff, and explain JSON must satisfy the packaged 3.5.0 schema; unknown object properties are rejected
 - **Local paths**: `projectRoot` is represented as `.`, and lockfile metadata uses a project-relative path so CI artifacts do not expose workspace paths
 
 ## Markdown

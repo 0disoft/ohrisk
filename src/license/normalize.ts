@@ -21,6 +21,19 @@ type CommercialRestrictionAnalysis = {
 export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedLicense {
   const signals: NormalizedLicenseSignal[] = [];
   const evidenceSources = describeEvidenceSources(evidence);
+  const licenseFileExpressions = readLicenseFileExpressions(evidence);
+  const distinctLicenseFileExpressions = new Set(
+    licenseFileExpressions.map((match) => match.expression)
+  );
+
+  if (evidence.metadataLicenseKind === "classifier" && distinctLicenseFileExpressions.size > 1) {
+    signals.push("conflicting-evidence");
+    evidenceSources.push(
+      `conflicting file license matches: ${licenseFileExpressions
+        .map((match) => `${match.expression} from ${match.filePath}`)
+        .join("; ")}`
+    );
+  }
 
   if (evidence.files.some((file) => file.kind === "notice")) {
     signals.push("notice-required");
@@ -113,7 +126,11 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     ...(parsed.exceptions.length > 0 ? { exceptions: parsed.exceptions } : {}),
     signals,
     evidenceSources,
-    confidence: parsed.usedAlias || licenseExpression.source === "license-file" ? "medium" : "high"
+    confidence: signals.includes("conflicting-evidence")
+      ? "low"
+      : parsed.usedAlias || licenseExpression.source === "license-file"
+        ? "medium"
+        : "high"
   }, parsed.ast);
 }
 
@@ -295,6 +312,18 @@ function addNonPackageRestrictionSources(
 function readLicenseExpressionEvidence(evidence: LicenseEvidence): LicenseExpressionEvidence | undefined {
   const packageExpression = readPackageLicenseExpression(evidence);
   if (packageExpression) {
+    const licenseFileExpression = evidence.metadataLicenseKind === "classifier"
+      && packageExpression === evidence.metadataLicense
+      ? readLicenseFileExpression(evidence)
+      : undefined;
+    if (
+      licenseFileExpression
+      && parseSpdxExpression(licenseFileExpression.expression).expression
+        !== parseSpdxExpression(packageExpression).expression
+    ) {
+      return licenseFileExpression;
+    }
+
     return {
       expression: packageExpression,
       source: "package-metadata"
@@ -374,6 +403,16 @@ function isAbsentLicenseExpression(value: string): boolean {
 }
 
 function readLicenseFileExpression(evidence: LicenseEvidence): LicenseExpressionEvidence | undefined {
+  const matches = readLicenseFileExpressions(evidence);
+  if (new Set(matches.map((match) => match.expression)).size !== 1) {
+    return undefined;
+  }
+
+  return matches[0];
+}
+
+function readLicenseFileExpressions(evidence: LicenseEvidence): LicenseExpressionEvidence[] {
+  const matches: LicenseExpressionEvidence[] = [];
   for (const file of evidence.files) {
     if (file.kind !== "license" && file.kind !== "copying") {
       continue;
@@ -381,15 +420,15 @@ function readLicenseFileExpression(evidence: LicenseEvidence): LicenseExpression
 
     const expression = recognizeStandardLicenseText(file.text);
     if (expression && !isAbsentLicenseExpression(expression)) {
-      return {
+      matches.push({
         expression,
         source: "license-file",
         filePath: file.path
-      };
+      });
     }
   }
 
-  return undefined;
+  return matches;
 }
 
 function recognizeStandardLicenseText(text: string): string | undefined {
@@ -414,28 +453,17 @@ function recognizeStandardLicenseText(text: string): string | undefined {
     return "CC0-1.0";
   }
 
-  if (/\bGNU AFFERO GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 3\b/i.test(text)) {
-    return "AGPL-3.0-only";
+  if (
+    /\bsubject to your choice of exactly one of\b/i.test(text)
+    && /\bThe FreeType License\b/i.test(text)
+    && /\bGNU General Public License(?: \(GPL\))?, version 2 or later\b/i.test(text)
+  ) {
+    return "FTL OR GPL-2.0-or-later";
   }
 
-  if (/\bGNU LESSER GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 3\b/i.test(text)) {
-    return "LGPL-3.0-only";
-  }
-
-  if (/\bGNU LESSER GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 2\.1\b/i.test(text)) {
-    return "LGPL-2.1-only";
-  }
-
-  if (/\bGNU LIBRARY GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 2\b/i.test(text)) {
-    return "LGPL-2.0-only";
-  }
-
-  if (/\bGNU GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 3\b/i.test(text)) {
-    return "GPL-3.0-only";
-  }
-
-  if (/\bGNU GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 2\b/i.test(text)) {
-    return "GPL-2.0-only";
+  const gnuLicense = recognizeGnuLicenseText(text);
+  if (gnuLicense) {
+    return gnuLicense;
   }
 
   if (/\bfree and unencumbered software released into the public domain\b/i.test(text)) {
@@ -469,6 +497,46 @@ function recognizeStandardLicenseText(text: string): string | undefined {
   }
 
   return undefined;
+}
+
+const GNU_LICENSE_SIGNATURES = [
+  {
+    expression: "AGPL-3.0-only",
+    pattern: /\bGNU AFFERO GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 3\b/i
+  },
+  {
+    expression: "LGPL-3.0-only",
+    pattern: /\bGNU LESSER GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 3\b/i
+  },
+  {
+    expression: "LGPL-2.1-only",
+    pattern: /\bGNU LESSER GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 2\.1\b/i
+  },
+  {
+    expression: "LGPL-2.0-only",
+    pattern: /\bGNU LIBRARY GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 2\b/i
+  },
+  {
+    expression: "GPL-3.0-only",
+    pattern: /\bGNU GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 3\b/i
+  },
+  {
+    expression: "GPL-2.0-only",
+    pattern: /\bGNU GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 2\b/i
+  }
+] as const;
+
+function recognizeGnuLicenseText(text: string): string | undefined {
+  let earliest: { expression: string; index: number } | undefined;
+
+  for (const signature of GNU_LICENSE_SIGNATURES) {
+    const match = signature.pattern.exec(text);
+    if (match && (!earliest || match.index < earliest.index)) {
+      earliest = { expression: signature.expression, index: match.index };
+    }
+  }
+
+  return earliest?.expression;
 }
 
 function readSpdxLicenseIdentifier(text: string): string | undefined {
@@ -523,7 +591,8 @@ function describeEvidenceSources(evidence: LicenseEvidence): string[] {
 
   const metadataSource = evidence.metadataSource ?? "package metadata";
   if (evidence.metadataLicense) {
-    sources.push(`${metadataSource} license: ${evidence.metadataLicense}`);
+    const metadataLabel = evidence.metadataLicenseKind === "classifier" ? "classifier" : "license";
+    sources.push(`${metadataSource} ${metadataLabel}: ${evidence.metadataLicense}`);
   }
 
   if (evidence.metadataLicenses !== undefined) {

@@ -24,7 +24,7 @@ binaries to users. In this mode:
 - MPL file-level copyleft is `low` because service use does not deliver a copy
   of the package to users.
 - Weak copyleft LGPL and EPL remain `review`.
-- Permissive licenses (MIT, Apache-2.0, BSD, ISC, etc.) are `low`.
+- Permissive licenses (MIT, Apache-2.0, BSD, ISC, FTL, etc.) are `low`.
 
 ## When to choose distributed-app
 
@@ -65,7 +65,7 @@ separate asset decision.
 
 | License family | Example SPDX IDs | saas | distributed-app |
 |---|---|---|---|
-| Permissive | MIT, Apache-2.0, BSD-3-Clause, ISC, 0BSD, Zlib | low | low |
+| Permissive | MIT, Apache-2.0, BSD-3-Clause, ISC, 0BSD, FTL, Zlib | low | low |
 | File-level copyleft | MPL-2.0 | low | review |
 | Weak copyleft | LGPL-3.0, EPL-2.0 | review | review |
 | Strong copyleft (GPL) | GPL-2.0, GPL-3.0 | review | high |

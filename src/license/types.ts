@@ -3,6 +3,7 @@ import type { SpdxExpressionNode } from "./spdx";
 export type NormalizedLicenseSignal =
   | "missing"
   | "malformed"
+  | "conflicting-evidence"
   | "custom-text"
   | "commercial-restriction"
   | "notice-required"

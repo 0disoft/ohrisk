@@ -92,6 +92,33 @@ describe("evaluateLicenseRisk", () => {
     expect(finding.action).toBe("No action needed for this profile.");
   });
 
+  test("treats the FreeType License as permissive low risk", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "freetype@2.14.3",
+        original: "FTL",
+        expression: "FTL",
+        choices: ["FTL"],
+        joiner: "single",
+        signals: [],
+        evidenceSources: ["source: tarball", "file license match: FTL from LICENSE"],
+        confidence: "medium"
+      },
+      dependency: {
+        ...baseDependency,
+        id: "freetype@2.14.3",
+        name: "freetype",
+        version: "2.14.3",
+        paths: [["root", "freetype@2.14.3"]]
+      },
+      profile: "distributed-app"
+    });
+
+    expect(finding.severity).toBe("low");
+    expect(finding.recommendation).toBe("allow");
+    expect(finding.action).toBe("No action needed for this profile.");
+  });
+
   test("treats Zlib as a permissive low-risk license", () => {
     const finding = evaluateLicenseRisk({
       license: {
@@ -482,6 +509,34 @@ describe("evaluateLicenseRisk", () => {
     expect(finding.action).toBe(
       "Fix or manually review the declared license expression before approving this package."
     );
+  });
+
+  test("explains conflicting license evidence as a specific unknown risk", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "package@1.0.0",
+        original: "MIT",
+        expression: "MIT",
+        choices: ["MIT"],
+        joiner: "single",
+        signals: ["conflicting-evidence"],
+        evidenceSources: [
+          "source: tarball",
+          "conflicting file license matches: Apache-2.0 from LICENSE-APACHE; MIT from LICENSE-MIT"
+        ],
+        confidence: "low"
+      },
+      dependency: baseDependency,
+      profile: "saas"
+    });
+
+    expect(finding.severity).toBe("unknown");
+    expect(finding.reason).toBe("License evidence contains conflicting recognized expressions.");
+    expect(finding.recommendation).toBe("collect-evidence");
+    expect(finding.action).toBe(
+      "Review the conflicting license evidence before approving this package."
+    );
+    expect(finding.evidence).toContain("signals: conflicting-evidence");
   });
 
   test("treats explicit commercial restriction signals as high risk", () => {

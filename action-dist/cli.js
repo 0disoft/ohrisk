@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: b76709df2477764916f374a209966c92dba271048d87179928038048df0e88dc
+// ohrisk-action-source-sha256: 2089bf27a27ae861481ddbee66571f49b6e491c2c7bbb229392a387c0d6a1bdb
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18538,7 +18538,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.0";
+var OHRISK_VERSION = "1.14.1";
 
 // src/archive/archive-project.ts
 import path47 from "node:path";
@@ -18965,7 +18965,10 @@ function mergeLicenseEvidence(left, right) {
     ...left,
     ...left.packageJsonLicense ? {} : right.packageJsonLicense ? { packageJsonLicense: right.packageJsonLicense } : {},
     ...left.packageJsonLicenses !== undefined ? {} : right.packageJsonLicenses !== undefined ? { packageJsonLicenses: right.packageJsonLicenses } : {},
-    ...left.metadataLicense ? {} : right.metadataLicense ? { metadataLicense: right.metadataLicense } : {},
+    ...left.metadataLicense ? {} : right.metadataLicense ? {
+      metadataLicense: right.metadataLicense,
+      ...right.metadataLicenseKind ? { metadataLicenseKind: right.metadataLicenseKind } : {}
+    } : {},
     ...left.metadataLicenses !== undefined ? {} : right.metadataLicenses !== undefined ? { metadataLicenses: right.metadataLicenses } : {},
     ...left.metadataSource ? {} : right.metadataSource ? { metadataSource: right.metadataSource } : {},
     ...left.packageJsonPrivate !== undefined ? {} : right.packageJsonPrivate !== undefined ? { packageJsonPrivate: right.packageJsonPrivate } : {},
@@ -45096,13 +45099,17 @@ function collectDistInfoEvidence(input) {
   if (files.length === 0) {
     warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Python dist-info metadata.");
   }
-  const metadataLicense = readPythonMetadataLicense(input.distInfo.metadata);
+  const metadataLicense = readPythonMetadataLicenseDetails(input.distInfo.metadata);
   if (!metadataLicense) {
     warnings.push("Python METADATA did not declare License-Expression, License, or a recognized license classifier.");
   }
   return ok({
     packageId: input.packageId,
-    ...metadataLicense ? { metadataLicense, metadataSource: "METADATA" } : {},
+    ...metadataLicense ? {
+      metadataLicense: metadataLicense.license,
+      metadataLicenseKind: metadataLicense.kind,
+      metadataSource: "METADATA"
+    } : {},
     files,
     source: "local",
     warnings
@@ -45172,17 +45179,17 @@ function firstHeader(headers, key) {
   const value = headers.get(key)?.find((item) => item.trim() !== "")?.trim();
   return value && value.length > 0 ? value : undefined;
 }
-function readPythonMetadataLicense(metadata) {
+function readPythonMetadataLicenseDetails(metadata) {
   if (metadata.licenseExpression) {
-    return metadata.licenseExpression;
+    return { license: metadata.licenseExpression, kind: "declared" };
   }
   const classifierLicenses = metadata.classifiers.map((classifier) => LICENSE_CLASSIFIER_ALIASES.get(classifier)).filter((license) => license !== undefined);
   if (classifierLicenses.length > 0) {
-    return [...new Set(classifierLicenses)].join(" OR ");
+    return { license: [...new Set(classifierLicenses)].join(" OR "), kind: "classifier" };
   }
   if (metadata.license && metadata.license.length <= 200 && !metadata.license.includes(`
 `) && !isAbsentPythonLicense(metadata.license)) {
-    return metadata.license;
+    return { license: metadata.license, kind: "declared" };
   }
   return;
 }
@@ -48179,7 +48186,7 @@ function parsePyPiReleaseMetadata(input) {
   if (!artifact) {
     return err(pypiMetadataError(input, "PyPI release metadata did not include a supported distribution with a SHA-256 digest."));
   }
-  const metadataLicense = readPythonMetadataLicense({
+  const metadataLicense = readPythonMetadataLicenseDetails({
     licenseExpression: readShortMetadataString(document2.info.license_expression),
     license: readShortMetadataString(document2.info.license),
     classifiers: readStringArray(document2.info.classifiers),
@@ -48187,7 +48194,10 @@ function parsePyPiReleaseMetadata(input) {
   });
   return ok({
     artifact,
-    ...metadataLicense ? { metadataLicense } : {}
+    ...metadataLicense ? {
+      metadataLicense: metadataLicense.license,
+      metadataLicenseKind: metadataLicense.kind
+    } : {}
   });
 }
 function collectPythonDistributionEvidence(input) {
@@ -48229,11 +48239,13 @@ function collectPythonDistributionEvidence(input) {
     metadata: metadata.value.metadata,
     warnings
   });
-  const artifactMetadataLicense = readPythonMetadataLicense(metadata.value.metadata);
+  const artifactMetadataLicense = readPythonMetadataLicenseDetails(metadata.value.metadata);
   const selectedMetadata = selectMetadataLicense({
-    artifactLicense: artifactMetadataLicense,
+    artifactLicense: artifactMetadataLicense?.license,
+    artifactLicenseKind: artifactMetadataLicense?.kind,
     artifactSource: metadata.value.path,
-    registryLicense: input.registryMetadataLicense
+    registryLicense: input.registryMetadataLicense,
+    registryLicenseKind: input.registryMetadataLicenseKind
   });
   warnings.push(...selectedMetadata.warnings);
   if (input.yanked) {
@@ -48247,7 +48259,11 @@ function collectPythonDistributionEvidence(input) {
   }
   return ok({
     packageId: input.packageId,
-    ...selectedMetadata.license && selectedMetadata.source ? { metadataLicense: selectedMetadata.license, metadataSource: selectedMetadata.source } : {},
+    ...selectedMetadata.license && selectedMetadata.source ? {
+      metadataLicense: selectedMetadata.license,
+      ...selectedMetadata.kind ? { metadataLicenseKind: selectedMetadata.kind } : {},
+      metadataSource: selectedMetadata.source
+    } : {},
     files,
     source: "tarball",
     warnings
@@ -48255,19 +48271,35 @@ function collectPythonDistributionEvidence(input) {
 }
 function selectMetadataLicense(input) {
   if (!input.artifactLicense) {
-    return input.registryLicense ? { license: input.registryLicense, source: "PyPI release metadata", warnings: [] } : { warnings: [] };
+    return input.registryLicense ? {
+      license: input.registryLicense,
+      ...input.registryLicenseKind ? { kind: input.registryLicenseKind } : {},
+      source: "PyPI release metadata",
+      warnings: []
+    } : { warnings: [] };
   }
   if (!input.registryLicense) {
-    return { license: input.artifactLicense, source: input.artifactSource, warnings: [] };
+    return {
+      license: input.artifactLicense,
+      ...input.artifactLicenseKind ? { kind: input.artifactLicenseKind } : {},
+      source: input.artifactSource,
+      warnings: []
+    };
   }
   if (input.artifactLicense === input.registryLicense) {
-    return { license: input.artifactLicense, source: input.artifactSource, warnings: [] };
+    return {
+      license: input.artifactLicense,
+      ...input.artifactLicenseKind ? { kind: input.artifactLicenseKind } : {},
+      source: input.artifactSource,
+      warnings: []
+    };
   }
   const artifactMalformed = parseSpdxExpression(input.artifactLicense).malformed;
   const registryMalformed = parseSpdxExpression(input.registryLicense).malformed;
   if (artifactMalformed && !registryMalformed) {
     return {
       license: input.registryLicense,
+      ...input.registryLicenseKind ? { kind: input.registryLicenseKind } : {},
       source: "PyPI release metadata",
       warnings: [
         "Distribution metadata contained a malformed license value; the valid PyPI release metadata license was preferred."
@@ -48276,6 +48308,7 @@ function selectMetadataLicense(input) {
   }
   return {
     license: input.artifactLicense,
+    ...input.artifactLicenseKind ? { kind: input.artifactLicenseKind } : {},
     source: input.artifactSource,
     warnings: [
       "PyPI release metadata license did not match the distribution metadata; the verified distribution metadata was preferred."
@@ -48410,6 +48443,7 @@ function declaredLicensePaths(packageRoot, metadataDir, licenseFiles) {
     }
     declared.add(joinArchivePath2(packageRoot, normalized));
     if (metadataDir.toLowerCase().endsWith(".dist-info")) {
+      declared.add(joinArchivePath2(metadataDir, normalized));
       declared.add(joinArchivePath2(`${metadataDir}/licenses`, normalized));
     }
   }
@@ -50286,7 +50320,10 @@ async function collectPyPiReleaseEvidence(input) {
     resolved: release.value.artifact.url,
     artifactFilename: release.value.artifact.filename,
     integrity: sha256HexIntegrity(release.value.artifact.sha256),
-    ...release.value.metadataLicense ? { registryMetadataLicense: release.value.metadataLicense } : {},
+    ...release.value.metadataLicense ? {
+      registryMetadataLicense: release.value.metadataLicense,
+      ...release.value.metadataLicenseKind ? { registryMetadataLicenseKind: release.value.metadataLicenseKind } : {}
+    } : {},
     yanked: release.value.artifact.yanked,
     fetchArtifact: input.fetchArtifact,
     resolveArtifactHost: input.resolveArtifactHost,
@@ -50391,7 +50428,10 @@ async function collectRemotePythonDistributionEvidence(input) {
       artifactFilename: input.artifactFilename,
       artifactBytes: artifact.value,
       artifactMaxBytes: input.artifactMaxBytes,
-      ...input.registryMetadataLicense ? { registryMetadataLicense: input.registryMetadataLicense } : {},
+      ...input.registryMetadataLicense ? {
+        registryMetadataLicense: input.registryMetadataLicense,
+        ...input.registryMetadataLicenseKind ? { registryMetadataLicenseKind: input.registryMetadataLicenseKind } : {}
+      } : {},
       ...input.yanked !== undefined ? { yanked: input.yanked } : {}
     });
     if (!collected.ok && collected.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
@@ -52306,6 +52346,12 @@ function isObjectRecord9(value) {
 function normalizeLicenseEvidence(evidence) {
   const signals = [];
   const evidenceSources = describeEvidenceSources(evidence);
+  const licenseFileExpressions = readLicenseFileExpressions(evidence);
+  const distinctLicenseFileExpressions = new Set(licenseFileExpressions.map((match) => match.expression));
+  if (evidence.metadataLicenseKind === "classifier" && distinctLicenseFileExpressions.size > 1) {
+    signals.push("conflicting-evidence");
+    evidenceSources.push(`conflicting file license matches: ${licenseFileExpressions.map((match) => `${match.expression} from ${match.filePath}`).join("; ")}`);
+  }
   if (evidence.files.some((file) => file.kind === "notice")) {
     signals.push("notice-required");
   }
@@ -52380,7 +52426,7 @@ function normalizeLicenseEvidence(evidence) {
     ...parsed.exceptions.length > 0 ? { exceptions: parsed.exceptions } : {},
     signals,
     evidenceSources,
-    confidence: parsed.usedAlias || licenseExpression.source === "license-file" ? "medium" : "high"
+    confidence: signals.includes("conflicting-evidence") ? "low" : parsed.usedAlias || licenseExpression.source === "license-file" ? "medium" : "high"
   }, parsed.ast);
 }
 function withSpdxAst(license, ast) {
@@ -52518,6 +52564,10 @@ function addNonPackageRestrictionSources(evidenceSources, analysis) {
 function readLicenseExpressionEvidence(evidence) {
   const packageExpression = readPackageLicenseExpression(evidence);
   if (packageExpression) {
+    const licenseFileExpression = evidence.metadataLicenseKind === "classifier" && packageExpression === evidence.metadataLicense ? readLicenseFileExpression(evidence) : undefined;
+    if (licenseFileExpression && parseSpdxExpression(licenseFileExpression.expression).expression !== parseSpdxExpression(packageExpression).expression) {
+      return licenseFileExpression;
+    }
     return {
       expression: packageExpression,
       source: "package-metadata"
@@ -52577,20 +52627,28 @@ function isAbsentLicenseExpression(value) {
   return normalized === "NOASSERTION" || normalized === "NONE";
 }
 function readLicenseFileExpression(evidence) {
+  const matches = readLicenseFileExpressions(evidence);
+  if (new Set(matches.map((match) => match.expression)).size !== 1) {
+    return;
+  }
+  return matches[0];
+}
+function readLicenseFileExpressions(evidence) {
+  const matches = [];
   for (const file of evidence.files) {
     if (file.kind !== "license" && file.kind !== "copying") {
       continue;
     }
     const expression = recognizeStandardLicenseText(file.text);
     if (expression && !isAbsentLicenseExpression(expression)) {
-      return {
+      matches.push({
         expression,
         source: "license-file",
         filePath: file.path
-      };
+      });
     }
   }
-  return;
+  return matches;
 }
 function recognizeStandardLicenseText(text3) {
   const spdxIdentifier = readSpdxLicenseIdentifier(text3);
@@ -52609,23 +52667,12 @@ function recognizeStandardLicenseText(text3) {
   if (/\bCreative Commons Legal Code\b[\s\S]*\bCC0 1\.0 Universal\b/i.test(text3)) {
     return "CC0-1.0";
   }
-  if (/\bGNU AFFERO GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 3\b/i.test(text3)) {
-    return "AGPL-3.0-only";
+  if (/\bsubject to your choice of exactly one of\b/i.test(text3) && /\bThe FreeType License\b/i.test(text3) && /\bGNU General Public License(?: \(GPL\))?, version 2 or later\b/i.test(text3)) {
+    return "FTL OR GPL-2.0-or-later";
   }
-  if (/\bGNU LESSER GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 3\b/i.test(text3)) {
-    return "LGPL-3.0-only";
-  }
-  if (/\bGNU LESSER GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 2\.1\b/i.test(text3)) {
-    return "LGPL-2.1-only";
-  }
-  if (/\bGNU LIBRARY GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 2\b/i.test(text3)) {
-    return "LGPL-2.0-only";
-  }
-  if (/\bGNU GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 3\b/i.test(text3)) {
-    return "GPL-3.0-only";
-  }
-  if (/\bGNU GENERAL PUBLIC LICENSE\b[\s\S]*\bVersion 2\b/i.test(text3)) {
-    return "GPL-2.0-only";
+  const gnuLicense = recognizeGnuLicenseText(text3);
+  if (gnuLicense) {
+    return gnuLicense;
   }
   if (/\bfree and unencumbered software released into the public domain\b/i.test(text3)) {
     return "Unlicense";
@@ -52643,6 +52690,42 @@ function recognizeStandardLicenseText(text3) {
     return /\bNeither the name of\b/i.test(text3) ? "BSD-3-Clause" : "BSD-2-Clause";
   }
   return;
+}
+var GNU_LICENSE_SIGNATURES = [
+  {
+    expression: "AGPL-3.0-only",
+    pattern: /\bGNU AFFERO GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 3\b/i
+  },
+  {
+    expression: "LGPL-3.0-only",
+    pattern: /\bGNU LESSER GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 3\b/i
+  },
+  {
+    expression: "LGPL-2.1-only",
+    pattern: /\bGNU LESSER GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 2\.1\b/i
+  },
+  {
+    expression: "LGPL-2.0-only",
+    pattern: /\bGNU LIBRARY GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 2\b/i
+  },
+  {
+    expression: "GPL-3.0-only",
+    pattern: /\bGNU GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 3\b/i
+  },
+  {
+    expression: "GPL-2.0-only",
+    pattern: /\bGNU GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 2\b/i
+  }
+];
+function recognizeGnuLicenseText(text3) {
+  let earliest;
+  for (const signature of GNU_LICENSE_SIGNATURES) {
+    const match = signature.pattern.exec(text3);
+    if (match && (!earliest || match.index < earliest.index)) {
+      earliest = { expression: signature.expression, index: match.index };
+    }
+  }
+  return earliest?.expression;
 }
 function readSpdxLicenseIdentifier(text3) {
   for (const line of text3.split(/\r?\n/)) {
@@ -52680,7 +52763,8 @@ function describeEvidenceSources(evidence) {
   }
   const metadataSource = evidence.metadataSource ?? "package metadata";
   if (evidence.metadataLicense) {
-    sources.push(`${metadataSource} license: ${evidence.metadataLicense}`);
+    const metadataLabel = evidence.metadataLicenseKind === "classifier" ? "classifier" : "license";
+    sources.push(`${metadataSource} ${metadataLabel}: ${evidence.metadataLicense}`);
   }
   if (evidence.metadataLicenses !== undefined) {
     sources.push(`${metadataSource} licenses field`);
@@ -53383,6 +53467,7 @@ var PERMISSIVE_LICENSES = new Set([
   "BSD-2-Clause",
   "BSD-3-Clause",
   "Apache-2.0",
+  "FTL",
   "Zlib",
   "CC0-1.0",
   "Unlicense"
@@ -53495,10 +53580,10 @@ function classifySeverity(license, profile, policy) {
   if (license.signals.includes("commercial-restriction") && !hasCommercialRestrictionChoice(license)) {
     return "high";
   }
-  if (license.signals.includes("internal-private") && !license.signals.includes("malformed")) {
+  if (license.signals.includes("internal-private") && !license.signals.includes("malformed") && !license.signals.includes("conflicting-evidence")) {
     return "low";
   }
-  if (license.signals.includes("missing") || license.signals.includes("malformed")) {
+  if (license.signals.includes("missing") || license.signals.includes("malformed") || license.signals.includes("conflicting-evidence")) {
     return "unknown";
   }
   if (license.spdxAst) {
@@ -53584,6 +53669,9 @@ function explainSeverity(license, profile, severity, policy) {
       }
       return `License expression is high risk for ${profile}.`;
     case "unknown":
+      if (license.signals.includes("conflicting-evidence")) {
+        return "License evidence contains conflicting recognized expressions.";
+      }
       if (license.signals.includes("missing")) {
         return "Package metadata does not declare a license expression.";
       }
@@ -53650,6 +53738,9 @@ function actionFor(recommendation, license) {
     case "exclude-dev-only":
       return "Keep this package out of production or scan with --prod.";
     case "collect-evidence":
+      if (license?.signals.includes("conflicting-evidence")) {
+        return "Review the conflicting license evidence before approving this package.";
+      }
       if (license?.signals.includes("missing")) {
         return "Add or verify package license metadata before approving this package.";
       }
@@ -54192,7 +54283,7 @@ function formatThresholdSummary(summary) {
 }
 
 // src/report/schema.ts
-var OHRISK_REPORT_SCHEMA_VERSION = "3.4.0";
+var OHRISK_REPORT_SCHEMA_VERSION = "3.5.0";
 var OHRISK_COMMON_REPORT_SCHEMA = `urn:ohrisk:schema:common:${OHRISK_REPORT_SCHEMA_VERSION}`;
 var OHRISK_SCAN_REPORT_SCHEMA = `urn:ohrisk:schema:scan-report:${OHRISK_REPORT_SCHEMA_VERSION}`;
 var OHRISK_DIFF_REPORT_SCHEMA = `urn:ohrisk:schema:diff-report:${OHRISK_REPORT_SCHEMA_VERSION}`;

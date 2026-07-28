@@ -11,7 +11,7 @@ import {
 } from "../shared/read-text-file";
 import { err, ok, type Result } from "../shared/result";
 import { classifyEvidenceFile } from "./license-files";
-import type { LicenseEvidence, LicenseEvidenceFile } from "./types";
+import type { LicenseEvidence, LicenseEvidenceFile, MetadataLicenseKind } from "./types";
 
 const PYTHON_METADATA_MAX_BYTES = 1024 * 1024;
 const PYTHON_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
@@ -24,6 +24,11 @@ export type PythonMetadata = {
   license?: string;
   classifiers: string[];
   licenseFiles: string[];
+};
+
+export type PythonMetadataLicense = {
+  license: string;
+  kind: MetadataLicenseKind;
 };
 
 type PythonDistInfo = {
@@ -193,14 +198,20 @@ function collectDistInfoEvidence(input: {
     warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Python dist-info metadata.");
   }
 
-  const metadataLicense = readPythonMetadataLicense(input.distInfo.metadata);
+  const metadataLicense = readPythonMetadataLicenseDetails(input.distInfo.metadata);
   if (!metadataLicense) {
     warnings.push("Python METADATA did not declare License-Expression, License, or a recognized license classifier.");
   }
 
   return ok({
     packageId: input.packageId,
-    ...(metadataLicense ? { metadataLicense, metadataSource: "METADATA" } : {}),
+    ...(metadataLicense
+      ? {
+          metadataLicense: metadataLicense.license,
+          metadataLicenseKind: metadataLicense.kind,
+          metadataSource: "METADATA"
+        }
+      : {}),
     files,
     source: "local",
     warnings
@@ -291,8 +302,14 @@ function firstHeader(headers: Map<string, string[]>, key: string): string | unde
 }
 
 export function readPythonMetadataLicense(metadata: PythonMetadata): string | undefined {
+  return readPythonMetadataLicenseDetails(metadata)?.license;
+}
+
+export function readPythonMetadataLicenseDetails(
+  metadata: PythonMetadata
+): PythonMetadataLicense | undefined {
   if (metadata.licenseExpression) {
-    return metadata.licenseExpression;
+    return { license: metadata.licenseExpression, kind: "declared" };
   }
 
   const classifierLicenses = metadata.classifiers
@@ -300,7 +317,7 @@ export function readPythonMetadataLicense(metadata: PythonMetadata): string | un
     .filter((license): license is string => license !== undefined);
 
   if (classifierLicenses.length > 0) {
-    return [...new Set(classifierLicenses)].join(" OR ");
+    return { license: [...new Set(classifierLicenses)].join(" OR "), kind: "classifier" };
   }
 
   if (
@@ -309,7 +326,7 @@ export function readPythonMetadataLicense(metadata: PythonMetadata): string | un
     && !metadata.license.includes("\n")
     && !isAbsentPythonLicense(metadata.license)
   ) {
-    return metadata.license;
+    return { license: metadata.license, kind: "declared" };
   }
 
   return undefined;

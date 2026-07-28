@@ -2118,7 +2118,12 @@ async function collectPyPiReleaseEvidence(input: {
     artifactFilename: release.value.artifact.filename,
     integrity: sha256HexIntegrity(release.value.artifact.sha256),
     ...(release.value.metadataLicense
-      ? { registryMetadataLicense: release.value.metadataLicense }
+      ? {
+          registryMetadataLicense: release.value.metadataLicense,
+          ...(release.value.metadataLicenseKind
+            ? { registryMetadataLicenseKind: release.value.metadataLicenseKind }
+            : {})
+        }
       : {}),
     yanked: release.value.artifact.yanked,
     fetchArtifact: input.fetchArtifact,
@@ -2148,6 +2153,7 @@ async function collectRemotePythonDistributionEvidence(input: {
   artifactFilename: string;
   integrity?: string;
   registryMetadataLicense?: string;
+  registryMetadataLicenseKind?: LicenseEvidence["metadataLicenseKind"];
   yanked?: boolean;
   fetchArtifact: ArtifactFetcher;
   resolveArtifactHost: ArtifactHostResolver | undefined;
@@ -2251,7 +2257,12 @@ async function collectRemotePythonDistributionEvidence(input: {
       artifactBytes: artifact.value,
       artifactMaxBytes: input.artifactMaxBytes,
       ...(input.registryMetadataLicense
-        ? { registryMetadataLicense: input.registryMetadataLicense }
+        ? {
+            registryMetadataLicense: input.registryMetadataLicense,
+            ...(input.registryMetadataLicenseKind
+              ? { registryMetadataLicenseKind: input.registryMetadataLicenseKind }
+              : {})
+          }
         : {}),
       ...(input.yanked !== undefined ? { yanked: input.yanked } : {})
     });

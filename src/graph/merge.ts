@@ -182,7 +182,10 @@ function mergeLicenseEvidence(left: LicenseEvidence, right: LicenseEvidence): Li
       ? { packageJsonLicenses: right.packageJsonLicenses }
       : {}),
     ...(left.metadataLicense ? {} : right.metadataLicense
-      ? { metadataLicense: right.metadataLicense }
+      ? {
+          metadataLicense: right.metadataLicense,
+          ...(right.metadataLicenseKind ? { metadataLicenseKind: right.metadataLicenseKind } : {})
+        }
       : {}),
     ...(left.metadataLicenses !== undefined ? {} : right.metadataLicenses !== undefined
       ? { metadataLicenses: right.metadataLicenses }

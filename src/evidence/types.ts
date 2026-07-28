@@ -17,6 +17,8 @@ export type LicenseEvidenceSource =
   | "tarball"
   | "unavailable";
 
+export type MetadataLicenseKind = "declared" | "classifier";
+
 export type EvidenceDiagnosticCode =
   | "collector_warning"
   | "license_evidence_missing"
@@ -41,6 +43,7 @@ export type LicenseEvidence = {
   packageJsonLicense?: string;
   packageJsonLicenses?: unknown;
   metadataLicense?: string;
+  metadataLicenseKind?: MetadataLicenseKind;
   metadataLicenses?: unknown;
   metadataSource?: string;
   files: LicenseEvidenceFile[];

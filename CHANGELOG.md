@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.14.1 - 2026-07-28
+
+- Corrected license evidence classification for GNU-family full texts, FreeType
+  dual-license declarations, and legacy Python wheels. GPLv3 texts that mention
+  AGPL compatibility no longer become AGPL findings; FreeType declarations are
+  preserved as `FTL OR GPL-2.0-or-later` and FTL is treated as permissive; and
+  declared `.dist-info/LICENSE` files can override conflicting legacy PyPI
+  classifiers after the verified wheel is inspected, while multiple distinct
+  recognized license files now fail closed as conflicting evidence. Report
+  evidence labels classifier-derived values as classifiers rather than declared
+  metadata licenses. The report schema is now 3.5.0 for the new
+  `conflicting-evidence` signal.
+
 ## 1.14.0 - 2026-07-27
 
 - Added Zig `build.zig.zon` dependency manifest support. Ohrisk parses

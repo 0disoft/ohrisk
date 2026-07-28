@@ -619,6 +619,141 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
+  test("recognizes a GPL v3 license before its later AGPL compatibility reference", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "gpl3-with-agpl-reference@1.0.0",
+      files: [
+        {
+          path: "LICENSE",
+          kind: "license",
+          text: [
+            "GNU GENERAL PUBLIC LICENSE",
+            "Version 3, 29 June 2007",
+            "",
+            "13. Use with the GNU Affero General Public License.",
+            "Notwithstanding any other provision of this License, you have permission to link or combine",
+            "any covered work with a work licensed under version 3 of the GNU Affero General Public License."
+          ].join("\n")
+        }
+      ],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      original: "GPL-3.0-only",
+      expression: "GPL-3.0-only",
+      choices: ["GPL-3.0-only"],
+      confidence: "medium"
+    });
+  });
+
+  test("recognizes the FreeType and GPL dual-license declaration", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "github.com/golang/freetype@v0.0.0-20170609003504-e2365dfdc4a0",
+      files: [
+        {
+          path: "LICENSE",
+          kind: "license",
+          text: [
+            "Use of the Freetype-Go software is subject to your choice of exactly one of",
+            "the following two licenses:",
+            "  * The FreeType License, which is similar to the original BSD license with",
+            "    an advertising clause, or",
+            "  * The GNU General Public License (GPL), version 2 or later.",
+            "",
+            "The text of these licenses are available in the licenses/ftl.txt and the",
+            "licenses/gpl.txt files respectively."
+          ].join("\n")
+        }
+      ],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      original: "FTL OR GPL-2.0-or-later",
+      expression: "FTL OR GPL-2.0-or-later",
+      choices: ["FTL", "GPL-2.0-or-later"],
+      joiner: "or",
+      confidence: "medium"
+    });
+  });
+
+  test("fails closed when a classifier conflicts with multiple recognized license files", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "multi-license@1.0.0",
+      metadataLicense: "MIT",
+      metadataLicenseKind: "classifier",
+      metadataSource: "METADATA",
+      files: [
+        {
+          path: "LICENSE-APACHE",
+          kind: "license",
+          text: "Apache License\nVersion 2.0, January 2004"
+        },
+        {
+          path: "LICENSE-MIT",
+          kind: "license",
+          text: [
+            "Permission is hereby granted, free of charge, to any person obtaining a copy",
+            "THE SOFTWARE IS PROVIDED \"AS IS\""
+          ].join("\n")
+        }
+      ],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      original: "MIT",
+      expression: "MIT",
+      choices: ["MIT"],
+      signals: ["conflicting-evidence"],
+      confidence: "low"
+    });
+    expect(normalized.evidenceSources).toContain(
+      "conflicting file license matches: Apache-2.0 from LICENSE-APACHE; MIT from LICENSE-MIT"
+    );
+    expect(normalized.evidenceSources).not.toContain(
+      "file license match: Apache-2.0 from LICENSE-APACHE"
+    );
+  });
+
+  test("keeps an explicit dual-license declaration with matching separate files", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "declared-multi-license@1.0.0",
+      metadataLicense: "MIT OR Apache-2.0",
+      metadataLicenseKind: "declared",
+      metadataSource: "METADATA",
+      files: [
+        {
+          path: "LICENSE-APACHE",
+          kind: "license",
+          text: "Apache License\nVersion 2.0, January 2004"
+        },
+        {
+          path: "LICENSE-MIT",
+          kind: "license",
+          text: [
+            "Permission is hereby granted, free of charge, to any person obtaining a copy",
+            "THE SOFTWARE IS PROVIDED \"AS IS\""
+          ].join("\n")
+        }
+      ],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      expression: "MIT OR Apache-2.0",
+      choices: ["MIT", "Apache-2.0"],
+      joiner: "or",
+      signals: [],
+      confidence: "high"
+    });
+  });
+
   test("recognizes public-domain-style license file text", () => {
     expect(
       normalizeLicenseEvidence({

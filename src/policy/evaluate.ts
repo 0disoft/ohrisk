@@ -24,6 +24,7 @@ const PERMISSIVE_LICENSES = new Set([
   "BSD-2-Clause",
   "BSD-3-Clause",
   "Apache-2.0",
+  "FTL",
   "Zlib",
   "CC0-1.0",
   "Unlicense"
@@ -193,11 +194,19 @@ function classifySeverity(
     return "high";
   }
 
-  if (license.signals.includes("internal-private") && !license.signals.includes("malformed")) {
+  if (
+    license.signals.includes("internal-private")
+    && !license.signals.includes("malformed")
+    && !license.signals.includes("conflicting-evidence")
+  ) {
     return "low";
   }
 
-  if (license.signals.includes("missing") || license.signals.includes("malformed")) {
+  if (
+    license.signals.includes("missing")
+    || license.signals.includes("malformed")
+    || license.signals.includes("conflicting-evidence")
+  ) {
     return "unknown";
   }
 
@@ -331,6 +340,10 @@ function explainSeverity(
 
       return `License expression is high risk for ${profile}.`;
     case "unknown":
+      if (license.signals.includes("conflicting-evidence")) {
+        return "License evidence contains conflicting recognized expressions.";
+      }
+
       if (license.signals.includes("missing")) {
         return "Package metadata does not declare a license expression.";
       }
@@ -417,6 +430,10 @@ function actionFor(recommendation: RiskRecommendation, license?: NormalizedLicen
     case "exclude-dev-only":
       return "Keep this package out of production or scan with --prod.";
     case "collect-evidence":
+      if (license?.signals.includes("conflicting-evidence")) {
+        return "Review the conflicting license evidence before approving this package.";
+      }
+
       if (license?.signals.includes("missing")) {
         return "Add or verify package license metadata before approving this package.";
       }

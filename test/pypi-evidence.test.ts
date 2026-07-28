@@ -11,6 +11,7 @@ import {
   parsePyPiReleaseMetadata
 } from "../src/evidence/pypi-package";
 import type { DependencyGraph, PackageEcosystem } from "../src/graph/types";
+import { normalizeLicenseEvidence } from "../src/license/normalize";
 import { createTarGz } from "./helpers/tar";
 import { createZip } from "./helpers/zip";
 
@@ -66,7 +67,8 @@ describe("PyPI release evidence", () => {
         packageType: "bdist_wheel",
         yanked: false
       },
-      metadataLicense: "Apache-2.0"
+      metadataLicense: "Apache-2.0",
+      metadataLicenseKind: "declared"
     });
   });
 
@@ -143,6 +145,99 @@ describe("PyPI release evidence", () => {
       kind: "license",
       text: "Apache License fixture text."
     }]);
+  });
+
+  test("reads legacy wheel license files stored directly under dist-info", () => {
+    const wheel = createZip({
+      "factorio_rcon_py-2.1.3.dist-info/METADATA": [
+        "Metadata-Version: 2.1",
+        "Name: factorio-rcon-py",
+        "Version: 2.1.3",
+        "License-File: LICENSE",
+        "Classifier: License :: OSI Approved :: GNU Lesser General Public License v2 (LGPLv2)",
+        ""
+      ].join("\n"),
+      "factorio_rcon_py-2.1.3.dist-info/LICENSE": [
+        "GNU LESSER GENERAL PUBLIC LICENSE",
+        "Version 2.1, February 1999"
+      ].join("\n")
+    });
+    const result = collectPythonDistributionEvidence({
+      packageId: "factorio-rcon-py@2.1.3",
+      packageName: "factorio-rcon-py",
+      version: "2.1.3",
+      artifactFilename: "factorio_rcon_py-2.1.3-py3-none-any.whl",
+      artifactBytes: wheel,
+      artifactMaxBytes: 1024 * 1024
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.files).toEqual([{
+      path: "factorio_rcon_py-2.1.3.dist-info/LICENSE",
+      kind: "license",
+      text: "GNU LESSER GENERAL PUBLIC LICENSE\nVersion 2.1, February 1999"
+    }]);
+    expect(result.value.warnings).not.toContain(
+      "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in the Python distribution."
+    );
+    const normalized = normalizeLicenseEvidence(result.value);
+    expect(normalized).toMatchObject({
+      original: "LGPL-2.1-only",
+      expression: "LGPL-2.1-only",
+      choices: ["LGPL-2.1-only"],
+      confidence: "medium"
+    });
+    expect(normalized.evidenceSources).toContain(
+      "factorio_rcon_py-2.1.3.dist-info/METADATA classifier: LGPL-2.0-only"
+    );
+    expect(normalized.evidenceSources).not.toContain(
+      "factorio_rcon_py-2.1.3.dist-info/METADATA license: LGPL-2.0-only"
+    );
+    expect(normalized.evidenceSources).toContain(
+      "file license match: LGPL-2.1-only from factorio_rcon_py-2.1.3.dist-info/LICENSE"
+    );
+  });
+
+  test("fails closed on a classifier with multiple conflicting wheel license files", () => {
+    const wheel = createZip({
+      "example_pkg-1.2.3.dist-info/METADATA": [
+        "Metadata-Version: 2.4",
+        "Name: Example_Pkg",
+        "Version: 1.2.3",
+        "Classifier: License :: OSI Approved :: MIT License",
+        "License-File: LICENSE-APACHE",
+        "License-File: LICENSE-MIT",
+        ""
+      ].join("\n"),
+      "example_pkg-1.2.3.dist-info/licenses/LICENSE-APACHE":
+        "Apache License\nVersion 2.0, January 2004",
+      "example_pkg-1.2.3.dist-info/licenses/LICENSE-MIT": [
+        "Permission is hereby granted, free of charge, to any person obtaining a copy",
+        "THE SOFTWARE IS PROVIDED \"AS IS\""
+      ].join("\n")
+    });
+    const result = collectPythonDistributionEvidence({
+      packageId: "example-pkg@1.2.3",
+      packageName: "example-pkg",
+      version: "1.2.3",
+      artifactFilename: "example_pkg-1.2.3-py3-none-any.whl",
+      artifactBytes: wheel,
+      artifactMaxBytes: 1024 * 1024
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value).toMatchObject({
+      metadataLicense: "MIT",
+      metadataLicenseKind: "classifier"
+    });
+    expect(normalizeLicenseEvidence(result.value)).toMatchObject({
+      original: "MIT",
+      choices: ["MIT"],
+      signals: ["conflicting-evidence"],
+      confidence: "low"
+    });
   });
 
   test("prefers a valid PyPI license over malformed wheel license prose", () => {
@@ -251,6 +346,37 @@ describe("PyPI release evidence", () => {
       source: "tarball",
       warnings: []
     });
+  });
+
+  test("does not substitute PyPI evidence when local index provenance is unavailable", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-pypi-local-fallback-"));
+    const observed: string[] = [];
+    try {
+      const result = await collectGraphEvidence({
+        graph: graphFor("pypi"),
+        projectRoot,
+        allowLocalProjectEvidence: true,
+        evidenceConcurrency: 1,
+        fetchArtifact: async (url) => {
+          observed.push(url);
+          throw new Error("Local Python evidence must not leak package coordinates to PyPI.");
+        }
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(observed).toEqual([]);
+      expect(result.value).toEqual([{
+        packageId: "example-pkg@1.2.3",
+        files: [],
+        source: "unavailable",
+        warnings: [
+          "Python package metadata was not found in a local .venv or venv site-packages directory."
+        ]
+      }]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 
   test("turns stalled PyPI metadata fetches into unavailable evidence", async () => {
