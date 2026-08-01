@@ -25,6 +25,11 @@ describe("collectGoModuleEvidence", () => {
         "GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007\n",
         "utf8"
       );
+      writeFileSync(
+        path.join(moduleDir, "go.mod"),
+        "module github.com/acme/risk\nrequire github.com/acme/child v1.2.3\n",
+        "utf8"
+      );
 
       const evidence = collectGoModuleEvidence({
         packageId: "github.com/acme/risk@v1.0.0",
@@ -40,7 +45,8 @@ describe("collectGoModuleEvidence", () => {
 
       expect(evidence.value).toMatchObject({
         packageId: "github.com/acme/risk@v1.0.0",
-        source: "local"
+        source: "local",
+        goModuleRequirements: ["github.com/acme/child"]
       });
       expect(evidence.value.files.map((file) => file.path)).toEqual(["LICENSE"]);
 

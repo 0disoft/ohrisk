@@ -152,8 +152,16 @@ evidence가 없으면 checksum이 있는 crates.io registry crate만 고정된
 Cargo.toml name/version을 검증한 뒤 license metadata와 파일을 읽는다. Git/path crate와
 대체 registry는 원격으로 가져오지 않는다.
 Go는 `go.work` workspace module, workspace `replace` directive, 각 module의
-`go.mod` require, module-level `replace` directive, 옆의 `go.sum` module ZIP checksum을
+`go.mod` require, module-level `replace` directive, 옆의 `go.sum` module ZIP 및
+`/go.mod` checksum을
 스캔한다. `go.work`의 `replace`는 module `go.mod`의 `replace`보다 먼저 적용한다.
+filesystem과 checkout된 repository에서는 표준 `tool` directive, `_test.go` import,
+기본 build context에서 활성화되지 않는 custom build tag source import를 개발 전용 root로
+분류한다. checksum이 검증된 module ZIP의 `go.mod` 또는 별도 checksum이 검증된
+고정 proxy `.mod` edge가 모두 갖춰졌을 때만 해당 scope를 하위 module로 전파한다.
+사용 가능한 `go.mod`가 없으면 빈 edge로 추정하지 않고 edge metadata를 제공하지 않는다.
+production root에서도 도달 가능한 module은 production을 유지하고,
+edge evidence가 하나라도 없으면 transitive module을 development로 낮추지 않는다.
 module-to-module `replace`는 원래 require identity를 유지하되
 replacement module/version의 로컬 cache evidence를 읽고, 프로젝트 root 안의 local
 path `replace`는 해당 경로의 license evidence를 읽는다. evidence는 로컬 Go module

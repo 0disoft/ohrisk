@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Go scans now retain the separate `go.sum` checksum for each dependency's
+  standalone `/go.mod` response. When a checksum-verified module ZIP or local
+  cache cannot provide complete module edges, Ohrisk may fetch the fixed public
+  proxy `.mod`, verify its Go `h1` checksum independently, and use only a strict,
+  complete parse for development-scope propagation. Missing, mismatched, or
+  malformed edge metadata remains unavailable instead of being treated as an
+  empty dependency set.
+
 ## 1.14.1 - 2026-07-28
 
 - Corrected license evidence classification for GNU-family full texts, FreeType

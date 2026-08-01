@@ -39,6 +39,8 @@ export type EvidenceSourceCounts = {
 
 export type LicenseEvidence = {
   packageId: string;
+  /** Internal verified Go module graph edges; not serialized into report contracts. */
+  goModuleRequirements?: string[];
   packageJsonPrivate?: boolean;
   packageJsonLicense?: string;
   packageJsonLicenses?: unknown;

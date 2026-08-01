@@ -1,5 +1,5 @@
 import { omitUndefined } from "../shared/object";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError, type OhriskErrorCode } from "../shared/errors";
@@ -12,10 +12,17 @@ import {
 } from "./read-input-file";
 import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
 
+const GO_SOURCE_FILE_MAX_BYTES = 1024 * 1024;
+const GO_SOURCE_TOTAL_MAX_BYTES = 64 * 1024 * 1024;
+const GO_SOURCE_FILE_LIMIT = 50_000;
+const GO_SOURCE_DIRECTORY_DEPTH_LIMIT = 64;
+const GO_SOURCE_IGNORED_DIRECTORIES = new Set([".git", "node_modules", "vendor"]);
+
 export type GoModuleRecord = {
   modulePath: string;
   version: string;
   checksum?: string;
+  goModChecksum?: string;
   dependencyType: DependencyType;
   direct: boolean;
   replacement?: GoReplacementTarget;
@@ -40,9 +47,15 @@ export type GoReplaceDirective = {
 
 export type GoModParseOptions = {
   goSumText?: string;
+  sourceFiles?: GoSourceFile[];
   replacementOverrideGroups?: GoReplaceDirective[][];
   localReplacementBaseDir?: string;
   localReplacementRootDir?: string;
+};
+
+export type GoSourceFile = {
+  path: string;
+  text: string;
 };
 
 export function parseGoModFile(
@@ -79,7 +92,8 @@ export function parseGoModFile(
   }
 
   return parseGoModText(goModText.value, goModPath, omitUndefined({
-    goSumText: goSum.value
+    goSumText: goSum.value,
+    sourceFiles: readBoundedGoSourceFiles(goModPath)
   }));
 }
 
@@ -103,10 +117,19 @@ export function parseGoModText(
 
     const goSumRecords = options.goSumText ? parseGoSumRecords(options.goSumText) : [];
     const goSumById = new Map(goSumRecords.map((record) => [goRecordId(record), record]));
+    const sourceDependencyTypes = goSourceDependencyTypes(
+      options.sourceFiles ?? [],
+      goMod.value.records.map((record) => record.modulePath),
+      goMod.value.toolPaths
+    );
     const records = new Map<string, GoModuleRecord>();
     for (const originalRecord of goMod.value.records) {
       const record = withGoModuleChecksum(
-        applyGoReplacement(originalRecord, localReplacements, replacementOverrideGroups),
+        applyGoReplacement({
+          ...originalRecord,
+          dependencyType: sourceDependencyTypes.get(originalRecord.modulePath)
+            ?? originalRecord.dependencyType
+        }, localReplacements, replacementOverrideGroups),
         goSumById
       );
       records.set(goRecordId(record), record);
@@ -138,7 +161,12 @@ export function parseGoModText(
               ...existing,
               direct: existing.direct || record.direct,
               dependencyType: mergeDependencyType(existing.dependencyType, record.dependencyType),
-              ...(existing.checksum ? {} : record.checksum ? { checksum: record.checksum } : {})
+              ...(existing.checksum ? {} : record.checksum ? { checksum: record.checksum } : {}),
+              ...(existing.goModChecksum
+                ? {}
+                : record.goModChecksum
+                  ? { goModChecksum: record.goModChecksum }
+                  : {})
             }
           : record);
       }
@@ -160,6 +188,7 @@ export function parseGoModText(
             ecosystem: "go",
             ...(record.replacement ? { resolved: goReplacementResolvedSpecifier(record.replacement) } : {}),
             ...(record.checksum ? { integrity: record.checksum } : {}),
+            ...(record.goModChecksum ? { goModIntegrity: record.goModChecksum } : {}),
             dependencyType: record.dependencyType,
             direct: record.direct,
             paths: [[rootName, id]]
@@ -213,20 +242,88 @@ function readOptionalGoSum(input: {
   return ok(goSumText.value);
 }
 
+export function readBoundedGoSourceFiles(goModPath: string): GoSourceFile[] {
+  const rootDir = path.dirname(goModPath);
+  const sourceFiles: GoSourceFile[] = [];
+  const pending = [{ directory: rootDir, relativeDirectory: "", depth: 0 }];
+  let totalBytes = 0;
+
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || current.depth > GO_SOURCE_DIRECTORY_DEPTH_LIMIT) {
+      return [];
+    }
+    let entries;
+    try {
+      entries = readdirSync(current.directory, { withFileTypes: true })
+        .sort((left, right) => left.name.localeCompare(right.name));
+    } catch {
+      return [];
+    }
+
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) {
+        continue;
+      }
+      const relativePath = current.relativeDirectory
+        ? `${current.relativeDirectory}/${entry.name}`
+        : entry.name;
+      const absolutePath = path.join(current.directory, entry.name);
+      if (entry.isDirectory()) {
+        if (GO_SOURCE_IGNORED_DIRECTORIES.has(entry.name)) {
+          continue;
+        }
+        if (existsSync(path.join(absolutePath, "go.mod"))) {
+          continue;
+        }
+        pending.push({
+          directory: absolutePath,
+          relativeDirectory: relativePath,
+          depth: current.depth + 1
+        });
+        continue;
+      }
+      if (!entry.isFile() || !entry.name.endsWith(".go")) {
+        continue;
+      }
+      if (sourceFiles.length >= GO_SOURCE_FILE_LIMIT) {
+        return [];
+      }
+      const source = readInputTextFile({
+        filePath: absolutePath,
+        maxBytes: GO_SOURCE_FILE_MAX_BYTES
+      });
+      if (!source.ok) {
+        return [];
+      }
+      totalBytes += Buffer.byteLength(source.value, "utf8");
+      if (totalBytes > GO_SOURCE_TOTAL_MAX_BYTES) {
+        return [];
+      }
+      sourceFiles.push({ path: relativePath, text: source.value });
+    }
+  }
+
+  return sourceFiles;
+}
+
 export function parseGoModRecords(
   input: string,
-  goModPath: string
+  goModPath: string,
+  options: { strictEdges?: boolean } = {}
 ): Result<{
   modulePath?: string;
   goVersion?: string;
   records: GoModuleRecord[];
   replacements: GoReplaceDirective[];
+  toolPaths: string[];
 }, OhriskError> {
   const records: GoModuleRecord[] = [];
   const replacements: GoReplaceDirective[] = [];
+  const toolPaths: string[] = [];
   let modulePath: string | undefined;
   let goVersion: string | undefined;
-  let block: "require" | "replace" | undefined;
+  let block: "require" | "replace" | "tool" | undefined;
 
   for (const [index, rawLine] of input.split(/\r?\n/).entries()) {
     const line = stripGoLineComment(rawLine).trim();
@@ -257,9 +354,35 @@ export function parseGoModRecords(
         continue;
       }
 
-      const record = parseRequireLine(line, rawLine);
+      if (block === "tool") {
+        const toolFields = splitGoDirectiveFields(line);
+        const toolPath = toolFields[0];
+        if (options.strictEdges && toolFields.length !== 1) {
+          return err({
+            code: "GO_MOD_PARSE_FAILED",
+            category: "invalid_input",
+            message: "Failed to parse go.mod tool directive.",
+            details: { goModPath, lineNumber: index + 1 }
+          });
+        }
+        if (toolPath) {
+          toolPaths.push(toolPath);
+        }
+        continue;
+      }
+
+      const record = options.strictEdges && splitGoDirectiveFields(line).length !== 2
+        ? undefined
+        : parseRequireLine(line, rawLine);
       if (record) {
         records.push(record);
+      } else if (options.strictEdges) {
+        return err({
+          code: "GO_MOD_PARSE_FAILED",
+          category: "invalid_input",
+          message: "Failed to parse go.mod require directive.",
+          details: { goModPath, lineNumber: index + 1 }
+        });
       }
       continue;
     }
@@ -274,6 +397,11 @@ export function parseGoModRecords(
       continue;
     }
 
+    if (line === "tool (") {
+      block = "tool";
+      continue;
+    }
+
     if (line.startsWith("module ")) {
       modulePath = line.slice("module ".length).trim();
       continue;
@@ -285,9 +413,19 @@ export function parseGoModRecords(
     }
 
     if (line.startsWith("require ")) {
-      const record = parseRequireLine(line.slice("require ".length).trim(), rawLine);
+      const requireLine = line.slice("require ".length).trim();
+      const record = options.strictEdges && splitGoDirectiveFields(requireLine).length !== 2
+        ? undefined
+        : parseRequireLine(requireLine, rawLine);
       if (record) {
         records.push(record);
+      } else if (options.strictEdges) {
+        return err({
+          code: "GO_MOD_PARSE_FAILED",
+          category: "invalid_input",
+          message: "Failed to parse go.mod require directive.",
+          details: { goModPath, lineNumber: index + 1 }
+        });
       }
       continue;
     }
@@ -306,14 +444,41 @@ export function parseGoModRecords(
       if (replacement.value) {
         replacements.push(replacement.value);
       }
+      continue;
     }
+
+    if (line.startsWith("tool ")) {
+      const toolFields = splitGoDirectiveFields(line.slice("tool ".length).trim());
+      const toolPath = toolFields[0];
+      if (options.strictEdges && toolFields.length !== 1) {
+        return err({
+          code: "GO_MOD_PARSE_FAILED",
+          category: "invalid_input",
+          message: "Failed to parse go.mod tool directive.",
+          details: { goModPath, lineNumber: index + 1 }
+        });
+      }
+      if (toolPath) {
+        toolPaths.push(toolPath);
+      }
+    }
+  }
+
+  if (options.strictEdges && block !== undefined) {
+    return err({
+      code: "GO_MOD_PARSE_FAILED",
+      category: "invalid_input",
+      message: "Failed to parse unterminated go.mod directive block.",
+      details: { goModPath, block }
+    });
   }
 
   return ok({
     ...(modulePath !== undefined ? { modulePath } : {}),
     ...(goVersion !== undefined ? { goVersion } : {}),
     records,
-    replacements
+    replacements,
+    toolPaths
   });
 }
 
@@ -346,6 +511,174 @@ function parseRequireLine(line: string, rawLine: string): GoModuleRecord | undef
     dependencyType: "production",
     direct: !indirect
   };
+}
+
+function goSourceDependencyTypes(
+  sourceFiles: GoSourceFile[],
+  modulePaths: string[],
+  toolPaths: string[]
+): Map<string, DependencyType> {
+  const dependencyTypes = new Map<string, DependencyType>();
+  const sortedModulePaths = [...new Set(modulePaths)]
+    .sort((left, right) => right.length - left.length || left.localeCompare(right));
+
+  for (const toolPath of toolPaths) {
+    const modulePath = sortedModulePaths.find((candidate) =>
+      toolPath === candidate || toolPath.startsWith(`${candidate}/`)
+    );
+    if (modulePath) {
+      dependencyTypes.set(modulePath, "development");
+    }
+  }
+
+  for (const sourceFile of sourceFiles) {
+    const dependencyType = isDevelopmentGoSource(sourceFile) ? "development" : "production";
+    for (const importPath of readGoImportPaths(sourceFile.text)) {
+      const modulePath = sortedModulePaths.find((candidate) =>
+        importPath === candidate || importPath.startsWith(`${candidate}/`)
+      );
+      if (!modulePath) {
+        continue;
+      }
+      const existing = dependencyTypes.get(modulePath);
+      dependencyTypes.set(
+        modulePath,
+        existing === "production" || dependencyType === "production"
+          ? "production"
+          : "development"
+      );
+    }
+  }
+
+  return dependencyTypes;
+}
+
+function isDevelopmentGoSource(sourceFile: GoSourceFile): boolean {
+  if (sourceFile.path.replaceAll("\\", "/").endsWith("_test.go")) {
+    return true;
+  }
+  const buildConstraint = sourceFile.text.match(/^\s*\/\/go:build\s+(.+)$/mu)?.[1]?.trim();
+  if (buildConstraint !== undefined) {
+    return !canGoBuildConstraintMatchDefaultContext(buildConstraint);
+  }
+  const legacyConstraints = [...sourceFile.text.matchAll(/^\s*\/\/\s*\+build\s+(.+)$/gmu)]
+    .map((match) => match[1]?.trim())
+    .filter((constraint): constraint is string => Boolean(constraint));
+  if (legacyConstraints.length === 0) {
+    return false;
+  }
+  const legacyExpression = legacyConstraints.map((constraint) => {
+    const options = constraint.split(/\s+/u).filter(Boolean).map((option) =>
+      `(${option.split(",").filter(Boolean).join(" && ")})`
+    );
+    return `(${options.join(" || ")})`;
+  }).join(" && ");
+  return !canGoBuildConstraintMatchDefaultContext(legacyExpression);
+}
+
+function canGoBuildConstraintMatchDefaultContext(expression: string): boolean {
+  const identifiers = expression.match(/[A-Za-z0-9_.]+/gu) ?? [];
+  const standardIdentifiers = new Set([
+    "aix", "android", "darwin", "dragonfly", "freebsd", "illumos", "ios", "js", "linux",
+    "netbsd", "openbsd", "plan9", "solaris", "wasip1", "windows", "386", "amd64", "arm",
+    "arm64", "loong64", "mips", "mips64", "mips64le", "mipsle", "ppc64", "ppc64le",
+    "riscv64", "s390x", "wasm", "cgo", "gc", "gccgo", "unix"
+  ]);
+  for (const identifier of identifiers) {
+    if (identifier.startsWith("go1.")) {
+      standardIdentifiers.add(identifier);
+    }
+  }
+  const customIdentifiers = new Set(identifiers.filter((identifier) =>
+    !standardIdentifiers.has(identifier)
+  ));
+  if (customIdentifiers.size === 0) {
+    return true;
+  }
+  const variables = [...new Set(identifiers.filter((identifier) =>
+    standardIdentifiers.has(identifier)
+  ))];
+  if (variables.length > 12) {
+    return true;
+  }
+
+  const assignments = 2 ** variables.length;
+  for (let mask = 0; mask < assignments; mask += 1) {
+    const values = new Map(variables.map((identifier, index) => [
+      identifier,
+      (mask & (2 ** index)) !== 0
+    ]));
+    const assignedExpression = expression.replace(/[A-Za-z0-9_.]+/gu, (identifier) =>
+      customIdentifiers.has(identifier) ? "false" : String(values.get(identifier) ?? false)
+    );
+    if (evaluateConservativeGoBuildExpression(assignedExpression)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function evaluateConservativeGoBuildExpression(expression: string): boolean {
+  const tokens = expression.match(/&&|\|\||!|\(|\)|true|false/gu);
+  if (!tokens || tokens.join("") !== expression.replaceAll(/\s+/gu, "")) {
+    return true;
+  }
+  let index = 0;
+  const parsePrimary = (): boolean => {
+    const token = tokens[index];
+    index += 1;
+    if (token === "true") return true;
+    if (token === "false") return false;
+    if (token === "!") return !parsePrimary();
+    if (token === "(") {
+      const value = parseOr();
+      if (tokens[index] !== ")") throw new Error("invalid build constraint");
+      index += 1;
+      return value;
+    }
+    throw new Error("invalid build constraint");
+  };
+  const parseAnd = (): boolean => {
+    let value = parsePrimary();
+    while (tokens[index] === "&&") {
+      index += 1;
+      const right = parsePrimary();
+      value = value && right;
+    }
+    return value;
+  };
+  const parseOr = (): boolean => {
+    let value = parseAnd();
+    while (tokens[index] === "||") {
+      index += 1;
+      const right = parseAnd();
+      value = value || right;
+    }
+    return value;
+  };
+
+  try {
+    const value = parseOr();
+    return index === tokens.length ? value : true;
+  } catch {
+    return true;
+  }
+}
+
+function readGoImportPaths(input: string): string[] {
+  const paths: string[] = [];
+  const importPattern = /(?:^|\n)\s*import\s+(?:\(([^)]*)\)|(?:[._A-Za-z][._A-Za-z0-9]*\s+)?(["`][^"`\r\n]+["`]))/gu;
+  for (const match of input.matchAll(importPattern)) {
+    const values = match[1]?.match(/["`][^"`\r\n]+["`]/gu)
+      ?? (match[2] ? [match[2]] : []);
+    for (const value of values) {
+      const importPath = value.slice(1, -1);
+      if (importPath !== "" && !importPath.includes("\\")) {
+        paths.push(importPath);
+      }
+    }
+  }
+  return paths;
 }
 
 export function parseGoReplaceDirectiveLine(input: {
@@ -473,22 +806,28 @@ function parseGoSumRecords(input: string): GoModuleRecord[] {
     const version = rawVersion.endsWith("/go.mod")
       ? rawVersion.slice(0, -"/go.mod".length)
       : rawVersion;
-    const checksum = rawVersion.endsWith("/go.mod")
-      ? undefined
-      : normalizeGoChecksum(rawChecksum);
+    const isGoModChecksum = rawVersion.endsWith("/go.mod");
+    const normalizedChecksum = normalizeGoChecksum(rawChecksum);
     const record: GoModuleRecord = {
       modulePath,
       version,
-      ...(checksum ? { checksum } : {}),
+      ...(normalizedChecksum
+        ? isGoModChecksum
+          ? { goModChecksum: normalizedChecksum }
+          : { checksum: normalizedChecksum }
+        : {}),
       dependencyType: "production" as const,
       direct: false
     };
     const id = goRecordId(record);
     const existing = records.get(id);
-    records.set(id, existing?.checksum && !record.checksum ? existing : {
+    records.set(id, {
       ...existing,
       ...record,
-      ...(record.checksum ? { checksum: record.checksum } : {})
+      ...(existing?.checksum && !record.checksum ? { checksum: existing.checksum } : {}),
+      ...(existing?.goModChecksum && !record.goModChecksum
+        ? { goModChecksum: existing.goModChecksum }
+        : {})
     });
   }
 
@@ -504,15 +843,19 @@ function withGoModuleChecksum(
   goSumById: ReadonlyMap<string, GoModuleRecord>
 ): GoModuleRecord {
   if (record.replacement?.kind === "local") {
-    const { checksum: _, ...withoutChecksum } = record;
+    const { checksum: _, goModChecksum: __, ...withoutChecksum } = record;
     return withoutChecksum;
   }
 
   const evidenceId = record.replacement?.kind === "module"
     ? `${record.replacement.modulePath}@${record.replacement.version}`
     : goRecordId(record);
-  const checksum = goSumById.get(evidenceId)?.checksum;
-  return checksum ? { ...record, checksum } : record;
+  const checksumRecord = goSumById.get(evidenceId);
+  return {
+    ...record,
+    ...(checksumRecord?.checksum ? { checksum: checksumRecord.checksum } : {}),
+    ...(checksumRecord?.goModChecksum ? { goModChecksum: checksumRecord.goModChecksum } : {})
+  };
 }
 
 function replaceDirectiveError(input: {

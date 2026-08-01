@@ -30,9 +30,13 @@ Remote fetching is limited to these explicit adapters:
   when its exact host is explicitly allowed by policy or `--allow-host`;
 - a bounded Maven JAR license-file fallback only when the selected repository
   publishes a SHA-256 sidecar and the JAR contains exact embedded Maven identity.
-- exact Go module ZIPs from the fixed public `proxy.golang.org` endpoint when
-  `go.sum` supplies the module ZIP's exact `h1` checksum; only root license
-  files from the checksum-verified archive are evidence.
+- exact Go module ZIPs and standalone `.mod` responses from the fixed public
+  `proxy.golang.org` endpoint when `go.sum` supplies each artifact's separate
+  exact `h1` checksum; root ZIP license files are evidence, while `go.mod`
+  contributes internal module edges only after the matching ZIP or `/go.mod`
+  checksum succeeds. Missing, malformed, or mismatched edge metadata remains
+  unavailable; archive input, entry, expansion, materialization, and compression
+  bounds still apply.
 - exact crates.io `.crate` archives from the fixed public `static.crates.io`
   endpoint when `Cargo.lock` supplies the crate SHA-256 checksum; Cargo.toml
   identity and package-root license files are trusted only after the complete
@@ -130,12 +134,19 @@ so absent local evidence remains unavailable instead of mixing identities.
 
 Go module evidence remains local-first. A module or module-to-module replacement
 may use the fixed public proxy only when the adjacent `go.sum` contains the exact
-module ZIP `h1` checksum for the evidence identity. Local path replacements are
-never sent to the proxy. Missing or malformed ZIP checksums produce unavailable
-evidence without a request, and a checksum mismatch fails the scan. For modules
+module ZIP `h1` checksum for the evidence identity. When edge metadata is absent
+from that verified ZIP, Ohrisk may fetch the standalone `.mod` only when `go.sum`
+also contains its distinct `<version>/go.mod` checksum. Local path replacements
+are never sent to the proxy. Missing or malformed ZIP checksums produce
+unavailable license evidence without a ZIP request, and a ZIP checksum mismatch
+fails the scan. For modules
 declaring Go 1.17 or later, `go.mod` is the complete requirement graph and
 `go.sum` is used only as the checksum ledger; older or versionless modules retain
-the conservative `go.sum`-only dependency fallback.
+the conservative `go.sum`-only dependency fallback. Bounded project source
+imports and standard Go `tool` directives identify development roots. Verified
+module ZIP `go.mod` requirements may propagate development scope only when every
+selected Go node has verified edge metadata. Any missing edge keeps transitive
+scope conservative, and production reachability always overrides development.
 
 `uv.lock` Git source records are identity-only inputs, not another remote
 adapter. Ohrisk accepts one only when uv's resolved source ends in a full 40- or
@@ -261,7 +272,7 @@ Cache validators are attached only to the first validated request and are not
 forwarded across redirects. The same rule already applies to registry bearer
 tokens, preventing request-specific state from crossing host boundaries.
 
-Checksum-identified Go module ZIPs use the same content-addressed cache,
+Checksum-identified Go module ZIPs and `.mod` responses use the same content-addressed cache,
 conditional revalidation, offline stale-entry behavior, size ceiling, and LRU
 control as other remote artifacts. Offline cache misses remain unavailable and
 never trigger DNS or HTTP work.
@@ -310,7 +321,8 @@ bytes before trusting package evidence. Without a supported integrity source,
 Ohrisk does not fetch or trust the artifact and records unavailable evidence
 with a warning.
 
-For Go, the integrity source is the exact module ZIP `h1` record in `go.sum`.
+For Go, the integrity sources are the separate module ZIP and `<version>/go.mod`
+`h1` records in `go.sum`.
 Ohrisk computes the Go checksum over every sorted ZIP entry name and content,
 requires the requested `<module>@<version>/` root prefix, and then inspects only
 root `LICENSE`, `LICENCE`, `COPYING`, `NOTICE`, and recognized variants. ZIP

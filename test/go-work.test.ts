@@ -73,6 +73,41 @@ describe("parseGoWorkFile", () => {
     }
   });
 
+  test("uses workspace module source build contexts for development roots", () => {
+    const projectRoot = mkdtempSync("ohrisk-go-work-scope-");
+
+    try {
+      writeGoWorkspace(projectRoot, {
+        goWork: "go 1.22\nuse ./app",
+        modules: {
+          app: {
+            goMod: [
+              "module example.com/app",
+              "go 1.22",
+              "require github.com/acme/tool v1.0.0"
+            ].join("\n")
+          }
+        }
+      });
+      writeFileSync(path.join(projectRoot, "app", "tools.go"), [
+        "//go:build workspace_tools_only",
+        "",
+        "package app",
+        "import _ \"github.com/acme/tool/cmd/tool\""
+      ].join("\n"));
+
+      const result = parseGoWorkFile(path.join(projectRoot, "go.work"));
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+      expect(result.value.nodes[0]?.dependencyType).toBe("development");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("deduplicates repeated go.work use paths for the same module", () => {
     const projectRoot = mkdtempSync("ohrisk-go-work-duplicate-use-");
 

@@ -216,14 +216,25 @@ Cargo and modern npm graphs, preventing combinatorial path expansion from
 inflating finding identities and reports without silently dropping packages.
 
 For Go 1.17 and later, `go.mod` requirements define the current dependency
-graph and adjacent `go.sum` entries are used only as module ZIP checksum records.
+graph and adjacent `go.sum` entries are used only as module ZIP and `/go.mod`
+checksum records.
 Older or versionless modules conservatively retain `go.sum`-only fallback nodes.
+Filesystem and checked-out repository scans use bounded `.go` source imports,
+test files, non-default custom build constraints, and standard `tool` directives
+to identify development roots. Requirements from checksum-verified module ZIP
+`go.mod` files or separately checksum-verified fixed-proxy `.mod` responses
+propagate that scope through the selected module graph. A module ZIP without a
+usable root `go.mod` does not contribute an empty requirement set. A module
+reachable from production remains production; missing or unverified edges never
+downgrade a transitive module to development. This classification controls
+`--prod` without changing license severity semantics.
 After local cache, vendor, and contained replacement evidence is exhausted,
-Ohrisk may fetch an exact module ZIP only from the fixed public Go proxy when
-the matching ZIP `h1` checksum exists. It verifies the complete Go checksum and
-requested module/version root before trusting root license files. Local
-replacements, missing checksums, and caller-selected private proxies are not
-fetched.
+Ohrisk may fetch an exact module ZIP or standalone `.mod` only from the fixed
+public Go proxy when the matching artifact-specific `h1` checksum exists. It
+verifies the complete ZIP checksum and requested module/version root before
+trusting root license files, and verifies the separate `/go.mod` checksum before
+using strict requirement edges. Local replacements, checksumless artifacts, and
+caller-selected private proxies are not fetched.
 
 For `*.csproj`, Ohrisk scans direct `PackageReference` and `PackageDownload`
 items. `PackageReference` may use a matching literal central `PackageVersion`;

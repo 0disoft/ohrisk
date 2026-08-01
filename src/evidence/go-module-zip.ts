@@ -1,6 +1,8 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { TextDecoder } from "node:util";
 
 import { readArchiveBytes } from "../archive/archive-reader";
+import { parseGoModRecords } from "../graph/go-mod";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 import { classifyEvidenceFile } from "./license-files";
@@ -12,7 +14,9 @@ const GO_MODULE_ZIP_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
 const GO_MODULE_ZIP_MATERIALIZED_MAX_BYTES = 256 * 1024 * 1024;
 const GO_MODULE_LICENSE_MAX_BYTES = 2 * 1024 * 1024;
 const GO_MODULE_LICENSE_FILE_LIMIT = 16;
+const GO_MODULE_MOD_MAX_BYTES = 2 * 1024 * 1024;
 const GO_H1_DIGEST_BYTES = 32;
+const GO_MOD_DECODER = new TextDecoder("utf-8", { fatal: true });
 
 export function collectGoModuleZipEvidence(input: {
   packageId: string;
@@ -106,14 +110,63 @@ export function collectGoModuleZipEvidence(input: {
     });
   }
 
+  const goModuleRequirements = readVerifiedGoModuleRequirements({
+    goModPath: `${rootPrefix}go.mod`,
+    entries: archive.value.entries,
+    readText: archive.value.readText
+  });
+
   return ok({
     packageId: input.packageId,
+    ...(goModuleRequirements ? { goModuleRequirements } : {}),
     files,
     source: "tarball",
     warnings: files.length > 0
       ? []
       : ["Checksum-verified Go module zip did not contain a root license evidence file."]
   });
+}
+
+export function readChecksumVerifiedGoModuleRequirements(input: {
+  checksum: string;
+  goMod: Buffer | Uint8Array;
+}): string[] | undefined {
+  const computedChecksum = hashGoModBytes(input.goMod);
+  if (!equalGoChecksums(input.checksum, computedChecksum)) {
+    return undefined;
+  }
+
+  let text: string;
+  try {
+    text = GO_MOD_DECODER.decode(input.goMod);
+  } catch {
+    return undefined;
+  }
+
+  const parsed = parseGoModRecords(text, "go.mod", { strictEdges: true });
+  return parsed.ok
+    ? [...new Set(parsed.value.records.map((record) => record.modulePath))].sort()
+    : undefined;
+}
+
+
+function readVerifiedGoModuleRequirements(input: {
+  goModPath: string;
+  entries: ReadonlyArray<{ path: string; type: "file" | "directory" }>;
+  readText: (entryPath: string, maxBytes: number) => Result<string, OhriskError>;
+}): string[] | undefined {
+  if (!input.entries.some((entry) => entry.type === "file" && entry.path === input.goModPath)) {
+    return undefined;
+  }
+  const goModText = input.readText(input.goModPath, GO_MODULE_MOD_MAX_BYTES);
+  if (!goModText.ok) {
+    return undefined;
+  }
+  const parsed = parseGoModRecords(goModText.value, input.goModPath, { strictEdges: true });
+  if (!parsed.ok) {
+    return undefined;
+  }
+  return [...new Set(parsed.value.records.map((record) => record.modulePath))].sort();
 }
 
 function hashGoModuleArchive(input: {
@@ -146,6 +199,14 @@ function hashGoModuleArchive(input: {
   }
 
   return ok(`h1:${summary.digest("base64")}`);
+}
+
+function hashGoModBytes(goMod: Buffer | Uint8Array): string {
+  const fileDigest = createHash("sha256").update(goMod).digest("hex");
+  const summary = createHash("sha256")
+    .update(`${fileDigest}  go.mod\n`, "utf8")
+    .digest("base64");
+  return `h1:${summary}`;
 }
 
 function equalGoChecksums(expected: string, computed: string): boolean {

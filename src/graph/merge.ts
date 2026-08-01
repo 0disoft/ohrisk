@@ -143,6 +143,13 @@ function artifactConflictWarnings(
   if (left.integrity && right.integrity && left.integrity !== right.integrity) {
     warnings.push(`Multiple lockfiles declare different integrity values for ${purl}.`);
   }
+  if (
+    left.goModIntegrity
+    && right.goModIntegrity
+    && left.goModIntegrity !== right.goModIntegrity
+  ) {
+    warnings.push(`Multiple lockfiles declare different go.mod integrity values for ${purl}.`);
+  }
   return warnings;
 }
 
@@ -151,6 +158,11 @@ function mergeDependencyNode(left: DependencyNode, right: DependencyNode): Depen
     ...left,
     ...(left.resolved ? {} : right.resolved ? { resolved: right.resolved } : {}),
     ...(left.integrity ? {} : right.integrity ? { integrity: right.integrity } : {}),
+    ...(left.goModIntegrity
+      ? {}
+      : right.goModIntegrity
+        ? { goModIntegrity: right.goModIntegrity }
+        : {}),
     ...((left.installNames?.length ?? 0) > 0 || (right.installNames?.length ?? 0) > 0
       ? { installNames: unique([...(left.installNames ?? []), ...(right.installNames ?? [])]) }
       : {}),
@@ -195,6 +207,14 @@ function mergeLicenseEvidence(left: LicenseEvidence, right: LicenseEvidence): Li
       : {}),
     ...(left.packageJsonPrivate !== undefined ? {} : right.packageJsonPrivate !== undefined
       ? { packageJsonPrivate: right.packageJsonPrivate }
+      : {}),
+    ...(left.goModuleRequirements !== undefined || right.goModuleRequirements !== undefined
+      ? {
+          goModuleRequirements: unique([
+            ...(left.goModuleRequirements ?? []),
+            ...(right.goModuleRequirements ?? [])
+          ]).sort()
+        }
       : {}),
     files: uniqueEvidenceFiles([...left.files, ...right.files]),
     warnings: unique([...left.warnings, ...right.warnings]),

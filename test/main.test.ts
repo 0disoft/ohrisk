@@ -6031,6 +6031,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
 
       const requestedBaselinePaths: string[] = [];
       const { io, stdout, stderr } = createTestIO(projectRoot);
+      io.listRefFiles = () => ok(["go.mod", "go.sum"]);
       io.readRefFile = ({ relativePath }) => {
         requestedBaselinePaths.push(relativePath);
         if (relativePath === "go.mod") {
@@ -6091,6 +6092,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
 
       const requestedBaselinePaths: string[] = [];
       const { io, stdout, stderr } = createTestIO(projectRoot);
+      io.listRefFiles = () => ok(["go.work", "app/go.mod", "app/go.sum"]);
       io.readRefFile = ({ relativePath }) => {
         requestedBaselinePaths.push(relativePath);
         if (relativePath === "go.work") {

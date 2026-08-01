@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.14.1
+npm install -g ohrisk@1.14.2
 cd your-project
 ohrisk scan
 ```
@@ -171,7 +171,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - pnpm `catalog:` and `catalog:<name>` dependency specifiers are resolved from `pnpm-workspace.yaml`
 - Deno `deno.lock` projects are scanned for npm package dependencies recorded in `npm:` specifiers; root remote URL imports and JSR packages fail closed instead of being silently skipped
 - Rust `Cargo.lock` projects are scanned for crates, using adjacent `Cargo.toml` root dependencies plus literal and segment `*`/`?` Cargo workspace member manifests such as `crates/*`, `crates/app-*`, `tools/?li`, and `crates/*/plugins/*` when available, honoring workspace `exclude` entries, `crate.workspace = true` dependency keys, workspace dependency package aliases, and table-form dependency sections such as `[dependencies.foo]`; traversal is iterative, retains every reachable crate, and stores at most 64 dependency paths per crate with a typed truncation diagnostic; remote scans fetch crates.io archives only from the fixed public artifact host and trust them only after Cargo.lock SHA-256 plus archive identity verification
-- Go `go.work` projects are scanned across workspace modules and apply workspace `replace` directives before module-level replacements; Go `go.mod` projects are scanned for required modules and Go `replace` directives, using adjacent `go.sum` entries as exact module-zip checksums rather than treating every historical checksum as a current dependency on Go 1.17 and later
+- Go `go.work` projects are scanned across workspace modules and apply workspace `replace` directives before module-level replacements; Go `go.mod` projects are scanned for required modules, standard `tool` directives, source imports, build constraints, and Go `replace` directives. Modules imported only by tests or source files that require a non-default custom build tag are development roots. Checksum-verified module `go.mod` edges propagate that scope only when the complete selected Go graph has verified edges. A module ZIP without a usable root `go.mod` may use the separately checksummed fixed-proxy `.mod` response; otherwise its edges remain unavailable and transitive modules stay in production scope. Adjacent `go.sum` entries are checksum records rather than current dependencies on Go 1.17 and later.
 - Python `pylock.toml` and named `pylock.<name>.toml` projects are scanned for versioned PyPI package records and project-root-contained source-tree package records with local source metadata
 - Python `pyproject.toml` projects without a companion lockfile are scanned for exact PEP 621 `name==version` direct dependency pins
 - Python `uv.lock` projects are scanned for PyPI package dependencies, project-root-contained `directory` or `editable` package source records, and remote Git records resolved to a full immutable commit; immutable Git records remain in the graph with unavailable evidence and are never cloned or replaced with same-name PyPI evidence, while iterative graph traversal retains every reachable package and stores at most 64 dependency paths per package with a typed truncation diagnostic
@@ -211,7 +211,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - installed `node_modules` package evidence, including npm alias install names, before network fallback
 - Yarn Berry `.yarn/cache` package zip evidence before registry fallback for PnP installs without `node_modules`
 - checksum- and identity-verified local Cargo registry source or `vendor/<crate>` evidence before a fixed public crates.io artifact fallback; remote `.crate` archives are trusted only after their exact Cargo.lock SHA-256, package root, and Cargo.toml identity are verified
-- local Go module cache, `vendor/<module>`, and project-root-contained local `replace` path evidence before a fixed public Go module proxy fallback for `go.work` and `go.mod` scans; remote module ZIPs are trusted only after their exact `go.sum` `h1` checksum is verified
+- local Go module cache, `vendor/<module>`, and project-root-contained local `replace` path evidence before a fixed public Go module proxy fallback for `go.work` and `go.mod` scans; remote module ZIPs and standalone `.mod` graph metadata are trusted only against their separate exact `go.sum` `h1` checksums
 - Python `.venv` and `venv` `*.dist-info/METADATA` package evidence, plus project-root-contained local source metadata and license files for `uv.lock`, `pylock.toml`, `requirements.txt`, `Pipfile.lock`, and `pdm.lock` local source entries, before unavailable fallback
 - exact-version PyPI release evidence for locked Python packages, using SHA-256-verified source distributions or wheels plus identity-checked `PKG-INFO`, `METADATA`, and license files; a verified distribution that exceeds archive inspection limits remains `unknown` without aborting unrelated package findings
 - local Maven `.m2/repository` POMs for Maven parent/BOM version management and package license evidence, including bounded parent-POM license inheritance
@@ -239,7 +239,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - local Bundler/RubyGems install path gemspec evidence before unavailable fallback for `Gemfile.lock` gems
 - Composer `composer.lock` package license declarations, followed by local `vendor/<vendor>/<package>/composer.json` evidence when lockfile metadata is absent
 - remote HTTPS package tarball evidence when the lockfile points to a tarball with supported integrity metadata, with plaintext HTTP, credential-bearing URLs, obvious local, private, special-purpose, and DNS-resolved internal hosts blocked before fetch, connected socket addresses rechecked by the default fetcher, redirects followed only after each target is validated, and transient network failures recorded as unavailable package evidence so other packages can still be scanned
-- fixed `proxy.golang.org` module ZIP evidence for Go dependencies with an exact `go.sum` `h1` checksum, including official `storage.googleapis.com` redirects, one bounded transient-failure retry, full module-ZIP checksum verification, and root license-file inspection without npm credentials
+- fixed `proxy.golang.org` module ZIP evidence for Go dependencies with an exact ZIP `go.sum` `h1` checksum, plus a separately checksum-verified `.mod` fallback for internal module edges, including official `storage.googleapis.com` redirects, one bounded transient-failure retry, full checksum verification, and root license-file inspection without npm credentials
 - a shared content-addressed artifact cache with HTTP freshness metadata, conditional `ETag`/`Last-Modified` revalidation, valid stale-entry support in `--offline` mode, and automatic 2 GiB LRU trimming
 - `ohrisk cache status|prune|clear` commands for cache inspection, age/size cleanup, and bounded removal
 - lockfile integrity verification for local and remote package tarballs; remote tarballs without integrity are reported as unavailable instead of being trusted as license evidence
@@ -382,7 +382,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.14.1
+npm install -g ohrisk@1.14.2
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
@@ -441,8 +441,8 @@ Supported dependency input files:
 - `pnpm-lock.yaml` with `importers`, `packages`, and `snapshots` sections, including default and named catalogs from `pnpm-workspace.yaml`
 - `deno.lock` npm package entries from Deno v3/v4-style lockfiles
 - `Cargo.lock` crate entries from Rust Cargo projects, using adjacent `Cargo.toml` root dependencies plus literal and segment `*`/`?` Cargo workspace member manifests such as `crates/*`, `crates/app-*`, `tools/?li`, and `crates/*/plugins/*` when available, honoring workspace `exclude` entries, `crate.workspace = true` dependency keys, workspace dependency package aliases, and table-form dependency sections such as `[dependencies.foo]`, plus local Cargo registry source for evidence
-- `go.work` workspace modules, workspace `replace` directives, module `go.mod` requirements, module `replace` directives, and adjacent `go.sum` ZIP checksums when available, using local Go module cache, `vendor/<module>`, project-root-contained local replacement paths, or checksum-verified public Go module ZIP evidence
-- `go.mod` module requirements and Go `replace` directives, using adjacent `go.sum` ZIP checksums for local or fixed-public-proxy evidence; Go 1.17 and later use the complete `go.mod` requirement graph while earlier or versionless modules conservatively retain `go.sum`-only fallback nodes
+- `go.work` workspace modules, workspace `replace` directives, module `go.mod` requirements, module `replace` directives, and adjacent `go.sum` ZIP and `/go.mod` checksums when available, using local Go module cache, `vendor/<module>`, project-root-contained local replacement paths, checksum-verified public Go module ZIP evidence, or a separately verified public `.mod` edge fallback
+- `go.mod` module requirements, standard `tool` directives, bounded source imports and build constraints, and Go `replace` directives, using adjacent `go.sum` ZIP and `/go.mod` checksums for local or fixed-public-proxy evidence; development-only roots and their verified exclusive module subgraphs are classified as development, production reachability wins for shared modules, incomplete edge evidence remains production, and Go 1.17 and later use the complete `go.mod` requirement graph while earlier or versionless modules conservatively retain `go.sum`-only fallback nodes
 - `pylock.toml` and `pylock.<name>.toml` versioned package entries and project-root-contained source-tree records from the PyPA lockfile specification, using dependency references for audit paths and installed `.venv`/`venv` dist-info metadata or local source metadata and license files for local evidence
 - `pyproject.toml` exact PEP 621 direct dependency pins such as `name==version`, using installed `.venv`/`venv` dist-info metadata for local evidence
 - `uv.lock` package entries from Python uv projects plus project-root-contained `directory` and `editable` records and remote Git records resolved to a full immutable commit, using installed `.venv`/`venv` dist-info metadata or local source metadata for ordinary packages while immutable Git records stay `unknown` until their exact commit license is verified manually

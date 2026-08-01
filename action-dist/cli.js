@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 2089bf27a27ae861481ddbee66571f49b6e491c2c7bbb229392a387c0d6a1bdb
+// ohrisk-action-source-sha256: 52a6470bf7dc68d61e2b39de27888078fb3b834d7a2026312177b4d424358560
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -14558,6 +14558,7 @@ ${indent}`);
 });
 
 // src/cli/main.ts
+import { Buffer as Buffer3 } from "node:buffer";
 import { isIP as isIP4 } from "node:net";
 
 // node_modules/.bun/@0disoft+laqu@1.0.8/node_modules/@0disoft/laqu/dist/runtime.js
@@ -16475,7 +16476,7 @@ function acquireLiveStreamLease(stream) {
   };
 }
 // src/cli/main.ts
-import { readdirSync as readdirSync33, realpathSync as realpathSync8, statSync as statSync35 } from "node:fs";
+import { readdirSync as readdirSync34, realpathSync as realpathSync8, statSync as statSync35 } from "node:fs";
 import path86 from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -18538,7 +18539,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.1";
+var OHRISK_VERSION = "1.14.2";
 
 // src/archive/archive-project.ts
 import path47 from "node:path";
@@ -18936,6 +18937,9 @@ function artifactConflictWarnings(left, right, purl) {
   if (left.integrity && right.integrity && left.integrity !== right.integrity) {
     warnings.push(`Multiple lockfiles declare different integrity values for ${purl}.`);
   }
+  if (left.goModIntegrity && right.goModIntegrity && left.goModIntegrity !== right.goModIntegrity) {
+    warnings.push(`Multiple lockfiles declare different go.mod integrity values for ${purl}.`);
+  }
   return warnings;
 }
 function mergeDependencyNode(left, right) {
@@ -18943,6 +18947,7 @@ function mergeDependencyNode(left, right) {
     ...left,
     ...left.resolved ? {} : right.resolved ? { resolved: right.resolved } : {},
     ...left.integrity ? {} : right.integrity ? { integrity: right.integrity } : {},
+    ...left.goModIntegrity ? {} : right.goModIntegrity ? { goModIntegrity: right.goModIntegrity } : {},
     ...(left.installNames?.length ?? 0) > 0 || (right.installNames?.length ?? 0) > 0 ? { installNames: unique([...left.installNames ?? [], ...right.installNames ?? []]) } : {},
     dependencyType: mergeDependencyType(left.dependencyType, right.dependencyType),
     direct: left.direct || right.direct,
@@ -18972,6 +18977,12 @@ function mergeLicenseEvidence(left, right) {
     ...left.metadataLicenses !== undefined ? {} : right.metadataLicenses !== undefined ? { metadataLicenses: right.metadataLicenses } : {},
     ...left.metadataSource ? {} : right.metadataSource ? { metadataSource: right.metadataSource } : {},
     ...left.packageJsonPrivate !== undefined ? {} : right.packageJsonPrivate !== undefined ? { packageJsonPrivate: right.packageJsonPrivate } : {},
+    ...left.goModuleRequirements !== undefined || right.goModuleRequirements !== undefined ? {
+      goModuleRequirements: unique([
+        ...left.goModuleRequirements ?? [],
+        ...right.goModuleRequirements ?? []
+      ]).sort()
+    } : {},
     files: uniqueEvidenceFiles([...left.files, ...right.files]),
     warnings: unique([...left.warnings, ...right.warnings]),
     source: strongerEvidenceSource(left.source, right.source)
@@ -23541,8 +23552,13 @@ function uniqueSorted(values) {
 }
 
 // src/graph/go-mod.ts
-import { existsSync as existsSync3 } from "node:fs";
+import { existsSync as existsSync3, readdirSync as readdirSync2 } from "node:fs";
 import path13 from "node:path";
+var GO_SOURCE_FILE_MAX_BYTES = 1024 * 1024;
+var GO_SOURCE_TOTAL_MAX_BYTES = 64 * 1024 * 1024;
+var GO_SOURCE_FILE_LIMIT = 50000;
+var GO_SOURCE_DIRECTORY_DEPTH_LIMIT = 64;
+var GO_SOURCE_IGNORED_DIRECTORIES = new Set([".git", "node_modules", "vendor"]);
 function parseGoModFile(goModPath, options = {}) {
   const goModText = readInputTextFile({
     filePath: goModPath,
@@ -23567,7 +23583,8 @@ function parseGoModFile(goModPath, options = {}) {
     return goSum;
   }
   return parseGoModText(goModText.value, goModPath, omitUndefined({
-    goSumText: goSum.value
+    goSumText: goSum.value,
+    sourceFiles: readBoundedGoSourceFiles(goModPath)
   }));
 }
 function parseGoModText(input, goModPath = "go.mod", options = {}) {
@@ -23580,9 +23597,13 @@ function parseGoModText(input, goModPath = "go.mod", options = {}) {
     const replacementOverrideGroups = options.replacementOverrideGroups ?? [];
     const goSumRecords = options.goSumText ? parseGoSumRecords(options.goSumText) : [];
     const goSumById = new Map(goSumRecords.map((record) => [goRecordId(record), record]));
+    const sourceDependencyTypes = goSourceDependencyTypes(options.sourceFiles ?? [], goMod.value.records.map((record) => record.modulePath), goMod.value.toolPaths);
     const records = new Map;
     for (const originalRecord of goMod.value.records) {
-      const record = withGoModuleChecksum(applyGoReplacement(originalRecord, localReplacements, replacementOverrideGroups), goSumById);
+      const record = withGoModuleChecksum(applyGoReplacement({
+        ...originalRecord,
+        dependencyType: sourceDependencyTypes.get(originalRecord.modulePath) ?? originalRecord.dependencyType
+      }, localReplacements, replacementOverrideGroups), goSumById);
       records.set(goRecordId(record), record);
     }
     const replacementTargetIds = new Set([...records.values()].flatMap((record) => record.replacement?.kind === "module" ? [`${record.replacement.modulePath}@${record.replacement.version}`] : []));
@@ -23598,7 +23619,8 @@ function parseGoModText(input, goModPath = "go.mod", options = {}) {
           ...existing,
           direct: existing.direct || record.direct,
           dependencyType: mergeDependencyType8(existing.dependencyType, record.dependencyType),
-          ...existing.checksum ? {} : record.checksum ? { checksum: record.checksum } : {}
+          ...existing.checksum ? {} : record.checksum ? { checksum: record.checksum } : {},
+          ...existing.goModChecksum ? {} : record.goModChecksum ? { goModChecksum: record.goModChecksum } : {}
         } : record);
       }
     }
@@ -23615,6 +23637,7 @@ function parseGoModText(input, goModPath = "go.mod", options = {}) {
           ecosystem: "go",
           ...record.replacement ? { resolved: goReplacementResolvedSpecifier(record.replacement) } : {},
           ...record.checksum ? { integrity: record.checksum } : {},
+          ...record.goModChecksum ? { goModIntegrity: record.goModChecksum } : {},
           dependencyType: record.dependencyType,
           direct: record.direct,
           paths: [[rootName, id]]
@@ -23655,9 +23678,68 @@ function readOptionalGoSum(input) {
   }
   return ok(goSumText.value);
 }
-function parseGoModRecords(input, goModPath) {
+function readBoundedGoSourceFiles(goModPath) {
+  const rootDir = path13.dirname(goModPath);
+  const sourceFiles = [];
+  const pending = [{ directory: rootDir, relativeDirectory: "", depth: 0 }];
+  let totalBytes = 0;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || current.depth > GO_SOURCE_DIRECTORY_DEPTH_LIMIT) {
+      return [];
+    }
+    let entries;
+    try {
+      entries = readdirSync2(current.directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
+    } catch {
+      return [];
+    }
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) {
+        continue;
+      }
+      const relativePath = current.relativeDirectory ? `${current.relativeDirectory}/${entry.name}` : entry.name;
+      const absolutePath = path13.join(current.directory, entry.name);
+      if (entry.isDirectory()) {
+        if (GO_SOURCE_IGNORED_DIRECTORIES.has(entry.name)) {
+          continue;
+        }
+        if (existsSync3(path13.join(absolutePath, "go.mod"))) {
+          continue;
+        }
+        pending.push({
+          directory: absolutePath,
+          relativeDirectory: relativePath,
+          depth: current.depth + 1
+        });
+        continue;
+      }
+      if (!entry.isFile() || !entry.name.endsWith(".go")) {
+        continue;
+      }
+      if (sourceFiles.length >= GO_SOURCE_FILE_LIMIT) {
+        return [];
+      }
+      const source = readInputTextFile({
+        filePath: absolutePath,
+        maxBytes: GO_SOURCE_FILE_MAX_BYTES
+      });
+      if (!source.ok) {
+        return [];
+      }
+      totalBytes += Buffer.byteLength(source.value, "utf8");
+      if (totalBytes > GO_SOURCE_TOTAL_MAX_BYTES) {
+        return [];
+      }
+      sourceFiles.push({ path: relativePath, text: source.value });
+    }
+  }
+  return sourceFiles;
+}
+function parseGoModRecords(input, goModPath, options = {}) {
   const records = [];
   const replacements = [];
+  const toolPaths = [];
   let modulePath;
   let goVersion;
   let block;
@@ -23687,9 +23769,32 @@ function parseGoModRecords(input, goModPath) {
         }
         continue;
       }
-      const record = parseRequireLine(line, rawLine);
+      if (block === "tool") {
+        const toolFields = splitGoDirectiveFields(line);
+        const toolPath = toolFields[0];
+        if (options.strictEdges && toolFields.length !== 1) {
+          return err({
+            code: "GO_MOD_PARSE_FAILED",
+            category: "invalid_input",
+            message: "Failed to parse go.mod tool directive.",
+            details: { goModPath, lineNumber: index + 1 }
+          });
+        }
+        if (toolPath) {
+          toolPaths.push(toolPath);
+        }
+        continue;
+      }
+      const record = options.strictEdges && splitGoDirectiveFields(line).length !== 2 ? undefined : parseRequireLine(line, rawLine);
       if (record) {
         records.push(record);
+      } else if (options.strictEdges) {
+        return err({
+          code: "GO_MOD_PARSE_FAILED",
+          category: "invalid_input",
+          message: "Failed to parse go.mod require directive.",
+          details: { goModPath, lineNumber: index + 1 }
+        });
       }
       continue;
     }
@@ -23701,6 +23806,10 @@ function parseGoModRecords(input, goModPath) {
       block = "replace";
       continue;
     }
+    if (line === "tool (") {
+      block = "tool";
+      continue;
+    }
     if (line.startsWith("module ")) {
       modulePath = line.slice("module ".length).trim();
       continue;
@@ -23710,9 +23819,17 @@ function parseGoModRecords(input, goModPath) {
       continue;
     }
     if (line.startsWith("require ")) {
-      const record = parseRequireLine(line.slice("require ".length).trim(), rawLine);
+      const requireLine = line.slice("require ".length).trim();
+      const record = options.strictEdges && splitGoDirectiveFields(requireLine).length !== 2 ? undefined : parseRequireLine(requireLine, rawLine);
       if (record) {
         records.push(record);
+      } else if (options.strictEdges) {
+        return err({
+          code: "GO_MOD_PARSE_FAILED",
+          category: "invalid_input",
+          message: "Failed to parse go.mod require directive.",
+          details: { goModPath, lineNumber: index + 1 }
+        });
       }
       continue;
     }
@@ -23730,13 +23847,38 @@ function parseGoModRecords(input, goModPath) {
       if (replacement.value) {
         replacements.push(replacement.value);
       }
+      continue;
     }
+    if (line.startsWith("tool ")) {
+      const toolFields = splitGoDirectiveFields(line.slice("tool ".length).trim());
+      const toolPath = toolFields[0];
+      if (options.strictEdges && toolFields.length !== 1) {
+        return err({
+          code: "GO_MOD_PARSE_FAILED",
+          category: "invalid_input",
+          message: "Failed to parse go.mod tool directive.",
+          details: { goModPath, lineNumber: index + 1 }
+        });
+      }
+      if (toolPath) {
+        toolPaths.push(toolPath);
+      }
+    }
+  }
+  if (options.strictEdges && block !== undefined) {
+    return err({
+      code: "GO_MOD_PARSE_FAILED",
+      category: "invalid_input",
+      message: "Failed to parse unterminated go.mod directive block.",
+      details: { goModPath, block }
+    });
   }
   return ok({
     ...modulePath !== undefined ? { modulePath } : {},
     ...goVersion !== undefined ? { goVersion } : {},
     records,
-    replacements
+    replacements,
+    toolPaths
   });
 }
 function shouldIncludeGoSumOnlyModules(goVersion) {
@@ -23765,6 +23907,172 @@ function parseRequireLine(line, rawLine) {
     dependencyType: "production",
     direct: !indirect
   };
+}
+function goSourceDependencyTypes(sourceFiles, modulePaths, toolPaths) {
+  const dependencyTypes = new Map;
+  const sortedModulePaths = [...new Set(modulePaths)].sort((left, right) => right.length - left.length || left.localeCompare(right));
+  for (const toolPath of toolPaths) {
+    const modulePath = sortedModulePaths.find((candidate) => toolPath === candidate || toolPath.startsWith(`${candidate}/`));
+    if (modulePath) {
+      dependencyTypes.set(modulePath, "development");
+    }
+  }
+  for (const sourceFile of sourceFiles) {
+    const dependencyType = isDevelopmentGoSource(sourceFile) ? "development" : "production";
+    for (const importPath of readGoImportPaths(sourceFile.text)) {
+      const modulePath = sortedModulePaths.find((candidate) => importPath === candidate || importPath.startsWith(`${candidate}/`));
+      if (!modulePath) {
+        continue;
+      }
+      const existing = dependencyTypes.get(modulePath);
+      dependencyTypes.set(modulePath, existing === "production" || dependencyType === "production" ? "production" : "development");
+    }
+  }
+  return dependencyTypes;
+}
+function isDevelopmentGoSource(sourceFile) {
+  if (sourceFile.path.replaceAll("\\", "/").endsWith("_test.go")) {
+    return true;
+  }
+  const buildConstraint = sourceFile.text.match(/^\s*\/\/go:build\s+(.+)$/mu)?.[1]?.trim();
+  if (buildConstraint !== undefined) {
+    return !canGoBuildConstraintMatchDefaultContext(buildConstraint);
+  }
+  const legacyConstraints = [...sourceFile.text.matchAll(/^\s*\/\/\s*\+build\s+(.+)$/gmu)].map((match) => match[1]?.trim()).filter((constraint) => Boolean(constraint));
+  if (legacyConstraints.length === 0) {
+    return false;
+  }
+  const legacyExpression = legacyConstraints.map((constraint) => {
+    const options = constraint.split(/\s+/u).filter(Boolean).map((option) => `(${option.split(",").filter(Boolean).join(" && ")})`);
+    return `(${options.join(" || ")})`;
+  }).join(" && ");
+  return !canGoBuildConstraintMatchDefaultContext(legacyExpression);
+}
+function canGoBuildConstraintMatchDefaultContext(expression) {
+  const identifiers = expression.match(/[A-Za-z0-9_.]+/gu) ?? [];
+  const standardIdentifiers = new Set([
+    "aix",
+    "android",
+    "darwin",
+    "dragonfly",
+    "freebsd",
+    "illumos",
+    "ios",
+    "js",
+    "linux",
+    "netbsd",
+    "openbsd",
+    "plan9",
+    "solaris",
+    "wasip1",
+    "windows",
+    "386",
+    "amd64",
+    "arm",
+    "arm64",
+    "loong64",
+    "mips",
+    "mips64",
+    "mips64le",
+    "mipsle",
+    "ppc64",
+    "ppc64le",
+    "riscv64",
+    "s390x",
+    "wasm",
+    "cgo",
+    "gc",
+    "gccgo",
+    "unix"
+  ]);
+  for (const identifier of identifiers) {
+    if (identifier.startsWith("go1.")) {
+      standardIdentifiers.add(identifier);
+    }
+  }
+  const customIdentifiers = new Set(identifiers.filter((identifier) => !standardIdentifiers.has(identifier)));
+  if (customIdentifiers.size === 0) {
+    return true;
+  }
+  const variables = [...new Set(identifiers.filter((identifier) => standardIdentifiers.has(identifier)))];
+  if (variables.length > 12) {
+    return true;
+  }
+  const assignments = 2 ** variables.length;
+  for (let mask = 0;mask < assignments; mask += 1) {
+    const values = new Map(variables.map((identifier, index) => [
+      identifier,
+      (mask & 2 ** index) !== 0
+    ]));
+    const assignedExpression = expression.replace(/[A-Za-z0-9_.]+/gu, (identifier) => customIdentifiers.has(identifier) ? "false" : String(values.get(identifier) ?? false));
+    if (evaluateConservativeGoBuildExpression(assignedExpression)) {
+      return true;
+    }
+  }
+  return false;
+}
+function evaluateConservativeGoBuildExpression(expression) {
+  const tokens = expression.match(/&&|\|\||!|\(|\)|true|false/gu);
+  if (!tokens || tokens.join("") !== expression.replaceAll(/\s+/gu, "")) {
+    return true;
+  }
+  let index = 0;
+  const parsePrimary = () => {
+    const token = tokens[index];
+    index += 1;
+    if (token === "true")
+      return true;
+    if (token === "false")
+      return false;
+    if (token === "!")
+      return !parsePrimary();
+    if (token === "(") {
+      const value = parseOr();
+      if (tokens[index] !== ")")
+        throw new Error("invalid build constraint");
+      index += 1;
+      return value;
+    }
+    throw new Error("invalid build constraint");
+  };
+  const parseAnd = () => {
+    let value = parsePrimary();
+    while (tokens[index] === "&&") {
+      index += 1;
+      const right = parsePrimary();
+      value = value && right;
+    }
+    return value;
+  };
+  const parseOr = () => {
+    let value = parseAnd();
+    while (tokens[index] === "||") {
+      index += 1;
+      const right = parseAnd();
+      value = value || right;
+    }
+    return value;
+  };
+  try {
+    const value = parseOr();
+    return index === tokens.length ? value : true;
+  } catch {
+    return true;
+  }
+}
+function readGoImportPaths(input) {
+  const paths = [];
+  const importPattern = /(?:^|\n)\s*import\s+(?:\(([^)]*)\)|(?:[._A-Za-z][._A-Za-z0-9]*\s+)?(["`][^"`\r\n]+["`]))/gu;
+  for (const match of input.matchAll(importPattern)) {
+    const values = match[1]?.match(/["`][^"`\r\n]+["`]/gu) ?? (match[2] ? [match[2]] : []);
+    for (const value of values) {
+      const importPath = value.slice(1, -1);
+      if (importPath !== "" && !importPath.includes("\\")) {
+        paths.push(importPath);
+      }
+    }
+  }
+  return paths;
 }
 function parseGoReplaceDirectiveLine(input) {
   const parts = splitGoDirectiveFields(input.line);
@@ -23870,20 +24178,22 @@ function parseGoSumRecords(input) {
       continue;
     }
     const version = rawVersion.endsWith("/go.mod") ? rawVersion.slice(0, -"/go.mod".length) : rawVersion;
-    const checksum = rawVersion.endsWith("/go.mod") ? undefined : normalizeGoChecksum(rawChecksum);
+    const isGoModChecksum = rawVersion.endsWith("/go.mod");
+    const normalizedChecksum = normalizeGoChecksum(rawChecksum);
     const record = {
       modulePath,
       version,
-      ...checksum ? { checksum } : {},
+      ...normalizedChecksum ? isGoModChecksum ? { goModChecksum: normalizedChecksum } : { checksum: normalizedChecksum } : {},
       dependencyType: "production",
       direct: false
     };
     const id = goRecordId(record);
     const existing = records.get(id);
-    records.set(id, existing?.checksum && !record.checksum ? existing : {
+    records.set(id, {
       ...existing,
       ...record,
-      ...record.checksum ? { checksum: record.checksum } : {}
+      ...existing?.checksum && !record.checksum ? { checksum: existing.checksum } : {},
+      ...existing?.goModChecksum && !record.goModChecksum ? { goModChecksum: existing.goModChecksum } : {}
     });
   }
   return [...records.values()];
@@ -23893,12 +24203,16 @@ function normalizeGoChecksum(value) {
 }
 function withGoModuleChecksum(record, goSumById) {
   if (record.replacement?.kind === "local") {
-    const { checksum: _, ...withoutChecksum } = record;
+    const { checksum: _, goModChecksum: __, ...withoutChecksum } = record;
     return withoutChecksum;
   }
   const evidenceId = record.replacement?.kind === "module" ? `${record.replacement.modulePath}@${record.replacement.version}` : goRecordId(record);
-  const checksum = goSumById.get(evidenceId)?.checksum;
-  return checksum ? { ...record, checksum } : record;
+  const checksumRecord = goSumById.get(evidenceId);
+  return {
+    ...record,
+    ...checksumRecord?.checksum ? { checksum: checksumRecord.checksum } : {},
+    ...checksumRecord?.goModChecksum ? { goModChecksum: checksumRecord.goModChecksum } : {}
+  };
 }
 function replaceDirectiveError(input) {
   return err(createError({
@@ -24140,6 +24454,7 @@ function parseGoWorkText(input, goWorkPath = "go.work", options = {}) {
   for (const moduleInput of [...moduleInputs].sort((left, right) => left.goModPath.localeCompare(right.goModPath))) {
     const graph = parseGoModText(moduleInput.goModText, moduleInput.goModPath, omitUndefined({
       goSumText: moduleInput.goSumText,
+      sourceFiles: moduleInput.sourceFiles,
       replacementOverrideGroups: [
         workspaceReplacementGroup.value,
         moduleReplacementGroup.value
@@ -24266,6 +24581,7 @@ function readGoWorkModuleInputs(input) {
       moduleRootDir: modulePath.moduleRootDir,
       goModPath: modulePath.goModPath,
       goModText: goModText.value,
+      sourceFiles: readBoundedGoSourceFiles(modulePath.goModPath),
       ...goSumText.value ? { goSumText: goSumText.value } : {}
     });
   }
@@ -24772,7 +25088,7 @@ function uniqueSortedNumbers(values) {
 }
 
 // src/graph/java-gradle-lock.ts
-import { readdirSync as readdirSync2, statSync as statSync2 } from "node:fs";
+import { readdirSync as readdirSync3, statSync as statSync2 } from "node:fs";
 import path17 from "node:path";
 function parseGradleLockfile(lockfilePath, options = {}) {
   if (isDirectory(lockfilePath)) {
@@ -24798,7 +25114,7 @@ function parseGradleLockfile(lockfilePath, options = {}) {
 function parseGradleDependencyLocksDirectory(lockfilePath, options) {
   let entries;
   try {
-    entries = readdirSync2(lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile(path17.join(lockfilePath, entry))).sort();
+    entries = readdirSync3(lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile(path17.join(lockfilePath, entry))).sort();
   } catch (cause) {
     return err(createError({
       code: "GRADLE_LOCK_READ_FAILED",
@@ -28872,7 +29188,7 @@ function isObjectRecord4(value) {
 
 // src/graph/npm-yarn-lock.ts
 var yarnLockfileModule = __toESM(require_lockfile(), 1);
-import { existsSync as existsSync8, readdirSync as readdirSync3, statSync as statSync3 } from "node:fs";
+import { existsSync as existsSync8, readdirSync as readdirSync4, statSync as statSync3 } from "node:fs";
 import path27 from "node:path";
 var yarnLockfile = yarnLockfileModule;
 function parseYarnLockfile(lockfilePath, packageJsonPath = path27.join(path27.dirname(lockfilePath), "package.json"), options = {}) {
@@ -29176,7 +29492,7 @@ function isInsideDirectory(rootPath, candidatePath) {
 }
 function listChildDirectories(parentPath) {
   try {
-    return readdirSync3(parentPath, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name !== "node_modules").map((entry) => path27.join(parentPath, entry.name));
+    return readdirSync4(parentPath, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name !== "node_modules").map((entry) => path27.join(parentPath, entry.name));
   } catch {
     return [];
   }
@@ -34302,7 +34618,7 @@ function mergeDependencyType21(left, right) {
 }
 
 // src/graph/rust-cargo-lock.ts
-import { existsSync as existsSync15, readdirSync as readdirSync4 } from "node:fs";
+import { existsSync as existsSync15, readdirSync as readdirSync5 } from "node:fs";
 import path40 from "node:path";
 var CARGO_MAX_PATHS_PER_PACKAGE = 64;
 function parseCargoLockfile(lockfilePath, options = {}) {
@@ -34595,7 +34911,7 @@ function expandCargoWorkspaceMemberSegments(input) {
   }
   let entries;
   try {
-    entries = readdirSync4(input.currentPath, { withFileTypes: true });
+    entries = readdirSync5(input.currentPath, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -36604,7 +36920,7 @@ function isRecord17(value) {
 }
 
 // src/graph/vcpkg-json.ts
-import { existsSync as existsSync16, readdirSync as readdirSync5, statSync as statSync4 } from "node:fs";
+import { existsSync as existsSync16, readdirSync as readdirSync6, statSync as statSync4 } from "node:fs";
 import path44 from "node:path";
 var VCPKG_STATUS_RELATIVE_PATH = path44.join("vcpkg_installed", "vcpkg", "status");
 function parseVcpkgJsonFile(manifestPath, options = {}) {
@@ -36717,7 +37033,7 @@ function findVcpkgStatusPath(projectRoot) {
     return direct;
   }
   try {
-    for (const entry of readdirSync5(projectRoot, { withFileTypes: true })) {
+    for (const entry of readdirSync6(projectRoot, { withFileTypes: true })) {
       if (!entry.isDirectory()) {
         continue;
       }
@@ -38015,7 +38331,8 @@ function parseLockfileTextForKind(input) {
       }));
     case "go-mod":
       return parseGoModText(input.text, input.lockfilePath, omitUndefined({
-        goSumText: input.goSumText
+        goSumText: input.goSumText,
+        sourceFiles: input.goSourceFiles
       }));
     case "pipfile-lock":
       return parsePipfileLockText(input.text, input.lockfilePath, omitUndefined({
@@ -38149,7 +38466,7 @@ function parseLockfileTextForKind(input) {
 }
 
 // src/project/discover.ts
-import { closeSync as closeSync2, existsSync as existsSync17, openSync as openSync2, readSync as readSync2, readdirSync as readdirSync6, statSync as statSync5 } from "node:fs";
+import { closeSync as closeSync2, existsSync as existsSync17, openSync as openSync2, readSync as readSync2, readdirSync as readdirSync7, statSync as statSync5 } from "node:fs";
 import path46 from "node:path";
 var MAX_AUTO_MERGED_DESCENDANT_PROJECTS = 64;
 var MAX_AUTO_MERGED_DESCENDANT_INPUTS = 128;
@@ -38525,7 +38842,7 @@ function discoverDescendantProject(input) {
       projectLockfiles2.set(`${lockfile.kind}\x00${lockfile.path}`, lockfile);
       projects.set(projectRoot, projectLockfiles2);
     }
-    const childDirectories = readdirSync6(currentDir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name !== ".git").map((entry) => path46.join(currentDir, entry.name)).sort().reverse();
+    const childDirectories = readdirSync7(currentDir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name !== ".git").map((entry) => path46.join(currentDir, entry.name)).sort().reverse();
     pendingDirectories.push(...childDirectories);
   }
   const candidates = [...projects.entries()].map(([rootDir, lockfileMap]) => ({
@@ -38759,7 +39076,7 @@ function hasKnownProjectManifest(dir) {
 }
 function findDotnetProjectFiles(dir) {
   try {
-    return readdirSync6(dir).filter((entry) => entry.toLowerCase().endsWith(".csproj")).filter((entry) => isFile3(path46.join(dir, entry))).sort();
+    return readdirSync7(dir).filter((entry) => entry.toLowerCase().endsWith(".csproj")).filter((entry) => isFile3(path46.join(dir, entry))).sort();
   } catch {
     return [];
   }
@@ -38767,7 +39084,7 @@ function findDotnetProjectFiles(dir) {
 function findGradleDependencyLockfiles(dir) {
   const lockDir = path46.join(dir, GRADLE_DEPENDENCY_LOCKS_DIR);
   try {
-    const lockfiles = readdirSync6(lockDir).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile3(path46.join(lockDir, entry))).sort();
+    const lockfiles = readdirSync7(lockDir).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile3(path46.join(lockDir, entry))).sort();
     return lockfiles.length > 0 ? [GRADLE_DEPENDENCY_LOCKS_DIR] : [];
   } catch {
     return [];
@@ -38798,7 +39115,7 @@ function normalizeCompanionLockfiles(lockfiles) {
 }
 function findXcodeSwiftPackageResolvedFiles(dir) {
   try {
-    return readdirSync6(dir).flatMap((entry) => xcodePackageResolvedCandidates(entry)).filter((candidate) => isFile3(path46.join(dir, candidate))).sort();
+    return readdirSync7(dir).flatMap((entry) => xcodePackageResolvedCandidates(entry)).filter((candidate) => isFile3(path46.join(dir, candidate))).sort();
   } catch {
     return [];
   }
@@ -38919,7 +39236,7 @@ function rootDirForGradleDependencyLockInput(lockfilePath) {
 }
 function findNamedPylockTomlFiles(dir) {
   try {
-    return readdirSync6(dir).filter((entry) => entry !== "pylock.toml" && isPylockTomlFile(entry)).filter((entry) => isFile3(path46.join(dir, entry))).sort();
+    return readdirSync7(dir).filter((entry) => entry !== "pylock.toml" && isPylockTomlFile(entry)).filter((entry) => isFile3(path46.join(dir, entry))).sort();
   } catch {
     return [];
   }
@@ -40453,7 +40770,7 @@ import {
   lstatSync as lstatSync2,
   mkdirSync,
   readFileSync,
-  readdirSync as readdirSync7,
+  readdirSync as readdirSync8,
   renameSync,
   rmSync as rmSync2,
   statSync as statSync7,
@@ -41041,7 +41358,7 @@ function ensureCacheMarker(rootDir) {
     if (existsSync18(markerPath)) {
       requireValidCacheMarker(rootDir);
     } else {
-      if (rootExisted && readdirSync7(rootDir).length > 0) {
+      if (rootExisted && readdirSync8(rootDir).length > 0) {
         throw new Error("Artifact cache directory is not empty and has no ownership marker.");
       }
       writeFileSync2(markerPath, CACHE_MARKER_CONTENT, { flag: "wx", mode: 384 });
@@ -41081,7 +41398,7 @@ function listRegularFiles(rootDir) {
   const visit2 = (directory) => {
     let entries;
     try {
-      entries = readdirSync7(directory, { withFileTypes: true });
+      entries = readdirSync8(directory, { withFileTypes: true });
     } catch {
       return;
     }
@@ -41105,7 +41422,7 @@ function removeEmptyCacheDirectories(rootDir) {
 function removeEmptyDirectories(directory, removeSelf) {
   let entries;
   try {
-    entries = readdirSync7(directory, { withFileTypes: true });
+    entries = readdirSync8(directory, { withFileTypes: true });
   } catch {
     return true;
   }
@@ -41115,7 +41432,7 @@ function removeEmptyDirectories(directory, removeSelf) {
     }
   }
   try {
-    if (removeSelf && readdirSync7(directory).length === 0) {
+    if (removeSelf && readdirSync8(directory).length === 0) {
       rmSync2(directory, { force: true });
       return true;
     }
@@ -41161,7 +41478,7 @@ import {
   closeSync as closeSync4,
   existsSync as existsSync45,
   openSync as openSync4,
-  readdirSync as readdirSync32,
+  readdirSync as readdirSync33,
   readSync as readSync4,
   realpathSync as realpathSync4,
   statSync as statSync33
@@ -41178,7 +41495,7 @@ import { createHash as createHash3, timingSafeEqual } from "node:crypto";
 import path50 from "node:path";
 
 // src/evidence/cargo-package.ts
-import { existsSync as existsSync19, readdirSync as readdirSync8, statSync as statSync8 } from "node:fs";
+import { existsSync as existsSync19, readdirSync as readdirSync9, statSync as statSync8 } from "node:fs";
 import path49 from "node:path";
 var CARGO_MANIFEST_MAX_BYTES = 1024 * 1024;
 var CARGO_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
@@ -41255,7 +41572,7 @@ function findCargoPackageDir(input) {
       }
       let registryDirs;
       try {
-        registryDirs = readdirSync8(registrySourceRoot, { withFileTypes: true });
+        registryDirs = readdirSync9(registrySourceRoot, { withFileTypes: true });
       } catch {
         continue;
       }
@@ -41433,7 +41750,7 @@ function evidenceFileCandidates(dir) {
     return [];
   }
   try {
-    return readdirSync8(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+    return readdirSync9(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
       absolutePath: path49.join(dir, entry.name),
       relativePath: entry.name
     }));
@@ -41654,7 +41971,7 @@ function cargoCrateError(input, message, details) {
 }
 
 // src/evidence/bazel-module.ts
-import { existsSync as existsSync20, readdirSync as readdirSync9, statSync as statSync9 } from "node:fs";
+import { existsSync as existsSync20, readdirSync as readdirSync10, statSync as statSync9 } from "node:fs";
 import path51 from "node:path";
 import { fileURLToPath } from "node:url";
 var BAZEL_REGISTRY_JSON_MAX_BYTES = 64 * 1024;
@@ -41859,7 +42176,7 @@ function readJsonFile(input) {
 }
 function readDirectoryEntries(dir) {
   try {
-    return readdirSync9(dir, { withFileTypes: true });
+    return readdirSync10(dir, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -41884,7 +42201,7 @@ function isRecord19(value) {
 }
 
 // src/evidence/carthage-package.ts
-import { existsSync as existsSync21, readdirSync as readdirSync10, statSync as statSync10 } from "node:fs";
+import { existsSync as existsSync21, readdirSync as readdirSync11, statSync as statSync10 } from "node:fs";
 import path52 from "node:path";
 var CARTHAGE_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var CARTHAGE_LICENSE_FILE_LIMIT = 50;
@@ -41945,7 +42262,7 @@ function findCaseInsensitiveChildDirectory(input) {
   }
   let entries;
   try {
-    entries = readdirSync10(input.parent, { withFileTypes: true });
+    entries = readdirSync11(input.parent, { withFileTypes: true });
   } catch {
     return;
   }
@@ -41990,7 +42307,7 @@ function readCarthageEvidenceFiles(input) {
 }
 function evidenceFileCandidates2(dir) {
   try {
-    return readdirSync10(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+    return readdirSync11(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
       absolutePath: path52.join(dir, entry.name),
       relativePath: entry.name
     }));
@@ -42019,7 +42336,7 @@ function isPathInside3(parent, child) {
 }
 
 // src/evidence/cocoapods-package.ts
-import { existsSync as existsSync22, readdirSync as readdirSync11, statSync as statSync11 } from "node:fs";
+import { existsSync as existsSync22, readdirSync as readdirSync12, statSync as statSync11 } from "node:fs";
 import path53 from "node:path";
 var COCOAPODS_PODSPEC_MAX_BYTES = 1024 * 1024;
 var COCOAPODS_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
@@ -42086,7 +42403,7 @@ function findCaseInsensitiveChildDirectory2(input) {
   }
   let entries;
   try {
-    entries = readdirSync11(input.parent, { withFileTypes: true });
+    entries = readdirSync12(input.parent, { withFileTypes: true });
   } catch {
     return;
   }
@@ -42182,7 +42499,7 @@ function readCocoapodsEvidenceFiles(input) {
 }
 function evidenceFileCandidates3(dir) {
   try {
-    return readdirSync11(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+    return readdirSync12(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
       absolutePath: path53.join(dir, entry.name),
       relativePath: entry.name
     }));
@@ -42214,7 +42531,7 @@ function isRecord20(value) {
 }
 
 // src/evidence/conda-package.ts
-import { existsSync as existsSync23, readdirSync as readdirSync12, statSync as statSync12 } from "node:fs";
+import { existsSync as existsSync23, readdirSync as readdirSync13, statSync as statSync12 } from "node:fs";
 import path54 from "node:path";
 var CONDA_INDEX_MAX_BYTES = 1024 * 1024;
 var CONDA_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
@@ -42417,7 +42734,7 @@ function condaEvidenceReadError(error) {
 }
 function readDirectoryEntries2(pathname) {
   try {
-    return readdirSync12(pathname, { withFileTypes: true });
+    return readdirSync13(pathname, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -42437,7 +42754,7 @@ function isRecord21(value) {
 }
 
 // src/evidence/conan-package.ts
-import { existsSync as existsSync24, readdirSync as readdirSync13, statSync as statSync13 } from "node:fs";
+import { existsSync as existsSync24, readdirSync as readdirSync14, statSync as statSync13 } from "node:fs";
 import os2 from "node:os";
 import path55 from "node:path";
 var CONANFILE_PY_MAX_BYTES = 1024 * 1024;
@@ -42548,7 +42865,7 @@ function conanCachePackageName(packageName) {
 }
 function childDirectories(parent) {
   try {
-    return readdirSync13(parent, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path55.resolve(parent, entry.name)).filter((candidate) => isPathInside5(parent, candidate) && isReadableDirectory6(candidate)).sort();
+    return readdirSync14(parent, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path55.resolve(parent, entry.name)).filter((candidate) => isPathInside5(parent, candidate) && isReadableDirectory6(candidate)).sort();
   } catch {
     return [];
   }
@@ -42625,7 +42942,7 @@ function readConanEvidenceFiles(input) {
 }
 function evidenceFileCandidates5(dir) {
   try {
-    return readdirSync13(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+    return readdirSync14(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
       absolutePath: path55.join(dir, entry.name),
       relativePath: entry.name
     }));
@@ -42654,7 +42971,7 @@ function isPathInside5(parent, child) {
 }
 
 // src/evidence/composer-package.ts
-import { existsSync as existsSync25, readdirSync as readdirSync14, statSync as statSync14 } from "node:fs";
+import { existsSync as existsSync25, readdirSync as readdirSync15, statSync as statSync14 } from "node:fs";
 import path56 from "node:path";
 var COMPOSER_JSON_MAX_BYTES = 1024 * 1024;
 var COMPOSER_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
@@ -42782,7 +43099,7 @@ function evidenceFileCandidates6(dir) {
     return [];
   }
   try {
-    return readdirSync14(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+    return readdirSync15(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
       absolutePath: path56.join(dir, entry.name),
       relativePath: entry.name
     }));
@@ -43034,10 +43351,11 @@ function roundUpToBlock(size) {
 }
 
 // src/evidence/go-module.ts
-import { existsSync as existsSync27, readdirSync as readdirSync15, realpathSync as realpathSync3, statSync as statSync16 } from "node:fs";
+import { existsSync as existsSync27, readdirSync as readdirSync16, realpathSync as realpathSync3, statSync as statSync16 } from "node:fs";
 import path58 from "node:path";
 var GO_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var GO_LICENSE_FILE_LIMIT = 50;
+var GO_MODULE_MOD_MAX_BYTES = 2 * 1024 * 1024;
 function collectGoModuleEvidence(input) {
   const replacement = parseGoReplacementResolved(input.resolved);
   const warnings = replacement.warnings;
@@ -43068,12 +43386,32 @@ function collectGoModuleEvidence(input) {
   if (files.length === 0) {
     warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Go module source.");
   }
+  const goModuleRequirements = readLocalGoModuleRequirements(moduleDir);
   return ok({
     packageId: input.packageId,
+    ...goModuleRequirements !== undefined ? { goModuleRequirements } : {},
     files,
     source: "local",
     warnings
   });
+}
+function readLocalGoModuleRequirements(moduleDir) {
+  const goModPath = path58.join(moduleDir, "go.mod");
+  if (!existsSync27(goModPath)) {
+    return;
+  }
+  const goModText = readTextFileWithLimit({
+    filePath: goModPath,
+    maxBytes: GO_MODULE_MOD_MAX_BYTES
+  });
+  if (!goModText.ok) {
+    return;
+  }
+  const parsed = parseGoModRecords(goModText.value, goModPath, { strictEdges: true });
+  if (!parsed.ok) {
+    return;
+  }
+  return [...new Set(parsed.value.records.map((record) => record.modulePath))].sort();
 }
 function findGoModuleDir(input) {
   if (input.localPath) {
@@ -43182,7 +43520,7 @@ function evidenceFileCandidates7(dir) {
     return [];
   }
   try {
-    return readdirSync15(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+    return readdirSync16(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
       absolutePath: path58.join(dir, entry.name),
       relativePath: entry.name
     }));
@@ -43216,7 +43554,7 @@ function evidenceFileReadWarning3(fileName, error) {
 }
 
 // src/evidence/hackage-package.ts
-import { existsSync as existsSync28, readdirSync as readdirSync16, statSync as statSync17 } from "node:fs";
+import { existsSync as existsSync28, readdirSync as readdirSync17, statSync as statSync17 } from "node:fs";
 import path59 from "node:path";
 var HACKAGE_PACKAGE_CONF_MAX_BYTES = 1024 * 1024;
 var HACKAGE_PACKAGE_DB_SEARCH_MAX_DEPTH = 8;
@@ -43355,7 +43693,7 @@ function childDirectories2(dir) {
 }
 function readDirectoryEntries3(dir) {
   try {
-    return readdirSync16(dir, { withFileTypes: true });
+    return readdirSync17(dir, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -43372,7 +43710,7 @@ function hackagePackageConfReadFailedMessage(error) {
 }
 
 // src/evidence/helm-chart.ts
-import { existsSync as existsSync29, readdirSync as readdirSync17, statSync as statSync18 } from "node:fs";
+import { existsSync as existsSync29, readdirSync as readdirSync18, statSync as statSync18 } from "node:fs";
 import path60 from "node:path";
 var HELM_CHART_YAML_MAX_BYTES = 1024 * 1024;
 var HELM_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
@@ -43498,7 +43836,7 @@ function readEvidenceFiles(input) {
 }
 function directoryEntries(dir) {
   try {
-    return readdirSync17(dir, { withFileTypes: true });
+    return readdirSync18(dir, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -43523,7 +43861,7 @@ function isRecord23(value) {
 }
 
 // src/evidence/hex-package.ts
-import { existsSync as existsSync30, readdirSync as readdirSync18, statSync as statSync19 } from "node:fs";
+import { existsSync as existsSync30, readdirSync as readdirSync19, statSync as statSync19 } from "node:fs";
 import path61 from "node:path";
 var MIX_EXS_MAX_BYTES = 1024 * 1024;
 var REBAR_CONFIG_MAX_BYTES = 1024 * 1024;
@@ -43605,7 +43943,7 @@ function findCaseInsensitiveChildDirectory3(input) {
   }
   let entries;
   try {
-    entries = readdirSync18(input.parent, { withFileTypes: true });
+    entries = readdirSync19(input.parent, { withFileTypes: true });
   } catch {
     return;
   }
@@ -43744,7 +44082,7 @@ function readHexEvidenceFiles(input) {
 }
 function evidenceFileCandidates8(dir) {
   try {
-    return readdirSync18(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+    return readdirSync19(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
       absolutePath: path61.join(dir, entry.name),
       relativePath: entry.name
     }));
@@ -43773,7 +44111,7 @@ function isPathInside8(parent, child) {
 }
 
 // src/evidence/julia-package.ts
-import { existsSync as existsSync31, readdirSync as readdirSync19, statSync as statSync20 } from "node:fs";
+import { existsSync as existsSync31, readdirSync as readdirSync20, statSync as statSync20 } from "node:fs";
 import path62 from "node:path";
 var JULIA_PROJECT_TOML_MAX_BYTES = 1024 * 1024;
 var JULIA_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
@@ -43929,7 +44267,7 @@ function readJuliaEvidenceFiles(input) {
 }
 function evidenceFileCandidates9(dir) {
   try {
-    return readdirSync19(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+    return readdirSync20(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
       absolutePath: path62.join(dir, entry.name),
       relativePath: entry.name
     }));
@@ -43939,7 +44277,7 @@ function evidenceFileCandidates9(dir) {
 }
 function childDirectories3(dir) {
   try {
-    return readdirSync19(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path62.join(dir, entry.name));
+    return readdirSync20(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path62.join(dir, entry.name));
   } catch {
     return [];
   }
@@ -44368,7 +44706,7 @@ function pomReadFailedMessage(error) {
 }
 
 // src/evidence/nix-package.ts
-import { existsSync as existsSync33, readdirSync as readdirSync20, statSync as statSync21 } from "node:fs";
+import { existsSync as existsSync33, readdirSync as readdirSync21, statSync as statSync21 } from "node:fs";
 import path64 from "node:path";
 var NIX_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var NIX_EVIDENCE_FILE_LIMIT = 50;
@@ -44445,7 +44783,7 @@ function readEvidenceFiles2(input) {
 }
 function directoryEntries2(dir) {
   try {
-    return readdirSync20(dir, { withFileTypes: true });
+    return readdirSync21(dir, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -44474,7 +44812,7 @@ function isPathInside10(parent, child) {
 }
 
 // src/evidence/nuget-package.ts
-import { existsSync as existsSync34, readdirSync as readdirSync21, statSync as statSync22 } from "node:fs";
+import { existsSync as existsSync34, readdirSync as readdirSync22, statSync as statSync22 } from "node:fs";
 import path65 from "node:path";
 var NUGET_NUSPEC_MAX_BYTES = 1024 * 1024;
 var NUGET_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
@@ -44570,7 +44908,7 @@ function findNuspecPath(packageDir, packageName, version) {
     return expectedWithVersion;
   }
   try {
-    const nuspec = readdirSync21(packageDir).find((entry) => entry.toLowerCase().endsWith(".nuspec"));
+    const nuspec = readdirSync22(packageDir).find((entry) => entry.toLowerCase().endsWith(".nuspec"));
     return nuspec ? path65.join(packageDir, nuspec) : undefined;
   } catch {
     return;
@@ -44725,7 +45063,7 @@ function evidenceFileCandidates10(dir) {
     return [];
   }
   try {
-    return readdirSync21(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+    return readdirSync22(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
       absolutePath: path65.join(dir, entry.name),
       relativePath: entry.name
     }));
@@ -44749,7 +45087,7 @@ function evidenceFileReadWarning5(fileName, error) {
 }
 
 // src/evidence/pub-package.ts
-import { existsSync as existsSync35, readdirSync as readdirSync22, statSync as statSync23 } from "node:fs";
+import { existsSync as existsSync35, readdirSync as readdirSync23, statSync as statSync23 } from "node:fs";
 import path66 from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var PUBSPEC_MAX_BYTES = 1024 * 1024;
@@ -44943,7 +45281,7 @@ function readPubEvidenceFiles(input) {
 }
 function evidenceFileCandidates11(packageDir) {
   try {
-    return readdirSync22(packageDir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+    return readdirSync23(packageDir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
       absolutePath: path66.join(packageDir, entry.name),
       relativePath: entry.name
     }));
@@ -44978,7 +45316,7 @@ function isRecord24(value) {
 }
 
 // src/evidence/python-package.ts
-import { existsSync as existsSync36, readdirSync as readdirSync23, statSync as statSync24 } from "node:fs";
+import { existsSync as existsSync36, readdirSync as readdirSync24, statSync as statSync24 } from "node:fs";
 import path67 from "node:path";
 var PYTHON_METADATA_MAX_BYTES = 1024 * 1024;
 var PYTHON_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
@@ -45044,7 +45382,7 @@ function sitePackageDirsUnder(libDir) {
     return [];
   }
   try {
-    return readdirSync23(libDir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name.startsWith("python")).map((entry) => path67.join(libDir, entry.name, "site-packages")).filter((candidate) => existsSync36(candidate) && isReadableDirectory16(candidate));
+    return readdirSync24(libDir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name.startsWith("python")).map((entry) => path67.join(libDir, entry.name, "site-packages")).filter((candidate) => existsSync36(candidate) && isReadableDirectory16(candidate));
   } catch {
     return [];
   }
@@ -45052,7 +45390,7 @@ function sitePackageDirsUnder(libDir) {
 function findMatchingDistInfo(input) {
   let entries;
   try {
-    entries = readdirSync23(input.sitePackageDir, { withFileTypes: true });
+    entries = readdirSync24(input.sitePackageDir, { withFileTypes: true });
   } catch (cause) {
     return err(createError({
       code: "PACKAGE_EVIDENCE_READ_FAILED",
@@ -45233,7 +45571,7 @@ function evidenceFileCandidates12(dir, relativePrefix) {
     return [];
   }
   try {
-    return readdirSync23(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+    return readdirSync24(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
       absolutePath: path67.join(dir, entry.name),
       relativePath: relativePrefix ? `${relativePrefix}/${entry.name}` : entry.name
     }));
@@ -45259,7 +45597,7 @@ function evidenceFileReadWarning6(fileName, error) {
 }
 
 // src/evidence/r-package.ts
-import { existsSync as existsSync37, readdirSync as readdirSync24, statSync as statSync25 } from "node:fs";
+import { existsSync as existsSync37, readdirSync as readdirSync25, statSync as statSync25 } from "node:fs";
 import path68 from "node:path";
 var R_DESCRIPTION_MAX_BYTES = 1024 * 1024;
 var R_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
@@ -45448,7 +45786,7 @@ function readRPackageEvidenceFiles(input) {
 }
 function evidenceFileCandidates13(dir) {
   try {
-    return readdirSync24(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+    return readdirSync25(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
       absolutePath: path68.join(dir, entry.name),
       relativePath: entry.name
     }));
@@ -45458,7 +45796,7 @@ function evidenceFileCandidates13(dir) {
 }
 function childDirectories4(dir) {
   try {
-    return readdirSync24(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path68.join(dir, entry.name));
+    return readdirSync25(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path68.join(dir, entry.name));
   } catch {
     return [];
   }
@@ -45475,7 +45813,7 @@ function isReadableDirectory17(pathname) {
 }
 
 // src/evidence/ruby-gem.ts
-import { existsSync as existsSync38, readdirSync as readdirSync25, statSync as statSync26 } from "node:fs";
+import { existsSync as existsSync38, readdirSync as readdirSync26, statSync as statSync26 } from "node:fs";
 import path69 from "node:path";
 var GEMSPEC_MAX_BYTES = 1024 * 1024;
 var GEM_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
@@ -45571,7 +45909,7 @@ function globRubyVersionRoots(root) {
     return [];
   }
   try {
-    return readdirSync25(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path69.join(root, entry.name));
+    return readdirSync26(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path69.join(root, entry.name));
   } catch {
     return [];
   }
@@ -45634,7 +45972,7 @@ function evidenceFileCandidates14(dir) {
     return [];
   }
   try {
-    return readdirSync25(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+    return readdirSync26(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
       absolutePath: path69.join(dir, entry.name),
       relativePath: entry.name
     }));
@@ -45658,7 +45996,7 @@ function evidenceFileReadWarning8(fileName, error) {
 }
 
 // src/evidence/swift-package.ts
-import { existsSync as existsSync39, readdirSync as readdirSync26, statSync as statSync27 } from "node:fs";
+import { existsSync as existsSync39, readdirSync as readdirSync27, statSync as statSync27 } from "node:fs";
 import path70 from "node:path";
 var SWIFT_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var SWIFT_LICENSE_FILE_LIMIT = 50;
@@ -45721,7 +46059,7 @@ function swiftCheckoutsRoots(projectRoot) {
 function findCaseInsensitiveChildDirectory4(input) {
   let entries;
   try {
-    entries = readdirSync26(input.parent, { withFileTypes: true });
+    entries = readdirSync27(input.parent, { withFileTypes: true });
   } catch {
     return;
   }
@@ -45766,7 +46104,7 @@ function readSwiftEvidenceFiles(input) {
 }
 function evidenceFileCandidates15(dir) {
   try {
-    return readdirSync26(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+    return readdirSync27(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
       absolutePath: path70.join(dir, entry.name),
       relativePath: entry.name
     }));
@@ -45795,7 +46133,7 @@ function isPathInside14(parent, child) {
 }
 
 // src/evidence/terraform-provider.ts
-import { existsSync as existsSync40, readdirSync as readdirSync27, statSync as statSync28 } from "node:fs";
+import { existsSync as existsSync40, readdirSync as readdirSync28, statSync as statSync28 } from "node:fs";
 import path71 from "node:path";
 var TERRAFORM_PROVIDER_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var TERRAFORM_PROVIDER_EVIDENCE_FILE_LIMIT = 50;
@@ -45876,7 +46214,7 @@ function readEvidenceFilesRecursively(input) {
 }
 function directoryEntries3(dir) {
   try {
-    return readdirSync27(dir, { withFileTypes: true });
+    return readdirSync28(dir, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -45898,11 +46236,11 @@ function isReadableDirectory20(pathname) {
 }
 
 // src/evidence/unity-package.ts
-import { existsSync as existsSync42, readdirSync as readdirSync29, statSync as statSync30 } from "node:fs";
+import { existsSync as existsSync42, readdirSync as readdirSync30, statSync as statSync30 } from "node:fs";
 import path73 from "node:path";
 
 // src/evidence/local-package.ts
-import { existsSync as existsSync41, readdirSync as readdirSync28, statSync as statSync29 } from "node:fs";
+import { existsSync as existsSync41, readdirSync as readdirSync29, statSync as statSync29 } from "node:fs";
 import path72 from "node:path";
 var LOCAL_PACKAGE_JSON_MAX_BYTES = 1024 * 1024;
 var LOCAL_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
@@ -46027,7 +46365,7 @@ function isObjectRecord6(value) {
 function readEvidenceFiles4(input) {
   const files = [];
   let foundEvidenceFile = false;
-  for (const entry of readdirSync28(input.packageDir, { withFileTypes: true })) {
+  for (const entry of readdirSync29(input.packageDir, { withFileTypes: true })) {
     if (!entry.isFile()) {
       continue;
     }
@@ -46108,7 +46446,7 @@ function findUnityPackageDir(input) {
 function packageCacheCandidates(input) {
   let entries;
   try {
-    entries = readdirSync29(input.packageCacheRoot);
+    entries = readdirSync30(input.packageCacheRoot);
   } catch {
     return [];
   }
@@ -46128,7 +46466,7 @@ function isPathInside15(parent, child) {
 }
 
 // src/evidence/vcpkg-package.ts
-import { existsSync as existsSync43, readdirSync as readdirSync30, statSync as statSync31 } from "node:fs";
+import { existsSync as existsSync43, readdirSync as readdirSync31, statSync as statSync31 } from "node:fs";
 import path74 from "node:path";
 var VCPKG_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var VCPKG_EVIDENCE_FILE_LIMIT = 20;
@@ -46189,7 +46527,7 @@ function findVcpkgInstallRoots(projectRoot) {
     roots.push(direct);
   }
   try {
-    for (const entry of readdirSync30(projectRoot, { withFileTypes: true })) {
+    for (const entry of readdirSync31(projectRoot, { withFileTypes: true })) {
       if (!entry.isDirectory()) {
         continue;
       }
@@ -46225,7 +46563,7 @@ function vcpkgCopyrightCandidates(input) {
 }
 function childDirectories5(parent) {
   try {
-    return readdirSync30(parent, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path74.join(parent, entry.name)).filter(isReadableDirectory22).sort();
+    return readdirSync31(parent, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path74.join(parent, entry.name)).filter(isReadableDirectory22).sort();
   } catch {
     return [];
   }
@@ -46258,7 +46596,7 @@ function isFile4(pathname) {
 
 // src/evidence/zig-package.ts
 import { createHash as createHash4 } from "node:crypto";
-import { existsSync as existsSync44, readdirSync as readdirSync31, statSync as statSync32 } from "node:fs";
+import { existsSync as existsSync44, readdirSync as readdirSync32, statSync as statSync32 } from "node:fs";
 import path75 from "node:path";
 import { TextDecoder as TextDecoder3 } from "node:util";
 
@@ -46980,7 +47318,7 @@ function evidenceFileCandidates16(dir) {
     return [];
   }
   try {
-    return readdirSync31(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+    return readdirSync32(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
       absolutePath: path75.join(dir, entry.name),
       relativePath: entry.name
     }));
@@ -47401,13 +47739,16 @@ function adapter(id, lockfileKinds, packageEcosystems) {
 
 // src/evidence/go-module-zip.ts
 import { createHash as createHash5, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+import { TextDecoder as TextDecoder4 } from "node:util";
 var GO_MODULE_ZIP_MAX_ENTRIES = 50000;
 var GO_MODULE_ZIP_ENTRY_MAX_BYTES = 50 * 1024 * 1024;
 var GO_MODULE_ZIP_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
 var GO_MODULE_ZIP_MATERIALIZED_MAX_BYTES = 256 * 1024 * 1024;
 var GO_MODULE_LICENSE_MAX_BYTES = 2 * 1024 * 1024;
 var GO_MODULE_LICENSE_FILE_LIMIT = 16;
+var GO_MODULE_MOD_MAX_BYTES2 = 2 * 1024 * 1024;
 var GO_H1_DIGEST_BYTES = 32;
+var GO_MOD_DECODER = new TextDecoder4("utf-8", { fatal: true });
 function collectGoModuleZipEvidence(input) {
   const archive = readArchiveBytes({
     displayName: `${safeGoModuleDisplayName(input.modulePath)}@${input.version}.zip`,
@@ -47480,12 +47821,46 @@ function collectGoModuleZipEvidence(input) {
       text: text3.value
     });
   }
+  const goModuleRequirements = readVerifiedGoModuleRequirements({
+    goModPath: `${rootPrefix}go.mod`,
+    entries: archive.value.entries,
+    readText: archive.value.readText
+  });
   return ok({
     packageId: input.packageId,
+    ...goModuleRequirements ? { goModuleRequirements } : {},
     files,
     source: "tarball",
     warnings: files.length > 0 ? [] : ["Checksum-verified Go module zip did not contain a root license evidence file."]
   });
+}
+function readChecksumVerifiedGoModuleRequirements(input) {
+  const computedChecksum = hashGoModBytes(input.goMod);
+  if (!equalGoChecksums(input.checksum, computedChecksum)) {
+    return;
+  }
+  let text3;
+  try {
+    text3 = GO_MOD_DECODER.decode(input.goMod);
+  } catch {
+    return;
+  }
+  const parsed = parseGoModRecords(text3, "go.mod", { strictEdges: true });
+  return parsed.ok ? [...new Set(parsed.value.records.map((record) => record.modulePath))].sort() : undefined;
+}
+function readVerifiedGoModuleRequirements(input) {
+  if (!input.entries.some((entry) => entry.type === "file" && entry.path === input.goModPath)) {
+    return;
+  }
+  const goModText = input.readText(input.goModPath, GO_MODULE_MOD_MAX_BYTES2);
+  if (!goModText.ok) {
+    return;
+  }
+  const parsed = parseGoModRecords(goModText.value, input.goModPath, { strictEdges: true });
+  if (!parsed.ok) {
+    return;
+  }
+  return [...new Set(parsed.value.records.map((record) => record.modulePath))].sort();
 }
 function hashGoModuleArchive(input) {
   const summary = createHash5("sha256");
@@ -47513,6 +47888,12 @@ function hashGoModuleArchive(input) {
 `, "utf8");
   }
   return ok(`h1:${summary.digest("base64")}`);
+}
+function hashGoModBytes(goMod) {
+  const fileDigest = createHash5("sha256").update(goMod).digest("hex");
+  const summary = createHash5("sha256").update(`${fileDigest}  go.mod
+`, "utf8").digest("base64");
+  return `h1:${summary}`;
 }
 function equalGoChecksums(expected, computed) {
   const expectedDigest = decodeGoChecksum(expected);
@@ -48805,6 +49186,7 @@ var MAVEN_JAR_MAX_BYTES2 = 32 * 1024 * 1024;
 var MAVEN_CHECKSUM_MAX_BYTES = 256;
 var GO_MODULE_PROXY_BASE_URL = "https://proxy.golang.org";
 var GO_MODULE_PROXY_HOSTS = new Set(["proxy.golang.org", "storage.googleapis.com"]);
+var GO_MODULE_MOD_MAX_BYTES3 = 2 * 1024 * 1024;
 var GO_MODULE_TRANSIENT_FETCH_ATTEMPTS = 2;
 var GO_MODULE_TRANSIENT_RETRY_DELAY_MS = 200;
 var CARGO_CRATES_IO_SOURCES2 = new Set([
@@ -49037,6 +49419,18 @@ async function collectNodeEvidence(input) {
     projectRoot: input.projectRoot
   }) : undefined;
   if (ecosystemEvidence) {
+    if (input.node.ecosystem === "go" && ecosystemEvidence.ok && ecosystemEvidence.value.source !== "unavailable" && ecosystemEvidence.value.goModuleRequirements === undefined) {
+      return collectVerifiedRemoteGoModuleRequirements({
+        node: input.node,
+        evidence: ecosystemEvidence.value,
+        fetchArtifact: input.fetchArtifact,
+        resolveArtifactHost: input.resolveArtifactHost,
+        fetchTimeoutMs: input.fetchTimeoutMs,
+        offline: input.offline,
+        artifactCache: input.artifactCache,
+        allowedHosts: input.allowedHosts
+      });
+    }
     if (input.node.ecosystem !== "maven" && input.node.ecosystem !== "go" && input.node.ecosystem !== "cargo" && input.node.ecosystem !== "nuget" && input.node.ecosystem !== "zig" || !ecosystemEvidence.ok || ecosystemEvidence.value.source !== "unavailable") {
       return ecosystemEvidence;
     }
@@ -49622,39 +50016,111 @@ async function collectRemoteGoModuleEvidence(input) {
       reason: input.node.resolved ? "Go local replacement evidence is unavailable during a remote repository scan." : "Go module coordinates were not safe for the fixed public module proxy."
     }));
   }
-  if (!input.node.integrity || !/^h1:[A-Za-z0-9+/]{43}=$/u.test(input.node.integrity)) {
-    return ok({
+  const zipChecksum = input.node.integrity && /^h1:[A-Za-z0-9+/]{43}=$/u.test(input.node.integrity) ? input.node.integrity : undefined;
+  let evidence;
+  if (!zipChecksum) {
+    evidence = {
       packageId: input.node.id,
       files: [],
       source: "unavailable",
       warnings: [
         "Go module source was not fetched because go.sum did not contain an exact h1 checksum for the module zip."
       ]
+    };
+  } else {
+    const resolved = goModuleProxyZipUrl(coordinates.modulePath, coordinates.version);
+    if (!resolved) {
+      return ok(unsupportedRemoteEcosystemEvidence({
+        node: input.node,
+        reason: "Go module path or version could not be encoded safely for the fixed public module proxy."
+      }));
+    }
+    const zip = await readRemoteArtifactBytes({
+      code: "TARBALL_FETCH_FAILED",
+      packageId: input.node.id,
+      url: resolved,
+      blockedMessage: "Go module proxy URL targets an unsupported or blocked host.",
+      resolveFailureMessage: "Failed to resolve the Go module proxy host.",
+      fetchFailureMessage: "Failed to fetch Go module zip.",
+      tooLargeMessage: "Go module zip response exceeded the maximum supported size.",
+      unreadableMessage: "Go module zip response did not expose a readable body stream.",
+      offlineMissMessage: "Offline mode could not find the Go module zip in the artifact cache.",
+      details: {
+        modulePath: coordinates.modulePath,
+        version: coordinates.version,
+        proxy: GO_MODULE_PROXY_BASE_URL
+      },
+      maxBytes: input.artifactMaxBytes,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      allowedHosts: input.allowedHosts,
+      permittedHosts: GO_MODULE_PROXY_HOSTS,
+      urlDetailKey: "resolved",
+      transientFetchAttempts: GO_MODULE_TRANSIENT_FETCH_ATTEMPTS,
+      transientRetryDelayMs: GO_MODULE_TRANSIENT_RETRY_DELAY_MS
     });
+    if (!zip.ok) {
+      return zip;
+    }
+    const collected = collectGoModuleZipEvidence({
+      packageId: input.node.id,
+      modulePath: coordinates.modulePath,
+      version: coordinates.version,
+      checksum: zipChecksum,
+      zip: zip.value,
+      artifactMaxBytes: input.artifactMaxBytes
+    });
+    if (!collected.ok) {
+      return collected;
+    }
+    evidence = collected.value;
   }
-  const resolved = goModuleProxyZipUrl(coordinates.modulePath, coordinates.version);
-  if (!resolved) {
-    return ok(unsupportedRemoteEcosystemEvidence({
-      node: input.node,
-      reason: "Go module path or version could not be encoded safely for the fixed public module proxy."
-    }));
+  return collectVerifiedRemoteGoModuleRequirements({
+    node: input.node,
+    evidence,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts
+  });
+}
+async function collectVerifiedRemoteGoModuleRequirements(input) {
+  if (input.evidence.goModuleRequirements !== undefined) {
+    return ok(input.evidence);
   }
-  const zip = await readRemoteArtifactBytes({
+  const goModChecksum = input.node.goModIntegrity && /^h1:[A-Za-z0-9+/]{43}=$/u.test(input.node.goModIntegrity) ? input.node.goModIntegrity : undefined;
+  if (!goModChecksum) {
+    return ok(input.evidence);
+  }
+  const coordinates = remoteGoModuleCoordinates(input.node);
+  if (!coordinates) {
+    return ok(input.evidence);
+  }
+  const goModUrl = goModuleProxyModUrl(coordinates.modulePath, coordinates.version);
+  if (!goModUrl) {
+    return ok(input.evidence);
+  }
+  const goMod = await readRemoteArtifactBytes({
     code: "TARBALL_FETCH_FAILED",
     packageId: input.node.id,
-    url: resolved,
+    url: goModUrl,
     blockedMessage: "Go module proxy URL targets an unsupported or blocked host.",
     resolveFailureMessage: "Failed to resolve the Go module proxy host.",
-    fetchFailureMessage: "Failed to fetch Go module zip.",
-    tooLargeMessage: "Go module zip response exceeded the maximum supported size.",
-    unreadableMessage: "Go module zip response did not expose a readable body stream.",
-    offlineMissMessage: "Offline mode could not find the Go module zip in the artifact cache.",
+    fetchFailureMessage: "Failed to fetch the checksum-identified Go module go.mod.",
+    tooLargeMessage: "Go module go.mod response exceeded the maximum supported size.",
+    unreadableMessage: "Go module go.mod response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find the Go module go.mod in the artifact cache.",
     details: {
       modulePath: coordinates.modulePath,
       version: coordinates.version,
       proxy: GO_MODULE_PROXY_BASE_URL
     },
-    maxBytes: input.artifactMaxBytes,
+    maxBytes: GO_MODULE_MOD_MAX_BYTES3,
     fetchArtifact: input.fetchArtifact,
     resolveArtifactHost: input.resolveArtifactHost,
     fetchTimeoutMs: input.fetchTimeoutMs,
@@ -49666,17 +50132,14 @@ async function collectRemoteGoModuleEvidence(input) {
     transientFetchAttempts: GO_MODULE_TRANSIENT_FETCH_ATTEMPTS,
     transientRetryDelayMs: GO_MODULE_TRANSIENT_RETRY_DELAY_MS
   });
-  if (!zip.ok) {
-    return zip;
+  if (!goMod.ok) {
+    return ok(input.evidence);
   }
-  return collectGoModuleZipEvidence({
-    packageId: input.node.id,
-    modulePath: coordinates.modulePath,
-    version: coordinates.version,
-    checksum: input.node.integrity,
-    zip: zip.value,
-    artifactMaxBytes: input.artifactMaxBytes
+  const requirements = readChecksumVerifiedGoModuleRequirements({
+    checksum: goModChecksum,
+    goMod: goMod.value
   });
+  return ok(requirements === undefined ? input.evidence : { ...input.evidence, goModuleRequirements: requirements });
 }
 async function collectRemoteCargoCrateEvidence(input) {
   if (!input.node.resolved || !CARGO_CRATES_IO_SOURCES2.has(input.node.resolved)) {
@@ -49759,9 +50222,15 @@ function remoteGoModuleCoordinates(node) {
   };
 }
 function goModuleProxyZipUrl(modulePath, version) {
+  return goModuleProxyArtifactUrl(modulePath, version, "zip");
+}
+function goModuleProxyModUrl(modulePath, version) {
+  return goModuleProxyArtifactUrl(modulePath, version, "mod");
+}
+function goModuleProxyArtifactUrl(modulePath, version, extension) {
   const escapedModulePath = escapeGoProxyModulePath(modulePath);
   const escapedVersion = escapeGoProxyVersion(version);
-  return escapedModulePath && escapedVersion ? `${GO_MODULE_PROXY_BASE_URL}/${escapedModulePath}/@v/${escapedVersion}.zip` : undefined;
+  return escapedModulePath && escapedVersion ? `${GO_MODULE_PROXY_BASE_URL}/${escapedModulePath}/@v/${escapedVersion}.${extension}` : undefined;
 }
 function escapeGoProxyModulePath(modulePath) {
   if (modulePath === "" || modulePath.startsWith("/") || modulePath.endsWith("/") || !/^[A-Za-z0-9.!_~+\-/]+$/u.test(modulePath)) {
@@ -50663,7 +51132,7 @@ function createYarnCacheIndexLoader(projectRoot) {
     try {
       loaded = ok({
         cacheDir,
-        filenames: readdirSync32(cacheDir, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".zip")).map((entry) => entry.name).sort((left, right) => left.localeCompare(right))
+        filenames: readdirSync33(cacheDir, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".zip")).map((entry) => entry.name).sort((left, right) => left.localeCompare(right))
       });
     } catch (cause) {
       loaded = err(createError({
@@ -52340,6 +52809,72 @@ function isOutsideRelativePath(relativePath) {
 }
 function isObjectRecord9(value) {
   return typeof value === "object" && value !== null;
+}
+
+// src/graph/go-scope.ts
+function refineGoDependencyScopes(graph, evidence) {
+  const goNodes = graph.nodes.filter((node) => node.ecosystem === "go");
+  if (goNodes.length === 0) {
+    return graph;
+  }
+  const evidenceById = new Map(evidence.map((item) => [item.packageId, item]));
+  const missingEdgeNodes = goNodes.filter((node) => evidenceById.get(node.id)?.goModuleRequirements === undefined);
+  if (missingEdgeNodes.length > 0) {
+    return graph;
+  }
+  const uniqueNodeByModulePath = uniqueGoNodeByModulePath(goNodes);
+  const adjacency = new Map;
+  for (const node of goNodes) {
+    const requirements = evidenceById.get(node.id)?.goModuleRequirements ?? [];
+    adjacency.set(node.id, requirements.map((modulePath) => uniqueNodeByModulePath.get(modulePath)?.id).filter((id) => id !== undefined).sort());
+  }
+  const productionPaths = traverseGoModuleGraph(goNodes.filter((node) => node.direct && node.dependencyType !== "development"), adjacency);
+  const developmentPaths = traverseGoModuleGraph(goNodes.filter((node) => node.direct && node.dependencyType === "development"), adjacency);
+  return {
+    ...graph,
+    nodes: graph.nodes.map((node) => {
+      if (node.ecosystem !== "go") {
+        return node;
+      }
+      const productionPath = productionPaths.get(node.id);
+      const developmentPath = developmentPaths.get(node.id);
+      if (developmentPath && !productionPath) {
+        return {
+          ...node,
+          dependencyType: "development",
+          paths: [developmentPath]
+        };
+      }
+      return productionPath && !node.direct ? { ...node, paths: [productionPath] } : node;
+    })
+  };
+}
+function uniqueGoNodeByModulePath(nodes) {
+  const byModulePath = new Map;
+  for (const node of nodes) {
+    byModulePath.set(node.name, byModulePath.has(node.name) ? undefined : node);
+  }
+  return new Map([...byModulePath.entries()].filter((entry) => entry[1] !== undefined));
+}
+function traverseGoModuleGraph(roots, adjacency) {
+  const paths = new Map;
+  const queue = [...roots].sort((left, right) => left.id.localeCompare(right.id)).map((node) => ({
+    id: node.id,
+    path: [...node.paths].sort((left, right) => left.length - right.length || left.join("\x00").localeCompare(right.join("\x00")))[0] ?? ["<go-module>", node.id]
+  }));
+  for (let index = 0;index < queue.length; index += 1) {
+    const current = queue[index];
+    if (!current || paths.has(current.id)) {
+      continue;
+    }
+    paths.set(current.id, current.path);
+    for (const childId of adjacency.get(current.id) ?? []) {
+      if (!paths.has(childId)) {
+        queue.push({ id: childId, path: [...current.path, childId] });
+      }
+    }
+  }
+  return paths;
 }
 
 // src/license/normalize.ts
@@ -59412,9 +59947,9 @@ async function runDiff(command, io) {
     io.stderr(formatError(baselineProject.error));
     return exitCodeForError(baselineProject.error);
   }
-  const baselineScanGraph = filterGraphForProdOnly(baselineProject.value.graph, command.prodOnly);
+  const baselineCollectionGraph = filterGraphBeforeEvidence(baselineProject.value.graph, command.prodOnly);
   const baselineEvidence = await collectEvidenceForGraph({
-    graph: baselineScanGraph,
+    graph: baselineCollectionGraph,
     projectRoot: currentProject.value.project.rootDir,
     evidenceRuntime: evidenceRuntime.value,
     ...workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}
@@ -59423,7 +59958,10 @@ async function runDiff(command, io) {
     io.stderr(formatError(baselineEvidence.error));
     return exitCodeForError(baselineEvidence.error);
   }
-  const baselineLicenses = normalizeAllLicenseEvidence(baselineEvidence.value);
+  const baselineScanGraph = filterGraphForProdOnly(refineGoDependencyScopes(baselineCollectionGraph, baselineEvidence.value), command.prodOnly);
+  const baselineNodeIds = new Set(baselineScanGraph.nodes.map((node) => node.id));
+  const relevantBaselineEvidence = baselineEvidence.value.filter((item) => baselineNodeIds.has(item.packageId));
+  const baselineLicenses = normalizeAllLicenseEvidence(relevantBaselineEvidence);
   const baselineFindings = evaluateLicenseRisks({
     licenses: baselineLicenses,
     dependencies: baselineScanGraph.nodes,
@@ -59435,6 +59973,7 @@ async function runDiff(command, io) {
     profile: command.profile,
     policy: policy.value,
     evidenceRuntime: evidenceRuntime.value,
+    prodOnly: command.prodOnly,
     applyWaivers: false,
     now: io.now ?? Date.now,
     ...workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}
@@ -59762,7 +60301,7 @@ async function scanProject(input) {
     if (isErr(graph)) {
       return graph;
     }
-    scanGraph = filterGraphForProdOnly(graph.value, input.prodOnly);
+    scanGraph = filterGraphBeforeEvidence(graph.value, input.prodOnly);
   }
   return evaluateProjectScan({
     project,
@@ -59770,6 +60309,7 @@ async function scanProject(input) {
     profile: input.profile,
     policy: policy.value,
     evidenceRuntime: evidenceRuntime.value,
+    prodOnly: input.prodOnly,
     applyWaivers: input.applyWaivers,
     now: input.now,
     ...input.configurationRoot ? { configurationRoot: input.configurationRoot } : project.source ? { configurationRoot: input.cwd } : {},
@@ -59798,7 +60338,7 @@ function loadArchiveProjectGraph(input) {
   }
   return ok({
     project: loaded.value.project,
-    scanGraph: filterGraphForProdOnly(loaded.value.graph, input.prodOnly)
+    scanGraph: filterGraphBeforeEvidence(loaded.value.graph, input.prodOnly)
   });
 }
 function loadProjectGraph(input) {
@@ -59810,7 +60350,7 @@ function loadProjectGraph(input) {
   if (isErr(graph)) {
     return graph;
   }
-  const scanGraph = filterGraphForProdOnly(graph.value, input.prodOnly);
+  const scanGraph = filterGraphBeforeEvidence(graph.value, input.prodOnly);
   return ok({
     project: discovered.value,
     scanGraph
@@ -59851,18 +60391,21 @@ async function evaluateProjectScan(input) {
     return evidence;
   }
   input.progress?.(SCAN_PROGRESS_EVALUATE_PERCENT, "Evaluating license risk...");
-  const normalizedLicenses = normalizeAllLicenseEvidence(evidence.value);
+  const scanGraph = filterGraphForProdOnly(refineGoDependencyScopes(input.scanGraph, evidence.value), input.prodOnly);
+  const scanNodeIds = new Set(scanGraph.nodes.map((node) => node.id));
+  const relevantEvidence = evidence.value.filter((item) => scanNodeIds.has(item.packageId));
+  const normalizedLicenses = normalizeAllLicenseEvidence(relevantEvidence);
   const riskFindings = evaluateLicenseRisks({
     licenses: normalizedLicenses,
-    dependencies: input.scanGraph.nodes,
+    dependencies: scanGraph.nodes,
     profile: input.profile,
     policy: input.policy
   });
   if (!input.applyWaivers) {
     return ok({
       project: input.project,
-      graph: input.scanGraph,
-      evidence: evidence.value,
+      graph: scanGraph,
+      evidence: relevantEvidence,
       normalizedLicenses,
       riskFindings,
       waivedFindings: [],
@@ -59881,8 +60424,8 @@ async function evaluateProjectScan(input) {
   });
   return ok({
     project: input.project,
-    graph: input.scanGraph,
-    evidence: evidence.value,
+    graph: scanGraph,
+    evidence: relevantEvidence,
     normalizedLicenses,
     riskFindings: appliedWaivers.activeFindings,
     waivedFindings: appliedWaivers.waivedFindings,
@@ -59907,6 +60450,27 @@ function filterGraphForProdOnly(graph, prodOnly) {
   }).filter((node) => node.paths.length > 0);
   const nodeIds = new Set(nodes.map((node) => node.id));
   const embeddedEvidence = graph.embeddedEvidence?.filter((evidence) => nodeIds.has(evidence.packageId));
+  return {
+    ...graph,
+    nodes,
+    ...embeddedEvidence ? { embeddedEvidence } : {}
+  };
+}
+function filterGraphBeforeEvidence(graph, prodOnly) {
+  if (!prodOnly) {
+    return graph;
+  }
+  const productionGraph = filterGraphForProdOnly(graph, true);
+  const productionNodesById = new Map(productionGraph.nodes.map((node) => [node.id, node]));
+  const nodes = graph.nodes.flatMap((node) => {
+    if (node.ecosystem === "go") {
+      return [node];
+    }
+    const productionNode = productionNodesById.get(node.id);
+    return productionNode ? [productionNode] : [];
+  });
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const embeddedEvidence = graph.embeddedEvidence?.filter((item) => nodeIds.has(item.packageId));
   return {
     ...graph,
     nodes,
@@ -60159,15 +60723,61 @@ function readBaselineGoWorkModuleInputs(input) {
     if (isErr(goSumText)) {
       return goSumText;
     }
+    const sourceFiles = input.baselineFiles ? readBaselineGoSourceFiles({
+      projectRoot: input.project.rootDir,
+      baselineRef: input.baselineRef,
+      moduleRootRelativePath: path86.posix.dirname(modulePath.goModRelativePath),
+      baselineFiles: input.baselineFiles,
+      readRefFile: input.readRefFile
+    }) : ok(undefined);
+    if (isErr(sourceFiles)) {
+      return sourceFiles;
+    }
     modules.push({
       usePath: modulePath.usePath,
       moduleRootDir: modulePath.moduleRootDir,
       goModPath: `${input.baselineRef}:${modulePath.goModRelativePath}`,
       goModText: goModText.value,
-      ...goSumText.value ? { goSumText: goSumText.value } : {}
+      ...goSumText.value ? { goSumText: goSumText.value } : {},
+      ...sourceFiles.value ? { sourceFiles: sourceFiles.value } : {}
     });
   }
   return ok(modules);
+}
+var BASELINE_GO_SOURCE_FILE_LIMIT = 256;
+var BASELINE_GO_SOURCE_MAX_DEPTH = 4;
+var BASELINE_GO_SOURCE_MAX_BYTES = 64 * 1024 * 1024;
+var BASELINE_GO_IGNORED_DIRECTORIES = new Set([".git", "node_modules", "vendor"]);
+function readBaselineGoSourceFiles(input) {
+  const moduleRoot = input.moduleRootRelativePath === "." ? "" : input.moduleRootRelativePath.replaceAll("\\", "/").replace(/^\.\//u, "").replace(/\/$/u, "");
+  const prefix = moduleRoot === "" ? "" : `${moduleRoot}/`;
+  const relativeFiles = [...input.baselineFiles].map((file) => file.replaceAll("\\", "/")).filter((file) => prefix === "" || file.startsWith(prefix));
+  const nestedModuleRoots = relativeFiles.filter((file) => file.endsWith("/go.mod")).map((file) => file.slice(prefix.length, -"/go.mod".length)).filter((root) => root !== "");
+  const candidates = relativeFiles.filter((file) => file.endsWith(".go")).map((file) => ({ absoluteRelativePath: file, moduleRelativePath: file.slice(prefix.length) })).filter(({ moduleRelativePath }) => {
+    const segments = moduleRelativePath.split("/");
+    return segments.length - 1 <= BASELINE_GO_SOURCE_MAX_DEPTH && !segments.some((segment) => BASELINE_GO_IGNORED_DIRECTORIES.has(segment)) && !nestedModuleRoots.some((root) => moduleRelativePath === root || moduleRelativePath.startsWith(`${root}/`));
+  }).sort((left, right) => left.moduleRelativePath.localeCompare(right.moduleRelativePath));
+  if (candidates.length > BASELINE_GO_SOURCE_FILE_LIMIT) {
+    return ok([]);
+  }
+  const sourceFiles = [];
+  let totalBytes = 0;
+  for (const candidate of candidates) {
+    const text3 = input.readRefFile({
+      projectRoot: input.projectRoot,
+      ref: input.baselineRef,
+      relativePath: candidate.absoluteRelativePath
+    });
+    if (isErr(text3)) {
+      return text3;
+    }
+    totalBytes += Buffer3.byteLength(text3.value, "utf8");
+    if (totalBytes > BASELINE_GO_SOURCE_MAX_BYTES) {
+      return ok([]);
+    }
+    sourceFiles.push({ path: candidate.moduleRelativePath, text: text3.value });
+  }
+  return ok(sourceFiles);
 }
 function loadBaselineProjectGraph(input) {
   const projectRoot = input.currentProject.project.rootDir;
@@ -60194,6 +60804,16 @@ function loadBaselineProjectGraph(input) {
     }
   } else {
     baselineLockfiles = [input.currentProject.project.lockfile];
+    if (baselineLockfiles.some((lockfile) => lockfile.kind === "go-mod" || lockfile.kind === "go-work")) {
+      const listed = input.listRefFiles({
+        projectRoot,
+        ref: input.baselineRef
+      });
+      if (isErr(listed)) {
+        return listed;
+      }
+      baselineRelativePaths = listed.value;
+    }
   }
   if (baselineLockfiles.length === 0) {
     return ok({
@@ -60321,11 +60941,22 @@ function parseBaselineLockfileGraph(input) {
   if (isErr(baselineGoSum)) {
     return baselineGoSum;
   }
+  const baselineGoSourceFiles = input.lockfile.kind === "go-mod" && input.baselineFiles ? readBaselineGoSourceFiles({
+    projectRoot: input.projectRoot,
+    baselineRef: input.baselineRef,
+    moduleRootRelativePath: lockfileDirectory,
+    baselineFiles: input.baselineFiles,
+    readRefFile: input.readRefFile
+  }) : ok(undefined);
+  if (isErr(baselineGoSourceFiles)) {
+    return baselineGoSourceFiles;
+  }
   const baselineGoWorkModules = input.lockfile.kind === "go-work" ? readBaselineGoWorkModuleInputs({
     project,
     baselineRef: input.baselineRef,
     goWorkText: baselineLockfile.value,
-    readRefFile: input.readRefFile
+    readRefFile: input.readRefFile,
+    ...input.baselineFiles ? { baselineFiles: input.baselineFiles } : {}
   }) : ok(undefined);
   if (isErr(baselineGoWorkModules)) {
     return baselineGoWorkModules;
@@ -60380,6 +61011,7 @@ function parseBaselineLockfileGraph(input) {
     ...baselineCargoMemberManifests.value?.length ? { cargoMemberManifestTexts: baselineCargoMemberManifests.value } : {},
     ...input.lockfile.kind === "cargo-lock" ? { cargoRootName: input.rootNameHint } : {},
     ...baselineGoSum.value ? { goSumText: baselineGoSum.value } : {},
+    ...baselineGoSourceFiles.value ? { goSourceFiles: baselineGoSourceFiles.value } : {},
     ...baselineGoWorkModules.value?.length ? { goWorkModuleInputs: baselineGoWorkModules.value } : {},
     goWorkDir: path86.dirname(input.lockfile.path),
     ...baselineComposerJson.value ? { composerJsonText: baselineComposerJson.value } : {},
@@ -60440,7 +61072,7 @@ function readBaselineGradleDependencyLocksDirectory(input) {
       const prefix = `${normalizedDirectory}/`;
       entries = [...input.baselineFiles].filter((entry) => entry.startsWith(prefix)).map((entry) => entry.slice(prefix.length)).filter((entry) => !entry.includes("/") && entry.toLowerCase().endsWith(".lockfile")).sort();
     } else {
-      entries = readdirSync33(input.lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile5(path86.join(input.lockfilePath, entry))).sort();
+      entries = readdirSync34(input.lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile5(path86.join(input.lockfilePath, entry))).sort();
     }
   } catch (cause) {
     return err(createError({
@@ -61190,5 +61822,7 @@ if (isCliEntrypoint(import.meta.url, process.argv[1])) {
   process.exit(exitCode);
 }
 export {
-  main
+  main,
+  loadBaselineProjectGraph,
+  filterGraphBeforeEvidence
 };

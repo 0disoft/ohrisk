@@ -91,6 +91,15 @@ A dev-only GPL dependency is excluded entirely with `--prod`. Without `--prod`,
 it appears in the scan but gets an `exclude-dev-only` recommendation if its
 severity is `review` or `high`.
 
+For Go modules, filesystem and checked-out repository scans identify development
+roots from standard `tool` directives, `_test.go` imports, and imports in source
+files that require non-default custom build tags. Checksum-verified module
+`go.mod` edges propagate development scope only when the selected graph is
+complete. A module ZIP without a usable root `go.mod` may use a separately
+checksum-verified fixed-proxy `.mod` response; otherwise it contributes no edge
+metadata. Production reachability wins for shared modules, and missing evidence
+keeps transitive modules in production scope.
+
 ## CI recommended combinations
 
 ```bash

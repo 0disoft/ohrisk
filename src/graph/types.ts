@@ -49,6 +49,8 @@ export type DependencyNode = {
   installNames?: string[];
   resolved?: string;
   integrity?: string;
+  /** Internal checksum for the module's standalone go.mod response. */
+  goModIntegrity?: string;
   dependencyType: DependencyType;
   direct: boolean;
   paths: string[][];

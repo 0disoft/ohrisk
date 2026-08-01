@@ -28,7 +28,10 @@ import {
 } from "./cache";
 import { collectCargoCrateEvidence } from "./cargo-crate";
 import { collectRegisteredEcosystemEvidence } from "../ecosystems/registry";
-import { collectGoModuleZipEvidence } from "./go-module-zip";
+import {
+  collectGoModuleZipEvidence,
+  readChecksumVerifiedGoModuleRequirements
+} from "./go-module-zip";
 import { collectLocalPackageEvidence } from "./local-package";
 import { collectMavenJarEvidence } from "./maven-jar";
 import { collectNugetNupkgEvidence } from "./nuget-nupkg";
@@ -180,8 +183,10 @@ const MAVEN_JAR_MAX_BYTES = 32 * 1024 * 1024;
 const MAVEN_CHECKSUM_MAX_BYTES = 256;
 const GO_MODULE_PROXY_BASE_URL = "https://proxy.golang.org";
 const GO_MODULE_PROXY_HOSTS = new Set(["proxy.golang.org", "storage.googleapis.com"]);
+const GO_MODULE_MOD_MAX_BYTES = 2 * 1024 * 1024;
 const GO_MODULE_TRANSIENT_FETCH_ATTEMPTS = 2;
 const GO_MODULE_TRANSIENT_RETRY_DELAY_MS = 200;
+
 const CARGO_CRATES_IO_SOURCES = new Set([
   "registry+https://github.com/rust-lang/crates.io-index",
   "registry+https://index.crates.io/"
@@ -510,6 +515,23 @@ async function collectNodeEvidence(input: {
       })
     : undefined;
   if (ecosystemEvidence) {
+    if (
+      input.node.ecosystem === "go"
+      && ecosystemEvidence.ok
+      && ecosystemEvidence.value.source !== "unavailable"
+      && ecosystemEvidence.value.goModuleRequirements === undefined
+    ) {
+      return collectVerifiedRemoteGoModuleRequirements({
+        node: input.node,
+        evidence: ecosystemEvidence.value,
+        fetchArtifact: input.fetchArtifact,
+        resolveArtifactHost: input.resolveArtifactHost,
+        fetchTimeoutMs: input.fetchTimeoutMs,
+        offline: input.offline,
+        artifactCache: input.artifactCache,
+        allowedHosts: input.allowedHosts
+      });
+    }
     if (
       (
         input.node.ecosystem !== "maven"
@@ -1226,40 +1248,130 @@ async function collectRemoteGoModuleEvidence(input: {
         : "Go module coordinates were not safe for the fixed public module proxy."
     }));
   }
-  if (!input.node.integrity || !/^h1:[A-Za-z0-9+/]{43}=$/u.test(input.node.integrity)) {
-    return ok({
+  const zipChecksum = input.node.integrity && /^h1:[A-Za-z0-9+/]{43}=$/u.test(input.node.integrity)
+    ? input.node.integrity
+    : undefined;
+  let evidence: LicenseEvidence;
+
+  if (!zipChecksum) {
+    evidence = {
       packageId: input.node.id,
       files: [],
       source: "unavailable",
       warnings: [
         "Go module source was not fetched because go.sum did not contain an exact h1 checksum for the module zip."
       ]
+    };
+  } else {
+    const resolved = goModuleProxyZipUrl(coordinates.modulePath, coordinates.version);
+    if (!resolved) {
+      return ok(unsupportedRemoteEcosystemEvidence({
+        node: input.node,
+        reason: "Go module path or version could not be encoded safely for the fixed public module proxy."
+      }));
+    }
+    const zip = await readRemoteArtifactBytes({
+      code: "TARBALL_FETCH_FAILED",
+      packageId: input.node.id,
+      url: resolved,
+      blockedMessage: "Go module proxy URL targets an unsupported or blocked host.",
+      resolveFailureMessage: "Failed to resolve the Go module proxy host.",
+      fetchFailureMessage: "Failed to fetch Go module zip.",
+      tooLargeMessage: "Go module zip response exceeded the maximum supported size.",
+      unreadableMessage: "Go module zip response did not expose a readable body stream.",
+      offlineMissMessage: "Offline mode could not find the Go module zip in the artifact cache.",
+      details: {
+        modulePath: coordinates.modulePath,
+        version: coordinates.version,
+        proxy: GO_MODULE_PROXY_BASE_URL
+      },
+      maxBytes: input.artifactMaxBytes,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      allowedHosts: input.allowedHosts,
+      permittedHosts: GO_MODULE_PROXY_HOSTS,
+      urlDetailKey: "resolved",
+      transientFetchAttempts: GO_MODULE_TRANSIENT_FETCH_ATTEMPTS,
+      transientRetryDelayMs: GO_MODULE_TRANSIENT_RETRY_DELAY_MS
     });
+    if (!zip.ok) {
+      return zip;
+    }
+
+    const collected = collectGoModuleZipEvidence({
+      packageId: input.node.id,
+      modulePath: coordinates.modulePath,
+      version: coordinates.version,
+      checksum: zipChecksum,
+      zip: zip.value,
+      artifactMaxBytes: input.artifactMaxBytes
+    });
+    if (!collected.ok) {
+      return collected;
+    }
+    evidence = collected.value;
   }
 
-  const resolved = goModuleProxyZipUrl(coordinates.modulePath, coordinates.version);
-  if (!resolved) {
-    return ok(unsupportedRemoteEcosystemEvidence({
-      node: input.node,
-      reason: "Go module path or version could not be encoded safely for the fixed public module proxy."
-    }));
+  return collectVerifiedRemoteGoModuleRequirements({
+    node: input.node,
+    evidence,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    allowedHosts: input.allowedHosts
+  });
+}
+
+async function collectVerifiedRemoteGoModuleRequirements(input: {
+  node: DependencyNode;
+  evidence: LicenseEvidence;
+  fetchArtifact: ArtifactFetcher;
+  resolveArtifactHost: ArtifactHostResolver | undefined;
+  fetchTimeoutMs: number;
+  offline: boolean;
+  artifactCache: ArtifactCache | undefined;
+  allowedHosts: ReadonlySet<string>;
+}): Promise<Result<LicenseEvidence, OhriskError>> {
+  if (input.evidence.goModuleRequirements !== undefined) {
+    return ok(input.evidence);
   }
-  const zip = await readRemoteArtifactBytes({
+  const goModChecksum = input.node.goModIntegrity
+    && /^h1:[A-Za-z0-9+/]{43}=$/u.test(input.node.goModIntegrity)
+    ? input.node.goModIntegrity
+    : undefined;
+  if (!goModChecksum) {
+    return ok(input.evidence);
+  }
+  const coordinates = remoteGoModuleCoordinates(input.node);
+  if (!coordinates) {
+    return ok(input.evidence);
+  }
+  const goModUrl = goModuleProxyModUrl(coordinates.modulePath, coordinates.version);
+  if (!goModUrl) {
+    return ok(input.evidence);
+  }
+
+  const goMod = await readRemoteArtifactBytes({
     code: "TARBALL_FETCH_FAILED",
     packageId: input.node.id,
-    url: resolved,
+    url: goModUrl,
     blockedMessage: "Go module proxy URL targets an unsupported or blocked host.",
     resolveFailureMessage: "Failed to resolve the Go module proxy host.",
-    fetchFailureMessage: "Failed to fetch Go module zip.",
-    tooLargeMessage: "Go module zip response exceeded the maximum supported size.",
-    unreadableMessage: "Go module zip response did not expose a readable body stream.",
-    offlineMissMessage: "Offline mode could not find the Go module zip in the artifact cache.",
+    fetchFailureMessage: "Failed to fetch the checksum-identified Go module go.mod.",
+    tooLargeMessage: "Go module go.mod response exceeded the maximum supported size.",
+    unreadableMessage: "Go module go.mod response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find the Go module go.mod in the artifact cache.",
     details: {
       modulePath: coordinates.modulePath,
       version: coordinates.version,
       proxy: GO_MODULE_PROXY_BASE_URL
     },
-    maxBytes: input.artifactMaxBytes,
+    maxBytes: GO_MODULE_MOD_MAX_BYTES,
     fetchArtifact: input.fetchArtifact,
     resolveArtifactHost: input.resolveArtifactHost,
     fetchTimeoutMs: input.fetchTimeoutMs,
@@ -1271,18 +1383,17 @@ async function collectRemoteGoModuleEvidence(input: {
     transientFetchAttempts: GO_MODULE_TRANSIENT_FETCH_ATTEMPTS,
     transientRetryDelayMs: GO_MODULE_TRANSIENT_RETRY_DELAY_MS
   });
-  if (!zip.ok) {
-    return zip;
+  if (!goMod.ok) {
+    return ok(input.evidence);
   }
 
-  return collectGoModuleZipEvidence({
-    packageId: input.node.id,
-    modulePath: coordinates.modulePath,
-    version: coordinates.version,
-    checksum: input.node.integrity,
-    zip: zip.value,
-    artifactMaxBytes: input.artifactMaxBytes
+  const requirements = readChecksumVerifiedGoModuleRequirements({
+    checksum: goModChecksum,
+    goMod: goMod.value
   });
+  return ok(requirements === undefined
+    ? input.evidence
+    : { ...input.evidence, goModuleRequirements: requirements });
 }
 
 async function collectRemoteCargoCrateEvidence(input: {
@@ -1385,12 +1496,25 @@ function remoteGoModuleCoordinates(node: DependencyNode): {
 }
 
 export function goModuleProxyZipUrl(modulePath: string, version: string): string | undefined {
+  return goModuleProxyArtifactUrl(modulePath, version, "zip");
+}
+
+export function goModuleProxyModUrl(modulePath: string, version: string): string | undefined {
+  return goModuleProxyArtifactUrl(modulePath, version, "mod");
+}
+
+function goModuleProxyArtifactUrl(
+  modulePath: string,
+  version: string,
+  extension: "mod" | "zip"
+): string | undefined {
   const escapedModulePath = escapeGoProxyModulePath(modulePath);
   const escapedVersion = escapeGoProxyVersion(version);
   return escapedModulePath && escapedVersion
-    ? `${GO_MODULE_PROXY_BASE_URL}/${escapedModulePath}/@v/${escapedVersion}.zip`
+    ? `${GO_MODULE_PROXY_BASE_URL}/${escapedModulePath}/@v/${escapedVersion}.${extension}`
     : undefined;
 }
+
 
 function escapeGoProxyModulePath(modulePath: string): string | undefined {
   if (

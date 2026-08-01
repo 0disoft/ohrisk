@@ -28,7 +28,7 @@ import {
 } from "./dotnet-nuget-lock";
 import { parseMixLockfile, parseMixLockText } from "./elixir-mix-lock";
 import { parseRebarLockfile, parseRebarLockText } from "./erlang-rebar-lock";
-import { parseGoModFile, parseGoModText } from "./go-mod";
+import { parseGoModFile, parseGoModText, type GoSourceFile } from "./go-mod";
 import { parseGoWorkFile, parseGoWorkText, type GoWorkModuleInput } from "./go-work";
 import type { DependencyGraph } from "./types";
 import { parseHelmChartFile, parseHelmChartText } from "./helm-chart";
@@ -111,6 +111,7 @@ export type LockfileTextParseInput = {
   cargoMemberManifestTexts?: string[];
   cargoRootName?: string;
   goSumText?: string;
+  goSourceFiles?: GoSourceFile[];
   goWorkModuleInputs?: GoWorkModuleInput[];
   goWorkDir?: string;
   composerJsonText?: string;
@@ -276,7 +277,8 @@ export function parseLockfileTextForKind(
       }));
     case "go-mod":
       return parseGoModText(input.text, input.lockfilePath, omitUndefined({
-        goSumText: input.goSumText
+        goSumText: input.goSumText,
+        sourceFiles: input.goSourceFiles
       }));
     case "pipfile-lock":
       return parsePipfileLockText(input.text, input.lockfilePath, omitUndefined({

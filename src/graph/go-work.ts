@@ -8,8 +8,10 @@ import {
   parseGoModRecords,
   parseGoModText,
   parseGoReplaceDirectiveLine,
+  readBoundedGoSourceFiles,
   splitGoDirectiveFields,
   stripGoLineComment,
+  type GoSourceFile,
   type GoReplaceDirective
 } from "./go-mod";
 import {
@@ -37,6 +39,7 @@ export type GoWorkModuleInput = {
   goModPath: string;
   goModText: string;
   goSumText?: string;
+  sourceFiles?: GoSourceFile[];
 };
 
 type GoWorkDirectives = {
@@ -145,6 +148,7 @@ export function parseGoWorkText(
   )) {
     const graph = parseGoModText(moduleInput.goModText, moduleInput.goModPath, omitUndefined({
       goSumText: moduleInput.goSumText,
+      sourceFiles: moduleInput.sourceFiles,
       replacementOverrideGroups: [
         workspaceReplacementGroup.value,
         moduleReplacementGroup.value
@@ -299,6 +303,7 @@ function readGoWorkModuleInputs(input: {
       moduleRootDir: modulePath.moduleRootDir,
       goModPath: modulePath.goModPath,
       goModText: goModText.value,
+      sourceFiles: readBoundedGoSourceFiles(modulePath.goModPath),
       ...(goSumText.value ? { goSumText: goSumText.value } : {})
     });
   }

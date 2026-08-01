@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { Buffer } from "node:buffer";
 import { isIP } from "node:net";
 import {
   createProgressRuntime,
@@ -39,6 +40,7 @@ import {
 import {
   findNearestDirectoryPackagesPropsPath
 } from "../graph/dotnet-nuget-lock";
+import type { GoSourceFile } from "../graph/go-mod";
 import {
   findGoWorkModulePaths,
   type GoWorkModuleInput
@@ -58,6 +60,7 @@ import {
   findCargoWorkspaceMemberManifestPathsFromRelativePaths
 } from "../graph/rust-cargo-lock";
 import { mergeDependencyGraphs, type SourcedDependencyGraph } from "../graph/merge";
+import { refineGoDependencyScopes } from "../graph/go-scope";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
 import { normalizeAllLicenseEvidence, normalizeLicenseEvidence } from "../license/normalize";
 import type { NormalizedLicense } from "../license/types";
@@ -366,12 +369,12 @@ async function runDiff(
     return exitCodeForError(baselineProject.error);
   }
 
-  const baselineScanGraph = filterGraphForProdOnly(
+  const baselineCollectionGraph = filterGraphBeforeEvidence(
     baselineProject.value.graph,
     command.prodOnly
   );
   const baselineEvidence = await collectEvidenceForGraph({
-    graph: baselineScanGraph,
+    graph: baselineCollectionGraph,
     projectRoot: currentProject.value.project.rootDir,
     evidenceRuntime: evidenceRuntime.value,
     ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {})
@@ -382,7 +385,15 @@ async function runDiff(
     return exitCodeForError(baselineEvidence.error);
   }
 
-  const baselineLicenses = normalizeAllLicenseEvidence(baselineEvidence.value);
+  const baselineScanGraph = filterGraphForProdOnly(
+    refineGoDependencyScopes(baselineCollectionGraph, baselineEvidence.value),
+    command.prodOnly
+  );
+  const baselineNodeIds = new Set(baselineScanGraph.nodes.map((node) => node.id));
+  const relevantBaselineEvidence = baselineEvidence.value.filter((item) =>
+    baselineNodeIds.has(item.packageId)
+  );
+  const baselineLicenses = normalizeAllLicenseEvidence(relevantBaselineEvidence);
   const baselineFindings = evaluateLicenseRisks({
     licenses: baselineLicenses,
     dependencies: baselineScanGraph.nodes,
@@ -394,6 +405,7 @@ async function runDiff(
     profile: command.profile,
     policy: policy.value,
     evidenceRuntime: evidenceRuntime.value,
+    prodOnly: command.prodOnly,
     applyWaivers: false,
     now: io.now ?? Date.now,
     ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {})
@@ -816,7 +828,7 @@ async function scanProject(input: {
     if (isErr(graph)) {
       return graph;
     }
-    scanGraph = filterGraphForProdOnly(graph.value, input.prodOnly);
+    scanGraph = filterGraphBeforeEvidence(graph.value, input.prodOnly);
   }
 
   return evaluateProjectScan({
@@ -825,6 +837,7 @@ async function scanProject(input: {
     profile: input.profile,
     policy: policy.value,
     evidenceRuntime: evidenceRuntime.value,
+    prodOnly: input.prodOnly,
     applyWaivers: input.applyWaivers,
     now: input.now,
     ...(input.configurationRoot
@@ -872,7 +885,7 @@ function loadArchiveProjectGraph(input: {
 
   return ok({
     project: loaded.value.project,
-    scanGraph: filterGraphForProdOnly(loaded.value.graph, input.prodOnly)
+    scanGraph: filterGraphBeforeEvidence(loaded.value.graph, input.prodOnly)
   });
 }
 
@@ -899,7 +912,7 @@ function loadProjectGraph(input: {
     return graph;
   }
 
-  const scanGraph = filterGraphForProdOnly(graph.value, input.prodOnly);
+  const scanGraph = filterGraphBeforeEvidence(graph.value, input.prodOnly);
 
   return ok({
     project: discovered.value,
@@ -948,6 +961,7 @@ async function evaluateProjectScan(input: {
   profile: Extract<CliCommand, { kind: "scan" | "ci" | "diff" }>["profile"];
   policy: ResolvedPolicyConfig;
   evidenceRuntime: EvidenceRuntimeOptions;
+  prodOnly: boolean;
   applyWaivers: boolean;
   now: ScanClock;
   workspaceRoot?: string;
@@ -982,18 +996,24 @@ async function evaluateProjectScan(input: {
   }
 
   input.progress?.(SCAN_PROGRESS_EVALUATE_PERCENT, "Evaluating license risk...");
-  const normalizedLicenses = normalizeAllLicenseEvidence(evidence.value);
+  const scanGraph = filterGraphForProdOnly(
+    refineGoDependencyScopes(input.scanGraph, evidence.value),
+    input.prodOnly
+  );
+  const scanNodeIds = new Set(scanGraph.nodes.map((node) => node.id));
+  const relevantEvidence = evidence.value.filter((item) => scanNodeIds.has(item.packageId));
+  const normalizedLicenses = normalizeAllLicenseEvidence(relevantEvidence);
   const riskFindings = evaluateLicenseRisks({
     licenses: normalizedLicenses,
-    dependencies: input.scanGraph.nodes,
+    dependencies: scanGraph.nodes,
     profile: input.profile,
     policy: input.policy
   });
   if (!input.applyWaivers) {
     return ok({
       project: input.project,
-      graph: input.scanGraph,
-      evidence: evidence.value,
+      graph: scanGraph,
+      evidence: relevantEvidence,
       normalizedLicenses,
       riskFindings,
       waivedFindings: [],
@@ -1016,8 +1036,8 @@ async function evaluateProjectScan(input: {
 
   return ok({
     project: input.project,
-    graph: input.scanGraph,
-    evidence: evidence.value,
+    graph: scanGraph,
+    evidence: relevantEvidence,
     normalizedLicenses,
     riskFindings: appliedWaivers.activeFindings,
     waivedFindings: appliedWaivers.waivedFindings,
@@ -1059,6 +1079,28 @@ function filterGraphForProdOnly(graph: DependencyGraph, prodOnly: boolean): Depe
   const embeddedEvidence = graph.embeddedEvidence?.filter((evidence) =>
     nodeIds.has(evidence.packageId)
   );
+  return {
+    ...graph,
+    nodes,
+    ...(embeddedEvidence ? { embeddedEvidence } : {})
+  };
+}
+
+export function filterGraphBeforeEvidence(graph: DependencyGraph, prodOnly: boolean): DependencyGraph {
+  if (!prodOnly) {
+    return graph;
+  }
+  const productionGraph = filterGraphForProdOnly(graph, true);
+  const productionNodesById = new Map(productionGraph.nodes.map((node) => [node.id, node]));
+  const nodes = graph.nodes.flatMap((node) => {
+    if (node.ecosystem === "go") {
+      return [node];
+    }
+    const productionNode = productionNodesById.get(node.id);
+    return productionNode ? [productionNode] : [];
+  });
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const embeddedEvidence = graph.embeddedEvidence?.filter((item) => nodeIds.has(item.packageId));
   return {
     ...graph,
     nodes,
@@ -1411,6 +1453,7 @@ function readBaselineGoWorkModuleInputs(input: {
   baselineRef: string;
   goWorkText: string;
   readRefFile: GitRefFileReader;
+  baselineFiles?: ReadonlySet<string>;
 }): Result<GoWorkModuleInput[] | undefined, OhriskError> {
   const modulePaths = findGoWorkModulePaths({
     goWorkText: input.goWorkText,
@@ -1442,16 +1485,89 @@ function readBaselineGoWorkModuleInputs(input: {
       return goSumText;
     }
 
+    const sourceFiles = input.baselineFiles
+      ? readBaselineGoSourceFiles({
+          projectRoot: input.project.rootDir,
+          baselineRef: input.baselineRef,
+          moduleRootRelativePath: path.posix.dirname(modulePath.goModRelativePath),
+          baselineFiles: input.baselineFiles,
+          readRefFile: input.readRefFile
+        })
+      : ok(undefined);
+    if (isErr(sourceFiles)) {
+      return sourceFiles;
+    }
+
     modules.push({
       usePath: modulePath.usePath,
       moduleRootDir: modulePath.moduleRootDir,
       goModPath: `${input.baselineRef}:${modulePath.goModRelativePath}`,
       goModText: goModText.value,
-      ...(goSumText.value ? { goSumText: goSumText.value } : {})
+      ...(goSumText.value ? { goSumText: goSumText.value } : {}),
+      ...(sourceFiles.value ? { sourceFiles: sourceFiles.value } : {})
     });
   }
 
   return ok(modules);
+}
+
+const BASELINE_GO_SOURCE_FILE_LIMIT = 256;
+const BASELINE_GO_SOURCE_MAX_DEPTH = 4;
+const BASELINE_GO_SOURCE_MAX_BYTES = 64 * 1024 * 1024;
+const BASELINE_GO_IGNORED_DIRECTORIES = new Set([".git", "node_modules", "vendor"]);
+
+function readBaselineGoSourceFiles(input: {
+  projectRoot: string;
+  baselineRef: string;
+  moduleRootRelativePath: string;
+  baselineFiles: ReadonlySet<string>;
+  readRefFile: GitRefFileReader;
+}): Result<GoSourceFile[] | undefined, OhriskError> {
+  const moduleRoot = input.moduleRootRelativePath === "."
+    ? ""
+    : input.moduleRootRelativePath.replaceAll("\\", "/").replace(/^\.\//u, "").replace(/\/$/u, "");
+  const prefix = moduleRoot === "" ? "" : `${moduleRoot}/`;
+  const relativeFiles = [...input.baselineFiles]
+    .map((file) => file.replaceAll("\\", "/"))
+    .filter((file) => prefix === "" || file.startsWith(prefix));
+  const nestedModuleRoots = relativeFiles
+    .filter((file) => file.endsWith("/go.mod"))
+    .map((file) => file.slice(prefix.length, -"/go.mod".length))
+    .filter((root) => root !== "");
+  const candidates = relativeFiles
+    .filter((file) => file.endsWith(".go"))
+    .map((file) => ({ absoluteRelativePath: file, moduleRelativePath: file.slice(prefix.length) }))
+    .filter(({ moduleRelativePath }) => {
+      const segments = moduleRelativePath.split("/");
+      return segments.length - 1 <= BASELINE_GO_SOURCE_MAX_DEPTH
+        && !segments.some((segment) => BASELINE_GO_IGNORED_DIRECTORIES.has(segment))
+        && !nestedModuleRoots.some((root) =>
+          moduleRelativePath === root || moduleRelativePath.startsWith(`${root}/`)
+        );
+    })
+    .sort((left, right) => left.moduleRelativePath.localeCompare(right.moduleRelativePath));
+  if (candidates.length > BASELINE_GO_SOURCE_FILE_LIMIT) {
+    return ok([]);
+  }
+
+  const sourceFiles: GoSourceFile[] = [];
+  let totalBytes = 0;
+  for (const candidate of candidates) {
+    const text = input.readRefFile({
+      projectRoot: input.projectRoot,
+      ref: input.baselineRef,
+      relativePath: candidate.absoluteRelativePath
+    });
+    if (isErr(text)) {
+      return text;
+    }
+    totalBytes += Buffer.byteLength(text.value, "utf8");
+    if (totalBytes > BASELINE_GO_SOURCE_MAX_BYTES) {
+      return ok([]);
+    }
+    sourceFiles.push({ path: candidate.moduleRelativePath, text: text.value });
+  }
+  return ok(sourceFiles);
 }
 
 type BaselineProjectGraph = {
@@ -1459,7 +1575,7 @@ type BaselineProjectGraph = {
   lockfiles: ProjectLockfile[];
 };
 
-function loadBaselineProjectGraph(input: {
+export function loadBaselineProjectGraph(input: {
   currentProject: {
     project: ProjectInput;
     scanGraph: DependencyGraph;
@@ -1496,6 +1612,16 @@ function loadBaselineProjectGraph(input: {
     }
   } else {
     baselineLockfiles = [input.currentProject.project.lockfile];
+    if (baselineLockfiles.some((lockfile) => lockfile.kind === "go-mod" || lockfile.kind === "go-work")) {
+      const listed = input.listRefFiles({
+        projectRoot,
+        ref: input.baselineRef
+      });
+      if (isErr(listed)) {
+        return listed;
+      }
+      baselineRelativePaths = listed.value;
+    }
   }
 
   if (baselineLockfiles.length === 0) {
@@ -1670,12 +1796,26 @@ function parseBaselineLockfileGraph(input: {
     return baselineGoSum;
   }
 
+  const baselineGoSourceFiles = input.lockfile.kind === "go-mod" && input.baselineFiles
+    ? readBaselineGoSourceFiles({
+        projectRoot: input.projectRoot,
+        baselineRef: input.baselineRef,
+        moduleRootRelativePath: lockfileDirectory,
+        baselineFiles: input.baselineFiles,
+        readRefFile: input.readRefFile
+      })
+    : ok(undefined);
+  if (isErr(baselineGoSourceFiles)) {
+    return baselineGoSourceFiles;
+  }
+
   const baselineGoWorkModules = input.lockfile.kind === "go-work"
     ? readBaselineGoWorkModuleInputs({
         project,
         baselineRef: input.baselineRef,
         goWorkText: baselineLockfile.value,
-        readRefFile: input.readRefFile
+        readRefFile: input.readRefFile,
+        ...(input.baselineFiles ? { baselineFiles: input.baselineFiles } : {})
       })
     : ok(undefined);
   if (isErr(baselineGoWorkModules)) {
@@ -1751,6 +1891,7 @@ function parseBaselineLockfileGraph(input: {
       ? { cargoRootName: input.rootNameHint }
       : {}),
     ...(baselineGoSum.value ? { goSumText: baselineGoSum.value } : {}),
+    ...(baselineGoSourceFiles.value ? { goSourceFiles: baselineGoSourceFiles.value } : {}),
     ...(baselineGoWorkModules.value?.length
       ? { goWorkModuleInputs: baselineGoWorkModules.value }
       : {}),

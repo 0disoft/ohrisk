@@ -2,6 +2,7 @@ import { omitUndefined } from "../shared/object";
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 
+import { parseGoModRecords } from "../graph/go-mod";
 import {
   readTextFileWithLimit,
   type TextFileReadError
@@ -13,6 +14,7 @@ import type { OhriskError } from "../shared/errors";
 
 const GO_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 const GO_LICENSE_FILE_LIMIT = 50;
+const GO_MODULE_MOD_MAX_BYTES = 2 * 1024 * 1024;
 
 export function collectGoModuleEvidence(input: {
   packageId: string;
@@ -57,12 +59,34 @@ export function collectGoModuleEvidence(input: {
     warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Go module source.");
   }
 
+  const goModuleRequirements = readLocalGoModuleRequirements(moduleDir);
+
   return ok({
     packageId: input.packageId,
+    ...(goModuleRequirements !== undefined ? { goModuleRequirements } : {}),
     files,
     source: "local",
     warnings
   });
+}
+
+function readLocalGoModuleRequirements(moduleDir: string): string[] | undefined {
+  const goModPath = path.join(moduleDir, "go.mod");
+  if (!existsSync(goModPath)) {
+    return undefined;
+  }
+  const goModText = readTextFileWithLimit({
+    filePath: goModPath,
+    maxBytes: GO_MODULE_MOD_MAX_BYTES
+  });
+  if (!goModText.ok) {
+    return undefined;
+  }
+  const parsed = parseGoModRecords(goModText.value, goModPath, { strictEdges: true });
+  if (!parsed.ok) {
+    return undefined;
+  }
+  return [...new Set(parsed.value.records.map((record) => record.modulePath))].sort();
 }
 
 function findGoModuleDir(input: {

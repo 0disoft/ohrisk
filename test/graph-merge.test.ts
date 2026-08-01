@@ -3,6 +3,42 @@ import { describe, expect, test } from "bun:test";
 import { mergeDependencyGraphs } from "../src/graph/merge";
 
 describe("mergeDependencyGraphs", () => {
+  test("preserves standalone Go module integrity across merged graphs", () => {
+    const node = {
+      id: "example.com/module@v1.0.0",
+      name: "example.com/module",
+      version: "v1.0.0",
+      ecosystem: "go" as const,
+      integrity: `h1:${"A".repeat(43)}=`,
+      dependencyType: "production" as const,
+      direct: true,
+      paths: [["workspace", "example.com/module@v1.0.0"]]
+    };
+    const merged = mergeDependencyGraphs([
+      {
+        source: { lockfileKind: "go-work", lockfilePath: "/repo/go.work" },
+        graph: {
+          rootName: "workspace",
+          lockfilePath: "/repo/go.work",
+          nodes: [{
+            ...node,
+            goModIntegrity: `h1:${"B".repeat(43)}=`
+          }]
+        }
+      },
+      {
+        source: { lockfileKind: "go-mod", lockfilePath: "/repo/app/go.mod" },
+        graph: {
+          rootName: "workspace",
+          lockfilePath: "/repo/app/go.mod",
+          nodes: [node]
+        }
+      }
+    ]);
+
+    expect(merged.nodes[0]?.goModIntegrity).toBe(`h1:${"B".repeat(43)}=`);
+  });
+
   test("deduplicates by Package URL and preserves paths, evidence, and provenance", () => {
     const merged = mergeDependencyGraphs([
       {
@@ -24,6 +60,7 @@ describe("mergeDependencyGraphs", () => {
           embeddedEvidence: [{
             packageId: "@scope/example@1.0.0",
             metadataLicense: "MIT",
+            goModuleRequirements: ["example.com/left"],
             files: [],
             source: "sbom",
             warnings: []
@@ -54,6 +91,7 @@ describe("mergeDependencyGraphs", () => {
           }],
           embeddedEvidence: [{
             packageId: "alias-name@1.0.0",
+            goModuleRequirements: ["example.com/right"],
             files: [{ path: "LICENSE", kind: "license", text: "MIT License" }],
             source: "local",
             warnings: ["second source"]
@@ -89,6 +127,7 @@ describe("mergeDependencyGraphs", () => {
     expect(merged.embeddedEvidence).toEqual([expect.objectContaining({
       packageId: "@scope/example@1.0.0",
       metadataLicense: "MIT",
+      goModuleRequirements: ["example.com/left", "example.com/right"],
       source: "local",
       files: [{ path: "LICENSE", kind: "license", text: "MIT License" }],
       warnings: ["second source"]
