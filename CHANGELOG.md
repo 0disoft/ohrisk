@@ -9,6 +9,10 @@
   complete parse for development-scope propagation. Missing, mismatched, or
   malformed edge metadata remains unavailable instead of being treated as an
   empty dependency set.
+- Production-only Go scans now keep a shared module in production scope when a
+  production dependency also requires it, even if local source analysis
+  classified that module as development-only, so its license risk is not dropped
+  from `--prod` reports.
 
 ## 1.14.1 - 2026-07-28
 

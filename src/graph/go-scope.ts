@@ -45,15 +45,19 @@ export function refineGoDependencyScopes(
       }
       const productionPath = productionPaths.get(node.id);
       const developmentPath = developmentPaths.get(node.id);
-      if (developmentPath && !productionPath) {
+      if (productionPath) {
         return {
           ...node,
-          dependencyType: "development",
-          paths: [developmentPath]
+          dependencyType: "production",
+          paths: [productionPath]
         };
       }
-      return productionPath && !node.direct
-        ? { ...node, paths: [productionPath] }
+      return developmentPath
+        ? {
+            ...node,
+            dependencyType: "development",
+            paths: [developmentPath]
+          }
         : node;
     })
   };

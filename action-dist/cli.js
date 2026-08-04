@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 52a6470bf7dc68d61e2b39de27888078fb3b834d7a2026312177b4d424358560
+// ohrisk-action-source-sha256: 8333e958a5d463f2201db485b53068934a7a303f2ea5203f32041e79ef27ac9c
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18539,7 +18539,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.2";
+var OHRISK_VERSION = "1.14.3";
 
 // src/archive/archive-project.ts
 import path47 from "node:path";
@@ -52838,14 +52838,18 @@ function refineGoDependencyScopes(graph, evidence) {
       }
       const productionPath = productionPaths.get(node.id);
       const developmentPath = developmentPaths.get(node.id);
-      if (developmentPath && !productionPath) {
+      if (productionPath) {
         return {
           ...node,
-          dependencyType: "development",
-          paths: [developmentPath]
+          dependencyType: "production",
+          paths: [productionPath]
         };
       }
-      return productionPath && !node.direct ? { ...node, paths: [productionPath] } : node;
+      return developmentPath ? {
+        ...node,
+        dependencyType: "development",
+        paths: [developmentPath]
+      } : node;
     })
   };
 }

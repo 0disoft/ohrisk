@@ -131,4 +131,32 @@ describe("refineGoDependencyScopes", () => {
       child.id
     ]]);
   });
+
+  test("promotes a shared module to production when a production root also requires it", () => {
+    const graph: DependencyGraph = {
+      rootName: "example.com/root",
+      lockfilePath: "go.mod",
+      nodes: [
+        node({ name: "example.com/runtime", dependencyType: "production", direct: true }),
+        node({ name: "example.com/tool", dependencyType: "development", direct: true }),
+        // Source analysis classified shared as development, but the production runtime requires it.
+        node({ name: "example.com/shared", dependencyType: "development", direct: false })
+      ]
+    };
+    const evidenceItems = [
+      evidence("example.com/runtime@v1.0.0", ["example.com/shared"]),
+      evidence("example.com/tool@v1.0.0", ["example.com/shared"]),
+      evidence("example.com/shared@v1.0.0", [])
+    ];
+
+    const refined = refineGoDependencyScopes(graph, evidenceItems);
+
+    const shared = refined.nodes.find((item) => item.name === "example.com/shared");
+    expect(shared?.dependencyType).toBe("production");
+    expect(shared?.paths).toEqual([[
+      "example.com/root",
+      "example.com/runtime@v1.0.0",
+      "example.com/shared@v1.0.0"
+    ]]);
+  });
 });
