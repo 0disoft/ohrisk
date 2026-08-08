@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: c5f157f9bae1045aa3765b5712686febcec0681a5b886f6faab41e27ef93e761
+// ohrisk-action-source-sha256: a4eb7012b4f993209da3e2d19c13c8a6e0a231745d3acd21599d41fd608379fc
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18539,7 +18539,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.4";
+var OHRISK_VERSION = "1.14.5";
 
 // src/archive/archive-project.ts
 import path47 from "node:path";
@@ -35605,6 +35605,11 @@ function escapeRegExp5(input) {
 }
 
 // src/graph/spdx-json.ts
+var SPDX_MAX_PATHS_PER_NODE = 64;
+var SPDX_MAX_PATH_DEPTH = 256;
+var SPDX_MAX_TRAVERSAL_PATHS = 200000;
+var SPDX_MAX_STORED_PATH_SEGMENTS = 1048576;
+var SPDX_TRUNCATED_PATH_SEGMENT = "<spdx-path-truncated>";
 function parseSpdxJsonFile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -35648,29 +35653,21 @@ function parseSpdxDocument(document2, lockfilePath) {
     packages,
     dependencyMap: dependencyMap.value
   });
-  const nodeMap = new Map;
-  for (const rootRef of rootRefs) {
-    const record = packages.find((pkg) => pkg.spdxId === rootRef);
-    if (!record) {
-      continue;
-    }
-    walkSpdxDependency({
-      record,
-      dependencyType: "production",
-      direct: true,
-      path: [rootName],
-      packages,
-      dependencyMap: dependencyMap.value,
-      nodeMap,
-      seen: new Set
-    });
-  }
+  const traversal = traverseSpdxDependencies({
+    rootName,
+    rootRefs,
+    packages,
+    dependencyMap: dependencyMap.value
+  });
+  const nodeMap = traversal.nodeMap;
+  const diagnostics = traversal.diagnostics;
   const nodes = [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id));
   const nodeIds = new Set(nodes.map((node) => node.id));
   return ok({
     rootName,
     lockfilePath,
     nodes,
+    ...diagnostics.length > 0 ? { diagnostics } : {},
     embeddedEvidence: packages.filter((pkg) => nodeIds.has(pkg.id)).map(spdxPackageEvidence)
   });
 }
@@ -35843,45 +35840,185 @@ function readSpdxRootRefs(input) {
   const inferredRoots = input.packages.map((pkg) => pkg.spdxId).filter((spdxId) => !referenced.has(spdxId)).sort();
   return inferredRoots.length > 0 ? inferredRoots : input.packages.map((pkg) => pkg.spdxId).sort();
 }
-function walkSpdxDependency(input) {
-  if (input.seen.has(input.record.spdxId)) {
-    return;
-  }
-  const nextSeen = new Set(input.seen);
-  nextSeen.add(input.record.spdxId);
-  const nextPath = [...input.path, input.record.id];
-  const existing = input.nodeMap.get(input.record.id);
-  if (existing) {
-    existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType23(existing.dependencyType, input.dependencyType);
-    existing.paths.push(nextPath);
-  } else {
-    input.nodeMap.set(input.record.id, {
-      id: input.record.id,
-      name: input.record.name,
-      version: input.record.version,
-      ecosystem: input.record.ecosystem,
-      dependencyType: input.dependencyType,
-      direct: input.direct,
-      paths: [nextPath]
-    });
-  }
-  for (const childRef of input.dependencyMap.get(input.record.spdxId) ?? []) {
-    const child = input.packages.find((pkg) => pkg.spdxId === childRef);
-    if (!child) {
+function traverseSpdxDependencies(input) {
+  const packagesByRef = new Map(input.packages.map((pkg) => [pkg.spdxId, pkg]));
+  const nodeMap = new Map;
+  const pathLimitAffected = new Set;
+  const depthLimitAffected = new Set;
+  const workLimitAffected = new Set;
+  const segmentLimitAffected = new Set;
+  const pathKeysByNodeId = new Map;
+  const expandedRefs = new Set;
+  let totalPaths = 0;
+  let totalStoredSegments = 0;
+  const stack = input.rootRefs.map((ref) => ({
+    ref,
+    pathIds: [input.rootName],
+    pathRefs: [],
+    direct: true,
+    depth: 1
+  }));
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) {
       continue;
     }
-    walkSpdxDependency({
-      record: child,
-      dependencyType: input.dependencyType,
-      direct: false,
-      path: nextPath,
-      packages: input.packages,
-      dependencyMap: input.dependencyMap,
-      nodeMap: input.nodeMap,
-      seen: nextSeen
+    if (current.pathRefs.includes(current.ref)) {
+      continue;
+    }
+    const record = packagesByRef.get(current.ref);
+    if (!record) {
+      continue;
+    }
+    if (totalPaths >= SPDX_MAX_TRAVERSAL_PATHS) {
+      workLimitAffected.add(record.id);
+      continue;
+    }
+    const nextPath = [...current.pathIds, record.id];
+    const nextPathRefs = [...current.pathRefs, current.ref];
+    const existing = nodeMap.get(record.id);
+    const pathKey = nextPath.join("\x00");
+    const pathKeys = pathKeysByNodeId.get(record.id) ?? new Set;
+    if (current.depth > SPDX_MAX_PATH_DEPTH) {
+      depthLimitAffected.add(record.id);
+      const summarizedPath = [input.rootName, SPDX_TRUNCATED_PATH_SEGMENT, record.id];
+      const summarizedKey = summarizedPath.join("\x00");
+      if (!pathKeys.has(summarizedKey)) {
+        pathKeys.add(summarizedKey);
+        pathKeysByNodeId.set(record.id, pathKeys);
+        totalPaths += 1;
+        totalStoredSegments += summarizedPath.length;
+        if (existing) {
+          existing.paths.push(summarizedPath);
+        } else {
+          const node = spdxNode(record, {
+            dependencyType: "production",
+            direct: current.direct,
+            paths: [summarizedPath]
+          });
+          nodeMap.set(record.id, node);
+        }
+      }
+      if (expandedRefs.has(current.ref)) {
+        continue;
+      }
+      expandedRefs.add(current.ref);
+      const childRefs2 = input.dependencyMap.get(current.ref) ?? [];
+      if (childRefs2.length > 0) {
+        const boundedPathIds = nextPath.length > SPDX_MAX_PATH_DEPTH ? nextPath.slice(-SPDX_MAX_PATH_DEPTH) : nextPath;
+        const boundedPathRefs = nextPathRefs.length > SPDX_MAX_PATH_DEPTH ? nextPathRefs.slice(-SPDX_MAX_PATH_DEPTH) : nextPathRefs;
+        for (let index = childRefs2.length - 1;index >= 0; index -= 1) {
+          const childRef = childRefs2[index];
+          if (!childRef) {
+            continue;
+          }
+          stack.push({
+            ref: childRef,
+            pathIds: boundedPathIds,
+            pathRefs: boundedPathRefs,
+            direct: false,
+            depth: current.depth + 1
+          });
+        }
+      }
+      continue;
+    }
+    if (pathKeys.has(pathKey)) {
+      continue;
+    }
+    if (pathKeys.size >= SPDX_MAX_PATHS_PER_NODE) {
+      pathLimitAffected.add(record.id);
+      continue;
+    }
+    if (totalStoredSegments + nextPath.length > SPDX_MAX_STORED_PATH_SEGMENTS) {
+      segmentLimitAffected.add(record.id);
+      continue;
+    }
+    pathKeys.add(pathKey);
+    pathKeysByNodeId.set(record.id, pathKeys);
+    totalPaths += 1;
+    totalStoredSegments += nextPath.length;
+    if (existing) {
+      existing.direct = existing.direct || current.direct;
+      existing.paths.push(nextPath);
+    } else {
+      nodeMap.set(record.id, spdxNode(record, {
+        dependencyType: "production",
+        direct: current.direct,
+        paths: [nextPath]
+      }));
+    }
+    if (expandedRefs.has(current.ref)) {
+      continue;
+    }
+    expandedRefs.add(current.ref);
+    const childRefs = input.dependencyMap.get(current.ref) ?? [];
+    if (childRefs.length > 0) {
+      const boundedPathIds = nextPath.length > SPDX_MAX_PATH_DEPTH ? nextPath.slice(-SPDX_MAX_PATH_DEPTH) : nextPath;
+      const boundedPathRefs = nextPathRefs.length > SPDX_MAX_PATH_DEPTH ? nextPathRefs.slice(-SPDX_MAX_PATH_DEPTH) : nextPathRefs;
+      for (let index = childRefs.length - 1;index >= 0; index -= 1) {
+        const childRef = childRefs[index];
+        if (!childRef) {
+          continue;
+        }
+        stack.push({
+          ref: childRef,
+          pathIds: boundedPathIds,
+          pathRefs: boundedPathRefs,
+          direct: false,
+          depth: current.depth + 1
+        });
+      }
+    }
+  }
+  for (const node of nodeMap.values()) {
+    node.paths.sort((left, right) => left.join("\x00").localeCompare(right.join("\x00")));
+  }
+  const diagnostics = [];
+  if (pathLimitAffected.size > 0) {
+    diagnostics.push({
+      code: "dependency_paths_truncated",
+      affectedNodeCount: pathLimitAffected.size,
+      limit: SPDX_MAX_PATHS_PER_NODE,
+      message: `SPDX dependency paths were limited to ${SPDX_MAX_PATHS_PER_NODE} paths per package.`
     });
   }
+  if (depthLimitAffected.size > 0) {
+    diagnostics.push({
+      code: "dependency_path_depth_summarized",
+      affectedNodeCount: depthLimitAffected.size,
+      limit: SPDX_MAX_PATH_DEPTH,
+      message: `SPDX dependency paths deeper than ${SPDX_MAX_PATH_DEPTH} packages were summarized.`
+    });
+  }
+  if (workLimitAffected.size > 0) {
+    diagnostics.push({
+      code: "dependency_paths_truncated",
+      affectedNodeCount: workLimitAffected.size,
+      limit: SPDX_MAX_TRAVERSAL_PATHS,
+      message: `SPDX dependency traversal stopped after ${SPDX_MAX_TRAVERSAL_PATHS} stored paths to bound scan work.`
+    });
+  }
+  if (segmentLimitAffected.size > 0) {
+    diagnostics.push({
+      code: "dependency_paths_truncated",
+      affectedNodeCount: segmentLimitAffected.size,
+      limit: SPDX_MAX_STORED_PATH_SEGMENTS,
+      message: `SPDX dependency paths were limited to ${SPDX_MAX_STORED_PATH_SEGMENTS} stored path segments.`
+    });
+  }
+  return { nodeMap, diagnostics };
+}
+function spdxNode(record, input) {
+  return {
+    id: record.id,
+    name: record.name,
+    version: record.version,
+    ecosystem: record.ecosystem,
+    dependencyType: input.dependencyType,
+    direct: input.direct,
+    paths: input.paths
+  };
 }
 function spdxPackageEvidence(record) {
   return {
@@ -35929,23 +36066,6 @@ function unsupportedSpdxDependencyError(lockfilePath, details) {
       ...structuredDetails
     }
   }));
-}
-function mergeDependencyType23(left, right) {
-  return dependencyTypeRank21(left) >= dependencyTypeRank21(right) ? left : right;
-}
-function dependencyTypeRank21(type) {
-  switch (type) {
-    case "production":
-      return 4;
-    case "optional":
-      return 3;
-    case "peer":
-      return 2;
-    case "development":
-      return 1;
-    case "unknown":
-      return 0;
-  }
 }
 function isRecord15(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -37118,7 +37238,7 @@ function readVcpkgManifestDependencies(manifest, manifestPath) {
     const existing = dependencies.get(parsed.value.name);
     dependencies.set(parsed.value.name, {
       name: parsed.value.name,
-      dependencyType: existing ? mergeDependencyType24(existing.dependencyType, parsed.value.dependencyType) : parsed.value.dependencyType
+      dependencyType: existing ? mergeDependencyType23(existing.dependencyType, parsed.value.dependencyType) : parsed.value.dependencyType
     });
   }
   return ok([...dependencies.values()].sort((left, right) => left.name.localeCompare(right.name)));
@@ -37343,7 +37463,7 @@ function appendVcpkgNodePath(input) {
   const pathIds = input.pathIds;
   if (existing) {
     existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType24(existing.dependencyType, input.dependencyType);
+    existing.dependencyType = mergeDependencyType23(existing.dependencyType, input.dependencyType);
     if (!existing.paths.some((pathItems) => samePath2(pathItems, pathIds))) {
       existing.paths.push(pathIds);
     }
@@ -37409,10 +37529,10 @@ function uniqueRecords(records) {
   }
   return [...byId.values()].sort((left, right) => left.id.localeCompare(right.id));
 }
-function mergeDependencyType24(left, right) {
-  return dependencyTypeRank22(left) >= dependencyTypeRank22(right) ? left : right;
+function mergeDependencyType23(left, right) {
+  return dependencyTypeRank21(left) >= dependencyTypeRank21(right) ? left : right;
 }
-function dependencyTypeRank22(type) {
+function dependencyTypeRank21(type) {
   switch (type) {
     case "production":
       return 4;

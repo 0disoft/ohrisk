@@ -18,6 +18,13 @@
   are reported as `conflicting-evidence` (unknown risk) so a restrictive claim
   such as AGPL is never silently replaced by a permissive claim such as MIT, and
   the merged result stays independent of input order.
+- SPDX JSON and RDF graph traversal is now iterative and bounded. Each package
+  stores at most 64 dependency paths, paths deeper than 256 packages are
+  summarized with a placeholder segment, and total traversal work and stored
+  path segments have explicit budgets. Limit overruns are reported through the
+  existing `dependency_paths_truncated` and `dependency_path_depth_summarized`
+  graph diagnostics instead of exploding path combinations or overflowing the
+  call stack.
 
 ## 1.14.1 - 2026-07-28
 

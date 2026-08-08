@@ -204,6 +204,15 @@ reviewed. Branches, tags, short revisions, unresolved URLs, and malformed remote
 sources fail closed, and rejected-source diagnostics redact credentials and URL
 parameters.
 
+For SPDX JSON and RDF SBOMs, dependency graph traversal is iterative and retains
+every reachable package while storing at most 64 dependency paths per package.
+Path depth is bounded at 256 packages; deeper paths are summarized with a
+placeholder segment. Additional paths or traversal work are reported through the
+same `dependency_paths_truncated` graph diagnostic used by Cargo and modern npm
+graphs, and summarized depth uses `dependency_path_depth_summarized`, so
+combinatorial path expansion cannot inflate finding identities or crash the
+scan.
+
 Local `uv.lock` directory sources are resolved from the lockfile location. In a
 repository-wide remote scan they may reference another selected project inside
 the validated repository checkout, while paths that escape the repository scan

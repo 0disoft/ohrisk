@@ -9,7 +9,18 @@ import {
   LOCKFILE_MAX_BYTES,
   readInputTextFile
 } from "./read-input-file";
-import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
+import type {
+  DependencyGraph,
+  DependencyGraphDiagnostic,
+  DependencyNode,
+  DependencyType
+} from "./types";
+
+export const SPDX_MAX_PATHS_PER_NODE = 64;
+export const SPDX_MAX_PATH_DEPTH = 256;
+const SPDX_MAX_TRAVERSAL_PATHS = 200_000;
+const SPDX_MAX_STORED_PATH_SEGMENTS = 1_048_576;
+const SPDX_TRUNCATED_PATH_SEGMENT = "<spdx-path-truncated>";
 
 type SpdxPackageRecord = {
   spdxId: string;
@@ -92,25 +103,14 @@ export function parseSpdxDocument(
     packages,
     dependencyMap: dependencyMap.value
   });
-  const nodeMap = new Map<string, DependencyNode>();
-
-  for (const rootRef of rootRefs) {
-    const record = packages.find((pkg) => pkg.spdxId === rootRef);
-    if (!record) {
-      continue;
-    }
-
-    walkSpdxDependency({
-      record,
-      dependencyType: "production",
-      direct: true,
-      path: [rootName],
-      packages,
-      dependencyMap: dependencyMap.value,
-      nodeMap,
-      seen: new Set()
-    });
-  }
+  const traversal = traverseSpdxDependencies({
+    rootName,
+    rootRefs,
+    packages,
+    dependencyMap: dependencyMap.value
+  });
+  const nodeMap = traversal.nodeMap;
+  const diagnostics = traversal.diagnostics;
 
   const nodes = [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id));
   const nodeIds = new Set(nodes.map((node) => node.id));
@@ -119,6 +119,9 @@ export function parseSpdxDocument(
     rootName,
     lockfilePath,
     nodes,
+    ...(diagnostics.length > 0
+      ? { diagnostics }
+      : {}),
     embeddedEvidence: packages
       .filter((pkg) => nodeIds.has(pkg.id))
       .map(spdxPackageEvidence)
@@ -371,58 +374,235 @@ function readSpdxRootRefs(input: {
     : input.packages.map((pkg) => pkg.spdxId).sort();
 }
 
-function walkSpdxDependency(input: {
-  record: SpdxPackageRecord;
-  dependencyType: DependencyType;
-  direct: boolean;
-  path: string[];
+function traverseSpdxDependencies(input: {
+  rootName: string;
+  rootRefs: string[];
   packages: SpdxPackageRecord[];
   dependencyMap: Map<string, string[]>;
+}): {
   nodeMap: Map<string, DependencyNode>;
-  seen: Set<string>;
-}): void {
-  if (input.seen.has(input.record.spdxId)) {
-    return;
-  }
+  diagnostics: DependencyGraphDiagnostic[];
+} {
+  const packagesByRef = new Map(input.packages.map((pkg) => [pkg.spdxId, pkg]));
+  const nodeMap = new Map<string, DependencyNode>();
+  const pathLimitAffected = new Set<string>();
+  const depthLimitAffected = new Set<string>();
+  const workLimitAffected = new Set<string>();
+  const segmentLimitAffected = new Set<string>();
+  const pathKeysByNodeId = new Map<string, Set<string>>();
+  const expandedRefs = new Set<string>();
+  let totalPaths = 0;
+  let totalStoredSegments = 0;
 
-  const nextSeen = new Set(input.seen);
-  nextSeen.add(input.record.spdxId);
-  const nextPath = [...input.path, input.record.id];
-  const existing = input.nodeMap.get(input.record.id);
+  const stack: Array<{
+    ref: string;
+    pathIds: string[];
+    pathRefs: string[];
+    direct: boolean;
+    depth: number;
+  }> = input.rootRefs.map((ref) => ({
+    ref,
+    pathIds: [input.rootName],
+    pathRefs: [],
+    direct: true,
+    depth: 1
+  }));
 
-  if (existing) {
-    existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType(existing.dependencyType, input.dependencyType);
-    existing.paths.push(nextPath);
-  } else {
-    input.nodeMap.set(input.record.id, {
-      id: input.record.id,
-      name: input.record.name,
-      version: input.record.version,
-      ecosystem: input.record.ecosystem,
-      dependencyType: input.dependencyType,
-      direct: input.direct,
-      paths: [nextPath]
-    });
-  }
-
-  for (const childRef of input.dependencyMap.get(input.record.spdxId) ?? []) {
-    const child = input.packages.find((pkg) => pkg.spdxId === childRef);
-    if (!child) {
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) {
+      continue;
+    }
+    if (current.pathRefs.includes(current.ref)) {
       continue;
     }
 
-    walkSpdxDependency({
-      record: child,
-      dependencyType: input.dependencyType,
-      direct: false,
-      path: nextPath,
-      packages: input.packages,
-      dependencyMap: input.dependencyMap,
-      nodeMap: input.nodeMap,
-      seen: nextSeen
+    const record = packagesByRef.get(current.ref);
+    if (!record) {
+      continue;
+    }
+
+    if (totalPaths >= SPDX_MAX_TRAVERSAL_PATHS) {
+      workLimitAffected.add(record.id);
+      continue;
+    }
+
+    const nextPath = [...current.pathIds, record.id];
+    const nextPathRefs = [...current.pathRefs, current.ref];
+    const existing = nodeMap.get(record.id);
+    const pathKey = nextPath.join("\u0000");
+    const pathKeys = pathKeysByNodeId.get(record.id) ?? new Set<string>();
+
+    if (current.depth > SPDX_MAX_PATH_DEPTH) {
+      depthLimitAffected.add(record.id);
+      const summarizedPath = [input.rootName, SPDX_TRUNCATED_PATH_SEGMENT, record.id];
+      const summarizedKey = summarizedPath.join("\u0000");
+      if (!pathKeys.has(summarizedKey)) {
+        pathKeys.add(summarizedKey);
+        pathKeysByNodeId.set(record.id, pathKeys);
+        totalPaths += 1;
+        totalStoredSegments += summarizedPath.length;
+        if (existing) {
+          existing.paths.push(summarizedPath);
+        } else {
+          const node = spdxNode(record, {
+            dependencyType: "production",
+            direct: current.direct,
+            paths: [summarizedPath]
+          });
+          nodeMap.set(record.id, node);
+        }
+      }
+      if (expandedRefs.has(current.ref)) {
+        continue;
+      }
+      expandedRefs.add(current.ref);
+
+      const childRefs = input.dependencyMap.get(current.ref) ?? [];
+      if (childRefs.length > 0) {
+        const boundedPathIds = nextPath.length > SPDX_MAX_PATH_DEPTH
+          ? nextPath.slice(-SPDX_MAX_PATH_DEPTH)
+          : nextPath;
+        const boundedPathRefs = nextPathRefs.length > SPDX_MAX_PATH_DEPTH
+          ? nextPathRefs.slice(-SPDX_MAX_PATH_DEPTH)
+          : nextPathRefs;
+
+        for (let index = childRefs.length - 1; index >= 0; index -= 1) {
+          const childRef = childRefs[index];
+          if (!childRef) {
+            continue;
+          }
+
+          stack.push({
+            ref: childRef,
+            pathIds: boundedPathIds,
+            pathRefs: boundedPathRefs,
+            direct: false,
+            depth: current.depth + 1
+          });
+        }
+      }
+      continue;
+    }
+
+    if (pathKeys.has(pathKey)) {
+      continue;
+    }
+
+    if (pathKeys.size >= SPDX_MAX_PATHS_PER_NODE) {
+      pathLimitAffected.add(record.id);
+      continue;
+    }
+
+    if (totalStoredSegments + nextPath.length > SPDX_MAX_STORED_PATH_SEGMENTS) {
+      segmentLimitAffected.add(record.id);
+      continue;
+    }
+
+    pathKeys.add(pathKey);
+    pathKeysByNodeId.set(record.id, pathKeys);
+    totalPaths += 1;
+    totalStoredSegments += nextPath.length;
+    if (existing) {
+      existing.direct = existing.direct || current.direct;
+      existing.paths.push(nextPath);
+    } else {
+      nodeMap.set(record.id, spdxNode(record, {
+        dependencyType: "production",
+        direct: current.direct,
+        paths: [nextPath]
+      }));
+    }
+
+    if (expandedRefs.has(current.ref)) {
+      continue;
+    }
+    expandedRefs.add(current.ref);
+
+    const childRefs = input.dependencyMap.get(current.ref) ?? [];
+    if (childRefs.length > 0) {
+      const boundedPathIds = nextPath.length > SPDX_MAX_PATH_DEPTH
+        ? nextPath.slice(-SPDX_MAX_PATH_DEPTH)
+        : nextPath;
+      const boundedPathRefs = nextPathRefs.length > SPDX_MAX_PATH_DEPTH
+        ? nextPathRefs.slice(-SPDX_MAX_PATH_DEPTH)
+        : nextPathRefs;
+
+      for (let index = childRefs.length - 1; index >= 0; index -= 1) {
+        const childRef = childRefs[index];
+        if (!childRef) {
+          continue;
+        }
+
+        stack.push({
+          ref: childRef,
+          pathIds: boundedPathIds,
+          pathRefs: boundedPathRefs,
+          direct: false,
+          depth: current.depth + 1
+        });
+      }
+    }
+  }
+
+  for (const node of nodeMap.values()) {
+    node.paths.sort((left, right) => left.join("\u0000").localeCompare(right.join("\u0000")));
+  }
+
+  const diagnostics: DependencyGraphDiagnostic[] = [];
+  if (pathLimitAffected.size > 0) {
+    diagnostics.push({
+      code: "dependency_paths_truncated",
+      affectedNodeCount: pathLimitAffected.size,
+      limit: SPDX_MAX_PATHS_PER_NODE,
+      message: `SPDX dependency paths were limited to ${SPDX_MAX_PATHS_PER_NODE} paths per package.`
     });
   }
+  if (depthLimitAffected.size > 0) {
+    diagnostics.push({
+      code: "dependency_path_depth_summarized",
+      affectedNodeCount: depthLimitAffected.size,
+      limit: SPDX_MAX_PATH_DEPTH,
+      message: `SPDX dependency paths deeper than ${SPDX_MAX_PATH_DEPTH} packages were summarized.`
+    });
+  }
+  if (workLimitAffected.size > 0) {
+    diagnostics.push({
+      code: "dependency_paths_truncated",
+      affectedNodeCount: workLimitAffected.size,
+      limit: SPDX_MAX_TRAVERSAL_PATHS,
+      message: `SPDX dependency traversal stopped after ${SPDX_MAX_TRAVERSAL_PATHS} stored paths to bound scan work.`
+    });
+  }
+  if (segmentLimitAffected.size > 0) {
+    diagnostics.push({
+      code: "dependency_paths_truncated",
+      affectedNodeCount: segmentLimitAffected.size,
+      limit: SPDX_MAX_STORED_PATH_SEGMENTS,
+      message: `SPDX dependency paths were limited to ${SPDX_MAX_STORED_PATH_SEGMENTS} stored path segments.`
+    });
+  }
+
+  return { nodeMap, diagnostics };
+}
+
+function spdxNode(
+  record: SpdxPackageRecord,
+  input: {
+    dependencyType: DependencyType;
+    direct: boolean;
+    paths: string[][];
+  }
+): DependencyNode {
+  return {
+    id: record.id,
+    name: record.name,
+    version: record.version,
+    ecosystem: record.ecosystem,
+    dependencyType: input.dependencyType,
+    direct: input.direct,
+    paths: input.paths
+  };
 }
 
 function spdxPackageEvidence(record: SpdxPackageRecord): LicenseEvidence {
@@ -491,25 +671,6 @@ function unsupportedSpdxDependencyError(
       }
     })
   );
-}
-
-function mergeDependencyType(left: DependencyType, right: DependencyType): DependencyType {
-  return dependencyTypeRank(left) >= dependencyTypeRank(right) ? left : right;
-}
-
-function dependencyTypeRank(type: DependencyType): number {
-  switch (type) {
-    case "production":
-      return 4;
-    case "optional":
-      return 3;
-    case "peer":
-      return 2;
-    case "development":
-      return 1;
-    case "unknown":
-      return 0;
-  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
