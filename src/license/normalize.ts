@@ -27,12 +27,22 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
   );
 
   if (evidence.metadataLicenseKind === "classifier" && distinctLicenseFileExpressions.size > 1) {
-    signals.push("conflicting-evidence");
+    if (!signals.includes("conflicting-evidence")) {
+      signals.push("conflicting-evidence");
+    }
     evidenceSources.push(
       `conflicting file license matches: ${licenseFileExpressions
         .map((match) => `${match.expression} from ${match.filePath}`)
         .join("; ")}`
     );
+  }
+
+  const conflictingLicenseClaims = evidence.conflictingLicenseClaims ?? [];
+  if (conflictingLicenseClaims.length > 0) {
+    if (!signals.includes("conflicting-evidence")) {
+      signals.push("conflicting-evidence");
+    }
+    evidenceSources.push(`conflicting license claims: ${conflictingLicenseClaims.join("; ")}`);
   }
 
   if (evidence.files.some((file) => file.kind === "notice")) {

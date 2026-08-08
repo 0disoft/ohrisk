@@ -13,6 +13,11 @@
   production dependency also requires it, even if local source analysis
   classified that module as development-only, so its license risk is not dropped
   from `--prod` reports.
+- Merging multiple lockfiles now preserves every conflicting license claim for a
+  package instead of keeping only the first input's claim. Conflicting claims
+  are reported as `conflicting-evidence` (unknown risk) so a restrictive claim
+  such as AGPL is never silently replaced by a permissive claim such as MIT, and
+  the merged result stays independent of input order.
 
 ## 1.14.1 - 2026-07-28
 

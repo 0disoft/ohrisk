@@ -1136,4 +1136,26 @@ describe("normalizeLicenseEvidence", () => {
       confidence: "low"
     });
   });
+
+  test("marks preserved conflicting license claims as conflicting evidence", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "conflicting-claims@1.0.0",
+      metadataLicense: "MIT",
+      conflictingLicenseClaims: ["AGPL-3.0-only", "MIT"],
+      files: [],
+      source: "sbom",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      packageId: "conflicting-claims@1.0.0",
+      original: "MIT",
+      choices: ["MIT"],
+      signals: ["conflicting-evidence"],
+      confidence: "low"
+    });
+    expect(normalized.evidenceSources).toContain(
+      "conflicting license claims: AGPL-3.0-only; MIT"
+    );
+  });
 });

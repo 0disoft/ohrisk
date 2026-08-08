@@ -539,6 +539,32 @@ describe("evaluateLicenseRisk", () => {
     expect(finding.evidence).toContain("signals: conflicting-evidence");
   });
 
+  test("fails closed when merged artifacts hold conflicting permissive and restrictive claims", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "package@1.0.0",
+        original: "MIT",
+        expression: "MIT",
+        choices: ["MIT"],
+        joiner: "single",
+        signals: ["conflicting-evidence"],
+        evidenceSources: [
+          "source: sbom",
+          "license: MIT",
+          "conflicting license claims: AGPL-3.0-only; MIT"
+        ],
+        confidence: "low"
+      },
+      dependency: baseDependency,
+      profile: "saas"
+    });
+
+    expect(finding.severity).toBe("unknown");
+    expect(finding.recommendation).toBe("collect-evidence");
+    expect(finding.reason).toBe("License evidence contains conflicting recognized expressions.");
+    expect(finding.evidence).toContain("signals: conflicting-evidence");
+  });
+
   test("treats explicit commercial restriction signals as high risk", () => {
     const finding = evaluateLicenseRisk({
       license: {

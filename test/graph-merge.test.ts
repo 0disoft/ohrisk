@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { mergeDependencyGraphs } from "../src/graph/merge";
+import { mergeDependencyGraphs, type SourcedDependencyGraph } from "../src/graph/merge";
 
 describe("mergeDependencyGraphs", () => {
   test("preserves standalone Go module integrity across merged graphs", () => {
@@ -143,4 +143,106 @@ describe("mergeDependencyGraphs", () => {
       "Multiple lockfiles declare different integrity values for pkg:npm/%40scope/example@1.0.0."
     ]);
   });
+
+  test("preserves conflicting license claims from different artifacts", () => {
+    const merged = mergeDependencyGraphs([
+      graphWithMetadataLicense("MIT"),
+      graphWithMetadataLicense("AGPL-3.0-only")
+    ]);
+
+    expect(merged.embeddedEvidence).toEqual([expect.objectContaining({
+      metadataLicense: "AGPL-3.0-only",
+      conflictingLicenseClaims: ["AGPL-3.0-only", "MIT"]
+    })]);
+  });
+
+  test("keeps conflicting license claim merging order-independent", () => {
+    const forward = mergeDependencyGraphs([
+      graphWithMetadataLicense("MIT"),
+      graphWithMetadataLicense("AGPL-3.0-only")
+    ]);
+    const reversed = mergeDependencyGraphs([
+      graphWithMetadataLicense("AGPL-3.0-only"),
+      graphWithMetadataLicense("MIT")
+    ]);
+
+    expect(forward.embeddedEvidence).toEqual(reversed.embeddedEvidence);
+  });
+
+  test("deduplicates identical license claims across artifacts", () => {
+    const merged = mergeDependencyGraphs([
+      graphWithMetadataLicense("MIT"),
+      graphWithMetadataLicense("MIT")
+    ]);
+
+    expect(merged.embeddedEvidence).toEqual([expect.objectContaining({
+      metadataLicense: "MIT"
+    })]);
+    expect(merged.embeddedEvidence?.[0]).not.toHaveProperty("conflictingLicenseClaims");
+  });
+
+  test("does not treat an identical multi-claim license field as a conflict", () => {
+    const graph = graphWithMetadataLicense("MIT");
+    const left = structuredClone(graph);
+    const right = structuredClone(graph);
+    left.graph.embeddedEvidence = [{
+      packageId: "@scope/example@1.0.0",
+      metadataLicenses: ["MIT", "Apache-2.0"],
+      files: [],
+      source: "sbom" as const,
+      warnings: []
+    }];
+    right.graph.embeddedEvidence = [{
+      packageId: "@scope/example@1.0.0",
+      metadataLicenses: ["MIT", "Apache-2.0"],
+      files: [],
+      source: "sbom" as const,
+      warnings: []
+    }];
+
+    const merged = mergeDependencyGraphs([left, right]);
+
+    expect(merged.embeddedEvidence?.[0]).not.toHaveProperty("conflictingLicenseClaims");
+    expect(merged.embeddedEvidence?.[0].metadataLicenses).toEqual(["MIT", "Apache-2.0"]);
+  });
 });
+
+function graphWithMetadataLicense(metadataLicense: string): SourcedDependencyGraph {
+  const id = "@scope/example@1.0.0";
+  return {
+    source: {
+      lockfileKind: metadataLicense === "MIT"
+        ? "package-lock" as const
+        : "npm-shrinkwrap" as const,
+      lockfilePath: metadataLicense === "MIT"
+        ? "/repo/package-lock.json"
+        : "/repo/npm-shrinkwrap.json"
+    },
+    graph: {
+      rootName: "app",
+      lockfilePath: metadataLicense === "MIT"
+        ? "/repo/package-lock.json"
+        : "/repo/npm-shrinkwrap.json",
+      nodes: [{
+        id,
+        name: "@scope/example",
+        version: "1.0.0",
+        ecosystem: "npm" as const,
+        resolved: metadataLicense === "MIT"
+          ? "https://registry.npmjs.org/example-a.tgz"
+          : "https://registry.npmjs.org/example-b.tgz",
+        integrity: metadataLicense === "MIT" ? "sha512-a" : "sha512-b",
+        dependencyType: "production" as const,
+        direct: true,
+        paths: [[`app`, id]]
+      }],
+      embeddedEvidence: [{
+        packageId: id,
+        metadataLicense,
+        files: [],
+        source: "sbom" as const,
+        warnings: []
+      }]
+    }
+  };
+}

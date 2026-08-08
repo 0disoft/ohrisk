@@ -41,6 +41,8 @@ export type LicenseEvidence = {
   packageId: string;
   /** Internal verified Go module graph edges; not serialized into report contracts. */
   goModuleRequirements?: string[];
+  /** License claims preserved from conflicting artifacts merged into one package node. */
+  conflictingLicenseClaims?: string[];
   packageJsonPrivate?: boolean;
   packageJsonLicense?: string;
   packageJsonLicenses?: unknown;

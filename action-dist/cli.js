@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 8333e958a5d463f2201db485b53068934a7a303f2ea5203f32041e79ef27ac9c
+// ohrisk-action-source-sha256: c5f157f9bae1045aa3765b5712686febcec0681a5b886f6faab41e27ef93e761
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18539,7 +18539,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.3";
+var OHRISK_VERSION = "1.14.4";
 
 // src/archive/archive-project.ts
 import path47 from "node:path";
@@ -18966,27 +18966,68 @@ function mergeDependencyType(left, right) {
   return rank[left] >= rank[right] ? left : right;
 }
 function mergeLicenseEvidence(left, right) {
+  const primary = primaryLicenseEvidence(left, right);
+  const secondary = primary === left ? right : left;
+  const conflictingLicenseClaims = collectConflictingLicenseClaims(left, right);
   return {
-    ...left,
-    ...left.packageJsonLicense ? {} : right.packageJsonLicense ? { packageJsonLicense: right.packageJsonLicense } : {},
-    ...left.packageJsonLicenses !== undefined ? {} : right.packageJsonLicenses !== undefined ? { packageJsonLicenses: right.packageJsonLicenses } : {},
-    ...left.metadataLicense ? {} : right.metadataLicense ? {
-      metadataLicense: right.metadataLicense,
-      ...right.metadataLicenseKind ? { metadataLicenseKind: right.metadataLicenseKind } : {}
+    ...primary,
+    ...primary.packageJsonLicense ? {} : secondary.packageJsonLicense ? { packageJsonLicense: secondary.packageJsonLicense } : {},
+    ...primary.packageJsonLicenses !== undefined ? {} : secondary.packageJsonLicenses !== undefined ? { packageJsonLicenses: secondary.packageJsonLicenses } : {},
+    ...primary.metadataLicense ? {} : secondary.metadataLicense ? {
+      metadataLicense: secondary.metadataLicense,
+      ...secondary.metadataLicenseKind ? { metadataLicenseKind: secondary.metadataLicenseKind } : {}
     } : {},
-    ...left.metadataLicenses !== undefined ? {} : right.metadataLicenses !== undefined ? { metadataLicenses: right.metadataLicenses } : {},
-    ...left.metadataSource ? {} : right.metadataSource ? { metadataSource: right.metadataSource } : {},
-    ...left.packageJsonPrivate !== undefined ? {} : right.packageJsonPrivate !== undefined ? { packageJsonPrivate: right.packageJsonPrivate } : {},
-    ...left.goModuleRequirements !== undefined || right.goModuleRequirements !== undefined ? {
+    ...primary.metadataLicenses !== undefined ? {} : secondary.metadataLicenses !== undefined ? { metadataLicenses: secondary.metadataLicenses } : {},
+    ...primary.metadataSource ? {} : secondary.metadataSource ? { metadataSource: secondary.metadataSource } : {},
+    ...primary.packageJsonPrivate === false ? secondary.packageJsonPrivate === true ? { packageJsonPrivate: true } : {} : primary.packageJsonPrivate === true ? {} : secondary.packageJsonPrivate !== undefined ? { packageJsonPrivate: secondary.packageJsonPrivate } : {},
+    ...primary.goModuleRequirements !== undefined || secondary.goModuleRequirements !== undefined ? {
       goModuleRequirements: unique([
-        ...left.goModuleRequirements ?? [],
-        ...right.goModuleRequirements ?? []
+        ...primary.goModuleRequirements ?? [],
+        ...secondary.goModuleRequirements ?? []
       ]).sort()
     } : {},
-    files: uniqueEvidenceFiles([...left.files, ...right.files]),
-    warnings: unique([...left.warnings, ...right.warnings]),
-    source: strongerEvidenceSource(left.source, right.source)
+    ...conflictingLicenseClaims.length > 0 ? { conflictingLicenseClaims } : {},
+    files: uniqueEvidenceFiles([...primary.files, ...secondary.files]).sort(compareEvidenceFiles),
+    warnings: unique([...primary.warnings, ...secondary.warnings]).sort(),
+    source: strongerEvidenceSource(primary.source, secondary.source)
   };
+}
+function primaryLicenseEvidence(left, right) {
+  const rank = {
+    local: 5,
+    tarball: 4,
+    registry: 3,
+    sbom: 3,
+    unavailable: 1
+  };
+  const leftRank = rank[left.source] ?? 0;
+  const rightRank = rank[right.source] ?? 0;
+  if (leftRank !== rightRank) {
+    return leftRank > rightRank ? left : right;
+  }
+  return JSON.stringify(left) <= JSON.stringify(right) ? left : right;
+}
+function collectConflictingLicenseClaims(left, right) {
+  const leftClaims = licenseClaimValues(left);
+  const rightClaims = licenseClaimValues(right);
+  const combined = unique([...leftClaims, ...rightClaims]);
+  return combined.length > 1 ? combined.sort() : [];
+}
+function licenseClaimValues(evidence) {
+  const values = [];
+  if (evidence.packageJsonLicense) {
+    values.push(evidence.packageJsonLicense);
+  }
+  if (evidence.metadataLicense) {
+    values.push(evidence.metadataLicense);
+  }
+  if (evidence.packageJsonLicenses !== undefined) {
+    values.push(JSON.stringify(evidence.packageJsonLicenses));
+  }
+  if (evidence.metadataLicenses !== undefined) {
+    values.push(JSON.stringify(evidence.metadataLicenses));
+  }
+  return values;
 }
 function strongerEvidenceSource(left, right) {
   const rank = {
@@ -19021,6 +19062,9 @@ function uniqueEvidenceFiles(files) {
     byKey.set(`${file.kind}\x00${file.path}\x00${file.text}`, file);
   }
   return [...byKey.values()];
+}
+function compareEvidenceFiles(left, right) {
+  return `${left.kind}\x00${left.path}\x00${left.text}`.localeCompare(`${right.kind}\x00${right.path}\x00${right.text}`);
 }
 
 // src/shared/object.ts
@@ -52888,8 +52932,17 @@ function normalizeLicenseEvidence(evidence) {
   const licenseFileExpressions = readLicenseFileExpressions(evidence);
   const distinctLicenseFileExpressions = new Set(licenseFileExpressions.map((match) => match.expression));
   if (evidence.metadataLicenseKind === "classifier" && distinctLicenseFileExpressions.size > 1) {
-    signals.push("conflicting-evidence");
+    if (!signals.includes("conflicting-evidence")) {
+      signals.push("conflicting-evidence");
+    }
     evidenceSources.push(`conflicting file license matches: ${licenseFileExpressions.map((match) => `${match.expression} from ${match.filePath}`).join("; ")}`);
+  }
+  const conflictingLicenseClaims = evidence.conflictingLicenseClaims ?? [];
+  if (conflictingLicenseClaims.length > 0) {
+    if (!signals.includes("conflicting-evidence")) {
+      signals.push("conflicting-evidence");
+    }
+    evidenceSources.push(`conflicting license claims: ${conflictingLicenseClaims.join("; ")}`);
   }
   if (evidence.files.some((file) => file.kind === "notice")) {
     signals.push("notice-required");

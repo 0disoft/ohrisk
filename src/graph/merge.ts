@@ -185,41 +185,100 @@ function mergeDependencyType(left: DependencyType, right: DependencyType): Depen
 }
 
 function mergeLicenseEvidence(left: LicenseEvidence, right: LicenseEvidence): LicenseEvidence {
+  const primary = primaryLicenseEvidence(left, right);
+  const secondary = primary === left ? right : left;
+  const conflictingLicenseClaims = collectConflictingLicenseClaims(left, right);
+
   return {
-    ...left,
-    ...(left.packageJsonLicense ? {} : right.packageJsonLicense
-      ? { packageJsonLicense: right.packageJsonLicense }
+    ...primary,
+    ...(primary.packageJsonLicense ? {} : secondary.packageJsonLicense
+      ? { packageJsonLicense: secondary.packageJsonLicense }
       : {}),
-    ...(left.packageJsonLicenses !== undefined ? {} : right.packageJsonLicenses !== undefined
-      ? { packageJsonLicenses: right.packageJsonLicenses }
+    ...(primary.packageJsonLicenses !== undefined ? {} : secondary.packageJsonLicenses !== undefined
+      ? { packageJsonLicenses: secondary.packageJsonLicenses }
       : {}),
-    ...(left.metadataLicense ? {} : right.metadataLicense
+    ...(primary.metadataLicense ? {} : secondary.metadataLicense
       ? {
-          metadataLicense: right.metadataLicense,
-          ...(right.metadataLicenseKind ? { metadataLicenseKind: right.metadataLicenseKind } : {})
+          metadataLicense: secondary.metadataLicense,
+          ...(secondary.metadataLicenseKind
+            ? { metadataLicenseKind: secondary.metadataLicenseKind }
+            : {})
         }
       : {}),
-    ...(left.metadataLicenses !== undefined ? {} : right.metadataLicenses !== undefined
-      ? { metadataLicenses: right.metadataLicenses }
+    ...(primary.metadataLicenses !== undefined ? {} : secondary.metadataLicenses !== undefined
+      ? { metadataLicenses: secondary.metadataLicenses }
       : {}),
-    ...(left.metadataSource ? {} : right.metadataSource
-      ? { metadataSource: right.metadataSource }
+    ...(primary.metadataSource ? {} : secondary.metadataSource
+      ? { metadataSource: secondary.metadataSource }
       : {}),
-    ...(left.packageJsonPrivate !== undefined ? {} : right.packageJsonPrivate !== undefined
-      ? { packageJsonPrivate: right.packageJsonPrivate }
-      : {}),
-    ...(left.goModuleRequirements !== undefined || right.goModuleRequirements !== undefined
+    ...(primary.packageJsonPrivate === false
+      ? secondary.packageJsonPrivate === true
+        ? { packageJsonPrivate: true }
+        : {}
+      : primary.packageJsonPrivate === true
+        ? {}
+        : secondary.packageJsonPrivate !== undefined
+          ? { packageJsonPrivate: secondary.packageJsonPrivate }
+          : {}),
+    ...(primary.goModuleRequirements !== undefined || secondary.goModuleRequirements !== undefined
       ? {
           goModuleRequirements: unique([
-            ...(left.goModuleRequirements ?? []),
-            ...(right.goModuleRequirements ?? [])
+            ...(primary.goModuleRequirements ?? []),
+            ...(secondary.goModuleRequirements ?? [])
           ]).sort()
         }
       : {}),
-    files: uniqueEvidenceFiles([...left.files, ...right.files]),
-    warnings: unique([...left.warnings, ...right.warnings]),
-    source: strongerEvidenceSource(left.source, right.source)
+    ...(conflictingLicenseClaims.length > 0 ? { conflictingLicenseClaims } : {}),
+    files: uniqueEvidenceFiles([...primary.files, ...secondary.files]).sort(compareEvidenceFiles),
+    warnings: unique([...primary.warnings, ...secondary.warnings]).sort(),
+    source: strongerEvidenceSource(primary.source, secondary.source)
   };
+}
+
+function primaryLicenseEvidence(
+  left: LicenseEvidence,
+  right: LicenseEvidence
+): LicenseEvidence {
+  const rank: Record<LicenseEvidence["source"], number> = {
+    local: 5,
+    tarball: 4,
+    registry: 3,
+    sbom: 3,
+    unavailable: 1
+  };
+  const leftRank = rank[left.source] ?? 0;
+  const rightRank = rank[right.source] ?? 0;
+  if (leftRank !== rightRank) {
+    return leftRank > rightRank ? left : right;
+  }
+  return JSON.stringify(left) <= JSON.stringify(right) ? left : right;
+}
+
+function collectConflictingLicenseClaims(
+  left: LicenseEvidence,
+  right: LicenseEvidence
+): string[] {
+  const leftClaims = licenseClaimValues(left);
+  const rightClaims = licenseClaimValues(right);
+  const combined = unique([...leftClaims, ...rightClaims]);
+  return combined.length > 1 ? combined.sort() : [];
+}
+
+function licenseClaimValues(evidence: LicenseEvidence): string[] {
+  const values: string[] = [];
+  if (evidence.packageJsonLicense) {
+    values.push(evidence.packageJsonLicense);
+  }
+  if (evidence.metadataLicense) {
+    values.push(evidence.metadataLicense);
+  }
+  if (evidence.packageJsonLicenses !== undefined) {
+    values.push(JSON.stringify(evidence.packageJsonLicenses));
+  }
+  if (evidence.metadataLicenses !== undefined) {
+    values.push(JSON.stringify(evidence.metadataLicenses));
+  }
+  return values;
 }
 
 function strongerEvidenceSource(
@@ -262,4 +321,13 @@ function uniqueEvidenceFiles(files: LicenseEvidence["files"]): LicenseEvidence["
     byKey.set(`${file.kind}\0${file.path}\0${file.text}`, file);
   }
   return [...byKey.values()];
+}
+
+function compareEvidenceFiles(
+  left: LicenseEvidence["files"][number],
+  right: LicenseEvidence["files"][number]
+): number {
+  return `${left.kind}\0${left.path}\0${left.text}`.localeCompare(
+    `${right.kind}\0${right.path}\0${right.text}`
+  );
 }
