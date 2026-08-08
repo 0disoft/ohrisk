@@ -1,8 +1,83 @@
 import { describe, expect, test } from "bun:test";
 
+import { BOUNDED_PATHS_MAX_PATHS_PER_NODE } from "../src/graph/bounded-dependency-paths";
 import { parseNixFlakeLockText } from "../src/graph/nix-flake-lock";
 
 describe("parseNixFlakeLockText", () => {
+  test("bounds combinatorial path explosion in converging Nix DAGs", () => {
+    const result = parseNixFlakeLockText(buildNixDiamondFixture(10), "flake.lock");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    const maxPaths = Math.max(...result.value.nodes.map((node) => node.paths.length));
+    expect(maxPaths).toBeLessThanOrEqual(BOUNDED_PATHS_MAX_PATHS_PER_NODE);
+    expect(result.value.diagnostics).toContainEqual(expect.objectContaining({
+      code: "dependency_paths_truncated"
+    }));
+  });
+
+  test("keeps descendants reachable after converging path truncation", () => {
+    const result = parseNixFlakeLockText(buildNixDiamondFixture(10, true), "flake.lock");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    const descendant = result.value.nodes.find((node) => node.id === "github:acme/descendant@eeeeeeeeeeeeeeee");
+    expect(descendant).toBeDefined();
+    expect(descendant?.paths.length).toBeGreaterThan(0);
+  });
+
+  test("summarizes deep Nix chains without losing reachable nodes", () => {
+    const result = parseNixFlakeLockText(buildNixChainFixture(512), "flake.lock");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.length).toBe(512);
+    expect(result.value.diagnostics).toContainEqual(expect.objectContaining({
+      code: "dependency_path_depth_summarized"
+    }));
+    for (const node of result.value.nodes) {
+      expect(node.paths.length).toBeGreaterThan(0);
+    }
+  });
+
+  test("keeps graph, paths, and diagnostics stable under input key order changes", () => {
+    const forward = parseNixFlakeLockText(buildNixConvergingFixture(false, false), "flake.lock");
+    const reversed = parseNixFlakeLockText(buildNixConvergingFixture(true, false), "flake.lock");
+
+    expect(forward.ok).toBe(true);
+    expect(reversed.ok).toBe(true);
+    if (!forward.ok || !reversed.ok) {
+      throw new Error("Fixture parse failed.");
+    }
+
+    expect(reversed.value.nodes.map((node) => ({ id: node.id, paths: node.paths })))
+      .toEqual(forward.value.nodes.map((node) => ({ id: node.id, paths: node.paths })));
+    expect(reversed.value.diagnostics).toEqual(forward.value.diagnostics);
+  });
+
+  test("deduplicates duplicated Nix input edges deterministically", () => {
+    const plain = parseNixFlakeLockText(buildNixConvergingFixture(false, false), "flake.lock");
+    const duplicated = parseNixFlakeLockText(buildNixConvergingFixture(false, true), "flake.lock");
+
+    expect(plain.ok).toBe(true);
+    expect(duplicated.ok).toBe(true);
+    if (!plain.ok || !duplicated.ok) {
+      throw new Error("Fixture parse failed.");
+    }
+
+    expect(duplicated.value.nodes.map((node) => ({ id: node.id, paths: node.paths })))
+      .toEqual(plain.value.nodes.map((node) => ({ id: node.id, paths: node.paths })));
+  });
+
   test("parses reachable Nix flake inputs", () => {
     const result = parseNixFlakeLockText(JSON.stringify({
       version: 7,
@@ -216,3 +291,153 @@ describe("parseNixFlakeLockText", () => {
     });
   });
 });
+
+function buildNixDiamondFixture(depth: number, includeDescendant = false): string {
+  const nodes: Record<string, unknown> = {};
+  const levelIds: string[][] = [];
+  let counter = 0;
+
+  for (let level = 0; level <= depth; level += 1) {
+    const ids: string[] = [];
+    for (let index = 0; index < 2 ** level; index += 1) {
+      const key = `diamond-${counter}`;
+      ids.push(key);
+      nodes[key] = {
+        locked: {
+          type: "github",
+          owner: "acme",
+          repo: `diamond-${counter}`,
+          rev: String(counter).padStart(16, "0"),
+          narHash: "sha256-diamond"
+        }
+      };
+      counter += 1;
+    }
+    levelIds.push(ids);
+  }
+
+  const sinkKey = "diamond-sink";
+  nodes[sinkKey] = {
+    locked: {
+      type: "github",
+      owner: "acme",
+      repo: "sink",
+      rev: "dddddddddddddddd",
+      narHash: "sha256-sink"
+    }
+  };
+  if (includeDescendant) {
+    nodes["diamond-descendant"] = {
+      locked: {
+        type: "github",
+        owner: "acme",
+        repo: "descendant",
+        rev: "eeeeeeeeeeeeeeee",
+        narHash: "sha256-descendant"
+      }
+    };
+  }
+
+  nodes.root = { inputs: { [levelIds[0][0]]: levelIds[0][0] } };
+  for (let level = 0; level < depth; level += 1) {
+    for (const [index, key] of levelIds[level].entries()) {
+      (nodes[key] as Record<string, unknown>).inputs = {
+        left: levelIds[level + 1][index * 2],
+        right: levelIds[level + 1][index * 2 + 1]
+      };
+    }
+  }
+  for (const key of levelIds[depth]) {
+    (nodes[key] as Record<string, unknown>).inputs = {
+      ...(includeDescendant ? { child: "diamond-descendant" } : {}),
+      sink: sinkKey
+    };
+  }
+
+  return JSON.stringify({ version: 7, root: "root", nodes });
+}
+
+function buildNixChainFixture(length: number): string {
+  const nodes: Record<string, unknown> = { root: { inputs: { "chain-0": "chain-0" } } };
+  for (let index = 0; index < length; index += 1) {
+    const key = `chain-${index}`;
+    nodes[key] = {
+      ...(index < length - 1 ? { inputs: { next: `chain-${index + 1}` } } : {}),
+      locked: {
+        type: "github",
+        owner: "acme",
+        repo: "chain",
+        rev: String(index).padStart(16, "0"),
+        narHash: "sha256-chain"
+      }
+    };
+  }
+
+  return JSON.stringify({ version: 7, root: "root", nodes });
+}
+
+function buildNixConvergingFixture(reverseOrder: boolean, duplicateEdges: boolean): string {
+  const nodes: Record<string, unknown> = {
+    root: {
+      inputs: {
+        "mid-a": "mid-a",
+        "mid-b": "mid-b"
+      }
+    },
+    "mid-a": {
+      inputs: { shared: "shared" },
+      locked: {
+        type: "github",
+        owner: "acme",
+        repo: "mid-a",
+        rev: "aaaaaaaaaaaaaaaa",
+        narHash: "sha256-mid-a"
+      }
+    },
+    "mid-b": {
+      inputs: { shared: "shared" },
+      locked: {
+        type: "github",
+        owner: "acme",
+        repo: "mid-b",
+        rev: "bbbbbbbbbbbbbbbb",
+        narHash: "sha256-mid-b"
+      }
+    },
+    shared: {
+      locked: {
+        type: "github",
+        owner: "acme",
+        repo: "shared",
+        rev: "cccccccccccccccc",
+        narHash: "sha256-shared"
+      }
+    }
+  };
+
+  if (duplicateEdges) {
+    (nodes["mid-a"] as Record<string, unknown>).inputs = {
+      shared: "shared",
+      "shared-again": "shared"
+    };
+    (nodes["mid-b"] as Record<string, unknown>).inputs = {
+      shared: "shared",
+      "shared-again": "shared"
+    };
+  }
+
+  const body = {
+    version: 7,
+    root: "root",
+    nodes
+  };
+  if (!reverseOrder) {
+    return JSON.stringify(body);
+  }
+
+  const reversedNodes: Record<string, unknown> = {};
+  for (const key of Object.keys(nodes).reverse()) {
+    reversedNodes[key] = nodes[key];
+  }
+  return JSON.stringify({ ...body, nodes: reversedNodes });
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: a4eb7012b4f993209da3e2d19c13c8a6e0a231745d3acd21599d41fd608379fc
+// ohrisk-action-source-sha256: 92ff9695a70e7d69eb3cff9cf0bf7e3f1eaa4864747b80d66b310bc78b8d7e3e
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18539,7 +18539,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.5";
+var OHRISK_VERSION = "1.14.6";
 
 // src/archive/archive-project.ts
 import path47 from "node:path";
@@ -27124,6 +27124,160 @@ function uniqueSorted3(values) {
 
 // src/graph/nix-flake-lock.ts
 import path23 from "node:path";
+
+// src/graph/bounded-dependency-paths.ts
+var BOUNDED_PATHS_MAX_PATHS_PER_NODE = 64;
+var BOUNDED_PATHS_MAX_PATH_DEPTH = 256;
+var BOUNDED_PATHS_MAX_TRAVERSAL_PATHS = 200000;
+var BOUNDED_PATHS_MAX_STORED_PATH_SEGMENTS = 1048576;
+var BOUNDED_PATHS_TRUNCATED_SEGMENT = "<path-truncated>";
+function collectBoundedDependencyPaths(input) {
+  const pathLimitAffected = new Set;
+  const depthLimitAffected = new Set;
+  const workLimitAffected = new Set;
+  const segmentLimitAffected = new Set;
+  const pathKeysByNodeKey = new Map;
+  const expandedNodeKeys = new Set;
+  let totalPaths = 0;
+  let totalStoredSegments = 0;
+  const stack = input.rootRefs.map((nodeKey) => ({
+    nodeKey,
+    pathNodeKeys: [input.rootName],
+    pathRefs: [],
+    depth: 1
+  }));
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) {
+      continue;
+    }
+    if (current.pathRefs.includes(current.nodeKey)) {
+      continue;
+    }
+    const nextPath = [...current.pathNodeKeys, current.nodeKey];
+    const nextPathRefs = [...current.pathRefs, current.nodeKey];
+    if (totalPaths >= BOUNDED_PATHS_MAX_TRAVERSAL_PATHS) {
+      workLimitAffected.add(current.nodeKey);
+      continue;
+    }
+    const pathKey = nextPath.join("\x00");
+    const pathKeys = pathKeysByNodeKey.get(current.nodeKey) ?? new Set;
+    if (current.depth > BOUNDED_PATHS_MAX_PATH_DEPTH) {
+      depthLimitAffected.add(current.nodeKey);
+      const summarizedPath = [input.rootName, BOUNDED_PATHS_TRUNCATED_SEGMENT, current.nodeKey];
+      const summarizedKey = summarizedPath.join("\x00");
+      if (!pathKeys.has(summarizedKey)) {
+        pathKeys.add(summarizedKey);
+        pathKeysByNodeKey.set(current.nodeKey, pathKeys);
+        totalPaths += 1;
+        totalStoredSegments += summarizedPath.length;
+      }
+      if (expandedNodeKeys.has(current.nodeKey)) {
+        continue;
+      }
+      expandedNodeKeys.add(current.nodeKey);
+      const childNodeKeys2 = input.childRefs(current.nodeKey);
+      if (childNodeKeys2.length > 0) {
+        const boundedPathNodeKeys = nextPath.length > BOUNDED_PATHS_MAX_PATH_DEPTH ? nextPath.slice(-BOUNDED_PATHS_MAX_PATH_DEPTH) : nextPath;
+        const boundedPathRefs = nextPathRefs.length > BOUNDED_PATHS_MAX_PATH_DEPTH ? nextPathRefs.slice(-BOUNDED_PATHS_MAX_PATH_DEPTH) : nextPathRefs;
+        for (let index = childNodeKeys2.length - 1;index >= 0; index -= 1) {
+          const childNodeKey = childNodeKeys2[index];
+          if (!childNodeKey) {
+            continue;
+          }
+          stack.push({
+            nodeKey: childNodeKey,
+            pathNodeKeys: boundedPathNodeKeys,
+            pathRefs: boundedPathRefs,
+            depth: current.depth + 1
+          });
+        }
+      }
+      continue;
+    }
+    if (pathKeys.has(pathKey)) {
+      continue;
+    }
+    if (pathKeys.size >= BOUNDED_PATHS_MAX_PATHS_PER_NODE) {
+      pathLimitAffected.add(current.nodeKey);
+      continue;
+    }
+    if (totalStoredSegments + nextPath.length > BOUNDED_PATHS_MAX_STORED_PATH_SEGMENTS) {
+      segmentLimitAffected.add(current.nodeKey);
+      continue;
+    }
+    pathKeys.add(pathKey);
+    pathKeysByNodeKey.set(current.nodeKey, pathKeys);
+    totalPaths += 1;
+    totalStoredSegments += nextPath.length;
+    if (expandedNodeKeys.has(current.nodeKey)) {
+      continue;
+    }
+    expandedNodeKeys.add(current.nodeKey);
+    const childNodeKeys = input.childRefs(current.nodeKey);
+    if (childNodeKeys.length > 0) {
+      const boundedPathNodeKeys = nextPath.length > BOUNDED_PATHS_MAX_PATH_DEPTH ? nextPath.slice(-BOUNDED_PATHS_MAX_PATH_DEPTH) : nextPath;
+      const boundedPathRefs = nextPathRefs.length > BOUNDED_PATHS_MAX_PATH_DEPTH ? nextPathRefs.slice(-BOUNDED_PATHS_MAX_PATH_DEPTH) : nextPathRefs;
+      for (let index = childNodeKeys.length - 1;index >= 0; index -= 1) {
+        const childNodeKey = childNodeKeys[index];
+        if (!childNodeKey) {
+          continue;
+        }
+        stack.push({
+          nodeKey: childNodeKey,
+          pathNodeKeys: boundedPathNodeKeys,
+          pathRefs: boundedPathRefs,
+          depth: current.depth + 1
+        });
+      }
+    }
+  }
+  const pathsByNode = new Map;
+  for (const [nodeKey, pathKeys] of pathKeysByNodeKey) {
+    pathsByNode.set(nodeKey, [...pathKeys].sort((left, right) => left.localeCompare(right)).map((key) => key.split("\x00")));
+  }
+  const diagnostics = [];
+  if (pathLimitAffected.size > 0) {
+    diagnostics.push({
+      code: "dependency_paths_truncated",
+      affectedNodeCount: pathLimitAffected.size,
+      limit: BOUNDED_PATHS_MAX_PATHS_PER_NODE,
+      message: `Dependency paths were limited to ${BOUNDED_PATHS_MAX_PATHS_PER_NODE} paths per ${input.pathNoun}.`
+    });
+  }
+  if (depthLimitAffected.size > 0) {
+    diagnostics.push({
+      code: "dependency_path_depth_summarized",
+      affectedNodeCount: depthLimitAffected.size,
+      limit: BOUNDED_PATHS_MAX_PATH_DEPTH,
+      message: `Dependency paths deeper than ${BOUNDED_PATHS_MAX_PATH_DEPTH} ${input.pathNoun} were summarized.`
+    });
+  }
+  if (workLimitAffected.size > 0) {
+    diagnostics.push({
+      code: "dependency_paths_truncated",
+      affectedNodeCount: workLimitAffected.size,
+      limit: BOUNDED_PATHS_MAX_TRAVERSAL_PATHS,
+      message: `Dependency traversal stopped after ${BOUNDED_PATHS_MAX_TRAVERSAL_PATHS} stored paths to bound scan work.`
+    });
+  }
+  if (segmentLimitAffected.size > 0) {
+    diagnostics.push({
+      code: "dependency_paths_truncated",
+      affectedNodeCount: segmentLimitAffected.size,
+      limit: BOUNDED_PATHS_MAX_STORED_PATH_SEGMENTS,
+      message: `Dependency paths were limited to ${BOUNDED_PATHS_MAX_STORED_PATH_SEGMENTS} stored path segments.`
+    });
+  }
+  return {
+    pathsByNode,
+    diagnostics,
+    discoveredNodeKeys: [...expandedNodeKeys],
+    rootRefs: input.rootRefs
+  };
+}
+
+// src/graph/nix-flake-lock.ts
 function parseNixFlakeLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -27163,8 +27317,9 @@ function parseNixFlakeLockText(input, lockfilePath = "flake.lock") {
       reason: "missing_nodes_object"
     });
   }
+  const nodesObject = parsed.nodes;
   const rootNodeKey = typeof parsed.root === "string" ? parsed.root : "root";
-  const rootNode = parsed.nodes[rootNodeKey];
+  const rootNode = nodesObject[rootNodeKey];
   if (!isRecord10(rootNode)) {
     return nixLockShapeError({
       lockfilePath,
@@ -27172,20 +27327,24 @@ function parseNixFlakeLockText(input, lockfilePath = "flake.lock") {
       node: rootNodeKey
     });
   }
-  const pathRecords = collectReachableNixPaths({
+  const inputValidation = validateNixInputTargets({
     lockfilePath,
-    nodes: parsed.nodes,
+    nodes: nodesObject,
     rootNodeKey
   });
-  if (!pathRecords.ok) {
-    return pathRecords;
+  if (!inputValidation.ok) {
+    return inputValidation;
   }
+  const pathCollection = collectBoundedDependencyPaths({
+    rootName: rootProjectName(lockfilePath),
+    rootRefs: [rootNodeKey],
+    childRefs: (nodeKey) => nixChildRefs(nodesObject, nodeKey),
+    pathNoun: "input node"
+  });
   const records = [];
-  for (const [nodeKey, paths] of pathRecords.value.entries()) {
-    if (nodeKey === rootNodeKey) {
-      continue;
-    }
-    const node = parsed.nodes[nodeKey];
+  const rootName = rootProjectName(lockfilePath);
+  for (const nodeKey of pathCollection.discoveredNodeKeys) {
+    const node = nodesObject[nodeKey];
     if (!isRecord10(node) || !isRecord10(node.locked)) {
       continue;
     }
@@ -27196,18 +27355,19 @@ function parseNixFlakeLockText(input, lockfilePath = "flake.lock") {
     if (!identity2.ok) {
       return err(identity2.error);
     }
+    const paths = (pathCollection.pathsByNode.get(nodeKey) ?? []).map((item) => item.filter((segment, index) => index === 0 || segment !== rootNodeKey));
     records.push({
       nodeKey,
       ...identity2.value,
       id: `${identity2.value.name}@${identity2.value.version}`,
       direct: paths.some((item) => item.length === 2),
-      paths: paths.map((item) => item.map((segment) => segment === rootNodeKey ? rootProjectName(lockfilePath) : segment))
+      paths
     });
   }
-  const rootName = rootProjectName(lockfilePath);
   return ok({
     rootName,
     lockfilePath,
+    ...pathCollection.diagnostics.length > 0 ? { diagnostics: pathCollection.diagnostics } : {},
     nodes: records.map((record) => ({
       id: record.id,
       name: record.name,
@@ -27220,22 +27380,8 @@ function parseNixFlakeLockText(input, lockfilePath = "flake.lock") {
     })).sort((left, right) => left.id.localeCompare(right.id))
   });
 }
-function collectReachableNixPaths(input) {
-  const pathsByNode = new Map;
-  const queue = [[input.rootNodeKey]];
-  while (queue.length > 0) {
-    const currentPath = queue.shift();
-    const currentNodeKey = currentPath[currentPath.length - 1];
-    if (!currentNodeKey) {
-      continue;
-    }
-    const existing = pathsByNode.get(currentNodeKey) ?? [];
-    if (existing.some((pathItem) => samePath(pathItem, currentPath))) {
-      continue;
-    }
-    existing.push(currentPath);
-    pathsByNode.set(currentNodeKey, existing);
-    const node = input.nodes[currentNodeKey];
+function validateNixInputTargets(input) {
+  for (const [nodeKey, node] of Object.entries(input.nodes)) {
     if (!isRecord10(node) || !isRecord10(node.inputs)) {
       continue;
     }
@@ -27244,17 +27390,33 @@ function collectReachableNixPaths(input) {
         return nixLockShapeError({
           lockfilePath: input.lockfilePath,
           reason: "input_target_missing",
-          node: currentNodeKey,
+          node: nodeKey,
           target
         });
       }
-      if (currentPath.includes(target)) {
-        continue;
-      }
-      queue.push([...currentPath, target]);
     }
   }
-  return ok(pathsByNode);
+  if (!input.nodes[input.rootNodeKey]) {
+    return nixLockShapeError({
+      lockfilePath: input.lockfilePath,
+      reason: "missing_root_node",
+      node: input.rootNodeKey
+    });
+  }
+  return ok(undefined);
+}
+function nixChildRefs(nodes, nodeKey) {
+  const node = nodes[nodeKey];
+  if (!isRecord10(node) || !isRecord10(node.inputs)) {
+    return [];
+  }
+  const targets = [];
+  for (const target of Object.values(node.inputs).flatMap(nixInputTargets)) {
+    if (Object.prototype.hasOwnProperty.call(nodes, target)) {
+      targets.push(target);
+    }
+  }
+  return targets;
 }
 function nixInputTargets(value) {
   if (typeof value === "string") {
@@ -27320,9 +27482,6 @@ function stringField(record, field) {
 }
 function rootProjectName(lockfilePath) {
   return path23.basename(path23.dirname(lockfilePath)) || "<nix-flake>";
-}
-function samePath(left, right) {
-  return left.length === right.length && left.every((item, index) => item === right[index]);
 }
 function nixLockShapeError(input) {
   return err(createError({
@@ -35605,11 +35764,6 @@ function escapeRegExp5(input) {
 }
 
 // src/graph/spdx-json.ts
-var SPDX_MAX_PATHS_PER_NODE = 64;
-var SPDX_MAX_PATH_DEPTH = 256;
-var SPDX_MAX_TRAVERSAL_PATHS = 200000;
-var SPDX_MAX_STORED_PATH_SEGMENTS = 1048576;
-var SPDX_TRUNCATED_PATH_SEGMENT = "<spdx-path-truncated>";
 function parseSpdxJsonFile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -35653,14 +35807,45 @@ function parseSpdxDocument(document2, lockfilePath) {
     packages,
     dependencyMap: dependencyMap.value
   });
-  const traversal = traverseSpdxDependencies({
+  const pathCollection = collectBoundedDependencyPaths({
     rootName,
     rootRefs,
-    packages,
-    dependencyMap: dependencyMap.value
+    childRefs: (nodeKey) => dependencyMap.value.get(nodeKey) ?? [],
+    pathNoun: "package"
   });
-  const nodeMap = traversal.nodeMap;
-  const diagnostics = traversal.diagnostics;
+  const nodeMap = new Map;
+  const packagesBySpdxId = new Map(packages.map((pkg) => [pkg.spdxId, pkg]));
+  const rootRefSet = new Set(pathCollection.rootRefs);
+  for (const nodeKey of pathCollection.discoveredNodeKeys) {
+    const record = packagesBySpdxId.get(nodeKey);
+    if (!record) {
+      continue;
+    }
+    const rawPaths = pathCollection.pathsByNode.get(nodeKey);
+    const paths = rawPaths ? rawPaths.map((item) => item.map((segment) => {
+      const segmentRecord = packagesBySpdxId.get(segment);
+      return segmentRecord ? segmentRecord.id : segment;
+    })) : rootRefSet.has(nodeKey) ? [[rootName]] : [];
+    const existing = nodeMap.get(record.id);
+    if (existing) {
+      existing.direct = existing.direct || paths.some((item) => item.length === 2);
+      existing.paths.push(...paths);
+    } else {
+      nodeMap.set(record.id, {
+        id: record.id,
+        name: record.name,
+        version: record.version,
+        ecosystem: record.ecosystem,
+        dependencyType: "production",
+        direct: paths.some((item) => item.length === 2),
+        paths: [...paths]
+      });
+    }
+  }
+  for (const node of nodeMap.values()) {
+    node.paths.sort((left, right) => left.join("\x00").localeCompare(right.join("\x00")));
+  }
+  const diagnostics = pathCollection.diagnostics;
   const nodes = [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id));
   const nodeIds = new Set(nodes.map((node) => node.id));
   return ok({
@@ -35839,186 +36024,6 @@ function readSpdxRootRefs(input) {
   }
   const inferredRoots = input.packages.map((pkg) => pkg.spdxId).filter((spdxId) => !referenced.has(spdxId)).sort();
   return inferredRoots.length > 0 ? inferredRoots : input.packages.map((pkg) => pkg.spdxId).sort();
-}
-function traverseSpdxDependencies(input) {
-  const packagesByRef = new Map(input.packages.map((pkg) => [pkg.spdxId, pkg]));
-  const nodeMap = new Map;
-  const pathLimitAffected = new Set;
-  const depthLimitAffected = new Set;
-  const workLimitAffected = new Set;
-  const segmentLimitAffected = new Set;
-  const pathKeysByNodeId = new Map;
-  const expandedRefs = new Set;
-  let totalPaths = 0;
-  let totalStoredSegments = 0;
-  const stack = input.rootRefs.map((ref) => ({
-    ref,
-    pathIds: [input.rootName],
-    pathRefs: [],
-    direct: true,
-    depth: 1
-  }));
-  while (stack.length > 0) {
-    const current = stack.pop();
-    if (!current) {
-      continue;
-    }
-    if (current.pathRefs.includes(current.ref)) {
-      continue;
-    }
-    const record = packagesByRef.get(current.ref);
-    if (!record) {
-      continue;
-    }
-    if (totalPaths >= SPDX_MAX_TRAVERSAL_PATHS) {
-      workLimitAffected.add(record.id);
-      continue;
-    }
-    const nextPath = [...current.pathIds, record.id];
-    const nextPathRefs = [...current.pathRefs, current.ref];
-    const existing = nodeMap.get(record.id);
-    const pathKey = nextPath.join("\x00");
-    const pathKeys = pathKeysByNodeId.get(record.id) ?? new Set;
-    if (current.depth > SPDX_MAX_PATH_DEPTH) {
-      depthLimitAffected.add(record.id);
-      const summarizedPath = [input.rootName, SPDX_TRUNCATED_PATH_SEGMENT, record.id];
-      const summarizedKey = summarizedPath.join("\x00");
-      if (!pathKeys.has(summarizedKey)) {
-        pathKeys.add(summarizedKey);
-        pathKeysByNodeId.set(record.id, pathKeys);
-        totalPaths += 1;
-        totalStoredSegments += summarizedPath.length;
-        if (existing) {
-          existing.paths.push(summarizedPath);
-        } else {
-          const node = spdxNode(record, {
-            dependencyType: "production",
-            direct: current.direct,
-            paths: [summarizedPath]
-          });
-          nodeMap.set(record.id, node);
-        }
-      }
-      if (expandedRefs.has(current.ref)) {
-        continue;
-      }
-      expandedRefs.add(current.ref);
-      const childRefs2 = input.dependencyMap.get(current.ref) ?? [];
-      if (childRefs2.length > 0) {
-        const boundedPathIds = nextPath.length > SPDX_MAX_PATH_DEPTH ? nextPath.slice(-SPDX_MAX_PATH_DEPTH) : nextPath;
-        const boundedPathRefs = nextPathRefs.length > SPDX_MAX_PATH_DEPTH ? nextPathRefs.slice(-SPDX_MAX_PATH_DEPTH) : nextPathRefs;
-        for (let index = childRefs2.length - 1;index >= 0; index -= 1) {
-          const childRef = childRefs2[index];
-          if (!childRef) {
-            continue;
-          }
-          stack.push({
-            ref: childRef,
-            pathIds: boundedPathIds,
-            pathRefs: boundedPathRefs,
-            direct: false,
-            depth: current.depth + 1
-          });
-        }
-      }
-      continue;
-    }
-    if (pathKeys.has(pathKey)) {
-      continue;
-    }
-    if (pathKeys.size >= SPDX_MAX_PATHS_PER_NODE) {
-      pathLimitAffected.add(record.id);
-      continue;
-    }
-    if (totalStoredSegments + nextPath.length > SPDX_MAX_STORED_PATH_SEGMENTS) {
-      segmentLimitAffected.add(record.id);
-      continue;
-    }
-    pathKeys.add(pathKey);
-    pathKeysByNodeId.set(record.id, pathKeys);
-    totalPaths += 1;
-    totalStoredSegments += nextPath.length;
-    if (existing) {
-      existing.direct = existing.direct || current.direct;
-      existing.paths.push(nextPath);
-    } else {
-      nodeMap.set(record.id, spdxNode(record, {
-        dependencyType: "production",
-        direct: current.direct,
-        paths: [nextPath]
-      }));
-    }
-    if (expandedRefs.has(current.ref)) {
-      continue;
-    }
-    expandedRefs.add(current.ref);
-    const childRefs = input.dependencyMap.get(current.ref) ?? [];
-    if (childRefs.length > 0) {
-      const boundedPathIds = nextPath.length > SPDX_MAX_PATH_DEPTH ? nextPath.slice(-SPDX_MAX_PATH_DEPTH) : nextPath;
-      const boundedPathRefs = nextPathRefs.length > SPDX_MAX_PATH_DEPTH ? nextPathRefs.slice(-SPDX_MAX_PATH_DEPTH) : nextPathRefs;
-      for (let index = childRefs.length - 1;index >= 0; index -= 1) {
-        const childRef = childRefs[index];
-        if (!childRef) {
-          continue;
-        }
-        stack.push({
-          ref: childRef,
-          pathIds: boundedPathIds,
-          pathRefs: boundedPathRefs,
-          direct: false,
-          depth: current.depth + 1
-        });
-      }
-    }
-  }
-  for (const node of nodeMap.values()) {
-    node.paths.sort((left, right) => left.join("\x00").localeCompare(right.join("\x00")));
-  }
-  const diagnostics = [];
-  if (pathLimitAffected.size > 0) {
-    diagnostics.push({
-      code: "dependency_paths_truncated",
-      affectedNodeCount: pathLimitAffected.size,
-      limit: SPDX_MAX_PATHS_PER_NODE,
-      message: `SPDX dependency paths were limited to ${SPDX_MAX_PATHS_PER_NODE} paths per package.`
-    });
-  }
-  if (depthLimitAffected.size > 0) {
-    diagnostics.push({
-      code: "dependency_path_depth_summarized",
-      affectedNodeCount: depthLimitAffected.size,
-      limit: SPDX_MAX_PATH_DEPTH,
-      message: `SPDX dependency paths deeper than ${SPDX_MAX_PATH_DEPTH} packages were summarized.`
-    });
-  }
-  if (workLimitAffected.size > 0) {
-    diagnostics.push({
-      code: "dependency_paths_truncated",
-      affectedNodeCount: workLimitAffected.size,
-      limit: SPDX_MAX_TRAVERSAL_PATHS,
-      message: `SPDX dependency traversal stopped after ${SPDX_MAX_TRAVERSAL_PATHS} stored paths to bound scan work.`
-    });
-  }
-  if (segmentLimitAffected.size > 0) {
-    diagnostics.push({
-      code: "dependency_paths_truncated",
-      affectedNodeCount: segmentLimitAffected.size,
-      limit: SPDX_MAX_STORED_PATH_SEGMENTS,
-      message: `SPDX dependency paths were limited to ${SPDX_MAX_STORED_PATH_SEGMENTS} stored path segments.`
-    });
-  }
-  return { nodeMap, diagnostics };
-}
-function spdxNode(record, input) {
-  return {
-    id: record.id,
-    name: record.name,
-    version: record.version,
-    ecosystem: record.ecosystem,
-    dependencyType: input.dependencyType,
-    direct: input.direct,
-    paths: input.paths
-  };
 }
 function spdxPackageEvidence(record) {
   return {
@@ -37464,7 +37469,7 @@ function appendVcpkgNodePath(input) {
   if (existing) {
     existing.direct = existing.direct || input.direct;
     existing.dependencyType = mergeDependencyType23(existing.dependencyType, input.dependencyType);
-    if (!existing.paths.some((pathItems) => samePath2(pathItems, pathIds))) {
+    if (!existing.paths.some((pathItems) => samePath(pathItems, pathIds))) {
       existing.paths.push(pathIds);
     }
   } else {
@@ -37546,7 +37551,7 @@ function dependencyTypeRank21(type) {
       return 0;
   }
 }
-function samePath2(left, right) {
+function samePath(left, right) {
   return left.length === right.length && left.every((item, index) => item === right[index]);
 }
 function isFile2(pathname) {

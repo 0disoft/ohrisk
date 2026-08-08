@@ -25,6 +25,13 @@
   existing `dependency_paths_truncated` and `dependency_path_depth_summarized`
   graph diagnostics instead of exploding path combinations or overflowing the
   call stack.
+- Nix `flake.lock` dependency traversal now uses the same bounded iterative walk
+  as SPDX: every reachable input node stays in the graph while each node stores
+  at most 64 dependency paths, depth is bounded at 256 nodes, and total
+  traversal work and stored path segments have explicit budgets. Deep nodes keep
+  a summarized placeholder path, and overruns are reported through the existing
+  graph diagnostics instead of exploding input-path fan-out or blocking on
+  quadratic queue operations.
 
 ## 1.14.1 - 2026-07-28
 

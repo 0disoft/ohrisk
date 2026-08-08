@@ -8,6 +8,7 @@ import {
   LOCKFILE_MAX_BYTES,
   readInputTextFile
 } from "./read-input-file";
+import { collectBoundedDependencyPaths } from "./bounded-dependency-paths";
 import type { DependencyGraph, DependencyNode } from "./types";
 
 type NixNodeRecord = {
@@ -75,9 +76,10 @@ export function parseNixFlakeLockText(
       reason: "missing_nodes_object"
     });
   }
+  const nodesObject = parsed.nodes;
 
   const rootNodeKey = typeof parsed.root === "string" ? parsed.root : "root";
-  const rootNode = parsed.nodes[rootNodeKey];
+  const rootNode = nodesObject[rootNodeKey];
   if (!isRecord(rootNode)) {
     return nixLockShapeError({
       lockfilePath,
@@ -86,22 +88,26 @@ export function parseNixFlakeLockText(
     });
   }
 
-  const pathRecords = collectReachableNixPaths({
+  const inputValidation = validateNixInputTargets({
     lockfilePath,
-    nodes: parsed.nodes,
+    nodes: nodesObject,
     rootNodeKey
   });
-  if (!pathRecords.ok) {
-    return pathRecords;
+  if (!inputValidation.ok) {
+    return inputValidation;
   }
 
-  const records: NixNodeRecord[] = [];
-  for (const [nodeKey, paths] of pathRecords.value.entries()) {
-    if (nodeKey === rootNodeKey) {
-      continue;
-    }
+  const pathCollection = collectBoundedDependencyPaths({
+    rootName: rootProjectName(lockfilePath),
+    rootRefs: [rootNodeKey],
+    childRefs: (nodeKey) => nixChildRefs(nodesObject, nodeKey),
+    pathNoun: "input node"
+  });
 
-    const node = parsed.nodes[nodeKey];
+  const records: NixNodeRecord[] = [];
+  const rootName = rootProjectName(lockfilePath);
+  for (const nodeKey of pathCollection.discoveredNodeKeys) {
+    const node = nodesObject[nodeKey];
     if (!isRecord(node) || !isRecord(node.locked)) {
       continue;
     }
@@ -114,21 +120,24 @@ export function parseNixFlakeLockText(
       return err(identity.error);
     }
 
+    const paths = (pathCollection.pathsByNode.get(nodeKey) ?? []).map((item) =>
+      item.filter((segment, index) => index === 0 || segment !== rootNodeKey)
+    );
     records.push({
       nodeKey,
       ...identity.value,
       id: `${identity.value.name}@${identity.value.version}`,
       direct: paths.some((item) => item.length === 2),
-      paths: paths.map((item) => item.map((segment) =>
-        segment === rootNodeKey ? rootProjectName(lockfilePath) : segment
-      ))
+      paths
     });
   }
 
-  const rootName = rootProjectName(lockfilePath);
   return ok({
     rootName,
     lockfilePath,
+    ...(pathCollection.diagnostics.length > 0
+      ? { diagnostics: pathCollection.diagnostics }
+      : {}),
     nodes: records
       .map((record): DependencyNode => ({
         id: record.id,
@@ -144,30 +153,12 @@ export function parseNixFlakeLockText(
   });
 }
 
-function collectReachableNixPaths(input: {
+function validateNixInputTargets(input: {
   lockfilePath: string;
   nodes: Record<string, unknown>;
   rootNodeKey: string;
-}): Result<Map<string, string[][]>, OhriskError> {
-  const pathsByNode = new Map<string, string[][]>();
-  const queue: string[][] = [[input.rootNodeKey]];
-
-  while (queue.length > 0) {
-    const currentPath = queue.shift() as string[];
-    const currentNodeKey = currentPath[currentPath.length - 1];
-    if (!currentNodeKey) {
-      continue;
-    }
-
-    const existing = pathsByNode.get(currentNodeKey) ?? [];
-    if (existing.some((pathItem) => samePath(pathItem, currentPath))) {
-      continue;
-    }
-
-    existing.push(currentPath);
-    pathsByNode.set(currentNodeKey, existing);
-
-    const node = input.nodes[currentNodeKey];
+}): Result<undefined, OhriskError> {
+  for (const [nodeKey, node] of Object.entries(input.nodes)) {
     if (!isRecord(node) || !isRecord(node.inputs)) {
       continue;
     }
@@ -177,20 +168,38 @@ function collectReachableNixPaths(input: {
         return nixLockShapeError({
           lockfilePath: input.lockfilePath,
           reason: "input_target_missing",
-          node: currentNodeKey,
+          node: nodeKey,
           target
         });
       }
-
-      if (currentPath.includes(target)) {
-        continue;
-      }
-
-      queue.push([...currentPath, target]);
     }
   }
 
-  return ok(pathsByNode);
+  if (!input.nodes[input.rootNodeKey]) {
+    return nixLockShapeError({
+      lockfilePath: input.lockfilePath,
+      reason: "missing_root_node",
+      node: input.rootNodeKey
+    });
+  }
+
+  return ok(undefined);
+}
+
+function nixChildRefs(nodes: Record<string, unknown>, nodeKey: string): string[] {
+  const node = nodes[nodeKey];
+  if (!isRecord(node) || !isRecord(node.inputs)) {
+    return [];
+  }
+
+  const targets: string[] = [];
+  for (const target of Object.values(node.inputs).flatMap(nixInputTargets)) {
+    if (Object.prototype.hasOwnProperty.call(nodes, target)) {
+      targets.push(target);
+    }
+  }
+
+  return targets;
 }
 
 function nixInputTargets(value: unknown): string[] {
@@ -286,10 +295,6 @@ function stringField(record: Record<string, unknown>, field: string): string | u
 
 function rootProjectName(lockfilePath: string): string {
   return path.basename(path.dirname(lockfilePath)) || "<nix-flake>";
-}
-
-function samePath(left: string[], right: string[]): boolean {
-  return left.length === right.length && left.every((item, index) => item === right[index]);
 }
 
 function nixLockShapeError(input: {
