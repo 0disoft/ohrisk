@@ -207,16 +207,28 @@ parameters.
 For SPDX JSON and RDF SBOMs, dependency graph traversal is iterative and retains
 every reachable package while storing at most 64 dependency paths per package,
 with path depth bounded at 256 packages and explicit budgets for total stored
-paths and stored path segments. Deeper paths are summarized with a placeholder
-segment, and limit overruns are reported through the `dependency_paths_truncated`
-and `dependency_path_depth_summarized` graph diagnostics, so combinatorial path
-expansion cannot inflate finding identities or crash the scan.
+paths and stored path segments. Node discovery runs separately from path
+storage: every reachable package is discovered and expanded once even when a
+path, work, or segment budget is exhausted, so truncation can never remove a
+dependency or its embedded evidence from the graph. Every node keeps at least
+one deterministic representative path, summarized with a placeholder segment
+when the budget is tight, and per-node caps are filled with distinct paths up to
+the 64-path limit. Deeper paths are summarized with a placeholder segment, and
+limit overruns are reported through the `dependency_paths_truncated` and
+`dependency_path_depth_summarized` graph diagnostics, so combinatorial path
+expansion cannot inflate finding identities or crash the scan. Discovery above
+the supported node limit fails closed with a typed
+`DEPENDENCY_GRAPH_LIMIT_EXCEEDED` error instead of silently omitting nodes.
 
 For Nix `flake.lock`, dependency graph traversal uses the same bounded iterative
 walk: every reachable input node is retained while storing at most 64 dependency
 paths per node, path depth is bounded at 256 nodes, and total traversal work and
-stored path segments have explicit budgets. Nodes beyond the depth bound keep a
-summarized placeholder path, and limit overruns are reported through the same
+stored path segments have explicit budgets. As with SPDX, node discovery is
+separate from path storage: budget exhaustion truncates extra paths but never
+drops reachable input nodes or their descendants, every node keeps at least one
+deterministic path, and discovery above the supported node limit fails closed
+with the same typed error. Nodes beyond the depth bound keep a summarized
+placeholder path, and limit overruns are reported through the same
 `dependency_paths_truncated` and `dependency_path_depth_summarized` graph
 diagnostics instead of materializing combinatorial input-path fan-out.
 

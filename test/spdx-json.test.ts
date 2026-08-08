@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
+import { BOUNDED_PATHS_MAX_PATHS_PER_NODE } from "../src/graph/bounded-dependency-paths";
 import { parseSpdxJsonText } from "../src/graph/spdx-json";
+import { buildFindingId } from "../src/policy/finding-id";
 
 describe("parseSpdxJsonText", () => {
   test("parses SPDX package graph and embedded license evidence from PURL refs", () => {
@@ -411,10 +413,91 @@ describe("parseSpdxJsonText", () => {
     }
 
     const maxPaths = Math.max(...result.value.nodes.map((node) => node.paths.length));
-    expect(maxPaths).toBeLessThanOrEqual(64);
+    expect(maxPaths).toBeLessThanOrEqual(BOUNDED_PATHS_MAX_PATHS_PER_NODE);
+    expect(maxPaths).toBe(BOUNDED_PATHS_MAX_PATHS_PER_NODE);
     expect(result.value.diagnostics).toContainEqual(expect.objectContaining({
       code: "dependency_paths_truncated"
     }));
+  });
+
+  test("keeps every dependency and embedded evidence under a tiny stored-path budget", () => {
+    const result = parseSpdxJsonText(
+      buildSpdxDiamondFixture(2, false),
+      "spdx.json",
+      { limits: { maxTraversalPaths: 1 } }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.length).toBe(8);
+    for (const node of result.value.nodes) {
+      expect(node.paths.length).toBeGreaterThan(0);
+    }
+    expect(result.value.embeddedEvidence?.length ?? 0).toBe(8);
+    expect(result.value.diagnostics).toContainEqual(expect.objectContaining({
+      code: "dependency_paths_truncated",
+      limit: 1
+    }));
+  });
+
+  test("keeps every dependency and embedded evidence under a tiny segment budget", () => {
+    const result = parseSpdxJsonText(
+      buildSpdxDiamondFixture(2, false),
+      "spdx.json",
+      { limits: { maxStoredPathSegments: 8 } }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.length).toBe(8);
+    for (const node of result.value.nodes) {
+      expect(node.paths.length).toBeGreaterThan(0);
+    }
+    expect(result.value.embeddedEvidence?.length ?? 0).toBe(8);
+    expect(result.value.diagnostics?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  test("keeps multi-parent path union at shallow convergence points", () => {
+    const result = parseSpdxJsonText(buildSpdxConvergingFixture(false), "spdx.json");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    const shared = result.value.nodes.find((node) => node.id === "shared@1.0.2");
+    expect(shared?.paths).toEqual([
+      ["fixture-spdx-converging", "root@1.0.0", "mid-a@1.0.0", "shared@1.0.2"],
+      ["fixture-spdx-converging", "root@1.0.0", "mid-b@1.0.1", "shared@1.0.2"]
+    ]);
+    expect(result.value.diagnostics ?? []).toEqual([]);
+  });
+
+  test("keeps finding IDs stable under relationship order changes", () => {
+    const forward = parseSpdxJsonText(buildSpdxConvergingFixture(false), "spdx.json");
+    const reversed = parseSpdxJsonText(buildSpdxConvergingFixture(true), "spdx.json");
+
+    expect(forward.ok).toBe(true);
+    expect(reversed.ok).toBe(true);
+    if (!forward.ok || !reversed.ok) {
+      throw new Error("Fixture parse failed.");
+    }
+
+    const findingIds = (result: typeof forward): string[] => result.value.nodes.map((node) =>
+      buildFindingId({
+        packageId: node.id,
+        dependencyType: node.dependencyType,
+        dependencyScope: node.direct ? "direct" : "transitive",
+        paths: node.paths
+      })
+    );
+    expect(findingIds(reversed)).toEqual(findingIds(forward));
   });
 
   test("does not overflow the call stack on deep SPDX chains", () => {
@@ -543,6 +626,44 @@ function buildSpdxChainFixture(length: number): string {
     documentDescribes: ["SPDXRef-chain-0"],
     packages,
     relationships
+  });
+}
+
+function buildSpdxConvergingFixture(reverseOrder = false): string {
+  const relationships: Array<Record<string, string>> = [
+    {
+      spdxElementId: "SPDXRef-root",
+      relationshipType: "DEPENDS_ON",
+      relatedSpdxElement: "SPDXRef-mid-a"
+    },
+    {
+      spdxElementId: "SPDXRef-root",
+      relationshipType: "DEPENDS_ON",
+      relatedSpdxElement: "SPDXRef-mid-b"
+    },
+    {
+      spdxElementId: "SPDXRef-mid-a",
+      relationshipType: "DEPENDS_ON",
+      relatedSpdxElement: "SPDXRef-shared"
+    },
+    {
+      spdxElementId: "SPDXRef-mid-b",
+      relationshipType: "DEPENDS_ON",
+      relatedSpdxElement: "SPDXRef-shared"
+    }
+  ];
+
+  return JSON.stringify({
+    spdxVersion: "SPDX-2.3",
+    name: "fixture-spdx-converging",
+    documentDescribes: ["SPDXRef-root"],
+    packages: [
+      spdxPackage("SPDXRef-root", "root", "1.0.0"),
+      spdxPackage("SPDXRef-mid-a", "mid-a", "1.0.0"),
+      spdxPackage("SPDXRef-mid-b", "mid-b", "1.0.1"),
+      spdxPackage("SPDXRef-shared", "shared", "1.0.2")
+    ],
+    relationships: reverseOrder ? relationships.reverse() : relationships
   });
 }
 

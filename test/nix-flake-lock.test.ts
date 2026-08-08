@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { BOUNDED_PATHS_MAX_PATHS_PER_NODE } from "../src/graph/bounded-dependency-paths";
 import { parseNixFlakeLockText } from "../src/graph/nix-flake-lock";
+import { buildFindingId } from "../src/policy/finding-id";
 
 describe("parseNixFlakeLockText", () => {
   test("bounds combinatorial path explosion in converging Nix DAGs", () => {
@@ -76,6 +77,115 @@ describe("parseNixFlakeLockText", () => {
 
     expect(duplicated.value.nodes.map((node) => ({ id: node.id, paths: node.paths })))
       .toEqual(plain.value.nodes.map((node) => ({ id: node.id, paths: node.paths })));
+  });
+
+  test("keeps every reachable node and descendant when a tiny stored-path budget is exhausted", () => {
+    const result = parseNixFlakeLockText(
+      buildNixDiamondFixture(2, true),
+      "flake.lock",
+      { limits: { maxTraversalPaths: 1 } }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    const expectedIds = [
+      "github:acme/diamond-0@0000000000000000",
+      "github:acme/diamond-1@0000000000000001",
+      "github:acme/diamond-2@0000000000000002",
+      "github:acme/diamond-3@0000000000000003",
+      "github:acme/diamond-4@0000000000000004",
+      "github:acme/diamond-5@0000000000000005",
+      "github:acme/diamond-6@0000000000000006",
+      "github:acme/sink@dddddddddddddddd",
+      "github:acme/descendant@eeeeeeeeeeeeeeee"
+    ].sort();
+    expect(result.value.nodes.map((node) => node.id).sort()).toEqual(expectedIds);
+    for (const node of result.value.nodes) {
+      expect(node.paths.length).toBeGreaterThan(0);
+    }
+    expect(result.value.diagnostics).toContainEqual(expect.objectContaining({
+      code: "dependency_paths_truncated",
+      limit: 1
+    }));
+  });
+
+  test("keeps every reachable node and descendant when a tiny segment budget is exhausted", () => {
+    const result = parseNixFlakeLockText(
+      buildNixDiamondFixture(2, true),
+      "flake.lock",
+      { limits: { maxStoredPathSegments: 8 } }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.length).toBe(9);
+    for (const node of result.value.nodes) {
+      expect(node.paths.length).toBeGreaterThan(0);
+    }
+    expect(result.value.diagnostics?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  test("keeps multi-parent paths up to the per-node cap at the convergence point", () => {
+    const result = parseNixFlakeLockText(buildNixDiamondFixture(10), "flake.lock");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    const sink = result.value.nodes.find(
+      (node) => node.id === "github:acme/sink@dddddddddddddddd"
+    );
+    expect(sink).toBeDefined();
+    expect(sink?.paths.length).toBe(BOUNDED_PATHS_MAX_PATHS_PER_NODE);
+    expect(result.value.diagnostics).toContainEqual(expect.objectContaining({
+      code: "dependency_paths_truncated"
+    }));
+  });
+
+  test("keeps multi-parent path union at shallow convergence points", () => {
+    const result = parseNixFlakeLockText(buildNixConvergingFixture(false, false), "flake.lock");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    const shared = result.value.nodes.find(
+      (node) => node.id === "github:acme/shared@cccccccccccccccc"
+    );
+    expect(shared?.paths).toEqual([
+      [".", "mid-a", "shared"],
+      [".", "mid-b", "shared"]
+    ]);
+    expect(result.value.diagnostics ?? []).toEqual([]);
+  });
+
+  test("keeps finding IDs stable under input order changes", () => {
+    const forward = parseNixFlakeLockText(buildNixConvergingFixture(false, false), "flake.lock");
+    const reversed = parseNixFlakeLockText(buildNixConvergingFixture(true, false), "flake.lock");
+
+    expect(forward.ok).toBe(true);
+    expect(reversed.ok).toBe(true);
+    if (!forward.ok || !reversed.ok) {
+      throw new Error("Fixture parse failed.");
+    }
+
+    const findingIds = (result: typeof forward): string[] => result.value.nodes.map((node) =>
+      buildFindingId({
+        packageId: node.id,
+        dependencyType: node.dependencyType,
+        dependencyScope: node.direct ? "direct" : "transitive",
+        paths: node.paths
+      })
+    );
+    expect(findingIds(reversed)).toEqual(findingIds(forward));
   });
 
   test("parses reachable Nix flake inputs", () => {

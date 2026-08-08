@@ -9,7 +9,10 @@ import {
   LOCKFILE_MAX_BYTES,
   readInputTextFile
 } from "./read-input-file";
-import { collectBoundedDependencyPaths } from "./bounded-dependency-paths";
+import {
+  collectBoundedDependencyPaths,
+  type BoundedPathLimits
+} from "./bounded-dependency-paths";
 import type {
   DependencyGraph,
   DependencyNode
@@ -32,7 +35,7 @@ type UnsupportedSpdxRelationshipReason =
 
 export function parseSpdxJsonFile(
   lockfilePath: string,
-  options: { maxBytes?: number } = {}
+  options: { maxBytes?: number; limits?: Partial<BoundedPathLimits> } = {}
 ): Result<DependencyGraph, OhriskError> {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -55,24 +58,28 @@ export function parseSpdxJsonFile(
     );
   }
 
-  return parseSpdxJsonText(lockfileText.value, lockfilePath);
+  return parseSpdxJsonText(lockfileText.value, lockfilePath, {
+    limits: options.limits
+  });
 }
 
 export function parseSpdxJsonText(
   input: string,
-  lockfilePath = "spdx.json"
+  lockfilePath = "spdx.json",
+  options: { limits?: Partial<BoundedPathLimits> } = {}
 ): Result<DependencyGraph, OhriskError> {
   const parsed = parseSpdxJson(input, lockfilePath);
   if (!parsed.ok) {
     return parsed;
   }
 
-  return parseSpdxDocument(parsed.value, lockfilePath);
+  return parseSpdxDocument(parsed.value, lockfilePath, options);
 }
 
 export function parseSpdxDocument(
   document: unknown,
-  lockfilePath: string
+  lockfilePath: string,
+  options: { limits?: Partial<BoundedPathLimits> } = {}
 ): Result<DependencyGraph, OhriskError> {
   if (!isRecord(document) || !Array.isArray(document.packages)) {
     return spdxShapeError(lockfilePath);
@@ -100,18 +107,22 @@ export function parseSpdxDocument(
     rootName,
     rootRefs,
     childRefs: (nodeKey) => dependencyMap.value.get(nodeKey) ?? [],
-    pathNoun: "package"
+    pathNoun: "package",
+    limits: options.limits
   });
+  if (!pathCollection.ok) {
+    return err(pathCollection.error);
+  }
   const nodeMap = new Map<string, DependencyNode>();
   const packagesBySpdxId = new Map(packages.map((pkg) => [pkg.spdxId, pkg]));
-  const rootRefSet = new Set(pathCollection.rootRefs);
-  for (const nodeKey of pathCollection.discoveredNodeKeys) {
+  const rootRefSet = new Set(pathCollection.value.rootRefs);
+  for (const nodeKey of pathCollection.value.discoveredNodeKeys) {
     const record = packagesBySpdxId.get(nodeKey);
     if (!record) {
       continue;
     }
 
-    const rawPaths = pathCollection.pathsByNode.get(nodeKey);
+    const rawPaths = pathCollection.value.pathsByNode.get(nodeKey);
     const paths = rawPaths
       ? rawPaths.map((item) => item.map((segment) => {
       const segmentRecord = packagesBySpdxId.get(segment);
@@ -139,7 +150,7 @@ export function parseSpdxDocument(
   for (const node of nodeMap.values()) {
     node.paths.sort((left, right) => left.join("\u0000").localeCompare(right.join("\u0000")));
   }
-  const diagnostics = pathCollection.diagnostics;
+  const diagnostics = pathCollection.value.diagnostics;
 
   const nodes = [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id));
   const nodeIds = new Set(nodes.map((node) => node.id));

@@ -8,7 +8,10 @@ import {
   LOCKFILE_MAX_BYTES,
   readInputTextFile
 } from "./read-input-file";
-import { collectBoundedDependencyPaths } from "./bounded-dependency-paths";
+import {
+  collectBoundedDependencyPaths,
+  type BoundedPathLimits
+} from "./bounded-dependency-paths";
 import type { DependencyGraph, DependencyNode } from "./types";
 
 type NixNodeRecord = {
@@ -23,7 +26,7 @@ type NixNodeRecord = {
 
 export function parseNixFlakeLockfile(
   lockfilePath: string,
-  options: { maxBytes?: number } = {}
+  options: { maxBytes?: number; limits?: Partial<BoundedPathLimits> } = {}
 ): Result<DependencyGraph, OhriskError> {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -46,12 +49,15 @@ export function parseNixFlakeLockfile(
     );
   }
 
-  return parseNixFlakeLockText(lockfileText.value, lockfilePath);
+  return parseNixFlakeLockText(lockfileText.value, lockfilePath, {
+    limits: options.limits
+  });
 }
 
 export function parseNixFlakeLockText(
   input: string,
-  lockfilePath = "flake.lock"
+  lockfilePath = "flake.lock",
+  options: { limits?: Partial<BoundedPathLimits> } = {}
 ): Result<DependencyGraph, OhriskError> {
   let parsed: unknown;
   try {
@@ -101,12 +107,16 @@ export function parseNixFlakeLockText(
     rootName: rootProjectName(lockfilePath),
     rootRefs: [rootNodeKey],
     childRefs: (nodeKey) => nixChildRefs(nodesObject, nodeKey),
-    pathNoun: "input node"
+    pathNoun: "input node",
+    limits: options.limits
   });
+  if (!pathCollection.ok) {
+    return err(pathCollection.error);
+  }
 
   const records: NixNodeRecord[] = [];
   const rootName = rootProjectName(lockfilePath);
-  for (const nodeKey of pathCollection.discoveredNodeKeys) {
+  for (const nodeKey of pathCollection.value.discoveredNodeKeys) {
     const node = nodesObject[nodeKey];
     if (!isRecord(node) || !isRecord(node.locked)) {
       continue;
@@ -120,7 +130,7 @@ export function parseNixFlakeLockText(
       return err(identity.error);
     }
 
-    const paths = (pathCollection.pathsByNode.get(nodeKey) ?? []).map((item) =>
+    const paths = (pathCollection.value.pathsByNode.get(nodeKey) ?? []).map((item) =>
       item.filter((segment, index) => index === 0 || segment !== rootNodeKey)
     );
     records.push({
@@ -135,8 +145,8 @@ export function parseNixFlakeLockText(
   return ok({
     rootName,
     lockfilePath,
-    ...(pathCollection.diagnostics.length > 0
-      ? { diagnostics: pathCollection.diagnostics }
+    ...(pathCollection.value.diagnostics.length > 0
+      ? { diagnostics: pathCollection.value.diagnostics }
       : {}),
     nodes: records
       .map((record): DependencyNode => ({

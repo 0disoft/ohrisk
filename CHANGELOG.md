@@ -32,6 +32,16 @@
   a summarized placeholder path, and overruns are reported through the existing
   graph diagnostics instead of exploding input-path fan-out or blocking on
   quadratic queue operations.
+- Bounded SPDX and Nix traversal now separates node discovery from path storage.
+  Every reachable node is discovered and its child edges expanded exactly once,
+  so exhausting the per-node, traversal-work, or stored-segment budget can no
+  longer remove later dependencies or their embedded evidence from the graph.
+  Every node keeps at least one deterministic path (summarized with a
+  placeholder segment when the budget is tight), per-node caps are filled with
+  distinct paths up to the 64-path limit, node discovery above the supported
+  limit fails closed with a typed `DEPENDENCY_GRAPH_LIMIT_EXCEEDED` error, and
+  node keys, paths, diagnostics, and finding identities stay stable under input
+  ordering changes.
 
 ## 1.14.1 - 2026-07-28
 
