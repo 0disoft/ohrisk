@@ -17,7 +17,10 @@ import {
   artifactCacheMetadataFromHeaders,
   createArtifactCache,
   defaultArtifactCacheDirectory,
-  openArtifactCacheForManagement
+  openArtifactCacheForManagement,
+  statusFromInventory,
+  type CacheIndexRecord,
+  type CacheInventory
 } from "../src/evidence/cache";
 
 describe("persistent artifact cache", () => {
@@ -366,6 +369,74 @@ describe("persistent artifact cache", () => {
       "win32"
     )).toBe(path.resolve("C:\\Users\\user\\AppData\\Local", "Ohrisk", "Cache", "artifacts"));
   });
+
+  test("summarizes a large synthetic inventory without argument-limit failure", () => {
+    const inventory = syntheticInventory(700_000);
+
+    const status = statusFromInventory(inventory, 2_000);
+
+    expect(status.entryCount).toBe(700_000);
+    expect(status.objectCount).toBe(700_000);
+    expect(status.totalBytes).toBe(7_000_000);
+    expect(status.orphanObjectCount).toBe(0);
+    expect(status.orphanBytes).toBe(0);
+    expect(status.staleEntryCount).toBe(1);
+    expect(status.corruptEntryCount).toBe(0);
+    expect(status.oldestAccessedAt).toBe(1_000);
+    expect(status.newestAccessedAt).toBe(1_000 + 699_999);
+  });
+
+  test("summarizes an empty inventory without min or max access fields", () => {
+    const status = statusFromInventory({ entries: [], objectSizes: new Map(), corruptEntryCount: 0 }, 1_000);
+
+    expect(status).toEqual({
+      entryCount: 0,
+      objectCount: 0,
+      totalBytes: 0,
+      orphanObjectCount: 0,
+      orphanBytes: 0,
+      staleEntryCount: 0,
+      corruptEntryCount: 0
+    });
+  });
+
+  test("summarizes a single entry with equal oldest and newest access times", () => {
+    const inventory = syntheticInventory(1);
+
+    const status = statusFromInventory(inventory, 1_000);
+
+    expect(status.entryCount).toBe(1);
+    expect(status.oldestAccessedAt).toBe(1_000);
+    expect(status.newestAccessedAt).toBe(1_000);
+    expect(status.staleEntryCount).toBe(0);
+  });
+
+  test("keeps stale count at the expiry boundary and counts corrupt entries", () => {
+    const inventory = syntheticInventory(3);
+    inventory.entries[0].index.expiresAt = 2_000;
+    inventory.entries[1].index.expiresAt = 2_001;
+    inventory.entries[2].index.expiresAt = 2_000;
+    inventory.corruptEntryCount = 4;
+
+    const status = statusFromInventory(inventory, 2_000);
+
+    expect(status.staleEntryCount).toBe(2);
+    expect(status.corruptEntryCount).toBe(4);
+  });
+
+  test("keeps the summary stable under entry and object order permutation", () => {
+    const forward = syntheticInventory(20);
+    const reversed: CacheInventory = {
+      entries: [...forward.entries].reverse(),
+      objectSizes: new Map(
+        [...forward.objectSizes.entries()].reverse()
+      ),
+      corruptEntryCount: 2
+    };
+    forward.corruptEntryCount = 2;
+
+    expect(statusFromInventory(forward, 2_000)).toEqual(statusFromInventory(reversed, 2_000));
+  });
 });
 
 function headersFrom(values: Record<string, string>): { get: (name: string) => string | null } {
@@ -388,4 +459,26 @@ function objectPathForDigest(root: string, digest: string): string {
 
 function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+function syntheticInventory(entryCount: number): CacheInventory {
+  const entries: CacheIndexRecord[] = [];
+  const objectSizes = new Map<string, number>();
+  for (let i = 0; i < entryCount; i += 1) {
+    const digest = `d${i}`;
+    entries.push({
+      path: `index/${digest}.json`,
+      index: {
+        version: 3,
+        key: digest,
+        sha256: digest,
+        size: 10,
+        fetchedAt: 1_000 + i,
+        lastAccessedAt: 1_000 + i,
+        expiresAt: 2_000 + i
+      }
+    });
+    objectSizes.set(digest, 10);
+  }
+  return { entries, objectSizes, corruptEntryCount: 0 };
 }

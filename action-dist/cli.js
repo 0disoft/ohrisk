@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 69c8c24e06536c72f65cb99896103439525eaa8105dc3dbba0184b1fe0351e1c
+// ohrisk-action-source-sha256: 77bfe85e568e5ab0e75cbb5771a1ae9886a673f962697b785783c9f8b0ff77fd
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18539,7 +18539,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.10";
+var OHRISK_VERSION = "1.14.11";
 
 // src/archive/archive-project.ts
 import path47 from "node:path";
@@ -41468,19 +41468,42 @@ function scanCacheInventory(rootDir, now) {
   return { entries, objectSizes, corruptEntryCount };
 }
 function statusFromInventory(inventory, now) {
-  const referencedDigests = new Set(inventory.entries.map((entry) => entry.index.sha256));
-  const orphanDigests = [...inventory.objectSizes.keys()].filter((digest) => !referencedDigests.has(digest));
-  const accessedAt = inventory.entries.map((entry) => entry.index.lastAccessedAt);
+  const referencedDigests = new Set;
+  let staleEntryCount = 0;
+  let oldestAccessedAt;
+  let newestAccessedAt;
+  for (const entry of inventory.entries) {
+    referencedDigests.add(entry.index.sha256);
+    if (entry.index.expiresAt <= now) {
+      staleEntryCount += 1;
+    }
+    if (oldestAccessedAt === undefined || entry.index.lastAccessedAt < oldestAccessedAt) {
+      oldestAccessedAt = entry.index.lastAccessedAt;
+    }
+    if (newestAccessedAt === undefined || entry.index.lastAccessedAt > newestAccessedAt) {
+      newestAccessedAt = entry.index.lastAccessedAt;
+    }
+  }
+  let totalBytes = 0;
+  let orphanObjectCount = 0;
+  let orphanBytes = 0;
+  for (const [digest, size] of inventory.objectSizes) {
+    totalBytes += size;
+    if (!referencedDigests.has(digest)) {
+      orphanObjectCount += 1;
+      orphanBytes += size;
+    }
+  }
   return {
     entryCount: inventory.entries.length,
     objectCount: inventory.objectSizes.size,
-    totalBytes: [...inventory.objectSizes.values()].reduce((total, size) => total + size, 0),
-    orphanObjectCount: orphanDigests.length,
-    orphanBytes: orphanDigests.reduce((total, digest) => total + (inventory.objectSizes.get(digest) ?? 0), 0),
-    staleEntryCount: inventory.entries.filter((entry) => entry.index.expiresAt <= now).length,
+    totalBytes,
+    orphanObjectCount,
+    orphanBytes,
+    staleEntryCount,
     corruptEntryCount: inventory.corruptEntryCount,
-    ...accessedAt.length > 0 ? { oldestAccessedAt: Math.min(...accessedAt) } : {},
-    ...accessedAt.length > 0 ? { newestAccessedAt: Math.max(...accessedAt) } : {}
+    ...oldestAccessedAt !== undefined ? { oldestAccessedAt } : {},
+    ...newestAccessedAt !== undefined ? { newestAccessedAt } : {}
   };
 }
 function removeOrphanedObjects(rootDir, now) {

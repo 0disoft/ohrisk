@@ -119,12 +119,12 @@ type ArtifactCacheIndexV2 = {
 
 type ArtifactCacheIndex = ArtifactCacheIndexV3 | ArtifactCacheIndexV2;
 
-type CacheIndexRecord = {
+export type CacheIndexRecord = {
   path: string;
   index: ArtifactCacheIndexV3;
 };
 
-type CacheInventory = {
+export type CacheInventory = {
   entries: CacheIndexRecord[];
   objectSizes: Map<string, number>;
   corruptEntryCount: number;
@@ -630,25 +630,46 @@ function scanCacheInventory(rootDir: string, now: number): CacheInventory {
   return { entries, objectSizes, corruptEntryCount };
 }
 
-function statusFromInventory(inventory: CacheInventory, now: number): ArtifactCacheStatus {
-  const referencedDigests = new Set(inventory.entries.map((entry) => entry.index.sha256));
-  const orphanDigests = [...inventory.objectSizes.keys()].filter(
-    (digest) => !referencedDigests.has(digest)
-  );
-  const accessedAt = inventory.entries.map((entry) => entry.index.lastAccessedAt);
+export function statusFromInventory(inventory: CacheInventory, now: number): ArtifactCacheStatus {
+  const referencedDigests = new Set<string>();
+  let staleEntryCount = 0;
+  let oldestAccessedAt: number | undefined;
+  let newestAccessedAt: number | undefined;
+
+  for (const entry of inventory.entries) {
+    referencedDigests.add(entry.index.sha256);
+    if (entry.index.expiresAt <= now) {
+      staleEntryCount += 1;
+    }
+    if (oldestAccessedAt === undefined || entry.index.lastAccessedAt < oldestAccessedAt) {
+      oldestAccessedAt = entry.index.lastAccessedAt;
+    }
+    if (newestAccessedAt === undefined || entry.index.lastAccessedAt > newestAccessedAt) {
+      newestAccessedAt = entry.index.lastAccessedAt;
+    }
+  }
+
+  let totalBytes = 0;
+  let orphanObjectCount = 0;
+  let orphanBytes = 0;
+  for (const [digest, size] of inventory.objectSizes) {
+    totalBytes += size;
+    if (!referencedDigests.has(digest)) {
+      orphanObjectCount += 1;
+      orphanBytes += size;
+    }
+  }
+
   return {
     entryCount: inventory.entries.length,
     objectCount: inventory.objectSizes.size,
-    totalBytes: [...inventory.objectSizes.values()].reduce((total, size) => total + size, 0),
-    orphanObjectCount: orphanDigests.length,
-    orphanBytes: orphanDigests.reduce(
-      (total, digest) => total + (inventory.objectSizes.get(digest) ?? 0),
-      0
-    ),
-    staleEntryCount: inventory.entries.filter((entry) => entry.index.expiresAt <= now).length,
+    totalBytes,
+    orphanObjectCount,
+    orphanBytes,
+    staleEntryCount,
     corruptEntryCount: inventory.corruptEntryCount,
-    ...(accessedAt.length > 0 ? { oldestAccessedAt: Math.min(...accessedAt) } : {}),
-    ...(accessedAt.length > 0 ? { newestAccessedAt: Math.max(...accessedAt) } : {})
+    ...(oldestAccessedAt !== undefined ? { oldestAccessedAt } : {}),
+    ...(newestAccessedAt !== undefined ? { newestAccessedAt } : {})
   };
 }
 

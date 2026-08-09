@@ -66,6 +66,12 @@
   parent returns `REPORT_OUTPUT_PATH_OUTSIDE_PROJECT` without creating missing
   intermediate directories inside or outside the project, while parent
   symlinks that resolve inside the project keep working.
+- Artifact cache status summaries now accumulate entry counts, byte totals,
+  stale counts, and oldest/newest access times in a single pass instead of
+  spreading every access timestamp into `Math.min`/`Math.max`. Cache
+  inventories of hundreds of thousands of entries no longer fail with a
+  `Maximum call stack size exceeded` RangeError, and the summary stays exact
+  and order-independent.
 
 ## 1.14.1 - 2026-07-28
 
