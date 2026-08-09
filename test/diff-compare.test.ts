@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { diffRiskFindings } from "../src/diff/compare";
+import { buildFindingFingerprint, buildFindingId } from "../src/policy/finding-id";
 import type { RiskFinding } from "../src/policy/types";
 
 function finding(overrides: Partial<RiskFinding> = {}): RiskFinding {
@@ -108,5 +109,65 @@ describe("diffRiskFindings", () => {
     expect(diff.changedFindings).toEqual([]);
     expect(diff.resolvedFindings).toEqual([baseline]);
     expect(diff.introducedFindings).toEqual([current]);
+  });
+
+  test("does not classify a path-permuted finding as new or resolved", () => {
+    const id = buildFindingId({
+      packageId: "shared@1.0.2",
+      dependencyType: "production",
+      dependencyScope: "transitive",
+      paths: [
+        ["fixture-a", "root@1.0.0", "mid-a@1.0.0", "shared@1.0.2"],
+        ["fixture-b", "root@1.0.0", "mid-b@1.0.1", "shared@1.0.2"]
+      ]
+    });
+    const permutedId = buildFindingId({
+      packageId: "shared@1.0.2",
+      dependencyType: "production",
+      dependencyScope: "transitive",
+      paths: [
+        ["fixture-b", "root@1.0.0", "mid-b@1.0.1", "shared@1.0.2"],
+        ["fixture-a", "root@1.0.0", "mid-a@1.0.0", "shared@1.0.2"]
+      ]
+    });
+    expect(permutedId).toBe(id);
+
+    const fingerprint = buildFindingFingerprint({
+      id,
+      severity: "high",
+      recommendation: "replace",
+      reason: "License expression is high risk for saas.",
+      evidence: ["source: sbom"]
+    });
+    const baseline = finding({
+      id,
+      fingerprint,
+      packageId: "shared@1.0.2",
+      dependencyScope: "transitive",
+      paths: [
+        ["fixture-a", "root@1.0.0", "mid-a@1.0.0", "shared@1.0.2"],
+        ["fixture-b", "root@1.0.0", "mid-b@1.0.1", "shared@1.0.2"]
+      ]
+    });
+    const current = finding({
+      id: permutedId,
+      fingerprint,
+      packageId: "shared@1.0.2",
+      dependencyScope: "transitive",
+      paths: [
+        ["fixture-b", "root@1.0.0", "mid-b@1.0.1", "shared@1.0.2"],
+        ["fixture-a", "root@1.0.0", "mid-a@1.0.0", "shared@1.0.2"]
+      ]
+    });
+
+    const diff = diffRiskFindings({
+      baselineFindings: [baseline],
+      currentFindings: [current]
+    });
+
+    expect(diff.newFindings).toEqual([]);
+    expect(diff.resolvedFindings).toEqual([]);
+    expect(diff.changedFindings).toEqual([]);
+    expect(diff.introducedFindings).toEqual([]);
   });
 });

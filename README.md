@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.14.8
+npm install -g ohrisk@1.14.9
 cd your-project
 ohrisk scan
 ```
@@ -382,7 +382,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.14.8
+npm install -g ohrisk@1.14.9
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
@@ -647,6 +647,13 @@ audits can distinguish ignored waiver files from projects with no waivers.
 If package names, versions, paths, reasons, or evidence text contain finding
 delimiters such as `::`, `>`, or `|`, Ohrisk percent-escapes those characters in
 the generated IDs and fingerprints to keep waiver matching unambiguous.
+Finding IDs canonicalize each dependency path set: exact duplicate paths are
+removed and the remaining paths are sorted by stable code-unit order, so
+relationship order, lockfile order, and merge input order cannot change a
+finding ID. Adding or removing a dependency path still changes the ID because
+paths are part of the finding identity. Waiver files written before this
+canonicalization continue to match through a legacy raw-order ID and fingerprint
+alias, so existing waivers keep applying to the same dependency graph.
 
 Explain a license expression without scanning a project:
 

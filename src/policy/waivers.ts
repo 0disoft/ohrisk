@@ -9,6 +9,7 @@ import {
   type TextFileReadError
 } from "../shared/read-text-file";
 import { err, ok, type Result } from "../shared/result";
+import { buildFindingFingerprint, buildLegacyFindingId } from "./finding-id";
 import type { RiskFinding } from "./types";
 
 export const DEFAULT_WAIVER_FILE_NAME = ".ohrisk-waivers.json";
@@ -115,12 +116,21 @@ export function applyRiskWaivers(input: {
   const now = input.now ?? new Date();
   const activeWaivers = input.waivers.filter((waiver) => !isExpired(waiver, now));
   const expiredWaivers = input.waivers.filter((waiver) => isExpired(waiver, now));
+  if (activeWaivers.length === 0) {
+    return {
+      activeFindings: input.findings,
+      waivedFindings: [],
+      expiredWaivers,
+      unmatchedWaivers: []
+    };
+  }
   const activeFindings: RiskFinding[] = [];
   const waivedFindings: WaivedRiskFinding[] = [];
   const matchedWaivers = new Set<RiskWaiver>();
 
   for (const finding of input.findings) {
-    const waiver = activeWaivers.find((candidate) => matchesWaiver(candidate, finding));
+    const legacy = legacyIdentityFor(finding);
+    const waiver = activeWaivers.find((candidate) => matchesWaiver(candidate, finding, legacy));
     if (!waiver) {
       activeFindings.push(finding);
       continue;
@@ -130,7 +140,9 @@ export function applyRiskWaivers(input: {
     waivedFindings.push({
       finding,
       waiver,
-      matchedBy: waiver.id === finding.id ? "id" : "fingerprint"
+      matchedBy: waiver.id === finding.id || waiver.id === legacy.id
+        ? "id"
+        : "fingerprint"
     });
   }
 
@@ -210,8 +222,37 @@ function unknownKeys(value: Record<string, unknown>, allowed: ReadonlySet<string
   return Object.keys(value).filter((key) => !allowed.has(key)).sort();
 }
 
-function matchesWaiver(waiver: RiskWaiver, finding: RiskFinding): boolean {
-  return waiver.id === finding.id || waiver.fingerprint === finding.fingerprint;
+function legacyIdentityFor(finding: RiskFinding): {
+  id: string;
+  fingerprint: string;
+} {
+  const id = buildLegacyFindingId({
+    packageId: finding.packageId,
+    dependencyType: finding.dependencyType,
+    dependencyScope: finding.dependencyScope,
+    paths: finding.paths
+  });
+  return {
+    id,
+    fingerprint: buildFindingFingerprint({
+      id,
+      severity: finding.severity,
+      recommendation: finding.recommendation,
+      reason: finding.reason,
+      evidence: finding.evidence
+    })
+  };
+}
+
+function matchesWaiver(
+  waiver: RiskWaiver,
+  finding: RiskFinding,
+  legacy: { id: string; fingerprint: string }
+): boolean {
+  return waiver.id === finding.id
+    || waiver.id === legacy.id
+    || waiver.fingerprint === finding.fingerprint
+    || waiver.fingerprint === legacy.fingerprint;
 }
 
 function isExpired(waiver: RiskWaiver, now: Date): boolean {

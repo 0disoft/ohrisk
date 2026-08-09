@@ -3,7 +3,48 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { DEFAULT_WAIVER_FILE_NAME, readRiskWaivers } from "../src/policy/waivers";
+import {
+  applyRiskWaivers,
+  DEFAULT_WAIVER_FILE_NAME,
+  readRiskWaivers,
+  type RiskWaiver
+} from "../src/policy/waivers";
+import {
+  buildFindingFingerprint,
+  buildFindingId,
+  buildLegacyFindingId
+} from "../src/policy/finding-id";
+import type { RiskFinding } from "../src/policy/types";
+
+function findingWithPaths(paths: string[][]): RiskFinding {
+  const id = buildFindingId({
+    packageId: "shared@1.0.2",
+    dependencyType: "production",
+    dependencyScope: "transitive",
+    paths
+  });
+  const fingerprint = buildFindingFingerprint({
+    id,
+    severity: "high",
+    recommendation: "replace",
+    reason: "License expression is high risk for saas.",
+    evidence: ["source: sbom"]
+  });
+
+  return {
+    id,
+    fingerprint,
+    packageId: "shared@1.0.2",
+    severity: "high",
+    reason: "License expression is high risk for saas.",
+    action: "Replace this package or escalate before shipping.",
+    dependencyType: "production",
+    dependencyScope: "transitive",
+    evidence: ["source: sbom"],
+    paths,
+    recommendation: "replace"
+  };
+}
 
 describe("readRiskWaivers", () => {
   test("publishes a closed waiver-file schema for roots and items", () => {
@@ -78,5 +119,65 @@ describe("readRiskWaivers", () => {
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
+  });
+
+  test("applies legacy raw-order waiver IDs after canonicalization", () => {
+    const paths = [
+      ["fixture-b", "root@1.0.0", "mid-b@1.0.1", "shared@1.0.2"],
+      ["fixture-a", "root@1.0.0", "mid-a@1.0.0", "shared@1.0.2"]
+    ];
+    const finding = findingWithPaths(paths);
+    const legacyId = buildLegacyFindingId({
+      packageId: finding.packageId,
+      dependencyType: finding.dependencyType,
+      dependencyScope: finding.dependencyScope,
+      paths: finding.paths
+    });
+    const waiver: RiskWaiver = { id: legacyId, reason: "Reviewed for this release." };
+
+    const result = applyRiskWaivers({
+      findings: [finding],
+      waivers: [waiver],
+      now: new Date("2026-08-09T00:00:00.000Z")
+    });
+
+    expect(result.waivedFindings).toHaveLength(1);
+    expect(result.waivedFindings[0]?.matchedBy).toBe("id");
+    expect(result.unmatchedWaivers).toEqual([]);
+    expect(result.activeFindings).toEqual([]);
+  });
+
+  test("applies legacy fingerprint waivers after canonicalization", () => {
+    const paths = [
+      ["fixture-b", "root@1.0.0", "mid-b@1.0.1", "shared@1.0.2"],
+      ["fixture-a", "root@1.0.0", "mid-a@1.0.0", "shared@1.0.2"]
+    ];
+    const finding = findingWithPaths(paths);
+    const legacyFingerprint = buildFindingFingerprint({
+      id: buildLegacyFindingId({
+        packageId: finding.packageId,
+        dependencyType: finding.dependencyType,
+        dependencyScope: finding.dependencyScope,
+        paths: finding.paths
+      }),
+      severity: finding.severity,
+      recommendation: finding.recommendation,
+      reason: finding.reason,
+      evidence: finding.evidence
+    });
+    const waiver: RiskWaiver = {
+      fingerprint: legacyFingerprint,
+      reason: "Reviewed for this release."
+    };
+
+    const result = applyRiskWaivers({
+      findings: [finding],
+      waivers: [waiver],
+      now: new Date("2026-08-09T00:00:00.000Z")
+    });
+
+    expect(result.waivedFindings).toHaveLength(1);
+    expect(result.waivedFindings[0]?.matchedBy).toBe("fingerprint");
+    expect(result.unmatchedWaivers).toEqual([]);
   });
 });

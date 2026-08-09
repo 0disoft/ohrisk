@@ -280,6 +280,15 @@ open version expressions fail closed instead of being guessed.
 - `.ohrisk-waivers.json` has its own closed Draft 2020-12 input contract at `schemas/waiver-file.schema.json`; the parser and schema both reject unknown root and item fields.
 - Shareable formats must not expose absolute local project roots, lockfiles, policy paths, cache paths, or credentials.
 - Machine-readable IDs, fingerprints, enum values, and paths must remain stable unless the change is documented and tested.
+- Finding IDs canonicalize the dependency path set before encoding: exact
+  duplicate paths are removed and the remaining paths are sorted by stable
+  code-unit order, independent of locale and input ordering. Relationship
+  order, lockfile order, graph merge order, and duplicate paths therefore
+  cannot change a finding ID, while adding or removing a dependency path
+  changes the ID because paths are part of the finding identity. Waivers
+  written against the previous raw-order identity keep matching through a
+  legacy ID and fingerprint alias applied only during waiver matching; reports,
+  diffs, and new waivers always use the canonical identity.
 
 ## Configuration Boundaries
 

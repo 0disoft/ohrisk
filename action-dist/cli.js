@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: a86a4254029390f61d3955f5965658e8e5c0c27af21b3fe9063ff4b09f290d5d
+// ohrisk-action-source-sha256: 338b778863350dc4b3f7b8d6ed5c52b02623953420870470f03087dcd5a92451
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18539,7 +18539,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.8";
+var OHRISK_VERSION = "1.14.9";
 
 // src/archive/archive-project.ts
 import path47 from "node:path";
@@ -53637,12 +53637,36 @@ function describeEvidenceSources(evidence) {
 
 // src/policy/finding-id.ts
 function buildFindingId(input) {
+  return joinFindingIdentity(input.packageId, input.dependencyType, input.dependencyScope, canonicalPathSet(input.paths));
+}
+function buildLegacyFindingId(input) {
+  return joinFindingIdentity(input.packageId, input.dependencyType, input.dependencyScope, input.paths);
+}
+function joinFindingIdentity(packageId, dependencyType, dependencyScope, paths) {
   return [
-    encodeFindingComponent(input.packageId),
-    encodeFindingComponent(input.dependencyType),
-    encodeFindingComponent(input.dependencyScope),
-    input.paths.map((items) => items.map(encodeFindingComponent).join(">")).join("|")
+    encodeFindingComponent(packageId),
+    encodeFindingComponent(dependencyType),
+    encodeFindingComponent(dependencyScope),
+    paths.map((items) => items.map(encodeFindingComponent).join(">")).join("|")
   ].join("::");
+}
+function canonicalPathSet(paths) {
+  const byKey = new Map;
+  for (const dependencyPath of paths) {
+    byKey.set(JSON.stringify(dependencyPath), dependencyPath);
+  }
+  return [...byKey.values()].sort(comparePaths2);
+}
+function comparePaths2(left, right) {
+  const leftKey = left.join("\x00");
+  const rightKey = right.join("\x00");
+  if (leftKey < rightKey) {
+    return -1;
+  }
+  if (leftKey > rightKey) {
+    return 1;
+  }
+  return 0;
 }
 function buildFindingFingerprint(input) {
   return [
@@ -54723,11 +54747,20 @@ function applyRiskWaivers(input) {
   const now = input.now ?? new Date;
   const activeWaivers = input.waivers.filter((waiver) => !isExpired(waiver, now));
   const expiredWaivers = input.waivers.filter((waiver) => isExpired(waiver, now));
+  if (activeWaivers.length === 0) {
+    return {
+      activeFindings: input.findings,
+      waivedFindings: [],
+      expiredWaivers,
+      unmatchedWaivers: []
+    };
+  }
   const activeFindings = [];
   const waivedFindings = [];
   const matchedWaivers = new Set;
   for (const finding of input.findings) {
-    const waiver = activeWaivers.find((candidate) => matchesWaiver(candidate, finding));
+    const legacy = legacyIdentityFor(finding);
+    const waiver = activeWaivers.find((candidate) => matchesWaiver(candidate, finding, legacy));
     if (!waiver) {
       activeFindings.push(finding);
       continue;
@@ -54736,7 +54769,7 @@ function applyRiskWaivers(input) {
     waivedFindings.push({
       finding,
       waiver,
-      matchedBy: waiver.id === finding.id ? "id" : "fingerprint"
+      matchedBy: waiver.id === finding.id || waiver.id === legacy.id ? "id" : "fingerprint"
     });
   }
   return {
@@ -54798,8 +54831,26 @@ function parseWaiver(value, index) {
 function unknownKeys(value, allowed) {
   return Object.keys(value).filter((key) => !allowed.has(key)).sort();
 }
-function matchesWaiver(waiver, finding) {
-  return waiver.id === finding.id || waiver.fingerprint === finding.fingerprint;
+function legacyIdentityFor(finding) {
+  const id = buildLegacyFindingId({
+    packageId: finding.packageId,
+    dependencyType: finding.dependencyType,
+    dependencyScope: finding.dependencyScope,
+    paths: finding.paths
+  });
+  return {
+    id,
+    fingerprint: buildFindingFingerprint({
+      id,
+      severity: finding.severity,
+      recommendation: finding.recommendation,
+      reason: finding.reason,
+      evidence: finding.evidence
+    })
+  };
+}
+function matchesWaiver(waiver, finding, legacy) {
+  return waiver.id === finding.id || waiver.id === legacy.id || waiver.fingerprint === finding.fingerprint || waiver.fingerprint === legacy.fingerprint;
 }
 function isExpired(waiver, now) {
   if (!waiver.expiresOn) {
@@ -58902,6 +58953,15 @@ function renderHtmlFilterScript(text3) {
     "    return segments;",
     "  };",
     "  const encodeFindingComponent = (value) => String(value).replace(/%/g, '%25').replace(/:/g, '%3A').replace(/>/g, '%3E').replace(/\\|/g, '%7C');",
+    "  const canonicalizePaths = (paths) => {",
+    "    const byKey = new Map();",
+    "    for (const dependencyPath of paths) byKey.set(JSON.stringify(dependencyPath), dependencyPath);",
+    "    return [...byKey.values()].sort((left, right) => {",
+    "      const leftKey = left.join('\\u0000');",
+    "      const rightKey = right.join('\\u0000');",
+    "      return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;",
+    "    });",
+    "  };",
     "  const decodeFingerprint = (fingerprintIndex) => {",
     "    const record = fingerprintPayload.f[fingerprintIndex];",
     "    if (typeof record === 'string') {",
@@ -58915,7 +58975,7 @@ function renderHtmlFilterScript(text3) {
     "    if (typeof packageId !== 'string' || typeof reason !== 'string' || !Array.isArray(record[3]) || !Array.isArray(record[7])) {",
     "      return null;",
     "    }",
-    "    const paths = record[3].map((pathIndex) => decodePath(pathIndex));",
+    "    const paths = canonicalizePaths(record[3].map((pathIndex) => decodePath(pathIndex)));",
     "    const evidence = record[7].map((stringIndex) => fingerprintPayload.s[stringIndex]);",
     "    if (paths.some((path) => !Array.isArray(path)) || evidence.some((item) => typeof item !== 'string')) {",
     "      return null;",

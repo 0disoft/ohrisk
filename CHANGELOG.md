@@ -51,6 +51,15 @@
   Wide or converging graphs no longer pay quadratic parent dedup per edge, and
   multi-root documents keep complete parent-path unions even when a child is
   discovered through one root before another same-depth parent.
+- Finding IDs now canonicalize each dependency path set before encoding: exact
+  duplicate paths are removed and the remaining paths are sorted by stable
+  code-unit order, so relationship order, lockfile order, graph merge input
+  order, and duplicate paths can no longer change a finding ID. Waivers and
+  diffs stay stable across semantically identical inputs, while adding or
+  removing a dependency path still changes the ID because paths are part of
+  the finding identity. Waivers written with the previous raw-order identity
+  keep applying through a legacy ID and fingerprint alias used only during
+  waiver matching.
 
 ## 1.14.1 - 2026-07-28
 

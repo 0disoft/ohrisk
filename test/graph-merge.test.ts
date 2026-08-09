@@ -1,6 +1,67 @@
 import { describe, expect, test } from "bun:test";
 
 import { mergeDependencyGraphs, type SourcedDependencyGraph } from "../src/graph/merge";
+import { parseSpdxJsonText } from "../src/graph/spdx-json";
+import { evaluateLicenseRisks } from "../src/policy/evaluate";
+import type { DependencyGraph } from "../src/graph/types";
+
+function spdxDiamondDoc(rootName: string): string {
+  return JSON.stringify({
+    spdxVersion: "SPDX-2.3",
+    name: rootName,
+    documentDescribes: ["SPDXRef-root"],
+    packages: [
+      {
+        SPDXID: "SPDXRef-root",
+        name: "root",
+        externalRefs: [{ referenceCategory: "PACKAGE-MANAGER", referenceType: "purl", referenceLocator: "pkg:npm/root@1.0.0" }]
+      },
+      {
+        SPDXID: "SPDXRef-mid-a",
+        name: "mid-a",
+        externalRefs: [{ referenceCategory: "PACKAGE-MANAGER", referenceType: "purl", referenceLocator: "pkg:npm/mid-a@1.0.0" }]
+      },
+      {
+        SPDXID: "SPDXRef-mid-b",
+        name: "mid-b",
+        externalRefs: [{ referenceCategory: "PACKAGE-MANAGER", referenceType: "purl", referenceLocator: "pkg:npm/mid-b@1.0.1" }]
+      },
+      {
+        SPDXID: "SPDXRef-shared",
+        name: "shared",
+        externalRefs: [{ referenceCategory: "PACKAGE-MANAGER", referenceType: "purl", referenceLocator: "pkg:npm/shared@1.0.2" }]
+      }
+    ],
+    relationships: [
+      { spdxElementId: "SPDXRef-root", relationshipType: "DEPENDS_ON", relatedSpdxElement: "SPDXRef-mid-a" },
+      { spdxElementId: "SPDXRef-root", relationshipType: "DEPENDS_ON", relatedSpdxElement: "SPDXRef-mid-b" },
+      { spdxElementId: "SPDXRef-mid-a", relationshipType: "DEPENDS_ON", relatedSpdxElement: "SPDXRef-shared" },
+      { spdxElementId: "SPDXRef-mid-b", relationshipType: "DEPENDS_ON", relatedSpdxElement: "SPDXRef-shared" }
+    ]
+  });
+}
+
+function sharedFindingIds(graph: DependencyGraph): string[] {
+  const node = graph.nodes.find((candidate) => candidate.id === "shared@1.0.2");
+  if (!node) {
+    return [];
+  }
+
+  return evaluateLicenseRisks({
+    licenses: [{
+      packageId: "shared@1.0.2",
+      original: "MIT",
+      expression: "MIT",
+      choices: ["MIT"],
+      joiner: "single",
+      signals: [],
+      evidenceSources: ["source: sbom"],
+      confidence: "high"
+    }],
+    dependencies: [node],
+    profile: "saas"
+  }).map((finding) => finding.id);
+}
 
 describe("mergeDependencyGraphs", () => {
   test("preserves standalone Go module integrity across merged graphs", () => {
@@ -204,6 +265,31 @@ describe("mergeDependencyGraphs", () => {
 
     expect(merged.embeddedEvidence?.[0]).not.toHaveProperty("conflictingLicenseClaims");
     expect(merged.embeddedEvidence?.[0].metadataLicenses).toEqual(["MIT", "Apache-2.0"]);
+  });
+
+  test("keeps merged finding IDs stable under merge input order", () => {
+    const graphA = parseSpdxJsonText(spdxDiamondDoc("fixture-a"), "a.spdx.json");
+    const graphB = parseSpdxJsonText(spdxDiamondDoc("fixture-b"), "b.spdx.json");
+
+    expect(graphA.ok).toBe(true);
+    expect(graphB.ok).toBe(true);
+    if (!graphA.ok || !graphB.ok) {
+      throw new Error("Fixture parse failed.");
+    }
+
+    const sourcedA: SourcedDependencyGraph = {
+      source: { lockfileKind: "spdx-json", lockfilePath: "a.spdx.json" },
+      graph: graphA.value
+    };
+    const sourcedB: SourcedDependencyGraph = {
+      source: { lockfileKind: "spdx-json", lockfilePath: "b.spdx.json" },
+      graph: graphB.value
+    };
+
+    const ab = mergeDependencyGraphs([sourcedA, sourcedB]);
+    const ba = mergeDependencyGraphs([sourcedB, sourcedA]);
+
+    expect(sharedFindingIds(ba)).toEqual(sharedFindingIds(ab));
   });
 });
 

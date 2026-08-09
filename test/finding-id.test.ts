@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildFindingFingerprint, buildFindingId } from "../src/policy/finding-id";
+import {
+  buildFindingFingerprint,
+  buildFindingId,
+  buildLegacyFindingId
+} from "../src/policy/finding-id";
 
 describe("finding identity", () => {
   test("preserves existing readable finding IDs when components do not contain delimiters", () => {
@@ -69,5 +73,105 @@ describe("finding identity", () => {
     expect(fingerprint).toContain("reason%3A%3Awith%3Edelimiters");
     expect(fingerprint).toContain("license%3A MIT %7C Apache-2.0");
     expect(fingerprint).toContain("path %3E LICENSE");
+  });
+
+  test("keeps finding IDs stable under path array permutation and duplicates", () => {
+    const base = {
+      packageId: "shared@1.0.2",
+      dependencyType: "production" as const,
+      dependencyScope: "transitive" as const
+    };
+    const forward = buildFindingId({
+      ...base,
+      paths: [["fixture-a", "root@1.0.0", "mid-a@1.0.0", "shared@1.0.2"], ["fixture-b", "root@1.0.0", "mid-b@1.0.1", "shared@1.0.2"]]
+    });
+    const reversed = buildFindingId({
+      ...base,
+      paths: [["fixture-b", "root@1.0.0", "mid-b@1.0.1", "shared@1.0.2"], ["fixture-a", "root@1.0.0", "mid-a@1.0.0", "shared@1.0.2"]]
+    });
+    const duplicated = buildFindingId({
+      ...base,
+      paths: [
+        ["fixture-a", "root@1.0.0", "mid-a@1.0.0", "shared@1.0.2"],
+        ["fixture-b", "root@1.0.0", "mid-b@1.0.1", "shared@1.0.2"],
+        ["fixture-a", "root@1.0.0", "mid-a@1.0.0", "shared@1.0.2"]
+      ]
+    });
+
+    expect(reversed).toBe(forward);
+    expect(duplicated).toBe(forward);
+    expect(forward).toBe(
+      "shared@1.0.2::production::transitive::"
+      + "fixture-a>root@1.0.0>mid-a@1.0.0>shared@1.0.2"
+      + "|fixture-b>root@1.0.0>mid-b@1.0.1>shared@1.0.2"
+    );
+  });
+
+  test("canonicalizes special and percent-encoded path segments by code unit", () => {
+    const id = buildFindingId({
+      packageId: "pkg@1.0.0",
+      dependencyType: "production",
+      dependencyScope: "transitive",
+      paths: [["Ä", "b"], ["zz", "a"]]
+    });
+
+    expect(id).toBe("pkg@1.0.0::production::transitive::zz>a|Ä>b");
+
+    const encoded = buildFindingId({
+      packageId: "pkg@1.0.0",
+      dependencyType: "production",
+      dependencyScope: "transitive",
+      paths: [["pkg%3Ascope", "z"], ["plain", "a"]]
+    });
+    const encodedReversed = buildFindingId({
+      packageId: "pkg@1.0.0",
+      dependencyType: "production",
+      dependencyScope: "transitive",
+      paths: [["plain", "a"], ["pkg%3Ascope", "z"]]
+    });
+
+    expect(encodedReversed).toBe(encoded);
+    expect(encoded).toContain("pkg%253Ascope>z");
+    expect(encoded).toContain("|plain>a");
+  });
+
+  test("changes finding identity when the path set changes", () => {
+    const base = {
+      packageId: "pkg@1.0.0",
+      dependencyType: "production" as const,
+      dependencyScope: "transitive" as const
+    };
+    const single = buildFindingId({
+      ...base,
+      paths: [["fixture", "parent@1.0.0", "pkg@1.0.0"]]
+    });
+    const withSecondParent = buildFindingId({
+      ...base,
+      paths: [
+        ["fixture", "parent@1.0.0", "pkg@1.0.0"],
+        ["fixture", "other@2.0.0", "pkg@1.0.0"]
+      ]
+    });
+
+    expect(withSecondParent).not.toBe(single);
+  });
+
+  test("builds legacy raw-order finding IDs for waiver compatibility", () => {
+    const input = {
+      packageId: "shared@1.0.2",
+      dependencyType: "production" as const,
+      dependencyScope: "transitive" as const,
+      paths: [
+        ["fixture-b", "root@1.0.0", "mid-b@1.0.1", "shared@1.0.2"],
+        ["fixture-a", "root@1.0.0", "mid-a@1.0.0", "shared@1.0.2"]
+      ]
+    };
+
+    expect(buildLegacyFindingId(input)).toBe(
+      "shared@1.0.2::production::transitive::"
+      + "fixture-b>root@1.0.0>mid-b@1.0.1>shared@1.0.2"
+      + "|fixture-a>root@1.0.0>mid-a@1.0.0>shared@1.0.2"
+    );
+    expect(buildFindingId(input)).not.toBe(buildLegacyFindingId(input));
   });
 });
