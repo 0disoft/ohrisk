@@ -37,21 +37,24 @@ export const writeReportFile: ReportWriter = (input) => {
     !isPathInsideOrEqual(resolvedPath, resolvedCwd)
   ) {
     return err(
-      createError({
-        code: "REPORT_OUTPUT_PATH_OUTSIDE_PROJECT",
-        category: "invalid_input",
-        message: "Report output paths must be relative paths inside the current project.",
-        details: {
-          outputPath: input.outputPath,
-          projectRoot: resolvedCwd,
-          resolvedPath
-        }
+      reportOutputPathOutsideError({
+        outputPath: input.outputPath,
+        projectRoot: resolvedCwd,
+        resolvedPath
       })
     );
   }
 
   try {
-    mkdirSync(path.dirname(resolvedPath), { recursive: true });
+    const parentResult = ensureSafeReportParent({
+      outputPath: input.outputPath,
+      projectRoot: resolvedCwd,
+      resolvedPath
+    });
+    if (!parentResult.ok) {
+      return parentResult;
+    }
+
     const validatedPath = validateResolvedReportPath({
       outputPath: input.outputPath,
       projectRoot: resolvedCwd,
@@ -70,19 +73,216 @@ export const writeReportFile: ReportWriter = (input) => {
     });
   } catch (cause) {
     return err(
-      createError({
-        code: "REPORT_WRITE_FAILED",
-        category: "filesystem",
-        message: "Failed to write the requested report file.",
-        details: {
-          outputPath: input.outputPath,
-          resolvedPath,
-          cause: cause instanceof Error ? cause.message : String(cause)
-        }
+      reportWriteFailedError({
+        outputPath: input.outputPath,
+        resolvedPath,
+        cause
       })
     );
   }
 };
+
+function ensureSafeReportParent(input: {
+  outputPath: string;
+  projectRoot: string;
+  resolvedPath: string;
+}): Result<ValidatedReportPath, OhriskError> {
+  const realProjectRoot = realpathSync(input.projectRoot);
+  const parentPath = path.dirname(input.resolvedPath);
+  const relativeParent = path.relative(input.projectRoot, parentPath);
+
+  if (relativeParent === "") {
+    return ok({
+      resolvedPath: input.resolvedPath,
+      realParent: realProjectRoot,
+      realProjectRoot
+    });
+  }
+
+  if (relativeParent.startsWith("..") || path.isAbsolute(relativeParent)) {
+    return err(
+      reportOutputPathOutsideError({
+        outputPath: input.outputPath,
+        projectRoot: input.projectRoot,
+        resolvedPath: input.resolvedPath,
+        realProjectRoot,
+        realParent: parentPath,
+        reason: "parent_outside_project"
+      })
+    );
+  }
+
+  let currentPath = input.projectRoot;
+  for (const segment of relativeParent.split(path.sep)) {
+    if (segment === "" || segment === "." || segment === "..") {
+      return err(
+        reportOutputPathOutsideError({
+          outputPath: input.outputPath,
+          projectRoot: input.projectRoot,
+          resolvedPath: input.resolvedPath,
+          realProjectRoot,
+          realParent: parentPath,
+          reason: "invalid_parent_segment"
+        })
+      );
+    }
+
+    const candidatePath = path.join(currentPath, segment);
+    const stepResult = resolveOrCreateReportComponent({
+      candidatePath,
+      outputPath: input.outputPath,
+      projectRoot: input.projectRoot,
+      resolvedPath: input.resolvedPath,
+      realProjectRoot
+    });
+    if (!stepResult.ok) {
+      return stepResult;
+    }
+    currentPath = stepResult.value;
+  }
+
+  return ok({
+    resolvedPath: input.resolvedPath,
+    realParent: currentPath,
+    realProjectRoot
+  });
+}
+
+function resolveOrCreateReportComponent(input: {
+  candidatePath: string;
+  outputPath: string;
+  projectRoot: string;
+  resolvedPath: string;
+  realProjectRoot: string;
+}): Result<string, OhriskError> {
+  let stats: ReturnType<typeof lstatSync> | undefined;
+
+  try {
+    stats = lstatSync(input.candidatePath);
+  } catch (cause) {
+    if (!isNoSuchEntryError(cause)) {
+      return err(
+        reportWriteFailedError({
+          outputPath: input.outputPath,
+          resolvedPath: input.resolvedPath,
+          cause
+        })
+      );
+    }
+
+    try {
+      mkdirSync(input.candidatePath);
+    } catch (mkdirCause) {
+      if (!isAlreadyExistsError(mkdirCause)) {
+        return err(
+          reportWriteFailedError({
+            outputPath: input.outputPath,
+            resolvedPath: input.resolvedPath,
+            cause: mkdirCause
+          })
+        );
+      }
+    }
+
+    try {
+      stats = lstatSync(input.candidatePath);
+    } catch (recheckCause) {
+      return err(
+        reportWriteFailedError({
+          outputPath: input.outputPath,
+          resolvedPath: input.resolvedPath,
+          cause: recheckCause
+        })
+      );
+    }
+  }
+
+  if (stats.isSymbolicLink()) {
+    return resolveReportParentSymlink({
+      ...input,
+      symlinkPath: input.candidatePath
+    });
+  }
+
+  if (!stats.isDirectory()) {
+    return err(
+      reportWriteFailedError({
+        outputPath: input.outputPath,
+        resolvedPath: input.resolvedPath,
+        cause: new Error("Report output parent component is not a directory.")
+      })
+    );
+  }
+
+  try {
+    return ok(realpathSync(input.candidatePath));
+  } catch (cause) {
+    return err(
+      reportWriteFailedError({
+        outputPath: input.outputPath,
+        resolvedPath: input.resolvedPath,
+        cause
+      })
+    );
+  }
+}
+
+function resolveReportParentSymlink(input: {
+  candidatePath: string;
+  symlinkPath: string;
+  outputPath: string;
+  projectRoot: string;
+  resolvedPath: string;
+  realProjectRoot: string;
+}): Result<string, OhriskError> {
+  let realTarget: string;
+  try {
+    realTarget = realpathSync(input.symlinkPath);
+  } catch (cause) {
+    return err(
+      reportWriteFailedError({
+        outputPath: input.outputPath,
+        resolvedPath: input.resolvedPath,
+        cause
+      })
+    );
+  }
+
+  if (!isPathInsideOrEqual(realTarget, input.realProjectRoot)) {
+    return err(
+      reportOutputPathOutsideError({
+        outputPath: input.outputPath,
+        projectRoot: input.projectRoot,
+        resolvedPath: input.resolvedPath,
+        realProjectRoot: input.realProjectRoot,
+        realParent: realTarget,
+        reason: "parent_symlink_outside_project"
+      })
+    );
+  }
+
+  try {
+    if (!lstatSync(realTarget).isDirectory()) {
+      return err(
+        reportWriteFailedError({
+          outputPath: input.outputPath,
+          resolvedPath: input.resolvedPath,
+          cause: new Error("Report output parent symlink resolves to a non-directory.")
+        })
+      );
+    }
+  } catch (cause) {
+    return err(
+      reportWriteFailedError({
+        outputPath: input.outputPath,
+        resolvedPath: input.resolvedPath,
+        cause
+      })
+    );
+  }
+
+  return ok(realTarget);
+}
 
 function writeValidatedReportFile(input: {
   contents: string;
@@ -174,18 +374,13 @@ function validateResolvedReportPath(input: {
     !isPathInsideOrEqual(realParent, realProjectRoot)
   ) {
     return err(
-      createError({
-        code: "REPORT_OUTPUT_PATH_OUTSIDE_PROJECT",
-        category: "invalid_input",
-        message: "Report output paths must be relative paths inside the current project.",
-        details: {
-          outputPath: input.outputPath,
-          projectRoot: input.projectRoot,
-          resolvedPath: input.resolvedPath,
-          realProjectRoot,
-          realParent,
-          ...(existingOutputIsSymlink ? { reason: "output_symlink_not_supported" } : {})
-        }
+      reportOutputPathOutsideError({
+        outputPath: input.outputPath,
+        projectRoot: input.projectRoot,
+        resolvedPath: input.resolvedPath,
+        realProjectRoot,
+        realParent,
+        ...(existingOutputIsSymlink ? { reason: "output_symlink_not_supported" } : {})
       })
     );
   }
@@ -230,6 +425,60 @@ function isReplaceBlockedByExistingTarget(cause: unknown): boolean {
     ? (cause as { code?: unknown }).code
     : undefined;
   return code === "EEXIST" || code === "EPERM" || code === "ENOTEMPTY";
+}
+
+function reportOutputPathOutsideError(input: {
+  outputPath: string;
+  projectRoot: string;
+  resolvedPath: string;
+  realProjectRoot?: string;
+  realParent?: string;
+  reason?: string;
+}): OhriskError {
+  return createError({
+    code: "REPORT_OUTPUT_PATH_OUTSIDE_PROJECT",
+    category: "invalid_input",
+    message: "Report output paths must be relative paths inside the current project.",
+    details: {
+      outputPath: input.outputPath,
+      projectRoot: input.projectRoot,
+      resolvedPath: input.resolvedPath,
+      ...(input.realProjectRoot !== undefined ? { realProjectRoot: input.realProjectRoot } : {}),
+      ...(input.realParent !== undefined ? { realParent: input.realParent } : {}),
+      ...(input.reason !== undefined ? { reason: input.reason } : {})
+    }
+  });
+}
+
+function reportWriteFailedError(input: {
+  outputPath: string;
+  resolvedPath: string;
+  cause: unknown;
+}): OhriskError {
+  return createError({
+    code: "REPORT_WRITE_FAILED",
+    category: "filesystem",
+    message: "Failed to write the requested report file.",
+    details: {
+      outputPath: input.outputPath,
+      resolvedPath: input.resolvedPath,
+      cause: input.cause instanceof Error ? input.cause.message : String(input.cause)
+    }
+  });
+}
+
+function isNoSuchEntryError(cause: unknown): boolean {
+  const code = cause instanceof Error && "code" in cause
+    ? (cause as { code?: unknown }).code
+    : undefined;
+  return code === "ENOENT";
+}
+
+function isAlreadyExistsError(cause: unknown): boolean {
+  const code = cause instanceof Error && "code" in cause
+    ? (cause as { code?: unknown }).code
+    : undefined;
+  return code === "EEXIST";
 }
 
 function closeReportTempFile(fileDescriptor: number): void {

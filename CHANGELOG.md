@@ -60,6 +60,12 @@
   the finding identity. Waivers written with the previous raw-order identity
   keep applying through a legacy ID and fingerprint alias used only during
   waiver matching.
+- Report output paths are now created and validated one directory component at
+  a time against the real project root before any side effect. A requested
+  output that resolves outside the project through a symlink or junction
+  parent returns `REPORT_OUTPUT_PATH_OUTSIDE_PROJECT` without creating missing
+  intermediate directories inside or outside the project, while parent
+  symlinks that resolve inside the project keep working.
 
 ## 1.14.1 - 2026-07-28
 

@@ -30,6 +30,13 @@ development, tests, and packaging.
 - `--fail-on unknown|review|high|low` controls CI failure threshold.
 - `--json`, `--markdown`, `--html`, `--sarif`, and `--cyclonedx` select report formats.
 - `--output <path>` writes a report artifact.
+- `--output <path>` creates missing parent directories one component at a time,
+  resolving and containment-checking every existing component against the
+  project root before creating anything. A rejected output path, including one
+  whose symlink or junction parent points outside the project, returns
+  `REPORT_OUTPUT_PATH_OUTSIDE_PROJECT` without creating a new file or directory
+  inside or outside the project. Parent symlinks that resolve inside the
+  project remain supported.
 - A remote repository scan with `--html` and no explicit `--output` writes `<repository>-ohrisk.html` under the invocation directory. Local and archive HTML scans keep their existing stdout behavior.
 - `--submodules ignore|reject` controls remote Git submodule gitlinks. The default `ignore` mode reports incomplete coverage without fetching submodules; `reject` fails on the first submodule path.
 - `--language <locale>` localizes HTML report chrome and Ohrisk-generated review text.

@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.14.9
+npm install -g ohrisk@1.14.10
 cd your-project
 ohrisk scan
 ```
@@ -382,7 +382,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.14.9
+npm install -g ohrisk@1.14.10
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
@@ -598,6 +598,12 @@ ohrisk diff main --all --prod --markdown --output reports/ohrisk-pr.md
 
 `--output` accepts project-relative file paths only. Absolute paths,
 drive-relative paths, UNC paths, and `.` or `..` path segments are rejected.
+Parent directories are created one component at a time, and every existing
+component is resolved and checked against the project root before anything is
+created. A rejected output path never leaves a new file or directory inside or
+outside the project, including through symlink or junction parents that point
+outside the project. Parent symlinks that resolve inside the project remain
+supported.
 
 Fail a local CI step when findings meet a threshold:
 
