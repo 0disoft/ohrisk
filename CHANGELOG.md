@@ -42,6 +42,15 @@
   limit fails closed with a typed `DEPENDENCY_GRAPH_LIMIT_EXCEEDED` error, and
   node keys, paths, diagnostics, and finding identities stay stable under input
   ordering changes.
+- SPDX relationship parsing now builds a set-backed adjacency during
+  relationship processing and materializes deterministic sorted child lists
+  once, so wide documents with many relationships no longer pay quadratic
+  array-copy cost per edge.
+- The shared bounded traversal keeps discovered parents in a set-backed
+  structure and assigns dependency paths in parents-before-children order.
+  Wide or converging graphs no longer pay quadratic parent dedup per edge, and
+  multi-root documents keep complete parent-path unions even when a child is
+  discovered through one root before another same-depth parent.
 
 ## 1.14.1 - 2026-07-28
 

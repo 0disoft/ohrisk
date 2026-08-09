@@ -272,9 +272,9 @@ function readSpdxDependencyMap(
   unsupportedRelationshipFields: UnsupportedSpdxDependencyField[];
 }> {
   const packageIds = new Set(packages.map((pkg) => pkg.spdxId));
-  const dependencyMap = new Map<string, string[]>();
+  const adjacency = new Map<string, Set<string>>();
   if (value === undefined) {
-    return ok(dependencyMap);
+    return ok(new Map<string, string[]>());
   }
   if (!Array.isArray(value)) {
     return err({
@@ -288,9 +288,12 @@ function readSpdxDependencyMap(
       return;
     }
 
-    dependencyMap.set(parent, [
-      ...new Set([...(dependencyMap.get(parent) ?? []), child])
-    ]);
+    let children = adjacency.get(parent);
+    if (!children) {
+      children = new Set<string>();
+      adjacency.set(parent, children);
+    }
+    children.add(child);
   };
 
   const unsupportedIndexes = new Set<number>();
@@ -359,6 +362,11 @@ function readSpdxDependencyMap(
       relationshipIndexes: [...unsupportedIndexes].sort((left, right) => left - right),
       unsupportedRelationshipFields: [...unsupportedFields].sort()
     }));
+  }
+
+  const dependencyMap = new Map<string, string[]>();
+  for (const [parent, children] of adjacency) {
+    dependencyMap.set(parent, [...children].sort());
   }
 
   return ok(dependencyMap);

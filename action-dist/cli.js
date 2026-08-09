@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 74ba647e976cfb1e2f64d372315e3d4f488901039de99a9cd0d46e7e4c8248c8
+// ohrisk-action-source-sha256: a86a4254029390f61d3955f5965658e8e5c0c27af21b3fe9063ff4b09f290d5d
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18539,7 +18539,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.7";
+var OHRISK_VERSION = "1.14.8";
 
 // src/archive/archive-project.ts
 import path47 from "node:path";
@@ -27144,8 +27144,9 @@ function collectBoundedDependencyPaths(input) {
     ...BOUNDED_PATH_LIMITS,
     ...input.limits
   };
+  const rootRefs = [...input.rootRefs].sort();
   const discovery = discoverBoundedNodes({
-    rootRefs: input.rootRefs,
+    rootRefs,
     childRefs: input.childRefs,
     maxDiscoveredNodes: limits.maxDiscoveredNodes
   });
@@ -27251,12 +27252,12 @@ function collectBoundedDependencyPaths(input) {
     pathsByNode,
     diagnostics,
     discoveredNodeKeys: discovery.value.nodeOrder,
-    rootRefs: input.rootRefs
+    rootRefs
   });
 }
 function discoverBoundedNodes(input) {
   const nodeOrder = [];
-  const parentLists = new Map;
+  const parentSets = new Map;
   const depthByNode = new Map;
   const visited = new Set;
   const rootRefSet = new Set(input.rootRefs);
@@ -27266,7 +27267,7 @@ function discoverBoundedNodes(input) {
       continue;
     }
     visited.add(rootRef);
-    parentLists.set(rootRef, []);
+    parentSets.set(rootRef, new Set);
     depthByNode.set(rootRef, 1);
     nodeOrder.push(rootRef);
     queue.push({ nodeKey: rootRef, depth: 1 });
@@ -27284,15 +27285,11 @@ function discoverBoundedNodes(input) {
         if (rootRefSet.has(child)) {
           continue;
         }
-        const existingParents = parentLists.get(child) ?? [];
-        if (!existingParents.includes(current.nodeKey)) {
-          existingParents.push(current.nodeKey);
-          parentLists.set(child, existingParents);
-        }
+        parentSets.get(child)?.add(current.nodeKey);
         continue;
       }
       visited.add(child);
-      parentLists.set(child, [current.nodeKey]);
+      parentSets.set(child, new Set([current.nodeKey]));
       depthByNode.set(child, current.depth + 1);
       nodeOrder.push(child);
       if (nodeOrder.length > input.maxDiscoveredNodes) {
@@ -27309,7 +27306,61 @@ function discoverBoundedNodes(input) {
       queue.push({ nodeKey: child, depth: current.depth + 1 });
     }
   }
-  return ok({ nodeOrder, parentLists, depthByNode });
+  const parentLists = new Map;
+  for (const [nodeKey, parents] of parentSets) {
+    parentLists.set(nodeKey, [...parents]);
+  }
+  return ok({
+    nodeOrder: topologicalNodeOrder(nodeOrder, parentSets),
+    parentLists,
+    depthByNode
+  });
+}
+function topologicalNodeOrder(nodeOrder, parentSets) {
+  const childSets = new Map;
+  for (const [nodeKey, parents] of parentSets) {
+    for (const parent of parents) {
+      let children = childSets.get(parent);
+      if (!children) {
+        children = new Set;
+        childSets.set(parent, children);
+      }
+      children.add(nodeKey);
+    }
+  }
+  const indegree = new Map;
+  for (const nodeKey of nodeOrder) {
+    indegree.set(nodeKey, parentSets.get(nodeKey)?.size ?? 0);
+  }
+  const order = [];
+  const queue = [];
+  for (const nodeKey of nodeOrder) {
+    if ((indegree.get(nodeKey) ?? 0) === 0) {
+      queue.push(nodeKey);
+    }
+  }
+  let head = 0;
+  const ordered = new Set;
+  while (head < queue.length) {
+    const nodeKey = queue[head];
+    head += 1;
+    ordered.add(nodeKey);
+    order.push(nodeKey);
+    for (const child of childSets.get(nodeKey) ?? []) {
+      const next = (indegree.get(child) ?? 1) - 1;
+      indegree.set(child, next);
+      if (next === 0) {
+        queue.push(child);
+      }
+    }
+  }
+  for (const nodeKey of nodeOrder) {
+    if (!ordered.has(nodeKey)) {
+      ordered.add(nodeKey);
+      order.push(nodeKey);
+    }
+  }
+  return order;
 }
 function boundedRepresentativePath(input) {
   const chain = [];
@@ -36011,9 +36062,9 @@ function readMeaningfulSpdxLicenseValue(value) {
 }
 function readSpdxDependencyMap(value, packages) {
   const packageIds = new Set(packages.map((pkg) => pkg.spdxId));
-  const dependencyMap = new Map;
+  const adjacency = new Map;
   if (value === undefined) {
-    return ok(dependencyMap);
+    return ok(new Map);
   }
   if (!Array.isArray(value)) {
     return err({
@@ -36025,9 +36076,12 @@ function readSpdxDependencyMap(value, packages) {
     if (!packageIds.has(parent) || !packageIds.has(child) || parent === child) {
       return;
     }
-    dependencyMap.set(parent, [
-      ...new Set([...dependencyMap.get(parent) ?? [], child])
-    ]);
+    let children = adjacency.get(parent);
+    if (!children) {
+      children = new Set;
+      adjacency.set(parent, children);
+    }
+    children.add(child);
   };
   const unsupportedIndexes = new Set;
   const unsupportedFields = new Set;
@@ -36075,6 +36129,10 @@ function readSpdxDependencyMap(value, packages) {
       relationshipIndexes: [...unsupportedIndexes].sort((left, right) => left - right),
       unsupportedRelationshipFields: [...unsupportedFields].sort()
     }));
+  }
+  const dependencyMap = new Map;
+  for (const [parent, children] of adjacency) {
+    dependencyMap.set(parent, [...children].sort());
   }
   return ok(dependencyMap);
 }

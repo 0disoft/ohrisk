@@ -549,6 +549,84 @@ describe("parseSpdxJsonText", () => {
     expect(duplicated.value.nodes.map((node) => ({ id: node.id, paths: node.paths })))
       .toEqual(result.value.nodes.map((node) => ({ id: node.id, paths: node.paths })));
   });
+
+  test("parses a wide SPDX star with duplicate relationships without duplicate paths", () => {
+    const result = parseSpdxJsonText(
+      buildSpdxStarFixture(12_000, true),
+      "spdx.json"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.length).toBe(12_001);
+    expect(result.value.embeddedEvidence?.length ?? 0).toBe(12_001);
+    for (const node of result.value.nodes) {
+      const keys = new Set(node.paths.map((path) => path.join("\u0000")));
+      expect(keys.size).toBe(node.paths.length);
+      expect(node.paths.length).toBe(1);
+    }
+    const root = result.value.nodes.find((node) => node.id === "star-root@1.0.0");
+    expect(root?.paths).toEqual([["fixture-spdx-star", "star-root@1.0.0"]]);
+  });
+
+  test("normalizes inverse DEPENDENCY_OF relationships onto the described root", () => {
+    const result = parseSpdxJsonText(JSON.stringify({
+      spdxVersion: "SPDX-2.3",
+      name: "fixture-spdx-inverse",
+      documentDescribes: ["SPDXRef-root"],
+      packages: [
+        spdxPackage("SPDXRef-root", "root", "1.0.0"),
+        spdxPackage("SPDXRef-child", "child", "2.0.0")
+      ],
+      relationships: [
+        {
+          spdxElementId: "SPDXRef-child",
+          relationshipType: "DEPENDENCY_OF",
+          relatedSpdxElement: "SPDXRef-root"
+        }
+      ]
+    }), "spdx.json");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes.find((node) => node.id === "child@2.0.0"))
+      .toMatchObject({
+        direct: false,
+        paths: [["fixture-spdx-inverse", "root@1.0.0", "child@2.0.0"]]
+      });
+  });
+
+  test("keeps graph, paths, diagnostics, and finding IDs stable under relationship ordering", () => {
+    const forward = parseSpdxJsonText(buildSpdxOrderingFixture("forward"), "spdx.json");
+    const reversed = parseSpdxJsonText(buildSpdxOrderingFixture("reverse"), "spdx.json");
+    const shuffled = parseSpdxJsonText(buildSpdxOrderingFixture("shuffle"), "spdx.json");
+
+    expect(forward.ok).toBe(true);
+    expect(reversed.ok).toBe(true);
+    expect(shuffled.ok).toBe(true);
+    if (!forward.ok || !reversed.ok || !shuffled.ok) {
+      throw new Error("Fixture parse failed.");
+    }
+
+    const canonical = (result: typeof forward): unknown[] => [
+      result.value.nodes.map((node) => ({ id: node.id, paths: node.paths })),
+      result.value.diagnostics,
+      result.value.nodes.map((node) => buildFindingId({
+        packageId: node.id,
+        dependencyType: node.dependencyType,
+        dependencyScope: node.direct ? "direct" : "transitive",
+        paths: node.paths
+      }))
+    ];
+    expect(canonical(reversed)).toEqual(canonical(forward));
+    expect(canonical(shuffled)).toEqual(canonical(forward));
+  });
 });
 
 function buildSpdxDiamondFixture(depth: number, reverseOrder = false): string {
@@ -665,6 +743,84 @@ function buildSpdxConvergingFixture(reverseOrder = false): string {
     ],
     relationships: reverseOrder ? relationships.reverse() : relationships
   });
+}
+
+function buildSpdxOrderingFixture(order: "forward" | "reverse" | "shuffle"): string {
+  const relationships: Array<Record<string, string>> = [
+    {
+      spdxElementId: "SPDXRef-root",
+      relationshipType: "DEPENDS_ON",
+      relatedSpdxElement: "SPDXRef-mid-a"
+    },
+    {
+      spdxElementId: "SPDXRef-root",
+      relationshipType: "DEPENDS_ON",
+      relatedSpdxElement: "SPDXRef-mid-b"
+    },
+    {
+      spdxElementId: "SPDXRef-root",
+      relationshipType: "DEPENDS_ON",
+      relatedSpdxElement: "SPDXRef-dup-child"
+    },
+    {
+      spdxElementId: "SPDXRef-root",
+      relationshipType: "DEPENDS_ON",
+      relatedSpdxElement: "SPDXRef-dup-child"
+    },
+    {
+      spdxElementId: "SPDXRef-mid-a",
+      relationshipType: "DEPENDS_ON",
+      relatedSpdxElement: "SPDXRef-shared"
+    },
+    {
+      spdxElementId: "SPDXRef-mid-b",
+      relationshipType: "DEPENDS_ON",
+      relatedSpdxElement: "SPDXRef-shared"
+    },
+    {
+      spdxElementId: "SPDXRef-shared",
+      relationshipType: "DEPENDS_ON",
+      relatedSpdxElement: "SPDXRef-leaf"
+    },
+    {
+      spdxElementId: "SPDXRef-leaf",
+      relationshipType: "DEPENDENCY_OF",
+      relatedSpdxElement: "SPDXRef-shared"
+    }
+  ];
+  const ordered = order === "forward"
+    ? relationships
+    : order === "reverse"
+      ? [...relationships].reverse()
+      : shuffledRelationships(relationships);
+
+  return JSON.stringify({
+    spdxVersion: "SPDX-2.3",
+    name: "fixture-spdx-ordering",
+    documentDescribes: ["SPDXRef-root"],
+    packages: [
+      spdxPackage("SPDXRef-root", "root", "1.0.0"),
+      spdxPackage("SPDXRef-mid-a", "mid-a", "1.0.0"),
+      spdxPackage("SPDXRef-mid-b", "mid-b", "1.0.1"),
+      spdxPackage("SPDXRef-dup-child", "dup-child", "1.0.2"),
+      spdxPackage("SPDXRef-shared", "shared", "1.0.3"),
+      spdxPackage("SPDXRef-leaf", "leaf", "1.0.4")
+    ],
+    relationships: ordered
+  });
+}
+
+function shuffledRelationships(
+  relationships: Array<Record<string, string>>
+): Array<Record<string, string>> {
+  const result = [...relationships];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const swapIndex = (index * 7 + 1) % (index + 1);
+    const current = result[index];
+    result[index] = result[swapIndex] ?? result[index];
+    result[swapIndex] = current;
+  }
+  return result;
 }
 
 function buildSpdxStarFixture(childCount: number, duplicateEdges = false): string {

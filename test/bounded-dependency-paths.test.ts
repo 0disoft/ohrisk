@@ -171,6 +171,46 @@ describe("collectBoundedDependencyPaths", () => {
     }
   });
 
+  test("keeps multi-parent paths identical under parent and root order changes", () => {
+    const edges: Record<string, string[]> = {
+      root: ["p1", "p2", "p3", "p4"],
+      "p1": ["x"],
+      "p2": ["x"],
+      "p3": ["x"],
+      "p4": ["x"],
+      "r2": ["x"],
+      "x": ["leaf"],
+      "leaf": []
+    };
+
+    const forward = collectBoundedDependencyPaths({
+      rootName: "fixture",
+      rootRefs: ["root", "r2"],
+      childRefs: (nodeKey) => edges[nodeKey] ?? [],
+      pathNoun: "node"
+    });
+    const reversedEdges = collectBoundedDependencyPaths({
+      rootName: "fixture",
+      rootRefs: ["r2", "root"],
+      childRefs: (nodeKey) => [...(edges[nodeKey] ?? [])].reverse(),
+      pathNoun: "node"
+    });
+
+    expect(forward.ok).toBe(true);
+    expect(reversedEdges.ok).toBe(true);
+    if (!forward.ok || !reversedEdges.ok) {
+      throw new Error("Helper parse failed.");
+    }
+
+    expect(reversedEdges.value.discoveredNodeKeys).toEqual(forward.value.discoveredNodeKeys);
+    expect(reversedEdges.value.diagnostics).toEqual(forward.value.diagnostics);
+    for (const nodeKey of forward.value.discoveredNodeKeys) {
+      expect(reversedEdges.value.pathsByNode.get(nodeKey))
+        .toEqual(forward.value.pathsByNode.get(nodeKey));
+    }
+    expect(forward.value.pathsByNode.get("x")?.length).toBe(5);
+  });
+
   test("stores up to the per-node cap when candidate paths overflow it", () => {
     const childRefs = buildChildRefs({
       root: Array.from({ length: 70 }, (_, index) => `parent-${index}`),

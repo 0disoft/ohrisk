@@ -219,6 +219,9 @@ limit overruns are reported through the `dependency_paths_truncated` and
 expansion cannot inflate finding identities or crash the scan. Discovery above
 the supported node limit fails closed with a typed
 `DEPENDENCY_GRAPH_LIMIT_EXCEEDED` error instead of silently omitting nodes.
+Relationship adjacency is built with set-backed dedup and paths are assigned
+parents-before-children, so wide relationship lists and multi-root documents
+retain complete parent-path unions without quadratic per-edge work.
 
 For Nix `flake.lock`, dependency graph traversal uses the same bounded iterative
 walk: every reachable input node is retained while storing at most 64 dependency

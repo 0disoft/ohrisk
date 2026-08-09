@@ -43,9 +43,10 @@ export function collectBoundedDependencyPaths(input: {
     ...BOUNDED_PATH_LIMITS,
     ...input.limits
   };
+  const rootRefs = [...input.rootRefs].sort();
 
   const discovery = discoverBoundedNodes({
-    rootRefs: input.rootRefs,
+    rootRefs,
     childRefs: input.childRefs,
     maxDiscoveredNodes: limits.maxDiscoveredNodes
   });
@@ -163,7 +164,7 @@ export function collectBoundedDependencyPaths(input: {
     pathsByNode,
     diagnostics,
     discoveredNodeKeys: discovery.value.nodeOrder,
-    rootRefs: input.rootRefs
+    rootRefs
   });
 }
 
@@ -177,7 +178,7 @@ function discoverBoundedNodes(input: {
   depthByNode: Map<string, number>;
 }, OhriskError> {
   const nodeOrder: string[] = [];
-  const parentLists = new Map<string, string[]>();
+  const parentSets = new Map<string, Set<string>>();
   const depthByNode = new Map<string, number>();
   const visited = new Set<string>();
   const rootRefSet = new Set(input.rootRefs);
@@ -188,7 +189,7 @@ function discoverBoundedNodes(input: {
       continue;
     }
     visited.add(rootRef);
-    parentLists.set(rootRef, []);
+    parentSets.set(rootRef, new Set<string>());
     depthByNode.set(rootRef, 1);
     nodeOrder.push(rootRef);
     queue.push({ nodeKey: rootRef, depth: 1 });
@@ -208,15 +209,11 @@ function discoverBoundedNodes(input: {
         if (rootRefSet.has(child)) {
           continue;
         }
-        const existingParents = parentLists.get(child) ?? [];
-        if (!existingParents.includes(current.nodeKey)) {
-          existingParents.push(current.nodeKey);
-          parentLists.set(child, existingParents);
-        }
+        parentSets.get(child)?.add(current.nodeKey);
         continue;
       }
       visited.add(child);
-      parentLists.set(child, [current.nodeKey]);
+      parentSets.set(child, new Set([current.nodeKey]));
       depthByNode.set(child, current.depth + 1);
       nodeOrder.push(child);
 
@@ -238,7 +235,80 @@ function discoverBoundedNodes(input: {
     }
   }
 
-  return ok({ nodeOrder, parentLists, depthByNode });
+  const parentLists = new Map<string, string[]>();
+  for (const [nodeKey, parents] of parentSets) {
+    // Parents keep first-discovered order: with sorted roots and sorted child
+    // refs this is deterministic and input-order independent, and it keeps
+    // representative paths acyclic for cyclic graphs. Sorting the final list
+    // would route representative chains into cycles.
+    parentLists.set(nodeKey, [...parents]);
+  }
+
+  return ok({
+    nodeOrder: topologicalNodeOrder(nodeOrder, parentSets),
+    parentLists,
+    depthByNode
+  });
+}
+
+// Parents must be assigned paths before their children so multi-parent unions
+// are complete even when a child is discovered through one root before another
+// same-depth parent. BFS discovery order is not topological for multi-root
+// graphs, so reorder parents-before-children with Kahn's algorithm; cycle
+// members keep discovery order at the end.
+function topologicalNodeOrder(
+  nodeOrder: string[],
+  parentSets: Map<string, Set<string>>
+): string[] {
+  const childSets = new Map<string, Set<string>>();
+  for (const [nodeKey, parents] of parentSets) {
+    for (const parent of parents) {
+      let children = childSets.get(parent);
+      if (!children) {
+        children = new Set<string>();
+        childSets.set(parent, children);
+      }
+      children.add(nodeKey);
+    }
+  }
+
+  const indegree = new Map<string, number>();
+  for (const nodeKey of nodeOrder) {
+    indegree.set(nodeKey, parentSets.get(nodeKey)?.size ?? 0);
+  }
+
+  const order: string[] = [];
+  const queue: string[] = [];
+  for (const nodeKey of nodeOrder) {
+    if ((indegree.get(nodeKey) ?? 0) === 0) {
+      queue.push(nodeKey);
+    }
+  }
+
+  let head = 0;
+  const ordered = new Set<string>();
+  while (head < queue.length) {
+    const nodeKey = queue[head];
+    head += 1;
+    ordered.add(nodeKey);
+    order.push(nodeKey);
+    for (const child of childSets.get(nodeKey) ?? []) {
+      const next = (indegree.get(child) ?? 1) - 1;
+      indegree.set(child, next);
+      if (next === 0) {
+        queue.push(child);
+      }
+    }
+  }
+
+  for (const nodeKey of nodeOrder) {
+    if (!ordered.has(nodeKey)) {
+      ordered.add(nodeKey);
+      order.push(nodeKey);
+    }
+  }
+
+  return order;
 }
 
 function boundedRepresentativePath(input: {
