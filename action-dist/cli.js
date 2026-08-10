@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 5b495c3d3db5269f96306c9221797481e1bcbf2816d7d78eab07e446c48edb59
+// ohrisk-action-source-sha256: fc677f0ea985db256b7165a874e88d7e9f5d2d7f9586419158427ee86f0b69f0
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -14561,329 +14561,644 @@ ${indent}`);
 import { Buffer as Buffer3 } from "node:buffer";
 import { isIP as isIP4 } from "node:net";
 
-// node_modules/.bun/@0disoft+laqu@1.0.8/node_modules/@0disoft/laqu/dist/runtime.js
+// node_modules/.bun/@0disoft+laqu@1.1.8/node_modules/@0disoft/laqu/dist/runtime.js
 import { AsyncLocalStorage } from "node:async_hooks";
 
-// node_modules/.bun/@0disoft+laqu@1.0.8/node_modules/@0disoft/laqu/dist/output-coordinator.js
-class TerminalLease {
-  closed = false;
-  renderedLineCount = 0;
-  cursorHiddenByUs = 0;
-  rawModeChangedByUs = false;
-  activeBars = 0;
-  renderTimer;
-  pendingFrame;
-  partialLineKnownByUs = false;
-  lastLiveLines = [];
-}
+// node_modules/.bun/@0disoft+laqu@1.1.8/node_modules/@0disoft/laqu/dist/unicode-width-ranges.js
+var wideRanges = [
+  4352,
+  4447,
+  8986,
+  8987,
+  9001,
+  9002,
+  9193,
+  9196,
+  9200,
+  9200,
+  9203,
+  9203,
+  9725,
+  9726,
+  9748,
+  9749,
+  9800,
+  9811,
+  9855,
+  9855,
+  9875,
+  9875,
+  9889,
+  9889,
+  9898,
+  9899,
+  9917,
+  9918,
+  9924,
+  9925,
+  9934,
+  9934,
+  9940,
+  9940,
+  9962,
+  9962,
+  9970,
+  9971,
+  9973,
+  9973,
+  9978,
+  9978,
+  9981,
+  9981,
+  9989,
+  9989,
+  9994,
+  9995,
+  10024,
+  10024,
+  10060,
+  10060,
+  10062,
+  10062,
+  10067,
+  10069,
+  10071,
+  10071,
+  10133,
+  10135,
+  10160,
+  10160,
+  10175,
+  10175,
+  11035,
+  11036,
+  11088,
+  11088,
+  11093,
+  11093,
+  11904,
+  11929,
+  11931,
+  12019,
+  12032,
+  12245,
+  12272,
+  12283,
+  12288,
+  12350,
+  12353,
+  12438,
+  12441,
+  12543,
+  12549,
+  12591,
+  12593,
+  12686,
+  12688,
+  12771,
+  12784,
+  12830,
+  12832,
+  12871,
+  12880,
+  19903,
+  19968,
+  42124,
+  42128,
+  42182,
+  43360,
+  43388,
+  44032,
+  55203,
+  63744,
+  64109,
+  64112,
+  64217,
+  65040,
+  65049,
+  65072,
+  65106,
+  65108,
+  65126,
+  65128,
+  65131,
+  65281,
+  65376,
+  65504,
+  65510,
+  94176,
+  94180,
+  94192,
+  94193,
+  94208,
+  100343,
+  100352,
+  101589,
+  101632,
+  101640,
+  110576,
+  110579,
+  110581,
+  110587,
+  110589,
+  110590,
+  110592,
+  110882,
+  110928,
+  110930,
+  110948,
+  110951,
+  110960,
+  111355,
+  126980,
+  126980,
+  127183,
+  127183,
+  127374,
+  127374,
+  127377,
+  127386,
+  127488,
+  127490,
+  127504,
+  127547,
+  127552,
+  127560,
+  127568,
+  127569,
+  127584,
+  127589,
+  127744,
+  127776,
+  127789,
+  127797,
+  127799,
+  127868,
+  127870,
+  127891,
+  127904,
+  127946,
+  127951,
+  127955,
+  127968,
+  127984,
+  127988,
+  127988,
+  127992,
+  128062,
+  128064,
+  128064,
+  128066,
+  128252,
+  128255,
+  128317,
+  128331,
+  128334,
+  128336,
+  128359,
+  128378,
+  128378,
+  128405,
+  128406,
+  128420,
+  128420,
+  128507,
+  128591,
+  128640,
+  128709,
+  128716,
+  128716,
+  128720,
+  128722,
+  128725,
+  128727,
+  128733,
+  128735,
+  128747,
+  128748,
+  128756,
+  128764,
+  128992,
+  129003,
+  129008,
+  129008,
+  129292,
+  129338,
+  129340,
+  129349,
+  129351,
+  129535,
+  129648,
+  129652,
+  129656,
+  129660,
+  129664,
+  129670,
+  129680,
+  129708,
+  129712,
+  129722,
+  129728,
+  129733,
+  129744,
+  129753,
+  129760,
+  129767,
+  129776,
+  129782,
+  131072,
+  173791,
+  173824,
+  177976,
+  177984,
+  178205,
+  178208,
+  183969,
+  183984,
+  191456,
+  194560,
+  195101,
+  196608,
+  201546
+];
+var ambiguousRanges = [
+  161,
+  161,
+  164,
+  164,
+  167,
+  168,
+  170,
+  170,
+  173,
+  174,
+  176,
+  180,
+  182,
+  186,
+  188,
+  191,
+  198,
+  198,
+  208,
+  208,
+  215,
+  216,
+  222,
+  225,
+  230,
+  230,
+  232,
+  234,
+  236,
+  237,
+  240,
+  240,
+  242,
+  243,
+  247,
+  250,
+  252,
+  252,
+  254,
+  254,
+  257,
+  257,
+  273,
+  273,
+  275,
+  275,
+  283,
+  283,
+  294,
+  295,
+  299,
+  299,
+  305,
+  307,
+  312,
+  312,
+  319,
+  322,
+  324,
+  324,
+  328,
+  331,
+  333,
+  333,
+  338,
+  339,
+  358,
+  359,
+  363,
+  363,
+  462,
+  462,
+  464,
+  464,
+  466,
+  466,
+  468,
+  468,
+  470,
+  470,
+  472,
+  472,
+  474,
+  474,
+  476,
+  476,
+  593,
+  593,
+  609,
+  609,
+  708,
+  708,
+  711,
+  711,
+  713,
+  715,
+  717,
+  717,
+  720,
+  720,
+  728,
+  731,
+  733,
+  733,
+  735,
+  735,
+  768,
+  879,
+  913,
+  929,
+  931,
+  937,
+  945,
+  961,
+  963,
+  969,
+  1025,
+  1025,
+  1040,
+  1103,
+  1105,
+  1105,
+  8208,
+  8208,
+  8211,
+  8214,
+  8216,
+  8217,
+  8220,
+  8221,
+  8224,
+  8226,
+  8228,
+  8231,
+  8240,
+  8240,
+  8242,
+  8243,
+  8245,
+  8245,
+  8251,
+  8251,
+  8254,
+  8254,
+  8308,
+  8308,
+  8319,
+  8319,
+  8321,
+  8324,
+  8364,
+  8364,
+  8451,
+  8451,
+  8453,
+  8453,
+  8457,
+  8457,
+  8467,
+  8467,
+  8470,
+  8470,
+  8481,
+  8482,
+  8486,
+  8486,
+  8491,
+  8491,
+  8531,
+  8532,
+  8539,
+  8542,
+  8544,
+  8555,
+  8560,
+  8569,
+  8585,
+  8585,
+  8592,
+  8601,
+  8632,
+  8633,
+  8658,
+  8658,
+  8660,
+  8660,
+  8679,
+  8679,
+  8704,
+  8704,
+  8706,
+  8707,
+  8711,
+  8712,
+  8715,
+  8715,
+  8719,
+  8719,
+  8721,
+  8721,
+  8725,
+  8725,
+  8730,
+  8730,
+  8733,
+  8736,
+  8739,
+  8739,
+  8741,
+  8741,
+  8743,
+  8748,
+  8750,
+  8750,
+  8756,
+  8759,
+  8764,
+  8765,
+  8776,
+  8776,
+  8780,
+  8780,
+  8786,
+  8786,
+  8800,
+  8801,
+  8804,
+  8807,
+  8810,
+  8811,
+  8814,
+  8815,
+  8834,
+  8835,
+  8838,
+  8839,
+  8853,
+  8853,
+  8857,
+  8857,
+  8869,
+  8869,
+  8895,
+  8895,
+  8978,
+  8978,
+  9312,
+  9449,
+  9451,
+  9547,
+  9552,
+  9587,
+  9600,
+  9615,
+  9618,
+  9621,
+  9632,
+  9633,
+  9635,
+  9641,
+  9650,
+  9651,
+  9654,
+  9655,
+  9660,
+  9661,
+  9664,
+  9665,
+  9670,
+  9672,
+  9675,
+  9675,
+  9678,
+  9681,
+  9698,
+  9701,
+  9711,
+  9711,
+  9733,
+  9734,
+  9737,
+  9737,
+  9742,
+  9743,
+  9756,
+  9756,
+  9758,
+  9758,
+  9792,
+  9792,
+  9794,
+  9794,
+  9824,
+  9825,
+  9827,
+  9829,
+  9831,
+  9834,
+  9836,
+  9837,
+  9839,
+  9839,
+  9886,
+  9887,
+  9919,
+  9919,
+  9926,
+  9933,
+  9935,
+  9939,
+  9941,
+  9953,
+  9955,
+  9955,
+  9960,
+  9961,
+  9963,
+  9969,
+  9972,
+  9972,
+  9974,
+  9977,
+  9979,
+  9980,
+  9982,
+  9983,
+  10045,
+  10045,
+  10102,
+  10111,
+  11094,
+  11097,
+  12872,
+  12879,
+  57344,
+  63743,
+  65024,
+  65039,
+  65533,
+  65533,
+  127232,
+  127242,
+  127248,
+  127277,
+  127280,
+  127337,
+  127344,
+  127373,
+  127375,
+  127376,
+  127387,
+  127404,
+  917760,
+  917999,
+  983040,
+  1048573,
+  1048576,
+  1114109
+];
 
-class OutputCoordinator {
-  target;
-  renderer;
-  live;
-  jsonSerialization;
-  backpressureTimeoutMs;
-  lease = new TerminalLease;
-  #waitingForDrain = false;
-  #drainPromise;
-  #drainTimer;
-  #jsonArrayStarted = false;
-  #jsonArrayNeedsComma = false;
-  constructor(target, renderer, live, jsonSerialization = "none", backpressureTimeoutMs = 1000) {
-    this.target = target;
-    this.renderer = renderer;
-    this.live = live;
-    this.jsonSerialization = jsonSerialization;
-    this.backpressureTimeoutMs = backpressureTimeoutMs;
-  }
-  render(snapshot) {
-    if (this.lease.closed) {
-      return;
-    }
-    this.writeFrame(this.renderer.render(snapshot));
-  }
-  writeFrame(frame) {
-    if (frame.kind === "none") {
-      return;
-    }
-    if (this.#waitingForDrain) {
-      this.lease.pendingFrame = mergePendingFrame(this.lease.pendingFrame, frame);
-      return;
-    }
-    this.#writeNow(frame);
-  }
-  finalize(snapshot) {
-    if (this.lease.closed) {
-      return;
-    }
-    this.writeFrame(this.renderer.finalize?.(snapshot) ?? { kind: "none" });
-  }
-  async flush() {
-    if (this.#drainPromise !== undefined) {
-      await this.#drainPromise;
-    }
-    const pending = this.lease.pendingFrame;
-    this.lease.pendingFrame = undefined;
-    if (pending !== undefined) {
-      this.#writeNow(pending);
-    }
-    if (this.#drainPromise !== undefined) {
-      await this.#drainPromise;
-    }
-  }
-  async close() {
-    if (this.lease.closed) {
-      return;
-    }
-    await this.flush();
-    if (this.jsonSerialization === "array") {
-      this.#writeRaw(this.#jsonArrayStarted ? `]
-` : `[]
-`);
-      await this.flush();
-    }
-    if (this.live) {
-      const cursor = this.#showCursor();
-      if (this.lease.renderedLineCount > 0) {
-        this.#writeRaw(`${cursor}\x1B[0m
-`);
-      } else if (cursor.length > 0) {
-        this.#writeRaw(`${cursor}\x1B[0m`);
-      }
-      await this.flush();
-    }
-    this.lease.closed = true;
-    this.lease.renderedLineCount = 0;
-    this.lease.cursorHiddenByUs = 0;
-    this.lease.activeBars = 0;
-    this.lease.pendingFrame = undefined;
-    this.lease.partialLineKnownByUs = false;
-    this.lease.lastLiveLines = [];
-    this.#jsonArrayStarted = false;
-    this.#jsonArrayNeedsComma = false;
-  }
-  #writeNow(frame) {
-    switch (frame.kind) {
-      case "live":
-        this.#writeLive(frame.scrollbackLines, frame.lines);
-        return;
-      case "plain":
-        this.#writeRaw(`${frame.lines.join(`
-`)}
-`);
-        return;
-      case "json":
-        this.#writeJson(frame.events);
-        return;
-      case "none":
-        return;
-    }
-  }
-  #writeJson(events) {
-    if (events.length === 0) {
-      return;
-    }
-    if (this.jsonSerialization === "array") {
-      let chunk = "";
-      if (!this.#jsonArrayStarted) {
-        chunk += "[";
-        this.#jsonArrayStarted = true;
-      }
-      for (const event of events) {
-        chunk += `${this.#jsonArrayNeedsComma ? "," : ""}${JSON.stringify(event)}`;
-        this.#jsonArrayNeedsComma = true;
-      }
-      this.#writeRaw(chunk);
-      return;
-    }
-    this.#writeRaw(`${events.map((event) => JSON.stringify(event)).join(`
-`)}
-`);
-  }
-  #writeLive(scrollbackLines, lines) {
-    if (scrollbackLines.length === 0 && sameLines(lines, this.lease.lastLiveLines)) {
-      return;
-    }
-    const cursor = this.#hideCursor();
-    const clear = this.lease.renderedLineCount > 0 ? eraseLines(this.lease.renderedLineCount) : "";
-    const scrollback = scrollbackLines.length > 0 ? `${scrollbackLines.join(`
-`)}
-` : "";
-    const liveLines = lines.length > 0 ? lines.join(`
-`) : "";
-    const chunk = `${cursor}${clear}${scrollback}${liveLines}\x1B[0m`;
-    this.lease.renderedLineCount = lines.length;
-    this.lease.partialLineKnownByUs = lines.length > 0;
-    this.lease.lastLiveLines = [...lines];
-    this.#writeRaw(chunk);
-  }
-  #hideCursor() {
-    if (!this.live || this.lease.cursorHiddenByUs > 0) {
-      return "";
-    }
-    this.lease.cursorHiddenByUs += 1;
-    return "\x1B[?25l";
-  }
-  #showCursor() {
-    if (!this.live || this.lease.cursorHiddenByUs === 0) {
-      return "";
-    }
-    this.lease.cursorHiddenByUs = 0;
-    return "\x1B[?25h";
-  }
-  #writeRaw(chunk) {
-    if (chunk.length === 0 || this.lease.closed) {
-      return;
-    }
-    let accepted;
-    try {
-      accepted = this.target.write(chunk);
-    } catch {
-      this.#disableOutput();
-      return;
-    }
-    if (accepted !== false) {
-      return;
-    }
-    if (this.target.on === undefined || this.target.off === undefined) {
-      return;
-    }
-    this.#waitingForDrain = true;
-    this.#drainPromise = new Promise((resolve) => {
-      const settle = (replayPending) => {
-        if (!this.#waitingForDrain) {
-          return;
-        }
-        if (this.#drainTimer !== undefined) {
-          clearTimeout(this.#drainTimer);
-          this.#drainTimer = undefined;
-        }
-        this.target.off?.("drain", onDrain);
-        this.target.off?.("error", onError);
-        this.target.off?.("close", onClose);
-        this.target.off?.("finish", onFinish);
-        this.#waitingForDrain = false;
-        this.#drainPromise = undefined;
-        const pending = this.lease.pendingFrame;
-        this.lease.pendingFrame = undefined;
-        if (replayPending && pending !== undefined) {
-          this.#writeNow(pending);
-        }
-        resolve();
-      };
-      const onDrain = () => settle(true);
-      const onError = () => settle(false);
-      const onClose = () => settle(false);
-      const onFinish = () => settle(false);
-      this.target.on?.("drain", onDrain);
-      this.target.on?.("error", onError);
-      this.target.on?.("close", onClose);
-      this.target.on?.("finish", onFinish);
-      this.#drainTimer = setTimeout(() => settle(false), this.backpressureTimeoutMs);
-    });
-  }
-  #disableOutput() {
-    this.lease.closed = true;
-    this.lease.pendingFrame = undefined;
-    this.lease.renderedLineCount = 0;
-    this.lease.cursorHiddenByUs = 0;
-    this.lease.activeBars = 0;
-    this.lease.partialLineKnownByUs = false;
-    this.lease.lastLiveLines = [];
-  }
-}
-function sameLines(left, right) {
-  return left.length === right.length && left.every((line, index) => line === right[index]);
-}
-function mergePendingFrame(previous, next) {
-  if (previous === undefined) {
-    return next;
-  }
-  if (previous?.kind === "json" && next.kind === "json") {
-    return { kind: "json", events: [...previous.events, ...next.events] };
-  }
-  if (previous.kind === "plain" && next.kind === "plain") {
-    return { kind: "plain", lines: [...previous.lines, ...next.lines] };
-  }
-  if (previous.kind === "live" && next.kind === "live") {
-    return {
-      kind: "live",
-      scrollbackLines: [...previous.scrollbackLines, ...next.scrollbackLines],
-      lines: next.lines
-    };
-  }
-  return next;
-}
-function eraseLines(count) {
-  let output = "\r\x1B[2K";
-  for (let index = 1;index < count; index += 1) {
-    output += "\x1B[1A\r\x1B[2K";
-  }
-  return output;
-}
-
-// node_modules/.bun/@0disoft+laqu@1.0.8/node_modules/@0disoft/laqu/dist/events.js
-var LAQU_EVENT_SCHEMA = "laqu.event";
-var LAQU_EVENT_SCHEMA_VERSION = 1;
-function taskEvent(task) {
-  return {
-    schema: LAQU_EVENT_SCHEMA,
-    version: LAQU_EVENT_SCHEMA_VERSION,
-    type: "task",
-    createdAt: Date.now(),
-    task: {
-      id: task.id,
-      title: task.title,
-      status: task.status,
-      progress: eventProgress(task.aggregate),
-      depth: task.depth,
-      ...task.parentId === undefined ? {} : { parentId: task.parentId },
-      ...task.message === undefined ? {} : { message: task.message },
-      ...task.detail === undefined ? {} : { detail: task.detail }
-    }
-  };
-}
-function logEvent(message, createdAt) {
-  return {
-    schema: LAQU_EVENT_SCHEMA,
-    version: LAQU_EVENT_SCHEMA_VERSION,
-    type: "log",
-    message,
-    createdAt
-  };
-}
-function summaryEvent(counts, createdAt) {
-  return {
-    schema: LAQU_EVENT_SCHEMA,
-    version: LAQU_EVENT_SCHEMA_VERSION,
-    type: "summary",
-    createdAt,
-    tasks: {
-      total: counts.total,
-      running: counts.running,
-      succeeded: counts.succeeded,
-      failed: counts.failed,
-      cancelled: counts.cancelled,
-      skipped: counts.skipped
-    }
-  };
-}
-function eventProgress(progress) {
-  switch (progress.kind) {
-    case "none":
-      return { kind: "none" };
-    case "mixed":
-      return { kind: "mixed" };
-    case "ratio":
-      return { kind: "ratio", ratio: progress.ratio, overrun: progress.overrun };
-  }
-}
-
-// node_modules/.bun/@0disoft+laqu@1.0.8/node_modules/@0disoft/laqu/dist/width.js
+// node_modules/.bun/@0disoft+laqu@1.1.8/node_modules/@0disoft/laqu/dist/width.js
 var ansiPattern = new RegExp(String.raw`\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007]*(?:\u0007|\u001b\\)|[@-Z\\-_])`, "g");
 var resetSequence = "\x1B[0m";
 var unsafeControlPattern = new RegExp(String.raw`[\u0000-\u0008\u000a-\u001f\u007f-\u009f]`, "g");
 var segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+var markOnlyPattern = /^\p{Mark}+$/u;
+var markPattern = /\p{Mark}/u;
+var defaultIgnorablePattern = /\p{Default_Ignorable_Code_Point}/u;
+var emojiPattern = /\p{Emoji}/u;
+var emojiPresentationPattern = /\p{Emoji_Presentation}/u;
+var extendedPictographicPattern = /\p{Extended_Pictographic}/u;
+var regionalIndicatorPattern = /^\p{Regional_Indicator}{1,2}$/u;
+var unifiedIdeographPattern = /\p{Unified_Ideograph}/u;
+var keycapPattern = /^[#*0-9]\uFE0F?\u20E3$/u;
+var textPresentationSelector = "︎";
+var emojiPresentationSelector = "️";
+var zeroWidthJoiner = "‍";
 function tokenizeAnsi(input) {
   const tokens = [];
   let lastIndex = 0;
@@ -14931,7 +15246,7 @@ function truncateToColumns(input, columns, options = {}) {
   if (columns <= 0) {
     return "";
   }
-  const requestedMarker = options.overflowMarker ?? "";
+  const requestedMarker = displayWidth(input, options) > columns ? options.overflowMarker ?? "" : "";
   const marker = displayWidth(requestedMarker, options) > columns ? truncateToColumns(requestedMarker, columns, { ...options, overflowMarker: "" }) : requestedMarker;
   const markerWidth = displayWidth(marker, options);
   const target = marker === "" ? columns : Math.max(0, columns - markerWidth);
@@ -14974,10 +15289,14 @@ function clusterWidth(cluster, ambiguousWidth) {
   if (cluster.length === 0) {
     return 0;
   }
-  if (/^\p{Mark}+$/u.test(cluster)) {
+  if (markOnlyPattern.test(cluster)) {
     return 0;
   }
-  if (cluster.includes("‍") || /\p{Extended_Pictographic}/u.test(cluster)) {
+  if (keycapPattern.test(cluster) || regionalIndicatorPattern.test(cluster)) {
+    return 2;
+  }
+  const textPresentation = cluster.includes(textPresentationSelector);
+  if (!textPresentation && (emojiPresentationPattern.test(cluster) || cluster.includes(emojiPresentationSelector) && emojiPattern.test(cluster) || cluster.includes(zeroWidthJoiner) && extendedPictographicPattern.test(cluster))) {
     return 2;
   }
   let width = 0;
@@ -14989,14 +15308,14 @@ function clusterWidth(cluster, ambiguousWidth) {
     if (codePoint === 0 || codePoint < 32 || codePoint >= 127 && codePoint < 160) {
       continue;
     }
-    if (isCombining(codePoint)) {
+    if (markPattern.test(char) || defaultIgnorablePattern.test(char)) {
       continue;
     }
-    if (isFullWidth(codePoint)) {
+    if (unifiedIdeographPattern.test(char) || isInRanges(codePoint, wideRanges)) {
       width += 2;
       continue;
     }
-    if (isAmbiguous(codePoint)) {
+    if (isInRanges(codePoint, ambiguousRanges)) {
       width += ambiguousWidth;
       continue;
     }
@@ -15004,14 +15323,25 @@ function clusterWidth(cluster, ambiguousWidth) {
   }
   return width;
 }
-function isCombining(codePoint) {
-  return codePoint >= 768 && codePoint <= 879 || codePoint >= 6832 && codePoint <= 6911 || codePoint >= 7616 && codePoint <= 7679 || codePoint >= 8400 && codePoint <= 8447 || codePoint >= 65024 && codePoint <= 65039 || codePoint >= 917760 && codePoint <= 917999 || codePoint >= 65056 && codePoint <= 65071;
-}
-function isFullWidth(codePoint) {
-  return codePoint >= 4352 && (codePoint <= 4447 || codePoint === 9001 || codePoint === 9002 || codePoint >= 11904 && codePoint <= 42191 && codePoint !== 12351 || codePoint >= 44032 && codePoint <= 55203 || codePoint >= 63744 && codePoint <= 64255 || codePoint >= 65040 && codePoint <= 65049 || codePoint >= 65072 && codePoint <= 65135 || codePoint >= 65280 && codePoint <= 65376 || codePoint >= 65504 && codePoint <= 65510 || codePoint >= 131072 && codePoint <= 262141);
-}
-function isAmbiguous(codePoint) {
-  return codePoint >= 161 && codePoint <= 255 || codePoint >= 8208 && codePoint <= 8231 || codePoint >= 8481 && codePoint <= 8959 || codePoint >= 9312 && codePoint <= 9471;
+function isInRanges(codePoint, ranges) {
+  let low = 0;
+  let high = ranges.length / 2 - 1;
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    const start = ranges[middle * 2];
+    const end = ranges[middle * 2 + 1];
+    if (start === undefined || end === undefined) {
+      return false;
+    }
+    if (codePoint < start) {
+      high = middle - 1;
+    } else if (codePoint > end) {
+      low = middle + 1;
+    } else {
+      return true;
+    }
+  }
+  return false;
 }
 function needsSgrReset(input) {
   const state = emptySgrState();
@@ -15171,7 +15501,438 @@ function isSgrActive(state) {
   return state.intensity || state.italic || state.underline || state.blink || state.inverse || state.conceal || state.strike || state.overline || state.foreground || state.background || state.underlineColor;
 }
 
-// node_modules/.bun/@0disoft+laqu@1.0.8/node_modules/@0disoft/laqu/dist/theme.js
+// node_modules/.bun/@0disoft+laqu@1.1.8/node_modules/@0disoft/laqu/dist/output-coordinator.js
+class LaquOutputError extends Error {
+  code;
+  name = "LaquOutputError";
+  constructor(code, message, options) {
+    super(message, options);
+    this.code = code;
+  }
+}
+
+class TerminalLease {
+  closed = false;
+  renderedLineCount = 0;
+  cursorHiddenByUs = 0;
+  rawModeChangedByUs = false;
+  activeBars = 0;
+  renderTimer;
+  partialLineKnownByUs = false;
+  lastLiveLines = [];
+}
+
+class OutputCoordinator {
+  target;
+  renderer;
+  live;
+  jsonSerialization;
+  backpressureTimeoutMs;
+  maxPendingFrames;
+  lease = new TerminalLease;
+  #waitingForDrain = false;
+  #drainPromise;
+  #drainTimer;
+  #settleDrain;
+  #jsonArrayStarted = false;
+  #jsonArrayNeedsComma = false;
+  #pendingFrames = [];
+  #pendingHead = 0;
+  #pendingLiveFrame;
+  #pendingLiveFrameCount = 0;
+  #pendingCount = 0;
+  #outputError;
+  constructor(target, renderer, live, jsonSerialization = "none", backpressureTimeoutMs = 1000, maxPendingFrames = 4096) {
+    this.target = target;
+    this.renderer = renderer;
+    this.live = live;
+    this.jsonSerialization = jsonSerialization;
+    this.backpressureTimeoutMs = backpressureTimeoutMs;
+    this.maxPendingFrames = maxPendingFrames;
+  }
+  render(snapshot) {
+    if (this.lease.closed || this.#outputError !== undefined) {
+      return;
+    }
+    this.writeFrame(this.renderer.render(snapshot));
+  }
+  writeFrame(frame) {
+    if (frame.kind === "none" || this.lease.closed || this.#outputError !== undefined) {
+      return;
+    }
+    if (this.#waitingForDrain) {
+      this.#enqueuePending(frame);
+      return;
+    }
+    this.#writeNow(frame);
+  }
+  finalize(snapshot) {
+    if (this.lease.closed || this.#outputError !== undefined) {
+      return;
+    }
+    this.writeFrame(this.renderer.finalize?.(snapshot) ?? { kind: "none" });
+  }
+  invalidateLiveLayout(columns) {
+    if (!this.live || this.lease.closed || !Number.isSafeInteger(columns) || columns <= 0) {
+      return;
+    }
+    let physicalRows = 0;
+    for (const line of this.lease.lastLiveLines) {
+      physicalRows += Math.max(1, Math.ceil(displayWidth(line) / columns));
+    }
+    this.lease.renderedLineCount = physicalRows;
+    this.lease.lastLiveLines = [];
+  }
+  async flush() {
+    while (true) {
+      this.#throwIfFailed();
+      if (this.#drainPromise !== undefined) {
+        await this.#drainPromise;
+        continue;
+      }
+      const pending = this.#dequeuePending();
+      if (pending === undefined) {
+        break;
+      }
+      this.#writeNow(pending);
+    }
+    this.#throwIfFailed();
+  }
+  async close() {
+    if (this.lease.closed) {
+      this.#throwIfFailed();
+      return;
+    }
+    let closeFailure;
+    try {
+      if (this.#outputError === undefined) {
+        try {
+          await this.flush();
+        } catch (error) {
+          closeFailure = error;
+        }
+      }
+      if (closeFailure === undefined && this.#outputError === undefined && this.jsonSerialization === "array") {
+        this.#writeRaw(this.#jsonArrayStarted ? `]
+` : `[]
+`);
+        try {
+          await this.flush();
+        } catch (error) {
+          closeFailure = error;
+        }
+      }
+      if (this.live) {
+        const cursor = this.#showCursor();
+        const cleanup = this.lease.renderedLineCount > 0 ? `${cursor}\x1B[0m
+` : cursor.length > 0 ? `${cursor}\x1B[0m` : "";
+        if (closeFailure === undefined && this.#outputError === undefined) {
+          this.#writeRaw(cleanup);
+          try {
+            await this.flush();
+          } catch (error) {
+            closeFailure = error;
+            this.#writeBestEffortRaw(cleanup);
+          }
+        } else {
+          this.#writeBestEffortRaw(cleanup);
+        }
+      }
+    } finally {
+      this.#settleDrain?.();
+      this.lease.closed = true;
+      this.lease.renderedLineCount = 0;
+      this.lease.cursorHiddenByUs = 0;
+      this.lease.activeBars = 0;
+      this.lease.partialLineKnownByUs = false;
+      this.lease.lastLiveLines = [];
+      this.#jsonArrayStarted = false;
+      this.#jsonArrayNeedsComma = false;
+      this.#clearPending();
+    }
+    if (closeFailure !== undefined) {
+      throw closeFailure;
+    }
+    this.#throwIfFailed();
+  }
+  #enqueuePending(frame) {
+    if (this.#pendingCount >= this.maxPendingFrames) {
+      this.#fail(new LaquOutputError("LAQU_OUTPUT_BUFFER_OVERFLOW", `status output exceeded ${this.maxPendingFrames} pending frames`));
+      return;
+    }
+    this.#pendingCount += 1;
+    if (this.live && frame.kind === "live") {
+      if (this.#pendingLiveFrame === undefined) {
+        this.#pendingLiveFrame = {
+          scrollbackLines: [...frame.scrollbackLines],
+          lines: frame.lines
+        };
+      } else {
+        for (const line of frame.scrollbackLines) {
+          this.#pendingLiveFrame.scrollbackLines.push(line);
+        }
+        this.#pendingLiveFrame.lines = frame.lines;
+      }
+      this.#pendingLiveFrameCount += 1;
+      return;
+    }
+    this.#pendingFrames.push(frame);
+  }
+  #dequeuePending() {
+    const frame = this.#pendingFrames[this.#pendingHead];
+    if (frame !== undefined) {
+      this.#pendingHead += 1;
+      this.#pendingCount -= 1;
+      if (this.#pendingHead === this.#pendingFrames.length) {
+        this.#pendingFrames.length = 0;
+        this.#pendingHead = 0;
+      }
+      return frame;
+    }
+    if (this.#pendingLiveFrame !== undefined) {
+      const liveFrame = { kind: "live", ...this.#pendingLiveFrame };
+      this.#pendingLiveFrame = undefined;
+      this.#pendingCount -= this.#pendingLiveFrameCount;
+      this.#pendingLiveFrameCount = 0;
+      return liveFrame;
+    }
+    return;
+  }
+  #clearPending() {
+    this.#pendingFrames.length = 0;
+    this.#pendingHead = 0;
+    this.#pendingLiveFrame = undefined;
+    this.#pendingLiveFrameCount = 0;
+    this.#pendingCount = 0;
+  }
+  #writeNow(frame) {
+    switch (frame.kind) {
+      case "live":
+        this.#writeLive(frame.scrollbackLines, frame.lines);
+        return;
+      case "plain":
+        this.#writeRaw(`${frame.lines.join(`
+`)}
+`);
+        return;
+      case "json":
+        this.#writeJson(frame.events);
+        return;
+      case "none":
+        return;
+    }
+  }
+  #writeJson(events) {
+    if (events.length === 0) {
+      return;
+    }
+    if (this.jsonSerialization === "array") {
+      let chunk = "";
+      if (!this.#jsonArrayStarted) {
+        chunk += "[";
+        this.#jsonArrayStarted = true;
+      }
+      for (const event of events) {
+        chunk += `${this.#jsonArrayNeedsComma ? "," : ""}${JSON.stringify(event)}`;
+        this.#jsonArrayNeedsComma = true;
+      }
+      this.#writeRaw(chunk);
+      return;
+    }
+    this.#writeRaw(`${events.map((event) => JSON.stringify(event)).join(`
+`)}
+`);
+  }
+  #writeLive(scrollbackLines, lines) {
+    if (scrollbackLines.length === 0 && sameLines(lines, this.lease.lastLiveLines)) {
+      return;
+    }
+    const cursor = this.#hideCursor();
+    const clear = this.lease.renderedLineCount > 0 ? eraseLines(this.lease.renderedLineCount) : "";
+    const scrollback = scrollbackLines.length > 0 ? `${scrollbackLines.join(`
+`)}
+` : "";
+    const liveLines = lines.length > 0 ? lines.join(`
+`) : "";
+    const chunk = `${cursor}${clear}${scrollback}${liveLines}\x1B[0m`;
+    this.lease.renderedLineCount = lines.length;
+    this.lease.partialLineKnownByUs = lines.length > 0;
+    this.lease.lastLiveLines = [...lines];
+    this.#writeRaw(chunk);
+  }
+  #hideCursor() {
+    if (!this.live || this.lease.cursorHiddenByUs > 0) {
+      return "";
+    }
+    this.lease.cursorHiddenByUs += 1;
+    return "\x1B[?25l";
+  }
+  #showCursor() {
+    if (!this.live || this.lease.cursorHiddenByUs === 0) {
+      return "";
+    }
+    this.lease.cursorHiddenByUs = 0;
+    return "\x1B[?25h";
+  }
+  #writeRaw(chunk) {
+    if (chunk.length === 0 || this.lease.closed || this.#outputError !== undefined) {
+      return;
+    }
+    let accepted;
+    try {
+      accepted = this.target.write(chunk);
+    } catch (error) {
+      this.#fail(new LaquOutputError("LAQU_OUTPUT_WRITE_FAILED", "status output write failed", {
+        cause: error
+      }));
+      return;
+    }
+    if (accepted !== false) {
+      return;
+    }
+    if (this.target.on === undefined || this.target.off === undefined) {
+      this.#fail(new LaquOutputError("LAQU_OUTPUT_BACKPRESSURE_UNSUPPORTED", "status stream returned backpressure without removable drain listeners"));
+      return;
+    }
+    this.#waitForDrain();
+  }
+  #waitForDrain() {
+    this.#waitingForDrain = true;
+    this.#drainPromise = new Promise((resolve) => {
+      const settle = () => {
+        if (!this.#waitingForDrain) {
+          return;
+        }
+        if (this.#drainTimer !== undefined) {
+          clearTimeout(this.#drainTimer);
+          this.#drainTimer = undefined;
+        }
+        this.target.off?.("drain", onDrain);
+        this.target.off?.("error", onError);
+        this.target.off?.("close", onClose);
+        this.target.off?.("finish", onFinish);
+        this.#waitingForDrain = false;
+        this.#drainPromise = undefined;
+        this.#settleDrain = undefined;
+        resolve();
+      };
+      const onDrain = () => settle();
+      const onError = (error) => {
+        this.#storeError(new LaquOutputError("LAQU_OUTPUT_WRITE_FAILED", "status stream emitted an error", {
+          cause: error
+        }));
+        settle();
+      };
+      const onClose = () => {
+        this.#storeError(new LaquOutputError("LAQU_OUTPUT_WRITE_FAILED", "status stream closed before drain"));
+        settle();
+      };
+      const onFinish = () => {
+        this.#storeError(new LaquOutputError("LAQU_OUTPUT_WRITE_FAILED", "status stream finished before drain"));
+        settle();
+      };
+      this.#settleDrain = settle;
+      this.target.on?.("drain", onDrain);
+      this.target.on?.("error", onError);
+      this.target.on?.("close", onClose);
+      this.target.on?.("finish", onFinish);
+      this.#drainTimer = setTimeout(() => {
+        this.#storeError(new LaquOutputError("LAQU_OUTPUT_BACKPRESSURE_TIMEOUT", `status stream did not drain within ${this.backpressureTimeoutMs}ms`));
+        settle();
+      }, this.backpressureTimeoutMs);
+    });
+  }
+  #writeBestEffortRaw(chunk) {
+    if (chunk.length === 0) {
+      return;
+    }
+    try {
+      this.target.write(chunk);
+    } catch {}
+  }
+  #fail(error) {
+    this.#storeError(error);
+    this.#settleDrain?.();
+  }
+  #storeError(error) {
+    this.#outputError ??= error;
+    this.#clearPending();
+  }
+  #throwIfFailed() {
+    if (this.#outputError !== undefined) {
+      throw this.#outputError;
+    }
+  }
+}
+function sameLines(left, right) {
+  return left.length === right.length && left.every((line, index) => line === right[index]);
+}
+function eraseLines(count) {
+  let output = "\r\x1B[2K";
+  for (let index = 1;index < count; index += 1) {
+    output += "\x1B[1A\r\x1B[2K";
+  }
+  return output;
+}
+
+// node_modules/.bun/@0disoft+laqu@1.1.8/node_modules/@0disoft/laqu/dist/events.js
+var LAQU_EVENT_SCHEMA = "laqu.event";
+var LAQU_EVENT_SCHEMA_VERSION = 1;
+function taskEvent(task) {
+  return {
+    schema: LAQU_EVENT_SCHEMA,
+    version: LAQU_EVENT_SCHEMA_VERSION,
+    type: "task",
+    createdAt: Date.now(),
+    task: {
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      progress: eventProgress(task.aggregate),
+      depth: task.depth,
+      ...task.parentId === undefined ? {} : { parentId: task.parentId },
+      ...task.message === undefined ? {} : { message: task.message },
+      ...task.detail === undefined ? {} : { detail: task.detail }
+    }
+  };
+}
+function logEvent(message, createdAt) {
+  return {
+    schema: LAQU_EVENT_SCHEMA,
+    version: LAQU_EVENT_SCHEMA_VERSION,
+    type: "log",
+    message,
+    createdAt
+  };
+}
+function summaryEvent(counts, createdAt) {
+  return {
+    schema: LAQU_EVENT_SCHEMA,
+    version: LAQU_EVENT_SCHEMA_VERSION,
+    type: "summary",
+    createdAt,
+    tasks: {
+      total: counts.total,
+      running: counts.running,
+      succeeded: counts.succeeded,
+      failed: counts.failed,
+      cancelled: counts.cancelled,
+      skipped: counts.skipped
+    }
+  };
+}
+function eventProgress(progress) {
+  switch (progress.kind) {
+    case "none":
+      return { kind: "none" };
+    case "mixed":
+      return { kind: "mixed" };
+    case "ratio":
+      return { kind: "ratio", ratio: progress.ratio, overrun: progress.overrun };
+  }
+}
+
+// node_modules/.bun/@0disoft+laqu@1.1.8/node_modules/@0disoft/laqu/dist/theme.js
 var defaultTokens = {
   successSymbol: "✓",
   failSymbol: "×",
@@ -15238,7 +15999,7 @@ function sanitizeToken(value, name) {
   return sanitizeText(value);
 }
 
-// node_modules/.bun/@0disoft+laqu@1.0.8/node_modules/@0disoft/laqu/dist/renderer.js
+// node_modules/.bun/@0disoft+laqu@1.1.8/node_modules/@0disoft/laqu/dist/renderer.js
 function chooseRenderer(options) {
   if (options.policy === "silent" || options.policy === "never") {
     return { renderer: new NullRenderer, live: false, jsonSerialization: "none" };
@@ -15282,13 +16043,15 @@ class AnsiLiveRenderer {
     this.maxRows = maxRows;
   }
   render(snapshot) {
+    const columns = resolveLayoutValue(this.columns);
+    const maxRows = resolveLayoutValue(this.maxRows);
     const newLogs = logsAfterSequence(snapshot.logs, this.#seenLogSequence);
-    const scrollbackLines = renderLogLines(newLogs, this.theme, this.columns);
+    const scrollbackLines = renderLogLines(newLogs, this.theme, columns);
     this.#seenLogSequence = lastLogSequence(snapshot.logs, this.#seenLogSequence);
     return {
       kind: "live",
       scrollbackLines,
-      lines: rowsForSnapshot(snapshot, this.theme, this.columns, this.maxRows)
+      lines: rowsForSnapshot(snapshot, this.theme, columns, maxRows)
     };
   }
 }
@@ -15368,13 +16131,30 @@ class NullRenderer {
 }
 function rowsForSnapshot(snapshot, theme, columns, maxRows) {
   const rows = flattenTasks(snapshot.tasks);
-  const visible = rows.slice(0, maxRows);
+  const prioritized = prioritizeActiveTasks(rows);
+  const taskBudget = rows.length > maxRows && maxRows > 1 ? maxRows - 1 : maxRows;
+  const visible = prioritized.slice(0, taskBudget);
   const output = visible.map((task) => renderTaskRow(task, theme, columns));
   const hidden = rows.length - visible.length;
-  if (hidden > 0) {
+  if (hidden > 0 && output.length < maxRows) {
     output.push(truncateToColumns(`${hidden} more tasks...`, columns, theme.tokens));
   }
   return output;
+}
+function prioritizeActiveTasks(tasks) {
+  const active = [];
+  const terminal = [];
+  for (const task of tasks) {
+    if (task.status === "pending" || task.status === "running") {
+      active.push(task);
+    } else {
+      terminal.push(task);
+    }
+  }
+  return [...active, ...terminal];
+}
+function resolveLayoutValue(value) {
+  return typeof value === "function" ? value() : value;
 }
 function flattenTasks(tasks) {
   const rows = [];
@@ -15477,14 +16257,13 @@ function progressBar(ratio, overrun, theme) {
   return `[${theme.tokens.progressComplete.repeat(completed)}${theme.tokens.progressIncomplete.repeat(incomplete)}${tail}]`;
 }
 
-// node_modules/.bun/@0disoft+laqu@1.0.8/node_modules/@0disoft/laqu/dist/task-store.js
+// node_modules/.bun/@0disoft+laqu@1.1.8/node_modules/@0disoft/laqu/dist/task-store.js
 class TaskStore {
   #tasks = new Map;
-  #rootIds = [];
+  #rootIds = new Set;
   #logs = [];
-  #prunedTerminalIds = new Set;
-  #snapshottedTerminalIds = new Set;
-  #terminalOrder = [];
+  #pendingTerminalSnapshots = [];
+  #pruneCandidates = [];
   #maxLogs;
   #maxTerminalTasks;
   #summaryCounts = {
@@ -15497,6 +16276,8 @@ class TaskStore {
   };
   #nextId = 1;
   #nextLogSequence = 1;
+  #retainedTerminalTasks = 0;
+  #pruneCandidateHead = 0;
   constructor(options = {}) {
     this.#maxLogs = validatedMaxRecords(options.maxLogs ?? 1000, "maxLogs");
     this.#maxTerminalTasks = validatedMaxRecords(options.maxTerminalTasks ?? 1000, "maxTerminalTasks");
@@ -15519,25 +16300,24 @@ class TaskStore {
       message: options.message,
       detail: options.detail,
       weight,
-      children: [],
-      updatedAt: now
+      children: new Set,
+      updatedAt: now,
+      snapshottedTerminal: false,
+      pruneCandidateQueued: false
     };
     this.#tasks.set(id, node);
     this.#summaryCounts.total += 1;
     this.#summaryCounts.running += 1;
     if (parentId === undefined) {
-      this.#rootIds.push(id);
+      this.#rootIds.add(id);
     } else if (parent !== undefined) {
-      parent.children.push(id);
+      parent.children.add(id);
       parent.updatedAt = now;
     }
     return id;
   }
   update(id, update) {
     const node = this.#tasks.get(id);
-    if (node === undefined && this.#prunedTerminalIds.has(id)) {
-      return;
-    }
     if (node === undefined) {
       throw new Error(`Unknown task id: ${id}`);
     }
@@ -15550,9 +16330,6 @@ class TaskStore {
   }
   forceTerminalUpdate(id, update) {
     const node = this.#tasks.get(id);
-    if (node === undefined && this.#prunedTerminalIds.has(id)) {
-      return;
-    }
     if (node === undefined) {
       throw new Error(`Unknown task id: ${id}`);
     }
@@ -15562,9 +16339,6 @@ class TaskStore {
   }
   getProgress(id) {
     const node = this.#tasks.get(id);
-    if (node === undefined && this.#prunedTerminalIds.has(id)) {
-      return { kind: "none" };
-    }
     if (node === undefined) {
       throw new Error(`Unknown task id: ${id}`);
     }
@@ -15591,14 +16365,23 @@ class TaskStore {
       createdAt: Date.now()
     };
     this.#pruneTerminalTasks();
-    rememberTerminalTasks(snapshot.tasks, this.#snapshottedTerminalIds);
+    this.#markTerminalTasksSnapshotted();
     return snapshot;
+  }
+  retentionStats() {
+    return {
+      retainedTasks: this.#tasks.size,
+      retainedTerminalTasks: this.#retainedTerminalTasks,
+      pendingTerminalSnapshots: this.#pendingTerminalSnapshots.length,
+      pendingPruneCandidates: this.#pruneCandidates.length - this.#pruneCandidateHead
+    };
   }
   #snapshotTasks() {
     const snapshots = new Map;
     const stack = [];
-    for (let index = this.#rootIds.length - 1;index >= 0; index -= 1) {
-      const id = this.#rootIds[index];
+    const rootIds = [...this.#rootIds];
+    for (let index = rootIds.length - 1;index >= 0; index -= 1) {
+      const id = rootIds[index];
       if (id !== undefined) {
         stack.push({ id, depth: 0, visited: false });
       }
@@ -15611,15 +16394,16 @@ class TaskStore {
       const node = this.#requireNode(item.id);
       if (!item.visited) {
         stack.push({ id: item.id, depth: item.depth, visited: true });
-        for (let index = node.children.length - 1;index >= 0; index -= 1) {
-          const childId = node.children[index];
+        const childIds = [...node.children];
+        for (let index = childIds.length - 1;index >= 0; index -= 1) {
+          const childId = childIds[index];
           if (childId !== undefined) {
             stack.push({ id: childId, depth: item.depth + 1, visited: false });
           }
         }
         continue;
       }
-      const children = node.children.map((childId) => requireSnapshot(snapshots, childId));
+      const children = [...node.children].map((childId) => requireSnapshot(snapshots, childId));
       snapshots.set(node.id, {
         id: node.id,
         parentId: node.parentId,
@@ -15635,14 +16419,11 @@ class TaskStore {
         updatedAt: node.updatedAt
       });
     }
-    return this.#rootIds.map((id) => requireSnapshot(snapshots, id));
+    return rootIds.map((id) => requireSnapshot(snapshots, id));
   }
   #requireNode(id) {
     const node = this.#tasks.get(id);
     if (node === undefined) {
-      if (this.#prunedTerminalIds.has(id)) {
-        throw new Error(`Task id was pruned after terminal retention: ${id}`);
-      }
       throw new Error(`Unknown task id: ${id}`);
     }
     return node;
@@ -15661,52 +16442,69 @@ class TaskStore {
     decrementSummaryStatus(this.#summaryCounts, previousStatus);
     incrementSummaryStatus(this.#summaryCounts, nextStatus);
     if (!isTerminalStatus(previousStatus) && isTerminalStatus(nextStatus)) {
-      this.#terminalOrder.push(id);
+      this.#retainedTerminalTasks += 1;
+      this.#pendingTerminalSnapshots.push(id);
     }
   }
   #pruneTerminalTasks() {
-    let retainedTerminalTasks = this.#countRetainedTerminalTasks();
-    while (retainedTerminalTasks > this.#maxTerminalTasks) {
-      const orderIndex = this.#terminalOrder.findIndex((id2) => {
-        const node2 = this.#tasks.get(id2);
-        return node2 === undefined || this.#snapshottedTerminalIds.has(id2) && isTerminalStatus(node2.status) && node2.children.length === 0;
-      });
-      if (orderIndex === -1) {
-        return;
-      }
-      const id = this.#terminalOrder.splice(orderIndex, 1)[0];
+    while (this.#retainedTerminalTasks > this.#maxTerminalTasks) {
+      const id = this.#pruneCandidates[this.#pruneCandidateHead];
       if (id === undefined) {
-        return;
+        break;
       }
+      this.#pruneCandidateHead += 1;
       const node = this.#tasks.get(id);
-      if (node === undefined || !isTerminalStatus(node.status) || node.children.length > 0) {
+      if (node === undefined) {
+        continue;
+      }
+      node.pruneCandidateQueued = false;
+      if (!node.snapshottedTerminal || !isTerminalStatus(node.status) || node.children.size > 0) {
         continue;
       }
       this.#removeTaskNode(node);
-      retainedTerminalTasks -= 1;
     }
+    this.#compactPruneCandidates();
   }
-  #countRetainedTerminalTasks() {
-    let count = 0;
-    for (const node of this.#tasks.values()) {
-      if (isTerminalStatus(node.status)) {
-        count += 1;
+  #markTerminalTasksSnapshotted() {
+    for (const id of this.#pendingTerminalSnapshots) {
+      const node = this.#tasks.get(id);
+      if (node !== undefined && isTerminalStatus(node.status)) {
+        node.snapshottedTerminal = true;
+        this.#enqueuePruneCandidate(node);
       }
     }
-    return count;
+    this.#pendingTerminalSnapshots.length = 0;
+  }
+  #enqueuePruneCandidate(node) {
+    if (node.pruneCandidateQueued || !node.snapshottedTerminal || !isTerminalStatus(node.status) || node.children.size > 0) {
+      return;
+    }
+    node.pruneCandidateQueued = true;
+    this.#pruneCandidates.push(node.id);
   }
   #removeTaskNode(node) {
     this.#tasks.delete(node.id);
-    this.#prunedTerminalIds.add(node.id);
-    this.#snapshottedTerminalIds.delete(node.id);
+    this.#retainedTerminalTasks -= 1;
     if (node.parentId === undefined) {
-      removeArrayItem(this.#rootIds, node.id);
+      this.#rootIds.delete(node.id);
       return;
     }
     const parent = this.#tasks.get(node.parentId);
     if (parent !== undefined) {
-      removeArrayItem(parent.children, node.id);
+      parent.children.delete(node.id);
       parent.updatedAt = Date.now();
+      this.#enqueuePruneCandidate(parent);
+    }
+  }
+  #compactPruneCandidates() {
+    if (this.#pruneCandidateHead === this.#pruneCandidates.length) {
+      this.#pruneCandidates.length = 0;
+      this.#pruneCandidateHead = 0;
+      return;
+    }
+    if (this.#pruneCandidateHead >= 1024 && this.#pruneCandidateHead * 2 >= this.#pruneCandidates.length) {
+      this.#pruneCandidates.splice(0, this.#pruneCandidateHead);
+      this.#pruneCandidateHead = 0;
     }
   }
 }
@@ -15924,33 +16722,10 @@ function assertFiniteNonNegative(value, name) {
 function clamp01(value) {
   return Math.min(1, Math.max(0, value));
 }
-function removeArrayItem(items, item) {
-  const index = items.indexOf(item);
-  if (index !== -1) {
-    items.splice(index, 1);
-  }
-}
-function rememberTerminalTasks(tasks, seenTerminalIds) {
-  const stack = [...tasks].reverse();
-  while (stack.length > 0) {
-    const task = stack.pop();
-    if (task === undefined) {
-      continue;
-    }
-    if (isTerminalStatus(task.status)) {
-      seenTerminalIds.add(task.id);
-    }
-    for (let index = task.children.length - 1;index >= 0; index -= 1) {
-      const child = task.children[index];
-      if (child !== undefined) {
-        stack.push(child);
-      }
-    }
-  }
-}
 
-// node_modules/.bun/@0disoft+laqu@1.0.8/node_modules/@0disoft/laqu/dist/runtime.js
+// node_modules/.bun/@0disoft+laqu@1.1.8/node_modules/@0disoft/laqu/dist/runtime.js
 var defaultFlushHz = 15;
+var fatalShutdownTimeoutMs = 250;
 var liveStreamLeases = new WeakSet;
 function createProgressRuntime(options = {}) {
   assertRuntimeOptions(options);
@@ -15959,29 +16734,37 @@ function createProgressRuntime(options = {}) {
   const capability = options.streamCapability ?? detectCapability(stderr, env);
   const policy = options.progressPolicy ?? "auto";
   const theme = compileTheme({ useColor: defaultUseColor(capability, env), ...options.theme });
-  const columns = normalizedColumns(stderr.columns);
-  const maxRows = validatedPositiveSafeInteger(options.maxRows ?? 12, "maxRows");
+  const configuredMaxRows = validatedPositiveSafeInteger(options.maxRows ?? 12, "maxRows");
   const rendererOptions = {
     format: options.format ?? "human",
     policy,
     capability,
     theme,
-    columns,
-    maxRows
+    columns: () => normalizedColumns(stderr.columns),
+    maxRows: () => normalizedRows(stderr.rows, configuredMaxRows)
   };
-  const initialDecision = chooseRenderer(rendererOptions);
-  const liveStreamLease = initialDecision.live ? acquireLiveStreamLease(stderr) : undefined;
-  const decision = initialDecision.live && liveStreamLease === undefined ? chooseRenderer({ ...rendererOptions, policy: "plain" }) : initialDecision;
   const store = new TaskStore({
     maxLogs: options.retention?.maxLogs,
     maxTerminalTasks: options.retention?.maxTerminalTasks
   });
-  const coordinator = new OutputCoordinator(stderr, decision.renderer, decision.live, decision.jsonSerialization);
-  const runtime = new LaquRuntime(store, coordinator, policy, liveStreamLease);
-  if (options.manageProcessLifecycle === true) {
-    runtime.manageProcessLifecycle();
+  const initialDecision = chooseRenderer(rendererOptions);
+  const liveStreamLease = initialDecision.live ? acquireLiveStreamLease(stderr) : undefined;
+  const decision = initialDecision.live && liveStreamLease === undefined ? chooseRenderer({ ...rendererOptions, policy: "plain" }) : initialDecision;
+  let runtime;
+  try {
+    const coordinator = new OutputCoordinator(stderr, decision.renderer, decision.live, decision.jsonSerialization);
+    runtime = new LaquRuntime(store, coordinator, policy, liveStreamLease, decision.live ? stderr : undefined);
+    if (options.manageProcessLifecycle === true) {
+      runtime.manageProcessLifecycle();
+    }
+    return runtime;
+  } catch (error) {
+    runtime?.disposeInfrastructure();
+    if (runtime === undefined) {
+      liveStreamLease?.release();
+    }
+    throw error;
   }
-  return runtime;
 }
 
 class LaquRuntime {
@@ -15991,22 +16774,36 @@ class LaquRuntime {
   liveStreamLease;
   #timer;
   #flushPromise;
-  #closePromise;
+  #gracefulClosePromise;
+  #finalizePromise;
   #dirty = false;
-  #closing = false;
-  #closed = false;
+  #state = "open";
   #processLifecycle;
+  #terminalResizeCleanup;
   #handles = new Set;
   #taskCloseContext = new AsyncLocalStorage;
   #activeScopedTasks = 0;
   #closeRequestedByScopedTask = false;
   #scopedTasksDrained;
   #resolveScopedTasksDrained;
-  constructor(store, coordinator, policy, liveStreamLease) {
+  constructor(store, coordinator, policy, liveStreamLease, resizeTarget) {
     this.store = store;
     this.coordinator = coordinator;
     this.policy = policy;
     this.liveStreamLease = liveStreamLease;
+    if (resizeTarget !== undefined) {
+      this.#terminalResizeCleanup = subscribeToResize(resizeTarget, () => {
+        this.coordinator.invalidateLiveLayout(normalizedColumns(resizeTarget.columns));
+        this.markDirty(true);
+      });
+    }
+  }
+  disposeInfrastructure() {
+    this.#processLifecycle?.dispose();
+    this.#processLifecycle = undefined;
+    this.#terminalResizeCleanup?.();
+    this.#terminalResizeCleanup = undefined;
+    this.liveStreamLease?.release();
   }
   async task(title, optionsOrCallback, maybeCallback) {
     const options = typeof optionsOrCallback === "function" ? {} : optionsOrCallback;
@@ -16014,16 +16811,16 @@ class LaquRuntime {
     if (callback === undefined) {
       throw new TypeError("task callback is required");
     }
-    const handle = this.#createRootHandle(title, options);
+    const handle = this.#createRootHandle(title, options, true);
     this.#activeScopedTasks += 1;
     try {
       const result = await this.#taskCloseContext.run(handle, () => callback(handle));
-      if (this.#acceptsMutations()) {
+      if (this.#acceptsHandleMutation(true)) {
         handle.succeed();
       }
       return result;
     } catch (error) {
-      if (this.#acceptsMutations()) {
+      if (this.#acceptsHandleMutation(true)) {
         if (options.signal?.aborted === true) {
           this.store.forceTerminalUpdate(handle.id, { status: "cancelled", message: "aborted" });
         } else {
@@ -16042,34 +16839,38 @@ class LaquRuntime {
         this.#scopedTasksDrained = undefined;
       }
       await this.flush();
-      if (this.#shouldRunDeferredScopedClose()) {
+      if (this.#closeRequestedByScopedTask && this.#activeScopedTasks === 0) {
         this.#closeRequestedByScopedTask = false;
-        await this.close();
+        await this.#gracefulClosePromise;
       }
     }
   }
   createTask(title, options = {}) {
-    return this.#createRootHandle(title, options);
+    return this.#createRootHandle(title, options, false);
   }
   log(message) {
-    this.#assertAcceptsMutations();
+    this.#assertLogWritable();
     this.store.addLog(message);
     this.markDirty(true);
   }
   async flush() {
-    this.#flushPromise ??= this.#flushOnce().finally(() => {
-      this.#flushPromise = undefined;
-    });
-    await this.#flushPromise;
+    do {
+      this.#flushPromise ??= this.#flushOnce().finally(() => {
+        this.#flushPromise = undefined;
+      });
+      await this.#flushPromise;
+    } while (this.#dirty && this.#state !== "closed" && this.policy !== "silent" && this.policy !== "never");
   }
   async close() {
-    if (this.#shouldDeferScopedClose()) {
+    const calledFromScopedTask = this.#shouldDeferScopedClose();
+    this.#beginDraining();
+    this.#gracefulClosePromise ??= this.#closeAfterScopedTasks();
+    if (calledFromScopedTask) {
       this.#closeRequestedByScopedTask = true;
       await this.flush();
       return;
     }
-    this.#closePromise ??= this.#closeAfterScopedTasks();
-    await this.#closePromise;
+    await this.#gracefulClosePromise;
   }
   async#closeAfterScopedTasks() {
     if (this.#activeScopedTasks > 0) {
@@ -16078,12 +16879,16 @@ class LaquRuntime {
       });
       await this.#scopedTasksDrained;
     }
-    await this.#closeOnce();
+    await this.#finalize();
   }
   manageProcessLifecycle() {
     this.#processLifecycle ??= new ProcessLifecycleLease(() => {
-      return this.close();
+      return this.#closeForProcessTermination();
     });
+  }
+  async#closeForProcessTermination() {
+    this.#beginDraining();
+    await waitForSettlement(this.#finalize(), fatalShutdownTimeoutMs);
   }
   async#flushOnce() {
     do {
@@ -16094,29 +16899,49 @@ class LaquRuntime {
       this.#dirty = false;
       this.coordinator.render(this.store.snapshot());
       await this.coordinator.flush();
-    } while (this.#dirty && !this.#closed && this.policy !== "silent" && this.policy !== "never");
+    } while (this.#dirty && this.#state !== "closed" && this.policy !== "silent" && this.policy !== "never");
   }
-  async#closeOnce() {
-    if (this.#closed) {
+  #finalize() {
+    this.#finalizePromise ??= this.#finalizeOnce();
+    return this.#finalizePromise;
+  }
+  async#finalizeOnce() {
+    if (this.#state === "closed") {
       return;
     }
-    this.#closing = true;
+    this.#state = "finalizing";
     this.#processLifecycle?.dispose();
     this.#processLifecycle = undefined;
     for (const handle of this.#handles) {
-      handle.dispose();
+      handle.forceCancel();
     }
+    let outputFailure;
     try {
-      await this.flush();
-      this.#closed = true;
-      this.coordinator.finalize(this.store.snapshot());
-      await this.coordinator.close();
+      try {
+        await this.flush();
+      } catch (error) {
+        outputFailure = error;
+      }
+      try {
+        this.coordinator.finalize(this.store.snapshot());
+      } catch (error) {
+        outputFailure ??= error;
+      }
+      try {
+        await this.coordinator.close();
+      } catch (error) {
+        outputFailure ??= error;
+      }
+      if (outputFailure !== undefined) {
+        throw outputFailure;
+      }
     } finally {
-      this.liveStreamLease?.release();
+      this.#state = "closed";
+      this.disposeInfrastructure();
     }
   }
   markDirty(immediate = false) {
-    if (this.#closing || this.#closed || this.policy === "silent" || this.policy === "never") {
+    if (this.#state === "finalizing" || this.#state === "closed" || this.policy === "silent" || this.policy === "never") {
       return;
     }
     this.#dirty = true;
@@ -16140,39 +16965,52 @@ class LaquRuntime {
     });
   }
   #shouldDeferScopedClose() {
-    return this.#taskCloseContext.getStore() !== undefined && this.#activeScopedTasks > 0 && !this.#closing && !this.#closed;
+    return this.#taskCloseContext.getStore() !== undefined && this.#activeScopedTasks > 0 && this.#state !== "finalizing" && this.#state !== "closed";
   }
-  #shouldRunDeferredScopedClose() {
-    return this.#closeRequestedByScopedTask && this.#activeScopedTasks === 0 && !this.#closing && !this.#closed;
+  #beginDraining() {
+    if (this.#state === "open") {
+      this.#state = "draining";
+    }
   }
-  #acceptsMutations() {
-    return !this.#closing && !this.#closed;
+  #acceptsHandleMutation(allowDuringDrain) {
+    return this.#state === "open" || this.#state === "draining" && allowDuringDrain;
   }
-  #assertAcceptsMutations() {
-    if (!this.#acceptsMutations()) {
+  #assertOpen() {
+    if (this.#state !== "open") {
       throw new Error("Laqu runtime is closing");
     }
   }
-  #createRootHandle(title, options) {
-    this.#assertAcceptsMutations();
+  #assertLogWritable() {
+    if (this.#state === "open" || this.#state === "draining" && this.#taskCloseContext.getStore() !== undefined) {
+      return;
+    }
+    throw new Error("Laqu runtime is closing");
+  }
+  #assertHandleWritable(allowDuringDrain) {
+    if (!this.#acceptsHandleMutation(allowDuringDrain)) {
+      throw new Error("Laqu runtime is closing");
+    }
+  }
+  #createRootHandle(title, options, allowDuringDrain) {
+    this.#assertOpen();
     const id = this.store.createTask(title, options);
-    const handle = this.#createHandle(id);
+    const handle = this.#createHandle(id, allowDuringDrain);
     handle.bindSignal(options.signal);
     this.markDirty(true);
     return handle;
   }
-  #createHandle(id) {
+  #createHandle(id, allowDuringDrain) {
     let handle;
-    handle = new StoreTaskHandle(id, this.store, (immediate) => this.markDirty(immediate), () => this.#assertAcceptsMutations(), (parentId, title, options) => this.#createChildHandle(parentId, title, options), () => {
+    handle = new StoreTaskHandle(id, this.store, (immediate) => this.markDirty(immediate), () => this.#assertHandleWritable(allowDuringDrain), (parentId, title, options) => this.#createChildHandle(parentId, title, options, allowDuringDrain), () => {
       this.#handles.delete(handle);
     });
     this.#handles.add(handle);
     return handle;
   }
-  #createChildHandle(parentId, title, options) {
-    this.#assertAcceptsMutations();
+  #createChildHandle(parentId, title, options, allowDuringDrain) {
+    this.#assertHandleWritable(allowDuringDrain);
     const id = this.store.createTask(title, options, parentId);
-    const handle = this.#createHandle(id);
+    const handle = this.#createHandle(id, allowDuringDrain);
     handle.bindSignal(options.signal);
     this.markDirty(true);
     return handle;
@@ -16184,14 +17022,22 @@ class ProcessLifecycleLease {
   #onException;
   #onRejection;
   constructor(cleanup) {
+    let terminationStarted = false;
+    const runCleanup = (after) => {
+      if (terminationStarted) {
+        return;
+      }
+      terminationStarted = true;
+      cleanup().then(after, after);
+    };
     this.#onSignal = (signal) => {
-      cleanup().finally(() => {
+      runCleanup(() => {
         process.kill(process.pid, signal);
       });
     };
     this.#onException = (error) => {
       process.exitCode = 1;
-      cleanup().finally(() => {
+      runCleanup(() => {
         setImmediate(() => {
           throw error;
         });
@@ -16199,7 +17045,7 @@ class ProcessLifecycleLease {
     };
     this.#onRejection = (reason) => {
       process.exitCode = 1;
-      cleanup().finally(() => {
+      runCleanup(() => {
         setImmediate(() => {
           throw unknownToRejectionError(reason);
         });
@@ -16226,6 +17072,7 @@ class StoreTaskHandle {
   createChildHandle;
   onDispose;
   #abortCleanup;
+  #disposed = false;
   constructor(id, store, onChange, assertWritable, createChildHandle, onDispose) {
     this.id = id;
     this.store = store;
@@ -16247,32 +17094,51 @@ class StoreTaskHandle {
     this.#abortCleanup = () => signal.removeEventListener("abort", onAbort);
   }
   dispose() {
+    if (this.#disposed) {
+      return;
+    }
+    this.#disposed = true;
     this.#disposeAbortCleanup();
     this.onDispose();
   }
+  forceCancel() {
+    if (this.#disposed) {
+      return;
+    }
+    this.store.forceTerminalUpdate(this.id, { status: "cancelled" });
+    this.dispose();
+  }
   setTotal(total) {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, {
       progress: setTotalProgress(total, currentProgressValue(this.store.getProgress(this.id)))
     });
     this.onChange(false);
   }
   setCompleted(completed) {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, {
       progress: setCompletedProgress(completed, this.store.getProgress(this.id))
     });
     this.onChange(false);
   }
   advance(delta) {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, {
       progress: advanceProgress(delta, this.store.getProgress(this.id))
     });
     this.onChange(false);
   }
   setRatio(ratio) {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, { progress: ratioProgress(ratio) });
     this.onChange(false);
   }
@@ -16280,7 +17146,9 @@ class StoreTaskHandle {
     this.setRatio(percent / 100);
   }
   setIndeterminate(message) {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, {
       progress: { kind: "indeterminate" },
       ...message === undefined ? {} : { message }
@@ -16288,17 +17156,23 @@ class StoreTaskHandle {
     this.onChange(false);
   }
   setMessage(message) {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, { message });
     this.onChange(false);
   }
   setDetail(detail) {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, { detail });
     this.onChange(false);
   }
   succeed(message) {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, {
       status: "succeeded",
       ...message === undefined ? {} : { message }
@@ -16307,7 +17181,9 @@ class StoreTaskHandle {
     this.onChange(true);
   }
   fail(error) {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     const message = unknownToMessage(error);
     this.store.update(this.id, {
       status: "failed",
@@ -16317,7 +17193,9 @@ class StoreTaskHandle {
     this.onChange(true);
   }
   cancel(message) {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, {
       status: "cancelled",
       ...message === undefined ? {} : { message }
@@ -16326,7 +17204,9 @@ class StoreTaskHandle {
     this.onChange(true);
   }
   skip(message) {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, {
       status: "skipped",
       ...message === undefined ? {} : { message }
@@ -16336,12 +17216,34 @@ class StoreTaskHandle {
   }
   child(title, options = {}) {
     this.assertWritable();
+    if (this.#disposed) {
+      throw new Error(`Cannot create child task under terminal task: ${this.id}`);
+    }
     return this.createChildHandle(this.id, title, options);
+  }
+  #canMutate() {
+    this.assertWritable();
+    return !this.#disposed;
   }
   #disposeAbortCleanup() {
     this.#abortCleanup?.();
     this.#abortCleanup = undefined;
   }
+}
+async function waitForSettlement(promise, timeoutMs) {
+  await new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    promise.then(finish, finish);
+  });
 }
 function detectCapability(stream, env) {
   if (env.CI !== undefined) {
@@ -16380,6 +17282,12 @@ function normalizedColumns(columns) {
     return columns;
   }
   return 80;
+}
+function normalizedRows(rows, maxRows) {
+  if (typeof rows === "number" && Number.isSafeInteger(rows) && rows > 0) {
+    return Math.min(rows, maxRows);
+  }
+  return maxRows;
 }
 function assertRuntimeOptions(options) {
   if (typeof options !== "object" || options === null || Array.isArray(options)) {
@@ -16473,6 +17381,22 @@ function acquireLiveStreamLease(stream) {
       released = true;
       liveStreamLeases.delete(stream);
     }
+  };
+}
+function subscribeToResize(stream, listener) {
+  const target = stream;
+  if (typeof target.on !== "function" || typeof target.off !== "function") {
+    return;
+  }
+  try {
+    target.on("resize", listener);
+  } catch {
+    return;
+  }
+  return () => {
+    try {
+      target.off?.("resize", listener);
+    } catch {}
   };
 }
 // src/cli/main.ts

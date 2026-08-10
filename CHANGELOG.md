@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Development dependencies were refreshed with `bun update --latest`:
+  TypeScript moved from 6.0.3 to 7.0.2, Node type definitions from 24.13.2 to
+  26.2.0, and the resolved Laqu progress runtime from 1.0.8 to 1.1.8 while
+  keeping the declared `latest` range. No public CLI, report, schema, waiver,
+  or Action surface changed.
 - `ohrisk scan`, `ohrisk ci`, and `ohrisk diff` now propagate the first
   SIGINT (Ctrl+C) or SIGTERM to the command-scoped remote evidence batch.
   In-flight fetches are aborted, retries and queued work stop, no partial

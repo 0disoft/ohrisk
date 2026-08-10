@@ -46,9 +46,9 @@ describe("package metadata", () => {
     expect(packageJson.dependencies?.["@0disoft/laqu"]).toBeUndefined();
     expect(packageJson.devDependencies?.["@0disoft/laqu"]).toBe("latest");
     expect(packageJson.devDependencies?.["@types/bun"]).toBe("1.3.14");
-    expect(packageJson.devDependencies?.["@types/node"]).toBe("24.13.2");
+    expect(packageJson.devDependencies?.["@types/node"]).toBe("26.2.0");
     expect(packageJson.devDependencies?.["@yarnpkg/lockfile"]).toBe("1.1.0");
-    expect(packageJson.devDependencies?.typescript).toBe("6.0.3");
+    expect(packageJson.devDependencies?.typescript).toBe("7.0.2");
     expect(packageJson.devDependencies?.yaml).toBe("2.9.0");
 
     expect(packageJson.scripts?.build).toBe("bun scripts/build.ts");
