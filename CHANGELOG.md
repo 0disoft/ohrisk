@@ -72,6 +72,13 @@
   inventories of hundreds of thousands of entries no longer fail with a
   `Maximum call stack size exceeded` RangeError, and the summary stays exact
   and order-independent.
+- Artifact cache pruning now plans removals with a digest reference count:
+  each live index entry increments its object digest once, and an object is
+  only reclaimed when its last remaining entry is removed. The per-entry
+  full-array scan of remaining entries is gone, so pruning hundreds of
+  thousands of unique-digest entries scales near-linearly instead of
+  quadratically while keeping the same stale, max-age, LRU, and max-size
+  decisions and exact removal counts.
 
 ## 1.14.1 - 2026-07-28
 

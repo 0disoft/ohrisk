@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 77bfe85e568e5ab0e75cbb5771a1ae9886a673f962697b785783c9f8b0ff77fd
+// ohrisk-action-source-sha256: af9d8f82cfcb349ddfc73d2176ac61a1d84b0874d19e81d4729b62eb5f8c4f52
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18539,7 +18539,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.11";
+var OHRISK_VERSION = "1.14.12";
 
 // src/archive/archive-project.ts
 import path47 from "node:path";
@@ -41087,6 +41087,61 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path48 from "node:path";
+
+// src/evidence/cache-prune-plan.ts
+function planCachePrune(input) {
+  const removeExpired = input.removeExpired ?? true;
+  const maxAgeMs = input.maxAgeMs;
+  const entriesToRemove = new Set;
+  const liveDigestCounts = new Map;
+  const liveEntries = [];
+  for (const entry of input.entries) {
+    const isExpired = removeExpired && entry.index.expiresAt <= input.now;
+    const isTooOld = maxAgeMs !== undefined && input.now - entry.index.lastAccessedAt >= maxAgeMs;
+    if (isExpired || isTooOld) {
+      entriesToRemove.add(entry.path);
+      continue;
+    }
+    liveEntries.push(entry);
+    liveDigestCounts.set(entry.index.sha256, (liveDigestCounts.get(entry.index.sha256) ?? 0) + 1);
+  }
+  let remainingBytes = 0;
+  for (const [digest, count] of liveDigestCounts) {
+    if (count > 0) {
+      remainingBytes += input.objectSizes.get(digest) ?? 0;
+    }
+  }
+  liveEntries.sort((left, right) => left.index.lastAccessedAt - right.index.lastAccessedAt || left.path.localeCompare(right.path));
+  for (const entry of liveEntries) {
+    if (remainingBytes <= input.maxSizeBytes) {
+      break;
+    }
+    entriesToRemove.add(entry.path);
+    const digest = entry.index.sha256;
+    const remainingCount = (liveDigestCounts.get(digest) ?? 1) - 1;
+    liveDigestCounts.set(digest, remainingCount);
+    if (remainingCount === 0) {
+      remainingBytes -= input.objectSizes.get(digest) ?? entry.index.size;
+    }
+  }
+  const referencedAfterRemoval = new Set;
+  for (const entry of input.entries) {
+    if (!entriesToRemove.has(entry.path)) {
+      referencedAfterRemoval.add(entry.index.sha256);
+    }
+  }
+  const referencedBeforeRemoval = new Set(input.entries.map((entry) => entry.index.sha256));
+  const removeObjectDigests = [...referencedBeforeRemoval].filter((digest) => !referencedAfterRemoval.has(digest)).sort(comparePath);
+  return {
+    removeEntryPaths: [...entriesToRemove].sort(comparePath),
+    removeObjectDigests
+  };
+}
+function comparePath(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+// src/evidence/cache.ts
 var CACHE_FORMAT_VERSION = 3;
 var LEGACY_CACHE_FORMAT_VERSION = 2;
 var CACHE_INDEX_MAX_BYTES = 32 * 1024;
@@ -41377,26 +41432,15 @@ function pruneArtifactCache(rootDir, options, now) {
     const before = statusFromInventory(inventory, now);
     const maxSizeBytes = normalizeMaxSize(options.maxSizeBytes, Number.MAX_SAFE_INTEGER);
     const maxAgeMs = options.maxAgeMs === undefined ? undefined : normalizeTtl(options.maxAgeMs, 0);
-    const removeExpired = options.removeExpired ?? true;
-    const entriesToRemove = new Set;
-    for (const entry of inventory.entries) {
-      if (removeExpired && entry.index.expiresAt <= now || maxAgeMs !== undefined && now - entry.index.lastAccessedAt >= maxAgeMs) {
-        entriesToRemove.add(entry.path);
-      }
-    }
-    const remainingEntries = inventory.entries.filter((entry) => !entriesToRemove.has(entry.path)).sort((left, right) => left.index.lastAccessedAt - right.index.lastAccessedAt || left.path.localeCompare(right.path));
-    let remainingBytes = uniqueReferencedBytes(remainingEntries, inventory.objectSizes);
-    for (const entry of remainingEntries) {
-      if (remainingBytes <= maxSizeBytes) {
-        break;
-      }
-      entriesToRemove.add(entry.path);
-      const stillReferenced = remainingEntries.some((candidate) => candidate.path !== entry.path && !entriesToRemove.has(candidate.path) && candidate.index.sha256 === entry.index.sha256);
-      if (!stillReferenced) {
-        remainingBytes -= inventory.objectSizes.get(entry.index.sha256) ?? entry.index.size;
-      }
-    }
-    for (const indexPath of entriesToRemove) {
+    const plan = planCachePrune({
+      entries: inventory.entries,
+      objectSizes: inventory.objectSizes,
+      now,
+      maxSizeBytes,
+      maxAgeMs,
+      removeExpired: options.removeExpired
+    });
+    for (const indexPath of plan.removeEntryPaths) {
       removeQuietly(indexPath);
     }
     const objectCleanup = removeOrphanedObjects(rootDir, now);
@@ -41533,10 +41577,6 @@ function removeObjectWhenUnreferenced(rootDir, digest, now) {
   if (!referenced) {
     removeQuietly(cacheObjectPath(rootDir, digest));
   }
-}
-function uniqueReferencedBytes(entries, objectSizes) {
-  const digests = new Set(entries.map((entry) => entry.index.sha256));
-  return [...digests].reduce((total, digest) => total + (objectSizes.get(digest) ?? 0), 0);
 }
 function readIndexFile(indexPath, expectedKey, now, defaultTtlMs) {
   if (!isRegularFile(indexPath)) {

@@ -16,6 +16,7 @@ import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
+import { planCachePrune } from "./cache-prune-plan";
 
 const CACHE_FORMAT_VERSION = 3;
 const LEGACY_CACHE_FORMAT_VERSION = 2;
@@ -516,41 +517,16 @@ function pruneArtifactCache(
     const maxAgeMs = options.maxAgeMs === undefined
       ? undefined
       : normalizeTtl(options.maxAgeMs, 0);
-    const removeExpired = options.removeExpired ?? true;
-    const entriesToRemove = new Set<string>();
+    const plan = planCachePrune({
+      entries: inventory.entries,
+      objectSizes: inventory.objectSizes,
+      now,
+      maxSizeBytes,
+      maxAgeMs,
+      removeExpired: options.removeExpired
+    });
 
-    for (const entry of inventory.entries) {
-      if (
-        (removeExpired && entry.index.expiresAt <= now)
-        || (maxAgeMs !== undefined && now - entry.index.lastAccessedAt >= maxAgeMs)
-      ) {
-        entriesToRemove.add(entry.path);
-      }
-    }
-
-    const remainingEntries = inventory.entries
-      .filter((entry) => !entriesToRemove.has(entry.path))
-      .sort((left, right) =>
-        left.index.lastAccessedAt - right.index.lastAccessedAt
-        || left.path.localeCompare(right.path)
-      );
-    let remainingBytes = uniqueReferencedBytes(remainingEntries, inventory.objectSizes);
-    for (const entry of remainingEntries) {
-      if (remainingBytes <= maxSizeBytes) {
-        break;
-      }
-      entriesToRemove.add(entry.path);
-      const stillReferenced = remainingEntries.some((candidate) =>
-        candidate.path !== entry.path
-        && !entriesToRemove.has(candidate.path)
-        && candidate.index.sha256 === entry.index.sha256
-      );
-      if (!stillReferenced) {
-        remainingBytes -= inventory.objectSizes.get(entry.index.sha256) ?? entry.index.size;
-      }
-    }
-
-    for (const indexPath of entriesToRemove) {
+    for (const indexPath of plan.removeEntryPaths) {
       removeQuietly(indexPath);
     }
     const objectCleanup = removeOrphanedObjects(rootDir, now);
@@ -707,17 +683,6 @@ function removeObjectWhenUnreferenced(rootDir: string, digest: string, now: numb
   if (!referenced) {
     removeQuietly(cacheObjectPath(rootDir, digest));
   }
-}
-
-function uniqueReferencedBytes(
-  entries: CacheIndexRecord[],
-  objectSizes: ReadonlyMap<string, number>
-): number {
-  const digests = new Set(entries.map((entry) => entry.index.sha256));
-  return [...digests].reduce(
-    (total, digest) => total + (objectSizes.get(digest) ?? 0),
-    0
-  );
 }
 
 function readIndexFile(
