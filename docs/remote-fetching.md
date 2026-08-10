@@ -314,6 +314,14 @@ resolver becomes unavailable evidence for one package instead of permanently
 consuming an evidence worker. The CLI exposes bounded `--timeout` and `--jobs`
 values; policy cannot expand hard safety ceilings.
 
+Parallel evidence workers share one operation-scoped cancellation signal. As
+soon as any package confirms a fatal error, every in-flight sibling fetch is
+aborted, queued packages are not started, and aborted requests are not retried
+or converted into transient failures. The first fatal error remains the
+representative, while a fetch that had already completed keeps its real package
+failure in the deterministic lowest-index representative selection. A caller
+signal is observed without aborting the caller's controller.
+
 When a remote package artifact has supported lockfile integrity metadata, an
 exact PyPI release response supplies its SHA-256 digest, or a NuGet dependency
 input SHA-512 matches the nuget.org catalog SHA-512 and byte size, Ohrisk verifies the downloaded

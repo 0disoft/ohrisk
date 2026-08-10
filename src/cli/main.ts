@@ -1115,6 +1115,7 @@ async function collectEvidenceForGraph(input: {
   workspaceRoot?: string;
   evidenceRuntime: EvidenceRuntimeOptions;
   progress?: (progress: EvidenceCollectionProgress) => void;
+  signal?: AbortSignal;
 }): Promise<Result<LicenseEvidence[], OhriskError>> {
   const embeddedEvidence = input.graph.embeddedEvidence ?? [];
   const embeddedEvidenceIds = new Set(embeddedEvidence.map((evidence) => evidence.packageId));
@@ -1150,6 +1151,7 @@ async function collectEvidenceForGraph(input: {
       : {}),
     offline: input.evidenceRuntime.offline,
     cacheDir: input.evidenceRuntime.cacheDir,
+    ...(input.signal ? { signal: input.signal } : {}),
     ...(input.evidenceRuntime.jobs !== undefined
       ? { evidenceConcurrency: input.evidenceRuntime.jobs }
       : {}),

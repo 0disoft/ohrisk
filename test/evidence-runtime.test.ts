@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -267,6 +267,357 @@ describe("evidence runtime controls", () => {
     }
   });
 
+});
+
+
+describe("batch cancellation propagation", () => {
+  test("first fatal aborts in-flight sibling fetches, blocks queued work, and keeps the representative error", async () => {
+    const cacheDir = mkdtempSync(path.join(tmpdir(), "ohrisk-cancel-batch-"));
+    const tarball = fixtureTarball("MIT");
+    const urls = [
+      "https://registry.npmjs.org/pending-b/-/pending-b-1.0.0.tgz",
+      "https://registry.npmjs.org/pending-c/-/pending-c-1.0.0.tgz",
+      "https://registry.npmjs.org/fatal-a/-/fatal-a-1.0.0.tgz",
+      "https://registry.npmjs.org/queued-d/-/queued-d-1.0.0.tgz"
+    ];
+    const started: Array<{ url: string; signal: AbortSignal }> = [];
+    const aborted: string[] = [];
+    const completed: string[] = [];
+
+    try {
+      const result = await collectGraphEvidence({
+        graph: graphForUrls(urls),
+        projectRoot: cacheDir,
+        cacheDir,
+        evidenceConcurrency: 3,
+        fetchTimeoutMs: 500,
+        progress: (progress) => {
+          completed.push(progress.packageId);
+        },
+        fetchArtifact: (url, options) => {
+          const signal = options?.signal ?? new AbortController().signal;
+          started.push({ url, signal });
+          if (url === urls[2]) {
+            return Promise.resolve(okResponse(tarball, { "cache-control": "max-age=3600" }));
+          }
+          return new Promise((_resolve, reject) => {
+            const onAbort = () => {
+              aborted.push(url);
+              reject(new DOMException("aborted", "AbortError"));
+            };
+            if (signal.aborted) {
+              onAbort();
+            } else {
+              signal.addEventListener("abort", onAbort, { once: true });
+            }
+          });
+        }
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("expected the batch to fail");
+      expect(result.error.code).toBe("PACKAGE_INTEGRITY_CHECK_FAILED");
+      expect(result.error.details?.packageId).toBe("package-2@1.0.0");
+      expect(aborted).toEqual([
+        "https://registry.npmjs.org/pending-b/-/pending-b-1.0.0.tgz",
+        "https://registry.npmjs.org/pending-c/-/pending-c-1.0.0.tgz"
+      ]);
+      expect(completed).toEqual([]);
+      expect(started.map((entry) => entry.url)).toEqual(urls.slice(0, 3));
+      const indexFiles = readdirSync(path.join(cacheDir, "index"), {
+        recursive: true,
+        encoding: "utf8"
+      }).filter((entry) => entry.endsWith(".json"));
+      expect(indexFiles).toHaveLength(1);
+    } finally {
+      rmSync(cacheDir, { force: true, recursive: true });
+    }
+  });
+
+  test("caller signal abort propagates to every in-flight fetch without retries", async () => {
+    const cacheDir = mkdtempSync(path.join(tmpdir(), "ohrisk-cancel-caller-"));
+    const urls = [
+      "https://registry.npmjs.org/caller-a/-/caller-a-1.0.0.tgz",
+      "https://registry.npmjs.org/caller-b/-/caller-b-1.0.0.tgz"
+    ];
+    const caller = new AbortController();
+    let startedCount = 0;
+    let resolveStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      resolveStarted = resolve;
+    });
+    const aborted: string[] = [];
+
+    try {
+      const run = collectGraphEvidence({
+        graph: graphForUrls(urls),
+        projectRoot: cacheDir,
+        cacheDir,
+        evidenceConcurrency: 2,
+        fetchTimeoutMs: 500,
+        signal: caller.signal,
+        fetchArtifact: (url, options) => {
+          startedCount += 1;
+          if (startedCount === 2) {
+            resolveStarted();
+          }
+          return new Promise((_resolve, reject) => {
+            const onAbort = () => {
+              aborted.push(url);
+              reject(new DOMException("aborted", "AbortError"));
+            };
+            const signal = options?.signal;
+            if (signal?.aborted) {
+              onAbort();
+            } else {
+              signal?.addEventListener("abort", onAbort, { once: true });
+            }
+          });
+        }
+      });
+
+      await started;
+      caller.abort();
+      const result = await run;
+
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("expected the batch to fail");
+      expect(result.error.details?.reason).toBe("aborted");
+      expect(aborted).toEqual(urls);
+      expect(startedCount).toBe(2);
+    } finally {
+      rmSync(cacheDir, { force: true, recursive: true });
+    }
+  });
+
+  test("transient retry backoff stops after a fatal sibling without another network attempt", async () => {
+    const cacheDir = mkdtempSync(path.join(tmpdir(), "ohrisk-cancel-retry-"));
+    const tarball = fixtureTarball("MIT");
+    const goZipUrl = "https://proxy.golang.org/github.com/example/mod/@v/v1.0.0.zip";
+    const fatalUrl = "https://registry.npmjs.org/fatal-a/-/fatal-a-1.0.0.tgz";
+    let goZipCalls = 0;
+
+    try {
+      const result = await collectGraphEvidence({
+        graph: {
+          rootName: "cancel-retry",
+          lockfilePath: "go.mod",
+          nodes: [
+            {
+              id: "github.com/example/mod@v1.0.0",
+              name: "github.com/example/mod",
+              version: "v1.0.0",
+              ecosystem: "go",
+              resolved: "go-module:github.com/example/mod@v1.0.0",
+              integrity: `h1:${"A".repeat(43)}=`,
+              dependencyType: "production",
+              direct: true,
+              paths: [["cancel-retry", "github.com/example/mod@v1.0.0"]]
+            },
+            {
+              id: "package-a@1.0.0",
+              name: "package-a",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved: fatalUrl,
+              integrity: TEST_INTEGRITY,
+              dependencyType: "production",
+              direct: true,
+              paths: [["cancel-retry", "package-a@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot: cacheDir,
+        cacheDir,
+        evidenceConcurrency: 2,
+        fetchArtifact: (url) => {
+          if (url === goZipUrl) {
+            goZipCalls += 1;
+            return Promise.resolve({
+              ok: false,
+              status: 503,
+              statusText: "Service Unavailable",
+              headers: headersFrom({}),
+              body: null,
+              arrayBuffer: async () => new ArrayBuffer(0)
+            });
+          }
+          return Promise.resolve(okResponse(tarball, { "cache-control": "max-age=3600" }));
+        }
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("expected the batch to fail");
+      expect(result.error.code).toBe("PACKAGE_INTEGRITY_CHECK_FAILED");
+      expect(result.error.details?.packageId).toBe("package-a@1.0.0");
+      expect(goZipCalls).toBe(1);
+    } finally {
+      rmSync(cacheDir, { force: true, recursive: true });
+    }
+  });
+
+  test("non-fatal evidence miss does not cancel sibling fetches", async () => {
+    const cacheDir = mkdtempSync(path.join(tmpdir(), "ohrisk-cancel-miss-"));
+    const tarball = fixtureTarball("MIT");
+    const missUrl = "https://registry.npmjs.org/miss/-/miss-1.0.0.tgz";
+    const hitUrl = "https://registry.npmjs.org/hit/-/hit-1.0.0.tgz";
+    const hitSignal: AbortSignal[] = [];
+
+    try {
+      const result = await collectGraphEvidence({
+        graph: {
+          rootName: "cancel-miss",
+          lockfilePath: "package-lock.json",
+          nodes: [
+            {
+              id: "miss@1.0.0",
+              name: "miss",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved: missUrl,
+              integrity: TEST_INTEGRITY,
+              dependencyType: "production",
+              direct: true,
+              paths: [["cancel-miss", "miss@1.0.0"]]
+            },
+            {
+              id: "hit@1.0.0",
+              name: "hit",
+              version: "1.0.0",
+              ecosystem: "npm",
+              resolved: hitUrl,
+              integrity: integrityFor(tarball),
+              dependencyType: "production",
+              direct: true,
+              paths: [["cancel-miss", "hit@1.0.0"]]
+            }
+          ]
+        },
+        projectRoot: cacheDir,
+        cacheDir,
+        evidenceConcurrency: 2,
+        fetchTimeoutMs: 500,
+        fetchArtifact: (url, options) => {
+          if (url === hitUrl) {
+            hitSignal.push(options?.signal ?? new AbortController().signal);
+            return Promise.resolve(okResponse(tarball, { "cache-control": "max-age=3600" }));
+          }
+          return Promise.resolve({
+            ok: false,
+            status: 404,
+            statusText: "Not Found",
+            headers: headersFrom({}),
+            body: null,
+            arrayBuffer: async () => new ArrayBuffer(0)
+          });
+        }
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value[0]).toMatchObject({ source: "unavailable" });
+      expect(result.value[1]).toMatchObject({ packageJsonLicense: "MIT", source: "tarball" });
+      expect(hitSignal[0]?.aborted).toBe(false);
+    } finally {
+      rmSync(cacheDir, { force: true, recursive: true });
+    }
+  });
+
+  test("pre-fetch fatals keep the lowest input index as the representative", async () => {
+    const cacheDir = mkdtempSync(path.join(tmpdir(), "ohrisk-cancel-arbitration-"));
+    let fetchCalls = 0;
+
+    try {
+      const result = await collectGraphEvidence({
+        graph: graphForUrls([
+          "http://registry.npmjs.org/a.tgz",
+          "http://registry.npmjs.org/b.tgz"
+        ]),
+        projectRoot: cacheDir,
+        cacheDir,
+        evidenceConcurrency: 2,
+        fetchArtifact: async () => {
+          fetchCalls += 1;
+          throw new Error("validation must reject before any fetch");
+        }
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("expected the batch to fail");
+      expect(result.error.details?.reason).toBe("insecure_http_not_supported");
+      expect(result.error.details?.packageId).toBe("package-0@1.0.0");
+      expect(fetchCalls).toBe(0);
+    } finally {
+      rmSync(cacheDir, { force: true, recursive: true });
+    }
+  });
+
+  test("a second concurrent fatal aborts the first sibling instead of replacing the representative", async () => {
+    const cacheDir = mkdtempSync(path.join(tmpdir(), "ohrisk-cancel-two-fatal-"));
+    const tarball = fixtureTarball("MIT");
+    const urls = [
+      "https://registry.npmjs.org/fatal-0/-/fatal-0-1.0.0.tgz",
+      "https://registry.npmjs.org/fatal-1/-/fatal-1-1.0.0.tgz"
+    ];
+    const gates: Array<{
+      resolve: () => void;
+      reject: (error: unknown) => void;
+    }> = [];
+    const rejectedWithAbort: string[] = [];
+    const completed: string[] = [];
+    let startedCount = 0;
+    let resolveStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      resolveStarted = resolve;
+    });
+
+    try {
+      const run = collectGraphEvidence({
+        graph: graphForUrls(urls),
+        projectRoot: cacheDir,
+        cacheDir,
+        evidenceConcurrency: 2,
+        fetchTimeoutMs: 500,
+        progress: (progress) => {
+          completed.push(progress.packageId);
+        },
+        fetchArtifact: (url, options) => {
+          startedCount += 1;
+          if (startedCount === 2) {
+            resolveStarted();
+          }
+          return new Promise((resolve, reject) => {
+            gates.push({
+              resolve: () => resolve(okResponse(tarball, { "cache-control": "max-age=3600" })),
+              reject
+            });
+            const onAbort = () => {
+              rejectedWithAbort.push(url);
+              reject(new DOMException("aborted", "AbortError"));
+            };
+            const signal = options?.signal;
+            if (signal?.aborted) {
+              onAbort();
+            } else {
+              signal?.addEventListener("abort", onAbort, { once: true });
+            }
+          });
+        }
+      });
+
+      await started;
+      gates[1]?.resolve();
+      const result = await run;
+
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("expected the batch to fail");
+      expect(result.error.details?.packageId).toBe("package-1@1.0.0");
+      expect(completed).toEqual([]);
+      expect(rejectedWithAbort).toEqual(["https://registry.npmjs.org/fatal-0/-/fatal-0-1.0.0.tgz"]);
+    } finally {
+      rmSync(cacheDir, { force: true, recursive: true });
+    }
+  });
 });
 
 

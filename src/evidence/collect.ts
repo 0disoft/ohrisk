@@ -26,6 +26,12 @@ import {
   type ArtifactCacheEntry,
   type ArtifactCacheResponseMetadata
 } from "./cache";
+import {
+  abortableDelay,
+  BatchCancellation,
+  isAbortErrorLike,
+  isCollectionAbortedError
+} from "./cancellation";
 import { collectCargoCrateEvidence } from "./cargo-crate";
 import { collectRegisteredEcosystemEvidence } from "../ecosystems/registry";
 import {
@@ -223,12 +229,15 @@ export async function collectGraphEvidence(input: {
   registryAuthTokens?: ReadonlyMap<string, string>;
   allowedArtifactHosts?: Iterable<string>;
   progress?: (progress: EvidenceCollectionProgress) => void;
+  signal?: AbortSignal;
 }): Promise<Result<LicenseEvidence[], OhriskError>> {
   const evidence = new Array<LicenseEvidence>(input.graph.nodes.length);
   const total = input.graph.nodes.length;
   if (total === 0) {
     return ok([]);
   }
+
+  const batchCancellation = new BatchCancellation(input.signal);
 
   const workspaceRoot = input.workspaceRoot
     ? resolveTrustedWorkspaceRoot(input.workspaceRoot)
@@ -269,6 +278,7 @@ export async function collectGraphEvidence(input: {
     jarMaxBytes: Math.min(tarballMaxBytes, MAVEN_JAR_MAX_BYTES),
     offline: input.offline ?? false,
     artifactCache,
+    signal: batchCancellation.signal,
     allowedHosts,
     repositoryUrls: input.graph.mavenRepositoryUrls ?? []
   });
@@ -279,6 +289,7 @@ export async function collectGraphEvidence(input: {
     registryMetadataMaxBytes,
     offline: input.offline ?? false,
     artifactCache,
+    signal: batchCancellation.signal,
     allowedHosts
   });
 
@@ -310,6 +321,7 @@ export async function collectGraphEvidence(input: {
         installedPackageJsonMaxBytes,
         offline: input.offline ?? false,
         artifactCache,
+        signal: batchCancellation.signal,
         npmRegistryUrl: input.npmRegistryUrl,
         allowedHosts,
         loadYarnCacheIndex,
@@ -334,11 +346,25 @@ export async function collectGraphEvidence(input: {
         }
 
         const previousFailure = failure as { index: number; error: OhriskError } | undefined;
+        if (isCollectionAbortedError(collected.error)) {
+          if (!previousFailure) {
+            failure = {
+              index,
+              error: collected.error
+            };
+            batchCancellation.abort();
+          }
+          // In-flight sibling work was cancelled after an earlier fatal. Its
+          // failure is a consequence of that cancellation and must never
+          // replace the representative error.
+          return;
+        }
         if (!previousFailure || index < previousFailure.index) {
           failure = {
             index,
             error: collected.error
           };
+          batchCancellation.abort();
         }
         return;
       }
@@ -354,8 +380,12 @@ export async function collectGraphEvidence(input: {
     }
   };
 
-  await Promise.all(Array.from({ length: workerCount }, () => collectNext()));
-  artifactCache?.maintain();
+  try {
+    await Promise.all(Array.from({ length: workerCount }, () => collectNext()));
+    artifactCache?.maintain();
+  } finally {
+    batchCancellation.dispose();
+  }
 
   if (failure) {
     return err(failure.error);
@@ -372,6 +402,7 @@ export async function fetchMavenCentralModelPoms(input: {
   pomMaxBytes?: number;
   offline?: boolean;
   cacheDir?: string;
+  signal?: AbortSignal;
 }): Promise<Result<RemoteMavenModelPom[], OhriskError>> {
   if (input.requests.length === 0) {
     return ok([]);
@@ -424,6 +455,7 @@ export async function fetchMavenCentralModelPoms(input: {
         fetchTimeoutMs: input.fetchTimeoutMs ?? ARTIFACT_FETCH_TIMEOUT_MS,
         offline: input.offline ?? false,
         artifactCache,
+        signal: input.signal ?? new AbortController().signal,
         allowedHosts: new Set(),
         permittedHosts: MAVEN_CENTRAL_HOSTS,
         urlDetailKey: "registryUrl"
@@ -453,6 +485,9 @@ export async function fetchMavenCentralModelPoms(input: {
 }
 
 function isRecoverableRemoteEvidenceError(error: OhriskError): boolean {
+  if (isCollectionAbortedError(error)) {
+    return false;
+  }
   return (
     error.category === "network"
     && (
@@ -502,6 +537,7 @@ async function collectNodeEvidence(input: {
   installedPackageJsonMaxBytes: number;
   offline: boolean;
   artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
   npmRegistryUrl: string | undefined;
   allowedHosts: ReadonlySet<string>;
   loadYarnCacheIndex: YarnCacheIndexLoader;
@@ -529,6 +565,7 @@ async function collectNodeEvidence(input: {
         fetchTimeoutMs: input.fetchTimeoutMs,
         offline: input.offline,
         artifactCache: input.artifactCache,
+        signal: input.signal,
         allowedHosts: input.allowedHosts
       });
     }
@@ -611,6 +648,7 @@ async function collectNodeEvidence(input: {
         artifactMaxBytes: input.tarballMaxBytes,
         offline: input.offline,
         artifactCache: input.artifactCache,
+        signal: input.signal,
         allowedHosts: input.allowedHosts
       });
     }
@@ -635,6 +673,7 @@ async function collectNodeEvidence(input: {
         artifactMaxBytes: input.tarballMaxBytes,
         offline: input.offline,
         artifactCache: input.artifactCache,
+        signal: input.signal,
         allowedHosts: input.allowedHosts
       });
     }
@@ -655,6 +694,7 @@ async function collectNodeEvidence(input: {
       artifactMaxBytes: input.tarballMaxBytes,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts
     });
   }
@@ -668,6 +708,7 @@ async function collectNodeEvidence(input: {
       artifactMaxBytes: input.tarballMaxBytes,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts
     });
   }
@@ -683,6 +724,7 @@ async function collectNodeEvidence(input: {
       artifactMaxBytes: input.tarballMaxBytes,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts,
       loadServiceIndex: input.loadNugetServiceIndex
     });
@@ -699,6 +741,7 @@ async function collectNodeEvidence(input: {
       tarballMaxBytes: input.tarballMaxBytes,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts,
       permittedHosts: PUB_DEV_ARCHIVE_HOSTS,
       urlError: {
@@ -734,6 +777,7 @@ async function collectNodeEvidence(input: {
       tarballMaxBytes: input.tarballMaxBytes,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts,
       integrity: input.node.integrity,
       skipIntegrityCheck: true,
@@ -768,6 +812,7 @@ async function collectNodeEvidence(input: {
       tarballMaxBytes: input.tarballMaxBytes,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       npmRegistryUrl: input.npmRegistryUrl,
       allowedHosts: input.allowedHosts,
       preferRegistryMetadata: !input.node.direct
@@ -786,6 +831,7 @@ async function collectNodeEvidence(input: {
       tarballMaxBytes: input.tarballMaxBytes,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts
     });
   }
@@ -917,6 +963,7 @@ function createNugetServiceIndexLoader(input: {
   registryMetadataMaxBytes: number;
   offline: boolean;
   artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
   allowedHosts: ReadonlySet<string>;
 }): NugetServiceIndexLoader {
   let pending: Promise<Result<NugetServiceEndpoints, OhriskError>> | undefined;
@@ -932,6 +979,7 @@ function createNugetServiceIndexLoader(input: {
         fetchTimeoutMs: input.fetchTimeoutMs,
         offline: input.offline,
         artifactCache: input.artifactCache,
+        signal: input.signal,
         allowedHosts: input.allowedHosts
       });
       return bytes.ok
@@ -952,6 +1000,7 @@ async function collectRemoteNugetPackageEvidence(input: {
   artifactMaxBytes: number;
   offline: boolean;
   artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
   allowedHosts: ReadonlySet<string>;
   loadServiceIndex: NugetServiceIndexLoader;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
@@ -997,6 +1046,7 @@ async function collectRemoteNugetPackageEvidence(input: {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts
   });
   if (!versionsBytes.ok) {
@@ -1025,6 +1075,7 @@ async function collectRemoteNugetPackageEvidence(input: {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts
   });
   if (!registrationBytes.ok) {
@@ -1055,6 +1106,7 @@ async function collectRemoteNugetPackageEvidence(input: {
       fetchTimeoutMs: input.fetchTimeoutMs,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts
     });
     if (!pageBytes.ok) {
@@ -1083,6 +1135,7 @@ async function collectRemoteNugetPackageEvidence(input: {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts
   });
   if (!catalogBytes.ok) {
@@ -1145,6 +1198,7 @@ async function collectRemoteNugetPackageEvidence(input: {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     permittedHosts: NUGET_ORG_HOSTS,
     urlDetailKey: "resolved"
@@ -1182,6 +1236,7 @@ async function readNugetRegistryBytes(input: {
   fetchTimeoutMs: number;
   offline: boolean;
   artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
   allowedHosts: ReadonlySet<string>;
 }): Promise<Result<Buffer, OhriskError>> {
   const response = await readRemoteArtifactBytes({
@@ -1201,6 +1256,7 @@ async function readNugetRegistryBytes(input: {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     permittedHosts: NUGET_ORG_HOSTS,
     urlDetailKey: "registryUrl"
@@ -1237,6 +1293,7 @@ async function collectRemoteGoModuleEvidence(input: {
   artifactMaxBytes: number;
   offline: boolean;
   artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
   allowedHosts: ReadonlySet<string>;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   const coordinates = remoteGoModuleCoordinates(input.node);
@@ -1291,6 +1348,7 @@ async function collectRemoteGoModuleEvidence(input: {
       fetchTimeoutMs: input.fetchTimeoutMs,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts,
       permittedHosts: GO_MODULE_PROXY_HOSTS,
       urlDetailKey: "resolved",
@@ -1323,6 +1381,7 @@ async function collectRemoteGoModuleEvidence(input: {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts
   });
 }
@@ -1335,6 +1394,7 @@ async function collectVerifiedRemoteGoModuleRequirements(input: {
   fetchTimeoutMs: number;
   offline: boolean;
   artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
   allowedHosts: ReadonlySet<string>;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   if (input.evidence.goModuleRequirements !== undefined) {
@@ -1377,6 +1437,7 @@ async function collectVerifiedRemoteGoModuleRequirements(input: {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     permittedHosts: GO_MODULE_PROXY_HOSTS,
     urlDetailKey: "resolved",
@@ -1404,6 +1465,7 @@ async function collectRemoteCargoCrateEvidence(input: {
   artifactMaxBytes: number;
   offline: boolean;
   artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
   allowedHosts: ReadonlySet<string>;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   if (!input.node.resolved || !CARGO_CRATES_IO_SOURCES.has(input.node.resolved)) {
@@ -1456,6 +1518,7 @@ async function collectRemoteCargoCrateEvidence(input: {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     permittedHosts: CARGO_CRATE_HOSTS,
     urlDetailKey: "resolved"
@@ -1667,6 +1730,7 @@ function createMavenEvidenceCollector(input: {
   jarMaxBytes: number;
   offline: boolean;
   artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
   allowedHosts: ReadonlySet<string>;
   repositoryUrls: string[];
 }): MavenEvidenceCollector {
@@ -1694,6 +1758,7 @@ function createMavenEvidenceCollector(input: {
       pomMaxBytes: input.pomMaxBytes,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts
     });
     pomRequests.set(key, request);
@@ -1765,6 +1830,7 @@ function createMavenEvidenceCollector(input: {
               jarMaxBytes: input.jarMaxBytes,
               offline: input.offline,
               artifactCache: input.artifactCache,
+              signal: input.signal,
               allowedHosts: input.allowedHosts
             })
           : ok(undefined);
@@ -1853,6 +1919,7 @@ async function loadMavenPomFromRepositories(input: {
   pomMaxBytes: number;
   offline: boolean;
   artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
   allowedHosts: ReadonlySet<string>;
 }): Promise<Result<MavenPomLookup, OhriskError>> {
   let firstNetworkError: OhriskError | undefined;
@@ -1890,6 +1957,7 @@ async function loadMavenPomFromRepository(input: {
   pomMaxBytes: number;
   offline: boolean;
   artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
   allowedHosts: ReadonlySet<string>;
 }): Promise<Result<MavenPomLicenseMetadata, OhriskError>> {
   const repositoryPath = mavenPomRepositoryPath(input.coordinates);
@@ -1924,6 +1992,7 @@ async function loadMavenPomFromRepository(input: {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     permittedHosts: input.repository.permittedHosts,
     urlDetailKey: "registryUrl"
@@ -1950,6 +2019,7 @@ async function collectRemoteMavenJarEvidence(input: {
   jarMaxBytes: number;
   offline: boolean;
   artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
   allowedHosts: ReadonlySet<string>;
 }): Promise<Result<LicenseEvidence | undefined, OhriskError>> {
   const pomPath = mavenPomRepositoryPath(input.coordinates);
@@ -1984,6 +2054,7 @@ async function collectRemoteMavenJarEvidence(input: {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     permittedHosts: input.repository.permittedHosts,
     urlDetailKey: "registryUrl"
@@ -2024,6 +2095,7 @@ async function collectRemoteMavenJarEvidence(input: {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     permittedHosts: input.repository.permittedHosts,
     urlDetailKey: "resolved"
@@ -2062,6 +2134,7 @@ async function collectNpmRegistryTarballEvidence(input: {
   tarballMaxBytes: number;
   offline: boolean;
   artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
   npmRegistryUrl: string | undefined;
   allowedHosts: ReadonlySet<string>;
   preferRegistryMetadata: boolean;
@@ -2088,6 +2161,7 @@ async function collectNpmRegistryTarballEvidence(input: {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     urlDetailKey: "registryUrl"
   });
@@ -2138,6 +2212,7 @@ async function collectNpmRegistryTarballEvidence(input: {
     tarballMaxBytes: input.tarballMaxBytes,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     urlError: {
       code: "REGISTRY_METADATA_FETCH_FAILED",
@@ -2190,6 +2265,7 @@ async function collectPyPiReleaseEvidence(input: {
   artifactMaxBytes: number;
   offline: boolean;
   artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
   allowedHosts: ReadonlySet<string>;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   const metadataUrl = pypiPackageVersionUrl(input.node.name, input.node.version);
@@ -2210,6 +2286,7 @@ async function collectPyPiReleaseEvidence(input: {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     permittedHosts: PYPI_METADATA_HOSTS,
     urlDetailKey: "registryUrl"
@@ -2256,6 +2333,7 @@ async function collectPyPiReleaseEvidence(input: {
     artifactMaxBytes: input.artifactMaxBytes,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     permittedHosts: PYPI_DISTRIBUTION_HOSTS,
     urlError: {
@@ -2285,6 +2363,7 @@ async function collectRemotePythonDistributionEvidence(input: {
   artifactMaxBytes: number;
   offline: boolean;
   artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
   allowedHosts: ReadonlySet<string>;
   permittedHosts?: ReadonlySet<string>;
   urlError?: {
@@ -2352,6 +2431,7 @@ async function collectRemotePythonDistributionEvidence(input: {
       fetchTimeoutMs: input.fetchTimeoutMs,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts,
       ...(input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}),
       urlDetailKey: "resolved"
@@ -2760,6 +2840,7 @@ async function collectRemoteTarballEvidence(input: {
   tarballMaxBytes: number;
   offline: boolean;
   artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
   allowedHosts: ReadonlySet<string>;
   permittedHosts?: ReadonlySet<string>;
   collectEvidence?: (tarball: Buffer) => Result<LicenseEvidence, OhriskError>;
@@ -2832,6 +2913,7 @@ async function collectRemoteTarballEvidence(input: {
       fetchTimeoutMs: input.fetchTimeoutMs,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts,
       ...(input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}),
       urlDetailKey: "resolved"
@@ -2912,6 +2994,7 @@ async function readRemoteArtifactBytes(input: {
   urlDetailKey: "registryUrl" | "resolved";
   transientFetchAttempts?: number;
   transientRetryDelayMs?: number;
+  signal: AbortSignal;
 }): Promise<Result<Buffer, OhriskError>> {
   const urlValidation = validateRemoteArtifactUrl({
     code: input.code,
@@ -2924,6 +3007,13 @@ async function readRemoteArtifactBytes(input: {
   });
   if (!urlValidation.ok) {
     return err(urlValidation.error);
+  }
+
+  if (input.signal.aborted) {
+    return err(collectionAbortedRemoteError({
+      code: input.code,
+      details: input.details
+    }));
   }
 
   const cached = input.artifactCache?.read(input.url, input.maxBytes);
@@ -2963,11 +3053,21 @@ async function readRemoteArtifactBytes(input: {
   const artifact = await readTransientRemoteArtifactWithRetry({
     attempts: input.transientFetchAttempts ?? 1,
     retryDelayMs: input.transientRetryDelayMs ?? 0,
+    signal: input.signal,
+    createAbortError: () => collectionAbortedRemoteError({
+      code: input.code,
+      details: input.details
+    }),
     read: () => readArtifactWithTimeout<RemoteArtifactRead>({
       fetchArtifact: input.fetchArtifact,
       url: input.url,
       requestHeaders: conditionalArtifactRequestHeaders(cached),
       timeoutMs: input.fetchTimeoutMs,
+      signal: input.signal,
+      createAbortError: () => collectionAbortedRemoteError({
+        code: input.code,
+        details: input.details
+      }),
       redirectPolicy: {
         code: input.code,
         packageId: input.packageId,
@@ -3084,6 +3184,8 @@ async function readRemoteArtifactBytes(input: {
 async function readTransientRemoteArtifactWithRetry<T>(input: {
   attempts: number;
   retryDelayMs: number;
+  signal?: AbortSignal;
+  createAbortError: () => OhriskError;
   read: () => Promise<Result<T, OhriskError>>;
 }): Promise<Result<T, OhriskError>> {
   const attempts = Math.max(1, Math.trunc(input.attempts));
@@ -3092,8 +3194,14 @@ async function readTransientRemoteArtifactWithRetry<T>(input: {
     if (!isRetryableTransientRemoteError(result.error)) {
       return result;
     }
+    if (input.signal?.aborted) {
+      return err(input.createAbortError());
+    }
     if (input.retryDelayMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, input.retryDelayMs));
+      await abortableDelay(input.retryDelayMs, input.signal);
+      if (input.signal?.aborted) {
+        return err(input.createAbortError());
+      }
     }
     result = await input.read();
   }
@@ -3101,6 +3209,9 @@ async function readTransientRemoteArtifactWithRetry<T>(input: {
 }
 
 function isRetryableTransientRemoteError(error: OhriskError): boolean {
+  if (isCollectionAbortedError(error)) {
+    return false;
+  }
   if (error.category !== "network") {
     return false;
   }
@@ -3116,6 +3227,21 @@ function isRetryableTransientRemoteError(error: OhriskError): boolean {
   }
   const cause = error.details?.cause;
   return typeof cause !== "string" || !cause.toLowerCase().includes("timed out");
+}
+
+function collectionAbortedRemoteError(input: {
+  code: "REGISTRY_METADATA_FETCH_FAILED" | "TARBALL_FETCH_FAILED";
+  details: Record<string, unknown>;
+}): OhriskError {
+  return createError({
+    code: input.code,
+    category: "network",
+    message: "Evidence collection was aborted.",
+    details: {
+      ...redactUrlCredentialsInDetails(input.details),
+      reason: "aborted"
+    }
+  });
 }
 
 function isPackageTarballTooLargeError(error: OhriskError): boolean {
@@ -3457,6 +3583,8 @@ async function readArtifactWithTimeout<T>(input: {
   url: string;
   requestHeaders?: Record<string, string>;
   timeoutMs: number;
+  signal?: AbortSignal;
+  createAbortError: () => OhriskError;
   redirectPolicy: RemoteArtifactFetchPolicy;
   createFailureError: (cause: unknown) => OhriskError;
   readResponse: (
@@ -3465,22 +3593,38 @@ async function readArtifactWithTimeout<T>(input: {
   ) => Promise<Result<T, OhriskError>>;
 }): Promise<Result<T, OhriskError>> {
   const controller = new AbortController();
+  const fetchController = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
   let timeoutError: Error | undefined;
+  let onExternalAbort: (() => void) | undefined;
 
   const timeoutPromise = new Promise<Result<T, OhriskError>>((resolve) => {
     timeout = setTimeout(() => {
       timeoutError = new Error(`Artifact fetch timed out after ${input.timeoutMs}ms.`);
       controller.abort();
+      fetchController.abort();
       resolve(err(input.createFailureError(timeoutError)));
     }, input.timeoutMs);
   });
+
+  if (input.signal) {
+    if (input.signal.aborted) {
+      fetchController.abort();
+    } else {
+      // The batch abort cancels the request and its body stream immediately,
+      // while a response that was already obtained still settles its body read
+      // through the timeout-only signal so real package fatals can participate
+      // in the deterministic lowest-index arbitration.
+      onExternalAbort = () => fetchController.abort();
+      input.signal.addEventListener("abort", onExternalAbort, { once: true });
+    }
+  }
 
   try {
     const readPromise = fetchArtifactWithManualRedirects({
       fetchArtifact: input.fetchArtifact,
       url: input.url,
-      signal: controller.signal,
+      signal: fetchController.signal,
       ...(input.requestHeaders ? { requestHeaders: input.requestHeaders } : {}),
       redirectPolicy: input.redirectPolicy
     })
@@ -3496,11 +3640,19 @@ async function readArtifactWithTimeout<T>(input: {
 
         return result;
       })
-      .catch((cause): Result<T, OhriskError> => err(input.createFailureError(cause)));
+      .catch((cause): Result<T, OhriskError> => {
+        if (input.signal?.aborted) {
+          return err(input.createAbortError());
+        }
+        return err(input.createFailureError(cause));
+      });
     return await Promise.race([readPromise, timeoutPromise]);
   } finally {
     if (timeout) {
       clearTimeout(timeout);
+    }
+    if (onExternalAbort) {
+      input.signal?.removeEventListener("abort", onExternalAbort);
     }
   }
 }
@@ -3960,6 +4112,13 @@ function createRemoteArtifactExceptionError(input: {
         resolvedAddress: normalizeUrlHostname(input.cause.remoteAddress),
         reason: input.cause.reason
       }
+    });
+  }
+
+  if (isAbortErrorLike(input.cause)) {
+    return collectionAbortedRemoteError({
+      code: input.code,
+      details: input.details
     });
   }
 

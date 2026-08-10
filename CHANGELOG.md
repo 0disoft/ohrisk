@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Parallel remote evidence collection now cancels in-flight sibling fetches as
+  soon as one package confirms a fatal error. The first fatal error code and
+  details are preserved, queued packages are not started, aborted requests are
+  not retried as transient failures, and fetches that already completed keep
+  their real package failure in the deterministic lowest-index representative
+  selection. A caller-provided abort signal propagates to every worker without
+  retrying aborted requests.
 - Go scans now retain the separate `go.sum` checksum for each dependency's
   standalone `/go.mod` response. When a checksum-verified module ZIP or local
   cache cannot provide complete module edges, Ohrisk may fetch the fixed public

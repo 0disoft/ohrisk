@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 944e09c9b3b37f1fc29152c87f9572764e989a8a0991fc9132201b4e9a921689
+// ohrisk-action-source-sha256: 9f60897ae4f78c8c7f86038db7f641f4456b198f2eab1f1d57f88e59f79ef292
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18539,7 +18539,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.13";
+var OHRISK_VERSION = "1.14.14";
 
 // src/archive/archive-project.ts
 import path47 from "node:path";
@@ -41914,6 +41914,68 @@ import { Readable } from "node:stream";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 import { gunzipSync as gunzipSync4 } from "node:zlib";
 
+// src/evidence/cancellation.ts
+class BatchCancellation {
+  controller = new AbortController;
+  callerSignal;
+  onCallerAbort;
+  constructor(callerSignal) {
+    this.callerSignal = callerSignal;
+    this.onCallerAbort = () => this.controller.abort();
+    if (callerSignal) {
+      if (callerSignal.aborted) {
+        this.controller.abort();
+      } else {
+        callerSignal.addEventListener("abort", this.onCallerAbort, { once: true });
+      }
+    }
+  }
+  get signal() {
+    return this.controller.signal;
+  }
+  abort() {
+    this.controller.abort();
+  }
+  dispose() {
+    if (this.callerSignal) {
+      this.callerSignal.removeEventListener("abort", this.onCallerAbort);
+    }
+  }
+}
+function isCollectionAbortedError(error) {
+  return error.details?.reason === "aborted";
+}
+function isAbortErrorLike(cause) {
+  if (cause instanceof Error) {
+    return cause.name === "AbortError";
+  }
+  if (typeof cause === "object" && cause !== null) {
+    return cause.name === "AbortError";
+  }
+  return false;
+}
+function abortableDelay(ms, signal) {
+  return new Promise((resolve2) => {
+    if (ms <= 0 || !signal) {
+      setTimeout(resolve2, Math.max(0, ms));
+      return;
+    }
+    if (signal.aborted) {
+      resolve2();
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve2();
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve2();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 // src/evidence/cargo-crate.ts
 import { createHash as createHash3, timingSafeEqual } from "node:crypto";
 import path50 from "node:path";
@@ -49633,6 +49695,7 @@ async function collectGraphEvidence(input) {
   if (total === 0) {
     return ok([]);
   }
+  const batchCancellation = new BatchCancellation(input.signal);
   const workspaceRoot = input.workspaceRoot ? resolveTrustedWorkspaceRoot(input.workspaceRoot) : ok(undefined);
   if (!workspaceRoot.ok) {
     return err(workspaceRoot.error);
@@ -49662,6 +49725,7 @@ async function collectGraphEvidence(input) {
     jarMaxBytes: Math.min(tarballMaxBytes, MAVEN_JAR_MAX_BYTES2),
     offline: input.offline ?? false,
     artifactCache,
+    signal: batchCancellation.signal,
     allowedHosts,
     repositoryUrls: input.graph.mavenRepositoryUrls ?? []
   });
@@ -49672,6 +49736,7 @@ async function collectGraphEvidence(input) {
     registryMetadataMaxBytes,
     offline: input.offline ?? false,
     artifactCache,
+    signal: batchCancellation.signal,
     allowedHosts
   });
   const collectNext = async () => {
@@ -49699,6 +49764,7 @@ async function collectGraphEvidence(input) {
         installedPackageJsonMaxBytes,
         offline: input.offline ?? false,
         artifactCache,
+        signal: batchCancellation.signal,
         npmRegistryUrl: input.npmRegistryUrl,
         allowedHosts,
         loadYarnCacheIndex,
@@ -49721,11 +49787,22 @@ async function collectGraphEvidence(input) {
           continue;
         }
         const previousFailure = failure;
+        if (isCollectionAbortedError(collected.error)) {
+          if (!previousFailure) {
+            failure = {
+              index,
+              error: collected.error
+            };
+            batchCancellation.abort();
+          }
+          return;
+        }
         if (!previousFailure || index < previousFailure.index) {
           failure = {
             index,
             error: collected.error
           };
+          batchCancellation.abort();
         }
         return;
       }
@@ -49739,8 +49816,12 @@ async function collectGraphEvidence(input) {
       });
     }
   };
-  await Promise.all(Array.from({ length: workerCount }, () => collectNext()));
-  artifactCache?.maintain();
+  try {
+    await Promise.all(Array.from({ length: workerCount }, () => collectNext()));
+    artifactCache?.maintain();
+  } finally {
+    batchCancellation.dispose();
+  }
   if (failure) {
     return err(failure.error);
   }
@@ -49791,6 +49872,7 @@ async function fetchMavenCentralModelPoms(input) {
         fetchTimeoutMs: input.fetchTimeoutMs ?? ARTIFACT_FETCH_TIMEOUT_MS,
         offline: input.offline ?? false,
         artifactCache,
+        signal: input.signal ?? new AbortController().signal,
         allowedHosts: new Set,
         permittedHosts: MAVEN_CENTRAL_HOSTS,
         urlDetailKey: "registryUrl"
@@ -49816,6 +49898,9 @@ async function fetchMavenCentralModelPoms(input) {
   }
 }
 function isRecoverableRemoteEvidenceError(error) {
+  if (isCollectionAbortedError(error)) {
+    return false;
+  }
   return error.category === "network" && (error.code === "REGISTRY_METADATA_FETCH_FAILED" || error.code === "TARBALL_FETCH_FAILED");
 }
 function unavailableRemoteEvidence(input) {
@@ -49852,6 +49937,7 @@ async function collectNodeEvidence(input) {
         fetchTimeoutMs: input.fetchTimeoutMs,
         offline: input.offline,
         artifactCache: input.artifactCache,
+        signal: input.signal,
         allowedHosts: input.allowedHosts
       });
     }
@@ -49911,6 +49997,7 @@ async function collectNodeEvidence(input) {
         artifactMaxBytes: input.tarballMaxBytes,
         offline: input.offline,
         artifactCache: input.artifactCache,
+        signal: input.signal,
         allowedHosts: input.allowedHosts
       });
     }
@@ -49933,6 +50020,7 @@ async function collectNodeEvidence(input) {
         artifactMaxBytes: input.tarballMaxBytes,
         offline: input.offline,
         artifactCache: input.artifactCache,
+        signal: input.signal,
         allowedHosts: input.allowedHosts
       });
     }
@@ -49950,6 +50038,7 @@ async function collectNodeEvidence(input) {
       artifactMaxBytes: input.tarballMaxBytes,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts
     });
   }
@@ -49962,6 +50051,7 @@ async function collectNodeEvidence(input) {
       artifactMaxBytes: input.tarballMaxBytes,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts
     });
   }
@@ -49976,6 +50066,7 @@ async function collectNodeEvidence(input) {
       artifactMaxBytes: input.tarballMaxBytes,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts,
       loadServiceIndex: input.loadNugetServiceIndex
     });
@@ -49991,6 +50082,7 @@ async function collectNodeEvidence(input) {
       tarballMaxBytes: input.tarballMaxBytes,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts,
       permittedHosts: PUB_DEV_ARCHIVE_HOSTS,
       urlError: {
@@ -50020,6 +50112,7 @@ async function collectNodeEvidence(input) {
       tarballMaxBytes: input.tarballMaxBytes,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts,
       integrity: input.node.integrity,
       skipIntegrityCheck: true,
@@ -50053,6 +50146,7 @@ async function collectNodeEvidence(input) {
       tarballMaxBytes: input.tarballMaxBytes,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       npmRegistryUrl: input.npmRegistryUrl,
       allowedHosts: input.allowedHosts,
       preferRegistryMetadata: !input.node.direct
@@ -50070,6 +50164,7 @@ async function collectNodeEvidence(input) {
       tarballMaxBytes: input.tarballMaxBytes,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts
     });
   }
@@ -50177,6 +50272,7 @@ function createNugetServiceIndexLoader(input) {
         fetchTimeoutMs: input.fetchTimeoutMs,
         offline: input.offline,
         artifactCache: input.artifactCache,
+        signal: input.signal,
         allowedHosts: input.allowedHosts
       });
       return bytes.ok ? parseNugetServiceIndex({ packageId, text: bytes.value.toString("utf8") }) : bytes;
@@ -50223,6 +50319,7 @@ async function collectRemoteNugetPackageEvidence(input) {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts
   });
   if (!versionsBytes.ok) {
@@ -50250,6 +50347,7 @@ async function collectRemoteNugetPackageEvidence(input) {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts
   });
   if (!registrationBytes.ok) {
@@ -50279,6 +50377,7 @@ async function collectRemoteNugetPackageEvidence(input) {
       fetchTimeoutMs: input.fetchTimeoutMs,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts
     });
     if (!pageBytes.ok) {
@@ -50306,6 +50405,7 @@ async function collectRemoteNugetPackageEvidence(input) {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts
   });
   if (!catalogBytes.ok) {
@@ -50364,6 +50464,7 @@ async function collectRemoteNugetPackageEvidence(input) {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     permittedHosts: NUGET_ORG_HOSTS,
     urlDetailKey: "resolved"
@@ -50406,6 +50507,7 @@ async function readNugetRegistryBytes(input) {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     permittedHosts: NUGET_ORG_HOSTS,
     urlDetailKey: "registryUrl"
@@ -50480,6 +50582,7 @@ async function collectRemoteGoModuleEvidence(input) {
       fetchTimeoutMs: input.fetchTimeoutMs,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts,
       permittedHosts: GO_MODULE_PROXY_HOSTS,
       urlDetailKey: "resolved",
@@ -50510,6 +50613,7 @@ async function collectRemoteGoModuleEvidence(input) {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts
   });
 }
@@ -50550,6 +50654,7 @@ async function collectVerifiedRemoteGoModuleRequirements(input) {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     permittedHosts: GO_MODULE_PROXY_HOSTS,
     urlDetailKey: "resolved",
@@ -50612,6 +50717,7 @@ async function collectRemoteCargoCrateEvidence(input) {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     permittedHosts: CARGO_CRATE_HOSTS,
     urlDetailKey: "resolved"
@@ -50778,6 +50884,7 @@ function createMavenEvidenceCollector(input) {
       pomMaxBytes: input.pomMaxBytes,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts
     });
     pomRequests.set(key, request);
@@ -50843,6 +50950,7 @@ function createMavenEvidenceCollector(input) {
           jarMaxBytes: input.jarMaxBytes,
           offline: input.offline,
           artifactCache: input.artifactCache,
+          signal: input.signal,
           allowedHosts: input.allowedHosts
         }) : ok(undefined);
         if (!jarEvidence.ok) {
@@ -50960,6 +51068,7 @@ async function loadMavenPomFromRepository(input) {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     permittedHosts: input.repository.permittedHosts,
     urlDetailKey: "registryUrl"
@@ -51007,6 +51116,7 @@ async function collectRemoteMavenJarEvidence(input) {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     permittedHosts: input.repository.permittedHosts,
     urlDetailKey: "registryUrl"
@@ -51044,6 +51154,7 @@ async function collectRemoteMavenJarEvidence(input) {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     permittedHosts: input.repository.permittedHosts,
     urlDetailKey: "resolved"
@@ -51090,6 +51201,7 @@ async function collectNpmRegistryTarballEvidence(input) {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     urlDetailKey: "registryUrl"
   });
@@ -51134,6 +51246,7 @@ async function collectNpmRegistryTarballEvidence(input) {
     tarballMaxBytes: input.tarballMaxBytes,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     urlError: {
       code: "REGISTRY_METADATA_FETCH_FAILED",
@@ -51188,6 +51301,7 @@ async function collectPyPiReleaseEvidence(input) {
     fetchTimeoutMs: input.fetchTimeoutMs,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     permittedHosts: PYPI_METADATA_HOSTS,
     urlDetailKey: "registryUrl"
@@ -51224,6 +51338,7 @@ async function collectPyPiReleaseEvidence(input) {
     artifactMaxBytes: input.artifactMaxBytes,
     offline: input.offline,
     artifactCache: input.artifactCache,
+    signal: input.signal,
     allowedHosts: input.allowedHosts,
     permittedHosts: PYPI_DISTRIBUTION_HOSTS,
     urlError: {
@@ -51295,6 +51410,7 @@ async function collectRemotePythonDistributionEvidence(input) {
       fetchTimeoutMs: input.fetchTimeoutMs,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts,
       ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {},
       urlDetailKey: "resolved"
@@ -51639,6 +51755,7 @@ async function collectRemoteTarballEvidence(input) {
       fetchTimeoutMs: input.fetchTimeoutMs,
       offline: input.offline,
       artifactCache: input.artifactCache,
+      signal: input.signal,
       allowedHosts: input.allowedHosts,
       ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {},
       urlDetailKey: "resolved"
@@ -51701,6 +51818,12 @@ async function readRemoteArtifactBytes(input) {
   if (!urlValidation.ok) {
     return err(urlValidation.error);
   }
+  if (input.signal.aborted) {
+    return err(collectionAbortedRemoteError({
+      code: input.code,
+      details: input.details
+    }));
+  }
   const cached = input.artifactCache?.read(input.url, input.maxBytes);
   if (cached && (!cached.stale || input.offline)) {
     return ok(cached.bytes);
@@ -51735,11 +51858,21 @@ async function readRemoteArtifactBytes(input) {
   const artifact = await readTransientRemoteArtifactWithRetry({
     attempts: input.transientFetchAttempts ?? 1,
     retryDelayMs: input.transientRetryDelayMs ?? 0,
+    signal: input.signal,
+    createAbortError: () => collectionAbortedRemoteError({
+      code: input.code,
+      details: input.details
+    }),
     read: () => readArtifactWithTimeout({
       fetchArtifact: input.fetchArtifact,
       url: input.url,
       requestHeaders: conditionalArtifactRequestHeaders(cached),
       timeoutMs: input.fetchTimeoutMs,
+      signal: input.signal,
+      createAbortError: () => collectionAbortedRemoteError({
+        code: input.code,
+        details: input.details
+      }),
       redirectPolicy: {
         code: input.code,
         packageId: input.packageId,
@@ -51850,14 +51983,23 @@ async function readTransientRemoteArtifactWithRetry(input) {
     if (!isRetryableTransientRemoteError(result.error)) {
       return result;
     }
+    if (input.signal?.aborted) {
+      return err(input.createAbortError());
+    }
     if (input.retryDelayMs > 0) {
-      await new Promise((resolve2) => setTimeout(resolve2, input.retryDelayMs));
+      await abortableDelay(input.retryDelayMs, input.signal);
+      if (input.signal?.aborted) {
+        return err(input.createAbortError());
+      }
     }
     result = await input.read();
   }
   return result;
 }
 function isRetryableTransientRemoteError(error) {
+  if (isCollectionAbortedError(error)) {
+    return false;
+  }
   if (error.category !== "network") {
     return false;
   }
@@ -51867,6 +52009,17 @@ function isRetryableTransientRemoteError(error) {
   }
   const cause = error.details?.cause;
   return typeof cause !== "string" || !cause.toLowerCase().includes("timed out");
+}
+function collectionAbortedRemoteError(input) {
+  return createError({
+    code: input.code,
+    category: "network",
+    message: "Evidence collection was aborted.",
+    details: {
+      ...redactUrlCredentialsInDetails(input.details),
+      reason: "aborted"
+    }
+  });
 }
 function isPackageTarballTooLargeError(error) {
   return error.code === "TARBALL_FETCH_FAILED" && error.message === "Package tarball response exceeded the maximum supported size." || error.code === "TARBALL_PARSE_FAILED" && error.message === "Failed to decompress package tarball evidence." && typeof error.details?.maxUnpackedBytes === "number";
@@ -52102,20 +52255,31 @@ function readContentLength(headers) {
 }
 async function readArtifactWithTimeout(input) {
   const controller = new AbortController;
+  const fetchController = new AbortController;
   let timeout;
   let timeoutError;
+  let onExternalAbort;
   const timeoutPromise = new Promise((resolve2) => {
     timeout = setTimeout(() => {
       timeoutError = new Error(`Artifact fetch timed out after ${input.timeoutMs}ms.`);
       controller.abort();
+      fetchController.abort();
       resolve2(err(input.createFailureError(timeoutError)));
     }, input.timeoutMs);
   });
+  if (input.signal) {
+    if (input.signal.aborted) {
+      fetchController.abort();
+    } else {
+      onExternalAbort = () => fetchController.abort();
+      input.signal.addEventListener("abort", onExternalAbort, { once: true });
+    }
+  }
   try {
     const readPromise = fetchArtifactWithManualRedirects({
       fetchArtifact: input.fetchArtifact,
       url: input.url,
-      signal: controller.signal,
+      signal: fetchController.signal,
       ...input.requestHeaders ? { requestHeaders: input.requestHeaders } : {},
       redirectPolicy: input.redirectPolicy
     }).then(async (response) => {
@@ -52127,11 +52291,19 @@ async function readArtifactWithTimeout(input) {
         throw timeoutError;
       }
       return result;
-    }).catch((cause) => err(input.createFailureError(cause)));
+    }).catch((cause) => {
+      if (input.signal?.aborted) {
+        return err(input.createAbortError());
+      }
+      return err(input.createFailureError(cause));
+    });
     return await Promise.race([readPromise, timeoutPromise]);
   } finally {
     if (timeout) {
       clearTimeout(timeout);
+    }
+    if (onExternalAbort) {
+      input.signal?.removeEventListener("abort", onExternalAbort);
     }
   }
 }
@@ -52472,6 +52644,12 @@ function createRemoteArtifactExceptionError(input) {
         resolvedAddress: normalizeUrlHostname(input.cause.remoteAddress),
         reason: input.cause.reason
       }
+    });
+  }
+  if (isAbortErrorLike(input.cause)) {
+    return collectionAbortedRemoteError({
+      code: input.code,
+      details: input.details
     });
   }
   return createError({
@@ -61174,6 +61352,7 @@ async function collectEvidenceForGraph(input) {
     ...input.allowLocalProjectEvidence !== undefined ? { allowLocalProjectEvidence: input.allowLocalProjectEvidence } : {},
     offline: input.evidenceRuntime.offline,
     cacheDir: input.evidenceRuntime.cacheDir,
+    ...input.signal ? { signal: input.signal } : {},
     ...input.evidenceRuntime.jobs !== undefined ? { evidenceConcurrency: input.evidenceRuntime.jobs } : {},
     ...input.evidenceRuntime.timeoutMs !== undefined ? { fetchTimeoutMs: input.evidenceRuntime.timeoutMs } : {},
     ...input.evidenceRuntime.npmRegistryUrl ? { npmRegistryUrl: input.evidenceRuntime.npmRegistryUrl } : {},
