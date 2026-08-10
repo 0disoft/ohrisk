@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `ohrisk scan`, `ohrisk ci`, and `ohrisk diff` now propagate the first
+  SIGINT (Ctrl+C) or SIGTERM to the command-scoped remote evidence batch.
+  In-flight fetches are aborted, retries and queued work stop, no partial
+  report is written, and the CLI exits with code `130` plus a cancellation
+  message instead of reporting an ordinary remote evidence failure. Library
+  callers can pass their own abort signal through the CLI IO interface without
+  any process listener being registered, and a second signal does not force a
+  process kill because the existing per-request timeout and bounded worker
+  join finish the shutdown.
 - Parallel remote evidence collection now cancels in-flight sibling fetches as
   soon as one package confirms a fatal error. The first fatal error code and
   details are preserved, queued packages are not started, aborted requests are

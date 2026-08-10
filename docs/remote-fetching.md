@@ -320,7 +320,11 @@ aborted, queued packages are not started, and aborted requests are not retried
 or converted into transient failures. The first fatal error remains the
 representative, while a fetch that had already completed keeps its real package
 failure in the deterministic lowest-index representative selection. A caller
-signal is observed without aborting the caller's controller.
+signal is observed without aborting the caller's controller. The CLI wires the
+first `SIGINT` or `SIGTERM` into that command-scoped signal for `scan`, `ci`,
+and `diff`, so an interrupted command aborts fetches, stops retries and queued
+work, skips partial report output, and exits with code `130` instead of
+reporting an ordinary evidence failure.
 
 When a remote package artifact has supported lockfile integrity metadata, an
 exact PyPI release response supplies its SHA-256 digest, or a NuGet dependency

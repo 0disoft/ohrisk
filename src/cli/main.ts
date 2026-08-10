@@ -12,6 +12,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parseArgs, type CliCommand, type HelpTarget } from "./args";
+import {
+  COMMAND_CANCELLED_EXIT_CODE,
+  createCommandCancellation,
+  createProcessCommandSignal,
+  isCommandCancelled,
+  renderCommandCancelled
+} from "./cancellation";
 import { OHRISK_VERSION } from "./version";
 import { loadArchiveProject } from "../archive/archive-project";
 import { readArchiveFile } from "../archive/archive-reader";
@@ -116,6 +123,7 @@ export type CliIO = {
   writeReport?: ReportWriter;
   openReport?: ReportOpener;
   cloneRepository?: RepositoryCloner;
+  signal?: AbortSignal;
 };
 
 type ScanClock = () => number;
@@ -169,23 +177,28 @@ export async function main(
 
   const command = parsed.value;
 
-  switch (command.kind) {
-    case "help":
-      io.stdout(renderHelp(command.target));
-      return 0;
-    case "version":
-      io.stdout(renderVersion());
-      return 0;
-    case "cache":
-      return runCache(command, io);
-    case "scan":
-      return runScan(command, io);
-    case "ci":
-      return runScan(command, io);
-    case "diff":
-      return runDiff(command, io);
-    case "explain":
-      return runExplain(command, io);
+  const commandCancellation = createCommandCancellation(io.signal);
+  try {
+    switch (command.kind) {
+      case "help":
+        io.stdout(renderHelp(command.target));
+        return 0;
+      case "version":
+        io.stdout(renderVersion());
+        return 0;
+      case "cache":
+        return runCache(command, io);
+      case "scan":
+        return await runScan(command, io, commandCancellation.signal);
+      case "ci":
+        return await runScan(command, io, commandCancellation.signal);
+      case "diff":
+        return await runDiff(command, io, commandCancellation.signal);
+      case "explain":
+        return runExplain(command, io);
+    }
+  } finally {
+    commandCancellation.dispose();
   }
 }
 
@@ -303,7 +316,8 @@ function formatCacheTimestamp(value: number | undefined): string {
 
 async function runDiff(
   command: Extract<CliCommand, { kind: "diff" }>,
-  io: CliIO
+  io: CliIO,
+  signal: AbortSignal
 ): Promise<number> {
   const workspaceRoot = resolveWorkspaceRootPath({
     cwd: io.cwd,
@@ -377,10 +391,15 @@ async function runDiff(
     graph: baselineCollectionGraph,
     projectRoot: currentProject.value.project.rootDir,
     evidenceRuntime: evidenceRuntime.value,
+    signal,
     ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {})
   });
 
   if (isErr(baselineEvidence)) {
+    if (isCommandCancelled(signal)) {
+      io.stderr(renderCommandCancelled("Diff"));
+      return COMMAND_CANCELLED_EXIT_CODE;
+    }
     io.stderr(formatError(baselineEvidence.error));
     return exitCodeForError(baselineEvidence.error);
   }
@@ -408,10 +427,15 @@ async function runDiff(
     prodOnly: command.prodOnly,
     applyWaivers: false,
     now: io.now ?? Date.now,
+    signal,
     ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {})
   });
 
   if (isErr(current)) {
+    if (isCommandCancelled(signal)) {
+      io.stderr(renderCommandCancelled("Diff"));
+      return COMMAND_CANCELLED_EXIT_CODE;
+    }
     io.stderr(formatError(current.error));
     return exitCodeForError(current.error);
   }
@@ -436,6 +460,12 @@ async function runDiff(
     ...(command.failOn ? { failOn: command.failOn } : {}),
     policy: summarizePolicyConfig(policy.value)
   });
+
+  if (isCommandCancelled(signal)) {
+    io.stderr(renderCommandCancelled("Diff"));
+    return COMMAND_CANCELLED_EXIT_CODE;
+  }
+
   const emitted = emitReport({
     contents: output,
     outputPath: command.outputPath,
@@ -443,6 +473,10 @@ async function runDiff(
   });
 
   if (isErr(emitted)) {
+    if (isCommandCancelled(signal)) {
+      io.stderr(renderCommandCancelled("Diff"));
+      return COMMAND_CANCELLED_EXIT_CODE;
+    }
     io.stderr(formatError(emitted.error));
     return exitCodeForError(emitted.error);
   }
@@ -524,14 +558,15 @@ async function runExplain(
 
 async function runScan(
   command: Extract<CliCommand, { kind: "scan" | "ci" }>,
-  io: CliIO
+  io: CliIO,
+  signal: AbortSignal
 ): Promise<number> {
   const repository = command.kind === "scan" ? command.repository : undefined;
   const reportProgress = command.outputPath ? createScanProgressReporter(io) : undefined;
   reportProgress?.(0, command.kind === "ci" ? "Starting CI scan..." : "Starting scan...");
 
   if (!repository) {
-    return runScanAt({ command, io, scanCwd: io.cwd, reportProgress });
+    return runScanAt({ command, io, scanCwd: io.cwd, reportProgress, signal });
   }
 
   reportProgress?.(0, `Cloning ${repository.owner}/${repository.name}...`);
@@ -545,6 +580,11 @@ async function runScan(
   }
 
   try {
+    if (isCommandCancelled(signal)) {
+      await closeScanProgressReporter(reportProgress, "failure");
+      io.stderr(renderCommandCancelled("Scan"));
+      return COMMAND_CANCELLED_EXIT_CODE;
+    }
     return await runScanAt({
       command,
       io,
@@ -553,6 +593,7 @@ async function runScan(
       runtimeRoot: io.cwd,
       allowLocalProjectEvidence: false,
       reportProgress,
+      signal,
       temporaryRoot: cloned.value.rootDir,
       repository: {
         owner: repository.owner,
@@ -590,8 +631,9 @@ async function runScanAt(input: {
   reportProgress?: ScanProgressReporter;
   temporaryRoot?: string;
   repository?: RemoteRepositoryReportSource;
+  signal: AbortSignal;
 }): Promise<number> {
-  const { command, io, reportProgress } = input;
+  const { command, io, reportProgress, signal } = input;
   const now = io.now ?? Date.now;
   const workspaceRoot = resolveWorkspaceRootPath({
     cwd: io.cwd,
@@ -629,11 +671,16 @@ async function runScanAt(input: {
     applyWaivers: !command.noWaivers,
     now,
     ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}),
-    ...(reportProgress ? { progress: reportProgress } : {})
+    ...(reportProgress ? { progress: reportProgress } : {}),
+    signal
   });
 
   if (isErr(scanned)) {
     await closeScanProgressReporter(reportProgress, "failure");
+    if (isCommandCancelled(signal)) {
+      io.stderr(renderCommandCancelled("Scan"));
+      return COMMAND_CANCELLED_EXIT_CODE;
+    }
     const scanError = input.temporaryRoot
       ? redactTemporaryPath(scanned.error, input.temporaryRoot)
       : scanned.error;
@@ -669,6 +716,13 @@ async function runScanAt(input: {
     : command.sarif
       ? renderSarifReport(reportInput)
       : renderScanReport(reportInput);
+
+  if (isCommandCancelled(signal)) {
+    await closeScanProgressReporter(reportProgress, "failure");
+    io.stderr(renderCommandCancelled("Scan"));
+    return COMMAND_CANCELLED_EXIT_CODE;
+  }
+
   reportProgress?.(SCAN_PROGRESS_WRITE_PERCENT, "Writing report file...");
   const emitted = emitReport({
     contents: output,
@@ -679,6 +733,10 @@ async function runScanAt(input: {
 
   if (isErr(emitted)) {
     await closeScanProgressReporter(reportProgress, "failure");
+    if (isCommandCancelled(signal)) {
+      io.stderr(renderCommandCancelled("Scan"));
+      return COMMAND_CANCELLED_EXIT_CODE;
+    }
     io.stderr(formatError(emitted.error));
     return exitCodeForError(emitted.error);
   }
@@ -743,6 +801,7 @@ async function scanProject(input: {
   now: ScanClock;
   workspaceRoot?: string;
   progress?: ScanProgressReporter;
+  signal?: AbortSignal;
 }): Promise<Result<ScanResult, OhriskError>> {
   let project: ProjectInput;
   let scanGraph: DependencyGraph | undefined;
@@ -809,6 +868,7 @@ async function scanProject(input: {
       fetchRemotePoms: (requests) => fetchMavenCentralModelPoms({
         requests,
         offline: evidenceRuntime.value.offline,
+        ...(input.signal ? { signal: input.signal } : {}),
         ...(evidenceRuntime.value.timeoutMs === undefined
           ? {}
           : { fetchTimeoutMs: evidenceRuntime.value.timeoutMs }),
@@ -849,7 +909,8 @@ async function scanProject(input: {
       ? { allowLocalProjectEvidence: input.allowLocalProjectEvidence }
       : {}),
     ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
-    ...(input.progress ? { progress: input.progress } : {})
+    ...(input.progress ? { progress: input.progress } : {}),
+    ...(input.signal ? { signal: input.signal } : {})
   });
 }
 
@@ -966,6 +1027,7 @@ async function evaluateProjectScan(input: {
   now: ScanClock;
   workspaceRoot?: string;
   progress?: ScanProgressReporter;
+  signal?: AbortSignal;
 }): Promise<Result<ScanResult, OhriskError>> {
   const evidenceProgress = input.progress
     ? createEvidenceProgressReporter({
@@ -988,7 +1050,8 @@ async function evaluateProjectScan(input: {
         : {}),
     evidenceRuntime: input.evidenceRuntime,
     ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
-    ...(evidenceProgress ? { progress: evidenceProgress } : {})
+    ...(evidenceProgress ? { progress: evidenceProgress } : {}),
+    ...(input.signal ? { signal: input.signal } : {})
   });
 
   if (isErr(evidence)) {
@@ -2945,6 +3008,12 @@ function defaultIO(): CliIO {
 }
 
 if (isCliEntrypoint(import.meta.url, process.argv[1])) {
-  const exitCode = await main();
+  const processSignal = createProcessCommandSignal();
+  const exitCode = await main(process.argv.slice(2), {
+    ...defaultIO(),
+    signal: processSignal.signal
+  }).finally(() => {
+    processSignal.dispose();
+  });
   process.exit(exitCode);
 }

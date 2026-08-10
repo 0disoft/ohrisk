@@ -1,11 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { main, type CliIO } from "../src/cli/main";
+import { createProcessCommandSignal } from "../src/cli/cancellation";
 import { createArtifactCache } from "../src/evidence/cache";
 import { fetchMavenCentralModelPoms } from "../src/evidence/collect";
 import { createReportOpener } from "../src/report/open-report";
@@ -8618,5 +8627,182 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
     expect(stderr.join("\n")).toContain("workspaceRootPath:");
     expect(stderr.join("\n")).toContain("<absolute-path>");
     expect(stderr.join("\n")).not.toContain(missingRoot);
+  });
+
+  describe("command cancellation", () => {
+    test("a pre-aborted caller signal cancels a scan before evidence or report writes", async () => {
+      const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-cancel-scan-"));
+
+      try {
+        writeFileSync(
+          path.join(projectDir, "package-lock.json"),
+          JSON.stringify({
+            name: "cancel-scan",
+            version: "1.0.0",
+            lockfileVersion: 3,
+            packages: {
+              "": {
+                name: "cancel-scan",
+                version: "1.0.0",
+                dependencies: {
+                  "blocked-artifact": "1.0.0"
+                }
+              },
+              "node_modules/blocked-artifact": {
+                version: "1.0.0",
+                resolved: "https://registry.npmjs.org/blocked-artifact/-/blocked-artifact-1.0.0.tgz"
+              }
+            }
+          }, null, 2),
+          "utf8"
+        );
+
+        const controller = new AbortController();
+        controller.abort();
+        const { io, stdout, stderr } = createTestIO(projectDir);
+        io.signal = controller.signal;
+        let writeCalls = 0;
+        io.writeReport = () => {
+          writeCalls += 1;
+          return ok(path.join(projectDir, "report.json"));
+        };
+
+        const exitCode = await main(
+          ["scan", "--json", "--offline", "--cache-dir", path.join(projectDir, "cache"), "--output", "report.json"],
+          io
+        );
+
+        expect(exitCode).toBe(130);
+        expect(stdout).toEqual([]);
+        expect(stderr.join("\n")).toContain("Scan cancelled.");
+        expect(stderr.join("\n")).not.toContain("REGISTRY_METADATA_FETCH_FAILED");
+        expect(stderr.join("\n")).not.toContain("TARBALL_FETCH_FAILED");
+        expect(writeCalls).toBe(0);
+        expect(existsSync(path.join(projectDir, "report.json"))).toBe(false);
+      } finally {
+        rmSync(projectDir, { recursive: true, force: true });
+      }
+    });
+
+    test("an abort during a remote clone cancels and still cleans up the temporary checkout", async () => {
+      const invocationRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cancel-clone-"));
+      const temporaryRepository = mkdtempSync(path.join(tmpdir(), "ohrisk-cancel-checkout-"));
+      let cleaned = false;
+
+      try {
+        writeFileSync(
+          path.join(temporaryRepository, "package.json"),
+          JSON.stringify({ name: "remote-cancel-fixture", version: "1.0.0" }),
+          "utf8"
+        );
+        const { io, stdout, stderr } = createTestIO(invocationRoot);
+        const controller = new AbortController();
+        io.signal = controller.signal;
+        let resolveClone!: (
+          value: Awaited<ReturnType<NonNullable<CliIO["cloneRepository"]>>>
+        ) => void;
+        io.cloneRepository = () => new Promise((resolve) => {
+          resolveClone = resolve;
+        });
+
+        const pending = main(["scan", "--html", "https://github.com/0disoft/laqu.git"], io);
+        controller.abort();
+        resolveClone(ok({
+          rootDir: temporaryRepository,
+          submodules: {
+            total: 0,
+            paths: [],
+            pathsTruncated: false
+          },
+          symbolicLinks: {
+            total: 0,
+            paths: [],
+            pathsTruncated: false
+          },
+          nonPortablePaths: {
+            total: 0,
+            paths: [],
+            pathsTruncated: false
+          },
+          cleanup: () => {
+            cleaned = true;
+          }
+        }));
+        const exitCode = await pending;
+
+        expect(exitCode).toBe(130);
+        expect(cleaned).toBe(true);
+        expect(stdout).toEqual([]);
+        expect(stderr.join("\n")).toContain("Scan cancelled.");
+      } finally {
+        rmSync(invocationRoot, { recursive: true, force: true });
+        rmSync(temporaryRepository, { recursive: true, force: true });
+      }
+    });
+
+    test("a pre-aborted caller signal cancels a diff before baseline evidence", async () => {
+      const cacheDir = mkdtempSync(path.join(tmpdir(), "ohrisk-cancel-diff-cache-"));
+
+      try {
+        const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
+        io.readRefFile = () => ({
+          ok: true as const,
+          value: readFileSync(path.join(fixturesDir, "baseline-bun.lock"), "utf8")
+        });
+        const controller = new AbortController();
+        controller.abort();
+        io.signal = controller.signal;
+
+        const exitCode = await main(
+          ["diff", "main", "--json", "--cache-dir", cacheDir],
+          io
+        );
+
+        expect(exitCode).toBe(130);
+        expect(stdout).toEqual([]);
+        expect(stderr.join("\n")).toContain("Diff cancelled.");
+      } finally {
+        rmSync(cacheDir, { recursive: true, force: true });
+      }
+    });
+
+    test("library use without a caller signal never registers process listeners", async () => {
+      const before = process.listenerCount("SIGINT") + process.listenerCount("SIGTERM");
+      const { io } = createTestIO(path.join(fixturesDir, "bun-project"));
+
+      const exitCode = await main(["scan", "--json"], io);
+
+      expect(exitCode).toBe(0);
+      expect(process.listenerCount("SIGINT") + process.listenerCount("SIGTERM")).toBe(before);
+    });
+
+    test("process signal source aborts on the first signal and restores listeners on dispose", () => {
+      const registered: NodeJS.Signals[] = [];
+      const unregistered: NodeJS.Signals[] = [];
+      const listeners = new Map<NodeJS.Signals, () => void>();
+
+      const source = createProcessCommandSignal({
+        register: (signal, listener) => {
+          registered.push(signal);
+          listeners.set(signal, listener);
+        },
+        unregister: (signal) => {
+          unregistered.push(signal);
+        }
+      });
+
+      expect(registered).toEqual(["SIGINT", "SIGTERM"]);
+      expect(source.signal.aborted).toBe(false);
+
+      listeners.get("SIGINT")?.();
+      expect(source.signal.aborted).toBe(true);
+
+      listeners.get("SIGINT")?.();
+      listeners.get("SIGTERM")?.();
+      expect(source.signal.aborted).toBe(true);
+
+      source.dispose();
+      expect(unregistered).toEqual(["SIGINT", "SIGTERM"]);
+    });
   });
 });

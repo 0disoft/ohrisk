@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 9f60897ae4f78c8c7f86038db7f641f4456b198f2eab1f1d57f88e59f79ef292
+// ohrisk-action-source-sha256: 5b495c3d3db5269f96306c9221797481e1bcbf2816d7d78eab07e446c48edb59
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18538,8 +18538,52 @@ function validateBaselineRef(ref) {
   }));
 }
 
+// src/cli/cancellation.ts
+var COMMAND_CANCELLED_EXIT_CODE = 130;
+function createCommandCancellation(callerSignal) {
+  const controller = new AbortController;
+  const onCallerAbort = () => controller.abort();
+  if (callerSignal) {
+    if (callerSignal.aborted) {
+      controller.abort();
+    } else {
+      callerSignal.addEventListener("abort", onCallerAbort, { once: true });
+    }
+  }
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      callerSignal?.removeEventListener("abort", onCallerAbort);
+    }
+  };
+}
+function createProcessCommandSignal(input) {
+  const register = input?.register ?? ((signal, listener) => process.on(signal, listener));
+  const unregister = input?.unregister ?? ((signal, listener) => process.off(signal, listener));
+  const signals = ["SIGINT", "SIGTERM"];
+  const controller = new AbortController;
+  const onSignal = () => controller.abort();
+  for (const signal of signals) {
+    register(signal, onSignal);
+  }
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      for (const signal of signals) {
+        unregister(signal, onSignal);
+      }
+    }
+  };
+}
+function isCommandCancelled(signal) {
+  return signal?.aborted === true;
+}
+function renderCommandCancelled(commandLabel) {
+  return `${commandLabel} cancelled.`;
+}
+
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.14";
+var OHRISK_VERSION = "1.14.15";
 
 // src/archive/archive-project.ts
 import path47 from "node:path";
@@ -60629,23 +60673,28 @@ async function main(argv = process.argv.slice(2), io = defaultIO()) {
     return exitCodeForError(parsed.error);
   }
   const command = parsed.value;
-  switch (command.kind) {
-    case "help":
-      io.stdout(renderHelp(command.target));
-      return 0;
-    case "version":
-      io.stdout(renderVersion());
-      return 0;
-    case "cache":
-      return runCache(command, io);
-    case "scan":
-      return runScan(command, io);
-    case "ci":
-      return runScan(command, io);
-    case "diff":
-      return runDiff(command, io);
-    case "explain":
-      return runExplain(command, io);
+  const commandCancellation = createCommandCancellation(io.signal);
+  try {
+    switch (command.kind) {
+      case "help":
+        io.stdout(renderHelp(command.target));
+        return 0;
+      case "version":
+        io.stdout(renderVersion());
+        return 0;
+      case "cache":
+        return runCache(command, io);
+      case "scan":
+        return await runScan(command, io, commandCancellation.signal);
+      case "ci":
+        return await runScan(command, io, commandCancellation.signal);
+      case "diff":
+        return await runDiff(command, io, commandCancellation.signal);
+      case "explain":
+        return runExplain(command, io);
+    }
+  } finally {
+    commandCancellation.dispose();
   }
 }
 function runCache(command, io) {
@@ -60737,7 +60786,7 @@ function formatByteCount(bytes) {
 function formatCacheTimestamp(value) {
   return value === undefined ? "none" : new Date(value).toISOString();
 }
-async function runDiff(command, io) {
+async function runDiff(command, io, signal) {
   const workspaceRoot = resolveWorkspaceRootPath({
     cwd: io.cwd,
     workspaceRootPath: command.workspaceRootPath
@@ -60800,9 +60849,14 @@ async function runDiff(command, io) {
     graph: baselineCollectionGraph,
     projectRoot: currentProject.value.project.rootDir,
     evidenceRuntime: evidenceRuntime.value,
+    signal,
     ...workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}
   });
   if (isErr(baselineEvidence)) {
+    if (isCommandCancelled(signal)) {
+      io.stderr(renderCommandCancelled("Diff"));
+      return COMMAND_CANCELLED_EXIT_CODE;
+    }
     io.stderr(formatError(baselineEvidence.error));
     return exitCodeForError(baselineEvidence.error);
   }
@@ -60824,9 +60878,14 @@ async function runDiff(command, io) {
     prodOnly: command.prodOnly,
     applyWaivers: false,
     now: io.now ?? Date.now,
+    signal,
     ...workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}
   });
   if (isErr(current)) {
+    if (isCommandCancelled(signal)) {
+      io.stderr(renderCommandCancelled("Diff"));
+      return COMMAND_CANCELLED_EXIT_CODE;
+    }
     io.stderr(formatError(current.error));
     return exitCodeForError(current.error);
   }
@@ -60849,12 +60908,20 @@ async function runDiff(command, io) {
     ...command.failOn ? { failOn: command.failOn } : {},
     policy: summarizePolicyConfig(policy.value)
   });
+  if (isCommandCancelled(signal)) {
+    io.stderr(renderCommandCancelled("Diff"));
+    return COMMAND_CANCELLED_EXIT_CODE;
+  }
   const emitted = emitReport({
     contents: output,
     outputPath: command.outputPath,
     io
   });
   if (isErr(emitted)) {
+    if (isCommandCancelled(signal)) {
+      io.stderr(renderCommandCancelled("Diff"));
+      return COMMAND_CANCELLED_EXIT_CODE;
+    }
     io.stderr(formatError(emitted.error));
     return exitCodeForError(emitted.error);
   }
@@ -60922,12 +60989,12 @@ async function runExplain(command, io) {
   }
   return 0;
 }
-async function runScan(command, io) {
+async function runScan(command, io, signal) {
   const repository = command.kind === "scan" ? command.repository : undefined;
   const reportProgress = command.outputPath ? createScanProgressReporter(io) : undefined;
   reportProgress?.(0, command.kind === "ci" ? "Starting CI scan..." : "Starting scan...");
   if (!repository) {
-    return runScanAt({ command, io, scanCwd: io.cwd, reportProgress });
+    return runScanAt({ command, io, scanCwd: io.cwd, reportProgress, signal });
   }
   reportProgress?.(0, `Cloning ${repository.owner}/${repository.name}...`);
   const cloner = io.cloneRepository ?? cloneGitHubRepository;
@@ -60939,6 +61006,11 @@ async function runScan(command, io) {
     return exitCodeForError(cloned.error);
   }
   try {
+    if (isCommandCancelled(signal)) {
+      await closeScanProgressReporter(reportProgress, "failure");
+      io.stderr(renderCommandCancelled("Scan"));
+      return COMMAND_CANCELLED_EXIT_CODE;
+    }
     return await runScanAt({
       command,
       io,
@@ -60947,6 +61019,7 @@ async function runScan(command, io) {
       runtimeRoot: io.cwd,
       allowLocalProjectEvidence: false,
       reportProgress,
+      signal,
       temporaryRoot: cloned.value.rootDir,
       repository: {
         owner: repository.owner,
@@ -60974,7 +61047,7 @@ async function runScan(command, io) {
   }
 }
 async function runScanAt(input) {
-  const { command, io, reportProgress } = input;
+  const { command, io, reportProgress, signal } = input;
   const now = io.now ?? Date.now;
   const workspaceRoot = resolveWorkspaceRootPath({
     cwd: io.cwd,
@@ -61009,10 +61082,15 @@ async function runScanAt(input) {
     applyWaivers: !command.noWaivers,
     now,
     ...workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {},
-    ...reportProgress ? { progress: reportProgress } : {}
+    ...reportProgress ? { progress: reportProgress } : {},
+    signal
   });
   if (isErr(scanned)) {
     await closeScanProgressReporter(reportProgress, "failure");
+    if (isCommandCancelled(signal)) {
+      io.stderr(renderCommandCancelled("Scan"));
+      return COMMAND_CANCELLED_EXIT_CODE;
+    }
     const scanError = input.temporaryRoot ? redactTemporaryPath(scanned.error, input.temporaryRoot) : scanned.error;
     io.stderr(formatError(scanError));
     return exitCodeForError(scanError);
@@ -61040,6 +61118,11 @@ async function runScanAt(input) {
   };
   reportProgress?.(SCAN_PROGRESS_RENDER_PERCENT, `Rendering ${reportFormatLabel(command)} report...`);
   const output = command.cyclonedx ? renderCycloneDxReport(reportInput) : command.sarif ? renderSarifReport(reportInput) : renderScanReport(reportInput);
+  if (isCommandCancelled(signal)) {
+    await closeScanProgressReporter(reportProgress, "failure");
+    io.stderr(renderCommandCancelled("Scan"));
+    return COMMAND_CANCELLED_EXIT_CODE;
+  }
   reportProgress?.(SCAN_PROGRESS_WRITE_PERCENT, "Writing report file...");
   const emitted = emitReport({
     contents: output,
@@ -61049,6 +61132,10 @@ async function runScanAt(input) {
   });
   if (isErr(emitted)) {
     await closeScanProgressReporter(reportProgress, "failure");
+    if (isCommandCancelled(signal)) {
+      io.stderr(renderCommandCancelled("Scan"));
+      return COMMAND_CANCELLED_EXIT_CODE;
+    }
     io.stderr(formatError(emitted.error));
     return exitCodeForError(emitted.error);
   }
@@ -61139,6 +61226,7 @@ async function scanProject(input) {
       fetchRemotePoms: (requests) => fetchMavenCentralModelPoms({
         requests,
         offline: evidenceRuntime.value.offline,
+        ...input.signal ? { signal: input.signal } : {},
         ...evidenceRuntime.value.timeoutMs === undefined ? {} : { fetchTimeoutMs: evidenceRuntime.value.timeoutMs },
         ...evidenceRuntime.value.cacheDir === undefined ? {} : { cacheDir: evidenceRuntime.value.cacheDir }
       }),
@@ -61163,7 +61251,8 @@ async function scanProject(input) {
     ...input.configurationRoot ? { configurationRoot: input.configurationRoot } : project.source ? { configurationRoot: input.cwd } : {},
     ...input.allowLocalProjectEvidence !== undefined ? { allowLocalProjectEvidence: input.allowLocalProjectEvidence } : {},
     ...input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {},
-    ...input.progress ? { progress: input.progress } : {}
+    ...input.progress ? { progress: input.progress } : {},
+    ...input.signal ? { signal: input.signal } : {}
   });
 }
 function loadArchiveProjectGraph(input) {
@@ -61233,7 +61322,8 @@ async function evaluateProjectScan(input) {
     ...input.allowLocalProjectEvidence !== undefined ? { allowLocalProjectEvidence: input.allowLocalProjectEvidence } : input.project.source ? { allowLocalProjectEvidence: false } : {},
     evidenceRuntime: input.evidenceRuntime,
     ...input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {},
-    ...evidenceProgress ? { progress: evidenceProgress } : {}
+    ...evidenceProgress ? { progress: evidenceProgress } : {},
+    ...input.signal ? { signal: input.signal } : {}
   });
   if (isErr(evidence)) {
     return evidence;
@@ -62667,7 +62757,13 @@ function defaultIO() {
   };
 }
 if (isCliEntrypoint(import.meta.url, process.argv[1])) {
-  const exitCode = await main();
+  const processSignal = createProcessCommandSignal();
+  const exitCode = await main(process.argv.slice(2), {
+    ...defaultIO(),
+    signal: processSignal.signal
+  }).finally(() => {
+    processSignal.dispose();
+  });
   process.exit(exitCode);
 }
 export {

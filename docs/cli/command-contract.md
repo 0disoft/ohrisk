@@ -8,6 +8,20 @@
 The published CLI runs on Node.js `>=24.0.0`. Bun is used for repository
 development, tests, and packaging.
 
+## Cancellation
+
+`scan`, `ci`, and `diff` create one command-scoped abort signal shared by the
+current and baseline remote evidence work. The first `SIGINT` (Ctrl+C) or
+`SIGTERM` aborts in-flight fetches, stops retries and queued work, and skips
+partial report output. The command then exits with code `130` and a
+cancellation message on stderr instead of reporting an ordinary remote
+evidence failure. A second signal does not force a process kill; the existing
+per-request timeout and bounded worker join finish the shutdown. Library
+callers can pass their own `AbortSignal` through the CLI IO interface without
+any process listener being registered. On Windows, Ctrl+C is delivered as
+`SIGINT` and is supported; `SIGTERM` delivery depends on the host and is not
+guaranteed.
+
 ## Commands
 
 | Command | Contract |
