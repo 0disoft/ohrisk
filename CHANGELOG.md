@@ -79,6 +79,14 @@
   thousands of unique-digest entries scales near-linearly instead of
   quadratically while keeping the same stale, max-age, LRU, and max-size
   decisions and exact removal counts.
+- Artifact cache writes now publish their object and index under the same
+  short-lived maintenance lock that prune, clear, and remove use. Fetching and
+  temporary-file preparation happen outside the lock; only the final object and
+  index renames are mutually exclusive with cache cleanup, so a writer can no
+  longer have its just-published object deleted as an orphan between the two
+  publishes. A prune or clear that cannot acquire the lock fails closed with
+  `CACHE_OPERATION_FAILED`, while stale-lock recovery, PID ownership metadata,
+  and Windows atomic rename semantics stay unchanged.
 
 ## 1.14.1 - 2026-07-28
 

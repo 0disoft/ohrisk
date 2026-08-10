@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: af9d8f82cfcb349ddfc73d2176ac61a1d84b0874d19e81d4729b62eb5f8c4f52
+// ohrisk-action-source-sha256: 944e09c9b3b37f1fc29152c87f9572764e989a8a0991fc9132201b4e9a921689
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18539,7 +18539,7 @@ function validateBaselineRef(ref) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.12";
+var OHRISK_VERSION = "1.14.13";
 
 // src/archive/archive-project.ts
 import path47 from "node:path";
@@ -41209,11 +41209,16 @@ function createArtifactCacheHandle(rootDir, options, initializeOwnership) {
       defaultTtlMs,
       metadata
     }),
-    remove: (url) => removeArtifactCacheEntry(resolvedRoot, url, now()),
+    remove: (url) => {
+      withCacheCommitLock(resolvedRoot, now(), () => {
+        removeArtifactCacheEntry(resolvedRoot, url, now());
+        return ok(undefined);
+      });
+    },
     maintain: () => maintainArtifactCache(resolvedRoot, maxSizeBytes, now()),
     status: () => artifactCacheStatus(resolvedRoot, now()),
-    prune: (pruneOptions = {}) => pruneArtifactCache(resolvedRoot, pruneOptions, now()),
-    clear: () => clearArtifactCache(resolvedRoot, now())
+    prune: (pruneOptions = {}) => withCacheCommitLock(resolvedRoot, now(), () => pruneArtifactCache(resolvedRoot, pruneOptions, now())),
+    clear: () => withCacheCommitLock(resolvedRoot, now(), () => clearArtifactCache(resolvedRoot, now()))
   };
 }
 function maintainArtifactCache(rootDir, maxSizeBytes, now) {
@@ -41362,8 +41367,6 @@ function readArtifactCacheEntry(input) {
 }
 function writeArtifactCacheEntry(input) {
   const digest = sha256(input.bytes);
-  const objectPath = cacheObjectPath(input.rootDir, digest);
-  const indexPath = cacheIndexPath(input.rootDir, input.url);
   const metadata = normalizeWriteMetadata(input.metadata, input.now, input.defaultTtlMs);
   const index = {
     version: CACHE_FORMAT_VERSION,
@@ -41377,13 +41380,69 @@ function writeArtifactCacheEntry(input) {
     ...metadata.lastModified ? { lastModified: metadata.lastModified } : {}
   };
   try {
-    if (!ensureCacheMarker(input.rootDir)) {
-      return;
-    }
-    writeIfAbsent(objectPath, input.bytes);
-    replaceAtomic(indexPath, Buffer.from(`${JSON.stringify(index)}
-`, "utf8"));
+    commitArtifactCacheEntry({
+      rootDir: input.rootDir,
+      url: input.url,
+      bytes: input.bytes,
+      index,
+      now: input.now,
+      digest
+    });
   } catch {}
+}
+function commitArtifactCacheEntry(input) {
+  const objectPath = cacheObjectPath(input.rootDir, input.digest);
+  const indexPath = cacheIndexPath(input.rootDir, input.url);
+  const objectTempPath = temporaryCachePath(objectPath);
+  const indexTempPath = temporaryCachePath(indexPath);
+  const lockPath = path48.join(input.rootDir, CACHE_MAINTENANCE_LOCK_FILENAME);
+  let preparedObjectTemp = false;
+  let preparedIndexTemp = false;
+  try {
+    if (!ensureCacheMarker(input.rootDir)) {
+      return false;
+    }
+    mkdirSync(path48.dirname(objectPath), { recursive: true });
+    mkdirSync(path48.dirname(indexPath), { recursive: true });
+    if (!isRegularFile(objectPath)) {
+      writeFileSync2(objectTempPath, input.bytes, { flag: "wx", mode: 384 });
+      preparedObjectTemp = true;
+    }
+    writeFileSync2(indexTempPath, Buffer.from(`${JSON.stringify(input.index)}
+`, "utf8"), { flag: "wx", mode: 384 });
+    preparedIndexTemp = true;
+    if (!acquireCacheMaintenanceLock(lockPath, input.now)) {
+      return false;
+    }
+    try {
+      if (preparedObjectTemp) {
+        publishCacheObject(objectTempPath, objectPath);
+      }
+      input.beforeIndexPublish?.();
+      publishCacheIndex(indexTempPath, indexPath);
+      return true;
+    } finally {
+      removeQuietly(lockPath);
+    }
+  } finally {
+    if (preparedObjectTemp) {
+      removeQuietly(objectTempPath);
+    }
+    if (preparedIndexTemp) {
+      removeQuietly(indexTempPath);
+    }
+  }
+}
+function withCacheCommitLock(rootDir, now, action) {
+  const lockPath = path48.join(rootDir, CACHE_MAINTENANCE_LOCK_FILENAME);
+  if (!acquireCacheMaintenanceLock(lockPath, now)) {
+    return err(cacheOperationError("Failed to acquire the artifact cache commit lock.", rootDir, new Error("cache_commit_lock_unavailable")));
+  }
+  try {
+    return action();
+  } finally {
+    removeQuietly(lockPath);
+  }
 }
 function revalidateArtifactCacheEntry(input) {
   if (!hasValidCacheMarker(input.rootDir)) {
@@ -41675,24 +41734,17 @@ function normalizeMaxSize(value, fallback) {
 function isNonNegativeSafeInteger(value) {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
-function writeIfAbsent(filePath, bytes) {
-  mkdirSync(path48.dirname(filePath), { recursive: true });
-  if (isRegularFile(filePath)) {
-    return;
-  }
-  const temporaryPath = temporaryCachePath(filePath);
+function publishCacheObject(temporaryPath, objectPath) {
   try {
-    writeFileSync2(temporaryPath, bytes, { flag: "wx", mode: 384 });
-    try {
-      renameSync(temporaryPath, filePath);
-    } catch {
-      if (!isRegularFile(filePath)) {
-        throw new Error("Could not atomically publish cache object.");
-      }
+    renameSync(temporaryPath, objectPath);
+  } catch {
+    if (!isRegularFile(objectPath)) {
+      throw new Error("Could not atomically publish cache object.");
     }
-  } finally {
-    removeQuietly(temporaryPath);
   }
+}
+function publishCacheIndex(temporaryPath, indexPath) {
+  renameSync(temporaryPath, indexPath);
 }
 function replaceAtomic(filePath, bytes) {
   mkdirSync(path48.dirname(filePath), { recursive: true });
