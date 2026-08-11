@@ -254,7 +254,7 @@ function maintainArtifactCache(rootDir: string, maxSizeBytes: number, now: numbe
     const pruned = pruneArtifactCache(rootDir, {
       maxSizeBytes,
       removeExpired: false
-    }, now);
+    }, now, false);
     if (pruned.ok) {
       replaceAtomicBestEffort(
         path.join(rootDir, CACHE_MAINTENANCE_STAMP_FILENAME),
@@ -598,7 +598,8 @@ function artifactCacheStatus(
 function pruneArtifactCache(
   rootDir: string,
   options: ArtifactCachePruneOptions,
-  now: number
+  now: number,
+  verifyAfter = true
 ): Result<ArtifactCachePruneResult, OhriskError> {
   try {
     requireValidCacheMarker(rootDir);
@@ -617,19 +618,48 @@ function pruneArtifactCache(
       removeExpired: options.removeExpired
     });
 
+    const removedEntryPaths = new Set<string>();
     for (const indexPath of plan.removeEntryPaths) {
-      removeQuietly(indexPath);
+      if (removeQuietly(indexPath)) {
+        removedEntryPaths.add(indexPath);
+      }
     }
-    const objectCleanup = removeOrphanedObjects(rootDir, now);
+
+    const remainingEntries = inventory.entries.filter(
+      (entry) => !removedEntryPaths.has(entry.path)
+    );
+    const remainingDigests = new Set(
+      remainingEntries.map((entry) => entry.index.sha256)
+    );
+    const remainingObjectSizes = new Map(inventory.objectSizes);
+    let removedObjectCount = 0;
+    let removedBytes = 0;
+    for (const digest of plan.removeObjectDigests) {
+      if (remainingDigests.has(digest)) {
+        continue;
+      }
+      const size = remainingObjectSizes.get(digest);
+      if (size !== undefined && removeQuietly(cacheObjectPath(rootDir, digest))) {
+        remainingObjectSizes.delete(digest);
+        removedObjectCount += 1;
+        removedBytes += size;
+      }
+    }
     removeEmptyCacheDirectories(rootDir);
-    const afterInventory = scanCacheInventory(rootDir, now);
+    const afterInventory = verifyAfter
+      ? scanCacheInventory(rootDir, now)
+      : {
+          entries: remainingEntries,
+          objectSizes: remainingObjectSizes,
+          corruptEntryCount: 0
+        };
     const after = statusFromInventory(afterInventory, now);
     return ok({
       before,
       after,
       removedEntryCount: Math.max(0, before.entryCount - after.entryCount),
-      removedObjectCount: objectCleanup.removedObjectCount,
-      removedBytes: objectCleanup.removedBytes
+      removedObjectCount,
+      removedBytes
     });
   } catch (cause) {
     return err(cacheOperationError("Failed to prune the artifact cache.", rootDir, cause));
@@ -738,32 +768,6 @@ export function statusFromInventory(inventory: CacheInventory, now: number): Art
     ...(oldestAccessedAt !== undefined ? { oldestAccessedAt } : {}),
     ...(newestAccessedAt !== undefined ? { newestAccessedAt } : {})
   };
-}
-
-function removeOrphanedObjects(rootDir: string, now: number): {
-  removedObjectCount: number;
-  removedBytes: number;
-} {
-  const inventory = scanCacheInventory(rootDir, now);
-  const referencedDigests = new Set(inventory.entries.map((entry) => entry.index.sha256));
-  let removedObjectCount = 0;
-  let removedBytes = 0;
-
-  for (const objectPath of listRegularFiles(path.join(rootDir, "objects", "sha256"))) {
-    const digest = path.basename(objectPath);
-    if (referencedDigests.has(digest)) {
-      continue;
-    }
-    try {
-      const size = statSync(objectPath).size;
-      rmSync(objectPath, { force: true });
-      removedObjectCount += 1;
-      removedBytes += size;
-    } catch {
-      // Best-effort cleanup in the face of concurrent cache activity.
-    }
-  }
-  return { removedObjectCount, removedBytes };
 }
 
 function removeObjectWhenUnreferenced(rootDir: string, digest: string, now: number): void {
@@ -1085,11 +1089,13 @@ function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-function removeQuietly(filePath: string): void {
+function removeQuietly(filePath: string): boolean {
   try {
     rmSync(filePath, { force: true });
+    return !existsSync(filePath);
   } catch {
     // Best-effort cleanup only.
+    return false;
   }
 }
 

@@ -271,6 +271,37 @@ describe("persistent artifact cache", () => {
     }
   });
 
+  test("removes pre-existing orphan objects during one automatic maintenance pass", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "ohrisk-cache-maintenance-orphan-"));
+    try {
+      const cache = createArtifactCache(root, {
+        now: () => 1_000,
+        maxSizeBytes: 4
+      });
+      const keptUrl = "https://registry.example.com/kept.tgz";
+      const orphanUrl = "https://registry.example.com/orphan.tgz";
+      cache.write(keptUrl, Buffer.from("1111"));
+      cache.write(orphanUrl, Buffer.from("2222"));
+      unlinkSync(indexPathForUrl(root, orphanUrl));
+
+      cache.maintain();
+
+      const status = cache.status();
+      expect(status.ok).toBe(true);
+      if (!status.ok) throw new Error(status.error.message);
+      expect(status.value).toMatchObject({
+        entryCount: 1,
+        objectCount: 1,
+        totalBytes: 4,
+        orphanObjectCount: 0,
+        orphanBytes: 0
+      });
+      expect(cache.read(keptUrl, 1024)?.bytes.toString("utf8")).toBe("1111");
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   test("clears only cache-owned children and leaves an empty reusable cache", () => {
     const root = mkdtempSync(path.join(tmpdir(), "ohrisk-cache-clear-"));
     try {

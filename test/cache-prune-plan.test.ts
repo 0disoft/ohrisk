@@ -103,6 +103,23 @@ describe("planCachePrune", () => {
     expect(plan.removeObjectDigests).toEqual(["kept", "missing"]);
   });
 
+  test("includes pre-existing orphan objects in the same inventory plan", () => {
+    const inventory = inventoryWith([
+      entry("kept", { size: 100, accessedAt: 1_000, expiresAt: 9_000 })
+    ]);
+    inventory.objectSizes.set("orphan", 50);
+
+    const plan = planCachePrune({
+      entries: inventory.entries,
+      objectSizes: inventory.objectSizes,
+      now: 2_000,
+      maxSizeBytes: 100
+    });
+
+    expect(plan.removeEntryPaths).toEqual([]);
+    expect(plan.removeObjectDigests).toEqual(["orphan"]);
+  });
+
   test("keeps the removal plan stable under entry and object permutation", () => {
     const forward = inventoryWith([
       entry("a", { size: 100, accessedAt: 1_100, expiresAt: 9_000 }),

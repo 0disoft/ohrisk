@@ -63,10 +63,11 @@ export function planCachePrune(input: {
     }
   }
 
-  const referencedBeforeRemoval = new Set(
-    input.entries.map((entry) => entry.index.sha256)
-  );
-  const removeObjectDigests = [...referencedBeforeRemoval].filter(
+  const knownDigests = new Set(input.objectSizes.keys());
+  for (const entry of input.entries) {
+    knownDigests.add(entry.index.sha256);
+  }
+  const removeObjectDigests = [...knownDigests].filter(
     (digest) => !referencedAfterRemoval.has(digest)
   ).sort(comparePath);
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 3aaff12e62b0ac8d1fb964810bcf0dc929e0068f2816599dd9de98f686f981a9
+// ohrisk-action-source-sha256: 9c9e9c5388b864aa0ce86491ef72d139f3860cb92efc7f55dce260439efac127
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19520,7 +19520,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.16";
+var OHRISK_VERSION = "1.14.17";
 
 // src/archive/archive-project.ts
 import path48 from "node:path";
@@ -42199,8 +42199,11 @@ function planCachePrune(input) {
       referencedAfterRemoval.add(entry.index.sha256);
     }
   }
-  const referencedBeforeRemoval = new Set(input.entries.map((entry) => entry.index.sha256));
-  const removeObjectDigests = [...referencedBeforeRemoval].filter((digest) => !referencedAfterRemoval.has(digest)).sort(comparePath);
+  const knownDigests = new Set(input.objectSizes.keys());
+  for (const entry of input.entries) {
+    knownDigests.add(entry.index.sha256);
+  }
+  const removeObjectDigests = [...knownDigests].filter((digest) => !referencedAfterRemoval.has(digest)).sort(comparePath);
   return {
     removeEntryPaths: [...entriesToRemove].sort(comparePath),
     removeObjectDigests
@@ -42305,7 +42308,7 @@ function maintainArtifactCache(rootDir, maxSizeBytes, now) {
     const pruned = pruneArtifactCache(rootDir, {
       maxSizeBytes,
       removeExpired: false
-    }, now);
+    }, now, false);
     if (pruned.ok) {
       replaceAtomicBestEffort(path49.join(rootDir, CACHE_MAINTENANCE_STAMP_FILENAME), Buffer.from(`${now}
 `, "utf8"));
@@ -42553,7 +42556,7 @@ function artifactCacheStatus(rootDir, now) {
     return err(cacheOperationError("Failed to inspect the artifact cache.", rootDir, cause));
   }
 }
-function pruneArtifactCache(rootDir, options, now) {
+function pruneArtifactCache(rootDir, options, now, verifyAfter = true) {
   try {
     requireValidCacheMarker(rootDir);
     const inventory = scanCacheInventory(rootDir, now);
@@ -42568,19 +42571,41 @@ function pruneArtifactCache(rootDir, options, now) {
       maxAgeMs,
       removeExpired: options.removeExpired
     });
+    const removedEntryPaths = new Set;
     for (const indexPath of plan.removeEntryPaths) {
-      removeQuietly(indexPath);
+      if (removeQuietly(indexPath)) {
+        removedEntryPaths.add(indexPath);
+      }
     }
-    const objectCleanup = removeOrphanedObjects(rootDir, now);
+    const remainingEntries = inventory.entries.filter((entry) => !removedEntryPaths.has(entry.path));
+    const remainingDigests = new Set(remainingEntries.map((entry) => entry.index.sha256));
+    const remainingObjectSizes = new Map(inventory.objectSizes);
+    let removedObjectCount = 0;
+    let removedBytes = 0;
+    for (const digest of plan.removeObjectDigests) {
+      if (remainingDigests.has(digest)) {
+        continue;
+      }
+      const size = remainingObjectSizes.get(digest);
+      if (size !== undefined && removeQuietly(cacheObjectPath(rootDir, digest))) {
+        remainingObjectSizes.delete(digest);
+        removedObjectCount += 1;
+        removedBytes += size;
+      }
+    }
     removeEmptyCacheDirectories(rootDir);
-    const afterInventory = scanCacheInventory(rootDir, now);
+    const afterInventory = verifyAfter ? scanCacheInventory(rootDir, now) : {
+      entries: remainingEntries,
+      objectSizes: remainingObjectSizes,
+      corruptEntryCount: 0
+    };
     const after = statusFromInventory(afterInventory, now);
     return ok({
       before,
       after,
       removedEntryCount: Math.max(0, before.entryCount - after.entryCount),
-      removedObjectCount: objectCleanup.removedObjectCount,
-      removedBytes: objectCleanup.removedBytes
+      removedObjectCount,
+      removedBytes
     });
   } catch (cause) {
     return err(cacheOperationError("Failed to prune the artifact cache.", rootDir, cause));
@@ -42677,25 +42702,6 @@ function statusFromInventory(inventory, now) {
     ...oldestAccessedAt !== undefined ? { oldestAccessedAt } : {},
     ...newestAccessedAt !== undefined ? { newestAccessedAt } : {}
   };
-}
-function removeOrphanedObjects(rootDir, now) {
-  const inventory = scanCacheInventory(rootDir, now);
-  const referencedDigests = new Set(inventory.entries.map((entry) => entry.index.sha256));
-  let removedObjectCount = 0;
-  let removedBytes = 0;
-  for (const objectPath of listRegularFiles(path49.join(rootDir, "objects", "sha256"))) {
-    const digest = path49.basename(objectPath);
-    if (referencedDigests.has(digest)) {
-      continue;
-    }
-    try {
-      const size = statSync7(objectPath).size;
-      rmSync2(objectPath, { force: true });
-      removedObjectCount += 1;
-      removedBytes += size;
-    } catch {}
-  }
-  return { removedObjectCount, removedBytes };
 }
 function removeObjectWhenUnreferenced(rootDir, digest, now) {
   const referenced = listRegularFiles(path49.join(rootDir, "index")).some((indexPath) => {
@@ -42947,7 +42953,10 @@ function sha256(bytes) {
 function removeQuietly(filePath) {
   try {
     rmSync2(filePath, { force: true });
-  } catch {}
+    return !existsSync18(filePath);
+  } catch {
+    return false;
+  }
 }
 function randomSuffix() {
   return Math.random().toString(16).slice(2);

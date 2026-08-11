@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Automatic artifact-cache maintenance now reuses its initial cache inventory
+  when deleting stale indexes and orphan objects instead of walking the cache
+  three times and listing objects a fourth time. Explicit `cache prune` keeps
+  one final verification inventory for exact user-visible results, while the
+  opportunistic scan path completes with one inventory and preserves the
+  shared writer/pruner lock and best-effort Windows deletion behavior.
 - Remote repository scans now share one immutable tree inventory across the
   security validation walk and project discovery. The materialized
   filesystem is enumerated once instead of being re-walked by discovery, and
