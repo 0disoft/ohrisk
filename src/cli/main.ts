@@ -101,6 +101,7 @@ import {
   cloneGitHubRepository,
   type RepositoryCloner
 } from "../repository/github-repository";
+import type { RepositoryTreeInventory } from "../repository/tree-inventory";
 import {
   discoverProject,
   projectLockfiles,
@@ -594,6 +595,7 @@ async function runScan(
       allowLocalProjectEvidence: false,
       reportProgress,
       signal,
+      inventory: cloned.value.inventory,
       temporaryRoot: cloned.value.rootDir,
       repository: {
         owner: repository.owner,
@@ -632,6 +634,7 @@ async function runScanAt(input: {
   temporaryRoot?: string;
   repository?: RemoteRepositoryReportSource;
   signal: AbortSignal;
+  inventory?: RepositoryTreeInventory;
 }): Promise<number> {
   const { command, io, reportProgress, signal } = input;
   const now = io.now ?? Date.now;
@@ -672,7 +675,8 @@ async function runScanAt(input: {
     now,
     ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}),
     ...(reportProgress ? { progress: reportProgress } : {}),
-    signal
+    signal,
+    ...(input.inventory ? { inventory: input.inventory } : {})
   });
 
   if (isErr(scanned)) {
@@ -802,6 +806,7 @@ async function scanProject(input: {
   workspaceRoot?: string;
   progress?: ScanProgressReporter;
   signal?: AbortSignal;
+  inventory?: RepositoryTreeInventory;
 }): Promise<Result<ScanResult, OhriskError>> {
   let project: ProjectInput;
   let scanGraph: DependencyGraph | undefined;
@@ -827,7 +832,8 @@ async function scanProject(input: {
       ...(input.autoMergeSameRoot ? { autoMergeSameRoot: true } : {}),
       ...(input.autoMergeDescendantProjects ? { autoMergeDescendantProjects: true } : {}),
       allLockfiles: input.allLockfiles,
-      ...(input.progress ? { progress: input.progress } : {})
+      ...(input.progress ? { progress: input.progress } : {}),
+      ...(input.inventory ? { inventory: input.inventory } : {})
     });
     if (isErr(discovered)) {
       return discovered;
@@ -989,6 +995,7 @@ function discoverFilesystemProject(input: {
   autoMergeDescendantProjects?: boolean;
   allLockfiles?: boolean;
   progress?: ScanProgressReporter;
+  inventory?: RepositoryTreeInventory;
 }): Result<ProjectInput, OhriskError> {
   input.progress?.(SCAN_PROGRESS_DISCOVER_PERCENT, "Discovering project...");
   const discovered = discoverProject({
@@ -997,7 +1004,8 @@ function discoverFilesystemProject(input: {
     ...(input.projectSearchMode ? { searchMode: input.projectSearchMode } : {}),
     ...(input.autoMergeSameRoot ? { autoMergeSameRoot: true } : {}),
     ...(input.autoMergeDescendantProjects ? { autoMergeDescendantProjects: true } : {}),
-    ...(input.allLockfiles ? { allLockfiles: true } : {})
+    ...(input.allLockfiles ? { allLockfiles: true } : {}),
+    ...(input.inventory ? { inventory: input.inventory } : {})
   });
 
   if (isErr(discovered)) {

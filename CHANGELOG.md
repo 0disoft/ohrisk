@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Remote repository scans now share one immutable tree inventory across the
+  security validation walk and project discovery. The materialized
+  filesystem is enumerated once instead of being re-walked by discovery, and
+  nested lockfile, manifest, Gradle, .NET, Xcode, and named pylock inputs keep
+  their existing discovery order and error behavior. Local directory scans
+  continue to use the filesystem directly.
 - Development dependencies were refreshed with `bun update --latest`:
   TypeScript moved from 6.0.3 to 7.0.2, Node type definitions from 24.13.2 to
   26.2.0, and the resolved Laqu progress runtime from 1.0.8 to 1.1.8 while

@@ -1,6 +1,15 @@
 import { closeSync, existsSync, openSync, readSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
+import {
+  entryExists,
+  entryIsDirectory,
+  entryIsFile,
+  fileExistsInInventory,
+  listDirectoryEntries,
+  type RepositoryTreeEntry,
+  type RepositoryTreeInventory
+} from "../repository/tree-inventory";
 import { isDotnetProjectAutoDiscoveryCandidate } from "../graph/dotnet-nuget-lock";
 import { parseGradleVersionCatalogFile } from "../graph/java-gradle-version-catalog";
 import { parseCondaEnvironmentFile } from "../graph/conda-environment";
@@ -93,6 +102,7 @@ export type DiscoverProjectOptions = {
   autoMergeSameRoot?: boolean;
   autoMergeDescendantProjects?: boolean;
   searchMode?: "ancestors" | "tree";
+  inventory?: RepositoryTreeInventory;
 };
 
 const MAX_AUTO_MERGED_DESCENDANT_PROJECTS = 64;
@@ -384,14 +394,17 @@ export function discoverProject(
 
     const searchDirectories = searchMode === "tree" ? [startDir] : ancestorsFrom(startDir);
     for (const dir of searchDirectories) {
-      const lockfiles = findKnownLockfiles(dir);
-      const hasProjectManifest = hasKnownProjectManifest(dir);
-      const hasKnownLockfileDirectory = hasKnownLockfileDirectoryPath(dir);
+      const entries = options.inventory
+        ? listDirectoryEntries(dir, options.inventory)
+        : undefined;
+      const lockfiles = findKnownLockfiles(dir, entries, options.inventory);
+      const hasProjectManifest = hasKnownProjectManifest(dir, entries, options.inventory);
+      const hasKnownLockfileDirectory = hasKnownLockfileDirectoryPath(dir, entries);
 
       if (lockfiles.length === 0) {
         const packageJsonManifest = hasKnownLockfileDirectory
           ? undefined
-          : findDependencyFreePackageJsonManifest(dir);
+          : findDependencyFreePackageJsonManifest(dir, entries);
         if (packageJsonManifest) {
           return ok({
             rootDir: dir,
@@ -466,7 +479,8 @@ export function discoverProject(
         rootDir: startDir,
         allLockfiles: options.allLockfiles ?? false,
         autoMergeSameRoot: options.autoMergeSameRoot ?? false,
-        autoMergeDescendantProjects: options.autoMergeDescendantProjects ?? false
+        autoMergeDescendantProjects: options.autoMergeDescendantProjects ?? false,
+        ...(options.inventory ? { inventory: options.inventory } : {})
       });
       if (descendantProject) {
         return descendantProject;
@@ -518,6 +532,7 @@ function discoverDescendantProject(input: {
   allLockfiles: boolean;
   autoMergeSameRoot: boolean;
   autoMergeDescendantProjects: boolean;
+  inventory?: RepositoryTreeInventory;
 }): Result<ProjectInput, OhriskError> | undefined {
   const projects = new Map<string, Map<string, ProjectLockfile>>();
   const pendingDirectories = [input.rootDir];
@@ -528,17 +543,20 @@ function discoverDescendantProject(input: {
       continue;
     }
 
-    const lockfiles = findKnownLockfiles(currentDir)
+    const entries = input.inventory
+      ? listDirectoryEntries(currentDir, input.inventory)
+      : undefined;
+    const lockfiles = findKnownLockfiles(currentDir, entries, input.inventory)
       .flatMap((lockfileName) => {
         const lockfilePath = path.join(currentDir, lockfileName);
         const kind = supportedKindForLockfilePath(lockfilePath);
-        return kind && isConcreteAutoDiscoveryInput({ kind, path: lockfilePath })
+        return kind && isConcreteAutoDiscoveryInput({ kind, path: lockfilePath }, entries)
           ? [{ kind, path: lockfilePath } satisfies ProjectLockfile]
           : [];
       });
 
     if (lockfiles.length === 0) {
-      const packageJsonManifest = findDependencyFreePackageJsonManifest(currentDir);
+      const packageJsonManifest = findDependencyFreePackageJsonManifest(currentDir, entries);
       if (packageJsonManifest) {
         lockfiles.push({
           kind: "package-json",
@@ -554,11 +572,17 @@ function discoverDescendantProject(input: {
       projects.set(projectRoot, projectLockfiles);
     }
 
-    const childDirectories = readdirSync(currentDir, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && entry.name !== ".git")
-      .map((entry) => path.join(currentDir, entry.name))
-      .sort()
-      .reverse();
+    const childDirectories = input.inventory
+      ? listDirectoryEntries(currentDir, input.inventory)
+          .filter((entry) => entry.kind === "directory" && entry.name !== ".git")
+          .map((entry) => path.join(currentDir, entry.name))
+          .sort()
+          .reverse()
+      : readdirSync(currentDir, { withFileTypes: true })
+          .filter((entry) => entry.isDirectory() && entry.name !== ".git")
+          .map((entry) => path.join(currentDir, entry.name))
+          .sort()
+          .reverse();
     pendingDirectories.push(...childDirectories);
   }
 
@@ -667,12 +691,18 @@ function projectRelativePath(rootDir: string, targetPath: string): string {
   return relativePath === "" ? "." : relativePath;
 }
 
-function isConcreteAutoDiscoveryInput(lockfile: ProjectLockfile): boolean {
+function isConcreteAutoDiscoveryInput(
+  lockfile: ProjectLockfile,
+  entries?: RepositoryTreeEntry[]
+): boolean {
   if (lockfile.kind === "dotnet-project") {
     return isDotnetProjectAutoDiscoveryCandidate(lockfile.path);
   }
 
   if (lockfile.kind === "yarn-lock") {
+    if (entries) {
+      return entryIsFile(entries, "package.json");
+    }
     return isFile(path.join(path.dirname(lockfile.path), "package.json"));
   }
 
@@ -865,7 +895,42 @@ function isListedXcodePackageResolvedPath(relativePath: string): boolean {
   );
 }
 
-function findKnownLockfiles(dir: string): string[] {
+function findKnownLockfiles(
+  dir: string,
+  entries?: RepositoryTreeEntry[],
+  inventory?: RepositoryTreeInventory
+): string[] {
+  if (entries) {
+    const directLockfiles = KNOWN_LOCKFILES.filter((lockfile) => entryIsFile(entries, lockfile));
+    const nestedLockfiles = KNOWN_NESTED_LOCKFILES.filter((lockfile) =>
+      inventory
+        ? fileExistsInInventory(inventory, path.join(dir, lockfile))
+        : entryIsFile(entries, lockfile)
+    );
+    const gradleDependencyLockfiles = findGradleDependencyLockfiles(dir, entries, inventory);
+    const dotnetProjects = findDotnetProjectFiles(dir, entries);
+    const xcodeSwiftPackageResolvedFiles = findXcodeSwiftPackageResolvedFiles(dir, entries, inventory);
+    const namedPylockTomlFiles = findNamedPylockTomlFiles(dir, entries);
+
+    return normalizeCompanionLockfiles([
+      ...directLockfiles,
+      ...nestedLockfiles,
+      ...gradleDependencyLockfiles,
+      ...dotnetProjects,
+      ...xcodeSwiftPackageResolvedFiles,
+      ...namedPylockTomlFiles
+    ])
+      .filter((lockfileName) => {
+        const lockfilePath = path.join(dir, lockfileName);
+        const kind = supportedKindForLockfilePath(lockfilePath);
+        return kind === undefined || isConcreteAutoDiscoveryInput({
+          kind,
+          path: lockfilePath
+        }, entries);
+      })
+      .sort();
+  }
+
   const directLockfiles = KNOWN_LOCKFILES.filter((lockfile) => isFile(path.join(dir, lockfile)));
   const nestedLockfiles = KNOWN_NESTED_LOCKFILES.filter((lockfile) => isFile(path.join(dir, lockfile)));
   const gradleDependencyLockfiles = findGradleDependencyLockfiles(dir);
@@ -892,12 +957,30 @@ function findKnownLockfiles(dir: string): string[] {
     .sort();
 }
 
-function hasKnownProjectManifest(dir: string): boolean {
+function hasKnownProjectManifest(
+  dir: string,
+  entries?: RepositoryTreeEntry[],
+  inventory?: RepositoryTreeInventory
+): boolean {
+  if (entries) {
+    return KNOWN_PROJECT_MANIFESTS.some((manifest) =>
+      inventory
+        ? fileExistsInInventory(inventory, path.join(dir, manifest))
+        : entryExists(entries, manifest)
+    )
+      || findDotnetProjectFiles(dir, entries).length > 0;
+  }
   return KNOWN_PROJECT_MANIFESTS.some((manifest) => existsSync(path.join(dir, manifest)))
     || findDotnetProjectFiles(dir).length > 0;
 }
 
-function findDotnetProjectFiles(dir: string): string[] {
+function findDotnetProjectFiles(dir: string, entries?: RepositoryTreeEntry[]): string[] {
+  if (entries) {
+    return entries
+      .filter((entry) => entry.kind === "file" && entry.name.toLowerCase().endsWith(".csproj"))
+      .map((entry) => entry.name)
+      .sort();
+  }
   try {
     return readdirSync(dir)
       .filter((entry) => entry.toLowerCase().endsWith(".csproj"))
@@ -908,8 +991,20 @@ function findDotnetProjectFiles(dir: string): string[] {
   }
 }
 
-function findGradleDependencyLockfiles(dir: string): string[] {
+function findGradleDependencyLockfiles(
+  dir: string,
+  entries?: RepositoryTreeEntry[],
+  inventory?: RepositoryTreeInventory
+): string[] {
   const lockDir = path.join(dir, GRADLE_DEPENDENCY_LOCKS_DIR);
+  if (entries) {
+    const lockEntries = inventory ? listDirectoryEntries(lockDir, inventory) : [];
+    const lockfiles = lockEntries
+      .filter((entry) => entry.kind === "file" && entry.name.toLowerCase().endsWith(".lockfile"))
+      .map((entry) => entry.name)
+      .sort();
+    return lockfiles.length > 0 ? [GRADLE_DEPENDENCY_LOCKS_DIR] : [];
+  }
   try {
     const lockfiles = readdirSync(lockDir)
       .filter((entry) => entry.toLowerCase().endsWith(".lockfile"))
@@ -967,7 +1062,19 @@ function normalizeCompanionLockfiles(lockfiles: string[]): string[] {
   return normalized;
 }
 
-function findXcodeSwiftPackageResolvedFiles(dir: string): string[] {
+function findXcodeSwiftPackageResolvedFiles(
+  dir: string,
+  entries?: RepositoryTreeEntry[],
+  inventory?: RepositoryTreeInventory
+): string[] {
+  if (entries) {
+    return entries
+      .flatMap((entry) => xcodePackageResolvedCandidates(entry.name))
+      .filter((candidate) => inventory
+        ? fileExistsInInventory(inventory, path.join(dir, candidate))
+        : false)
+      .sort();
+  }
   try {
     return readdirSync(dir)
       .flatMap((entry) => xcodePackageResolvedCandidates(entry))
@@ -1076,7 +1183,13 @@ function supportedLockfileNames(): string[] {
   return ["package.json (dependency-free)", ...Object.keys(SUPPORTED_LOCKFILES), "pylock.<name>.toml", ...KNOWN_NESTED_LOCKFILES, GRADLE_DEPENDENCY_LOCKS_DIR, path.join(GRADLE_DEPENDENCY_LOCKS_DIR, "*.lockfile"), "*.csproj", "*.cdx.json", "*.spdx.json", "*.spdx", "*.spdx.rdf", "*.spdx.rdf.xml", "*.cdx.xml"];
 }
 
-function findDependencyFreePackageJsonManifest(dir: string): string | undefined {
+function findDependencyFreePackageJsonManifest(
+  dir: string,
+  entries?: RepositoryTreeEntry[]
+): string | undefined {
+  if (entries && !entryIsFile(entries, "package.json")) {
+    return undefined;
+  }
   const packageJsonPath = path.join(dir, "package.json");
   if (!isFile(packageJsonPath)) {
     return undefined;
@@ -1086,7 +1199,10 @@ function findDependencyFreePackageJsonManifest(dir: string): string | undefined 
   return parsed.ok ? "package.json" : undefined;
 }
 
-function hasKnownLockfileDirectoryPath(dir: string): boolean {
+function hasKnownLockfileDirectoryPath(dir: string, entries?: RepositoryTreeEntry[]): boolean {
+  if (entries) {
+    return KNOWN_LOCKFILES.some((lockfile) => entryIsDirectory(entries, lockfile));
+  }
   return KNOWN_LOCKFILES.some((lockfile) => {
     const lockfilePath = path.join(dir, lockfile);
     return existsSync(lockfilePath) && isDirectory(lockfilePath);
@@ -1144,7 +1260,17 @@ function rootDirForGradleDependencyLockInput(lockfilePath: string): string {
     : path.dirname(path.dirname(path.dirname(lockfilePath)));
 }
 
-function findNamedPylockTomlFiles(dir: string): string[] {
+function findNamedPylockTomlFiles(dir: string, entries?: RepositoryTreeEntry[]): string[] {
+  if (entries) {
+    return entries
+      .filter((entry) =>
+        entry.kind === "file"
+        && entry.name !== "pylock.toml"
+        && isPylockTomlFile(entry.name)
+      )
+      .map((entry) => entry.name)
+      .sort();
+  }
   try {
     return readdirSync(dir)
       .filter((entry) => entry !== "pylock.toml" && isPylockTomlFile(entry))

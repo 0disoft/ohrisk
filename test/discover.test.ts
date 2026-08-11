@@ -5,8 +5,46 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 import { discoverProject } from "../src/project/discover";
+import type { RepositoryTreeInventory } from "../src/repository/tree-inventory";
 
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
+
+function buildTreeInventory(rootDir: string, layout: Record<string, string[]>): RepositoryTreeInventory {
+  const directories = new Map<string, { name: string; kind: "file" | "directory" }[]>();
+  let entryCount = 0;
+
+  for (const [relativeDir, names] of Object.entries(layout)) {
+    const parts = relativeDir === "." ? [] : relativeDir.split(path.sep);
+    let current = rootDir;
+    if (!directories.has(current)) {
+      directories.set(current, []);
+    }
+    for (const part of parts) {
+      const parentEntries = directories.get(current) ?? [];
+      if (!parentEntries.some((entry) => entry.name === part && entry.kind === "directory")) {
+        parentEntries.push({ name: part, kind: "directory" });
+        entryCount += 1;
+      }
+      current = path.join(current, part);
+      if (!directories.has(current)) {
+        directories.set(current, []);
+      }
+    }
+    const entries = directories.get(current) ?? [];
+    for (const name of names) {
+      entries.push(name.endsWith("/")
+        ? { name: name.slice(0, -1), kind: "directory" as const }
+        : { name, kind: "file" as const });
+      entryCount += 1;
+    }
+  }
+
+  return {
+    rootDir,
+    directories,
+    entryCount
+  };
+}
 
 describe("discoverProject", () => {
   test("finds a bun.lock project", () => {
@@ -3052,6 +3090,82 @@ describe("discoverProject", () => {
     expect(result.error.code).toBe("NO_SUPPORTED_LOCKFILE");
     expect(result.error.details).toMatchObject({
       rootDir: projectDir
+    });
+  });
+
+  describe("inventory-backed discovery", () => {
+    test("tree discovery consumes a validated inventory without re-walking the filesystem", () => {
+      const rootDir = mkdtempSync(path.join(tmpdir(), "ohrisk-discover-inventory-"));
+
+      try {
+        const inventory = buildTreeInventory(rootDir, {
+          ".": ["apps/"],
+          [path.join("apps", "a")]: ["bun.lock"]
+        });
+        rmSync(rootDir, { recursive: true, force: true });
+
+        const result = discoverProject({
+          cwd: rootDir,
+          searchMode: "tree",
+          autoMergeSameRoot: true,
+          autoMergeDescendantProjects: true,
+          inventory
+        });
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.lockfile.path).toBe(
+            path.join(rootDir, "apps", "a", "bun.lock")
+          );
+          expect(result.value.lockfile.kind).toBe("bun");
+        }
+      } finally {
+        rmSync(rootDir, { recursive: true, force: true });
+      }
+    });
+
+    test("inventory-backed discovery matches filesystem discovery for the same tree", () => {
+      const rootDir = mkdtempSync(path.join(tmpdir(), "ohrisk-discover-inventory-match-"));
+
+      try {
+        mkdirSync(path.join(rootDir, "apps", "a"), { recursive: true });
+        writeFileSync(path.join(rootDir, "apps", "a", "bun.lock"), "lockfile", "utf8");
+        mkdirSync(path.join(rootDir, "tools"), { recursive: true });
+        writeFileSync(
+          path.join(rootDir, "tools", "package.json"),
+          JSON.stringify({ name: "tools" }),
+          "utf8"
+        );
+
+        const inventory = buildTreeInventory(rootDir, {
+          ".": ["apps/", "tools/"],
+          [path.join("apps", "a")]: ["bun.lock"],
+          tools: ["package.json"]
+        });
+
+        const filesystemResult = discoverProject({
+          cwd: rootDir,
+          searchMode: "tree",
+          autoMergeSameRoot: true,
+          autoMergeDescendantProjects: true
+        });
+        const inventoryResult = discoverProject({
+          cwd: rootDir,
+          searchMode: "tree",
+          autoMergeSameRoot: true,
+          autoMergeDescendantProjects: true,
+          inventory
+        });
+
+        expect(inventoryResult.ok).toBe(filesystemResult.ok);
+        if (filesystemResult.ok && inventoryResult.ok) {
+          expect(inventoryResult.value.lockfile).toEqual(filesystemResult.value.lockfile);
+          expect(inventoryResult.value.lockfiles).toEqual(filesystemResult.value.lockfiles);
+          expect(inventoryResult.value.rootDir).toBe(filesystemResult.value.rootDir);
+        }
+      } finally {
+        rmSync(rootDir, { recursive: true, force: true });
+      }
     });
   });
 });

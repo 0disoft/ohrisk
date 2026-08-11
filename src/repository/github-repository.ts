@@ -11,6 +11,7 @@ import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
 import { err, isErr, ok, type Result } from "../shared/result";
+import type { RepositoryTreeInventory } from "./tree-inventory";
 
 export type GitHubRepository = {
   url: string;
@@ -34,6 +35,7 @@ export type RepositorySymbolicLinkSummary = {
 
 export type ClonedRepository = {
   rootDir: string;
+  inventory?: RepositoryTreeInventory;
   submodules: RepositorySubmoduleSummary;
   symbolicLinks: RepositorySymbolicLinkSummary;
   nonPortablePaths: RepositorySymbolicLinkSummary;
@@ -217,6 +219,7 @@ export const cloneGitHubRepository: RepositoryCloner = async (repository, option
 
     return ok({
       rootDir: repositoryRoot,
+      inventory: materialized.value.inventory,
       submodules: validatedTree.value.submodules,
       symbolicLinks: validatedTree.value.symbolicLinks,
       nonPortablePaths: validatedTree.value.nonPortablePaths,
@@ -530,14 +533,19 @@ function classifyRepositoryPath(
   return ok("portable");
 }
 
-function validateMaterializedTree(repositoryRoot: string): Result<void, OhriskError> {
+function validateMaterializedTree(repositoryRoot: string): Result<{
+  entryCount: number;
+  inventory: RepositoryTreeInventory;
+}, OhriskError> {
   const pending = [repositoryRoot];
+  const directories = new Map<string, { name: string; kind: "file" | "directory" }[]>();
   let entries = 0;
   let totalBytes = 0;
 
   while (pending.length > 0) {
     const directory = pending.pop();
     if (!directory) continue;
+    const inventoryEntries: { name: string; kind: "file" | "directory" }[] = [];
     for (const name of readdirSync(directory)) {
       if (directory === repositoryRoot && name === ".git") continue;
       const entryPath = path.join(directory, name);
@@ -550,12 +558,14 @@ function validateMaterializedTree(repositoryRoot: string): Result<void, OhriskEr
         return err(repositoryTreeError("materialized_symbolic_link"));
       }
       if (stats.isDirectory()) {
+        inventoryEntries.push({ name, kind: "directory" });
         pending.push(entryPath);
         continue;
       }
       if (!stats.isFile()) {
         return err(repositoryTreeError("materialized_special_file"));
       }
+      inventoryEntries.push({ name, kind: "file" });
       totalBytes += stats.size;
       if (stats.size > MAX_FILE_BYTES || totalBytes > MAX_TREE_BYTES) {
         return err(repositoryLimitError(
@@ -565,9 +575,17 @@ function validateMaterializedTree(repositoryRoot: string): Result<void, OhriskEr
         ));
       }
     }
+    directories.set(directory, inventoryEntries);
   }
 
-  return ok(undefined);
+  return ok({
+    entryCount: entries,
+    inventory: {
+      rootDir: repositoryRoot,
+      directories,
+      entryCount: entries
+    }
+  });
 }
 
 function splitNullTerminated(buffer: Buffer): Buffer[] {

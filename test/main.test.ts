@@ -8629,6 +8629,74 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
     expect(stderr.join("\n")).not.toContain(missingRoot);
   });
 
+  test("remote scans discover projects from the validated tree inventory", async () => {
+    const invocationRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-remote-inventory-"));
+    const temporaryRepository = mkdtempSync(path.join(tmpdir(), "ohrisk-remote-inventory-checkout-"));
+    const nestedRoot = path.join(temporaryRepository, "apps", "a");
+
+    try {
+      mkdirSync(nestedRoot, { recursive: true });
+      writeFileSync(
+        path.join(nestedRoot, "bun.lock"),
+        readFileSync(path.join(fixturesDir, "bun-project", "bun.lock"), "utf8"),
+        "utf8"
+      );
+      const directories = new Map<string, { name: string; kind: "file" | "directory" }[]>();
+      directories.set(temporaryRepository, [{ name: "apps", kind: "directory" }]);
+      directories.set(path.join(temporaryRepository, "apps"), [{ name: "a", kind: "directory" }]);
+      directories.set(nestedRoot, [{ name: "bun.lock", kind: "file" }]);
+
+      const { io, stdout, stderr } = createTestIO(invocationRoot);
+      io.cloneRepository = async () => ok({
+        rootDir: temporaryRepository,
+        inventory: {
+          rootDir: temporaryRepository,
+          directories,
+          entryCount: 3
+        },
+        submodules: {
+          total: 0,
+          paths: [],
+          pathsTruncated: false
+        },
+        symbolicLinks: {
+          total: 0,
+          paths: [],
+          pathsTruncated: false
+        },
+        nonPortablePaths: {
+          total: 0,
+          paths: [],
+          pathsTruncated: false
+        },
+        cleanup: () => {}
+      });
+
+      const exitCode = await main(
+        [
+          "scan",
+          "--json",
+          "--cache-dir",
+          path.join(invocationRoot, "cache"),
+          "https://github.com/0disoft/laqu.git"
+        ],
+        io
+      );
+
+      expect(exitCode).toBe(0);
+      const payload = JSON.parse(stdout.join("\n")) as {
+        lockfile?: { kind: string; path: string };
+        status?: string;
+      };
+      expect(payload.lockfile?.kind).toBe("bun");
+      expect(payload.lockfile?.path).toBe("bun.lock");
+      expect(stderr.join("\n")).not.toContain("PROJECT_DISCOVERY_FAILED");
+    } finally {
+      rmSync(invocationRoot, { recursive: true, force: true });
+      rmSync(temporaryRepository, { recursive: true, force: true });
+    }
+  });
+
   describe("command cancellation", () => {
     test("a pre-aborted caller signal cancels a scan before evidence or report writes", async () => {
       const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-cancel-scan-"));
