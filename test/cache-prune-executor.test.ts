@@ -29,9 +29,9 @@ describe("executeCachePrunePlan", () => {
     });
 
     expect(result.completed).toBe(false);
-    expect(removedEntries).toEqual([entries[0]?.path]);
+    expect(removedEntries).toEqual(["index/a.json"]);
     expect(removedObjects).toEqual([]);
-    expect(result.remainingEntries.map((item) => item.path)).toEqual([entries[1]?.path]);
+    expect(result.remainingEntries.map((item) => item.path)).toEqual(["index/b.json"]);
   });
 
   test("removes unreferenced objects only after every planned index mutation", () => {
@@ -43,7 +43,7 @@ describe("executeCachePrunePlan", () => {
       entries,
       objectSizes: new Map([["shared", 4], ["old", 3], ["orphan", 2]]),
       plan: {
-        removeEntryPaths: [entries[0]!.path, entries[2]!.path],
+        removeEntryPaths: ["index/one.json", "index/old.json"],
         removeObjectDigests: ["old", "orphan", "shared"]
       },
       shouldStop: () => false,
@@ -58,9 +58,9 @@ describe("executeCachePrunePlan", () => {
     });
 
     expect(result.completed).toBe(true);
-    expect(removedEntries).toEqual([entries[0]!.path, entries[2]!.path]);
+    expect(removedEntries).toEqual(["index/one.json", "index/old.json"]);
     expect(removedObjects).toEqual(["old", "orphan"]);
-    expect(result.remainingEntries.map((item) => item.path)).toEqual([entries[1]!.path]);
+    expect(result.remainingEntries.map((item) => item.path)).toEqual(["index/two.json"]);
     expect([...result.remainingObjectSizes]).toEqual([["shared", 4]]);
     expect(result.removedObjectCount).toBe(2);
     expect(result.removedBytes).toBe(5);

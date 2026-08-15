@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: b6ca63cab98e54a00c87dd537bb40c29cd107d548de3d9469be16cd675cf4521
+// ohrisk-action-source-sha256: 3b36fbfd70b58f257c6cdbd796cdff067542a54f8c1e9cad95b69da883d3cf4a
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19712,14 +19712,13 @@ var package_default = {
     "test:coverage": "bun scripts/check-coverage.ts",
     "test:fuzz": "bun test test/parser-fuzz.test.ts",
     typecheck: "tsc -p tsconfig.json",
-    "typecheck:strict-source": "tsc -p tsconfig.strict-source.json",
     lint: "tsc -p tsconfig.lint.json && bun scripts/check-source-hygiene.ts",
     "format:check": "bun scripts/check-format.ts",
     "version:sync": "bun scripts/sync-version-references.ts",
     "release:notes": "bun scripts/extract-release-notes.ts",
     "verify:docs": "bun scripts/check-version-references.ts",
     "check:action-bundle": "bun scripts/check-action-bundle.ts",
-    check: "bun run format:check && bun run lint && bun run typecheck && bun run typecheck:strict-source && bun run verify:docs && bun run test:schemas && bun test && bun run test:fuzz && bun run check:action-bundle",
+    check: "bun run format:check && bun run lint && bun run typecheck && bun run verify:docs && bun run test:schemas && bun test && bun run test:fuzz && bun run check:action-bundle",
     "verify:release": "bun run check && bun run test:coverage && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts",
     "test:schemas": "bun test test/report-schema.test.ts"
   },

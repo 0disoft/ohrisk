@@ -63,10 +63,11 @@ describe("machine-readable report schemas", () => {
   test("keeps every packaged schema identifier aligned with runtime constants", () => {
     schemaRegistry.assertSupportedKeywords();
 
-    for (const [[, identifier], schema] of schemaCases.map((entry, index) => [
-      entry,
-      schemas[index]
-    ] as const)) {
+    for (const [index, [, identifier]] of schemaCases.entries()) {
+      const schema = schemas[index];
+      if (schema === undefined) {
+        throw new Error(`Missing packaged schema for ${identifier}.`);
+      }
       expect(schema).not.toBeBoolean();
       if (typeof schema === "boolean") {
         throw new Error("Expected an object JSON Schema.");

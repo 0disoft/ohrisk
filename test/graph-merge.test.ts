@@ -282,9 +282,13 @@ describe("mergeDependencyGraphs", () => {
     }];
 
     const merged = mergeDependencyGraphs([left, right]);
+    const [evidence] = merged.embeddedEvidence ?? [];
+    if (evidence === undefined) {
+      throw new Error("Expected merged embedded evidence.");
+    }
 
-    expect(merged.embeddedEvidence?.[0]).not.toHaveProperty("conflictingLicenseClaims");
-    expect(merged.embeddedEvidence?.[0].metadataLicenses).toEqual(["MIT", "Apache-2.0"]);
+    expect(evidence).not.toHaveProperty("conflictingLicenseClaims");
+    expect(evidence.metadataLicenses).toEqual(["MIT", "Apache-2.0"]);
   });
 
   test("keeps merged finding IDs stable under merge input order", () => {

@@ -503,9 +503,13 @@ describe("persistent artifact cache", () => {
 
   test("keeps stale count at the expiry boundary and counts corrupt entries", () => {
     const inventory = syntheticInventory(3);
-    inventory.entries[0].index.expiresAt = 2_000;
-    inventory.entries[1].index.expiresAt = 2_001;
-    inventory.entries[2].index.expiresAt = 2_000;
+    const [first, second, third] = inventory.entries;
+    if (first === undefined || second === undefined || third === undefined) {
+      throw new Error("Expected three synthetic cache entries.");
+    }
+    first.index.expiresAt = 2_000;
+    second.index.expiresAt = 2_001;
+    third.index.expiresAt = 2_000;
     inventory.corruptEntryCount = 4;
 
     const status = statusFromInventory(inventory, 2_000);

@@ -17,7 +17,7 @@ function createTarEntry(name: string, data: Buffer, type = "0", linkName = ""): 
 
   for (let i = 148; i < 156; i++) header[i] = 0x20;
   let checksum = 0;
-  for (let i = 0; i < 512; i++) checksum += header[i];
+  for (let i = 0; i < 512; i++) checksum += header.readUInt8(i);
   const checksumStr = checksum.toString(8).padStart(6, "0") + "\x00 ";
   header.write(checksumStr, 148, "ascii");
 

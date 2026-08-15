@@ -448,16 +448,20 @@ function buildNixDiamondFixture(depth: number, includeDescendant = false): strin
     };
   }
 
-  nodes.root = { inputs: { [levelIds[0][0]]: levelIds[0][0] } };
+  const rootLevel = requiredFixtureItem(levelIds, 0, "root level");
+  const rootKey = requiredFixtureItem(rootLevel, 0, "root node");
+  nodes.root = { inputs: { [rootKey]: rootKey } };
   for (let level = 0; level < depth; level += 1) {
-    for (const [index, key] of levelIds[level].entries()) {
+    const currentLevel = requiredFixtureItem(levelIds, level, `level ${level}`);
+    const nextLevel = requiredFixtureItem(levelIds, level + 1, `level ${level + 1}`);
+    for (const [index, key] of currentLevel.entries()) {
       (nodes[key] as Record<string, unknown>).inputs = {
-        left: levelIds[level + 1][index * 2],
-        right: levelIds[level + 1][index * 2 + 1]
+        left: requiredFixtureItem(nextLevel, index * 2, `left child at level ${level + 1}`),
+        right: requiredFixtureItem(nextLevel, index * 2 + 1, `right child at level ${level + 1}`)
       };
     }
   }
-  for (const key of levelIds[depth]) {
+  for (const key of requiredFixtureItem(levelIds, depth, `leaf level ${depth}`)) {
     (nodes[key] as Record<string, unknown>).inputs = {
       ...(includeDescendant ? { child: "diamond-descendant" } : {}),
       sink: sinkKey
@@ -465,6 +469,14 @@ function buildNixDiamondFixture(depth: number, includeDescendant = false): strin
   }
 
   return JSON.stringify({ version: 7, root: "root", nodes });
+}
+
+function requiredFixtureItem<T>(items: readonly T[], index: number, label: string): T {
+  const item = items[index];
+  if (item === undefined) {
+    throw new Error(`Missing ${label} in generated Nix fixture.`);
+  }
+  return item;
 }
 
 function buildNixChainFixture(length: number): string {

@@ -722,20 +722,22 @@ function buildSpdxDiamondFixture(depth: number, reverseOrder = false): string {
   packages.push(spdxPackage(sinkId, `diamond-${counter}`, `1.0.${counter}`));
 
   for (let level = 0; level < depth; level += 1) {
-    for (const [index, spdxId] of levelIds[level].entries()) {
+    const currentLevel = requiredFixtureItem(levelIds, level, `level ${level}`);
+    const nextLevel = requiredFixtureItem(levelIds, level + 1, `level ${level + 1}`);
+    for (const [index, spdxId] of currentLevel.entries()) {
       relationships.push({
         spdxElementId: spdxId,
         relationshipType: "DEPENDS_ON",
-        relatedSpdxElement: levelIds[level + 1][index * 2]
+        relatedSpdxElement: requiredFixtureItem(nextLevel, index * 2, "left child")
       });
       relationships.push({
         spdxElementId: spdxId,
         relationshipType: "DEPENDS_ON",
-        relatedSpdxElement: levelIds[level + 1][index * 2 + 1]
+        relatedSpdxElement: requiredFixtureItem(nextLevel, index * 2 + 1, "right child")
       });
     }
   }
-  for (const spdxId of levelIds[depth]) {
+  for (const spdxId of requiredFixtureItem(levelIds, depth, `leaf level ${depth}`)) {
     relationships.push({
       spdxElementId: spdxId,
       relationshipType: "DEPENDS_ON",
@@ -750,7 +752,7 @@ function buildSpdxDiamondFixture(depth: number, reverseOrder = false): string {
   return JSON.stringify({
     spdxVersion: "SPDX-2.3",
     name: "fixture-spdx-diamond",
-    documentDescribes: [levelIds[0][0]],
+    documentDescribes: [requiredFixtureItem(requiredFixtureItem(levelIds, 0, "root level"), 0, "root node")],
     packages,
     relationships
   });
@@ -888,11 +890,19 @@ function shuffledRelationships(
   const result = [...relationships];
   for (let index = result.length - 1; index > 0; index -= 1) {
     const swapIndex = (index * 7 + 1) % (index + 1);
-    const current = result[index];
-    result[index] = result[swapIndex] ?? result[index];
+    const current = requiredFixtureItem(result, index, "shuffle source");
+    result[index] = requiredFixtureItem(result, swapIndex, "shuffle target");
     result[swapIndex] = current;
   }
   return result;
+}
+
+function requiredFixtureItem<T>(items: readonly T[], index: number, label: string): T {
+  const item = items[index];
+  if (item === undefined) {
+    throw new Error(`Missing ${label} in generated SPDX fixture.`);
+  }
+  return item;
 }
 
 function buildSpdxStarFixture(childCount: number, duplicateEdges = false): string {

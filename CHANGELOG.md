@@ -2,10 +2,9 @@
 
 ## 1.15.0 - Unreleased
 
-- Product source now passes a dedicated `noUncheckedIndexedAccess` TypeScript
-  gate. Parser and path code explicitly handles missing indexed values; test
-  fixture migration and `exactOptionalPropertyTypes` remain separate follow-up
-  stages rather than being hidden behind assertions.
+- The complete TypeScript project now enforces `noUncheckedIndexedAccess`.
+  Parsers, path code, and generated test fixtures explicitly reject missing
+  indexed values instead of hiding them behind non-null assertions.
 - Development manifests now allow compatible updates within each reviewed
   major using caret ranges while `bun.lock` continues to pin exact resolved
   versions and integrity hashes. Mutable `latest` exceptions are no longer
