@@ -55,6 +55,8 @@ describe("package metadata", () => {
     expect(packageJson.scripts?.["build:action"]).toBe("bun scripts/build-action.ts");
     expect(packageJson.scripts?.prepack).toBe("bun scripts/build.ts");
     expect(packageJson.scripts?.typecheck).toBe("tsc -p tsconfig.json");
+    expect(packageJson.scripts?.["typecheck:strict-source"])
+      .toBe("tsc -p tsconfig.strict-source.json");
     expect(packageJson.scripts?.lint).toBe("tsc -p tsconfig.lint.json && bun scripts/check-source-hygiene.ts");
     expect(packageJson.scripts?.["format:check"]).toBe("bun scripts/check-format.ts");
     expect(packageJson.scripts?.["test:fuzz"]).toBe("bun test test/parser-fuzz.test.ts");
@@ -64,6 +66,7 @@ describe("package metadata", () => {
     expect(packageJson.scripts?.["check:action-bundle"])
       .toBe("bun scripts/check-action-bundle.ts");
     expect(packageJson.scripts?.check).toContain("bun run typecheck");
+    expect(packageJson.scripts?.check).toContain("bun run typecheck:strict-source");
     expect(packageJson.scripts?.check).toContain("bun run verify:docs");
     expect(packageJson.scripts?.check).toContain("bun test");
     expect(packageJson.scripts?.check).toContain("bun run test:fuzz");
@@ -78,6 +81,7 @@ describe("package metadata", () => {
       "scripts/**/*.ts"
     ]));
     expect(existsSync(path.join(repoRoot, "tsconfig.release.json"))).toBe(true);
+    expect(existsSync(path.join(repoRoot, "tsconfig.strict-source.json"))).toBe(true);
     expect(releaseTsconfig.extends).toBe("./tsconfig.json");
     expect(releaseTsconfig.files).toBeUndefined();
     expect(releaseTsconfig.include).toBeUndefined();

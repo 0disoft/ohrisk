@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 01b718e84fabad0b791eccb660ce511cf2a7c35056245ec3941cd47de8b603e3
+// ohrisk-action-source-sha256: b6ca63cab98e54a00c87dd537bb40c29cd107d548de3d9469be16cd675cf4521
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19712,13 +19712,14 @@ var package_default = {
     "test:coverage": "bun scripts/check-coverage.ts",
     "test:fuzz": "bun test test/parser-fuzz.test.ts",
     typecheck: "tsc -p tsconfig.json",
+    "typecheck:strict-source": "tsc -p tsconfig.strict-source.json",
     lint: "tsc -p tsconfig.lint.json && bun scripts/check-source-hygiene.ts",
     "format:check": "bun scripts/check-format.ts",
     "version:sync": "bun scripts/sync-version-references.ts",
     "release:notes": "bun scripts/extract-release-notes.ts",
     "verify:docs": "bun scripts/check-version-references.ts",
     "check:action-bundle": "bun scripts/check-action-bundle.ts",
-    check: "bun run format:check && bun run lint && bun run typecheck && bun run verify:docs && bun run test:schemas && bun test && bun run test:fuzz && bun run check:action-bundle",
+    check: "bun run format:check && bun run lint && bun run typecheck && bun run typecheck:strict-source && bun run verify:docs && bun run test:schemas && bun test && bun run test:fuzz && bun run check:action-bundle",
     "verify:release": "bun run check && bun run test:coverage && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts",
     "test:schemas": "bun test test/report-schema.test.ts"
   },
@@ -28612,6 +28613,9 @@ function topologicalNodeOrder(nodeOrder, parentSets) {
   while (head < queue.length) {
     const nodeKey = queue[head];
     head += 1;
+    if (nodeKey === undefined) {
+      break;
+    }
     ordered.add(nodeKey);
     order.push(nodeKey);
     for (const child of childSets.get(nodeKey) ?? []) {
@@ -28649,7 +28653,11 @@ function mergePathCandidates(input) {
   const seen = new Set([input.representative.join("\x00")]);
   const candidates = [input.representative];
   for (const parentPath of input.parentPaths) {
-    const candidate = [...parentPath, input.representative[input.representative.length - 1]];
+    const representativeNode = input.representative.at(-1);
+    if (representativeNode === undefined) {
+      continue;
+    }
+    const candidate = [...parentPath, representativeNode];
     const key = candidate.join("\x00");
     if (seen.has(key)) {
       continue;
@@ -38857,12 +38865,13 @@ function parseZigHash(hash) {
     return { format: "old", digestHex: hash.slice(4) };
   }
   const newMatch = ZIG_NEW_HASH_PATTERN.exec(hash);
-  if (newMatch && isValidZigName(newMatch[1]) && (isValidZigVersion(newMatch[2]) || isZigNakedTarballHashIdentity(newMatch[1], newMatch[2]))) {
+  const [, name, version, hashPlus] = newMatch ?? [];
+  if (name !== undefined && version !== undefined && hashPlus !== undefined && isValidZigName(name) && (isValidZigVersion(version) || isZigNakedTarballHashIdentity(name, version))) {
     return {
       format: "new",
-      name: newMatch[1],
-      version: newMatch[2],
-      hashPlus: newMatch[3]
+      name,
+      version,
+      hashPlus
     };
   }
   return null;
@@ -38889,6 +38898,9 @@ function tokenizeZon(input) {
   const len = input.length;
   while (pos < len) {
     const char = input[pos];
+    if (char === undefined) {
+      break;
+    }
     if (char === " " || char === "\t" || char === `
 ` || char === "\r") {
       pos += 1;
@@ -38964,7 +38976,11 @@ function tokenizeZon(input) {
     }
     if (/[0-9-]/.test(char)) {
       let end = pos;
-      while (end < len && /[0-9A-Za-z_.+-]/.test(input[end])) {
+      while (end < len) {
+        const numberChar = input[end];
+        if (numberChar === undefined || !/[0-9A-Za-z_.+-]/.test(numberChar)) {
+          break;
+        }
         end += 1;
       }
       const numberLiteral = input.slice(pos, end);
@@ -38994,6 +39010,9 @@ function readStringLiteral(input, start) {
   const bytes = [];
   while (pos < len) {
     const char = input[pos];
+    if (char === undefined) {
+      break;
+    }
     if (char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) {
       return err(zigZonParseError("raw_control_character_in_string"));
     }
@@ -39044,8 +39063,12 @@ function readStringLiteral(input, start) {
           let codePoint2 = 0;
           let digitCount = 0;
           while (end < len && input[end] !== "}") {
-            const digit = Number.parseInt(input[end], 16);
-            if (!/[0-9a-fA-F]/.test(input[end]) || Number.isNaN(digit)) {
+            const digitChar = input[end];
+            if (digitChar === undefined) {
+              return err(zigZonParseError("invalid_unicode_escape"));
+            }
+            const digit = Number.parseInt(digitChar, 16);
+            if (!/[0-9a-fA-F]/.test(digitChar) || Number.isNaN(digit)) {
               return err(zigZonParseError("invalid_unicode_escape"));
             }
             codePoint2 = codePoint2 * 16 + digit;
@@ -39109,6 +39132,9 @@ function readDotIdent(input, start) {
   }
   while (pos < len) {
     const char = input[pos];
+    if (char === undefined) {
+      break;
+    }
     if (/[A-Za-z0-9_]/.test(char)) {
       result += char;
       pos += 1;
@@ -39765,6 +39791,9 @@ function fileExistsInInventory(inventory, absolutePath) {
   let currentDir = inventory.rootDir;
   for (let index = 0;index < segments.length - 1; index += 1) {
     const segment = segments[index];
+    if (segment === undefined) {
+      return false;
+    }
     const entries = inventory.directories.get(currentDir);
     if (!entries?.some((entry) => entry.name === segment && entry.kind === "directory")) {
       return false;
@@ -39772,6 +39801,9 @@ function fileExistsInInventory(inventory, absolutePath) {
     currentDir = path47.join(currentDir, segment);
   }
   const finalName = segments[segments.length - 1];
+  if (finalName === undefined) {
+    return false;
+  }
   return inventory.directories.get(currentDir)?.some((entry) => entry.name === finalName && entry.kind === "file") ?? false;
 }
 
@@ -40376,7 +40408,7 @@ function normalizeListedProjectPath(value) {
 }
 function isListedXcodePackageResolvedPath(relativePath) {
   const segments = relativePath.split("/");
-  return segments.length === 5 && segments[0]?.endsWith(".xcodeproj") && segments.slice(1).join("/") === "project.xcworkspace/xcshareddata/swiftpm/Package.resolved" || segments.length === 4 && segments[0]?.endsWith(".xcworkspace") && segments.slice(1).join("/") === "xcshareddata/swiftpm/Package.resolved";
+  return segments.length === 5 && segments[0] !== undefined && segments[0].endsWith(".xcodeproj") && segments.slice(1).join("/") === "project.xcworkspace/xcshareddata/swiftpm/Package.resolved" || segments.length === 4 && segments[0] !== undefined && segments[0].endsWith(".xcworkspace") && segments.slice(1).join("/") === "xcshareddata/swiftpm/Package.resolved";
 }
 function findKnownLockfiles(dir, entries, inventory) {
   if (entries) {

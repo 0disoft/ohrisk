@@ -270,19 +270,22 @@ export function parseZigHash(hash: string): ZigHashParse {
   }
 
   const newMatch = ZIG_NEW_HASH_PATTERN.exec(hash);
+  const [, name, version, hashPlus] = newMatch ?? [];
   if (
-    newMatch
-    && isValidZigName(newMatch[1])
+    name !== undefined
+    && version !== undefined
+    && hashPlus !== undefined
+    && isValidZigName(name)
     && (
-      isValidZigVersion(newMatch[2])
-      || isZigNakedTarballHashIdentity(newMatch[1], newMatch[2])
+      isValidZigVersion(version)
+      || isZigNakedTarballHashIdentity(name, version)
     )
   ) {
     return {
       format: "new",
-      name: newMatch[1],
-      version: newMatch[2],
-      hashPlus: newMatch[3]
+      name,
+      version,
+      hashPlus
     };
   }
 
@@ -326,6 +329,9 @@ function tokenizeZon(input: string): Result<Token[], OhriskError> {
 
   while (pos < len) {
     const char = input[pos];
+    if (char === undefined) {
+      break;
+    }
 
     if (char === " " || char === "\t" || char === "\n" || char === "\r") {
       pos += 1;
@@ -413,7 +419,11 @@ function tokenizeZon(input: string): Result<Token[], OhriskError> {
 
     if (/[0-9-]/.test(char)) {
       let end = pos;
-      while (end < len && /[0-9A-Za-z_.+-]/.test(input[end])) {
+      while (end < len) {
+        const numberChar = input[end];
+        if (numberChar === undefined || !/[0-9A-Za-z_.+-]/.test(numberChar)) {
+          break;
+        }
         end += 1;
       }
       const numberLiteral = input.slice(pos, end);
@@ -452,6 +462,9 @@ function readStringLiteral(
 
   while (pos < len) {
     const char = input[pos];
+    if (char === undefined) {
+      break;
+    }
 
     if (char.charCodeAt(0) < 0x20 || char.charCodeAt(0) === 0x7f) {
       return err(zigZonParseError("raw_control_character_in_string"));
@@ -487,8 +500,12 @@ function readStringLiteral(
           let codePoint = 0;
           let digitCount = 0;
           while (end < len && input[end] !== "}") {
-            const digit = Number.parseInt(input[end], 16);
-            if (!/[0-9a-fA-F]/.test(input[end]) || Number.isNaN(digit)) {
+            const digitChar = input[end];
+            if (digitChar === undefined) {
+              return err(zigZonParseError("invalid_unicode_escape"));
+            }
+            const digit = Number.parseInt(digitChar, 16);
+            if (!/[0-9a-fA-F]/.test(digitChar) || Number.isNaN(digit)) {
               return err(zigZonParseError("invalid_unicode_escape"));
             }
             codePoint = codePoint * 16 + digit;
@@ -569,6 +586,9 @@ function readDotIdent(
 
   while (pos < len) {
     const char = input[pos];
+    if (char === undefined) {
+      break;
+    }
     if (/[A-Za-z0-9_]/.test(char)) {
       result += char;
       pos += 1;

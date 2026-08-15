@@ -290,6 +290,9 @@ function topologicalNodeOrder(
   while (head < queue.length) {
     const nodeKey = queue[head];
     head += 1;
+    if (nodeKey === undefined) {
+      break;
+    }
     ordered.add(nodeKey);
     order.push(nodeKey);
     for (const child of childSets.get(nodeKey) ?? []) {
@@ -344,7 +347,11 @@ function mergePathCandidates(input: {
   const candidates: string[][] = [input.representative];
 
   for (const parentPath of input.parentPaths) {
-    const candidate = [...parentPath, input.representative[input.representative.length - 1]];
+    const representativeNode = input.representative.at(-1);
+    if (representativeNode === undefined) {
+      continue;
+    }
+    const candidate = [...parentPath, representativeNode];
     const key = candidate.join("\u0000");
     if (seen.has(key)) {
       continue;

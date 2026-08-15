@@ -58,6 +58,9 @@ export function fileExistsInInventory(
   let currentDir = inventory.rootDir;
   for (let index = 0; index < segments.length - 1; index += 1) {
     const segment = segments[index];
+    if (segment === undefined) {
+      return false;
+    }
     const entries = inventory.directories.get(currentDir);
     if (!entries?.some((entry) => entry.name === segment && entry.kind === "directory")) {
       return false;
@@ -66,6 +69,9 @@ export function fileExistsInInventory(
   }
 
   const finalName = segments[segments.length - 1];
+  if (finalName === undefined) {
+    return false;
+  }
   return inventory.directories.get(currentDir)
     ?.some((entry) => entry.name === finalName && entry.kind === "file") ?? false;
 }

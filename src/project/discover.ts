@@ -913,11 +913,13 @@ function isListedXcodePackageResolvedPath(relativePath: string): boolean {
   const segments = relativePath.split("/");
   return (
     segments.length === 5
-    && segments[0]?.endsWith(".xcodeproj")
+    && segments[0] !== undefined
+    && segments[0].endsWith(".xcodeproj")
     && segments.slice(1).join("/") === "project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
   ) || (
     segments.length === 4
-    && segments[0]?.endsWith(".xcworkspace")
+    && segments[0] !== undefined
+    && segments[0].endsWith(".xcworkspace")
     && segments.slice(1).join("/") === "xcshareddata/swiftpm/Package.resolved"
   );
 }
