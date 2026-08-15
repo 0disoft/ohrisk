@@ -59,6 +59,8 @@ and modules without an exact ZIP checksum are never sent to the proxy.
 - Commercial restrictions explicitly scoped to documentation or data remain
   evidence for those assets and do not override a separate package-code license;
   ambiguous or mixed-scope denials remain package restrictions.
+- SPDX `licenseDeclared` and `licenseConcluded` assertions remain separately
+  attributable; disagreement is conflicting evidence with unknown severity.
 - Waivers may suppress matching findings, but strict waiver drift can fail CI.
 - Shareable formats must avoid leaking absolute local paths.
 

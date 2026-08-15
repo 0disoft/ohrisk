@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- SPDX package evidence now preserves `licenseDeclared` and
+  `licenseConcluded` as separate assertions. When they disagree, Ohrisk keeps
+  both values, reports `conflicting-evidence`, and fails closed to unknown
+  severity instead of silently preferring the SBOM creator's conclusion.
 - Both sides of `diff` now use the same bounded Maven Central parent and
   imported-BOM model resolver as `scan` and `ci`, including exact identity
   checks and offline artifact-cache reuse. Baseline managed versions no longer

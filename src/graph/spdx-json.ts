@@ -24,7 +24,8 @@ type SpdxPackageRecord = {
   version: string;
   id: string;
   ecosystem: DependencyNode["ecosystem"];
-  licenseExpression?: string;
+  licenseDeclared?: string;
+  licenseConcluded?: string;
 };
 
 type UnsupportedSpdxDependencyField = "relationships" | "spdxElementId" | "relatedSpdxElement";
@@ -201,15 +202,16 @@ function readSpdxPackageRecords(value: unknown[]): SpdxPackageRecord[] {
       continue;
     }
 
+    const licenseDeclared = readMeaningfulSpdxLicenseValue(pkg.licenseDeclared);
+    const licenseConcluded = readMeaningfulSpdxLicenseValue(pkg.licenseConcluded);
     records.push(omitUndefined({
       spdxId: pkg.SPDXID,
       name: purl.name,
       version: purl.version,
       id: purl.id,
       ecosystem: purl.ecosystem,
-      ...(readSpdxPackageLicenseExpression(pkg) ? {
-        licenseExpression: readSpdxPackageLicenseExpression(pkg)
-      } : {})
+      licenseDeclared,
+      licenseConcluded
     }));
   }
 
@@ -238,15 +240,6 @@ function readSpdxPackageUrl(value: unknown): ReturnType<typeof parsePackageUrl> 
   }
 
   return undefined;
-}
-
-function readSpdxPackageLicenseExpression(pkg: Record<string, unknown>): string | undefined {
-  const concluded = readMeaningfulSpdxLicenseValue(pkg.licenseConcluded);
-  if (concluded) {
-    return concluded;
-  }
-
-  return readMeaningfulSpdxLicenseValue(pkg.licenseDeclared);
 }
 
 function readMeaningfulSpdxLicenseValue(value: unknown): string | undefined {
@@ -423,13 +416,23 @@ function readSpdxRootRefs(input: {
 }
 
 function spdxPackageEvidence(record: SpdxPackageRecord): LicenseEvidence {
+  const primaryLicense = record.licenseConcluded ?? record.licenseDeclared;
+  const distinctAssertions = [...new Set([
+    ...(record.licenseDeclared ? [record.licenseDeclared] : []),
+    ...(record.licenseConcluded ? [record.licenseConcluded] : [])
+  ])].sort();
   return {
     packageId: record.id,
-    ...(record.licenseExpression ? { metadataLicense: record.licenseExpression } : {}),
+    ...(primaryLicense ? { metadataLicense: primaryLicense } : {}),
     metadataSource: "SPDX",
+    ...(record.licenseDeclared ? { sbomDeclaredLicense: record.licenseDeclared } : {}),
+    ...(record.licenseConcluded ? { sbomConcludedLicense: record.licenseConcluded } : {}),
+    ...(distinctAssertions.length > 1
+      ? { conflictingLicenseClaims: distinctAssertions }
+      : {}),
     files: [],
     source: "sbom",
-    warnings: record.licenseExpression
+    warnings: primaryLicense
       ? []
       : ["SPDX package did not declare usable license evidence."]
   };
@@ -442,7 +445,8 @@ function deduplicateSpdxPackageRecords(records: SpdxPackageRecord[]): SpdxPackag
     seen.set(record.spdxId, existing
       ? omitUndefined({
           ...existing,
-          licenseExpression: existing.licenseExpression ?? record.licenseExpression
+          licenseDeclared: existing.licenseDeclared ?? record.licenseDeclared,
+          licenseConcluded: existing.licenseConcluded ?? record.licenseConcluded
         })
       : record);
   }

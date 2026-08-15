@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { BOUNDED_PATHS_MAX_PATHS_PER_NODE } from "../src/graph/bounded-dependency-paths";
 import { parseSpdxJsonText } from "../src/graph/spdx-json";
+import { normalizeLicenseEvidence } from "../src/license/normalize";
 import { buildFindingId } from "../src/policy/finding-id";
 
 describe("parseSpdxJsonText", () => {
@@ -114,6 +115,42 @@ describe("parseSpdxJsonText", () => {
       warnings: ["SPDX package did not declare usable license evidence."]
     });
     expect(evidence).not.toHaveProperty("metadataLicense");
+  });
+
+  test("preserves conflicting SPDX declared and concluded license assertions", () => {
+    const result = parseSpdxJsonText(JSON.stringify({
+      spdxVersion: "SPDX-2.3",
+      name: "fixture-spdx-conflicting-assertions",
+      documentDescribes: ["SPDXRef-Package-conflict"],
+      packages: [{
+        SPDXID: "SPDXRef-Package-conflict",
+        name: "conflicting-package",
+        licenseConcluded: "MIT",
+        licenseDeclared: "AGPL-3.0-only",
+        externalRefs: [{
+          referenceCategory: "PACKAGE-MANAGER",
+          referenceType: "purl",
+          referenceLocator: "pkg:npm/conflicting-package@1.0.0"
+        }]
+      }]
+    }), "spdx.json");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    const evidence = result.value.embeddedEvidence?.[0];
+    expect(evidence).toMatchObject({
+      packageId: "conflicting-package@1.0.0",
+      sbomConcludedLicense: "MIT",
+      sbomDeclaredLicense: "AGPL-3.0-only",
+      conflictingLicenseClaims: ["AGPL-3.0-only", "MIT"]
+    });
+    expect(normalizeLicenseEvidence(evidence!)).toMatchObject({
+      confidence: "low",
+      signals: ["conflicting-evidence"]
+    });
   });
 
   test("merges duplicate dependency relationships without dropping child edges", () => {

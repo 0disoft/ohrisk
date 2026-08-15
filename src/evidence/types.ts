@@ -50,6 +50,10 @@ export type LicenseEvidence = {
   metadataLicenseKind?: MetadataLicenseKind;
   metadataLicenses?: unknown;
   metadataSource?: string;
+  /** SPDX SBOM assertion made by the package supplier or manifest author. */
+  sbomDeclaredLicense?: string;
+  /** SPDX SBOM assertion concluded by the SBOM creator or analysis tool. */
+  sbomConcludedLicense?: string;
   files: LicenseEvidenceFile[];
   source: LicenseEvidenceSource;
   warnings: string[];

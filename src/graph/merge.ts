@@ -211,6 +211,12 @@ function mergeLicenseEvidence(left: LicenseEvidence, right: LicenseEvidence): Li
     ...(primary.metadataSource ? {} : secondary.metadataSource
       ? { metadataSource: secondary.metadataSource }
       : {}),
+    ...(primary.sbomDeclaredLicense ? {} : secondary.sbomDeclaredLicense
+      ? { sbomDeclaredLicense: secondary.sbomDeclaredLicense }
+      : {}),
+    ...(primary.sbomConcludedLicense ? {} : secondary.sbomConcludedLicense
+      ? { sbomConcludedLicense: secondary.sbomConcludedLicense }
+      : {}),
     ...(primary.packageJsonPrivate === false
       ? secondary.packageJsonPrivate === true
         ? { packageJsonPrivate: true }
@@ -271,6 +277,12 @@ function licenseClaimValues(evidence: LicenseEvidence): string[] {
   }
   if (evidence.metadataLicense) {
     values.push(evidence.metadataLicense);
+  }
+  if (evidence.sbomDeclaredLicense) {
+    values.push(evidence.sbomDeclaredLicense);
+  }
+  if (evidence.sbomConcludedLicense) {
+    values.push(evidence.sbomConcludedLicense);
   }
   if (evidence.packageJsonLicenses !== undefined) {
     values.push(JSON.stringify(evidence.packageJsonLicenses));

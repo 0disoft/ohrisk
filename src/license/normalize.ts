@@ -212,6 +212,14 @@ function collectPackageLicenseTexts(evidence: LicenseEvidence): string[] {
     texts.push(evidence.metadataLicense);
   }
 
+  if (evidence.sbomDeclaredLicense) {
+    texts.push(evidence.sbomDeclaredLicense);
+  }
+
+  if (evidence.sbomConcludedLicense) {
+    texts.push(evidence.sbomConcludedLicense);
+  }
+
   const metadataLicenseObjectType = readLicenseObjectType(evidence.metadataLicenses);
   if (metadataLicenseObjectType) {
     texts.push(metadataLicenseObjectType);
@@ -622,6 +630,14 @@ function describeEvidenceSources(evidence: LicenseEvidence): string[] {
 
   if (evidence.metadataLicenses !== undefined) {
     sources.push(`${metadataSource} licenses field`);
+  }
+
+  if (evidence.sbomDeclaredLicense) {
+    sources.push(`SPDX licenseDeclared: ${evidence.sbomDeclaredLicense}`);
+  }
+
+  if (evidence.sbomConcludedLicense) {
+    sources.push(`SPDX licenseConcluded: ${evidence.sbomConcludedLicense}`);
   }
 
   for (const file of evidence.files) {

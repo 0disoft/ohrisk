@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 73cf6651339c459b03b8995e23368aea0e63dd99d4911a23b34f08fccaa0554c
+// ohrisk-action-source-sha256: 532622a5572c34caa7745d6ccb8039a453200bba478d672f91a22c543aee46d4
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19596,7 +19596,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.38";
+var OHRISK_VERSION = "1.14.39";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -20036,6 +20036,8 @@ function mergeLicenseEvidence(left, right) {
     } : {},
     ...primary.metadataLicenses !== undefined ? {} : secondary.metadataLicenses !== undefined ? { metadataLicenses: secondary.metadataLicenses } : {},
     ...primary.metadataSource ? {} : secondary.metadataSource ? { metadataSource: secondary.metadataSource } : {},
+    ...primary.sbomDeclaredLicense ? {} : secondary.sbomDeclaredLicense ? { sbomDeclaredLicense: secondary.sbomDeclaredLicense } : {},
+    ...primary.sbomConcludedLicense ? {} : secondary.sbomConcludedLicense ? { sbomConcludedLicense: secondary.sbomConcludedLicense } : {},
     ...primary.packageJsonPrivate === false ? secondary.packageJsonPrivate === true ? { packageJsonPrivate: true } : {} : primary.packageJsonPrivate === true ? {} : secondary.packageJsonPrivate !== undefined ? { packageJsonPrivate: secondary.packageJsonPrivate } : {},
     ...primary.goModuleRequirements !== undefined || secondary.goModuleRequirements !== undefined ? {
       goModuleRequirements: unique([
@@ -20077,6 +20079,12 @@ function licenseClaimValues(evidence) {
   }
   if (evidence.metadataLicense) {
     values.push(evidence.metadataLicense);
+  }
+  if (evidence.sbomDeclaredLicense) {
+    values.push(evidence.sbomDeclaredLicense);
+  }
+  if (evidence.sbomConcludedLicense) {
+    values.push(evidence.sbomConcludedLicense);
   }
   if (evidence.packageJsonLicenses !== undefined) {
     values.push(JSON.stringify(evidence.packageJsonLicenses));
@@ -36666,15 +36674,16 @@ function readSpdxPackageRecords(value) {
     if (!purl) {
       continue;
     }
+    const licenseDeclared = readMeaningfulSpdxLicenseValue(pkg.licenseDeclared);
+    const licenseConcluded = readMeaningfulSpdxLicenseValue(pkg.licenseConcluded);
     records.push(omitUndefined({
       spdxId: pkg.SPDXID,
       name: purl.name,
       version: purl.version,
       id: purl.id,
       ecosystem: purl.ecosystem,
-      ...readSpdxPackageLicenseExpression(pkg) ? {
-        licenseExpression: readSpdxPackageLicenseExpression(pkg)
-      } : {}
+      licenseDeclared,
+      licenseConcluded
     }));
   }
   return deduplicateSpdxPackageRecords(records);
@@ -36693,13 +36702,6 @@ function readSpdxPackageUrl(value) {
     }
   }
   return;
-}
-function readSpdxPackageLicenseExpression(pkg) {
-  const concluded = readMeaningfulSpdxLicenseValue(pkg.licenseConcluded);
-  if (concluded) {
-    return concluded;
-  }
-  return readMeaningfulSpdxLicenseValue(pkg.licenseDeclared);
 }
 function readMeaningfulSpdxLicenseValue(value) {
   if (typeof value !== "string") {
@@ -36818,13 +36820,21 @@ function readSpdxRootRefs(input) {
   return inferredRoots.length > 0 ? inferredRoots : input.packages.map((pkg) => pkg.spdxId).sort();
 }
 function spdxPackageEvidence(record) {
+  const primaryLicense = record.licenseConcluded ?? record.licenseDeclared;
+  const distinctAssertions = [...new Set([
+    ...record.licenseDeclared ? [record.licenseDeclared] : [],
+    ...record.licenseConcluded ? [record.licenseConcluded] : []
+  ])].sort();
   return {
     packageId: record.id,
-    ...record.licenseExpression ? { metadataLicense: record.licenseExpression } : {},
+    ...primaryLicense ? { metadataLicense: primaryLicense } : {},
     metadataSource: "SPDX",
+    ...record.licenseDeclared ? { sbomDeclaredLicense: record.licenseDeclared } : {},
+    ...record.licenseConcluded ? { sbomConcludedLicense: record.licenseConcluded } : {},
+    ...distinctAssertions.length > 1 ? { conflictingLicenseClaims: distinctAssertions } : {},
     files: [],
     source: "sbom",
-    warnings: record.licenseExpression ? [] : ["SPDX package did not declare usable license evidence."]
+    warnings: primaryLicense ? [] : ["SPDX package did not declare usable license evidence."]
   };
 }
 function deduplicateSpdxPackageRecords(records) {
@@ -36833,7 +36843,8 @@ function deduplicateSpdxPackageRecords(records) {
     const existing = seen.get(record.spdxId);
     seen.set(record.spdxId, existing ? omitUndefined({
       ...existing,
-      licenseExpression: existing.licenseExpression ?? record.licenseExpression
+      licenseDeclared: existing.licenseDeclared ?? record.licenseDeclared,
+      licenseConcluded: existing.licenseConcluded ?? record.licenseConcluded
     }) : record);
   }
   return [...seen.values()];
@@ -55014,6 +55025,12 @@ function collectPackageLicenseTexts(evidence) {
   if (evidence.metadataLicense) {
     texts.push(evidence.metadataLicense);
   }
+  if (evidence.sbomDeclaredLicense) {
+    texts.push(evidence.sbomDeclaredLicense);
+  }
+  if (evidence.sbomConcludedLicense) {
+    texts.push(evidence.sbomConcludedLicense);
+  }
   const metadataLicenseObjectType = readLicenseObjectType(evidence.metadataLicenses);
   if (metadataLicenseObjectType) {
     texts.push(metadataLicenseObjectType);
@@ -55306,6 +55323,12 @@ function describeEvidenceSources(evidence) {
   }
   if (evidence.metadataLicenses !== undefined) {
     sources.push(`${metadataSource} licenses field`);
+  }
+  if (evidence.sbomDeclaredLicense) {
+    sources.push(`SPDX licenseDeclared: ${evidence.sbomDeclaredLicense}`);
+  }
+  if (evidence.sbomConcludedLicense) {
+    sources.push(`SPDX licenseConcluded: ${evidence.sbomConcludedLicense}`);
   }
   for (const file of evidence.files) {
     sources.push(`file: ${file.path} (${file.kind})`);
