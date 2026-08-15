@@ -65,6 +65,13 @@ export type ScanReportInput = {
   unmatchedWaivers: RiskWaiver[];
   policy?: PolicyConfigSummary;
   repository?: RemoteRepositoryReportSource;
+  completeness?: ScanCompleteness;
+};
+
+export type ScanCompleteness = {
+  status: "complete" | "partial";
+  unavailablePackageCount: number;
+  skippedRepositoryEntryCount: number;
 };
 
 export type RemoteRepositoryReportSource = {
@@ -88,8 +95,45 @@ export type RemoteRepositoryReportSource = {
   };
 };
 
+export function buildScanCompleteness(input: {
+  evidence: LicenseEvidence[];
+  repository?: RemoteRepositoryReportSource;
+}): ScanCompleteness {
+  const unavailablePackageCount = input.evidence.filter(
+    (evidence) => evidence.source === "unavailable"
+  ).length;
+  const skippedRepositoryEntryCount = input.repository
+    ? input.repository.submodules.skippedCount
+      + input.repository.symbolicLinks.skippedCount
+      + input.repository.nonPortablePaths.skippedCount
+    : 0;
+  return {
+    status: unavailablePackageCount > 0 || skippedRepositoryEntryCount > 0
+      ? "partial"
+      : "complete",
+    unavailablePackageCount,
+    skippedRepositoryEntryCount
+  };
+}
+
+function formatScanCompleteness(completeness: ScanCompleteness): string {
+  if (completeness.status === "complete") {
+    return "complete";
+  }
+  const reasons = [
+    completeness.unavailablePackageCount > 0
+      ? `${completeness.unavailablePackageCount} package evidence source${completeness.unavailablePackageCount === 1 ? "" : "s"} unavailable`
+      : undefined,
+    completeness.skippedRepositoryEntryCount > 0
+      ? `${completeness.skippedRepositoryEntryCount} repository entr${completeness.skippedRepositoryEntryCount === 1 ? "y" : "ies"} skipped`
+      : undefined
+  ].filter((reason): reason is string => reason !== undefined);
+  return `partial (${reasons.join(", ")})`;
+}
+
 export function renderScanReport(input: ScanReportInput): string {
   const summary = buildScanSummary(input);
+  const completeness = input.completeness ?? buildScanCompleteness(input);
   const nextAction = nextActionFor(input.riskFindings, input.repository);
   const thresholdSummary = buildThresholdSummary(input.riskFindings, input.failOn);
   const waiverDriftSummary = buildWaiverDriftSummary(input);
@@ -114,6 +158,7 @@ export function renderScanReport(input: ScanReportInput): string {
         dependencyGraphDiagnostics: input.graph.diagnostics ?? [],
         dependencyOrigins: dependencyProvenance(input),
         evidence: summary.evidence,
+        completeness,
         licenses: summary.licenses,
         risks: summary.risks,
         waiverMode: input.waiverMode,
@@ -151,6 +196,7 @@ export function renderScanReport(input: ScanReportInput): string {
     `Dependencies: ${summary.dependencyGraph.total} total, ${summary.dependencyGraph.direct} direct, ${summary.dependencyGraph.transitive} transitive`,
     ...renderDependencyGraphDiagnostics(input.graph.diagnostics ?? []),
     `Evidence: ${summary.evidence.files} files, ${summary.evidence.warnings} warnings`,
+    `Completeness: ${formatScanCompleteness(completeness)}`,
     `Licenses: ${summary.licenses.highConfidence} high-confidence, ${summary.licenses.mediumConfidence} medium-confidence, ${summary.licenses.lowConfidence} low-confidence`,
     `License issues: ${summary.licenses.missing} missing, ${summary.licenses.malformed} malformed`,
     `Risks: ${summary.risks.high} high, ${summary.risks.review} review, ${summary.risks.unknown} unknown, ${summary.risks.low} low`,
@@ -390,6 +436,10 @@ function buildReviewSummaryCards(
     [text.labels.status, text.messages.reviewStatus(summary.risks)],
     [text.labels.activeFindings, text.messages.activeFindings(summary.risks)],
     [text.labels.scope, text.messages.scope(input.profile, input.prodOnly)],
+    [
+      text.labels.scanCoverage,
+      formatScanCompleteness(input.completeness ?? buildScanCompleteness(input))
+    ],
     [
       text.labels.waivers,
       text.messages.reviewWaivers(
@@ -1143,6 +1193,7 @@ function renderMarkdownReport(
     `- Dependencies: ${formatMarkdownInlineCode(`${summary.dependencyGraph.total} total`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.direct} direct`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.transitive} transitive`)}`,
     ...renderMarkdownDependencyGraphDiagnostics(input.graph.diagnostics ?? []),
     `- Evidence: ${formatMarkdownInlineCode(`${summary.evidence.files} files`)}, ${formatMarkdownInlineCode(`${summary.evidence.warnings} warnings`)}`,
+    `- Completeness: ${formatMarkdownInlineCode(formatScanCompleteness(input.completeness ?? buildScanCompleteness(input)))}`,
     `- Licenses: ${formatMarkdownInlineCode(`${summary.licenses.highConfidence} high-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.mediumConfidence} medium-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.lowConfidence} low-confidence`)}`,
     `- License issues: ${formatMarkdownInlineCode(`${summary.licenses.missing} missing`)}, ${formatMarkdownInlineCode(`${summary.licenses.malformed} malformed`)}`,
     `- Risks: ${formatMarkdownInlineCode(`${summary.risks.high} high`)}, ${formatMarkdownInlineCode(`${summary.risks.review} review`)}, ${formatMarkdownInlineCode(`${summary.risks.unknown} unknown`)}, ${formatMarkdownInlineCode(`${summary.risks.low} low`)}`,

@@ -91,6 +91,7 @@ import { renderDiffReport, type DiffLockfileChanges } from "../report/diff-repor
 import { renderExplainReport } from "../report/explain-report";
 import { renderSarifReport } from "../report/sarif-report";
 import {
+  buildScanCompleteness,
   renderScanReport,
   type RemoteRepositoryReportSource,
   type ScanReportInput
@@ -693,6 +694,11 @@ async function runScanAt(input: {
     return exitCodeForError(scanError);
   }
 
+  const completeness = buildScanCompleteness({
+    evidence: scanned.value.evidence,
+    ...(input.repository ? { repository: input.repository } : {})
+  });
+
   const reportInput: ScanReportInput = {
     project: scanned.value.project,
     graph: scanned.value.graph,
@@ -712,6 +718,7 @@ async function runScanAt(input: {
     expiredWaivers: scanned.value.expiredWaivers,
     unmatchedWaivers: scanned.value.unmatchedWaivers,
     policy: scanned.value.policy,
+    completeness,
     ...(input.repository ? { repository: input.repository } : {})
   };
 
@@ -763,6 +770,14 @@ async function runScanAt(input: {
   }
 
   if (command.kind === "ci" && hasFindingAtOrAbove(scanned.value.riskFindings, command.failOn)) {
+    return 1;
+  }
+
+  if (
+    command.kind === "ci"
+    && completeness.status === "partial"
+    && !command.allowPartialEvidence
+  ) {
     return 1;
   }
 
@@ -2583,7 +2598,7 @@ function renderTopLevelHelp(): string {
     "",
     "Usage:",
     "  ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
-    "  ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
+    "  ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--allow-partial-evidence] [--output <file>] [--open]",
     "  ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
     "  ohrisk cache status|prune|clear [--cache-dir <path>] [--json]",
@@ -2626,6 +2641,7 @@ function renderTopLevelHelp(): string {
     "  --output <file>        Write report output to a project-relative file instead of stdout.",
     "  --open                 Open the written HTML report after scan completion.",
     "  --fail-on <severity>   CI threshold. Defaults to high for ci.",
+    "  --allow-partial-evidence  Let ci pass when evidence or repository coverage is partial.",
     "  --strict-waivers       Fail CI when local waivers are expired or unmatched.",
     "  --help, -h             Print this help text.",
     "  --version, -v          Print the Ohrisk package version."
@@ -2674,7 +2690,7 @@ function renderCiHelp(): string {
     "Ohrisk ci",
     "",
     "Usage:",
-    "  ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
+    "  ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--allow-partial-evidence] [--output <file>] [--open]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
@@ -2699,6 +2715,7 @@ function renderCiHelp(): string {
     "  --language <en|ko|es|fr|zh|hi|ja|id|tr|ru|de> Set the HTML report language. Defaults to en.",
     "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
     "  --fail-on <severity>   CI threshold. Defaults to high.",
+    "  --allow-partial-evidence  Let ci pass when evidence or repository coverage is partial.",
     "  --strict-waivers       Fail CI when local waivers are expired or unmatched.",
     "  --output <file>        Write report output to a project-relative file instead of stdout.",
     "  --open                 Open the written HTML report after scan completion.",

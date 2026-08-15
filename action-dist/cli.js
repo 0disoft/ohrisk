@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 865d6d1b24614b63367ca3aa1e77b51f84c7fafa02f26780ee5cefba8aa45adc
+// ohrisk-action-source-sha256: 943cecb3cbb0e55719902a995a8993ee8c8a69a7b565ea98ed44ede425e719d9
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18468,6 +18468,7 @@ function parseScanLikeArgs(argv, kind) {
   let openReport = false;
   let failOn = "high";
   let strictWaivers = false;
+  let allowPartialEvidence = false;
   for (let index = 0;index < argv.length; index += 1) {
     const arg = argv[index];
     if (!arg) {
@@ -18773,6 +18774,18 @@ function parseScanLikeArgs(argv, kind) {
         strictWaivers = true;
         break;
       }
+      case "--allow-partial-evidence": {
+        if (kind !== "ci") {
+          return err(createError({
+            code: "INVALID_ARGUMENT",
+            category: "invalid_input",
+            message: "--allow-partial-evidence is only supported by the ci command.",
+            details: { supportedOptions: supportedOptionsFor(kind) }
+          }));
+        }
+        allowPartialEvidence = true;
+        break;
+      }
       case "--help":
       case "-h":
         return ok({ kind: "help", target: kind });
@@ -18910,7 +18923,8 @@ function parseScanLikeArgs(argv, kind) {
       ...openReport ? { openReport } : {},
       ...reportLanguage !== DEFAULT_REPORT_LANGUAGE ? { reportLanguage } : {},
       failOn,
-      strictWaivers
+      strictWaivers,
+      allowPartialEvidence
     });
   }
   return ok({
@@ -19086,7 +19100,7 @@ function supportedOptionsFor(kind) {
     "--help",
     "-h"
   ];
-  return kind === "ci" ? [...common, "--fail-on", "--strict-waivers"] : [...common, "--repo", "--submodules"];
+  return kind === "ci" ? [...common, "--fail-on", "--strict-waivers", "--allow-partial-evidence"] : [...common, "--repo", "--submodules"];
 }
 function readRequiredOptionValue(argv, index, option, details) {
   const value = argv[index + 1];
@@ -19582,7 +19596,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.34";
+var OHRISK_VERSION = "1.14.35";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -59848,8 +59862,28 @@ var HTML_REPORT_CONTENT_SECURITY_POLICY = [
 // src/report/scan-report.ts
 var HTML_DEFERRED_FINGERPRINT_MIN_CHARS = 512;
 var HTML_FINGERPRINT_PREVIEW_CHARS = 240;
+function buildScanCompleteness(input) {
+  const unavailablePackageCount = input.evidence.filter((evidence) => evidence.source === "unavailable").length;
+  const skippedRepositoryEntryCount = input.repository ? input.repository.submodules.skippedCount + input.repository.symbolicLinks.skippedCount + input.repository.nonPortablePaths.skippedCount : 0;
+  return {
+    status: unavailablePackageCount > 0 || skippedRepositoryEntryCount > 0 ? "partial" : "complete",
+    unavailablePackageCount,
+    skippedRepositoryEntryCount
+  };
+}
+function formatScanCompleteness(completeness) {
+  if (completeness.status === "complete") {
+    return "complete";
+  }
+  const reasons = [
+    completeness.unavailablePackageCount > 0 ? `${completeness.unavailablePackageCount} package evidence source${completeness.unavailablePackageCount === 1 ? "" : "s"} unavailable` : undefined,
+    completeness.skippedRepositoryEntryCount > 0 ? `${completeness.skippedRepositoryEntryCount} repository entr${completeness.skippedRepositoryEntryCount === 1 ? "y" : "ies"} skipped` : undefined
+  ].filter((reason) => reason !== undefined);
+  return `partial (${reasons.join(", ")})`;
+}
 function renderScanReport(input) {
   const summary = buildScanSummary(input);
+  const completeness = input.completeness ?? buildScanCompleteness(input);
   const nextAction = nextActionFor2(input.riskFindings, input.repository);
   const thresholdSummary = buildThresholdSummary(input.riskFindings, input.failOn);
   const waiverDriftSummary = buildWaiverDriftSummary(input);
@@ -59872,6 +59906,7 @@ function renderScanReport(input) {
       dependencyGraphDiagnostics: input.graph.diagnostics ?? [],
       dependencyOrigins: dependencyProvenance(input),
       evidence: summary.evidence,
+      completeness,
       licenses: summary.licenses,
       risks: summary.risks,
       waiverMode: input.waiverMode,
@@ -59903,6 +59938,7 @@ function renderScanReport(input) {
     `Dependencies: ${summary.dependencyGraph.total} total, ${summary.dependencyGraph.direct} direct, ${summary.dependencyGraph.transitive} transitive`,
     ...renderDependencyGraphDiagnostics(input.graph.diagnostics ?? []),
     `Evidence: ${summary.evidence.files} files, ${summary.evidence.warnings} warnings`,
+    `Completeness: ${formatScanCompleteness(completeness)}`,
     `Licenses: ${summary.licenses.highConfidence} high-confidence, ${summary.licenses.mediumConfidence} medium-confidence, ${summary.licenses.lowConfidence} low-confidence`,
     `License issues: ${summary.licenses.missing} missing, ${summary.licenses.malformed} malformed`,
     `Risks: ${summary.risks.high} high, ${summary.risks.review} review, ${summary.risks.unknown} unknown, ${summary.risks.low} low`,
@@ -60109,6 +60145,10 @@ function buildReviewSummaryCards(input, summary, text3, waiverDriftSummary) {
     [text3.labels.status, text3.messages.reviewStatus(summary.risks)],
     [text3.labels.activeFindings, text3.messages.activeFindings(summary.risks)],
     [text3.labels.scope, text3.messages.scope(input.profile, input.prodOnly)],
+    [
+      text3.labels.scanCoverage,
+      formatScanCompleteness(input.completeness ?? buildScanCompleteness(input))
+    ],
     [
       text3.labels.waivers,
       text3.messages.reviewWaivers(summary.waivers.applied, summary.waivers.expired + summary.waivers.unmatched)
@@ -60720,6 +60760,7 @@ function renderMarkdownReport2(input, summary) {
     `- Dependencies: ${formatMarkdownInlineCode(`${summary.dependencyGraph.total} total`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.direct} direct`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.transitive} transitive`)}`,
     ...renderMarkdownDependencyGraphDiagnostics(input.graph.diagnostics ?? []),
     `- Evidence: ${formatMarkdownInlineCode(`${summary.evidence.files} files`)}, ${formatMarkdownInlineCode(`${summary.evidence.warnings} warnings`)}`,
+    `- Completeness: ${formatMarkdownInlineCode(formatScanCompleteness(input.completeness ?? buildScanCompleteness(input)))}`,
     `- Licenses: ${formatMarkdownInlineCode(`${summary.licenses.highConfidence} high-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.mediumConfidence} medium-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.lowConfidence} low-confidence`)}`,
     `- License issues: ${formatMarkdownInlineCode(`${summary.licenses.missing} missing`)}, ${formatMarkdownInlineCode(`${summary.licenses.malformed} malformed`)}`,
     `- Risks: ${formatMarkdownInlineCode(`${summary.risks.high} high`)}, ${formatMarkdownInlineCode(`${summary.risks.review} review`)}, ${formatMarkdownInlineCode(`${summary.risks.unknown} unknown`)}, ${formatMarkdownInlineCode(`${summary.risks.low} low`)}`,
@@ -62228,6 +62269,10 @@ async function runScanAt(input) {
     io.stderr(formatError(scanError));
     return exitCodeForError(scanError);
   }
+  const completeness = buildScanCompleteness({
+    evidence: scanned.value.evidence,
+    ...input.repository ? { repository: input.repository } : {}
+  });
   const reportInput = {
     project: scanned.value.project,
     graph: scanned.value.graph,
@@ -62247,6 +62292,7 @@ async function runScanAt(input) {
     expiredWaivers: scanned.value.expiredWaivers,
     unmatchedWaivers: scanned.value.unmatchedWaivers,
     policy: scanned.value.policy,
+    completeness,
     ...input.repository ? { repository: input.repository } : {}
   };
   reportProgress?.(SCAN_PROGRESS_RENDER_PERCENT, `Rendering ${reportFormatLabel(command)} report...`);
@@ -62287,6 +62333,9 @@ async function runScanAt(input) {
     }
   }
   if (command.kind === "ci" && hasFindingAtOrAbove(scanned.value.riskFindings, command.failOn)) {
+    return 1;
+  }
+  if (command.kind === "ci" && completeness.status === "partial" && !command.allowPartialEvidence) {
     return 1;
   }
   if (command.kind === "ci" && command.strictWaivers && hasWaiverDrift(scanned.value)) {
@@ -63501,7 +63550,7 @@ function renderTopLevelHelp() {
     "",
     "Usage:",
     "  ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
-    "  ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
+    "  ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--allow-partial-evidence] [--output <file>] [--open]",
     "  ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
     "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
     "  ohrisk cache status|prune|clear [--cache-dir <path>] [--json]",
@@ -63544,6 +63593,7 @@ function renderTopLevelHelp() {
     "  --output <file>        Write report output to a project-relative file instead of stdout.",
     "  --open                 Open the written HTML report after scan completion.",
     "  --fail-on <severity>   CI threshold. Defaults to high for ci.",
+    "  --allow-partial-evidence  Let ci pass when evidence or repository coverage is partial.",
     "  --strict-waivers       Fail CI when local waivers are expired or unmatched.",
     "  --help, -h             Print this help text.",
     "  --version, -v          Print the Ohrisk package version."
@@ -63592,7 +63642,7 @@ function renderCiHelp() {
     "Ohrisk ci",
     "",
     "Usage:",
-    "  ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--output <file>] [--open]",
+    "  ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--allow-partial-evidence] [--output <file>] [--open]",
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
@@ -63617,6 +63667,7 @@ function renderCiHelp() {
     "  --language <en|ko|es|fr|zh|hi|ja|id|tr|ru|de> Set the HTML report language. Defaults to en.",
     "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
     "  --fail-on <severity>   CI threshold. Defaults to high.",
+    "  --allow-partial-evidence  Let ci pass when evidence or repository coverage is partial.",
     "  --strict-waivers       Fail CI when local waivers are expired or unmatched.",
     "  --output <file>        Write report output to a project-relative file instead of stdout.",
     "  --open                 Open the written HTML report after scan completion.",

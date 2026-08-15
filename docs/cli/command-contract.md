@@ -53,6 +53,9 @@ without producing a report.
 - `--profile saas|distributed-app` selects the shipping model, with organization policy overrides applied afterward.
 - `--prod` narrows scans to production-relevant dependencies when supported by the input ecosystem.
 - `--fail-on unknown|review|high|low` controls CI failure threshold.
+- `ci` also fails when package evidence or repository coverage is partial.
+  `--allow-partial-evidence` is an explicit fail-open override for environments
+  that intentionally accept that reduced assurance.
 - `--json`, `--markdown`, `--html`, `--sarif`, and `--cyclonedx` select report formats.
 - `--output <path>` writes a report artifact.
 - `--output <path>` creates missing parent directories one component at a time,

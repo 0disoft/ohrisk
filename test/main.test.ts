@@ -7559,6 +7559,27 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       expect(output).toContain("dependency: unknown direct");
       expect(output).toContain("source: unavailable");
       expect(output).toContain("LuaRocks package rockspec was not found");
+
+      const strictCi = createTestIO(projectRoot);
+      expect(await main(["ci", "--json"], strictCi.io)).toBe(1);
+      const strictPayload = JSON.parse(strictCi.stdout.join("\n")) as {
+        completeness: {
+          status: string;
+          unavailablePackageCount: number;
+          skippedRepositoryEntryCount: number;
+        };
+      };
+      expect(strictPayload.completeness).toEqual({
+        status: "partial",
+        unavailablePackageCount: 1,
+        skippedRepositoryEntryCount: 0
+      });
+
+      const allowedCi = createTestIO(projectRoot);
+      expect(await main(["ci", "--allow-partial-evidence"], allowedCi.io)).toBe(0);
+      expect(allowedCi.stdout.join("\n")).toContain(
+        "Completeness: partial (1 package evidence source unavailable)"
+      );
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }

@@ -30,6 +30,7 @@
 | `output` | Optional repository-relative report output path. |
 | `no-waivers` | Boolean string controlling waiver loading for `scan` and `ci`; rejected for `diff`, which compares unwaived findings. |
 | `strict-waivers` | Boolean string controlling waiver drift failure for `ci`; rejected for `scan` and `diff`. |
+| `allow-partial-evidence` | CI-only boolean override that permits incomplete evidence or repository coverage. |
 
 ## Outputs
 

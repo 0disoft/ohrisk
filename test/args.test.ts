@@ -491,7 +491,8 @@ describe("parseArgs", () => {
       cyclonedx: false,
       noWaivers: false,
       failOn: "high",
-      strictWaivers: false
+      strictWaivers: false,
+      allowPartialEvidence: false
     });
   });
 
@@ -508,7 +509,8 @@ describe("parseArgs", () => {
       "--json",
       "--fail-on",
       "review",
-      "--strict-waivers"
+      "--strict-waivers",
+      "--allow-partial-evidence"
     ]);
 
     expect(parsed.ok).toBe(true);
@@ -529,7 +531,8 @@ describe("parseArgs", () => {
       lockfilePath: "pnpm-lock.yaml",
       workspaceRootPath: "../..",
       failOn: "review",
-      strictWaivers: true
+      strictWaivers: true,
+      allowPartialEvidence: true
     });
   });
 
@@ -552,7 +555,8 @@ describe("parseArgs", () => {
       cyclonedx: false,
       noWaivers: true,
       failOn: "high",
-      strictWaivers: false
+      strictWaivers: false,
+      allowPartialEvidence: false
     });
   });
 

@@ -89,6 +89,7 @@ export type CliCommand =
       openReport?: boolean;
       failOn: RiskSeverity;
       strictWaivers: boolean;
+      allowPartialEvidence: boolean;
     }
   | {
       kind: "diff";
@@ -402,6 +403,7 @@ function parseScanLikeArgs(
   let openReport = false;
   let failOn: RiskSeverity = "high";
   let strictWaivers = false;
+  let allowPartialEvidence = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -753,6 +755,20 @@ function parseScanLikeArgs(
         strictWaivers = true;
         break;
       }
+      case "--allow-partial-evidence": {
+        if (kind !== "ci") {
+          return err(
+            createError({
+              code: "INVALID_ARGUMENT",
+              category: "invalid_input",
+              message: "--allow-partial-evidence is only supported by the ci command.",
+              details: { supportedOptions: supportedOptionsFor(kind) }
+            })
+          );
+        }
+        allowPartialEvidence = true;
+        break;
+      }
       case "--help":
       case "-h":
         return ok({ kind: "help", target: kind });
@@ -921,7 +937,8 @@ function parseScanLikeArgs(
       ...(openReport ? { openReport } : {}),
       ...(reportLanguage !== DEFAULT_REPORT_LANGUAGE ? { reportLanguage } : {}),
       failOn,
-      strictWaivers
+      strictWaivers,
+      allowPartialEvidence
     });
   }
 
@@ -1148,7 +1165,7 @@ function supportedOptionsFor(kind: "scan" | "ci"): string[] {
     "-h"
   ];
   return kind === "ci"
-    ? [...common, "--fail-on", "--strict-waivers"]
+    ? [...common, "--fail-on", "--strict-waivers", "--allow-partial-evidence"]
     : [...common, "--repo", "--submodules"];
 }
 

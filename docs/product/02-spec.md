@@ -94,3 +94,6 @@ rejected, and output parents are created only by the CLI's contained writer.
 The optional `archive` input is
 a contained repository-relative regular file, is forwarded only for `scan` and
 `ci`, conflicts with `lockfile`, and remains compatible with `all`.
+CI treats unavailable package evidence and skipped repository coverage as a
+separate completeness failure, regardless of the configured risk threshold;
+callers must explicitly opt into `allow-partial-evidence` to pass it.

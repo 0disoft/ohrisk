@@ -42,6 +42,10 @@ forwarded as `--archive` after path validation, cannot be combined with
 `lockfile`, and is rejected for `diff`. `all: "true"` remains valid and asks the
 CLI to scan every supported lockfile found at the single archive project root.
 
+`ci` fails partial evidence or repository coverage independently of `fail-on`.
+The boolean `allow-partial-evidence` input is an explicit CI-only override and
+is rejected for `scan` and `diff`.
+
 ## Version selection
 
 The default `bundled` value uses the embedded CLI without an extra

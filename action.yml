@@ -66,6 +66,10 @@ inputs:
     description: Fail when local waivers are expired or unmatched.
     required: false
     default: "false"
+  allow-partial-evidence:
+    description: Allow command=ci to pass when package evidence or repository coverage is incomplete.
+    required: false
+    default: "false"
   offline:
     description: Disable remote evidence requests and use only local evidence or cache entries.
     required: false
@@ -159,6 +163,7 @@ runs:
         OHRISK_OUTPUT: ${{ inputs.output }}
         OHRISK_NO_WAIVERS: ${{ inputs.no-waivers }}
         OHRISK_STRICT_WAIVERS: ${{ inputs.strict-waivers }}
+        OHRISK_ALLOW_PARTIAL_EVIDENCE: ${{ inputs.allow-partial-evidence }}
         OHRISK_OFFLINE: ${{ inputs.offline }}
         OHRISK_CACHE_DIR: ${{ inputs.cache-dir }}
         OHRISK_JOBS: ${{ inputs.jobs }}
@@ -259,6 +264,7 @@ runs:
         require_bool "all" "$OHRISK_ALL"
         require_bool "no-waivers" "$OHRISK_NO_WAIVERS"
         require_bool "strict-waivers" "$OHRISK_STRICT_WAIVERS"
+        require_bool "allow-partial-evidence" "$OHRISK_ALLOW_PARTIAL_EVIDENCE"
         require_bool "offline" "$OHRISK_OFFLINE"
 
         if [ "$OHRISK_ALL" = "true" ] && [ -n "$OHRISK_LOCKFILE" ]; then
@@ -308,6 +314,11 @@ runs:
 
         if [ "$OHRISK_COMMAND" != "ci" ] && [ "$OHRISK_STRICT_WAIVERS" = "true" ]; then
           echo "::error::strict-waivers requires command=ci."
+          exit 1
+        fi
+
+        if [ "$OHRISK_COMMAND" != "ci" ] && [ "$OHRISK_ALLOW_PARTIAL_EVIDENCE" = "true" ]; then
+          echo "::error::allow-partial-evidence requires command=ci."
           exit 1
         fi
 
@@ -370,6 +381,10 @@ runs:
 
         if [ "$OHRISK_STRICT_WAIVERS" = "true" ]; then
           args+=("--strict-waivers")
+        fi
+
+        if [ "$OHRISK_ALLOW_PARTIAL_EVIDENCE" = "true" ]; then
+          args+=("--allow-partial-evidence")
         fi
 
         if [ "$OHRISK_OFFLINE" = "true" ]; then

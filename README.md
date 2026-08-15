@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.14.34
+npm install -g ohrisk@1.14.35
 cd your-project
 ohrisk scan
 ```
@@ -383,7 +383,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.14.34
+npm install -g ohrisk@1.14.35
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
@@ -611,6 +611,11 @@ Fail a local CI step when findings meet a threshold:
 ```bash
 ohrisk ci --fail-on high
 ```
+
+CI fails separately when package evidence or repository coverage is partial,
+even if no finding reaches the risk threshold. Use
+`--allow-partial-evidence` only for an intentional fail-open exception; reports
+record the completeness status and affected counts.
 
 Fail a local CI step when waiver files contain expired or unmatched waivers:
 

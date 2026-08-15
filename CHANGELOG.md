@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- CI now treats unavailable package evidence and skipped repository coverage as
+  a separate partial-scan failure, independently of the risk threshold. The
+  explicit `--allow-partial-evidence` flag and matching Action input provide a
+  deliberate fail-open override, and reports expose structured completeness.
 - Full-text detection now recognizes the BSD four-clause advertising
   acknowledgement before the BSD three-clause signature. `BSD-4-Clause`
   requires review instead of being reduced to a permissive low-risk result.
