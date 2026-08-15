@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 943cecb3cbb0e55719902a995a8993ee8c8a69a7b565ea98ed44ede425e719d9
+// ohrisk-action-source-sha256: e7ebd704f83b936778977e2bad9ea3b2769bd941483426b842d5f0265ea1c21b
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19596,7 +19596,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.35";
+var OHRISK_VERSION = "1.14.36";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -61967,18 +61967,17 @@ async function runDiff(command, io, signal) {
     io.stderr(formatError(workspaceRoot.error));
     return exitCodeForError(workspaceRoot.error);
   }
-  const currentProject = loadProjectGraph({
+  const currentProject = discoverFilesystemProject({
     cwd: io.cwd,
     ...command.lockfilePath ? { lockfilePath: command.lockfilePath } : {},
-    ...command.allLockfiles ? { allLockfiles: true } : {},
-    prodOnly: command.prodOnly
+    ...command.allLockfiles ? { allLockfiles: true } : {}
   });
   if (isErr(currentProject)) {
     io.stderr(formatError(currentProject.error));
     return exitCodeForError(currentProject.error);
   }
   const policy = readPolicyConfig({
-    projectRoot: currentProject.value.project.rootDir,
+    projectRoot: currentProject.value.rootDir,
     ...workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {},
     ...command.policyPath ? { policyPath: command.policyPath } : {}
   });
@@ -61988,7 +61987,7 @@ async function runDiff(command, io, signal) {
   }
   const evidenceRuntime = resolveEvidenceRuntimeOptions({
     cwd: io.cwd,
-    projectRoot: currentProject.value.project.rootDir,
+    projectRoot: currentProject.value.rootDir,
     policy: policy.value,
     offline: command.offline ?? false,
     ...command.cacheDir ? { cacheDir: command.cacheDir } : {},
@@ -62003,10 +62002,28 @@ async function runDiff(command, io, signal) {
     io.stderr(formatError(evidenceRuntime.error));
     return exitCodeForError(evidenceRuntime.error);
   }
+  const currentGraph = await parseProjectDependencyGraphWithRemoteMavenPoms({
+    project: currentProject.value,
+    fetchRemotePoms: (requests) => fetchMavenCentralModelPoms({
+      requests,
+      offline: evidenceRuntime.value.offline,
+      signal,
+      ...evidenceRuntime.value.timeoutMs === undefined ? {} : { fetchTimeoutMs: evidenceRuntime.value.timeoutMs },
+      ...evidenceRuntime.value.cacheDir === undefined ? {} : { cacheDir: evidenceRuntime.value.cacheDir }
+    })
+  });
+  if (isErr(currentGraph)) {
+    io.stderr(formatError(currentGraph.error));
+    return exitCodeForError(currentGraph.error);
+  }
+  const currentProjectGraph = {
+    project: currentProject.value,
+    scanGraph: filterGraphBeforeEvidence(currentGraph.value, command.prodOnly)
+  };
   const readRefFile = io.readRefFile ?? readGitRefFile;
   const listRefFiles = io.listRefFiles ?? listGitRefFiles;
   const baselineProject = loadBaselineProjectGraph({
-    currentProject: currentProject.value,
+    currentProject: currentProjectGraph,
     baselineRef: command.baselineRef,
     allLockfiles: command.allLockfiles ?? false,
     readRefFile,
@@ -62019,7 +62036,7 @@ async function runDiff(command, io, signal) {
   const baselineCollectionGraph = filterGraphBeforeEvidence(baselineProject.value.graph, command.prodOnly);
   const baselineEvidence = await collectEvidenceForGraph({
     graph: baselineCollectionGraph,
-    projectRoot: currentProject.value.project.rootDir,
+    projectRoot: currentProject.value.rootDir,
     evidenceRuntime: evidenceRuntime.value,
     signal,
     ...workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}
@@ -62043,7 +62060,7 @@ async function runDiff(command, io, signal) {
     policy: policy.value
   });
   const current = await evaluateProjectScan({
-    ...currentProject.value,
+    ...currentProjectGraph,
     profile: command.profile,
     policy: policy.value,
     evidenceRuntime: evidenceRuntime.value,
@@ -62073,8 +62090,8 @@ async function runDiff(command, io, signal) {
     json: command.json,
     markdown: command.markdown,
     lockfileChanges: buildDiffLockfileChanges({
-      projectRoot: currentProject.value.project.rootDir,
-      currentLockfiles: projectLockfiles(currentProject.value.project),
+      projectRoot: currentProject.value.rootDir,
+      currentLockfiles: projectLockfiles(currentProject.value),
       baselineLockfiles: baselineProject.value.lockfiles
     }),
     ...command.failOn ? { failOn: command.failOn } : {},
@@ -62461,21 +62478,6 @@ function loadArchiveProjectGraph(input) {
   return ok({
     project: loaded.value.project,
     scanGraph: filterGraphBeforeEvidence(loaded.value.graph, input.prodOnly)
-  });
-}
-function loadProjectGraph(input) {
-  const discovered = discoverFilesystemProject(input);
-  if (isErr(discovered)) {
-    return discovered;
-  }
-  const graph = parseProjectDependencyGraph(discovered.value);
-  if (isErr(graph)) {
-    return graph;
-  }
-  const scanGraph = filterGraphBeforeEvidence(graph.value, input.prodOnly);
-  return ok({
-    project: discovered.value,
-    scanGraph
   });
 }
 function discoverFilesystemProject(input) {

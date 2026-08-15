@@ -43,6 +43,10 @@ without producing a report.
 | `ohrisk explain <expr>` | Classify one license expression for the selected profile without scanning a project; `--policy` applies license-level organization rules only. |
 | `ohrisk cache status|prune|clear` | Inspect or clean the persistent artifact cache without scanning a project. |
 
+`scan` and the current side of `diff` use the same dependency graph parser,
+including bounded Maven parent and imported-BOM resolution through the
+configured artifact cache and network policy.
+
 ## Stable Options
 
 - `--lockfile <path>` selects one supported input; `--all` discovers and merges all supported lockfiles at the selected project root. They are mutually exclusive for scan, CI, and diff. A remote repository scan automatically merges multiple supported inputs at its one selected project root; local, archive, CI, and diff inputs keep the explicit `--all` opt-in.

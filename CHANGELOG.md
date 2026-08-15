@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `diff` now parses the current checkout with the same remote Maven parent and
+  imported-BOM model resolver used by `scan`. Managed dependency versions no
+  longer disappear or fail only because the command changed from scan to diff.
 - CI now treats unavailable package evidence and skipped repository coverage as
   a separate partial-scan failure, independently of the risk threshold. The
   explicit `--allow-partial-evidence` flag and matching Action input provide a

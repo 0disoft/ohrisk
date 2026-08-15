@@ -34,7 +34,6 @@ import {
   type EvidenceCollectionProgress
 } from "../evidence/collect";
 import {
-  parseProjectDependencyGraph,
   parseProjectDependencyGraphWithRemoteMavenPoms
 } from "../ecosystems/registry";
 import type { LicenseEvidence } from "../evidence/types";
@@ -331,11 +330,10 @@ async function runDiff(
     return exitCodeForError(workspaceRoot.error);
   }
 
-  const currentProject = loadProjectGraph({
+  const currentProject = discoverFilesystemProject({
     cwd: io.cwd,
     ...(command.lockfilePath ? { lockfilePath: command.lockfilePath } : {}),
-    ...(command.allLockfiles ? { allLockfiles: true } : {}),
-    prodOnly: command.prodOnly
+    ...(command.allLockfiles ? { allLockfiles: true } : {})
   });
 
   if (isErr(currentProject)) {
@@ -344,7 +342,7 @@ async function runDiff(
   }
 
   const policy = readPolicyConfig({
-    projectRoot: currentProject.value.project.rootDir,
+    projectRoot: currentProject.value.rootDir,
     ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}),
     ...(command.policyPath ? { policyPath: command.policyPath } : {})
   });
@@ -355,7 +353,7 @@ async function runDiff(
 
   const evidenceRuntime = resolveEvidenceRuntimeOptions({
     cwd: io.cwd,
-    projectRoot: currentProject.value.project.rootDir,
+    projectRoot: currentProject.value.rootDir,
     policy: policy.value,
     offline: command.offline ?? false,
     ...(command.cacheDir ? { cacheDir: command.cacheDir } : {}),
@@ -371,10 +369,33 @@ async function runDiff(
     return exitCodeForError(evidenceRuntime.error);
   }
 
+  const currentGraph = await parseProjectDependencyGraphWithRemoteMavenPoms({
+    project: currentProject.value,
+    fetchRemotePoms: (requests) => fetchMavenCentralModelPoms({
+      requests,
+      offline: evidenceRuntime.value.offline,
+      signal,
+      ...(evidenceRuntime.value.timeoutMs === undefined
+        ? {}
+        : { fetchTimeoutMs: evidenceRuntime.value.timeoutMs }),
+      ...(evidenceRuntime.value.cacheDir === undefined
+        ? {}
+        : { cacheDir: evidenceRuntime.value.cacheDir })
+    })
+  });
+  if (isErr(currentGraph)) {
+    io.stderr(formatError(currentGraph.error));
+    return exitCodeForError(currentGraph.error);
+  }
+  const currentProjectGraph = {
+    project: currentProject.value,
+    scanGraph: filterGraphBeforeEvidence(currentGraph.value, command.prodOnly)
+  };
+
   const readRefFile = io.readRefFile ?? readGitRefFile;
   const listRefFiles = io.listRefFiles ?? listGitRefFiles;
   const baselineProject = loadBaselineProjectGraph({
-    currentProject: currentProject.value,
+    currentProject: currentProjectGraph,
     baselineRef: command.baselineRef,
     allLockfiles: command.allLockfiles ?? false,
     readRefFile,
@@ -392,7 +413,7 @@ async function runDiff(
   );
   const baselineEvidence = await collectEvidenceForGraph({
     graph: baselineCollectionGraph,
-    projectRoot: currentProject.value.project.rootDir,
+    projectRoot: currentProject.value.rootDir,
     evidenceRuntime: evidenceRuntime.value,
     signal,
     ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {})
@@ -423,7 +444,7 @@ async function runDiff(
     policy: policy.value
   });
   const current = await evaluateProjectScan({
-    ...currentProject.value,
+    ...currentProjectGraph,
     profile: command.profile,
     policy: policy.value,
     evidenceRuntime: evidenceRuntime.value,
@@ -456,8 +477,8 @@ async function runDiff(
     json: command.json,
     markdown: command.markdown,
     lockfileChanges: buildDiffLockfileChanges({
-      projectRoot: currentProject.value.project.rootDir,
-      currentLockfiles: projectLockfiles(currentProject.value.project),
+      projectRoot: currentProject.value.rootDir,
+      currentLockfiles: projectLockfiles(currentProject.value),
       baselineLockfiles: baselineProject.value.lockfiles
     }),
     ...(command.failOn ? { failOn: command.failOn } : {}),
@@ -972,37 +993,6 @@ function loadArchiveProjectGraph(input: {
   return ok({
     project: loaded.value.project,
     scanGraph: filterGraphBeforeEvidence(loaded.value.graph, input.prodOnly)
-  });
-}
-
-function loadProjectGraph(input: {
-  cwd: string;
-  lockfilePath?: string;
-  projectSearchMode?: "ancestors" | "tree";
-  autoMergeSameRoot?: boolean;
-  autoMergeDescendantProjects?: boolean;
-  allLockfiles?: boolean;
-  prodOnly: boolean;
-  progress?: ScanProgressReporter;
-}): Result<{
-  project: ProjectInput;
-  scanGraph: DependencyGraph;
-}, OhriskError> {
-  const discovered = discoverFilesystemProject(input);
-  if (isErr(discovered)) {
-    return discovered;
-  }
-  const graph = parseProjectDependencyGraph(discovered.value);
-
-  if (isErr(graph)) {
-    return graph;
-  }
-
-  const scanGraph = filterGraphBeforeEvidence(graph.value, input.prodOnly);
-
-  return ok({
-    project: discovered.value,
-    scanGraph
   });
 }
 

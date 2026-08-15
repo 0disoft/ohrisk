@@ -2931,6 +2931,30 @@ describe("main", () => {
       const output = stdout.join("\n");
       expect(output).toContain("Lockfile: pom.xml (maven-pom)");
       expect(output).toContain("org.junit.jupiter:junit-jupiter-engine@5.14.4");
+
+      const diff = createTestIO(projectRoot);
+      diff.io.readRefFile = () => ({
+        ok: true as const,
+        value: [
+          "<project>",
+          "  <groupId>org.example</groupId>",
+          "  <artifactId>fixture-maven-bom</artifactId>",
+          "  <version>0.9.0</version>",
+          "</project>"
+        ].join("\n")
+      });
+      const diffExitCode = await main([
+        "diff",
+        "main",
+        "--offline",
+        "--cache-dir",
+        cacheDir
+      ], diff.io);
+      expect(diffExitCode).toBe(0);
+      expect(diff.stderr).toEqual([]);
+      expect(diff.stdout.join("\n")).toContain(
+        "org.junit.jupiter:junit-jupiter-engine@5.14.4"
+      );
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
