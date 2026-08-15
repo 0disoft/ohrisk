@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 8a3b3df9f8edf18f3d7ddb4c75ba79a28dbbb49f6f2845b3c62aefbb5aa6de1a
+// ohrisk-action-source-sha256: d54c39a4d67e61a4f6c716e0c4e0ac19d80d5cba855f44243dab94fd41ca35fb
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18242,6 +18242,17 @@ function sanitizeGitDiagnostic(value) {
   return lastLine || "Git did not provide a diagnostic.";
 }
 
+// src/cli/command.ts
+var SUPPORTED_COMMANDS = [
+  "scan",
+  "ci",
+  "diff",
+  "explain",
+  "cache",
+  "help",
+  "version"
+];
+
 // src/cli/option-values.ts
 import { isIP } from "node:net";
 function parseBoundedPositiveInteger(value, max) {
@@ -18332,7 +18343,6 @@ var FAIL_ON_SEVERITIES = ["high", "unknown", "review", "low"];
 var SCAN_OUTPUT_FORMAT_OPTIONS = ["--json", "--sarif", "--markdown", "--html", "--cyclonedx"];
 var DIFF_OUTPUT_FORMAT_OPTIONS = ["--json", "--markdown"];
 var BASELINE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
-var SUPPORTED_COMMANDS = ["scan", "ci", "diff", "explain", "cache", "help", "version"];
 function parseArgs(argv) {
   if (argv.length === 0) {
     return ok({ kind: "help" });

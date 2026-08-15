@@ -11,7 +11,7 @@ import { readdirSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { parseArgs, type CliCommand } from "./args";
+import { parseArgs } from "./args";
 import {
   COMMAND_CANCELLED_EXIT_CODE,
   createCommandCancellation,
@@ -117,6 +117,7 @@ import {
 import { createError, exitCodeForError, formatError, type OhriskError } from "../shared/errors";
 import { err, isErr, ok, type Result } from "../shared/result";
 import { runCacheCommand } from "./cache-command";
+import type { CliCommand } from "./command";
 import { renderHelp } from "./help";
 import { resolveWorkspaceRootPath } from "./workspace-root";
 

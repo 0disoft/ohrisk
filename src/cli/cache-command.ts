@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import type { CliCommand } from "./args";
+import type { CliCommand } from "./command";
 import {
   defaultArtifactCacheDirectory,
   openArtifactCacheForManagement,

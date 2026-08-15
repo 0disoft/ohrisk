@@ -1,4 +1,4 @@
-import type { HelpTarget } from "./args";
+import type { HelpTarget } from "./command";
 
 export function renderHelp(target?: HelpTarget): string {
   switch (target) {
