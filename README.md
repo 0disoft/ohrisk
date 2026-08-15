@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.14.24
+npm install -g ohrisk@1.14.25
 cd your-project
 ohrisk scan
 ```
@@ -202,7 +202,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - Elixir Mix `mix.lock` projects are scanned for resolved Hex package pins; adjacent root `mix.exs` literal `only:` dependency options are used for production/development root classification when available, while mix.lock dependency graph reconstruction and remote Hex.pm artifact fetch are not scanned yet
 - Erlang Rebar3 `rebar.lock` projects are scanned for Hex `pkg` pins; depth-0 Hex pins are classified as production roots, while git/path deps, plugin locks, profile-specific test deps, and Rebar dependency tree reconstruction are not scanned yet
 - Ruby Bundler `Gemfile.lock` projects are scanned for direct and transitive gem dependencies
-- PHP Composer `composer.lock` projects are scanned for production and development package dependencies, using adjacent `composer.json` root dependencies when available and package license declarations embedded in the lockfile as local evidence
+- PHP Composer `composer.lock` projects are scanned for production and development package dependencies, using adjacent `composer.json` root dependencies when available and installed `vendor/` package sources for license evidence
 - CycloneDX JSON/XML, SPDX JSON/RDF, and SPDX tag-value SBOM files are scanned for Package URL-backed package identities, dependency relationships, and embedded license evidence
 - explicit `--lockfile` SBOM paths are sniffed by content when their filename does not use a supported SBOM name or suffix
 - npm alias dependency resolution, including pnpm alias package keys, with alias context preserved in dependency paths
@@ -237,15 +237,14 @@ The current implementation is the first local dependency-risk vertical slice:
 - local CocoaPods `Pods/<pod>` source and `Pods/Local Podspecs/<pod>.podspec.json` evidence before unavailable fallback for `Podfile.lock` packages
 - local Elixir/Erlang `deps/<package>` source and `mix.exs` or `rebar.config` license metadata before unavailable fallback for Hex packages
 - local Bundler/RubyGems install path gemspec evidence before unavailable fallback for `Gemfile.lock` gems
-- Composer `composer.lock` package license declarations, followed by local `vendor/<vendor>/<package>/composer.json` evidence when lockfile metadata is absent
+- local `vendor/<vendor>/<package>/composer.json` evidence for Composer packages; unverified `composer.lock` license declarations are not treated as evidence
 - remote HTTPS package tarball evidence when the lockfile points to a tarball with supported integrity metadata, with plaintext HTTP, credential-bearing URLs, obvious local, private, special-purpose, and DNS-resolved internal hosts blocked before fetch, connected socket addresses rechecked by the default fetcher, redirects followed only after each target is validated, and transient network failures recorded as unavailable package evidence so other packages can still be scanned
 - fixed `proxy.golang.org` module ZIP evidence for Go dependencies with an exact ZIP `go.sum` `h1` checksum, plus a separately checksum-verified `.mod` fallback for internal module edges, including official `storage.googleapis.com` redirects, one bounded transient-failure retry, full checksum verification, and root license-file inspection without npm credentials
 - a shared content-addressed artifact cache with HTTP freshness metadata, conditional `ETag`/`Last-Modified` revalidation, valid stale-entry support in `--offline` mode, and automatic 2 GiB LRU trimming
 - `ohrisk cache status|prune|clear` commands for cache inspection, age/size cleanup, and bounded removal
 - lockfile integrity verification for local and remote package tarballs; remote tarballs without integrity are reported as unavailable instead of being trusted as license evidence
 - npm registry metadata lookup when the lockfile does not include a direct tarball URL
-- exact npm registry SPDX metadata for transitive packages, with direct dependencies and missing or non-SPDX declarations still inspected from integrity-verified tarballs
-- exact SPDX `license` metadata embedded by npm in modern `package-lock.json` and `npm-shrinkwrap.json`; missing, conflicting, or non-SPDX declarations continue to local or verified-tarball evidence
+- npm registry metadata used only to locate exact-version tarballs, whose integrity and package contents are inspected before license evidence is trusted
 - PyPI exact-release metadata lookup when a locked Python package does not include a direct distribution URL
 - gzipped package tarball evidence
 - `package.json` license fields
@@ -382,7 +381,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.14.24
+npm install -g ohrisk@1.14.25
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
@@ -473,7 +472,7 @@ Supported dependency input files:
 - CocoaPods `Podfile.lock` pod entries, using local `Pods/` source and `Pods/Local Podspecs` metadata for evidence
 - Elixir Mix `mix.lock` Hex package pins, using adjacent root `mix.exs` literal `only:` options for production/development classification and local `deps/` package source and `mix.exs` metadata for evidence; Erlang Rebar3 `rebar.lock` Hex package pins, using depth-0 production root classification and local `deps/` package source and `rebar.config` metadata for evidence
 - Ruby Bundler `Gemfile.lock` gem entries, using literal companion `Gemfile` group blocks and inline `group:` options for development classification and local Bundler/RubyGems gemspec metadata for evidence
-- PHP Composer `composer.lock` package entries, using adjacent `composer.json` root dependencies when available, embedded lockfile licenses first, and local `vendor/` package metadata when lockfile license metadata is absent
+- PHP Composer `composer.lock` package entries, using adjacent `composer.json` root dependencies when available and local `vendor/` package metadata for license evidence
 - CycloneDX JSON/XML SBOM package entries with Package URL identities, dependency relationships, and embedded license evidence; traversal is iterative, retains every reachable component, stores at most 64 paths per component, and summarizes paths deeper than 256 components with typed graph diagnostics
 - SPDX JSON/RDF and tag-value SBOM package entries with Package URL external refs, dependency relationships, and embedded license evidence
 - Yarn classic/Berry `yarn.lock` with root and workspace dependency sets from `package.json` manifests, plus local `.yarn/cache` zip evidence for Berry/PnP installs

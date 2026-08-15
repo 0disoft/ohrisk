@@ -1736,8 +1736,16 @@ describe("collectGraphEvidence", () => {
     ]);
   });
 
-  test("uses exact npm registry license metadata for transitive packages without fetching tarballs", async () => {
+  test("inspects integrity-verified tarballs instead of trusting transitive registry licenses", async () => {
     const fetchedUrls: string[] = [];
+    const tarball = createTarGz({
+      "package/package.json": JSON.stringify({
+        name: "registry-transitive",
+        version: "2.0.0",
+        license: "AGPL-3.0-only"
+      }),
+      "package/LICENSE": "GNU AFFERO GENERAL PUBLIC LICENSE"
+    });
     const evidence = await collectGraphEvidence({
       graph: {
         lockfilePath: "bun.lock",
@@ -1748,7 +1756,7 @@ describe("collectGraphEvidence", () => {
             version: "2.0.0",
             ecosystem: "npm",
             resolved: "https://registry.npmjs.org/registry-transitive/-/registry-transitive-2.0.0.tgz",
-            integrity: "sha512-fixture",
+            integrity: integrityFor(tarball),
             dependencyType: "production",
             direct: false,
             paths: [["root", "direct@1.0.0", "registry-transitive@2.0.0"]]
@@ -1758,6 +1766,9 @@ describe("collectGraphEvidence", () => {
       projectRoot: bunProjectDir,
       fetchArtifact: async (url) => {
         fetchedUrls.push(url);
+        if (url.endsWith(".tgz")) {
+          return okArtifactResponseFromBuffer(tarball);
+        }
         return okArtifactResponseFromBuffer(JSON.stringify({
           name: "registry-transitive",
           version: "2.0.0",
@@ -1775,16 +1786,14 @@ describe("collectGraphEvidence", () => {
     }
 
     expect(fetchedUrls).toEqual([
-      "https://registry.npmjs.org/registry-transitive/2.0.0"
+      "https://registry.npmjs.org/registry-transitive/2.0.0",
+      "https://registry.example.test/registry-transitive/-/registry-transitive-2.0.0.tgz"
     ]);
-    expect(evidence.value).toEqual([{
+    expect(evidence.value).toEqual([expect.objectContaining({
       packageId: "registry-transitive@2.0.0",
-      metadataLicense: "MIT",
-      metadataSource: "npm registry metadata",
-      files: [],
-      source: "registry",
-      warnings: []
-    }]);
+      packageJsonLicense: "AGPL-3.0-only",
+      source: "tarball"
+    })]);
   });
 
   test("reuses bounded artifact host resolutions across registry requests", async () => {

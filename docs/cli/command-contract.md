@@ -160,7 +160,7 @@ directory where Ohrisk was invoked remains the configuration, waiver, cache, and
 root. General package-cache, install-tree, and vendored-source evidence from the temporary checkout
 is disabled. Project-contained source metadata and license files explicitly referenced by a selected
 Python lockfile local-source record are parser inputs and remain bounded by the validated checkout;
-lockfile-embedded evidence and the bounded npm/PyPI/Maven/Go/NuGet remote package-evidence pipeline also remain
+project-contained local-source evidence, standalone SBOM evidence, and the bounded npm/PyPI/Maven/Go/NuGet remote package-evidence pipeline also remain
 available. Shareable reports and errors redact the temporary checkout path.
 
 ## Multiple Lockfiles
@@ -170,6 +170,11 @@ are deduplicated by Package URL while the original package identifier and every
 contributing lockfile remain available as provenance. Conflicting package
 metadata is reported instead of silently replacing the first deterministic
 record.
+
+Automatic remote same-root merging excludes CycloneDX and SPDX inputs when a
+dependency manifest or lockfile is present. Explicit `--all` keeps those inputs,
+but an overlapping SBOM license claim cannot replace evidence collected from the
+dependency input for the same Package URL.
 
 Maven aggregator `pom.xml` inputs recursively scan project-contained `<module>`
 POMs. Module paths, nesting depth, total module count, file size, cycles, and
@@ -217,7 +222,9 @@ Git, path, alternate-registry, and checksumless crate sources are not fetched.
 For modern npm `package-lock.json` and `npm-shrinkwrap.json`, graph traversal is
 also iterative and retains every reachable package while storing at most 64
 dependency paths per package. Additional paths use the same typed truncation
-diagnostic instead of expanding path combinations without a bound.
+diagnostic instead of expanding path combinations without a bound. Package
+`license` fields in the lockfile or npm registry metadata are not authoritative
+evidence; installed sources or integrity-verified tarballs are inspected instead.
 
 For modern Dart and Flutter `pubspec.lock`, exact pub.dev hosted records retain
 their archive SHA-256 and fixed archive URL. Remote evidence verifies the full

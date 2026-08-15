@@ -104,6 +104,7 @@ import {
 import type { RepositoryTreeInventory } from "../repository/tree-inventory";
 import {
   discoverProject,
+  isSbomLockfileKind,
   projectLockfiles,
   projectLockfilesFromRelativePaths,
   type ProjectInput,
@@ -1192,10 +1193,25 @@ async function collectEvidenceForGraph(input: {
   signal?: AbortSignal;
 }): Promise<Result<LicenseEvidence[], OhriskError>> {
   const embeddedEvidence = input.graph.embeddedEvidence ?? [];
-  const embeddedEvidenceIds = new Set(embeddedEvidence.map((evidence) => evidence.packageId));
   const graphNodeIds = new Set(input.graph.nodes.map((node) => node.id));
   const relevantEmbeddedEvidence = embeddedEvidence.filter((evidence) =>
     graphNodeIds.has(evidence.packageId)
+  );
+  const nodesById = new Map(input.graph.nodes.map((node) => [node.id, node]));
+  const ignoredOverlappingSbomIds = new Set(
+    relevantEmbeddedEvidence
+      .filter((evidence) => {
+        const node = nodesById.get(evidence.packageId);
+        return evidence.source === "sbom"
+          && node?.origins?.some((origin) => !isSbomLockfileKind(origin.lockfileKind));
+      })
+      .map((evidence) => evidence.packageId)
+  );
+  const authoritativeEmbeddedEvidence = relevantEmbeddedEvidence.filter(
+    (evidence) => !ignoredOverlappingSbomIds.has(evidence.packageId)
+  );
+  const embeddedEvidenceIds = new Set(
+    authoritativeEmbeddedEvidence.map((evidence) => evidence.packageId)
   );
   const totalEvidenceCount = input.graph.nodes.length;
   let completedEvidenceCount = 0;
@@ -1207,7 +1223,7 @@ async function collectEvidenceForGraph(input: {
         embeddedEvidence: []
       };
 
-  for (const evidence of relevantEmbeddedEvidence) {
+  for (const evidence of authoritativeEmbeddedEvidence) {
     completedEvidenceCount += 1;
     input.progress?.({
       completed: completedEvidenceCount,
@@ -1256,7 +1272,18 @@ async function collectEvidenceForGraph(input: {
     return collected;
   }
 
-  return ok([...relevantEmbeddedEvidence, ...collected.value]);
+  return ok([
+    ...authoritativeEmbeddedEvidence,
+    ...collected.value.map((evidence) => ignoredOverlappingSbomIds.has(evidence.packageId)
+      ? {
+          ...evidence,
+          warnings: [
+            ...evidence.warnings,
+            "Embedded SBOM license metadata was ignored because a dependency input resolved the same package."
+          ]
+        }
+      : evidence)
+  ]);
 }
 
 function resolveEvidenceRuntimeOptions(input: {

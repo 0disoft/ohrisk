@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Lockfile and registry license declarations no longer replace independently
+  inspectable package artifacts. npm registry records locate exact tarballs,
+  Composer uses installed package sources, and mixed dependency/SBOM scans
+  ignore overlapping repository-controlled SBOM claims.
 - Multi-artifact evidence merging now preserves previously discovered license
   conflicts when later, stronger evidence is combined for the same package.
 - HTML report opening now invokes the platform opener through a trusted absolute

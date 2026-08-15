@@ -89,7 +89,6 @@ import type { LicenseEvidence } from "./types";
 import { collectZipPackageEvidence } from "./zip-package";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
 import { parseZigHash } from "../graph/zig-zon";
-import { parseSpdxExpression } from "../license/spdx";
 import { createError, type OhriskError } from "../shared/errors";
 import {
   mavenPomRepositoryPath,
@@ -803,8 +802,7 @@ async function collectNodeEvidence(input: {
       artifactCache: input.artifactCache,
       signal: input.signal,
       npmRegistryUrl: input.npmRegistryUrl,
-      allowedHosts: input.allowedHosts,
-      preferRegistryMetadata: !input.node.direct
+      allowedHosts: input.allowedHosts
     });
   }
 
@@ -2050,7 +2048,6 @@ async function collectNpmRegistryTarballEvidence(input: {
   signal: AbortSignal;
   npmRegistryUrl: string | undefined;
   allowedHosts: ReadonlySet<string>;
-  preferRegistryMetadata: boolean;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   const metadataUrl = npmRegistryPackageVersionUrl(
     input.node.name,
@@ -2089,14 +2086,6 @@ async function collectNpmRegistryTarballEvidence(input: {
   });
   if (!metadata.ok) {
     return err(metadata.error);
-  }
-
-  const registryEvidence = readNpmRegistryLicenseEvidence({
-    node: input.node,
-    metadata: metadata.value
-  });
-  if (input.preferRegistryMetadata && registryEvidence) {
-    return ok(registryEvidence);
   }
 
   const tarballUrl = readRegistryTarballUrl(metadata.value, input.node.version);
@@ -2138,35 +2127,6 @@ async function collectNpmRegistryTarballEvidence(input: {
       }
     }
   });
-}
-
-function readNpmRegistryLicenseEvidence(input: {
-  node: DependencyNode;
-  metadata: unknown;
-}): LicenseEvidence | undefined {
-  const versionMetadata = readRegistryVersionMetadata(input.metadata, input.node.version);
-  if (!versionMetadata) {
-    return undefined;
-  }
-
-  const license = versionMetadata.license;
-  if (typeof license !== "string" || license.trim() === "") {
-    return undefined;
-  }
-
-  const parsed = parseSpdxExpression(license);
-  if (parsed.malformed || parsed.choices.length === 0) {
-    return undefined;
-  }
-
-  return {
-    packageId: input.node.id,
-    metadataLicense: license,
-    metadataSource: "npm registry metadata",
-    files: [],
-    source: "registry",
-    warnings: []
-  };
 }
 
 async function collectPyPiReleaseEvidence(input: {

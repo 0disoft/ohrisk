@@ -308,6 +308,17 @@ describe("main", () => {
         "# documentation dependencies are intentionally empty in this fixture\n",
         "utf8"
       );
+      writeFileSync(path.join(temporaryRepository, "cyclonedx.json"), JSON.stringify({
+        bomFormat: "CycloneDX",
+        specVersion: "1.5",
+        components: [{
+          type: "library",
+          name: "forged-license",
+          version: "1.0.0",
+          purl: "pkg:pypi/forged-license@1.0.0",
+          licenses: [{ license: { id: "MIT" } }]
+        }]
+      }), "utf8");
 
       const { io, stdout, stderr } = createTestIO(invocationRoot);
       io.cloneRepository = async () => ok({
@@ -335,6 +346,74 @@ describe("main", () => {
     } finally {
       rmSync(invocationRoot, { recursive: true, force: true });
       rmSync(temporaryRepository, { recursive: true, force: true });
+    }
+  });
+
+  test("does not let an all-input SBOM suppress installed package evidence", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-all-sbom-evidence-"));
+
+    try {
+      writeFileSync(path.join(projectRoot, "package.json"), JSON.stringify({
+        name: "fixture-all-sbom",
+        version: "1.0.0",
+        dependencies: { "mixed-evidence": "1.0.0" }
+      }), "utf8");
+      writeFileSync(path.join(projectRoot, "package-lock.json"), JSON.stringify({
+        name: "fixture-all-sbom",
+        version: "1.0.0",
+        lockfileVersion: 3,
+        packages: {
+          "": {
+            name: "fixture-all-sbom",
+            version: "1.0.0",
+            dependencies: { "mixed-evidence": "1.0.0" }
+          },
+          "node_modules/mixed-evidence": {
+            name: "mixed-evidence",
+            version: "1.0.0"
+          }
+        }
+      }), "utf8");
+      writeFileSync(path.join(projectRoot, "cyclonedx.json"), JSON.stringify({
+        bomFormat: "CycloneDX",
+        specVersion: "1.5",
+        metadata: {
+          component: { name: "fixture-all-sbom", "bom-ref": "root-app" }
+        },
+        components: [{
+          type: "library",
+          "bom-ref": "pkg:npm/mixed-evidence@1.0.0",
+          purl: "pkg:npm/mixed-evidence@1.0.0",
+          licenses: [{ license: { id: "MIT" } }]
+        }],
+        dependencies: [{
+          ref: "root-app",
+          dependsOn: ["pkg:npm/mixed-evidence@1.0.0"]
+        }]
+      }), "utf8");
+      writeLocalPackage(
+        projectRoot,
+        "mixed-evidence",
+        "1.0.0",
+        "AGPL-3.0-only",
+        "LICENSE",
+        "GNU AFFERO GENERAL PUBLIC LICENSE"
+      );
+
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      const exitCode = await main(["scan", "--all", "--json"], io);
+
+      expect(exitCode, stderr.join("\n")).toBe(0);
+      const report = JSON.parse(stdout.join("\n")) as {
+        findings: Array<{ packageId: string; severity: string; evidence: string[] }>;
+      };
+      expect(report.findings).toContainEqual(expect.objectContaining({
+        packageId: "mixed-evidence@1.0.0",
+        severity: "high",
+        evidence: expect.arrayContaining(["source: local"])
+      }));
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
     }
   });
 
@@ -7559,6 +7638,21 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-composer-project-"));
 
     try {
+      const safeDir = path.join(projectRoot, "vendor", "acme", "safe");
+      const riskDir = path.join(projectRoot, "vendor", "acme", "risk");
+      mkdirSync(safeDir, { recursive: true });
+      mkdirSync(riskDir, { recursive: true });
+      writeFileSync(
+        path.join(safeDir, "composer.json"),
+        JSON.stringify({ name: "acme/safe", version: "1.0.0", license: "MIT" }),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(riskDir, "composer.json"),
+        JSON.stringify({ name: "acme/risk", version: "2.0.0", license: "AGPL-3.0-only" }),
+        "utf8"
+      );
+      writeFileSync(path.join(riskDir, "LICENSE"), "GNU AFFERO GENERAL PUBLIC LICENSE", "utf8");
       writeFileSync(
         path.join(projectRoot, "composer.json"),
         JSON.stringify({
@@ -7588,7 +7682,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
             {
               name: "acme/risk",
               version: "2.0.0",
-              license: ["AGPL-3.0-only"]
+              license: ["MIT"]
             }
           ],
           "packages-dev": [
@@ -7613,7 +7707,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       expect(output).toContain("- [high] acme/risk@2.0.0");
       expect(output).toContain("path: acme/app -> acme/safe@1.0.0 -> acme/risk@2.0.0");
       expect(output).toContain("license: AGPL-3.0-only");
-      expect(output).toContain("composer.lock licenses field");
+      expect(output).toContain("composer.json license: AGPL-3.0-only");
       expect(output).not.toContain("Remote package evidence is not configured for the composer ecosystem.");
       expect(output).not.toContain("acme/dev-tool@3.0.0");
     } finally {

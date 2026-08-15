@@ -99,7 +99,7 @@ describe("parsePackageLockfile", () => {
       });
   });
 
-  test("uses exact transitive package license metadata embedded in modern package locks", () => {
+  test("does not trust package license metadata embedded in modern package locks", () => {
     const result = parsePackageLockText(JSON.stringify({
       name: "fixture-package-lock-license-metadata",
       lockfileVersion: 3,
@@ -131,24 +131,7 @@ describe("parsePackageLockfile", () => {
       throw new Error(result.error.message);
     }
 
-    expect(result.value.embeddedEvidence).toEqual([
-      {
-        packageId: "child@2.0.0",
-        metadataLicense: "MIT",
-        metadataSource: "package-lock.json",
-        files: [],
-        source: "local",
-        warnings: []
-      },
-      {
-        packageId: "parent@1.0.0",
-        metadataLicense: "Apache-2.0",
-        metadataSource: "package-lock.json",
-        files: [],
-        source: "local",
-        warnings: []
-      }
-    ]);
+    expect(result.value.embeddedEvidence).toBeUndefined();
   });
 
   test("bounds dependency path fan-out while retaining every reachable package", () => {

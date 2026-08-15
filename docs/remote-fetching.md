@@ -13,10 +13,9 @@ Remote fetching is limited to these explicit adapters:
 
 - direct HTTPS package tarball URLs recorded in supported npm-family lockfiles;
 - npm-compatible registry metadata lookup for an exact locked package version;
-- exact SPDX metadata from that response for transitive npm packages, while
-  direct packages and absent or non-SPDX declarations continue to the verified
-  tarball path;
-- the tarball URL returned by that exact-version registry metadata response.
+- the tarball URL returned by that exact-version registry metadata response,
+  with lockfile integrity verification and package-content inspection required
+  before its license evidence is trusted.
 - PyPI release metadata lookup for an exact locked Python package version;
 - the SHA-256-identified source distribution or wheel returned by that exact
   PyPI release response, including bounded identity-checked package metadata and
@@ -118,16 +117,15 @@ an empty successful report. Dependencies whose exact group, artifact, and
 version match a module in the same reactor are project components and are not
 reported again as external packages.
 
-Other ecosystems use local caches, vendored source, lockfile-embedded evidence,
-or local package metadata. Any further remote ecosystem adapter is not enabled until
+Other ecosystems use local caches, vendored source, bounded project-contained
+local-source evidence, SBOM-only evidence, or local package metadata. Any further remote ecosystem adapter is not enabled until
 it implements the same target, integrity, cache, credential, and resource
 boundary.
 
-Modern npm package locks may embed the exact package `license` field alongside
-the locked name and version. Ohrisk uses one valid SPDX declaration from that
-local metadata before making a registry request. Missing, non-SPDX, or duplicate
-records with conflicting license values are not trusted as embedded evidence
-and continue through the local-package or integrity-verified tarball path.
+Modern npm package locks and registry responses may include package `license`
+fields, but those declarations do not replace inspectable package contents.
+Ohrisk uses installed package sources first and otherwise requires an
+integrity-verified tarball before accepting npm license evidence.
 An npm package resolved from Git or another non-registry source is never replaced
 with a same-name registry artifact: its integrity identifies different bytes,
 so absent local evidence remains unavailable instead of mixing identities.

@@ -73,32 +73,7 @@ describe("parseComposerLockText", () => {
         direct: false,
         paths: [["vendor/root", "vendor/app-lib@1.0.0", "vendor/transitive-lib@2.0.0"]]
       });
-    expect(result.value.embeddedEvidence).toEqual([
-      {
-        packageId: "vendor/app-lib@1.0.0",
-        metadataLicenses: ["MIT", "Apache-2.0"],
-        metadataSource: "composer.lock",
-        files: [],
-        source: "local",
-        warnings: []
-      },
-      {
-        packageId: "vendor/dev-tool@3.0.0",
-        metadataLicense: "GPL-3.0-only",
-        metadataSource: "composer.lock",
-        files: [],
-        source: "local",
-        warnings: []
-      },
-      {
-        packageId: "vendor/transitive-lib@2.0.0",
-        metadataLicenses: ["BSD-2-Clause"],
-        metadataSource: "composer.lock",
-        files: [],
-        source: "local",
-        warnings: []
-      }
-    ]);
+    expect(result.value.embeddedEvidence).toBeUndefined();
   });
 
   test("stops walking dependency cycles without dropping reachable paths", () => {

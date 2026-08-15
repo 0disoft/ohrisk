@@ -107,6 +107,17 @@ export type DiscoverProjectOptions = {
 
 const MAX_AUTO_MERGED_DESCENDANT_PROJECTS = 64;
 const MAX_AUTO_MERGED_DESCENDANT_INPUTS = 128;
+const SBOM_LOCKFILE_KINDS = new Set<SupportedLockfileKind>([
+  "cyclonedx-json",
+  "cyclonedx-xml",
+  "spdx-json",
+  "spdx-rdf",
+  "spdx-tag-value"
+]);
+
+export function isSbomLockfileKind(kind: string): boolean {
+  return SBOM_LOCKFILE_KINDS.has(kind as SupportedLockfileKind);
+}
 
 export function projectLockfiles(project: ProjectInput): ProjectLockfile[] {
   return project.lockfiles ?? [project.lockfile];
@@ -437,15 +448,14 @@ export function discoverProject(
         );
       }
 
-      const selectedLockfiles = mergeSameRoot ? lockfiles : lockfiles.slice(0, 1);
-      const projectLockfileEntries = selectedLockfiles.flatMap((lockfileName) => {
+      const projectLockfileEntries = lockfiles.flatMap((lockfileName) => {
         const kind = supportedKindForLockfilePath(lockfileName);
         return kind
           ? [{ kind, path: path.join(dir, lockfileName) } satisfies ProjectLockfile]
           : [];
       });
 
-      if (projectLockfileEntries.length !== selectedLockfiles.length) {
+      if (projectLockfileEntries.length !== lockfiles.length) {
         return err(
           createError({
             code: "NO_SUPPORTED_LOCKFILE",
@@ -460,7 +470,13 @@ export function discoverProject(
         );
       }
 
-      const primaryLockfile = projectLockfileEntries[0];
+      const selectedLockfiles = mergeSameRoot
+        ? selectAutomaticallyMergedInputs(
+            projectLockfileEntries,
+            options.allLockfiles ?? false
+          )
+        : projectLockfileEntries.slice(0, 1);
+      const primaryLockfile = selectedLockfiles[0];
       if (!primaryLockfile) {
         continue;
       }
@@ -470,7 +486,7 @@ export function discoverProject(
           ? dir
           : rootDirForLockfilePath(primaryLockfile.path, primaryLockfile.kind),
         lockfile: primaryLockfile,
-        ...(projectLockfileEntries.length > 1 ? { lockfiles: projectLockfileEntries } : {})
+        ...(selectedLockfiles.length > 1 ? { lockfiles: selectedLockfiles } : {})
       });
     }
 
@@ -663,7 +679,7 @@ function discoverDescendantProject(input: {
   }
 
   const selectedLockfiles = mergeSameRoot
-    ? candidate.lockfiles
+    ? selectAutomaticallyMergedInputs(candidate.lockfiles, input.allLockfiles)
     : candidate.lockfiles.slice(0, 1);
   const primaryLockfile = selectedLockfiles[0]!;
   return ok({
@@ -671,6 +687,17 @@ function discoverDescendantProject(input: {
     lockfile: primaryLockfile,
     ...(selectedLockfiles.length > 1 ? { lockfiles: selectedLockfiles } : {})
   });
+}
+
+function selectAutomaticallyMergedInputs(
+  lockfiles: ProjectLockfile[],
+  allLockfiles: boolean
+): ProjectLockfile[] {
+  if (allLockfiles || lockfiles.every((lockfile) => isSbomLockfileKind(lockfile.kind))) {
+    return lockfiles;
+  }
+
+  return lockfiles.filter((lockfile) => !isSbomLockfileKind(lockfile.kind));
 }
 
 function descendantProjectLimitError(
