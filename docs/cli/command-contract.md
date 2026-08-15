@@ -212,6 +212,12 @@ remains the combined new-and-changed threshold set. A baseline with no
 supported input is represented as an empty dependency graph instead of forcing
 the current lockfile path to exist in that ref.
 
+Baseline evidence is isolated from the current worktree. npm `file:` and
+relative workspace packages are read from the requested Git ref within the
+selected project or explicit `--workspace-root`; other baseline package
+evidence may use verified remote artifacts or cache entries, but never the
+current install tree or current local package paths.
+
 For `requirements.txt`, plain pins and entries whose provenance cannot be
 resolved are treated as direct dependencies. Inline or following pip-compile
 `# via` annotations restore bounded parent paths when every named parent maps

@@ -34,6 +34,10 @@ import {
   type EvidenceCollectionProgress
 } from "../evidence/collect";
 import {
+  attachGitRefLocalNpmEvidence,
+  hasGitRefLocalNpmPackage
+} from "../evidence/git-ref-local-package";
+import {
   parseProjectDependencyGraphWithRemoteMavenPoms
 } from "../ecosystems/registry";
 import type { LicenseEvidence } from "../evidence/types";
@@ -392,6 +396,11 @@ async function runDiff(
     scanGraph: filterGraphBeforeEvidence(currentGraph.value, command.prodOnly)
   };
 
+  if (isCommandCancelled(signal)) {
+    io.stderr(renderCommandCancelled("Diff"));
+    return COMMAND_CANCELLED_EXIT_CODE;
+  }
+
   const readRefFile = io.readRefFile ?? readGitRefFile;
   const listRefFiles = io.listRefFiles ?? listGitRefFiles;
   const baselineProject = loadBaselineProjectGraph({
@@ -399,7 +408,8 @@ async function runDiff(
     baselineRef: command.baselineRef,
     allLockfiles: command.allLockfiles ?? false,
     readRefFile,
-    listRefFiles
+    listRefFiles,
+    ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {})
   });
 
   if (isErr(baselineProject)) {
@@ -414,6 +424,7 @@ async function runDiff(
   const baselineEvidence = await collectEvidenceForGraph({
     graph: baselineCollectionGraph,
     projectRoot: currentProject.value.rootDir,
+    allowLocalProjectEvidence: false,
     evidenceRuntime: evidenceRuntime.value,
     signal,
     ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {})
@@ -1692,8 +1703,10 @@ export function loadBaselineProjectGraph(input: {
   allLockfiles: boolean;
   readRefFile: GitRefFileReader;
   listRefFiles: GitRefFileLister;
+  workspaceRoot?: string;
 }): Result<BaselineProjectGraph, OhriskError> {
   const projectRoot = input.currentProject.project.rootDir;
+  const evidenceSnapshotRoot = input.workspaceRoot ?? projectRoot;
   let baselineRelativePaths: string[] | undefined;
   let baselineLockfiles: ProjectLockfile[];
 
@@ -1747,6 +1760,9 @@ export function loadBaselineProjectGraph(input: {
   const baselineFiles = baselineRelativePaths
     ? new Set(baselineRelativePaths.map((value) => value.replace(/\\/g, "/")))
     : undefined;
+  let availableBaselineEvidenceFiles = evidenceSnapshotRoot === projectRoot
+    ? baselineFiles
+    : undefined;
   const graphs: SourcedDependencyGraph[] = [];
 
   for (const lockfile of baselineLockfiles) {
@@ -1762,8 +1778,38 @@ export function loadBaselineProjectGraph(input: {
       return parsed;
     }
 
+    let graph = parsed.value;
+    if (hasGitRefLocalNpmPackage(graph)) {
+      if (!availableBaselineEvidenceFiles) {
+        const listed = input.listRefFiles({
+          projectRoot: evidenceSnapshotRoot,
+          ref: input.baselineRef
+        });
+        if (isErr(listed)) {
+          return listed;
+        }
+        availableBaselineEvidenceFiles = new Set(
+          listed.value.map((value) => value.replace(/\\/g, "/"))
+        );
+      }
+
+      const withLocalEvidence = attachGitRefLocalNpmEvidence({
+        graph,
+        lockfileRelativePath: projectRelativeLockfilePath(projectRoot, lockfile.path),
+        baselineRef: input.baselineRef,
+        baselineFiles: availableBaselineEvidenceFiles,
+        projectRoot,
+        snapshotRoot: evidenceSnapshotRoot,
+        readRefFile: input.readRefFile
+      });
+      if (isErr(withLocalEvidence)) {
+        return withLocalEvidence;
+      }
+      graph = withLocalEvidence.value;
+    }
+
     graphs.push({
-      graph: parsed.value,
+      graph,
       source: {
         lockfileKind: lockfile.kind,
         lockfilePath: projectRelativeLockfilePath(projectRoot, lockfile.path)

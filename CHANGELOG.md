@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `diff` now collects baseline npm `file:` and relative workspace package
+  evidence from the requested Git ref, including an explicit workspace root.
+  Baseline evidence collection no longer reads the current worktree's local
+  packages, install tree, or package caches.
 - `diff` now parses the current checkout with the same remote Maven parent and
   imported-BOM model resolver used by `scan`. Managed dependency versions no
   longer disappear or fail only because the command changed from scan to diff.

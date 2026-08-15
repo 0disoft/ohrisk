@@ -5,6 +5,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync
@@ -53,6 +54,96 @@ function createTestIO(cwd: string): { io: CliIO; stdout: string[]; stderr: strin
     stdout,
     stderr
   };
+}
+
+function createBaselineSnapshotIO(
+  snapshotRoot: string,
+  overrides: Record<string, string | null>
+): Pick<CliIO, "listRefFiles" | "readRefFile"> {
+  const normalizedOverrides = new Map(
+    Object.entries(overrides).map(([relativePath, contents]) => [
+      relativePath.replace(/\\/g, "/"),
+      contents
+    ])
+  );
+
+  return {
+    listRefFiles: ({ projectRoot }) => {
+      const projectPrefix = path.relative(snapshotRoot, projectRoot).replace(/\\/g, "/");
+      const files = new Set(listSnapshotFiles(projectRoot));
+      for (const [snapshotRelativePath, contents] of normalizedOverrides) {
+        const projectRelativePath = projectPrefix === ""
+          ? snapshotRelativePath
+          : snapshotRelativePath.startsWith(`${projectPrefix}/`)
+            ? snapshotRelativePath.slice(projectPrefix.length + 1)
+            : undefined;
+        if (projectRelativePath === undefined || projectRelativePath === "") {
+          continue;
+        }
+        if (contents === null) {
+          files.delete(projectRelativePath);
+        } else {
+          files.add(projectRelativePath);
+        }
+      }
+      return ok([...files].sort());
+    },
+    readRefFile: ({ projectRoot, relativePath }) => {
+      const projectPrefix = path.relative(snapshotRoot, projectRoot).replace(/\\/g, "/");
+      const snapshotRelativePath = path.posix.join(
+        projectPrefix === "" ? "." : projectPrefix,
+        relativePath.replace(/\\/g, "/")
+      );
+      if (normalizedOverrides.has(snapshotRelativePath)) {
+        const contents = normalizedOverrides.get(snapshotRelativePath);
+        if (contents !== null && contents !== undefined) {
+          return ok(contents);
+        }
+        return err(createError({
+          code: "GIT_REF_FILE_NOT_FOUND",
+          category: "invalid_input",
+          message: "The requested baseline file does not exist in the git ref.",
+          details: { relativePath }
+        }));
+      }
+
+      const filePath = path.join(projectRoot, ...relativePath.replace(/\\/g, "/").split("/"));
+      if (existsSync(filePath)) {
+        return ok(readFileSync(filePath, "utf8"));
+      }
+      return err(createError({
+        code: "GIT_REF_FILE_NOT_FOUND",
+        category: "invalid_input",
+        message: "The requested baseline file does not exist in the git ref.",
+        details: { relativePath }
+      }));
+    }
+  };
+}
+
+function listSnapshotFiles(rootDir: string): string[] {
+  const files: string[] = [];
+  const pending = [""];
+  while (pending.length > 0) {
+    const relativeDirectory = pending.pop()!;
+    const directoryPath = relativeDirectory === ""
+      ? rootDir
+      : path.join(rootDir, ...relativeDirectory.split("/"));
+    for (const entry of readdirSync(directoryPath, { withFileTypes: true })) {
+      if (entry.isDirectory() && (entry.name === ".git" || entry.name === "node_modules")) {
+        continue;
+      }
+      const relativePath = relativeDirectory === ""
+        ? entry.name
+        : `${relativeDirectory}/${entry.name}`;
+      if (entry.isDirectory()) {
+        pending.push(relativePath);
+      } else if (entry.isFile()) {
+        files.push(relativePath);
+      }
+    }
+  }
+  return files.sort();
 }
 
 function expectEvidenceProgress(
@@ -5142,8 +5233,9 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
 
   test("prints separately classified findings for a git ref diff", async () => {
     const baselineLockfile = readFileSync(path.join(fixturesDir, "baseline-bun.lock"), "utf8");
-    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
-    io.readRefFile = () => ({ ok: true as const, value: baselineLockfile });
+    const projectRoot = path.join(fixturesDir, "bun-project");
+    const { io, stdout, stderr } = createTestIO(projectRoot);
+    Object.assign(io, createBaselineSnapshotIO(projectRoot, { "bun.lock": baselineLockfile }));
 
     const exitCode = await main(["diff", "main", "--prod"], io);
 
@@ -5187,6 +5279,83 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
     expect(payload.currentFindingCount).toBe(0);
     expect(payload.baselineFindingCount).toBe(0);
     expect(payload.newFindingCount).toBe(0);
+  });
+
+  test("diff reads local npm package evidence from the baseline ref instead of the worktree", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-diff-baseline-local-npm-"));
+    const localPackageDir = path.join(projectRoot, "local-package");
+    const lockfile = JSON.stringify({
+      name: "baseline-local-npm",
+      version: "1.0.0",
+      lockfileVersion: 3,
+      packages: {
+        "": {
+          name: "baseline-local-npm",
+          version: "1.0.0",
+          dependencies: {
+            "local-package": "file:./local-package"
+          }
+        },
+        "node_modules/local-package": {
+          name: "local-package",
+          version: "1.0.0",
+          resolved: "file:./local-package"
+        }
+      }
+    }, null, 2);
+
+    try {
+      mkdirSync(localPackageDir, { recursive: true });
+      writeFileSync(path.join(projectRoot, "package-lock.json"), lockfile, "utf8");
+      writeFileSync(
+        path.join(localPackageDir, "package.json"),
+        JSON.stringify({ name: "local-package", version: "1.0.0", license: "MIT" }),
+        "utf8"
+      );
+      writeFileSync(path.join(localPackageDir, "LICENSE"), "MIT License\n", "utf8");
+
+      const baselineFiles: Record<string, string> = {
+        "package-lock.json": lockfile,
+        "local-package/package.json": JSON.stringify({
+          name: "local-package",
+          version: "1.0.0",
+          license: "AGPL-3.0-only"
+        }),
+        "local-package/LICENSE": "GNU AFFERO GENERAL PUBLIC LICENSE Version 3\n"
+      };
+      const requestedBaselinePaths: string[] = [];
+      const { io, stdout, stderr } = createTestIO(projectRoot);
+      io.listRefFiles = () => ok(Object.keys(baselineFiles));
+      io.readRefFile = ({ relativePath }) => {
+        requestedBaselinePaths.push(relativePath);
+        const contents = baselineFiles[relativePath];
+        if (contents === undefined) {
+          throw new Error(`Unexpected baseline path: ${relativePath}`);
+        }
+        return ok(contents);
+      };
+
+      const exitCode = await main(["diff", "main", "--json", "--offline"], io);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toEqual([]);
+      expect(requestedBaselinePaths).toContain("local-package/package.json");
+      expect(requestedBaselinePaths).toContain("local-package/LICENSE");
+
+      const payload = JSON.parse(stdout.join("\n")) as {
+        baselineFindingCount: number;
+        changedFindingCount: number;
+        changedFindings: Array<{ packageId: string; severity: string }>;
+      };
+      expect(payload.baselineFindingCount).toBe(1);
+      expect(payload.changedFindingCount).toBe(1);
+      expect(payload.changedFindings).toContainEqual(expect.objectContaining({
+        packageId: "local-package@1.0.0",
+        severity: "low"
+      }));
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 
   test("diff --all compares lockfile sets in both revisions", async () => {
@@ -7869,7 +8038,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       );
 
       const { io, stdout, stderr } = createTestIO(projectRoot);
-      io.readRefFile = () => ({ ok: true as const, value: baselineLockfile });
+      Object.assign(io, createBaselineSnapshotIO(projectRoot, { "bun.lock": baselineLockfile }));
 
       const exitCode = await main(["diff", "main", "--prod", "--json", "--fail-on", "high"], io);
 
@@ -7919,25 +8088,19 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         "dual-license": "file:../bun-project/.registry/dual-license"
       }
     });
-    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "yarn-project"));
-    io.readRefFile = ({ relativePath }) => {
-      if (relativePath === "yarn.lock") {
-        return { ok: true as const, value: baselineLockfile };
-      }
-
-      if (relativePath === "package.json") {
-        return { ok: true as const, value: baselinePackageJson };
-      }
-
-      throw new Error(`Unexpected baseline path: ${relativePath}`);
-    };
+    const projectRoot = path.join(fixturesDir, "yarn-project");
+    const { io, stdout, stderr } = createTestIO(projectRoot);
+    Object.assign(io, createBaselineSnapshotIO(fixturesDir, {
+      "yarn-project/yarn.lock": baselineLockfile,
+      "yarn-project/package.json": baselinePackageJson
+    }));
 
     const exitCode = await main([
       "diff",
       "main",
       "--prod",
       "--workspace-root",
-      repoRoot
+      fixturesDir
     ], io);
 
     expect(exitCode).toBe(0);
@@ -7998,21 +8161,11 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       writeFileSync(path.join(projectRoot, "yarn.lock"), yarnLockfile, "utf8");
 
       const { io, stdout, stderr } = createTestIO(projectRoot);
-      io.readRefFile = ({ relativePath }) => {
-        if (relativePath === "yarn.lock") {
-          return { ok: true as const, value: yarnLockfile };
-        }
-
-        if (relativePath === "package.json") {
-          return { ok: true as const, value: rootPackageJson };
-        }
-
-        if (relativePath === "apps/web/package.json") {
-          return { ok: true as const, value: workspacePackageJson };
-        }
-
-        throw new Error(`Unexpected baseline path: ${relativePath}`);
-      };
+      Object.assign(io, createBaselineSnapshotIO(projectRoot, {
+        "yarn.lock": yarnLockfile,
+        "package.json": rootPackageJson,
+        "apps/web/package.json": workspacePackageJson
+      }));
 
       const exitCode = await main(["diff", "main", "--prod"], io);
 
@@ -8204,8 +8357,9 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
 
   test("prints JSON diff output", async () => {
     const baselineLockfile = readFileSync(path.join(fixturesDir, "baseline-bun.lock"), "utf8");
-    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
-    io.readRefFile = () => ({ ok: true as const, value: baselineLockfile });
+    const projectRoot = path.join(fixturesDir, "bun-project");
+    const { io, stdout, stderr } = createTestIO(projectRoot);
+    Object.assign(io, createBaselineSnapshotIO(projectRoot, { "bun.lock": baselineLockfile }));
 
     const exitCode = await main(["diff", "main", "--prod", "--json"], io);
 
@@ -8261,8 +8415,9 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
 
   test("prints Markdown diff output", async () => {
     const baselineLockfile = readFileSync(path.join(fixturesDir, "baseline-bun.lock"), "utf8");
-    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
-    io.readRefFile = () => ({ ok: true as const, value: baselineLockfile });
+    const projectRoot = path.join(fixturesDir, "bun-project");
+    const { io, stdout, stderr } = createTestIO(projectRoot);
+    Object.assign(io, createBaselineSnapshotIO(projectRoot, { "bun.lock": baselineLockfile }));
 
     const exitCode = await main(["diff", "main", "--prod", "--markdown"], io);
 
@@ -8287,8 +8442,9 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
 
   test("prints diff threshold outcome", async () => {
     const baselineLockfile = readFileSync(path.join(fixturesDir, "baseline-bun.lock"), "utf8");
-    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
-    io.readRefFile = () => ({ ok: true as const, value: baselineLockfile });
+    const projectRoot = path.join(fixturesDir, "bun-project");
+    const { io, stdout, stderr } = createTestIO(projectRoot);
+    Object.assign(io, createBaselineSnapshotIO(projectRoot, { "bun.lock": baselineLockfile }));
 
     const exitCode = await main(["diff", "main", "--prod", "--fail-on", "unknown"], io);
 
@@ -8301,8 +8457,9 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
 
   test("returns non-zero from diff when new findings meet the fail threshold", async () => {
     const baselineLockfile = readFileSync(path.join(fixturesDir, "baseline-bun.lock"), "utf8");
-    const { io, stdout, stderr } = createTestIO(path.join(fixturesDir, "bun-project"));
-    io.readRefFile = () => ({ ok: true as const, value: baselineLockfile });
+    const projectRoot = path.join(fixturesDir, "bun-project");
+    const { io, stdout, stderr } = createTestIO(projectRoot);
+    Object.assign(io, createBaselineSnapshotIO(projectRoot, { "bun.lock": baselineLockfile }));
 
     const exitCode = await main(["diff", "main", "--prod", "--json", "--fail-on", "unknown"], io);
 
