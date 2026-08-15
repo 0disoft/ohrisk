@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: c242ca6b789c39086f920a11fd26d056e7c14f35cbe82188b4118f056110c3b3
+// ohrisk-action-source-sha256: b3304244077668c933ab1209d9200dc34d66d74361dcb145c4bd20ccb08fd220
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19582,7 +19582,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.29";
+var OHRISK_VERSION = "1.14.30";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -50940,7 +50940,8 @@ function normalizeEvidenceConcurrency(value, total) {
   return Math.min(Math.max(1, Math.trunc(value)), total);
 }
 async function collectNodeEvidence(input) {
-  const ecosystemEvidence = input.allowLocalProjectEvidence ? collectRegisteredEcosystemEvidence({
+  const hasVerifiedPubArchive = input.node.ecosystem === "pub" && input.node.resolved !== undefined && input.node.integrity !== undefined;
+  const ecosystemEvidence = input.allowLocalProjectEvidence && !hasVerifiedPubArchive ? collectRegisteredEcosystemEvidence({
     node: input.node,
     projectRoot: input.projectRoot
   }) : undefined;

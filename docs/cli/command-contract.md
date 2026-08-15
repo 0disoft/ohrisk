@@ -231,7 +231,8 @@ evidence; installed sources or integrity-verified tarballs are inspected instead
 For modern Dart and Flutter `pubspec.lock`, exact pub.dev hosted records retain
 their archive SHA-256 and fixed archive URL. Remote evidence verifies the full
 archive digest plus root `pubspec.yaml` name/version before trusting bounded
-root license files. Custom hosted registries, Git/path sources, and hashless
+root license files, and this verified path takes precedence over project-local
+Pub cache contents. Custom hosted registries, Git/path sources, and hashless
 legacy hosted records remain local-only.
 
 For `pnpm-lock.yaml`, every importer remains a graph root and every reachable

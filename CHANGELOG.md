@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Modern pub.dev lock records now take the SHA-256-verified archive path before
+  project-local Pub evidence. Attacker-controlled `.dart_tool` or `.pub-cache`
+  content can no longer bypass archive integrity and package identity checks.
 - Commercial-use denials are now treated as package restrictions unless the
   statement explicitly limits them to documentation or data. Merely mentioning
   one of those assets cannot suppress a package-level high-risk signal.

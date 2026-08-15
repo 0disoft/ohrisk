@@ -121,7 +121,9 @@ describe("collectPubPackageEvidence", () => {
     }
   });
 
-  test("fetches hash-verified pub.dev archives and validates package identity", async () => {
+  test("prefers hash-verified pub.dev archives over untrusted local evidence by default", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-pub-verified-evidence-"));
+    const packageDir = path.join(projectRoot, ".pub-cache", "risk_package-1.0.0");
     const archive = createTarGz({
       "pubspec.yaml": [
         "name: risk_package",
@@ -131,33 +133,48 @@ describe("collectPubPackageEvidence", () => {
       "LICENSE": "Apache License\nVersion 2.0, January 2004\n"
     });
     const fetchedUrls: string[] = [];
-    const evidence = await collectGraphEvidence({
-      graph: pubGraph({
-        resolved: "https://pub.dev/api/archives/risk_package-1.0.0.tar.gz",
-        integrity: sha256Integrity(archive)
-      }),
-      projectRoot: ".",
-      allowLocalProjectEvidence: false,
-      resolveArtifactHost: async () => [{ address: "1.1.1.1", family: 4 }],
-      fetchArtifact: async (url) => {
-        fetchedUrls.push(url);
-        return artifactResponse(archive, url);
-      }
-    });
+    try {
+      mkdirSync(path.join(projectRoot, ".dart_tool"), { recursive: true });
+      mkdirSync(packageDir, { recursive: true });
+      writeFileSync(path.join(projectRoot, ".dart_tool", "package_config.json"), JSON.stringify({
+        configVersion: 2,
+        packages: [{ name: "risk_package", rootUri: "../.pub-cache/risk_package-1.0.0" }]
+      }));
+      writeFileSync(
+        path.join(packageDir, "pubspec.yaml"),
+        "name: risk_package\nversion: 1.0.0\nlicense: MIT\n"
+      );
+      writeFileSync(path.join(packageDir, "LICENSE"), "MIT License\n");
 
-    expect(evidence.ok).toBe(true);
-    if (!evidence.ok) throw new Error(evidence.error.message);
-    expect(fetchedUrls).toEqual([
-      "https://pub.dev/api/archives/risk_package-1.0.0.tar.gz"
-    ]);
-    expect(evidence.value[0]).toMatchObject({
-      packageId: "risk_package@1.0.0",
-      metadataLicense: "Apache-2.0",
-      metadataSource: "pubspec.yaml",
-      source: "tarball",
-      warnings: []
-    });
-    expect(evidence.value[0]?.files.map((file) => file.path)).toEqual(["LICENSE"]);
+      const evidence = await collectGraphEvidence({
+        graph: pubGraph({
+          resolved: "https://pub.dev/api/archives/risk_package-1.0.0.tar.gz",
+          integrity: sha256Integrity(archive)
+        }),
+        projectRoot,
+        resolveArtifactHost: async () => [{ address: "1.1.1.1", family: 4 }],
+        fetchArtifact: async (url) => {
+          fetchedUrls.push(url);
+          return artifactResponse(archive, url);
+        }
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) throw new Error(evidence.error.message);
+      expect(fetchedUrls).toEqual([
+        "https://pub.dev/api/archives/risk_package-1.0.0.tar.gz"
+      ]);
+      expect(evidence.value[0]).toMatchObject({
+        packageId: "risk_package@1.0.0",
+        metadataLicense: "Apache-2.0",
+        metadataSource: "pubspec.yaml",
+        source: "tarball",
+        warnings: []
+      });
+      expect(evidence.value[0]?.files.map((file) => file.path)).toEqual(["LICENSE"]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 
   test("fails closed when a pub.dev archive digest does not match the lockfile", async () => {

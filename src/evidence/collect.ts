@@ -532,7 +532,10 @@ async function collectNodeEvidence(input: {
   collectMavenEvidence: MavenEvidenceCollector;
   loadNugetServiceIndex: NugetServiceIndexLoader;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
-  const ecosystemEvidence = input.allowLocalProjectEvidence
+  const hasVerifiedPubArchive = input.node.ecosystem === "pub"
+    && input.node.resolved !== undefined
+    && input.node.integrity !== undefined;
+  const ecosystemEvidence = input.allowLocalProjectEvidence && !hasVerifiedPubArchive
     ? collectRegisteredEcosystemEvidence({
         node: input.node,
         projectRoot: input.projectRoot

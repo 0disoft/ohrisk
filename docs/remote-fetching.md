@@ -45,7 +45,8 @@ Remote fetching is limited to these explicit adapters:
 - exact pub.dev package archives from the fixed `pub.dev` endpoint when a
   modern hosted `pubspec.lock` record supplies the archive SHA-256; the complete
   archive digest and root `pubspec.yaml` name/version must match before bounded
-  root license files are trusted. Custom hosted registries, Git/path sources,
+  root license files are trusted. This verified archive takes precedence over
+  project-local Pub cache contents. Custom hosted registries, Git/path sources,
   and hashless legacy lock records are not fetched.
 - exact public nuget.org packages selected through the V3 service index,
   flat-container version index, registration metadata, and catalog leaf, only

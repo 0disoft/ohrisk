@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.14.29
+npm install -g ohrisk@1.14.30
 cd your-project
 ohrisk scan
 ```
@@ -195,7 +195,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - Haskell Stack `stack.yaml.lock` projects are scanned for completed Hackage package pins; local Stack package database license metadata is used when present, while snapshot package expansion, git/path extra-deps, direct/transitive graph reconstruction, and Hackage metadata fetch are not scanned yet
 - Perl Carton `cpanfile.snapshot` projects are scanned for Carton snapshot v1 distribution pins and dependency paths inferred from `provides` and `requirements`; local Carton cache archive `META.json` or `META.yml` license metadata is used when present, while MetaCPAN artifact fetch is not scanned yet
 - LuaRocks `luarocks.lock` projects are scanned for literal `dependencies` table package pins; local `.rockspec` files in the project root or local rocks tree are used for literal string or string-table license metadata when present, while dependency graph reconstruction and LuaRocks metadata fetch are not scanned yet
-- Dart and Flutter `pubspec.lock` projects are scanned for concrete Pub package versions recorded in the lockfile; modern pub.dev hosted records retain their archive SHA-256 for verified remote evidence, while custom registries and Git/path sources remain local-only
+- Dart and Flutter `pubspec.lock` projects are scanned for concrete Pub package versions recorded in the lockfile; modern pub.dev hosted records use their archive SHA-256 for verified remote evidence before project-local cache contents, while custom registries and Git/path sources remain local-only
 - Swift Package Manager `Package.resolved` projects are scanned for pinned packages with resolved versions, revisions, or branches; Package.resolved does not expose parent dependency graphs, so packages are reported as root-level pins with unknown dependency type
 - Carthage `Cartfile.resolved` projects are scanned for resolved GitHub, git, and binary pins; Cartfile.resolved does not expose parent dependency graphs, so packages are reported as root-level pins with unknown dependency type
 - CocoaPods `Podfile.lock` projects are scanned for resolved pods; subspecs are collapsed to their root pod identity and dependency type is reported as unknown because Podfile.lock does not encode production/development groups
@@ -231,7 +231,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - local Julia depot `Project.toml` metadata and license file evidence before unavailable fallback for `Manifest.toml` packages
 - local Stack `.stack-work/install` package database metadata before unavailable fallback for Hackage packages
 - local Carton cache archive `META.json` or `META.yml` metadata before unavailable fallback for CPAN distributions
-- local Dart Pub cache package source evidence before exact pub.dev fallback for modern hosted `pubspec.lock` records; remote archives are trusted only after the lockfile SHA-256 and `pubspec.yaml` package identity match
+- hash-verified pub.dev archive evidence for modern hosted `pubspec.lock` records, preferred over untrusted project-local Pub cache contents; remote archives are trusted only after the lockfile SHA-256 and `pubspec.yaml` package identity match
 - local SwiftPM `.build/checkouts` and Xcode `SourcePackages/checkouts` package source evidence before unavailable fallback for `Package.resolved` packages
 - local Carthage `Carthage/Checkouts` package source evidence before unavailable fallback for `Cartfile.resolved` packages
 - local CocoaPods `Pods/<pod>` source and `Pods/Local Podspecs/<pod>.podspec.json` evidence before unavailable fallback for `Podfile.lock` packages
@@ -383,7 +383,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.14.29
+npm install -g ohrisk@1.14.30
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
@@ -468,7 +468,7 @@ Supported dependency input files:
 - Haskell Stack `stack.yaml.lock` completed Hackage package pins, using local Stack package database metadata before unavailable evidence fallback
 - Perl Carton `cpanfile.snapshot` distribution pins, using local Carton cache archive metadata before unavailable evidence fallback
 - LuaRocks `luarocks.lock` dependency pins, using local `.rockspec` license metadata before unavailable evidence fallback
-- Dart/Flutter `pubspec.lock` package entries, using local `.dart_tool/package_config.json` and Pub cache package source for evidence
+- Dart/Flutter `pubspec.lock` package entries, using SHA-256-verified pub.dev archives first for modern hosted records and local `.dart_tool/package_config.json` or Pub cache sources for non-verifiable records
 - SwiftPM `Package.resolved` package pins, using local `.build/checkouts` or `SourcePackages/checkouts` package source for evidence
 - Carthage `Cartfile.resolved` package pins, using local `Carthage/Checkouts` package source for evidence
 - CocoaPods `Podfile.lock` pod entries, using local `Pods/` source and `Pods/Local Podspecs` metadata for evidence
