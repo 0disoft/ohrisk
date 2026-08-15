@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Remote repository checkout verification now measures the complete temporary
+  staging tree while validating materialized files and building the discovery
+  inventory in one directory pass. Git metadata still counts toward the 1 GiB
+  staging ceiling but remains outside project entry and source-byte totals.
 - Automatic artifact-cache maintenance now follows the command cancellation
   signal and gets a one-second best-effort work budget. It inventories without
   mutating, checks the budget before each cleanup mutation, releases its shared

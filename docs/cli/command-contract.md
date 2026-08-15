@@ -140,7 +140,9 @@ relative paths for each skipped entry type, including non-portable files, and wh
 fails with the first detected path. Temporary clone storage is capped at 1 GiB and the full
 operation uses separate hard stage budgets: two minutes for clone, 30 seconds for tree inspection,
 and three minutes for checkout. These are fail-closed limits, not
-truncation rules.
+truncation rules. After checkout, one materialized-tree pass measures all temporary storage,
+validates repository files, and produces the immutable project-discovery inventory. Git metadata
+counts toward the storage ceiling but is excluded from project entry and source-byte totals.
 
 When no supported dependency manifest, lockfile, or SBOM exists, `NO_SUPPORTED_LOCKFILE` reports
 that no dependency project was detected and points to `ohrisk help scan`; it does not print the
