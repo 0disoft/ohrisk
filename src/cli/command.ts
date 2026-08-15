@@ -17,13 +17,14 @@ export const SUPPORTED_COMMANDS = [
 ] as const;
 
 export type HelpTarget = typeof SUPPORTED_COMMANDS[number];
+export type CacheAction = "status" | "prune" | "clear";
 
 export type CliCommand =
   | { kind: "help"; target?: HelpTarget }
   | { kind: "version" }
   | {
       kind: "cache";
-      action: "status" | "prune" | "clear";
+      action: CacheAction;
       json: boolean;
       cacheDir?: string;
       maxSizeBytes?: number;

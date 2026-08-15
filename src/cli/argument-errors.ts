@@ -1,6 +1,7 @@
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 import type { CliCommand } from "./command";
+import { supportedOptionsFor } from "./command-spec";
 
 export function unexpectedTopLevelArgs(
   command: string | undefined,
@@ -96,38 +97,4 @@ function missingOptionValue(
     message: `${option} requires a value.`,
     ...(details ? { details } : {})
   }));
-}
-
-export function supportedOptionsFor(kind: "scan" | "ci"): string[] {
-  const common = [
-    "--profile",
-    "--prod",
-    "--all",
-    "--policy",
-    "--config",
-    "--offline",
-    "--cache-dir",
-    "--jobs",
-    "--timeout",
-    "--registry-url",
-    "--registry-token-env",
-    "--allow-host",
-    "--json",
-    "--sarif",
-    "--markdown",
-    "--html",
-    "--language",
-    "--cyclonedx",
-    "--no-waivers",
-    "--lockfile",
-    "--archive",
-    "--workspace-root",
-    "--output",
-    "--open",
-    "--help",
-    "-h"
-  ];
-  return kind === "ci"
-    ? [...common, "--fail-on", "--strict-waivers", "--allow-partial-evidence"]
-    : [...common, "--repo", "--submodules"];
 }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { parseArgs } from "../src/cli/args";
+import { supportedCacheOptions, supportedOptionsFor } from "../src/cli/command-spec";
 
 describe("parseArgs", () => {
   test("parses positional and explicit GitHub repository inputs", () => {
@@ -1041,6 +1042,24 @@ describe("parseArgs", () => {
       expect(parsed.error.code).toBe("INVALID_ARGUMENT");
       expect(parsed.error.details?.supportedOptions).toContain("--help");
       expect(parsed.error.details?.supportedOptions).toContain("-h");
+    }
+  });
+
+  test("reports supported options from the declarative command spec", () => {
+    for (const [argv, expectedOptions] of [
+      [["scan", "--bad"], supportedOptionsFor("scan")],
+      [["ci", "--bad"], supportedOptionsFor("ci")],
+      [["diff", "main", "--bad"], supportedOptionsFor("diff")],
+      [["explain", "MIT", "--bad"], supportedOptionsFor("explain")],
+      [["cache", "status", "--bad"], supportedCacheOptions("status")]
+    ] as const) {
+      const parsed = parseArgs([...argv]);
+
+      expect(parsed.ok).toBe(false);
+      if (parsed.ok) {
+        throw new Error("Expected unknown option to fail.");
+      }
+      expect(parsed.error.details?.supportedOptions).toEqual(expectedOptions);
     }
   });
 

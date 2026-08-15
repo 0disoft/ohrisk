@@ -21,9 +21,9 @@ import {
   outputFormatConflict,
   readRequiredOptionValue,
   repositoryConflict,
-  supportedOptionsFor,
   unexpectedTopLevelArgs
 } from "./argument-errors";
+import { supportedCacheOptions, supportedOptionsFor } from "./command-spec";
 import {
   isSafeRepositoryRelativePath,
   normalizeHostnameOption,
@@ -225,13 +225,7 @@ function parseCacheArgs(argv: string[]): Result<CliCommand, OhriskError> {
               : "cache accepts exactly one action.",
             details: arg.startsWith("-")
               ? {
-                  supportedOptions: [
-                    "--cache-dir",
-                    "--json",
-                    ...(action === "prune" ? ["--max-size", "--max-age"] : []),
-                    "--help",
-                    "-h"
-                  ]
+                  supportedOptions: supportedCacheOptions(action)
                 }
               : { action, extraArgument: arg }
           })
@@ -955,15 +949,7 @@ function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
               category: "invalid_input",
               message: `Unknown explain option "${arg}".`,
               details: {
-                supportedOptions: [
-                  "--profile",
-                  "--policy",
-                  "--workspace-root",
-                  "--json",
-                  "--output",
-                  "--help",
-                  "-h"
-                ]
+                supportedOptions: supportedOptionsFor("explain")
               }
             })
           );
@@ -1236,28 +1222,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
               category: "invalid_input",
               message: `Unknown diff option "${arg}".`,
               details: {
-                supportedOptions: [
-                  "--profile",
-                  "--prod",
-                  "--lockfile",
-                  "--all",
-                  "--policy",
-                  "--config",
-                  "--offline",
-                  "--cache-dir",
-                  "--jobs",
-                  "--timeout",
-                  "--registry-url",
-                  "--registry-token-env",
-                  "--allow-host",
-                  "--workspace-root",
-                  "--json",
-                  "--markdown",
-                  "--output",
-                  "--fail-on",
-                  "--help",
-                  "-h"
-                ]
+                supportedOptions: supportedOptionsFor("diff")
               }
             })
           );

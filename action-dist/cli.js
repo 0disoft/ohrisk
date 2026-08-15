@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 22616e48efbc2852cf93eb6a2f1df02a08fce7b2e84535597098993ac96e77a5
+// ohrisk-action-source-sha256: 365afaef32c2ec6872e22bda8ee8c6c9f0b2c5f8d38a901ce31866a966d684bd
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -15413,6 +15413,87 @@ var SUPPORTED_COMMANDS = [
   "version"
 ];
 
+// src/cli/command-spec.ts
+var SCAN_AND_CI_OPTIONS = [
+  "--profile",
+  "--prod",
+  "--all",
+  "--policy",
+  "--config",
+  "--offline",
+  "--cache-dir",
+  "--jobs",
+  "--timeout",
+  "--registry-url",
+  "--registry-token-env",
+  "--allow-host",
+  "--json",
+  "--sarif",
+  "--markdown",
+  "--html",
+  "--language",
+  "--cyclonedx",
+  "--no-waivers",
+  "--lockfile",
+  "--archive",
+  "--workspace-root",
+  "--output",
+  "--open",
+  "--help",
+  "-h"
+];
+var COMMAND_OPTIONS = {
+  scan: [...SCAN_AND_CI_OPTIONS, "--repo", "--submodules"],
+  ci: [
+    ...SCAN_AND_CI_OPTIONS,
+    "--fail-on",
+    "--strict-waivers",
+    "--allow-partial-evidence"
+  ],
+  diff: [
+    "--profile",
+    "--prod",
+    "--lockfile",
+    "--all",
+    "--policy",
+    "--config",
+    "--offline",
+    "--cache-dir",
+    "--jobs",
+    "--timeout",
+    "--registry-url",
+    "--registry-token-env",
+    "--allow-host",
+    "--workspace-root",
+    "--json",
+    "--markdown",
+    "--output",
+    "--fail-on",
+    "--help",
+    "-h"
+  ],
+  explain: [
+    "--profile",
+    "--policy",
+    "--workspace-root",
+    "--json",
+    "--output",
+    "--help",
+    "-h"
+  ]
+};
+var CACHE_OPTIONS = {
+  status: ["--cache-dir", "--json", "--help", "-h"],
+  prune: ["--cache-dir", "--json", "--max-size", "--max-age", "--help", "-h"],
+  clear: ["--cache-dir", "--json", "--help", "-h"]
+};
+function supportedOptionsFor(kind) {
+  return [...COMMAND_OPTIONS[kind]];
+}
+function supportedCacheOptions(action) {
+  return [...CACHE_OPTIONS[action]];
+}
+
 // src/cli/argument-errors.ts
 function unexpectedTopLevelArgs(command, extraArgs) {
   return err(createError({
@@ -15473,37 +15554,6 @@ function missingOptionValue(option, details) {
     message: `${option} requires a value.`,
     ...details ? { details } : {}
   }));
-}
-function supportedOptionsFor(kind) {
-  const common = [
-    "--profile",
-    "--prod",
-    "--all",
-    "--policy",
-    "--config",
-    "--offline",
-    "--cache-dir",
-    "--jobs",
-    "--timeout",
-    "--registry-url",
-    "--registry-token-env",
-    "--allow-host",
-    "--json",
-    "--sarif",
-    "--markdown",
-    "--html",
-    "--language",
-    "--cyclonedx",
-    "--no-waivers",
-    "--lockfile",
-    "--archive",
-    "--workspace-root",
-    "--output",
-    "--open",
-    "--help",
-    "-h"
-  ];
-  return kind === "ci" ? [...common, "--fail-on", "--strict-waivers", "--allow-partial-evidence"] : [...common, "--repo", "--submodules"];
 }
 
 // src/cli/option-values.ts
@@ -15739,13 +15789,7 @@ function parseCacheArgs(argv) {
           category: "invalid_input",
           message: arg.startsWith("-") ? `Unknown cache option "${arg}".` : "cache accepts exactly one action.",
           details: arg.startsWith("-") ? {
-            supportedOptions: [
-              "--cache-dir",
-              "--json",
-              ...action === "prune" ? ["--max-size", "--max-age"] : [],
-              "--help",
-              "-h"
-            ]
+            supportedOptions: supportedCacheOptions(action)
           } : { action, extraArgument: arg }
         }));
     }
@@ -16367,15 +16411,7 @@ function parseExplainArgs(argv) {
             category: "invalid_input",
             message: `Unknown explain option "${arg}".`,
             details: {
-              supportedOptions: [
-                "--profile",
-                "--policy",
-                "--workspace-root",
-                "--json",
-                "--output",
-                "--help",
-                "-h"
-              ]
+              supportedOptions: supportedOptionsFor("explain")
             }
           }));
         }
@@ -16612,28 +16648,7 @@ function parseDiffArgs(argv) {
             category: "invalid_input",
             message: `Unknown diff option "${arg}".`,
             details: {
-              supportedOptions: [
-                "--profile",
-                "--prod",
-                "--lockfile",
-                "--all",
-                "--policy",
-                "--config",
-                "--offline",
-                "--cache-dir",
-                "--jobs",
-                "--timeout",
-                "--registry-url",
-                "--registry-token-env",
-                "--allow-host",
-                "--workspace-root",
-                "--json",
-                "--markdown",
-                "--output",
-                "--fail-on",
-                "--help",
-                "-h"
-              ]
+              supportedOptions: supportedOptionsFor("diff")
             }
           }));
         }
