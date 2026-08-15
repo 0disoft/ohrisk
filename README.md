@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.14.44
+npm install -g ohrisk@1.14.45
 cd your-project
 ohrisk scan
 ```
@@ -262,6 +262,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - common human-readable license metadata alias normalization, including slash and comma dual-license shorthands
 - low-risk classification for common permissive, Zlib, and public-domain-style SPDX licenses
 - NOTICE evidence is surfaced as attribution-preservation action text without raising severity
+- distributed-app findings expose `license-text` and `notice-file` obligation evidence with `status: unknown`; Ohrisk does not claim the obligation is satisfied until the actual release artifact is checked
 - high-risk classification for common source-available restriction licenses
 - package-scoped commercial restriction detection in license evidence and package metadata; only restrictions explicitly limited to documentation or data/corpora remain scoped evidence without raising package-code severity, while mixed or ambiguous scope stays package-level
 - profile-aware risk evaluation for `saas` and `distributed-app`
@@ -384,7 +385,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.14.44
+npm install -g ohrisk@1.14.45
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open

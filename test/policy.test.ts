@@ -166,6 +166,48 @@ describe("evaluateLicenseRisk", () => {
       "Preserve required NOTICE or attribution files when distributing this package."
     );
     expect(finding.evidence).toContain("signals: notice-required");
+    expect(finding.evidence).toContain(
+      "obligation: notice-file; status: unknown; trigger: notice evidence in distributed-app"
+    );
+    expect(finding.evidence).toContain(
+      "obligation: license-text; status: unknown; trigger: license expression in distributed-app"
+    );
+  });
+
+  test("surfaces distribution license-text obligations without claiming satisfaction", () => {
+    const distributedFinding = evaluateLicenseRisk({
+      license: {
+        packageId: "package@1.0.0",
+        original: "MIT",
+        expression: "MIT",
+        choices: ["MIT"],
+        joiner: "single",
+        signals: [],
+        evidenceSources: ["source: local", "package.json license: MIT"],
+        confidence: "high"
+      },
+      dependency: baseDependency,
+      profile: "distributed-app"
+    });
+    const saasFinding = evaluateLicenseRisk({
+      license: {
+        packageId: "package@1.0.0",
+        original: "MIT",
+        expression: "MIT",
+        choices: ["MIT"],
+        joiner: "single",
+        signals: [],
+        evidenceSources: ["source: local", "package.json license: MIT"],
+        confidence: "high"
+      },
+      dependency: baseDependency,
+      profile: "saas"
+    });
+
+    expect(distributedFinding.evidence).toContain(
+      "obligation: license-text; status: unknown; trigger: license expression in distributed-app"
+    );
+    expect(saasFinding.evidence.some((item) => item.startsWith("obligation:"))).toBe(false);
   });
 
   test("uses the least risky branch for OR expressions", () => {

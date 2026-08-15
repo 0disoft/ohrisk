@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: f6a841ecdc24fe85468e4c4a3a5177d8b831658697e81aebafb4144e6e7524e1
+// ohrisk-action-source-sha256: 43c255660b48165d11f99dd19681cb280b578b02ab12c1333ee9c8b06e12594f
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19596,7 +19596,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.44";
+var OHRISK_VERSION = "1.14.45";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -57155,6 +57155,12 @@ var COMMERCIAL_RESTRICTION_LICENSES = new Set([
   ...SOURCE_AVAILABLE_RESTRICTION_LICENSES,
   "UNLICENSED"
 ]);
+var LICENSE_TEXT_PRESERVATION_EXEMPTIONS = new Set([
+  "0BSD",
+  "CC0-1.0",
+  "Unlicense",
+  "UNLICENSED"
+]);
 var NO_ACTION_NEEDED = "No action needed for this profile.";
 var REPLACE_ACTION = "Replace this package or escalate before shipping.";
 var UNLICENSED_ACTION = "Do not ship this package until license permissions are clarified.";
@@ -57172,7 +57178,7 @@ function evaluateLicenseRisk(input) {
   const reason = policyRuleMatch ? explainPackagePolicy(policyRuleMatch.pattern, policyRuleMatch.rule, classificationReason) : classificationReason;
   const action = policyRule?.action ?? actionFor(recommendation, input.license);
   const dependencyScope = dependencyScopeFor(input.dependency);
-  const evidence = buildEvidence(input.license, input.dependency);
+  const evidence = buildEvidence(input.license, input.dependency, input.profile);
   const id = buildFindingId({
     packageId,
     dependencyType: input.dependency.dependencyType,
@@ -57344,17 +57350,32 @@ function collectPolicyTerms(node, terms) {
   collectPolicyTerms(node.left, terms);
   collectPolicyTerms(node.right, terms);
 }
-function buildEvidence(license, dependency) {
+function buildEvidence(license, dependency, profile) {
   const evidence = [
     license.original ? `license: ${license.original}` : "license: missing",
     `dependency: ${dependency.dependencyType}`,
     dependency.direct ? "direct dependency" : "transitive dependency",
-    ...license.evidenceSources
+    ...license.evidenceSources,
+    ...obligationEvidence(license, profile)
   ];
   if (license.signals.length > 0) {
     evidence.push(`signals: ${license.signals.join(", ")}`);
   }
   return evidence;
+}
+function obligationEvidence(license, profile) {
+  if (profile !== "distributed-app") {
+    return [];
+  }
+  const obligations = [];
+  if (license.signals.includes("notice-required")) {
+    obligations.push("obligation: notice-file; status: unknown; trigger: notice evidence in distributed-app");
+  }
+  const unreliableExpression = license.signals.some((signal) => signal === "missing" || signal === "malformed" || signal === "conflicting-evidence" || signal === "custom-text");
+  if (!unreliableExpression && license.choices.some((choice) => !LICENSE_TEXT_PRESERVATION_EXEMPTIONS.has(choice) && !choice.includes("LicenseRef-"))) {
+    obligations.push("obligation: license-text; status: unknown; trigger: license expression in distributed-app");
+  }
+  return obligations;
 }
 function recommendationFor(severity, dependency) {
   if (severity === "low") {

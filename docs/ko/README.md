@@ -357,6 +357,9 @@ medium-confidence로 표시하며, 모양만 비슷한 미등록 ID는 거부한
 파일의 표현식이 metadata 선택지에 없으면 두 근거를 모두 보존하고
 `conflicting-evidence` unknown으로 판정한다. deprecated GNU ID와 현재의
 `-only`/`-or-later` 등가 표현은 잘못된 충돌로 처리하지 않는다.
+`distributed-app` finding에는 확인된 license expression과 NOTICE evidence를
+바탕으로 `license-text`, `notice-file` obligation을 표시한다. 다만 실제 배포
+산출물을 검사한 것이 아니므로 status는 항상 `unknown`이며 충족·누락을 단정하지 않는다.
 CycloneDX 경로 복원은 재귀 없이 모든 도달 가능한 component를 유지하되 component당
 최대 64개 경로를 저장하고 256단계보다 깊은 경로는 요약한다. 이런 제한이 적용되면
 JSON scan report의 typed dependency-graph diagnostic에 표시된다.

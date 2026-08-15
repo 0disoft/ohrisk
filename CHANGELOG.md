@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Distributed-app findings now include conservative `license-text` and
+  `notice-file` obligation evidence. Status stays `unknown` because dependency
+  evidence cannot prove that a release artifact preserves the required files;
+  the added evidence intentionally changes affected finding fingerprints.
 - Parseable package metadata is now reconciled with every recognizable license
   file instead of suppressing file evidence. A file license outside the
   declared choices fails closed as `conflicting-evidence`; deprecated GNU IDs

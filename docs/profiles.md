@@ -89,6 +89,11 @@ expression outside the declared license choices is reported as
 `conflicting-evidence` with unknown severity; deprecated GNU identifiers compare
 against their current `-only` or `-or-later` equivalents.
 
+For `distributed-app`, recognized license expressions and collected NOTICE
+files add conservative `license-text` and `notice-file` obligation evidence.
+Their status remains `unknown`: a dependency scan does not inspect the final
+release assembly and therefore cannot claim satisfaction or noncompliance.
+
 The npm `package.json` field `private: true` prevents accidental publication;
 it does not prove that the package is owned by the scanning organization. A
 private package without license evidence therefore remains `unknown` unless an

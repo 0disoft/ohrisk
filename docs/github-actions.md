@@ -19,7 +19,7 @@ byte. A diff invocation requires a baseline ref:
   with:
     fetch-depth: 0
 
-- uses: 0disoft/ohrisk@v1.14.44
+- uses: 0disoft/ohrisk@v1.14.45
   with:
     command: diff
     baseline-ref: origin/main
@@ -36,7 +36,7 @@ To scan a source archive directly, pass a checked-in or downloaded
 repository-relative regular file to `archive`:
 
 ```yaml
-- uses: 0disoft/ohrisk@v1.14.44
+- uses: 0disoft/ohrisk@v1.14.45
   with:
     command: ci
     archive: artifacts/source.tar.gz
@@ -78,7 +78,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install -g ohrisk@1.14.44
+      - run: npm install -g ohrisk@1.14.45
 
       - run: ohrisk diff origin/main --prod --fail-on high
 ```
@@ -116,7 +116,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install -g ohrisk@1.14.44
+      - run: npm install -g ohrisk@1.14.45
 
       - name: Generate Ohrisk report
         run: |
@@ -191,7 +191,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install -g ohrisk@1.14.44
+      - run: npm install -g ohrisk@1.14.45
 
       - run: |
           mkdir -p reports

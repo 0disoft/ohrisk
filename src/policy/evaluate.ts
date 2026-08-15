@@ -76,6 +76,13 @@ const COMMERCIAL_RESTRICTION_LICENSES = new Set([
   "UNLICENSED"
 ]);
 
+const LICENSE_TEXT_PRESERVATION_EXEMPTIONS = new Set([
+  "0BSD",
+  "CC0-1.0",
+  "Unlicense",
+  "UNLICENSED"
+]);
+
 const NO_ACTION_NEEDED = "No action needed for this profile.";
 const REPLACE_ACTION = "Replace this package or escalate before shipping.";
 const UNLICENSED_ACTION = "Do not ship this package until license permissions are clarified.";
@@ -115,7 +122,7 @@ export function evaluateLicenseRisk(input: {
     : classificationReason;
   const action = policyRule?.action ?? actionFor(recommendation, input.license);
   const dependencyScope = dependencyScopeFor(input.dependency);
-  const evidence = buildEvidence(input.license, input.dependency);
+  const evidence = buildEvidence(input.license, input.dependency, input.profile);
   const id = buildFindingId({
     packageId,
     dependencyType: input.dependency.dependencyType,
@@ -373,14 +380,19 @@ function collectPolicyTerms(node: SpdxExpressionNode, terms: string[]): void {
   collectPolicyTerms(node.right, terms);
 }
 
-function buildEvidence(license: NormalizedLicense, dependency: DependencyNode): string[] {
+function buildEvidence(
+  license: NormalizedLicense,
+  dependency: DependencyNode,
+  profile: UsageProfile
+): string[] {
   const evidence = [
     license.original
       ? `license: ${license.original}`
       : "license: missing",
     `dependency: ${dependency.dependencyType}`,
     dependency.direct ? "direct dependency" : "transitive dependency",
-    ...license.evidenceSources
+    ...license.evidenceSources,
+    ...obligationEvidence(license, profile)
   ];
 
   if (license.signals.length > 0) {
@@ -388,6 +400,39 @@ function buildEvidence(license: NormalizedLicense, dependency: DependencyNode): 
   }
 
   return evidence;
+}
+
+function obligationEvidence(license: NormalizedLicense, profile: UsageProfile): string[] {
+  if (profile !== "distributed-app") {
+    return [];
+  }
+
+  const obligations: string[] = [];
+  if (license.signals.includes("notice-required")) {
+    obligations.push(
+      "obligation: notice-file; status: unknown; trigger: notice evidence in distributed-app"
+    );
+  }
+
+  const unreliableExpression = license.signals.some((signal) =>
+    signal === "missing"
+    || signal === "malformed"
+    || signal === "conflicting-evidence"
+    || signal === "custom-text"
+  );
+  if (
+    !unreliableExpression
+    && license.choices.some((choice) =>
+      !LICENSE_TEXT_PRESERVATION_EXEMPTIONS.has(choice)
+      && !choice.includes("LicenseRef-")
+    )
+  ) {
+    obligations.push(
+      "obligation: license-text; status: unknown; trigger: license expression in distributed-app"
+    );
+  }
+
+  return obligations;
 }
 
 function recommendationFor(
