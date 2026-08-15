@@ -67,6 +67,9 @@ and modules without an exact ZIP checksum are never sent to the proxy.
 - Valid local and `DocumentRef-*:LicenseRef-*` expressions are custom,
   low-confidence evidence unless document-local extracted text supplies stronger
   signals; external document contents are never inferred.
+- Standard license and exception identifiers are validated against a pinned,
+  source-commit- and blob-identified official SPDX catalog. Deprecated entries
+  remain parseable, while unlisted shape-valid identifiers fail closed.
 - Waivers may suppress matching findings, but strict waiver drift can fail CI.
 - Shareable formats must avoid leaking absolute local paths.
 

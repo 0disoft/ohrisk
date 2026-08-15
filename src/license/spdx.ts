@@ -1,3 +1,5 @@
+import { spdxExceptionIdStatus, spdxLicenseIdStatus } from "./spdx-catalog";
+
 const LICENSE_EXPRESSION_ALIASES = new Map<string, string>([
   ["gnu general public license, version 3.0", "GPL-3.0-only"],
   ["eclipse public license v2.0", "EPL-2.0"],
@@ -55,8 +57,12 @@ const LICENSE_ALIASES = new Map<string, string>([
   ["unlicensed", "UNLICENSED"]
 ]);
 
-const VALID_SPDX_ID = /^[A-Za-z0-9-.+]+$/;
 const VALID_SPDX_LICENSE_REFERENCE = /^(?:DocumentRef-[A-Za-z0-9.-]+:)?LicenseRef-[A-Za-z0-9.-]+$/;
+const OHRISK_NON_SPDX_LICENSE_IDS = new Set([
+  "Commons-Clause",
+  "PolyForm-Free-Trial-1.0.0",
+  "UNLICENSED"
+]);
 
 export type SpdxLicenseNode = {
   type: "license";
@@ -484,7 +490,10 @@ function normalizeLicenseToken(token: string): NormalizedOperand {
     };
   }
 
-  if (!VALID_SPDX_ID.test(trimmed)) {
+  if (
+    !OHRISK_NON_SPDX_LICENSE_IDS.has(trimmed)
+    && spdxLicenseIdStatus(trimmed) === "unlisted"
+  ) {
     return {
       normalized: trimmed,
       malformed: true,
@@ -501,7 +510,7 @@ function normalizeLicenseToken(token: string): NormalizedOperand {
 
 function normalizeExceptionToken(token: string): string | undefined {
   const trimmed = token.trim();
-  return VALID_SPDX_ID.test(trimmed) ? trimmed : undefined;
+  return spdxExceptionIdStatus(trimmed) === "unlisted" ? undefined : trimmed;
 }
 
 function collectChoicesFromTokens(tokens: LexToken[]): string[] {

@@ -276,6 +276,19 @@ describe("parseSpdxExpression", () => {
     expect(parsed.malformed).toBe(true);
     expect(parsed.original).toBe("not a license ???");
   });
+
+  test("rejects shape-valid identifiers missing from the pinned SPDX catalog", () => {
+    expect(parseSpdxExpression("Definitely-Not-A-License-1.0")).toMatchObject({
+      malformed: true
+    });
+    expect(parseSpdxExpression("MIT WITH Imaginary-exception")).toMatchObject({
+      malformed: true
+    });
+    expect(parseSpdxExpression("3D-Slicer-1.0")).toMatchObject({
+      expression: "3D-Slicer-1.0",
+      malformed: false
+    });
+  });
 });
 
 describe("normalizeLicenseEvidence", () => {

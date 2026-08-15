@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- SPDX license and exception identifiers are now validated against the pinned
+  official `spdx/license-list-data` build `e4c1f27` from 2026-07-16. Shape-valid
+  invented identifiers no longer become high-confidence license expressions;
+  deprecated identifiers remain parseable for compatibility.
 - SPDX 2.3 local and external `LicenseRef` expressions are now parsed according
   to their reference grammar. They remain custom, low-confidence evidence, and
   unresolved external-document references stay unknown with an explicit

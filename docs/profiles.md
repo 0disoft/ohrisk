@@ -75,7 +75,13 @@ separate asset decision.
 | Source-available restriction | SSPL-1.0, BUSL-1.1, Commons-Clause, Elastic-2.0, PolyForm-Noncommercial-1.0.0, PolyForm-Free-Trial-1.0.0 | high | high |
 | UNLICENSED | UNLICENSED | high | high |
 | Missing or malformed | (no license declared) | unknown | unknown |
-| Unrecognized | (license not in Ohrisk's known set) | unknown | unknown |
+| Unrecognized | (identifier absent from the pinned SPDX catalog and Ohrisk aliases) | unknown | unknown |
+
+Standard license and exception identifiers are validated against the pinned
+official `spdx/license-list-data` build recorded in
+`src/license/spdx-catalog.ts`. Deprecated SPDX identifiers remain accepted for
+existing metadata compatibility; invented identifiers do not become recognized
+merely because they match the SPDX identifier character shape.
 
 The npm `package.json` field `private: true` prevents accidental publication;
 it does not prove that the package is owned by the scanning organization. A
