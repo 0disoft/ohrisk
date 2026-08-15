@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 365afaef32c2ec6872e22bda8ee8c6c9f0b2c5f8d38a901ce31866a966d684bd
+// ohrisk-action-source-sha256: c8e7b27f6bb7747914e361cdaa55e7ac3a1261c1da080311e028c4bfe000904c
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -15414,6 +15414,34 @@ var SUPPORTED_COMMANDS = [
 ];
 
 // src/cli/command-spec.ts
+var COMMAND_USAGE = {
+  scan: "ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
+  ci: "ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--allow-partial-evidence] [--output <file>] [--open]",
+  diff: "ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
+  explain: "ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
+  cache: "ohrisk cache status|prune|clear [--cache-dir <path>] [--json]",
+  help: "ohrisk help [command]",
+  version: "ohrisk version"
+};
+var COMMAND_DESCRIPTIONS = {
+  scan: "Find the current project and prepare a license-risk scan.",
+  ci: "Run a scan and exit non-zero when findings meet the fail threshold.",
+  diff: "Compare current findings against a baseline git ref.",
+  explain: "Explain how a license expression is classified for a profile.",
+  cache: "Inspect, prune, or clear the persistent artifact cache.",
+  help: "Print this help text.",
+  version: "Print the Ohrisk package version."
+};
+var COMMAND_DETAIL_USAGE = {
+  ...COMMAND_USAGE,
+  explain: "ohrisk explain <license-expression> [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--json] [--output <file>]",
+  cache: [
+    "ohrisk cache status [--cache-dir <path>] [--json]",
+    "ohrisk cache prune [--cache-dir <path>] [--max-size <size>] [--max-age <duration>] [--json]",
+    "ohrisk cache clear [--cache-dir <path>] [--json]"
+  ],
+  version: ["ohrisk version", "ohrisk --version", "ohrisk -v"]
+};
 var SCAN_AND_CI_OPTIONS = [
   "--profile",
   "--prod",
@@ -60619,22 +60647,10 @@ function renderTopLevelHelp() {
     "Ohrisk",
     "",
     "Usage:",
-    "  ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
-    "  ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--allow-partial-evidence] [--output <file>] [--open]",
-    "  ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
-    "  ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
-    "  ohrisk cache status|prune|clear [--cache-dir <path>] [--json]",
-    "  ohrisk help [command]",
-    "  ohrisk version",
+    ...Object.values(COMMAND_USAGE).map((usage) => `  ${usage}`),
     "",
     "Commands:",
-    "  scan    Find the current project and prepare a license-risk scan.",
-    "  ci      Run a scan and exit non-zero when findings meet the fail threshold.",
-    "  diff    Compare current findings against a baseline git ref.",
-    "  explain Explain how a license expression is classified for a profile.",
-    "  cache   Inspect, prune, or clear the persistent artifact cache.",
-    "  help    Print this help text.",
-    "  version Print the Ohrisk package version.",
+    ...Object.entries(COMMAND_DESCRIPTIONS).map(([command, description]) => `  ${command.padEnd(8, " ")}${description}`),
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
@@ -60675,7 +60691,7 @@ function renderScanHelp() {
     "Ohrisk scan",
     "",
     "Usage:",
-    "  ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
+    `  ${COMMAND_DETAIL_USAGE.scan}`,
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
@@ -60712,7 +60728,7 @@ function renderCiHelp() {
     "Ohrisk ci",
     "",
     "Usage:",
-    "  ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--allow-partial-evidence] [--output <file>] [--open]",
+    `  ${COMMAND_DETAIL_USAGE.ci}`,
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
@@ -60750,7 +60766,7 @@ function renderDiffHelp() {
     "Ohrisk diff",
     "",
     "Usage:",
-    "  ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
+    `  ${COMMAND_DETAIL_USAGE.diff}`,
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
@@ -60779,9 +60795,7 @@ function renderCacheHelp() {
     "Ohrisk cache",
     "",
     "Usage:",
-    "  ohrisk cache status [--cache-dir <path>] [--json]",
-    "  ohrisk cache prune [--cache-dir <path>] [--max-size <size>] [--max-age <duration>] [--json]",
-    "  ohrisk cache clear [--cache-dir <path>] [--json]",
+    ...COMMAND_DETAIL_USAGE.cache.map((usage) => `  ${usage}`),
     "",
     "Actions:",
     "  status                Show entry, object, size, freshness, and corruption counts.",
@@ -60802,7 +60816,7 @@ function renderExplainHelp() {
     "Ohrisk explain",
     "",
     "Usage:",
-    "  ohrisk explain <license-expression> [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--json] [--output <file>]",
+    `  ${COMMAND_DETAIL_USAGE.explain}`,
     "",
     "Options:",
     "  --profile <profile>    Usage profile. Defaults to saas.",
@@ -60819,7 +60833,7 @@ function renderHelpCommandHelp() {
     "Ohrisk help",
     "",
     "Usage:",
-    "  ohrisk help [command]",
+    `  ${COMMAND_DETAIL_USAGE.help}`,
     "",
     "Commands:",
     "  scan",
@@ -60840,9 +60854,7 @@ function renderVersionHelp() {
     "Ohrisk version",
     "",
     "Usage:",
-    "  ohrisk version",
-    "  ohrisk --version",
-    "  ohrisk -v",
+    ...COMMAND_DETAIL_USAGE.version.map((usage) => `  ${usage}`),
     "",
     "Options:",
     "  --help, -h             Print this help text."
