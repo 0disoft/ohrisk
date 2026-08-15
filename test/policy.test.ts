@@ -464,6 +464,26 @@ describe("evaluateLicenseRisk", () => {
     );
   });
 
+  test("requires review for BSD four-clause advertising attribution", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "package@1.0.0",
+        original: "BSD-4-Clause",
+        expression: "BSD-4-Clause",
+        choices: ["BSD-4-Clause"],
+        joiner: "single",
+        signals: [],
+        evidenceSources: ["source: tarball", "file: LICENSE (license)"],
+        confidence: "medium"
+      },
+      dependency: baseDependency,
+      profile: "saas"
+    });
+
+    expect(finding.severity).toBe("review");
+    expect(finding.recommendation).toBe("review");
+  });
+
   test("explains malformed license metadata as a specific unknown risk", () => {
     const finding = evaluateLicenseRisk({
       license: {

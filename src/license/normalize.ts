@@ -513,6 +513,11 @@ function recognizeStandardLicenseText(text: string): string | undefined {
   }
 
   if (/\bRedistribution and use in source and binary forms\b/i.test(text)) {
+    if (
+      /\bAll advertising materials mentioning features or use of this software must display the following acknowledgement\b/i.test(text)
+    ) {
+      return "BSD-4-Clause";
+    }
     return /\bNeither the name of\b/i.test(text) ? "BSD-3-Clause" : "BSD-2-Clause";
   }
 

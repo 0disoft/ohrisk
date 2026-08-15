@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Full-text detection now recognizes the BSD four-clause advertising
+  acknowledgement before the BSD three-clause signature. `BSD-4-Clause`
+  requires review instead of being reduced to a permissive low-risk result.
 - `package.json private: true` is now retained only as provenance and no longer
   treated as proof that an unlicensed local dependency is organization-owned.
   Without independent license evidence, the package remains `unknown`.

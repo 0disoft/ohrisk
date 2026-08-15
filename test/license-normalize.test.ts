@@ -488,6 +488,31 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
+  test("does not collapse the BSD four-clause advertising obligation into BSD three-clause", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "bsd-4-clause@1.0.0",
+      files: [{
+        path: "LICENSE",
+        kind: "license",
+        text: [
+          "Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:",
+          "All advertising materials mentioning features or use of this software must display the following acknowledgement:",
+          'This product includes software developed by the Example Organization.',
+          "Neither the name of the Example Organization nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission."
+        ].join("\n")
+      }],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      original: "BSD-4-Clause",
+      expression: "BSD-4-Clause",
+      choices: ["BSD-4-Clause"],
+      confidence: "medium"
+    });
+  });
+
   test("reads deprecated package.json license objects", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "legacy-license-object@1.0.0",

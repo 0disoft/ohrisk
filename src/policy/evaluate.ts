@@ -30,6 +30,10 @@ const PERMISSIVE_LICENSES = new Set([
   "Unlicense"
 ]);
 
+const ATTRIBUTION_REVIEW_LICENSES = new Set([
+  "BSD-4-Clause"
+]);
+
 const FILE_LEVEL_COPYLEFT_LICENSE_PREFIXES = ["MPL"];
 const WEAK_COPYLEFT_LICENSE_PREFIXES = ["LGPL", "EPL"];
 
@@ -262,6 +266,10 @@ function classifyLicenseChoice(
 
   if (PERMISSIVE_LICENSES.has(choice.license)) {
     return "low";
+  }
+
+  if (ATTRIBUTION_REVIEW_LICENSES.has(choice.license)) {
+    return "review";
   }
 
   if (COMMERCIAL_RESTRICTION_LICENSES.has(choice.license)) {

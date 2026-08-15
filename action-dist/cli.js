@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 8dd10fa74b67f2a78d45dfdb44d09d9d9c78ab5e7edc1d96e5e5d5c62ee15504
+// ohrisk-action-source-sha256: 865d6d1b24614b63367ca3aa1e77b51f84c7fafa02f26780ee5cefba8aa45adc
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19582,7 +19582,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.33";
+var OHRISK_VERSION = "1.14.34";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -55020,6 +55020,9 @@ function recognizeStandardLicenseText(text3) {
     return "Zlib";
   }
   if (/\bRedistribution and use in source and binary forms\b/i.test(text3)) {
+    if (/\bAll advertising materials mentioning features or use of this software must display the following acknowledgement\b/i.test(text3)) {
+      return "BSD-4-Clause";
+    }
     return /\bNeither the name of\b/i.test(text3) ? "BSD-3-Clause" : "BSD-2-Clause";
   }
   return;
@@ -55829,6 +55832,9 @@ var PERMISSIVE_LICENSES = new Set([
   "CC0-1.0",
   "Unlicense"
 ]);
+var ATTRIBUTION_REVIEW_LICENSES = new Set([
+  "BSD-4-Clause"
+]);
 var FILE_LEVEL_COPYLEFT_LICENSE_PREFIXES = ["MPL"];
 var WEAK_COPYLEFT_LICENSE_PREFIXES = ["LGPL", "EPL"];
 var STRONG_COPYLEFT_LICENSE_PREFIXES = [
@@ -55974,6 +55980,9 @@ function classifyLicenseChoice(choice, profile, policy) {
   }
   if (PERMISSIVE_LICENSES.has(choice.license)) {
     return "low";
+  }
+  if (ATTRIBUTION_REVIEW_LICENSES.has(choice.license)) {
+    return "review";
   }
   if (COMMERCIAL_RESTRICTION_LICENSES.has(choice.license)) {
     return "high";
