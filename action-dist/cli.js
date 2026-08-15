@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: e609c41b651bf080f3cf601e23e40ea60e109ce27051e9aed47b760e53c50613
+// ohrisk-action-source-sha256: b52a7f025b5e6bdfc4c83274bad0810a5e8f636e3351b1783cafb64f426c6666
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19596,7 +19596,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.40";
+var OHRISK_VERSION = "1.14.41";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -54680,6 +54680,7 @@ var LICENSE_ALIASES = new Map([
   ["unlicensed", "UNLICENSED"]
 ]);
 var VALID_SPDX_ID = /^[A-Za-z0-9-.+]+$/;
+var VALID_SPDX_LICENSE_REFERENCE = /^(?:DocumentRef-[A-Za-z0-9.-]+:)?LicenseRef-[A-Za-z0-9.-]+$/;
 function parseSpdxExpression(input) {
   const original = input.trim();
   if (original.length === 0) {
@@ -54723,6 +54724,9 @@ function parseSpdxExpression(input) {
 }
 function formatSpdxExpression(ast) {
   return formatNode(ast, 0);
+}
+function isSpdxLicenseReference(value) {
+  return VALID_SPDX_LICENSE_REFERENCE.test(value);
 }
 function parsedResult(original, ast, usedAlias) {
   const choices = [];
@@ -54953,6 +54957,13 @@ function normalizeLicenseToken(token) {
       usedAlias: alias !== trimmed
     };
   }
+  if (isSpdxLicenseReference(trimmed)) {
+    return {
+      normalized: trimmed,
+      malformed: false,
+      usedAlias: false
+    };
+  }
   if (!VALID_SPDX_ID.test(trimmed)) {
     return {
       normalized: trimmed,
@@ -55088,6 +55099,9 @@ function normalizeLicenseEvidence(evidence) {
       confidence: "low"
     }, parsed.ast);
   }
+  if (parsed.choices.some(isSpdxLicenseReference) && !signals.includes("custom-text")) {
+    signals.push("custom-text");
+  }
   return withSpdxAst({
     packageId: evidence.packageId,
     original: parsed.original,
@@ -55097,7 +55111,7 @@ function normalizeLicenseEvidence(evidence) {
     ...parsed.exceptions.length > 0 ? { exceptions: parsed.exceptions } : {},
     signals,
     evidenceSources,
-    confidence: signals.includes("conflicting-evidence") ? "low" : parsed.usedAlias || licenseExpression.source === "license-file" ? "medium" : "high"
+    confidence: signals.includes("conflicting-evidence") || signals.includes("custom-text") ? "low" : parsed.usedAlias || licenseExpression.source === "license-file" ? "medium" : "high"
   }, parsed.ast);
 }
 function withSpdxAst(license, ast) {

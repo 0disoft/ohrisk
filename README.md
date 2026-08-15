@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.14.40
+npm install -g ohrisk@1.14.41
 cd your-project
 ohrisk scan
 ```
@@ -257,7 +257,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - CycloneDX JSON/XML and SPDX JSON/RDF/tag-value package license declarations from SBOM metadata; conflicting SPDX declared and concluded assertions remain visible and produce unknown severity
 - common root-level `LICENSE`, `LICENCE`, `UNLICENSE`, `COPYING`, and `NOTICE` file variants
 - medium-confidence standard license detection from recognizable `LICENSE` and `COPYING` file text, including SPDX identifiers, GPL-family v2/v3 text, Zlib text, public-domain-style text, and malformed metadata pointers
-- SPDX-like license expression parsing
+- SPDX-like license expression parsing, including local and external-document `LicenseRef` syntax that remains custom low-confidence evidence
 - common human-readable license metadata alias normalization, including slash and comma dual-license shorthands
 - low-risk classification for common permissive, Zlib, and public-domain-style SPDX licenses
 - NOTICE evidence is surfaced as attribution-preservation action text without raising severity
@@ -383,7 +383,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.14.40
+npm install -g ohrisk@1.14.41
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open

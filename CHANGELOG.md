@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- SPDX 2.3 local and external `LicenseRef` expressions are now parsed according
+  to their reference grammar. They remain custom, low-confidence evidence, and
+  unresolved external-document references stay unknown with an explicit
+  warning instead of being mislabeled as malformed syntax.
 - SPDX JSON, RDF, and tag-value inputs now connect package `LicenseRef-*`
   expressions to their document-local extracted license text. Referenced custom
   text is bounded, attributable evidence and can surface explicit commercial

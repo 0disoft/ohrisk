@@ -64,6 +64,9 @@ and modules without an exact ZIP checksum are never sent to the proxy.
 - Document-local SPDX `LicenseRef-*` extracted text is attached only to packages
   that reference it, with per-package count and text-size limits. Unresolved
   local or external document references remain explicit warnings.
+- Valid local and `DocumentRef-*:LicenseRef-*` expressions are custom,
+  low-confidence evidence unless document-local extracted text supplies stronger
+  signals; external document contents are never inferred.
 - Waivers may suppress matching findings, but strict waiver drift can fail CI.
 - Shareable formats must avoid leaking absolute local paths.
 

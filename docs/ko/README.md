@@ -348,6 +348,8 @@ SPDX의 `licenseDeclared`와 `licenseConcluded`는 별도 주장으로 보존하
 다르면 둘 다 evidence에 표시하고 `conflicting-evidence` unknown으로 판정한다.
 package가 문서 내부 `LicenseRef-*`를 참조하면 해당 extracted license text도
 제한된 크기와 개수 안에서 evidence로 읽어 상업적 사용 제한 등을 검사한다.
+유효한 로컬 또는 `DocumentRef-*:LicenseRef-*` 참조 자체는 custom low-confidence로
+유지하고, 외부 문서의 내용은 추측하지 않는다.
 CycloneDX 경로 복원은 재귀 없이 모든 도달 가능한 component를 유지하되 component당
 최대 64개 경로를 저장하고 256단계보다 깊은 경로는 요약한다. 이런 제한이 적용되면
 JSON scan report의 typed dependency-graph diagnostic에 표시된다.

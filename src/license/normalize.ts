@@ -1,6 +1,6 @@
 import type { LicenseEvidence } from "../evidence/types";
 import type { NormalizedLicense, NormalizedLicenseSignal } from "./types";
-import { parseSpdxExpression } from "./spdx";
+import { isSpdxLicenseReference, parseSpdxExpression } from "./spdx";
 
 type LicenseExpressionEvidence = {
   expression: string;
@@ -108,6 +108,10 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     }, parsed.ast);
   }
 
+  if (parsed.choices.some(isSpdxLicenseReference) && !signals.includes("custom-text")) {
+    signals.push("custom-text");
+  }
+
   return withSpdxAst({
     packageId: evidence.packageId,
     original: parsed.original,
@@ -117,7 +121,7 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     ...(parsed.exceptions.length > 0 ? { exceptions: parsed.exceptions } : {}),
     signals,
     evidenceSources,
-    confidence: signals.includes("conflicting-evidence")
+    confidence: signals.includes("conflicting-evidence") || signals.includes("custom-text")
       ? "low"
       : parsed.usedAlias || licenseExpression.source === "license-file"
         ? "medium"

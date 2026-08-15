@@ -56,6 +56,7 @@ const LICENSE_ALIASES = new Map<string, string>([
 ]);
 
 const VALID_SPDX_ID = /^[A-Za-z0-9-.+]+$/;
+const VALID_SPDX_LICENSE_REFERENCE = /^(?:DocumentRef-[A-Za-z0-9.-]+:)?LicenseRef-[A-Za-z0-9.-]+$/;
 
 export type SpdxLicenseNode = {
   type: "license";
@@ -162,6 +163,10 @@ export function collectSpdxLicenseTerms(ast: SpdxExpressionNode): string[] {
     terms.push(node.exception ? `${node.license} WITH ${node.exception}` : node.license);
   });
   return [...new Set(terms)];
+}
+
+export function isSpdxLicenseReference(value: string): boolean {
+  return VALID_SPDX_LICENSE_REFERENCE.test(value);
 }
 
 export function visitSpdxExpression(
@@ -468,6 +473,14 @@ function normalizeLicenseToken(token: string): NormalizedOperand {
       normalized: alias,
       malformed: false,
       usedAlias: alias !== trimmed
+    };
+  }
+
+  if (isSpdxLicenseReference(trimmed)) {
+    return {
+      normalized: trimmed,
+      malformed: false,
+      usedAlias: false
     };
   }
 

@@ -224,6 +224,19 @@ describe("parseSpdxExpression", () => {
     });
   });
 
+  test("parses local and external SPDX LicenseRef expressions", () => {
+    expect(parseSpdxExpression("LicenseRef-Proprietary")).toMatchObject({
+      expression: "LicenseRef-Proprietary",
+      choices: ["LicenseRef-Proprietary"],
+      malformed: false
+    });
+    expect(parseSpdxExpression("DocumentRef-vendor:LicenseRef-Proprietary")).toMatchObject({
+      expression: "DocumentRef-vendor:LicenseRef-Proprietary",
+      choices: ["DocumentRef-vendor:LicenseRef-Proprietary"],
+      malformed: false
+    });
+  });
+
   test("preserves operator precedence and parenthesized grouping", () => {
     expect(parseSpdxExpression("MIT OR GPL-3.0-only AND Apache-2.0").ast).toEqual({
       type: "or",
@@ -346,6 +359,24 @@ describe("normalizeLicenseEvidence", () => {
       joiner: "single",
       signals: ["missing", "custom-text"],
       evidenceSources: ["source: local", "file: LICENSE (license)"],
+      confidence: "low"
+    });
+  });
+
+  test("keeps SPDX LicenseRef metadata custom and low confidence", () => {
+    expect(normalizeLicenseEvidence({
+      packageId: "custom-license@1.0.0",
+      metadataLicense: "DocumentRef-vendor:LicenseRef-Proprietary",
+      metadataSource: "SPDX",
+      files: [],
+      source: "sbom",
+      warnings: [
+        "SPDX external license reference DocumentRef-vendor:LicenseRef-Proprietary cannot be resolved from this document."
+      ]
+    })).toMatchObject({
+      expression: "DocumentRef-vendor:LicenseRef-Proprietary",
+      choices: ["DocumentRef-vendor:LicenseRef-Proprietary"],
+      signals: ["custom-text"],
       confidence: "low"
     });
   });
