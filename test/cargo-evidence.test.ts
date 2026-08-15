@@ -123,7 +123,7 @@ describe("collectCargoPackageEvidence", () => {
       }
 
       expect(evidence.value.files).toEqual([]);
-      expect(evidence.value.warnings).toContain("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Cargo package source.");
+      expect(evidence.value.warnings).toContain("No supported license, notice, attribution, or legal evidence file found in Cargo package source.");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
@@ -170,7 +170,7 @@ describe("collectCargoPackageEvidence", () => {
 
       expect(evidence.value.files).toHaveLength(50);
       expect(evidence.value.warnings).not.toContain(
-        "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Cargo package source."
+        "No supported license, notice, attribution, or legal evidence file found in Cargo package source."
       );
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });

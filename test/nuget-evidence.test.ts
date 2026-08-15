@@ -108,7 +108,7 @@ describe("collectNugetPackageEvidence", () => {
 
       expect(evidence.value.files).toEqual([]);
       expect(evidence.value.metadataLicense).toBeUndefined();
-      expect(evidence.value.warnings).toContain("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in NuGet package source.");
+      expect(evidence.value.warnings).toContain("No supported license, notice, attribution, or legal evidence file found in NuGet package source.");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
@@ -145,7 +145,7 @@ describe("collectNugetPackageEvidence", () => {
 
       expect(evidence.value.files).toHaveLength(50);
       expect(evidence.value.warnings).not.toContain(
-        "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in NuGet package source."
+        "No supported license, notice, attribution, or legal evidence file found in NuGet package source."
       );
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });

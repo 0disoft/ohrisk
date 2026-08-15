@@ -42,7 +42,7 @@ export function collectNixPackageEvidence(input: {
   });
 
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in local Nix flake input source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in local Nix flake input source.");
   }
 
   return ok({

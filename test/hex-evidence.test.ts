@@ -113,7 +113,7 @@ describe("collectHexPackageEvidence", () => {
       "Hex package evidence file limit reached at 50 files."
     );
     expect(evidence.value.warnings).not.toContain(
-      "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Hex package source."
+      "No supported license, notice, attribution, or legal evidence file found in Hex package source."
     );
   });
 });

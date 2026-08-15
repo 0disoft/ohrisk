@@ -93,7 +93,7 @@ describe("collectHelmChartEvidence", () => {
         "Helm chart evidence file limit reached at 50 files."
       );
       expect(result.value.warnings).not.toContain(
-        "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Helm chart source."
+        "No supported license, notice, attribution, or legal evidence file found in Helm chart source."
       );
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });

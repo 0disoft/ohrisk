@@ -62,7 +62,7 @@ export function collectZigPackageEvidence(input: {
   });
 
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Zig package source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Zig package source.");
   }
 
   return ok({
@@ -171,7 +171,7 @@ export function collectRemoteZigTarballEvidence(input: {
   const evidenceFiles = collectZigTarballEvidenceFiles(coveredEntries, warnings);
 
   if (evidenceFiles.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Zig package tarball.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Zig package tarball.");
   }
 
   return ok({

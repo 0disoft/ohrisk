@@ -63,7 +63,7 @@ export function collectTarballEvidence(input: {
 
     const files = collectTarEvidenceFiles(entries, packageRoot);
     const warnings = files.length === 0
-      ? ["No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found."]
+      ? ["No supported license, notice, attribution, or legal evidence file found."]
       : [];
 
     return ok({
@@ -159,7 +159,7 @@ export function collectPubTarballEvidence(input: {
       files,
       source: "tarball",
       warnings: files.length === 0
-        ? ["No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Dart pub package archive."]
+        ? ["No supported license, notice, attribution, or legal evidence file found in Dart pub package archive."]
         : []
     });
   } catch (cause) {

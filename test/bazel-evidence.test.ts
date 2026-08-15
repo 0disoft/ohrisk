@@ -81,7 +81,7 @@ describe("collectBazelModuleEvidence", () => {
       "Bazel module evidence file limit reached at 50 files."
     );
     expect(evidence.value.warnings).not.toContain(
-      "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Bazel module source."
+      "No supported license, notice, attribution, or legal evidence file found in Bazel module source."
     );
   });
 });

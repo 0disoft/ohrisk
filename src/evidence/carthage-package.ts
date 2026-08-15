@@ -41,7 +41,7 @@ export function collectCarthagePackageEvidence(input: {
   });
 
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Carthage checkout.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Carthage checkout.");
   }
 
   return ok({

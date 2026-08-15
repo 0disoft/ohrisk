@@ -360,6 +360,9 @@ medium-confidence로 표시하며, 모양만 비슷한 미등록 ID는 거부한
 `distributed-app` finding에는 확인된 license expression과 NOTICE evidence를
 바탕으로 `license-text`, `notice-file` obligation을 표시한다. 다만 실제 배포
 산출물을 검사한 것이 아니므로 status는 항상 `unknown`이며 충족·누락을 단정하지 않는다.
+공통 evidence 분류기는 `THIRD_PARTY_NOTICES`, `THIRD_PARTY_LICENSES`, `COPYRIGHT`,
+`AUTHORS`, `PATENTS`, `LEGAL`, `.license` sidecar와 collector가 경로를 제공하는
+`LICENSES/` 바로 아래 파일도 인식한다.
 CycloneDX 경로 복원은 재귀 없이 모든 도달 가능한 component를 유지하되 component당
 최대 64개 경로를 저장하고 256단계보다 깊은 경로는 요약한다. 이런 제한이 적용되면
 JSON scan report의 typed dependency-graph diagnostic에 표시된다.

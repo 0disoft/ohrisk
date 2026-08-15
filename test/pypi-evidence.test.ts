@@ -177,7 +177,7 @@ describe("PyPI release evidence", () => {
       text: "GNU LESSER GENERAL PUBLIC LICENSE\nVersion 2.1, February 1999"
     }]);
     expect(result.value.warnings).not.toContain(
-      "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in the Python distribution."
+      "No supported license, notice, attribution, or legal evidence file found in the Python distribution."
     );
     const normalized = normalizeLicenseEvidence(result.value);
     expect(normalized).toMatchObject({

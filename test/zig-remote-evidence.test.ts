@@ -446,7 +446,7 @@ test("collectRemoteZigTarballEvidence > handles tarball with no license file", (
   if (!result.ok) return;
 
   equal(result.value.files.length, 0);
-  equal(result.value.warnings!.some((w) => w.includes("No LICENSE")), true);
+  equal(result.value.warnings!.some((w) => w.includes("No supported license")), true);
 });
 
 test("collectRemoteZigTarballEvidence > collects multiple evidence files from tarball", () => {
@@ -510,7 +510,7 @@ test("collectRemoteZigTarballEvidence > ignores license files excluded by manife
   if (!result.ok) return;
   equal(result.value.source, "tarball");
   equal(result.value.files.length, 0);
-  equal(result.value.warnings?.some((warning) => warning.includes("No LICENSE")), true);
+  equal(result.value.warnings?.some((warning) => warning.includes("No supported license")), true);
 });
 
 test("collectRemoteZigTarballEvidence > preserves non-UTF-8 path bytes for filtering and hashing", () => {

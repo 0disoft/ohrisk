@@ -7,7 +7,7 @@ Examples for running Ohrisk in GitHub Actions.
 Use the tagged action for a reproducible PR gate:
 
 ```yaml
-- uses: 0disoft/ohrisk@v1.14.45
+- uses: 0disoft/ohrisk@v1.14.46
   with:
     prod: "true"
     fail-on: high
@@ -18,9 +18,9 @@ an npm version at workflow runtime. The optional `version` input accepts only an
 exact semantic version and asserts that the bundle contains that version:
 
 ```yaml
-- uses: 0disoft/ohrisk@v1.14.45
+- uses: 0disoft/ohrisk@v1.14.46
   with:
-    version: 1.14.45
+    version: 1.14.46
 ```
 
 Mutable npm tags, Git URLs, local paths, and version ranges are rejected. A
@@ -37,7 +37,7 @@ intentional, separately reviewed exception.
 Generate an HTML report artifact:
 
 ```yaml
-- uses: 0disoft/ohrisk@v1.14.45
+- uses: 0disoft/ohrisk@v1.14.46
   with:
     command: scan
     format: html
@@ -65,7 +65,7 @@ Compare a pull request against a baseline ref with the bundled action:
   with:
     fetch-depth: 0
 
-- uses: 0disoft/ohrisk@v1.14.45
+- uses: 0disoft/ohrisk@v1.14.46
   with:
     command: diff
     baseline-ref: origin/main
@@ -88,11 +88,11 @@ CI:
 - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
   with:
     node-version: 24
-- run: npm install -g ohrisk@1.14.45
+- run: npm install -g ohrisk@1.14.46
 ```
 
 A global install is useful when several steps invoke Ohrisk. For one command,
-`npx ohrisk@1.14.45`, `pnpm dlx ohrisk@1.14.45`, or an equivalent exact-version
+`npx ohrisk@1.14.46`, `pnpm dlx ohrisk@1.14.46`, or an equivalent exact-version
 runner also works.
 
 ## PR gate
@@ -112,7 +112,7 @@ Commit `.ohrisk.yml` at the project root or pass a repository-relative policy
 file explicitly:
 
 ```yaml
-- uses: 0disoft/ohrisk@v1.14.45
+- uses: 0disoft/ohrisk@v1.14.46
   with:
     policy: compliance/ohrisk.yml
     prod: "true"

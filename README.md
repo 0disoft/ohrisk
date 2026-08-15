@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.14.45
+npm install -g ohrisk@1.14.46
 cd your-project
 ohrisk scan
 ```
@@ -256,7 +256,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - Composer package `composer.json` `license` fields
 - CycloneDX JSON/XML and SPDX JSON/RDF/tag-value package license declarations from SBOM metadata; conflicting SPDX declared and concluded assertions remain visible and produce unknown severity
 - package metadata and recognizable license-file assertions are reconciled independently; a file expression outside the declared choices produces low-confidence `conflicting-evidence` and unknown severity instead of a false permissive result
-- common root-level `LICENSE`, `LICENCE`, `UNLICENSE`, `COPYING`, and `NOTICE` file variants
+- common `LICENSE`, `LICENCE`, `UNLICENSE`, `COPYING`, `NOTICE`, `THIRD_PARTY_NOTICES`, `THIRD_PARTY_LICENSES`, `COPYRIGHT`, `AUTHORS`, `PATENTS`, and `LEGAL` variants, `.license` sidecars, and files directly inside `LICENSES/` when the owning artifact collector exposes those paths
 - medium-confidence standard license detection from recognizable `LICENSE` and `COPYING` file text, including SPDX identifiers, GPL-family v2/v3 text, Zlib text, public-domain-style text, and malformed metadata pointers
 - SPDX-like license expression parsing against the pinned official license and exception catalog, including explicit medium-confidence provenance for deprecated identifiers and local or external-document `LicenseRef` syntax that remains custom low-confidence evidence
 - common human-readable license metadata alias normalization, including slash and comma dual-license shorthands
@@ -385,7 +385,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.14.45
+npm install -g ohrisk@1.14.46
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open

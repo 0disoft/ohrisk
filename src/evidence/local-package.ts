@@ -113,7 +113,7 @@ export function collectLocalPackageEvidenceFromSnapshot(input: {
   }
 
   if (!foundEvidenceFile) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found.");
   }
 
   return ok({
@@ -168,7 +168,7 @@ export function collectLocalPackageEvidence(input: {
     });
 
     if (!evidenceFiles.foundEvidenceFile) {
-      warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found.");
+      warnings.push("No supported license, notice, attribution, or legal evidence file found.");
     }
 
     return ok({

@@ -63,7 +63,7 @@ export function collectHexPackageEvidence(input: {
   });
 
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Hex package source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Hex package source.");
   }
 
   if (!metadataLicenses.value || metadataLicenses.value.licenses.length === 0) {

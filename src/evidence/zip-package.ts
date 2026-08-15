@@ -70,7 +70,7 @@ export function collectZipPackageEvidence(input: {
       }
 
       const warnings = files.value.length === 0
-        ? ["No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found."]
+        ? ["No supported license, notice, attribution, or legal evidence file found."]
         : [];
 
       return ok({

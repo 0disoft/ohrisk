@@ -91,7 +91,7 @@ describe("collectCondaPackageEvidence", () => {
         "Conda package evidence file limit reached at 50 files."
       );
       expect(evidence.value.warnings).not.toContain(
-        "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Conda package source."
+        "No supported license, notice, attribution, or legal evidence file found in Conda package source."
       );
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });

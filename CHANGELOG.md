@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Shared artifact evidence classification now recognizes third-party notice and
+  license bundles, `COPYRIGHT`, `AUTHORS`, `PATENTS`, `LEGAL`, `.license`
+  sidecars, and files directly inside `LICENSES/`. Missing-evidence diagnostics
+  now describe the supported legal-evidence class instead of an obsolete
+  five-name list.
 - Distributed-app findings now include conservative `license-text` and
   `notice-file` obligation evidence. Status stays `unknown` because dependency
   evidence cannot prove that a release artifact preserves the required files;

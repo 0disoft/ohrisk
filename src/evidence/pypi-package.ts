@@ -138,7 +138,7 @@ export function collectPythonDistributionEvidence(input: {
     warnings.push("The selected PyPI distribution is yanked, but it was retained because the dependency pins this exact version.");
   }
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in the Python distribution.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in the Python distribution.");
   }
   if (!artifactMetadataLicense) {
     warnings.push(

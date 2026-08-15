@@ -28,7 +28,15 @@ describe("classifyEvidenceFile", () => {
     expect(classifyEvidenceFile("LICENSE-MIT")).toBe("license");
     expect(classifyEvidenceFile("LICENCE_APACHE")).toBe("license");
     expect(classifyEvidenceFile("NOTICE_THIRD_PARTY")).toBe("notice");
+    expect(classifyEvidenceFile("THIRD_PARTY_NOTICES.txt")).toBe("notice");
+    expect(classifyEvidenceFile("THIRD-PARTY-LICENSES.md")).toBe("license");
     expect(classifyEvidenceFile("COPYING-LESSER")).toBe("copying");
+    expect(classifyEvidenceFile("COPYRIGHT")).toBe("other");
+    expect(classifyEvidenceFile("AUTHORS.md")).toBe("other");
+    expect(classifyEvidenceFile("PATENTS")).toBe("other");
+    expect(classifyEvidenceFile("LEGAL.txt")).toBe("other");
+    expect(classifyEvidenceFile("src/vendor.c.license")).toBe("license");
+    expect(classifyEvidenceFile("LICENSES/Apache-2.0.txt")).toBe("license");
     expect(classifyEvidenceFile("docs/LICENSE-MIT")).toBe("license");
     expect(classifyEvidenceFile("README.md")).toBeUndefined();
   });
@@ -83,7 +91,7 @@ describe("collectLocalPackageEvidence", () => {
       expect(result.value.packageJsonLicense).toBeUndefined();
       expect(result.value.files).toEqual([]);
       expect(result.value.warnings).toEqual([
-        "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found."
+        "No supported license, notice, attribution, or legal evidence file found."
       ]);
     } finally {
       rmSync(packageDir, { recursive: true, force: true });
@@ -541,7 +549,7 @@ describe("collectTarballEvidence", () => {
     expect(result.value.packageJsonLicense).toBe("MIT");
     expect(result.value.files).toEqual([]);
     expect(result.value.warnings).toEqual([
-      "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found."
+      "No supported license, notice, attribution, or legal evidence file found."
     ]);
   });
 });
@@ -712,7 +720,7 @@ describe("collectGraphEvidence", () => {
     const missingLicense = evidence.value.find((item) => item.packageId === "missing-license@4.0.0");
     expect(missingLicense).toMatchObject({
       files: [],
-      warnings: ["No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found."]
+      warnings: ["No supported license, notice, attribution, or legal evidence file found."]
     });
     expect(missingLicense).not.toHaveProperty("packageJsonLicense");
   });

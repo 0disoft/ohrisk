@@ -87,7 +87,7 @@ describe("collectTerraformProviderEvidence", () => {
       expect(result.value.files).toHaveLength(50);
       expect(result.value.warnings).toContain("Terraform provider evidence file limit reached at 50 files.");
       expect(result.value.warnings).not.toContain(
-        "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Terraform provider cache."
+        "No supported license, notice, attribution, or legal evidence file found in Terraform provider cache."
       );
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });

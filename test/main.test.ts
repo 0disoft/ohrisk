@@ -1049,7 +1049,7 @@ describe("main", () => {
     expect(stdout.join("\n")).toContain(
       "action: Add or verify package license metadata before approving this package."
     );
-    expect(stdout.join("\n")).toContain("warning: No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found.");
+    expect(stdout.join("\n")).toContain("warning: No supported license, notice, attribution, or legal evidence file found.");
     expect(stdout.join("\n")).toContain("file: COPYING (copying)");
     expect(stdout.join("\n")).toContain("- [review] gpl-package@5.0.0");
     expect(stdout.join("\n")).toContain("License expression should be reviewed before shipping under saas.");

@@ -372,7 +372,8 @@ is limited to one exact 64-hex SHA-256 value. Only then may Ohrisk download the
 matching JAR, capped at 32 MiB, verify the checksum, parse it with the bounded ZIP
 reader, and require exact
 `META-INF/maven/<groupId>/<artifactId>/pom.properties` identity. Only package-root
-or direct `META-INF` LICENSE, LICENCE, COPYING, and NOTICE files are considered;
+or direct `META-INF` supported license, notice, attribution, and legal evidence
+files are considered;
 nested dependency license directories are ignored. Missing checksums, missing
 embedded identity, absent license files, or a safely rejected optional JAR leave
 the package `unknown`. A malformed checksum, checksum mismatch, or embedded

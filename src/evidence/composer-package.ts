@@ -55,7 +55,7 @@ export function collectComposerPackageEvidence(input: {
   });
 
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Composer package source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Composer package source.");
   }
 
   if (packageJson.value.license === undefined) {

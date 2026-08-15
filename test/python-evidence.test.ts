@@ -239,7 +239,7 @@ describe("collectPythonPackageEvidence", () => {
 
       expect(evidence.value.files.length).toBeLessThan(51);
       expect(evidence.value.warnings).not.toContain(
-        "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Python dist-info metadata."
+        "No supported license, notice, attribution, or legal evidence file found in Python dist-info metadata."
       );
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });

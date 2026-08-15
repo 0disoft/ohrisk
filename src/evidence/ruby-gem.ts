@@ -63,7 +63,7 @@ export function collectRubyGemEvidence(input: {
   });
 
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Ruby gem source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Ruby gem source.");
   }
 
   if (!gemspec.value || gemspec.value.length === 0) {

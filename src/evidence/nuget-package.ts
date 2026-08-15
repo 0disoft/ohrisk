@@ -70,7 +70,7 @@ export function collectNugetPackageEvidence(input: {
   });
 
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in NuGet package source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in NuGet package source.");
   }
 
   if (!metadata.value.license && metadata.value.licenseUrl) {

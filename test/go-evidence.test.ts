@@ -236,7 +236,7 @@ describe("collectGoModuleEvidence", () => {
 
       expect(evidence.value.files).toHaveLength(50);
       expect(evidence.value.warnings).not.toContain(
-        "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Go module source."
+        "No supported license, notice, attribution, or legal evidence file found in Go module source."
       );
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });

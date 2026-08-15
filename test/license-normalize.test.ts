@@ -419,7 +419,7 @@ describe("normalizeLicenseEvidence", () => {
         files: [],
         source: "local",
         warnings: [
-          "No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found."
+          "No supported license, notice, attribution, or legal evidence file found."
         ]
       })
     ).toEqual({
@@ -430,7 +430,7 @@ describe("normalizeLicenseEvidence", () => {
       evidenceSources: [
         "source: local",
         "package.json private: true",
-        "warning: No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found."
+        "warning: No supported license, notice, attribution, or legal evidence file found."
       ],
       confidence: "low"
     });

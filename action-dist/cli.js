@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 43c255660b48165d11f99dd19681cb280b578b02ab12c1333ee9c8b06e12594f
+// ohrisk-action-source-sha256: 279823748d144a11f850a2b86367dbb9af613f8b041162dca45acd583183db56
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19596,7 +19596,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.45";
+var OHRISK_VERSION = "1.14.46";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -31445,9 +31445,19 @@ import path31 from "node:path";
 
 // src/evidence/license-files.ts
 function classifyEvidenceFile(path31) {
-  const normalized = path31.replace(/\\/g, "/").split("/").pop()?.toLowerCase();
+  const segments = path31.replace(/\\/g, "/").split("/").filter(Boolean);
+  const normalized = segments.at(-1)?.toLowerCase();
   if (!normalized) {
     return;
+  }
+  if (segments.at(-2)?.toLowerCase() === "licenses" || normalized.endsWith(".license")) {
+    return "license";
+  }
+  if (/^third[-_ ]party[-_ ]notices?(?:[._-]|$)/i.test(normalized)) {
+    return "notice";
+  }
+  if (/^third[-_ ]party[-_ ]licenses?(?:[._-]|$)/i.test(normalized)) {
+    return "license";
   }
   if (hasEvidenceName(normalized, "notice")) {
     return "notice";
@@ -31457,6 +31467,9 @@ function classifyEvidenceFile(path31) {
   }
   if (hasEvidenceName(normalized, "unlicense") || hasEvidenceName(normalized, "license") || hasEvidenceName(normalized, "licence")) {
     return "license";
+  }
+  if (hasEvidenceName(normalized, "copyright") || hasEvidenceName(normalized, "authors") || hasEvidenceName(normalized, "patents") || hasEvidenceName(normalized, "legal")) {
+    return "other";
   }
   return;
 }
@@ -31768,7 +31781,7 @@ function readLocalSourceEvidence(input) {
     });
   }
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in the local Python source tree.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in the local Python source tree.");
   }
   if (!input.metadata.license) {
     warnings.push(`${input.metadata.source} did not declare license metadata.`);
@@ -43179,7 +43192,7 @@ function collectCargoPackageEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Cargo package source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Cargo package source.");
   }
   if (!manifest.value.license) {
     warnings.push("Cargo.toml did not declare a package license.");
@@ -43630,7 +43643,7 @@ function collectBazelModuleEvidence(input) {
       warnings
     });
     if (files.length === 0) {
-      warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Bazel module source.");
+      warnings.push("No supported license, notice, attribution, or legal evidence file found in Bazel module source.");
     }
     return ok({
       packageId: input.packageId,
@@ -43857,7 +43870,7 @@ function collectCarthagePackageEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Carthage checkout.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Carthage checkout.");
   }
   return ok({
     packageId: input.packageId,
@@ -44002,7 +44015,7 @@ function collectCocoapodsPackageEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in CocoaPods package source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in CocoaPods package source.");
   }
   if (!podspecLicense.value) {
     warnings.push("CocoaPods podspec did not declare license metadata.");
@@ -44198,7 +44211,7 @@ function collectCondaPackageEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Conda package source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Conda package source.");
   }
   const metadataLicense = readCondaMetadataLicense(packageIndex.value);
   if (!metadataLicense) {
@@ -44422,7 +44435,7 @@ function collectConanPackageEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Conan package source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Conan package source.");
   }
   if (!conanfileLicenses.value || conanfileLicenses.value.length === 0) {
     warnings.push("Conan package conanfile.py did not declare license metadata.");
@@ -44636,7 +44649,7 @@ function collectComposerPackageEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Composer package source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Composer package source.");
   }
   if (packageJson.value.license === undefined) {
     warnings.push("Composer package composer.json did not declare license metadata.");
@@ -45016,7 +45029,7 @@ function collectGoModuleEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Go module source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Go module source.");
   }
   const goModuleRequirements = readLocalGoModuleRequirements(moduleDir);
   return ok({
@@ -45374,7 +45387,7 @@ function collectHelmChartEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Helm chart source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Helm chart source.");
   }
   if (!metadataLicense) {
     warnings.push("Helm Chart.yaml did not declare license metadata.");
@@ -45528,7 +45541,7 @@ function collectHexPackageEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Hex package source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Hex package source.");
   }
   if (!metadataLicenses.value || metadataLicenses.value.licenses.length === 0) {
     warnings.push("Hex package mix.exs or rebar.config did not declare license metadata.");
@@ -45780,7 +45793,7 @@ function collectJuliaPackageEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Julia package source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Julia package source.");
   }
   if (!projectToml.value?.license) {
     warnings.push("Julia Project.toml did not declare license metadata.");
@@ -46363,7 +46376,7 @@ function collectNixPackageEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in local Nix flake input source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in local Nix flake input source.");
   }
   return ok({
     packageId: input.packageId,
@@ -46480,7 +46493,7 @@ function collectNugetPackageEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in NuGet package source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in NuGet package source.");
   }
   if (!metadata.value.license && metadata.value.licenseUrl) {
     warnings.push(`NuGet nuspec declared only a licenseUrl: ${metadata.value.licenseUrl}`);
@@ -46754,7 +46767,7 @@ function collectPubPackageEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Dart pub package source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Dart pub package source.");
   }
   const metadataLicense = pubspec.value?.license;
   if (!metadataLicense) {
@@ -47067,7 +47080,7 @@ function collectDistInfoEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Python dist-info metadata.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Python dist-info metadata.");
   }
   const metadataLicense = readPythonMetadataLicenseDetails(input.distInfo.metadata);
   if (!metadataLicense) {
@@ -47268,7 +47281,7 @@ function collectRPackageEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in R package source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in R package source.");
   }
   if (!description.value?.license) {
     warnings.push("R package DESCRIPTION did not declare License metadata.");
@@ -47478,7 +47491,7 @@ function collectRubyGemEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Ruby gem source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Ruby gem source.");
   }
   if (!gemspec.value || gemspec.value.length === 0) {
     warnings.push("Ruby gemspec did not declare license metadata.");
@@ -47654,7 +47667,7 @@ function collectSwiftPackageEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Swift package checkout.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Swift package checkout.");
   }
   return ok({
     packageId: input.packageId,
@@ -47791,7 +47804,7 @@ function collectTerraformProviderEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Terraform provider cache.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Terraform provider cache.");
   }
   return ok({
     packageId: input.packageId,
@@ -47955,7 +47968,7 @@ function collectLocalPackageEvidenceFromSnapshot(input) {
     files.push({ path: fileName, kind, text: text3.value });
   }
   if (!foundEvidenceFile) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found.");
   }
   return ok({
     packageId: input.packageId,
@@ -47997,7 +48010,7 @@ function collectLocalPackageEvidence(input) {
       warnings
     });
     if (!evidenceFiles.foundEvidenceFile) {
-      warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found.");
+      warnings.push("No supported license, notice, attribution, or legal evidence file found.");
     }
     return ok({
       packageId: input.packageId,
@@ -48367,7 +48380,7 @@ function collectTarballEvidence(input) {
       return err(packageJson.error);
     }
     const files = collectTarEvidenceFiles(entries, packageRoot);
-    const warnings = files.length === 0 ? ["No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found."] : [];
+    const warnings = files.length === 0 ? ["No supported license, notice, attribution, or legal evidence file found."] : [];
     return ok({
       packageId: input.packageId,
       ...readLicenseFields2(packageJson.value),
@@ -48441,7 +48454,7 @@ function collectPubTarballEvidence(input) {
       } : {},
       files,
       source: "tarball",
-      warnings: files.length === 0 ? ["No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Dart pub package archive."] : []
+      warnings: files.length === 0 ? ["No supported license, notice, attribution, or legal evidence file found in Dart pub package archive."] : []
     });
   } catch (cause) {
     return err(createError({
@@ -48705,7 +48718,7 @@ function collectZigPackageEvidence(input) {
     warnings
   });
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Zig package source.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Zig package source.");
   }
   return ok({
     packageId: input.packageId,
@@ -48788,7 +48801,7 @@ function collectRemoteZigTarballEvidence(input) {
   const warnings = [];
   const evidenceFiles = collectZigTarballEvidenceFiles(coveredEntries, warnings);
   if (evidenceFiles.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in Zig package tarball.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in Zig package tarball.");
   }
   return ok({
     packageId: input.packageId,
@@ -50500,7 +50513,7 @@ function collectPythonDistributionEvidence(input) {
     warnings.push("The selected PyPI distribution is yanked, but it was retained because the dependency pins this exact version.");
   }
   if (files.length === 0) {
-    warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in the Python distribution.");
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in the Python distribution.");
   }
   if (!artifactMetadataLicense) {
     warnings.push("Python distribution metadata did not declare License-Expression, License, or a recognized license classifier.");
@@ -50734,7 +50747,7 @@ function collectZipPackageEvidence(input) {
       if (!files.ok) {
         return err(files.error);
       }
-      const warnings = files.value.length === 0 ? ["No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found."] : [];
+      const warnings = files.value.length === 0 ? ["No supported license, notice, attribution, or legal evidence file found."] : [];
       return ok({
         packageId: input.packageId,
         ...readLicenseFields3(packageJson.value.packageJson),
