@@ -1,7 +1,6 @@
 import path from "node:path";
 
 import { readArchiveBytes, type ArchiveFormat, type ArchiveSource } from "../archive/archive-reader";
-import { parseSpdxExpression } from "../license/spdx";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 import { classifyEvidenceFile } from "./license-files";
@@ -11,9 +10,8 @@ import {
   readPythonMetadataLicenseDetails,
   type PythonMetadata
 } from "./python-package";
-import type { LicenseEvidence, LicenseEvidenceFile, MetadataLicenseKind } from "./types";
+import type { LicenseEvidence, LicenseEvidenceFile } from "./types";
 
-const PYPI_METADATA_LICENSE_MAX_CHARS = 200;
 const PYTHON_DISTRIBUTION_METADATA_MAX_BYTES = 1024 * 1024;
 const PYTHON_DISTRIBUTION_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 const PYTHON_DISTRIBUTION_LICENSE_FILE_LIMIT = 50;
@@ -29,8 +27,6 @@ export type PyPiReleaseArtifact = {
 
 export type PyPiReleaseMetadata = {
   artifact: PyPiReleaseArtifact;
-  metadataLicense?: string;
-  metadataLicenseKind?: MetadataLicenseKind;
 };
 
 export function parsePyPiReleaseMetadata(input: {
@@ -81,22 +77,7 @@ export function parsePyPiReleaseMetadata(input: {
     ));
   }
 
-  const metadataLicense = readPythonMetadataLicenseDetails({
-    licenseExpression: readShortMetadataString(document.info.license_expression),
-    license: readShortMetadataString(document.info.license),
-    classifiers: readStringArray(document.info.classifiers),
-    licenseFiles: readStringArray(document.info.license_files)
-  });
-
-  return ok({
-    artifact,
-    ...(metadataLicense
-      ? {
-          metadataLicense: metadataLicense.license,
-          metadataLicenseKind: metadataLicense.kind
-        }
-      : {})
-  });
+  return ok({ artifact });
 }
 
 export function collectPythonDistributionEvidence(input: {
@@ -106,8 +87,6 @@ export function collectPythonDistributionEvidence(input: {
   artifactFilename: string;
   artifactBytes: Buffer | Uint8Array;
   artifactMaxBytes: number;
-  registryMetadataLicense?: string;
-  registryMetadataLicenseKind?: MetadataLicenseKind;
   yanked?: boolean;
 }): Result<LicenseEvidence, OhriskError> {
   const format = pythonDistributionArchiveFormat(input.artifactFilename);
@@ -155,21 +134,13 @@ export function collectPythonDistributionEvidence(input: {
   });
 
   const artifactMetadataLicense = readPythonMetadataLicenseDetails(metadata.value.metadata);
-  const selectedMetadata = selectMetadataLicense({
-    artifactLicense: artifactMetadataLicense?.license,
-    artifactLicenseKind: artifactMetadataLicense?.kind,
-    artifactSource: metadata.value.path,
-    registryLicense: input.registryMetadataLicense,
-    registryLicenseKind: input.registryMetadataLicenseKind
-  });
-  warnings.push(...selectedMetadata.warnings);
   if (input.yanked) {
     warnings.push("The selected PyPI distribution is yanked, but it was retained because the dependency pins this exact version.");
   }
   if (files.length === 0) {
     warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in the Python distribution.");
   }
-  if (!selectedMetadata.license) {
+  if (!artifactMetadataLicense) {
     warnings.push(
       "Python distribution metadata did not declare License-Expression, License, or a recognized license classifier."
     );
@@ -177,74 +148,17 @@ export function collectPythonDistributionEvidence(input: {
 
   return ok({
     packageId: input.packageId,
-    ...(selectedMetadata.license && selectedMetadata.source
+    ...(artifactMetadataLicense
       ? {
-          metadataLicense: selectedMetadata.license,
-          ...(selectedMetadata.kind ? { metadataLicenseKind: selectedMetadata.kind } : {}),
-          metadataSource: selectedMetadata.source
+          metadataLicense: artifactMetadataLicense.license,
+          metadataLicenseKind: artifactMetadataLicense.kind,
+          metadataSource: metadata.value.path
         }
       : {}),
     files,
     source: "tarball",
     warnings
   });
-}
-
-function selectMetadataLicense(input: {
-  artifactLicense: string | undefined;
-  artifactLicenseKind: MetadataLicenseKind | undefined;
-  artifactSource: string;
-  registryLicense: string | undefined;
-  registryLicenseKind: MetadataLicenseKind | undefined;
-}): { license?: string; kind?: MetadataLicenseKind; source?: string; warnings: string[] } {
-  if (!input.artifactLicense) {
-    return input.registryLicense
-      ? {
-          license: input.registryLicense,
-          ...(input.registryLicenseKind ? { kind: input.registryLicenseKind } : {}),
-          source: "PyPI release metadata",
-          warnings: []
-        }
-      : { warnings: [] };
-  }
-  if (!input.registryLicense) {
-    return {
-      license: input.artifactLicense,
-      ...(input.artifactLicenseKind ? { kind: input.artifactLicenseKind } : {}),
-      source: input.artifactSource,
-      warnings: []
-    };
-  }
-  if (input.artifactLicense === input.registryLicense) {
-    return {
-      license: input.artifactLicense,
-      ...(input.artifactLicenseKind ? { kind: input.artifactLicenseKind } : {}),
-      source: input.artifactSource,
-      warnings: []
-    };
-  }
-
-  const artifactMalformed = parseSpdxExpression(input.artifactLicense).malformed;
-  const registryMalformed = parseSpdxExpression(input.registryLicense).malformed;
-  if (artifactMalformed && !registryMalformed) {
-    return {
-      license: input.registryLicense,
-      ...(input.registryLicenseKind ? { kind: input.registryLicenseKind } : {}),
-      source: "PyPI release metadata",
-      warnings: [
-        "Distribution metadata contained a malformed license value; the valid PyPI release metadata license was preferred."
-      ]
-    };
-  }
-
-  return {
-    license: input.artifactLicense,
-    ...(input.artifactLicenseKind ? { kind: input.artifactLicenseKind } : {}),
-    source: input.artifactSource,
-    warnings: [
-      "PyPI release metadata license did not match the distribution metadata; the verified distribution metadata was preferred."
-    ]
-  };
 }
 
 export function pythonDistributionArchiveFormat(filename: string): ArchiveFormat | undefined {
@@ -504,21 +418,6 @@ function pypiMetadataError(
       ...details
     }
   });
-}
-
-function readShortMetadataString(value: unknown): string | undefined {
-  return typeof value === "string"
-    && value.trim() !== ""
-    && value.length <= PYPI_METADATA_LICENSE_MAX_CHARS
-    && !value.includes("\n")
-    ? value.trim()
-    : undefined;
-}
-
-function readStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
 }
 
 function safeArtifactFilename(value: string): string {

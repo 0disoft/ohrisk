@@ -20,7 +20,7 @@ const PYPI_ARTIFACT_URL =
   "https://files.pythonhosted.org/packages/example/example_pkg-1.2.3-py3-none-any.whl";
 
 describe("PyPI release evidence", () => {
-  test("selects a non-yanked wheel before an sdist and reads release license metadata", () => {
+  test("selects a non-yanked wheel without trusting release license metadata", () => {
     const result = parsePyPiReleaseMetadata({
       packageId: "example-pkg@1.2.3",
       packageName: "example-pkg",
@@ -66,9 +66,7 @@ describe("PyPI release evidence", () => {
         sha256: "b".repeat(64),
         packageType: "bdist_wheel",
         yanked: false
-      },
-      metadataLicense: "Apache-2.0",
-      metadataLicenseKind: "declared"
+      }
     });
   });
 
@@ -240,7 +238,7 @@ describe("PyPI release evidence", () => {
     });
   });
 
-  test("prefers a valid PyPI license over malformed wheel license prose", () => {
+  test("keeps malformed verified wheel metadata instead of PyPI license metadata", () => {
     const wheel = createZip({
       "example_pkg-1.2.3.dist-info/METADATA": [
         "Metadata-Version: 2.1",
@@ -256,20 +254,17 @@ describe("PyPI release evidence", () => {
       version: "1.2.3",
       artifactFilename: "example_pkg-1.2.3-py3-none-any.whl",
       artifactBytes: wheel,
-      artifactMaxBytes: 1024 * 1024,
-      registryMetadataLicense: "BSD-3-Clause"
+      artifactMaxBytes: 1024 * 1024
     });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
     expect(result.value).toMatchObject({
-      metadataLicense: "BSD-3-Clause",
-      metadataSource: "PyPI release metadata",
+      metadataLicense: "Copyright 2010 Example Authors",
+      metadataSource: "example_pkg-1.2.3.dist-info/METADATA",
       source: "tarball"
     });
-    expect(result.value.warnings).toContain(
-      "Distribution metadata contained a malformed license value; the valid PyPI release metadata license was preferred."
-    );
+    expect(result.value.warnings.join("\n")).not.toContain("PyPI release metadata license");
   });
 
   test("reads sdist PKG-INFO and root license files", () => {

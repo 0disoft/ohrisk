@@ -2191,14 +2191,6 @@ async function collectPyPiReleaseEvidence(input: {
     resolved: release.value.artifact.url,
     artifactFilename: release.value.artifact.filename,
     integrity: sha256HexIntegrity(release.value.artifact.sha256),
-    ...(release.value.metadataLicense
-      ? {
-          registryMetadataLicense: release.value.metadataLicense,
-          ...(release.value.metadataLicenseKind
-            ? { registryMetadataLicenseKind: release.value.metadataLicenseKind }
-            : {})
-        }
-      : {}),
     yanked: release.value.artifact.yanked,
     fetchArtifact: input.fetchArtifact,
     resolveArtifactHost: input.resolveArtifactHost,
@@ -2227,8 +2219,6 @@ async function collectRemotePythonDistributionEvidence(input: {
   resolved: string;
   artifactFilename: string;
   integrity?: string;
-  registryMetadataLicense?: string;
-  registryMetadataLicenseKind?: LicenseEvidence["metadataLicenseKind"];
   yanked?: boolean;
   fetchArtifact: ArtifactFetcher;
   resolveArtifactHost: ArtifactHostResolver | undefined;
@@ -2333,14 +2323,6 @@ async function collectRemotePythonDistributionEvidence(input: {
       artifactFilename: input.artifactFilename,
       artifactBytes: artifact.value,
       artifactMaxBytes: input.artifactMaxBytes,
-      ...(input.registryMetadataLicense
-        ? {
-            registryMetadataLicense: input.registryMetadataLicense,
-            ...(input.registryMetadataLicenseKind
-              ? { registryMetadataLicenseKind: input.registryMetadataLicenseKind }
-              : {})
-          }
-        : {}),
       ...(input.yanked !== undefined ? { yanked: input.yanked } : {})
     });
     if (!collected.ok && collected.error.code === "ARCHIVE_LIMIT_EXCEEDED") {

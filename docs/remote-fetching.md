@@ -16,7 +16,9 @@ Remote fetching is limited to these explicit adapters:
 - the tarball URL returned by that exact-version registry metadata response,
   with lockfile integrity verification and package-content inspection required
   before its license evidence is trusted.
-- PyPI release metadata lookup for an exact locked Python package version;
+- PyPI release metadata lookup for an exact locked Python package version, used
+  only to select a digest-identified distribution; registry-supplied license
+  fields are not package license evidence;
 - the SHA-256-identified source distribution or wheel returned by that exact
   PyPI release response, including bounded identity-checked package metadata and
   license files.

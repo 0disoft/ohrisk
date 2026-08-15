@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- PyPI release JSON now selects only a SHA-256-identified distribution; its
+  registry-supplied license fields are never package evidence. Python license
+  metadata and files must come from the verified wheel or source distribution.
 - Remote repository discovery now fails closed when the repository root has a
   known dependency manifest but no supported lockfile. A nested supported
   project can no longer make that incomplete root project appear scanned.

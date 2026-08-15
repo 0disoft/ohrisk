@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 24252c1c31b63d65c42089e7efd98c64e1ea4a97857a1912baddb165a314a039
+// ohrisk-action-source-sha256: 74ad17726340f1e4184a405b4c0d58d3529e2a55ddff3ed69bc228b34f7122f9
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19582,7 +19582,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.27";
+var OHRISK_VERSION = "1.14.28";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -50120,406 +50120,6 @@ function decodeIntegrityDigest(input) {
 
 // src/evidence/pypi-package.ts
 import path79 from "node:path";
-
-// src/license/spdx.ts
-var LICENSE_EXPRESSION_ALIASES = new Map([
-  ["gnu general public license, version 3.0", "GPL-3.0-only"],
-  ["eclipse public license v2.0", "EPL-2.0"],
-  [
-    "the gnu general public license, v2 with universal foss exception, v1.0",
-    "GPL-2.0-only WITH Universal-FOSS-exception-1.0"
-  ]
-]);
-var LICENSE_ALIASES = new Map([
-  ["apache 2", "Apache-2.0"],
-  ["apache 2.0", "Apache-2.0"],
-  ["apache license 2.0", "Apache-2.0"],
-  ["apache license version 2.0", "Apache-2.0"],
-  ["apache license, version 2.0", "Apache-2.0"],
-  ["apache license, 2.0", "Apache-2.0"],
-  ["the apache software license, version 2.0", "Apache-2.0"],
-  ["bsd", "BSD-3-Clause"],
-  ["bsd 2-clause", "BSD-2-Clause"],
-  ["bsd 3-clause", "BSD-3-Clause"],
-  ["bsd-2-clause license", "BSD-2-Clause"],
-  ["bsd-3-clause license", "BSD-3-Clause"],
-  ["bsd license", "BSD-3-Clause"],
-  ["business source license", "BUSL-1.1"],
-  ["business source license 1.1", "BUSL-1.1"],
-  ["busl", "BUSL-1.1"],
-  ["commons clause", "Commons-Clause"],
-  ["commons clause license condition", "Commons-Clause"],
-  ["elastic license", "Elastic-2.0"],
-  ["elastic license 2.0", "Elastic-2.0"],
-  ["eclipse distribution license - v 1.0", "BSD-3-Clause"],
-  ["edl 1.0", "BSD-3-Clause"],
-  ["eclipse public license 1.0", "EPL-1.0"],
-  ["eclipse public license - v 1.0", "EPL-1.0"],
-  ["eclipse public license - v 2.0", "EPL-2.0"],
-  ["epl 2.0", "EPL-2.0"],
-  ["gpl2 w/ cpe", "GPL-2.0-with-classpath-exception"],
-  ["the gnu general public license (gpl), version 2, with classpath exception", "GPL-2.0-with-classpath-exception"],
-  ["gnu lesser general public license v2.1 only", "LGPL-2.1-only"],
-  ["2-clause bsd", "BSD-2-Clause"],
-  ["3-clause bsd", "BSD-3-Clause"],
-  ["simplified bsd license", "BSD-2-Clause"],
-  ["new bsd license", "BSD-3-Clause"],
-  ["isc license", "ISC"],
-  ["mit license", "MIT"],
-  ["the mit license (mit)", "MIT"],
-  ["modified bsd", "BSD-3-Clause"],
-  ["mpl 1.1", "MPL-1.1"],
-  ["polyform free trial 1.0.0", "PolyForm-Free-Trial-1.0.0"],
-  ["polyform noncommercial 1.0.0", "PolyForm-Noncommercial-1.0.0"],
-  ["server side public license", "SSPL-1.0"],
-  ["server side public license 1.0", "SSPL-1.0"],
-  ["sspl", "SSPL-1.0"],
-  ["the mit license", "MIT"],
-  ["unlicensed", "UNLICENSED"]
-]);
-var VALID_SPDX_ID = /^[A-Za-z0-9-.+]+$/;
-function parseSpdxExpression(input) {
-  const original = input.trim();
-  if (original.length === 0) {
-    return malformedResult(original, [], false);
-  }
-  const expressionAlias = LICENSE_EXPRESSION_ALIASES.get(original.toLowerCase());
-  if (expressionAlias) {
-    const parsedAlias = parseSpdxExpression(expressionAlias);
-    return {
-      ...parsedAlias,
-      original,
-      usedAlias: true
-    };
-  }
-  const alias = normalizeLicenseToken(original);
-  if (alias.normalized && !alias.malformed && alias.normalized !== original) {
-    const ast2 = {
-      type: "license",
-      license: alias.normalized
-    };
-    return parsedResult(original, ast2, true);
-  }
-  const shorthandOrExpression = parseShorthandOrExpression(original);
-  if (shorthandOrExpression) {
-    return shorthandOrExpression;
-  }
-  const tokens = lexExpression(original);
-  if (!tokens) {
-    return malformedResult(original, collectRecoverableChoices(original), false);
-  }
-  const state = {
-    tokens,
-    index: 0,
-    usedAlias: false
-  };
-  const ast = parseOrExpression(state);
-  if (!ast || state.index !== state.tokens.length) {
-    return malformedResult(original, collectChoicesFromTokens(tokens), state.usedAlias);
-  }
-  return parsedResult(original, ast, state.usedAlias);
-}
-function formatSpdxExpression(ast) {
-  return formatNode(ast, 0);
-}
-function parsedResult(original, ast, usedAlias) {
-  const choices = [];
-  const exceptions = [];
-  let hasAnd = false;
-  let hasOr = false;
-  visitNode(ast, (node) => {
-    if (node.type === "license") {
-      choices.push(node.license);
-      if (node.exception) {
-        exceptions.push(node.exception);
-      }
-      return;
-    }
-    if (node.type === "and") {
-      hasAnd = true;
-    } else {
-      hasOr = true;
-    }
-  });
-  const result2 = {
-    original,
-    expression: formatSpdxExpression(ast),
-    choices: [...new Set(choices)],
-    joiner: joinerFor(hasAnd, hasOr),
-    malformed: false,
-    usedAlias,
-    exceptions: [...new Set(exceptions)]
-  };
-  Object.defineProperty(result2, "ast", {
-    value: ast,
-    enumerable: false,
-    configurable: false,
-    writable: false
-  });
-  return result2;
-}
-function malformedResult(original, choices, usedAlias) {
-  return {
-    original,
-    choices: [...new Set(choices.length > 0 ? choices : original ? [original] : [])],
-    joiner: detectJoiner(original),
-    malformed: true,
-    usedAlias,
-    exceptions: []
-  };
-}
-function parseShorthandOrExpression(original) {
-  if (detectJoiner(original) !== "single" || !/[\/,]/.test(original)) {
-    return;
-  }
-  const rawTokens = original.replace(/[()]/g, " ").split(/\s*(?:\/|,)\s*/).map((token) => token.trim());
-  if (rawTokens.length < 2 || rawTokens.some((token) => token.length === 0)) {
-    return;
-  }
-  const normalizedTokens = rawTokens.map((token) => normalizeLicenseToken(token));
-  if (normalizedTokens.some((token) => token.malformed || token.normalized === undefined)) {
-    return;
-  }
-  const licenses = normalizedTokens.map((token) => token.normalized);
-  const firstLicense = licenses[0];
-  if (!firstLicense) {
-    return;
-  }
-  const ast = licenses.slice(1).reduce((left, license) => ({
-    type: "or",
-    left,
-    right: { type: "license", license }
-  }), { type: "license", license: firstLicense });
-  return parsedResult(original, ast, true);
-}
-function lexExpression(expression) {
-  const tokens = [];
-  let chunk = "";
-  let index = 0;
-  const flushOperand = () => {
-    const value = chunk.trim();
-    chunk = "";
-    if (value.length === 0) {
-      return true;
-    }
-    tokens.push({ type: "operand", value });
-    return true;
-  };
-  while (index < expression.length) {
-    const character = expression[index];
-    if (character === "(" || character === ")") {
-      flushOperand();
-      tokens.push({ type: character === "(" ? "lparen" : "rparen" });
-      index += 1;
-      continue;
-    }
-    const operator = readOperatorAt(expression, index);
-    if (operator) {
-      flushOperand();
-      tokens.push({ type: operator.value });
-      index = operator.nextIndex;
-      continue;
-    }
-    chunk += character;
-    index += 1;
-  }
-  flushOperand();
-  return tokens.length > 0 ? tokens : undefined;
-}
-function readOperatorAt(expression, index) {
-  const candidates = ["WITH", "AND", "OR"];
-  for (const candidate of candidates) {
-    const value = expression.slice(index, index + candidate.length);
-    if (value.toUpperCase() !== candidate) {
-      continue;
-    }
-    const previous = index === 0 ? undefined : expression[index - 1];
-    const next = expression[index + candidate.length];
-    if (!isOperatorBoundary(previous) || !isOperatorBoundary(next)) {
-      continue;
-    }
-    return {
-      value: candidate.toLowerCase(),
-      nextIndex: index + candidate.length
-    };
-  }
-  return;
-}
-function isOperatorBoundary(character) {
-  return character === undefined || /\s|\(|\)/.test(character);
-}
-function parseOrExpression(state) {
-  let left = parseAndExpression(state);
-  if (!left) {
-    return;
-  }
-  while (peekToken(state, "or")) {
-    state.index += 1;
-    const right = parseAndExpression(state);
-    if (!right) {
-      return;
-    }
-    left = { type: "or", left, right };
-  }
-  return left;
-}
-function parseAndExpression(state) {
-  let left = parseWithExpression(state);
-  if (!left) {
-    return;
-  }
-  while (peekToken(state, "and")) {
-    state.index += 1;
-    const right = parseWithExpression(state);
-    if (!right) {
-      return;
-    }
-    left = { type: "and", left, right };
-  }
-  return left;
-}
-function parseWithExpression(state) {
-  const primary = parsePrimaryExpression(state);
-  if (!primary) {
-    return;
-  }
-  if (!peekToken(state, "with")) {
-    return primary;
-  }
-  if (primary.type !== "license") {
-    return;
-  }
-  state.index += 1;
-  const exceptionToken = state.tokens[state.index];
-  if (!exceptionToken || exceptionToken.type !== "operand") {
-    return;
-  }
-  const exception = normalizeExceptionToken(exceptionToken.value);
-  if (!exception) {
-    return;
-  }
-  state.index += 1;
-  return {
-    ...primary,
-    exception
-  };
-}
-function parsePrimaryExpression(state) {
-  const token = state.tokens[state.index];
-  if (!token) {
-    return;
-  }
-  if (token.type === "operand") {
-    const normalized = normalizeLicenseToken(token.value);
-    if (normalized.malformed || !normalized.normalized) {
-      return;
-    }
-    state.usedAlias ||= normalized.usedAlias;
-    state.index += 1;
-    return {
-      type: "license",
-      license: normalized.normalized
-    };
-  }
-  if (token.type !== "lparen") {
-    return;
-  }
-  state.index += 1;
-  const nested = parseOrExpression(state);
-  if (!nested || !peekToken(state, "rparen")) {
-    return;
-  }
-  state.index += 1;
-  return nested;
-}
-function peekToken(state, type) {
-  return state.tokens[state.index]?.type === type;
-}
-function normalizeLicenseToken(token) {
-  const trimmed = token.trim();
-  if (!trimmed) {
-    return {
-      malformed: true,
-      usedAlias: false
-    };
-  }
-  const alias = LICENSE_ALIASES.get(trimmed.toLowerCase());
-  if (alias) {
-    return {
-      normalized: alias,
-      malformed: false,
-      usedAlias: alias !== trimmed
-    };
-  }
-  if (!VALID_SPDX_ID.test(trimmed)) {
-    return {
-      normalized: trimmed,
-      malformed: true,
-      usedAlias: false
-    };
-  }
-  return {
-    normalized: trimmed,
-    malformed: false,
-    usedAlias: false
-  };
-}
-function normalizeExceptionToken(token) {
-  const trimmed = token.trim();
-  return VALID_SPDX_ID.test(trimmed) ? trimmed : undefined;
-}
-function collectChoicesFromTokens(tokens) {
-  return tokens.flatMap((token) => {
-    if (token.type !== "operand") {
-      return [];
-    }
-    const normalized = normalizeLicenseToken(token.value);
-    return normalized.normalized && !normalized.malformed ? [normalized.normalized] : [];
-  });
-}
-function collectRecoverableChoices(original) {
-  return original.replace(/[()]/g, " ").split(/\s+(?:AND|OR|WITH)\s+/i).flatMap((token) => {
-    const normalized = normalizeLicenseToken(token);
-    return normalized.normalized && !normalized.malformed ? [normalized.normalized] : [];
-  });
-}
-function detectJoiner(expression) {
-  const hasAnd = /(?:^|\s|\()AND(?:$|\s|\))/i.test(expression);
-  const hasOr = /(?:^|\s|\()OR(?:$|\s|\))/i.test(expression);
-  return joinerFor(hasAnd, hasOr);
-}
-function joinerFor(hasAnd, hasOr) {
-  if (hasAnd && hasOr) {
-    return "mixed";
-  }
-  if (hasAnd) {
-    return "and";
-  }
-  if (hasOr) {
-    return "or";
-  }
-  return "single";
-}
-function formatNode(ast, parentPrecedence) {
-  if (ast.type === "license") {
-    return ast.exception ? `${ast.license} WITH ${ast.exception}` : ast.license;
-  }
-  const precedence = ast.type === "and" ? 2 : 1;
-  const operator = ast.type.toUpperCase();
-  const formatted = `${formatNode(ast.left, precedence)} ${operator} ${formatNode(ast.right, precedence)}`;
-  return precedence < parentPrecedence ? `(${formatted})` : formatted;
-}
-function visitNode(ast, visitor) {
-  visitor(ast);
-  if (ast.type === "license") {
-    return;
-  }
-  visitNode(ast.left, visitor);
-  visitNode(ast.right, visitor);
-}
-
-// src/evidence/pypi-package.ts
-var PYPI_METADATA_LICENSE_MAX_CHARS = 200;
 var PYTHON_DISTRIBUTION_METADATA_MAX_BYTES = 1024 * 1024;
 var PYTHON_DISTRIBUTION_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var PYTHON_DISTRIBUTION_LICENSE_FILE_LIMIT = 50;
@@ -50550,19 +50150,7 @@ function parsePyPiReleaseMetadata(input) {
   if (!artifact) {
     return err(pypiMetadataError(input, "PyPI release metadata did not include a supported distribution with a SHA-256 digest."));
   }
-  const metadataLicense = readPythonMetadataLicenseDetails({
-    licenseExpression: readShortMetadataString(document2.info.license_expression),
-    license: readShortMetadataString(document2.info.license),
-    classifiers: readStringArray(document2.info.classifiers),
-    licenseFiles: readStringArray(document2.info.license_files)
-  });
-  return ok({
-    artifact,
-    ...metadataLicense ? {
-      metadataLicense: metadataLicense.license,
-      metadataLicenseKind: metadataLicense.kind
-    } : {}
-  });
+  return ok({ artifact });
 }
 function collectPythonDistributionEvidence(input) {
   const format = pythonDistributionArchiveFormat(input.artifactFilename);
@@ -50604,80 +50192,26 @@ function collectPythonDistributionEvidence(input) {
     warnings
   });
   const artifactMetadataLicense = readPythonMetadataLicenseDetails(metadata.value.metadata);
-  const selectedMetadata = selectMetadataLicense({
-    artifactLicense: artifactMetadataLicense?.license,
-    artifactLicenseKind: artifactMetadataLicense?.kind,
-    artifactSource: metadata.value.path,
-    registryLicense: input.registryMetadataLicense,
-    registryLicenseKind: input.registryMetadataLicenseKind
-  });
-  warnings.push(...selectedMetadata.warnings);
   if (input.yanked) {
     warnings.push("The selected PyPI distribution is yanked, but it was retained because the dependency pins this exact version.");
   }
   if (files.length === 0) {
     warnings.push("No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found in the Python distribution.");
   }
-  if (!selectedMetadata.license) {
+  if (!artifactMetadataLicense) {
     warnings.push("Python distribution metadata did not declare License-Expression, License, or a recognized license classifier.");
   }
   return ok({
     packageId: input.packageId,
-    ...selectedMetadata.license && selectedMetadata.source ? {
-      metadataLicense: selectedMetadata.license,
-      ...selectedMetadata.kind ? { metadataLicenseKind: selectedMetadata.kind } : {},
-      metadataSource: selectedMetadata.source
+    ...artifactMetadataLicense ? {
+      metadataLicense: artifactMetadataLicense.license,
+      metadataLicenseKind: artifactMetadataLicense.kind,
+      metadataSource: metadata.value.path
     } : {},
     files,
     source: "tarball",
     warnings
   });
-}
-function selectMetadataLicense(input) {
-  if (!input.artifactLicense) {
-    return input.registryLicense ? {
-      license: input.registryLicense,
-      ...input.registryLicenseKind ? { kind: input.registryLicenseKind } : {},
-      source: "PyPI release metadata",
-      warnings: []
-    } : { warnings: [] };
-  }
-  if (!input.registryLicense) {
-    return {
-      license: input.artifactLicense,
-      ...input.artifactLicenseKind ? { kind: input.artifactLicenseKind } : {},
-      source: input.artifactSource,
-      warnings: []
-    };
-  }
-  if (input.artifactLicense === input.registryLicense) {
-    return {
-      license: input.artifactLicense,
-      ...input.artifactLicenseKind ? { kind: input.artifactLicenseKind } : {},
-      source: input.artifactSource,
-      warnings: []
-    };
-  }
-  const artifactMalformed = parseSpdxExpression(input.artifactLicense).malformed;
-  const registryMalformed = parseSpdxExpression(input.registryLicense).malformed;
-  if (artifactMalformed && !registryMalformed) {
-    return {
-      license: input.registryLicense,
-      ...input.registryLicenseKind ? { kind: input.registryLicenseKind } : {},
-      source: "PyPI release metadata",
-      warnings: [
-        "Distribution metadata contained a malformed license value; the valid PyPI release metadata license was preferred."
-      ]
-    };
-  }
-  return {
-    license: input.artifactLicense,
-    ...input.artifactLicenseKind ? { kind: input.artifactLicenseKind } : {},
-    source: input.artifactSource,
-    warnings: [
-      "PyPI release metadata license did not match the distribution metadata; the verified distribution metadata was preferred."
-    ]
-  };
 }
 function pythonDistributionArchiveFormat(filename) {
   const normalized = filename.toLowerCase();
@@ -50845,13 +50379,6 @@ function pypiMetadataError(input, message, details = {}) {
       ...details
     }
   });
-}
-function readShortMetadataString(value) {
-  return typeof value === "string" && value.trim() !== "" && value.length <= PYPI_METADATA_LICENSE_MAX_CHARS && !value.includes(`
-`) ? value.trim() : undefined;
-}
-function readStringArray(value) {
-  return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
 }
 function safeArtifactFilename(value) {
   const normalized = value.replace(/\\/gu, "/");
@@ -52733,10 +52260,6 @@ async function collectPyPiReleaseEvidence(input) {
     resolved: release.value.artifact.url,
     artifactFilename: release.value.artifact.filename,
     integrity: sha256HexIntegrity(release.value.artifact.sha256),
-    ...release.value.metadataLicense ? {
-      registryMetadataLicense: release.value.metadataLicense,
-      ...release.value.metadataLicenseKind ? { registryMetadataLicenseKind: release.value.metadataLicenseKind } : {}
-    } : {},
     yanked: release.value.artifact.yanked,
     fetchArtifact: input.fetchArtifact,
     resolveArtifactHost: input.resolveArtifactHost,
@@ -52843,10 +52366,6 @@ async function collectRemotePythonDistributionEvidence(input) {
       artifactFilename: input.artifactFilename,
       artifactBytes: artifact.value,
       artifactMaxBytes: input.artifactMaxBytes,
-      ...input.registryMetadataLicense ? {
-        registryMetadataLicense: input.registryMetadataLicense,
-        ...input.registryMetadataLicenseKind ? { registryMetadataLicenseKind: input.registryMetadataLicenseKind } : {}
-      } : {},
       ...input.yanked !== undefined ? { yanked: input.yanked } : {}
     });
     if (!collected.ok && collected.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
@@ -54715,6 +54234,403 @@ function traverseGoModuleGraph(roots, adjacency) {
     }
   }
   return paths;
+}
+
+// src/license/spdx.ts
+var LICENSE_EXPRESSION_ALIASES = new Map([
+  ["gnu general public license, version 3.0", "GPL-3.0-only"],
+  ["eclipse public license v2.0", "EPL-2.0"],
+  [
+    "the gnu general public license, v2 with universal foss exception, v1.0",
+    "GPL-2.0-only WITH Universal-FOSS-exception-1.0"
+  ]
+]);
+var LICENSE_ALIASES = new Map([
+  ["apache 2", "Apache-2.0"],
+  ["apache 2.0", "Apache-2.0"],
+  ["apache license 2.0", "Apache-2.0"],
+  ["apache license version 2.0", "Apache-2.0"],
+  ["apache license, version 2.0", "Apache-2.0"],
+  ["apache license, 2.0", "Apache-2.0"],
+  ["the apache software license, version 2.0", "Apache-2.0"],
+  ["bsd", "BSD-3-Clause"],
+  ["bsd 2-clause", "BSD-2-Clause"],
+  ["bsd 3-clause", "BSD-3-Clause"],
+  ["bsd-2-clause license", "BSD-2-Clause"],
+  ["bsd-3-clause license", "BSD-3-Clause"],
+  ["bsd license", "BSD-3-Clause"],
+  ["business source license", "BUSL-1.1"],
+  ["business source license 1.1", "BUSL-1.1"],
+  ["busl", "BUSL-1.1"],
+  ["commons clause", "Commons-Clause"],
+  ["commons clause license condition", "Commons-Clause"],
+  ["elastic license", "Elastic-2.0"],
+  ["elastic license 2.0", "Elastic-2.0"],
+  ["eclipse distribution license - v 1.0", "BSD-3-Clause"],
+  ["edl 1.0", "BSD-3-Clause"],
+  ["eclipse public license 1.0", "EPL-1.0"],
+  ["eclipse public license - v 1.0", "EPL-1.0"],
+  ["eclipse public license - v 2.0", "EPL-2.0"],
+  ["epl 2.0", "EPL-2.0"],
+  ["gpl2 w/ cpe", "GPL-2.0-with-classpath-exception"],
+  ["the gnu general public license (gpl), version 2, with classpath exception", "GPL-2.0-with-classpath-exception"],
+  ["gnu lesser general public license v2.1 only", "LGPL-2.1-only"],
+  ["2-clause bsd", "BSD-2-Clause"],
+  ["3-clause bsd", "BSD-3-Clause"],
+  ["simplified bsd license", "BSD-2-Clause"],
+  ["new bsd license", "BSD-3-Clause"],
+  ["isc license", "ISC"],
+  ["mit license", "MIT"],
+  ["the mit license (mit)", "MIT"],
+  ["modified bsd", "BSD-3-Clause"],
+  ["mpl 1.1", "MPL-1.1"],
+  ["polyform free trial 1.0.0", "PolyForm-Free-Trial-1.0.0"],
+  ["polyform noncommercial 1.0.0", "PolyForm-Noncommercial-1.0.0"],
+  ["server side public license", "SSPL-1.0"],
+  ["server side public license 1.0", "SSPL-1.0"],
+  ["sspl", "SSPL-1.0"],
+  ["the mit license", "MIT"],
+  ["unlicensed", "UNLICENSED"]
+]);
+var VALID_SPDX_ID = /^[A-Za-z0-9-.+]+$/;
+function parseSpdxExpression(input) {
+  const original = input.trim();
+  if (original.length === 0) {
+    return malformedResult(original, [], false);
+  }
+  const expressionAlias = LICENSE_EXPRESSION_ALIASES.get(original.toLowerCase());
+  if (expressionAlias) {
+    const parsedAlias = parseSpdxExpression(expressionAlias);
+    return {
+      ...parsedAlias,
+      original,
+      usedAlias: true
+    };
+  }
+  const alias = normalizeLicenseToken(original);
+  if (alias.normalized && !alias.malformed && alias.normalized !== original) {
+    const ast2 = {
+      type: "license",
+      license: alias.normalized
+    };
+    return parsedResult(original, ast2, true);
+  }
+  const shorthandOrExpression = parseShorthandOrExpression(original);
+  if (shorthandOrExpression) {
+    return shorthandOrExpression;
+  }
+  const tokens = lexExpression(original);
+  if (!tokens) {
+    return malformedResult(original, collectRecoverableChoices(original), false);
+  }
+  const state = {
+    tokens,
+    index: 0,
+    usedAlias: false
+  };
+  const ast = parseOrExpression(state);
+  if (!ast || state.index !== state.tokens.length) {
+    return malformedResult(original, collectChoicesFromTokens(tokens), state.usedAlias);
+  }
+  return parsedResult(original, ast, state.usedAlias);
+}
+function formatSpdxExpression(ast) {
+  return formatNode(ast, 0);
+}
+function parsedResult(original, ast, usedAlias) {
+  const choices = [];
+  const exceptions = [];
+  let hasAnd = false;
+  let hasOr = false;
+  visitNode(ast, (node) => {
+    if (node.type === "license") {
+      choices.push(node.license);
+      if (node.exception) {
+        exceptions.push(node.exception);
+      }
+      return;
+    }
+    if (node.type === "and") {
+      hasAnd = true;
+    } else {
+      hasOr = true;
+    }
+  });
+  const result2 = {
+    original,
+    expression: formatSpdxExpression(ast),
+    choices: [...new Set(choices)],
+    joiner: joinerFor(hasAnd, hasOr),
+    malformed: false,
+    usedAlias,
+    exceptions: [...new Set(exceptions)]
+  };
+  Object.defineProperty(result2, "ast", {
+    value: ast,
+    enumerable: false,
+    configurable: false,
+    writable: false
+  });
+  return result2;
+}
+function malformedResult(original, choices, usedAlias) {
+  return {
+    original,
+    choices: [...new Set(choices.length > 0 ? choices : original ? [original] : [])],
+    joiner: detectJoiner(original),
+    malformed: true,
+    usedAlias,
+    exceptions: []
+  };
+}
+function parseShorthandOrExpression(original) {
+  if (detectJoiner(original) !== "single" || !/[\/,]/.test(original)) {
+    return;
+  }
+  const rawTokens = original.replace(/[()]/g, " ").split(/\s*(?:\/|,)\s*/).map((token) => token.trim());
+  if (rawTokens.length < 2 || rawTokens.some((token) => token.length === 0)) {
+    return;
+  }
+  const normalizedTokens = rawTokens.map((token) => normalizeLicenseToken(token));
+  if (normalizedTokens.some((token) => token.malformed || token.normalized === undefined)) {
+    return;
+  }
+  const licenses = normalizedTokens.map((token) => token.normalized);
+  const firstLicense = licenses[0];
+  if (!firstLicense) {
+    return;
+  }
+  const ast = licenses.slice(1).reduce((left, license) => ({
+    type: "or",
+    left,
+    right: { type: "license", license }
+  }), { type: "license", license: firstLicense });
+  return parsedResult(original, ast, true);
+}
+function lexExpression(expression) {
+  const tokens = [];
+  let chunk = "";
+  let index = 0;
+  const flushOperand = () => {
+    const value = chunk.trim();
+    chunk = "";
+    if (value.length === 0) {
+      return true;
+    }
+    tokens.push({ type: "operand", value });
+    return true;
+  };
+  while (index < expression.length) {
+    const character = expression[index];
+    if (character === "(" || character === ")") {
+      flushOperand();
+      tokens.push({ type: character === "(" ? "lparen" : "rparen" });
+      index += 1;
+      continue;
+    }
+    const operator = readOperatorAt(expression, index);
+    if (operator) {
+      flushOperand();
+      tokens.push({ type: operator.value });
+      index = operator.nextIndex;
+      continue;
+    }
+    chunk += character;
+    index += 1;
+  }
+  flushOperand();
+  return tokens.length > 0 ? tokens : undefined;
+}
+function readOperatorAt(expression, index) {
+  const candidates = ["WITH", "AND", "OR"];
+  for (const candidate of candidates) {
+    const value = expression.slice(index, index + candidate.length);
+    if (value.toUpperCase() !== candidate) {
+      continue;
+    }
+    const previous = index === 0 ? undefined : expression[index - 1];
+    const next = expression[index + candidate.length];
+    if (!isOperatorBoundary(previous) || !isOperatorBoundary(next)) {
+      continue;
+    }
+    return {
+      value: candidate.toLowerCase(),
+      nextIndex: index + candidate.length
+    };
+  }
+  return;
+}
+function isOperatorBoundary(character) {
+  return character === undefined || /\s|\(|\)/.test(character);
+}
+function parseOrExpression(state) {
+  let left = parseAndExpression(state);
+  if (!left) {
+    return;
+  }
+  while (peekToken(state, "or")) {
+    state.index += 1;
+    const right = parseAndExpression(state);
+    if (!right) {
+      return;
+    }
+    left = { type: "or", left, right };
+  }
+  return left;
+}
+function parseAndExpression(state) {
+  let left = parseWithExpression(state);
+  if (!left) {
+    return;
+  }
+  while (peekToken(state, "and")) {
+    state.index += 1;
+    const right = parseWithExpression(state);
+    if (!right) {
+      return;
+    }
+    left = { type: "and", left, right };
+  }
+  return left;
+}
+function parseWithExpression(state) {
+  const primary = parsePrimaryExpression(state);
+  if (!primary) {
+    return;
+  }
+  if (!peekToken(state, "with")) {
+    return primary;
+  }
+  if (primary.type !== "license") {
+    return;
+  }
+  state.index += 1;
+  const exceptionToken = state.tokens[state.index];
+  if (!exceptionToken || exceptionToken.type !== "operand") {
+    return;
+  }
+  const exception = normalizeExceptionToken(exceptionToken.value);
+  if (!exception) {
+    return;
+  }
+  state.index += 1;
+  return {
+    ...primary,
+    exception
+  };
+}
+function parsePrimaryExpression(state) {
+  const token = state.tokens[state.index];
+  if (!token) {
+    return;
+  }
+  if (token.type === "operand") {
+    const normalized = normalizeLicenseToken(token.value);
+    if (normalized.malformed || !normalized.normalized) {
+      return;
+    }
+    state.usedAlias ||= normalized.usedAlias;
+    state.index += 1;
+    return {
+      type: "license",
+      license: normalized.normalized
+    };
+  }
+  if (token.type !== "lparen") {
+    return;
+  }
+  state.index += 1;
+  const nested = parseOrExpression(state);
+  if (!nested || !peekToken(state, "rparen")) {
+    return;
+  }
+  state.index += 1;
+  return nested;
+}
+function peekToken(state, type) {
+  return state.tokens[state.index]?.type === type;
+}
+function normalizeLicenseToken(token) {
+  const trimmed = token.trim();
+  if (!trimmed) {
+    return {
+      malformed: true,
+      usedAlias: false
+    };
+  }
+  const alias = LICENSE_ALIASES.get(trimmed.toLowerCase());
+  if (alias) {
+    return {
+      normalized: alias,
+      malformed: false,
+      usedAlias: alias !== trimmed
+    };
+  }
+  if (!VALID_SPDX_ID.test(trimmed)) {
+    return {
+      normalized: trimmed,
+      malformed: true,
+      usedAlias: false
+    };
+  }
+  return {
+    normalized: trimmed,
+    malformed: false,
+    usedAlias: false
+  };
+}
+function normalizeExceptionToken(token) {
+  const trimmed = token.trim();
+  return VALID_SPDX_ID.test(trimmed) ? trimmed : undefined;
+}
+function collectChoicesFromTokens(tokens) {
+  return tokens.flatMap((token) => {
+    if (token.type !== "operand") {
+      return [];
+    }
+    const normalized = normalizeLicenseToken(token.value);
+    return normalized.normalized && !normalized.malformed ? [normalized.normalized] : [];
+  });
+}
+function collectRecoverableChoices(original) {
+  return original.replace(/[()]/g, " ").split(/\s+(?:AND|OR|WITH)\s+/i).flatMap((token) => {
+    const normalized = normalizeLicenseToken(token);
+    return normalized.normalized && !normalized.malformed ? [normalized.normalized] : [];
+  });
+}
+function detectJoiner(expression) {
+  const hasAnd = /(?:^|\s|\()AND(?:$|\s|\))/i.test(expression);
+  const hasOr = /(?:^|\s|\()OR(?:$|\s|\))/i.test(expression);
+  return joinerFor(hasAnd, hasOr);
+}
+function joinerFor(hasAnd, hasOr) {
+  if (hasAnd && hasOr) {
+    return "mixed";
+  }
+  if (hasAnd) {
+    return "and";
+  }
+  if (hasOr) {
+    return "or";
+  }
+  return "single";
+}
+function formatNode(ast, parentPrecedence) {
+  if (ast.type === "license") {
+    return ast.exception ? `${ast.license} WITH ${ast.exception}` : ast.license;
+  }
+  const precedence = ast.type === "and" ? 2 : 1;
+  const operator = ast.type.toUpperCase();
+  const formatted = `${formatNode(ast.left, precedence)} ${operator} ${formatNode(ast.right, precedence)}`;
+  return precedence < parentPrecedence ? `(${formatted})` : formatted;
+}
+function visitNode(ast, visitor) {
+  visitor(ast);
+  if (ast.type === "license") {
+    return;
+  }
+  visitNode(ast.left, visitor);
+  visitNode(ast.right, visitor);
 }
 
 // src/license/normalize.ts
