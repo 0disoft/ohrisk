@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Parseable package metadata is now reconciled with every recognizable license
+  file instead of suppressing file evidence. A file license outside the
+  declared choices fails closed as `conflicting-evidence`; deprecated GNU IDs
+  remain equivalent to their current `-only` and `-or-later` forms.
 - Deprecated SPDX license and exception identifiers remain parseable for
   compatibility, but are now named in evidence provenance and carry medium
   confidence so reports do not present legacy metadata as current catalog use.

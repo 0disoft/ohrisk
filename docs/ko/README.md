@@ -353,6 +353,10 @@ package가 문서 내부 `LicenseRef-*`를 참조하면 해당 extracted license
 표준 license와 exception ID는 source commit과 blob SHA를 기록한 공식 SPDX catalog로
 검증한다. deprecated ID는 호환성을 위해 읽되 evidence에 식별자를 명시하고
 medium-confidence로 표시하며, 모양만 비슷한 미등록 ID는 거부한다.
+패키지 metadata와 인식 가능한 license file은 서로 독립된 주장으로 대조한다.
+파일의 표현식이 metadata 선택지에 없으면 두 근거를 모두 보존하고
+`conflicting-evidence` unknown으로 판정한다. deprecated GNU ID와 현재의
+`-only`/`-or-later` 등가 표현은 잘못된 충돌로 처리하지 않는다.
 CycloneDX 경로 복원은 재귀 없이 모든 도달 가능한 component를 유지하되 component당
 최대 64개 경로를 저장하고 256단계보다 깊은 경로는 요약한다. 이런 제한이 적용되면
 JSON scan report의 typed dependency-graph diagnostic에 표시된다.

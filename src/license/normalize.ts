@@ -19,6 +19,31 @@ type CommercialRestrictionAnalysis = {
   }>;
 };
 
+const DEPRECATED_GNU_LICENSE_EQUIVALENTS = new Map([
+  ["AGPL-1.0", "AGPL-1.0-only"],
+  ["AGPL-1.0+", "AGPL-1.0-or-later"],
+  ["AGPL-3.0", "AGPL-3.0-only"],
+  ["AGPL-3.0+", "AGPL-3.0-or-later"],
+  ["GFDL-1.1", "GFDL-1.1-only"],
+  ["GFDL-1.1+", "GFDL-1.1-or-later"],
+  ["GFDL-1.2", "GFDL-1.2-only"],
+  ["GFDL-1.2+", "GFDL-1.2-or-later"],
+  ["GFDL-1.3", "GFDL-1.3-only"],
+  ["GFDL-1.3+", "GFDL-1.3-or-later"],
+  ["GPL-1.0", "GPL-1.0-only"],
+  ["GPL-1.0+", "GPL-1.0-or-later"],
+  ["GPL-2.0", "GPL-2.0-only"],
+  ["GPL-2.0+", "GPL-2.0-or-later"],
+  ["GPL-3.0", "GPL-3.0-only"],
+  ["GPL-3.0+", "GPL-3.0-or-later"],
+  ["LGPL-2.0", "LGPL-2.0-only"],
+  ["LGPL-2.0+", "LGPL-2.0-or-later"],
+  ["LGPL-2.1", "LGPL-2.1-only"],
+  ["LGPL-2.1+", "LGPL-2.1-or-later"],
+  ["LGPL-3.0", "LGPL-3.0-only"],
+  ["LGPL-3.0+", "LGPL-3.0-or-later"]
+]);
+
 export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedLicense {
   const signals: NormalizedLicenseSignal[] = [];
   const evidenceSources = describeEvidenceSources(evidence);
@@ -113,6 +138,26 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     signals.push("custom-text");
   }
 
+  if (licenseExpression.source === "package-metadata") {
+    const declaredChoices = new Set(parsed.choices.map(comparableLicenseId));
+    const conflictingFileMatches = licenseFileExpressions.filter((match) => {
+      const fileExpression = parseSpdxExpression(match.expression);
+      return !fileExpression.malformed
+        && fileExpression.choices.some((choice) => !declaredChoices.has(comparableLicenseId(choice)));
+    });
+
+    if (conflictingFileMatches.length > 0) {
+      if (!signals.includes("conflicting-evidence")) {
+        signals.push("conflicting-evidence");
+      }
+      evidenceSources.push(
+        `conflicting metadata and file license matches: metadata ${parsed.expression}; ${conflictingFileMatches
+          .map((match) => `${match.expression} from ${match.filePath}`)
+          .join("; ")}`
+      );
+    }
+  }
+
   const deprecatedLicenseIds = parsed.choices.filter(
     (choice) => spdxLicenseIdStatus(choice) === "deprecated"
   );
@@ -145,6 +190,10 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
         ? "medium"
         : "high"
   }, parsed.ast);
+}
+
+function comparableLicenseId(licenseId: string): string {
+  return DEPRECATED_GNU_LICENSE_EQUIVALENTS.get(licenseId) ?? licenseId;
 }
 
 function withSpdxAst(

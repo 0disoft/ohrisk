@@ -806,6 +806,56 @@ describe("normalizeLicenseEvidence", () => {
     );
   });
 
+  test("fails closed when declared metadata conflicts with a recognized license file", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "metadata-file-conflict@1.0.0",
+      packageJsonLicense: "MIT",
+      files: [
+        {
+          path: "LICENSE",
+          kind: "license",
+          text: [
+            "GNU GENERAL PUBLIC LICENSE",
+            "Version 3, 29 June 2007",
+            "TERMS AND CONDITIONS"
+          ].join("\n")
+        }
+      ],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      original: "MIT",
+      expression: "MIT",
+      choices: ["MIT"],
+      signals: ["conflicting-evidence"],
+      confidence: "low"
+    });
+    expect(normalized.evidenceSources).toContain(
+      "conflicting metadata and file license matches: metadata MIT; GPL-3.0-only from LICENSE"
+    );
+  });
+
+  test("does not conflict deprecated GNU identifiers with their current equivalents", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "deprecated-equivalent@1.0.0",
+      packageJsonLicense: "AGPL-3.0",
+      files: [
+        {
+          path: "LICENSE",
+          kind: "license",
+          text: "GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007"
+        }
+      ],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized.signals).not.toContain("conflicting-evidence");
+    expect(normalized.confidence).toBe("medium");
+  });
+
   test("keeps an explicit dual-license declaration with matching separate files", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "declared-multi-license@1.0.0",

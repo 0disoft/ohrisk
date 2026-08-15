@@ -84,6 +84,11 @@ existing metadata compatibility, appear explicitly in evidence provenance, and
 carry medium confidence; invented identifiers do not become recognized merely
 because they match the SPDX identifier character shape.
 
+Recognized license files are reconciled with parseable package metadata. A file
+expression outside the declared license choices is reported as
+`conflicting-evidence` with unknown severity; deprecated GNU identifiers compare
+against their current `-only` or `-or-later` equivalents.
+
 The npm `package.json` field `private: true` prevents accidental publication;
 it does not prove that the package is owned by the scanning organization. A
 private package without license evidence therefore remains `unknown` unless an
