@@ -1,8 +1,40 @@
 import { describe, expect, test } from "bun:test";
 
 import { parseSpdxTagValueText } from "../src/graph/spdx-tag-value";
+import { normalizeLicenseEvidence } from "../src/license/normalize";
 
 describe("parseSpdxTagValueText", () => {
+  test("uses multiline extracted LicenseRef text as package evidence", () => {
+    const result = parseSpdxTagValueText(`
+SPDXVersion: SPDX-2.3
+SPDXID: SPDXRef-DOCUMENT
+DocumentName: fixture-spdx-tag-value-extracted-license
+DocumentDescribes: SPDXRef-Package-custom
+
+PackageName: custom-package
+SPDXID: SPDXRef-Package-custom
+PackageLicenseDeclared: LicenseRef-Commercial
+ExternalRef: PACKAGE-MANAGER purl pkg:npm/custom-package@1.0.0
+
+LicenseID: LicenseRef-Commercial
+ExtractedText: <text>Commercial use
+is prohibited.</text>
+`, "sbom.spdx");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    const evidence = result.value.embeddedEvidence?.[0];
+    expect(evidence?.files).toEqual([{
+      path: "spdx-license-ref/LicenseRef-Commercial.txt",
+      kind: "license",
+      text: "Commercial use\nis prohibited."
+    }]);
+    expect(normalizeLicenseEvidence(evidence!).signals).toContain("commercial-restriction");
+  });
+
   test("parses SPDX tag-value package graph and embedded license evidence from PURL refs", () => {
     const result = parseSpdxTagValueText(`
 SPDXVersion: SPDX-2.3

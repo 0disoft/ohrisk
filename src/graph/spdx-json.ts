@@ -26,7 +26,14 @@ type SpdxPackageRecord = {
   ecosystem: DependencyNode["ecosystem"];
   licenseDeclared?: string;
   licenseConcluded?: string;
+  licenseRefFiles: LicenseEvidence["files"];
+  licenseRefWarnings: string[];
 };
+
+type SpdxExtractedLicenseTextMap = Map<string, string[]>;
+
+const SPDX_LICENSE_REF_MAX_COUNT = 16;
+const SPDX_EXTRACTED_LICENSE_TEXT_MAX_BYTES = 2 * 1024 * 1024;
 
 type UnsupportedSpdxDependencyField = "relationships" | "spdxElementId" | "relatedSpdxElement";
 type UnsupportedSpdxRelationshipReason =
@@ -86,7 +93,8 @@ export function parseSpdxDocument(
     return spdxShapeError(lockfilePath);
   }
 
-  const packages = readSpdxPackageRecords(document.packages);
+  const extractedLicenseTexts = readSpdxExtractedLicenseTexts(document.hasExtractedLicensingInfos);
+  const packages = readSpdxPackageRecords(document.packages, extractedLicenseTexts);
   if (packages.length === 0) {
     return spdxShapeError(lockfilePath);
   }
@@ -190,7 +198,10 @@ function parseSpdxJson(
   }
 }
 
-function readSpdxPackageRecords(value: unknown[]): SpdxPackageRecord[] {
+function readSpdxPackageRecords(
+  value: unknown[],
+  extractedLicenseTexts: SpdxExtractedLicenseTextMap
+): SpdxPackageRecord[] {
   const records: SpdxPackageRecord[] = [];
   for (const pkg of value) {
     if (!isRecord(pkg) || typeof pkg.SPDXID !== "string") {
@@ -204,6 +215,10 @@ function readSpdxPackageRecords(value: unknown[]): SpdxPackageRecord[] {
 
     const licenseDeclared = readMeaningfulSpdxLicenseValue(pkg.licenseDeclared);
     const licenseConcluded = readMeaningfulSpdxLicenseValue(pkg.licenseConcluded);
+    const licenseRefEvidence = readSpdxLicenseRefEvidence({
+      expressions: [licenseDeclared, licenseConcluded],
+      extractedLicenseTexts
+    });
     records.push(omitUndefined({
       spdxId: pkg.SPDXID,
       name: purl.name,
@@ -211,11 +226,98 @@ function readSpdxPackageRecords(value: unknown[]): SpdxPackageRecord[] {
       id: purl.id,
       ecosystem: purl.ecosystem,
       licenseDeclared,
-      licenseConcluded
+      licenseConcluded,
+      licenseRefFiles: licenseRefEvidence.files,
+      licenseRefWarnings: licenseRefEvidence.warnings
     }));
   }
 
   return deduplicateSpdxPackageRecords(records);
+}
+
+function readSpdxExtractedLicenseTexts(value: unknown): SpdxExtractedLicenseTextMap {
+  const result: SpdxExtractedLicenseTextMap = new Map();
+  if (!Array.isArray(value)) {
+    return result;
+  }
+
+  for (const item of value) {
+    if (
+      !isRecord(item)
+      || typeof item.licenseId !== "string"
+      || !/^LicenseRef-[A-Za-z0-9.-]+$/.test(item.licenseId)
+      || typeof item.extractedText !== "string"
+    ) {
+      continue;
+    }
+
+    const text = item.extractedText.trim();
+    if (
+      text === ""
+      || Buffer.byteLength(text, "utf8") > SPDX_EXTRACTED_LICENSE_TEXT_MAX_BYTES
+    ) {
+      continue;
+    }
+
+    const existing = result.get(item.licenseId) ?? [];
+    if (!existing.includes(text)) {
+      existing.push(text);
+      existing.sort();
+      result.set(item.licenseId, existing);
+    }
+  }
+
+  return result;
+}
+
+function readSpdxLicenseRefEvidence(input: {
+  expressions: Array<string | undefined>;
+  extractedLicenseTexts: SpdxExtractedLicenseTextMap;
+}): Pick<LicenseEvidence, "files" | "warnings"> {
+  const localRefs = new Set<string>();
+  const externalRefs = new Set<string>();
+  const referencePattern = /(?:DocumentRef-[A-Za-z0-9.-]+:)?LicenseRef-[A-Za-z0-9.-]+/g;
+
+  for (const expression of input.expressions) {
+    for (const reference of expression?.match(referencePattern) ?? []) {
+      if (reference.includes(":")) {
+        externalRefs.add(reference);
+      } else {
+        localRefs.add(reference);
+      }
+    }
+  }
+
+  const warnings = [...externalRefs]
+    .sort()
+    .map((reference) => `SPDX external license reference ${reference} cannot be resolved from this document.`);
+  const files: LicenseEvidence["files"] = [];
+  const boundedRefs = [...localRefs].sort().slice(0, SPDX_LICENSE_REF_MAX_COUNT);
+  if (localRefs.size > SPDX_LICENSE_REF_MAX_COUNT) {
+    warnings.push(`SPDX package license reference limit reached at ${SPDX_LICENSE_REF_MAX_COUNT} references.`);
+  }
+
+  for (const reference of boundedRefs) {
+    const texts = input.extractedLicenseTexts.get(reference);
+    if (!texts || texts.length === 0) {
+      warnings.push(`SPDX extracted license text is unavailable for ${reference}.`);
+      continue;
+    }
+
+    if (texts.length > 1) {
+      warnings.push(`SPDX document contains ${texts.length} distinct extracted texts for ${reference}.`);
+    }
+    for (const [index, text] of texts.entries()) {
+      const suffix = texts.length === 1 ? "" : `-${index + 1}`;
+      files.push({
+        path: `spdx-license-ref/${reference}${suffix}.txt`,
+        kind: "license",
+        text
+      });
+    }
+  }
+
+  return { files, warnings };
 }
 
 function readSpdxPackageUrl(value: unknown): ReturnType<typeof parsePackageUrl> | undefined {
@@ -430,11 +532,12 @@ function spdxPackageEvidence(record: SpdxPackageRecord): LicenseEvidence {
     ...(distinctAssertions.length > 1
       ? { conflictingLicenseClaims: distinctAssertions }
       : {}),
-    files: [],
+    files: record.licenseRefFiles,
     source: "sbom",
-    warnings: primaryLicense
-      ? []
-      : ["SPDX package did not declare usable license evidence."]
+    warnings: [
+      ...record.licenseRefWarnings,
+      ...(primaryLicense ? [] : ["SPDX package did not declare usable license evidence."])
+    ]
   };
 }
 
@@ -446,12 +549,27 @@ function deduplicateSpdxPackageRecords(records: SpdxPackageRecord[]): SpdxPackag
       ? omitUndefined({
           ...existing,
           licenseDeclared: existing.licenseDeclared ?? record.licenseDeclared,
-          licenseConcluded: existing.licenseConcluded ?? record.licenseConcluded
+          licenseConcluded: existing.licenseConcluded ?? record.licenseConcluded,
+          licenseRefFiles: uniqueSpdxEvidenceFiles([
+            ...existing.licenseRefFiles,
+            ...record.licenseRefFiles
+          ]),
+          licenseRefWarnings: [...new Set([
+            ...existing.licenseRefWarnings,
+            ...record.licenseRefWarnings
+          ])].sort()
         })
       : record);
   }
 
   return [...seen.values()];
+}
+
+function uniqueSpdxEvidenceFiles(files: LicenseEvidence["files"]): LicenseEvidence["files"] {
+  return [...new Map(files.map((file) => [
+    `${file.path}\0${file.kind}\0${file.text}`,
+    file
+  ])).values()].sort((left, right) => left.path.localeCompare(right.path));
 }
 
 function spdxShapeError(lockfilePath: string): Result<never, OhriskError> {

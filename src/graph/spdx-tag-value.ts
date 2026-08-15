@@ -14,6 +14,12 @@ type SpdxTagValueDocument = {
   documentDescribes?: string[];
   packages: SpdxTagValuePackage[];
   relationships: SpdxTagValueRelationship[];
+  hasExtractedLicensingInfos?: SpdxTagValueExtractedLicensingInfo[];
+};
+
+type SpdxTagValueExtractedLicensingInfo = {
+  licenseId: string;
+  extractedText?: string;
 };
 
 type SpdxTagValuePackage = {
@@ -92,17 +98,33 @@ function readSpdxTagValueDocument(
     relationships: []
   };
   let currentPackage: SpdxTagValuePackage | undefined;
-  let insideTextBlock = false;
+  let currentExtractedLicensingInfo: SpdxTagValueExtractedLicensingInfo | undefined;
+  let textBlock: { tag: string; lines: string[]; line: number } | undefined;
 
   const lines = input.replace(/\r\n?/g, "\n").split("\n");
   for (let index = 0; index < lines.length; index += 1) {
     const rawLine = lines[index] ?? "";
     const line = rawLine.trim();
 
-    if (insideTextBlock) {
-      if (line.includes("</text>")) {
-        insideTextBlock = false;
+    if (textBlock) {
+      const closingIndex = rawLine.indexOf("</text>");
+      if (closingIndex === -1) {
+        textBlock.lines.push(rawLine);
+        continue;
       }
+
+      textBlock.lines.push(rawLine.slice(0, closingIndex));
+      if (textBlock.tag === "ExtractedText" && currentExtractedLicensingInfo) {
+        currentExtractedLicensingInfo.extractedText = textBlock.lines.join("\n");
+      }
+      if (rawLine.slice(closingIndex + "</text>".length).trim() !== "") {
+        return spdxTagValueParseError({
+          lockfilePath,
+          line: index + 1,
+          cause: "Unexpected content after a tag-value </text> block."
+        });
+      }
+      textBlock = undefined;
       continue;
     }
 
@@ -120,9 +142,27 @@ function readSpdxTagValueDocument(
     }
 
     const tag = line.slice(0, separatorIndex).trim();
-    const value = line.slice(separatorIndex + 1).trim();
-    if (startsUnclosedTextBlock(value)) {
-      insideTextBlock = true;
+    let value = line.slice(separatorIndex + 1).trim();
+    const textOpenIndex = value.indexOf("<text>");
+    if (textOpenIndex !== -1) {
+      const afterOpen = value.slice(textOpenIndex + "<text>".length);
+      const textCloseIndex = afterOpen.indexOf("</text>");
+      if (textCloseIndex === -1) {
+        textBlock = {
+          tag,
+          lines: [afterOpen],
+          line: index + 1
+        };
+        continue;
+      }
+      if (afterOpen.slice(textCloseIndex + "</text>".length).trim() !== "") {
+        return spdxTagValueParseError({
+          lockfilePath,
+          line: index + 1,
+          cause: "Unexpected content after a tag-value </text> block."
+        });
+      }
+      value = afterOpen.slice(0, textCloseIndex);
     }
 
     switch (tag) {
@@ -187,12 +227,26 @@ function readSpdxTagValueDocument(
         }
         break;
       }
+      case "LicenseID":
+        currentPackage = undefined;
+        currentExtractedLicensingInfo = { licenseId: value };
+        document.hasExtractedLicensingInfos = [
+          ...(document.hasExtractedLicensingInfos ?? []),
+          currentExtractedLicensingInfo
+        ];
+        break;
+      case "ExtractedText":
+        if (currentExtractedLicensingInfo) {
+          currentExtractedLicensingInfo.extractedText = value;
+        }
+        break;
     }
   }
 
-  if (insideTextBlock) {
+  if (textBlock) {
     return spdxTagValueParseError({
       lockfilePath,
+      line: textBlock.line,
       cause: "Unclosed SPDX tag-value <text> block."
     });
   }
@@ -259,10 +313,6 @@ function readSpdxRefList(value: string): string[] {
     .split(/[,\s]+/)
     .map((ref) => ref.trim())
     .filter((ref) => ref.startsWith("SPDXRef-"));
-}
-
-function startsUnclosedTextBlock(value: string): boolean {
-  return value.includes("<text>") && !value.includes("</text>");
 }
 
 function isSpdxDependencyRelationshipType(

@@ -153,6 +153,41 @@ describe("parseSpdxJsonText", () => {
     });
   });
 
+  test("uses extracted LicenseRef text as package evidence", () => {
+    const result = parseSpdxJsonText(JSON.stringify({
+      spdxVersion: "SPDX-2.3",
+      name: "fixture-spdx-extracted-license",
+      documentDescribes: ["SPDXRef-Package-custom"],
+      hasExtractedLicensingInfos: [{
+        licenseId: "LicenseRef-Commercial",
+        extractedText: "Commercial use is prohibited."
+      }],
+      packages: [{
+        SPDXID: "SPDXRef-Package-custom",
+        name: "custom-package",
+        licenseDeclared: "LicenseRef-Commercial",
+        externalRefs: [{
+          referenceCategory: "PACKAGE-MANAGER",
+          referenceType: "purl",
+          referenceLocator: "pkg:npm/custom-package@1.0.0"
+        }]
+      }]
+    }), "spdx.json");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    const evidence = result.value.embeddedEvidence?.[0];
+    expect(evidence?.files).toEqual([{
+      path: "spdx-license-ref/LicenseRef-Commercial.txt",
+      kind: "license",
+      text: "Commercial use is prohibited."
+    }]);
+    expect(normalizeLicenseEvidence(evidence!).signals).toContain("commercial-restriction");
+  });
+
   test("merges duplicate dependency relationships without dropping child edges", () => {
     const result = parseSpdxJsonText(JSON.stringify({
       spdxVersion: "SPDX-2.3",

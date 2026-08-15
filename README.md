@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.14.39
+npm install -g ohrisk@1.14.40
 cd your-project
 ohrisk scan
 ```
@@ -203,7 +203,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - Erlang Rebar3 `rebar.lock` projects are scanned for Hex `pkg` pins; depth-0 Hex pins are classified as production roots, while git/path deps, plugin locks, profile-specific test deps, and Rebar dependency tree reconstruction are not scanned yet
 - Ruby Bundler `Gemfile.lock` projects are scanned for direct and transitive gem dependencies
 - PHP Composer `composer.lock` projects are scanned for production and development package dependencies, using adjacent `composer.json` root dependencies when available and installed `vendor/` package sources for license evidence
-- CycloneDX JSON/XML, SPDX JSON/RDF, and SPDX tag-value SBOM files are scanned for Package URL-backed package identities, dependency relationships, and embedded license evidence; SPDX `licenseDeclared` and `licenseConcluded` assertions are retained separately, and disagreement fails closed as conflicting evidence
+- CycloneDX JSON/XML, SPDX JSON/RDF, and SPDX tag-value SBOM files are scanned for Package URL-backed package identities, dependency relationships, and embedded license evidence; SPDX `licenseDeclared` and `licenseConcluded` assertions are retained separately, disagreement fails closed as conflicting evidence, and referenced document-local `LicenseRef-*` extracted text is inspected within bounded limits
 - explicit `--lockfile` SBOM paths are sniffed by content when their filename does not use a supported SBOM name or suffix
 - npm alias dependency resolution, including pnpm alias package keys, with alias context preserved in dependency paths
 - production, development, optional, and peer dependency classification
@@ -383,7 +383,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.14.39
+npm install -g ohrisk@1.14.40
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open
@@ -476,7 +476,7 @@ Supported dependency input files:
 - Ruby Bundler `Gemfile.lock` gem entries, using literal companion `Gemfile` group blocks and inline `group:` options for development classification and local Bundler/RubyGems gemspec metadata for evidence
 - PHP Composer `composer.lock` package entries, using adjacent `composer.json` root dependencies when available and local `vendor/` package metadata for license evidence
 - CycloneDX JSON/XML SBOM package entries with Package URL identities, dependency relationships, and embedded license evidence; traversal is iterative, retains every reachable component, stores at most 64 paths per component, and summarizes paths deeper than 256 components with typed graph diagnostics
-- SPDX JSON/RDF and tag-value SBOM package entries with Package URL external refs, dependency relationships, and embedded license evidence, including separate declared and concluded assertions
+- SPDX JSON/RDF and tag-value SBOM package entries with Package URL external refs, dependency relationships, and embedded license evidence, including separate declared and concluded assertions plus bounded extracted text for referenced local `LicenseRef-*` identifiers
 - Yarn classic/Berry `yarn.lock` with root and workspace dependency sets from `package.json` manifests, plus local `.yarn/cache` zip evidence for Berry/PnP installs
 
 Select a specific dependency input when a project contains more than one supported input file:

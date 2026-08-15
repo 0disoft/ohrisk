@@ -1,8 +1,46 @@
 import { describe, expect, test } from "bun:test";
 
 import { parseSpdxRdfText } from "../src/graph/spdx-rdf";
+import { normalizeLicenseEvidence } from "../src/license/normalize";
 
 describe("parseSpdxRdfText", () => {
+  test("uses extracted LicenseRef text as package evidence", () => {
+    const result = parseSpdxRdfText(`<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF
+  xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  xmlns:spdx="http://spdx.org/rdf/terms#">
+  <spdx:SpdxDocument rdf:about="#SPDXRef-DOCUMENT">
+    <spdx:name>fixture-spdx-rdf-extracted-license</spdx:name>
+    <spdx:describesPackage rdf:resource="#SPDXRef-Package-custom" />
+  </spdx:SpdxDocument>
+  <spdx:ExtractedLicensingInfo rdf:about="#LicenseRef-Commercial">
+    <spdx:licenseId>LicenseRef-Commercial</spdx:licenseId>
+    <spdx:extractedText>Commercial use is prohibited.</spdx:extractedText>
+  </spdx:ExtractedLicensingInfo>
+  <spdx:Package rdf:about="#SPDXRef-Package-custom">
+    <spdx:licenseDeclared rdf:resource="#LicenseRef-Commercial" />
+    <spdx:externalRef>
+      <spdx:referenceCategory>PACKAGE-MANAGER</spdx:referenceCategory>
+      <spdx:referenceType>purl</spdx:referenceType>
+      <spdx:referenceLocator>pkg:npm/custom-package@1.0.0</spdx:referenceLocator>
+    </spdx:externalRef>
+  </spdx:Package>
+</rdf:RDF>`, "spdx.rdf");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    const evidence = result.value.embeddedEvidence?.[0];
+    expect(evidence?.files).toEqual([{
+      path: "spdx-license-ref/LicenseRef-Commercial.txt",
+      kind: "license",
+      text: "Commercial use is prohibited."
+    }]);
+    expect(normalizeLicenseEvidence(evidence!).signals).toContain("commercial-restriction");
+  });
+
   test("parses SPDX RDF package graph and embedded license evidence from PURL refs", () => {
     const result = parseSpdxRdfText(`<?xml version="1.0" encoding="UTF-8"?>
 <rdf:RDF

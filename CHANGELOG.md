@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- SPDX JSON, RDF, and tag-value inputs now connect package `LicenseRef-*`
+  expressions to their document-local extracted license text. Referenced custom
+  text is bounded, attributable evidence and can surface explicit commercial
+  restrictions instead of leaving the package as an unexplained unknown.
 - SPDX package evidence now preserves `licenseDeclared` and
   `licenseConcluded` as separate assertions. When they disagree, Ohrisk keeps
   both values, reports `conflicting-evidence`, and fails closed to unknown

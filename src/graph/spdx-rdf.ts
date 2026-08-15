@@ -15,6 +15,12 @@ type SpdxRdfDocument = {
   documentDescribes?: string[];
   packages: SpdxRdfPackage[];
   relationships: SpdxRdfRelationship[];
+  hasExtractedLicensingInfos?: SpdxRdfExtractedLicensingInfo[];
+};
+
+type SpdxRdfExtractedLicensingInfo = {
+  licenseId: string;
+  extractedText: string;
 };
 
 type SpdxRdfPackage = {
@@ -105,6 +111,12 @@ function spdxRdfXmlToDocument(
       .filter((pkg) => pkg.SPDXID !== undefined),
     relationships: []
   };
+  const extractedLicensingInfos = nodesByName(root, "ExtractedLicensingInfo")
+    .map(readSpdxRdfExtractedLicensingInfo)
+    .filter((info): info is SpdxRdfExtractedLicensingInfo => info !== undefined);
+  if (extractedLicensingInfos.length > 0) {
+    document.hasExtractedLicensingInfos = extractedLicensingInfos;
+  }
   for (const [index, relationshipNode] of nodesByName(root, "Relationship").entries()) {
     const relationship = readSpdxRdfRelationship({
       node: relationshipNode,
@@ -133,6 +145,18 @@ function spdxRdfXmlToDocument(
   }
 
   return ok(document);
+}
+
+function readSpdxRdfExtractedLicensingInfo(
+  node: XmlNode
+): SpdxRdfExtractedLicensingInfo | undefined {
+  const licenseId = childText(node, "licenseId") ?? resourceTerm(node.attributes.about ?? "");
+  const extractedText = childText(node, "extractedText");
+  if (!licenseId.startsWith("LicenseRef-") || !extractedText) {
+    return undefined;
+  }
+
+  return { licenseId, extractedText };
 }
 
 function readSpdxRdfPackage(node: XmlNode): SpdxRdfPackage {

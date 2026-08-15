@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 532622a5572c34caa7745d6ccb8039a453200bba478d672f91a22c543aee46d4
+// ohrisk-action-source-sha256: e609c41b651bf080f3cf601e23e40ea60e109ce27051e9aed47b760e53c50613
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19596,7 +19596,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.39";
+var OHRISK_VERSION = "1.14.40";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -36551,6 +36551,8 @@ function escapeRegExp5(input) {
 }
 
 // src/graph/spdx-json.ts
+var SPDX_LICENSE_REF_MAX_COUNT = 16;
+var SPDX_EXTRACTED_LICENSE_TEXT_MAX_BYTES = 2 * 1024 * 1024;
 function parseSpdxJsonFile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -36582,7 +36584,8 @@ function parseSpdxDocument(document2, lockfilePath, options = {}) {
   if (!isRecord15(document2) || !Array.isArray(document2.packages)) {
     return spdxShapeError(lockfilePath);
   }
-  const packages = readSpdxPackageRecords(document2.packages);
+  const extractedLicenseTexts = readSpdxExtractedLicenseTexts(document2.hasExtractedLicensingInfos);
+  const packages = readSpdxPackageRecords(document2.packages, extractedLicenseTexts);
   if (packages.length === 0) {
     return spdxShapeError(lockfilePath);
   }
@@ -36664,7 +36667,7 @@ function parseSpdxJson(input, lockfilePath) {
     }));
   }
 }
-function readSpdxPackageRecords(value) {
+function readSpdxPackageRecords(value, extractedLicenseTexts) {
   const records = [];
   for (const pkg of value) {
     if (!isRecord15(pkg) || typeof pkg.SPDXID !== "string") {
@@ -36676,6 +36679,10 @@ function readSpdxPackageRecords(value) {
     }
     const licenseDeclared = readMeaningfulSpdxLicenseValue(pkg.licenseDeclared);
     const licenseConcluded = readMeaningfulSpdxLicenseValue(pkg.licenseConcluded);
+    const licenseRefEvidence = readSpdxLicenseRefEvidence({
+      expressions: [licenseDeclared, licenseConcluded],
+      extractedLicenseTexts
+    });
     records.push(omitUndefined({
       spdxId: pkg.SPDXID,
       name: purl.name,
@@ -36683,10 +36690,73 @@ function readSpdxPackageRecords(value) {
       id: purl.id,
       ecosystem: purl.ecosystem,
       licenseDeclared,
-      licenseConcluded
+      licenseConcluded,
+      licenseRefFiles: licenseRefEvidence.files,
+      licenseRefWarnings: licenseRefEvidence.warnings
     }));
   }
   return deduplicateSpdxPackageRecords(records);
+}
+function readSpdxExtractedLicenseTexts(value) {
+  const result = new Map;
+  if (!Array.isArray(value)) {
+    return result;
+  }
+  for (const item of value) {
+    if (!isRecord15(item) || typeof item.licenseId !== "string" || !/^LicenseRef-[A-Za-z0-9.-]+$/.test(item.licenseId) || typeof item.extractedText !== "string") {
+      continue;
+    }
+    const text3 = item.extractedText.trim();
+    if (text3 === "" || Buffer.byteLength(text3, "utf8") > SPDX_EXTRACTED_LICENSE_TEXT_MAX_BYTES) {
+      continue;
+    }
+    const existing = result.get(item.licenseId) ?? [];
+    if (!existing.includes(text3)) {
+      existing.push(text3);
+      existing.sort();
+      result.set(item.licenseId, existing);
+    }
+  }
+  return result;
+}
+function readSpdxLicenseRefEvidence(input) {
+  const localRefs = new Set;
+  const externalRefs = new Set;
+  const referencePattern = /(?:DocumentRef-[A-Za-z0-9.-]+:)?LicenseRef-[A-Za-z0-9.-]+/g;
+  for (const expression of input.expressions) {
+    for (const reference of expression?.match(referencePattern) ?? []) {
+      if (reference.includes(":")) {
+        externalRefs.add(reference);
+      } else {
+        localRefs.add(reference);
+      }
+    }
+  }
+  const warnings = [...externalRefs].sort().map((reference) => `SPDX external license reference ${reference} cannot be resolved from this document.`);
+  const files = [];
+  const boundedRefs = [...localRefs].sort().slice(0, SPDX_LICENSE_REF_MAX_COUNT);
+  if (localRefs.size > SPDX_LICENSE_REF_MAX_COUNT) {
+    warnings.push(`SPDX package license reference limit reached at ${SPDX_LICENSE_REF_MAX_COUNT} references.`);
+  }
+  for (const reference of boundedRefs) {
+    const texts = input.extractedLicenseTexts.get(reference);
+    if (!texts || texts.length === 0) {
+      warnings.push(`SPDX extracted license text is unavailable for ${reference}.`);
+      continue;
+    }
+    if (texts.length > 1) {
+      warnings.push(`SPDX document contains ${texts.length} distinct extracted texts for ${reference}.`);
+    }
+    for (const [index, text3] of texts.entries()) {
+      const suffix = texts.length === 1 ? "" : `-${index + 1}`;
+      files.push({
+        path: `spdx-license-ref/${reference}${suffix}.txt`,
+        kind: "license",
+        text: text3
+      });
+    }
+  }
+  return { files, warnings };
 }
 function readSpdxPackageUrl(value) {
   if (!Array.isArray(value)) {
@@ -36832,9 +36902,12 @@ function spdxPackageEvidence(record) {
     ...record.licenseDeclared ? { sbomDeclaredLicense: record.licenseDeclared } : {},
     ...record.licenseConcluded ? { sbomConcludedLicense: record.licenseConcluded } : {},
     ...distinctAssertions.length > 1 ? { conflictingLicenseClaims: distinctAssertions } : {},
-    files: [],
+    files: record.licenseRefFiles,
     source: "sbom",
-    warnings: primaryLicense ? [] : ["SPDX package did not declare usable license evidence."]
+    warnings: [
+      ...record.licenseRefWarnings,
+      ...primaryLicense ? [] : ["SPDX package did not declare usable license evidence."]
+    ]
   };
 }
 function deduplicateSpdxPackageRecords(records) {
@@ -36844,10 +36917,24 @@ function deduplicateSpdxPackageRecords(records) {
     seen.set(record.spdxId, existing ? omitUndefined({
       ...existing,
       licenseDeclared: existing.licenseDeclared ?? record.licenseDeclared,
-      licenseConcluded: existing.licenseConcluded ?? record.licenseConcluded
+      licenseConcluded: existing.licenseConcluded ?? record.licenseConcluded,
+      licenseRefFiles: uniqueSpdxEvidenceFiles([
+        ...existing.licenseRefFiles,
+        ...record.licenseRefFiles
+      ]),
+      licenseRefWarnings: [...new Set([
+        ...existing.licenseRefWarnings,
+        ...record.licenseRefWarnings
+      ])].sort()
     }) : record);
   }
   return [...seen.values()];
+}
+function uniqueSpdxEvidenceFiles(files) {
+  return [...new Map(files.map((file) => [
+    `${file.path}\x00${file.kind}\x00${file.text}`,
+    file
+  ])).values()].sort((left, right) => left.path.localeCompare(right.path));
 }
 function spdxShapeError(lockfilePath) {
   return err(createError({
@@ -36918,6 +37005,10 @@ function spdxRdfXmlToDocument(root, lockfilePath) {
     packages: nodesByName(root, "Package").map(readSpdxRdfPackage).filter((pkg) => pkg.SPDXID !== undefined),
     relationships: []
   };
+  const extractedLicensingInfos = nodesByName(root, "ExtractedLicensingInfo").map(readSpdxRdfExtractedLicensingInfo).filter((info) => info !== undefined);
+  if (extractedLicensingInfos.length > 0) {
+    document2.hasExtractedLicensingInfos = extractedLicensingInfos;
+  }
   for (const [index, relationshipNode] of nodesByName(root, "Relationship").entries()) {
     const relationship = readSpdxRdfRelationship({
       node: relationshipNode,
@@ -36940,6 +37031,14 @@ function spdxRdfXmlToDocument(root, lockfilePath) {
     document2.documentDescribes = described;
   }
   return ok(document2);
+}
+function readSpdxRdfExtractedLicensingInfo(node) {
+  const licenseId = childText(node, "licenseId") ?? resourceTerm(node.attributes.about ?? "");
+  const extractedText = childText(node, "extractedText");
+  if (!licenseId.startsWith("LicenseRef-") || !extractedText) {
+    return;
+  }
+  return { licenseId, extractedText };
 }
 function readSpdxRdfPackage(node) {
   const packageId = readSpdxRef(node.attributes.about) ?? readSpdxRef(readResourceOrText(firstChild(node, "SPDXID"))) ?? readSpdxRef(childText(node, "SPDXID"));
@@ -37166,17 +37265,33 @@ function readSpdxTagValueDocument(input, lockfilePath) {
     relationships: []
   };
   let currentPackage;
-  let insideTextBlock = false;
+  let currentExtractedLicensingInfo;
+  let textBlock;
   const lines = input.replace(/\r\n?/g, `
 `).split(`
 `);
   for (let index = 0;index < lines.length; index += 1) {
     const rawLine = lines[index] ?? "";
     const line = rawLine.trim();
-    if (insideTextBlock) {
-      if (line.includes("</text>")) {
-        insideTextBlock = false;
+    if (textBlock) {
+      const closingIndex = rawLine.indexOf("</text>");
+      if (closingIndex === -1) {
+        textBlock.lines.push(rawLine);
+        continue;
       }
+      textBlock.lines.push(rawLine.slice(0, closingIndex));
+      if (textBlock.tag === "ExtractedText" && currentExtractedLicensingInfo) {
+        currentExtractedLicensingInfo.extractedText = textBlock.lines.join(`
+`);
+      }
+      if (rawLine.slice(closingIndex + "</text>".length).trim() !== "") {
+        return spdxTagValueParseError({
+          lockfilePath,
+          line: index + 1,
+          cause: "Unexpected content after a tag-value </text> block."
+        });
+      }
+      textBlock = undefined;
       continue;
     }
     if (line === "" || line.startsWith("#")) {
@@ -37191,9 +37306,27 @@ function readSpdxTagValueDocument(input, lockfilePath) {
       });
     }
     const tag = line.slice(0, separatorIndex).trim();
-    const value = line.slice(separatorIndex + 1).trim();
-    if (startsUnclosedTextBlock(value)) {
-      insideTextBlock = true;
+    let value = line.slice(separatorIndex + 1).trim();
+    const textOpenIndex = value.indexOf("<text>");
+    if (textOpenIndex !== -1) {
+      const afterOpen = value.slice(textOpenIndex + "<text>".length);
+      const textCloseIndex = afterOpen.indexOf("</text>");
+      if (textCloseIndex === -1) {
+        textBlock = {
+          tag,
+          lines: [afterOpen],
+          line: index + 1
+        };
+        continue;
+      }
+      if (afterOpen.slice(textCloseIndex + "</text>".length).trim() !== "") {
+        return spdxTagValueParseError({
+          lockfilePath,
+          line: index + 1,
+          cause: "Unexpected content after a tag-value </text> block."
+        });
+      }
+      value = afterOpen.slice(0, textCloseIndex);
     }
     switch (tag) {
       case "DocumentName":
@@ -37256,11 +37389,25 @@ function readSpdxTagValueDocument(input, lockfilePath) {
         }
         break;
       }
+      case "LicenseID":
+        currentPackage = undefined;
+        currentExtractedLicensingInfo = { licenseId: value };
+        document2.hasExtractedLicensingInfos = [
+          ...document2.hasExtractedLicensingInfos ?? [],
+          currentExtractedLicensingInfo
+        ];
+        break;
+      case "ExtractedText":
+        if (currentExtractedLicensingInfo) {
+          currentExtractedLicensingInfo.extractedText = value;
+        }
+        break;
     }
   }
-  if (insideTextBlock) {
+  if (textBlock) {
     return spdxTagValueParseError({
       lockfilePath,
+      line: textBlock.line,
       cause: "Unclosed SPDX tag-value <text> block."
     });
   }
@@ -37309,9 +37456,6 @@ function readRelationship(input) {
 }
 function readSpdxRefList(value) {
   return value.split(/[,\s]+/).map((ref) => ref.trim()).filter((ref) => ref.startsWith("SPDXRef-"));
-}
-function startsUnclosedTextBlock(value) {
-  return value.includes("<text>") && !value.includes("</text>");
 }
 function isSpdxDependencyRelationshipType2(value) {
   return value === "DEPENDS_ON" || value === "DEPENDENCY_OF";

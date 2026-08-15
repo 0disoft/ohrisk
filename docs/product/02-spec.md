@@ -61,6 +61,9 @@ and modules without an exact ZIP checksum are never sent to the proxy.
   ambiguous or mixed-scope denials remain package restrictions.
 - SPDX `licenseDeclared` and `licenseConcluded` assertions remain separately
   attributable; disagreement is conflicting evidence with unknown severity.
+- Document-local SPDX `LicenseRef-*` extracted text is attached only to packages
+  that reference it, with per-package count and text-size limits. Unresolved
+  local or external document references remain explicit warnings.
 - Waivers may suppress matching findings, but strict waiver drift can fail CI.
 - Shareable formats must avoid leaking absolute local paths.
 
