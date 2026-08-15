@@ -57,7 +57,8 @@ and modules without an exact ZIP checksum are never sent to the proxy.
 - Severities are `low`, `review`, `high`, and `unknown`.
 - Usage profiles are `saas` and `distributed-app`.
 - Commercial restrictions explicitly scoped to documentation or data remain
-  evidence for those assets and do not override a separate package-code license.
+  evidence for those assets and do not override a separate package-code license;
+  ambiguous or mixed-scope denials remain package restrictions.
 - Waivers may suppress matching findings, but strict waiver drift can fail CI.
 - Shareable formats must avoid leaking absolute local paths.
 

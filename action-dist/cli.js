@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 74ad17726340f1e4184a405b4c0d58d3529e2a55ddff3ed69bc228b34f7122f9
+// ohrisk-action-source-sha256: c242ca6b789c39086f920a11fd26d056e7c14f35cbe82188b4118f056110c3b3
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19582,7 +19582,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.28";
+var OHRISK_VERSION = "1.14.29";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -54753,14 +54753,15 @@ function analyzeCommercialRestrictions(evidence) {
         continue;
       }
       const scopes = restrictionScopes(statement);
-      if (scopes.package || !scopes.documentation && !scopes.data) {
+      const explicitlyNonPackage = isExplicitlyNonPackageRestriction(statement, scopes);
+      if (!explicitlyNonPackage) {
         packageRestricted = true;
       }
-      if (scopes.documentation && !scopes.package) {
+      if (scopes.documentation && explicitlyNonPackage) {
         const key = `documentation:${file.path}`;
         nonPackageScopes.set(key, { path: file.path, scope: "documentation" });
       }
-      if (scopes.data && !scopes.package) {
+      if (scopes.data && explicitlyNonPackage) {
         const key = `data:${file.path}`;
         nonPackageScopes.set(key, { path: file.path, scope: "data" });
       }
@@ -54856,6 +54857,24 @@ function restrictionScopes(statement) {
     data: DATA_RESTRICTION_SCOPE_PATTERN.test(statement)
   };
 }
+function isExplicitlyNonPackageRestriction(statement, scopes) {
+  if (scopes.package || !scopes.documentation && !scopes.data) {
+    return false;
+  }
+  const scopedSubject = statement.match(NON_PACKAGE_RESTRICTION_SUBJECT_PATTERN);
+  if (scopedSubject) {
+    const remainder2 = statement.slice(scopedSubject[0].length);
+    return !/^\s*(?:,|(?:and|or)\b)/iu.test(remainder2);
+  }
+  const scopedObject = statement.match(NON_PACKAGE_RESTRICTION_OBJECT_PATTERN);
+  if (!scopedObject) {
+    return false;
+  }
+  const remainder = statement.slice((scopedObject.index ?? 0) + scopedObject[0].length);
+  return !/^\s*(?:,|(?:and|or)\b)/iu.test(remainder);
+}
+var NON_PACKAGE_RESTRICTION_SUBJECT_PATTERN = /^\s*(?:[-*+]\s+|\d+[.)]\s+)?(?:the\s+)?(?:(?!(?:and|or)\b)[\w@./-]+\s+){0,3}(?:documentation|docs?|manuals?|tutorials?|corpora?|corpus|datasets?|data[ -]?sets?|training\s+data|test\s+data|model\s+weights?)\b/iu;
+var NON_PACKAGE_RESTRICTION_OBJECT_PATTERN = /\bcommercial\s+use\s+(?:of|for)\s+(?:the\s+)?(?:documentation|docs?|manuals?|tutorials?|corpora?|corpus|datasets?|data[ -]?sets?|training\s+data|test\s+data|model\s+weights?)\b/iu;
 function addNonPackageRestrictionSources(evidenceSources, analysis) {
   for (const item of analysis.nonPackageScopes) {
     evidenceSources.push(`restriction scope: ${item.scope} in ${item.path}`);

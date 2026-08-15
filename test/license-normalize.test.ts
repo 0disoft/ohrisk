@@ -1054,6 +1054,28 @@ describe("normalizeLicenseEvidence", () => {
     );
   });
 
+  test("does not let a non-package scope mention hide a package commercial denial", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "restricted-project@1.0.0",
+      metadataLicense: "MIT",
+      metadataSource: "METADATA",
+      files: [
+        {
+          path: "LICENSE",
+          kind: "license",
+          text: "The project and documentation are not for commercial use."
+        }
+      ],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized.signals).toContain("commercial-restriction");
+    expect(normalized.evidenceSources).not.toContain(
+      "restriction scope: documentation in LICENSE"
+    );
+  });
+
   test("marks explicit commercial restriction text in license files", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "commons-clause-package@1.0.0",

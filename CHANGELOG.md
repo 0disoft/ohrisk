@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Commercial-use denials are now treated as package restrictions unless the
+  statement explicitly limits them to documentation or data. Merely mentioning
+  one of those assets cannot suppress a package-level high-risk signal.
 - PyPI release JSON now selects only a SHA-256-identified distribution; its
   registry-supplied license fields are never package evidence. Python license
   metadata and files must come from the verified wheel or source distribution.
