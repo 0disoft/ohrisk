@@ -1,5 +1,6 @@
 import type { LicenseEvidence } from "../evidence/types";
 import type { NormalizedLicense, NormalizedLicenseSignal } from "./types";
+import { spdxExceptionIdStatus, spdxLicenseIdStatus } from "./spdx-catalog";
 import { isSpdxLicenseReference, parseSpdxExpression } from "./spdx";
 
 type LicenseExpressionEvidence = {
@@ -112,6 +113,23 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     signals.push("custom-text");
   }
 
+  const deprecatedLicenseIds = parsed.choices.filter(
+    (choice) => spdxLicenseIdStatus(choice) === "deprecated"
+  );
+  const deprecatedExceptionIds = parsed.exceptions.filter(
+    (exception) => spdxExceptionIdStatus(exception) === "deprecated"
+  );
+
+  for (const licenseId of deprecatedLicenseIds) {
+    evidenceSources.push(`deprecated SPDX license identifier: ${licenseId}`);
+  }
+
+  for (const exceptionId of deprecatedExceptionIds) {
+    evidenceSources.push(`deprecated SPDX exception identifier: ${exceptionId}`);
+  }
+
+  const usesDeprecatedSpdx = deprecatedLicenseIds.length > 0 || deprecatedExceptionIds.length > 0;
+
   return withSpdxAst({
     packageId: evidence.packageId,
     original: parsed.original,
@@ -123,7 +141,7 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     evidenceSources,
     confidence: signals.includes("conflicting-evidence") || signals.includes("custom-text")
       ? "low"
-      : parsed.usedAlias || licenseExpression.source === "license-file"
+      : usesDeprecatedSpdx || parsed.usedAlias || licenseExpression.source === "license-file"
         ? "medium"
         : "high"
   }, parsed.ast);

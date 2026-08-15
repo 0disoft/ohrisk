@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Deprecated SPDX license and exception identifiers remain parseable for
+  compatibility, but are now named in evidence provenance and carry medium
+  confidence so reports do not present legacy metadata as current catalog use.
 - SPDX license and exception identifiers are now validated against the pinned
   official `spdx/license-list-data` build `e4c1f27` from 2026-07-16. Shape-valid
   invented identifiers no longer become high-confidence license expressions;

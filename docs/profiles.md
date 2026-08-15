@@ -80,8 +80,9 @@ separate asset decision.
 Standard license and exception identifiers are validated against the pinned
 official `spdx/license-list-data` build recorded in
 `src/license/spdx-catalog.ts`. Deprecated SPDX identifiers remain accepted for
-existing metadata compatibility; invented identifiers do not become recognized
-merely because they match the SPDX identifier character shape.
+existing metadata compatibility, appear explicitly in evidence provenance, and
+carry medium confidence; invented identifiers do not become recognized merely
+because they match the SPDX identifier character shape.
 
 The npm `package.json` field `private: true` prevents accidental publication;
 it does not prove that the package is owned by the scanning organization. A

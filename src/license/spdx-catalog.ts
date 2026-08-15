@@ -868,4 +868,3 @@ function catalogStatus(
   }
   return "unlisted";
 }
-

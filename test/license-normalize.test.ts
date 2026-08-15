@@ -289,6 +289,23 @@ describe("parseSpdxExpression", () => {
       malformed: false
     });
   });
+
+  test("surfaces deprecated SPDX license and exception identifiers", () => {
+    expect(normalizeLicenseEvidence({
+      packageId: "legacy-spdx@1.0.0",
+      packageJsonLicense: "GPL-2.0 WITH Nokia-Qt-exception-1.1",
+      files: [],
+      source: "local",
+      warnings: []
+    })).toMatchObject({
+      expression: "GPL-2.0 WITH Nokia-Qt-exception-1.1",
+      confidence: "medium",
+      evidenceSources: expect.arrayContaining([
+        "deprecated SPDX license identifier: GPL-2.0",
+        "deprecated SPDX exception identifier: Nokia-Qt-exception-1.1"
+      ])
+    });
+  });
 });
 
 describe("normalizeLicenseEvidence", () => {

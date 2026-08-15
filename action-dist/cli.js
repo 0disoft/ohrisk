@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: a48513aaac38fa4d3cc27614bb67cd4f7382d90a63a5ada665cc1432b85371d4
+// ohrisk-action-source-sha256: 76fb691203f4bbc06f2d5f51736ea4ab16ff7d1d6e0daf8b6ce9ecc2b3073891
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19596,7 +19596,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.42";
+var OHRISK_VERSION = "1.14.43";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -55954,6 +55954,15 @@ function normalizeLicenseEvidence(evidence) {
   if (parsed.choices.some(isSpdxLicenseReference) && !signals.includes("custom-text")) {
     signals.push("custom-text");
   }
+  const deprecatedLicenseIds = parsed.choices.filter((choice) => spdxLicenseIdStatus(choice) === "deprecated");
+  const deprecatedExceptionIds = parsed.exceptions.filter((exception) => spdxExceptionIdStatus(exception) === "deprecated");
+  for (const licenseId of deprecatedLicenseIds) {
+    evidenceSources.push(`deprecated SPDX license identifier: ${licenseId}`);
+  }
+  for (const exceptionId of deprecatedExceptionIds) {
+    evidenceSources.push(`deprecated SPDX exception identifier: ${exceptionId}`);
+  }
+  const usesDeprecatedSpdx = deprecatedLicenseIds.length > 0 || deprecatedExceptionIds.length > 0;
   return withSpdxAst({
     packageId: evidence.packageId,
     original: parsed.original,
@@ -55963,7 +55972,7 @@ function normalizeLicenseEvidence(evidence) {
     ...parsed.exceptions.length > 0 ? { exceptions: parsed.exceptions } : {},
     signals,
     evidenceSources,
-    confidence: signals.includes("conflicting-evidence") || signals.includes("custom-text") ? "low" : parsed.usedAlias || licenseExpression.source === "license-file" ? "medium" : "high"
+    confidence: signals.includes("conflicting-evidence") || signals.includes("custom-text") ? "low" : usesDeprecatedSpdx || parsed.usedAlias || licenseExpression.source === "license-file" ? "medium" : "high"
   }, parsed.ast);
 }
 function withSpdxAst(license, ast) {
