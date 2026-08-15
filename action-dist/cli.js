@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: d54c39a4d67e61a4f6c716e0c4e0ac19d80d5cba855f44243dab94fd41ca35fb
+// ohrisk-action-source-sha256: f0762d7d65a6856afcdb7c6be31a4c568b9e89cabf08a254b94a4febff87f74e
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18253,6 +18253,99 @@ var SUPPORTED_COMMANDS = [
   "version"
 ];
 
+// src/cli/argument-errors.ts
+function unexpectedTopLevelArgs(command, extraArgs) {
+  return err(createError({
+    code: "INVALID_ARGUMENT",
+    category: "invalid_input",
+    message: `${command ?? "command"} does not accept those extra arguments.`,
+    details: { extraArgs }
+  }));
+}
+function cachePruneOnlyOptionError(option, action) {
+  return err(createError({
+    code: "INVALID_ARGUMENT",
+    category: "invalid_input",
+    message: `${option} is supported only by cache prune.`,
+    details: { option, action }
+  }));
+}
+function multipleRepositoryInputs(kind) {
+  return err(createError({
+    code: "INVALID_ARGUMENT",
+    category: "invalid_input",
+    message: "Specify one repository URL, either positionally or with --repo.",
+    details: { supportedOptions: supportedOptionsFor(kind) }
+  }));
+}
+function repositoryConflict(option, kind) {
+  return err(createError({
+    code: "INVALID_ARGUMENT",
+    category: "invalid_input",
+    message: `Remote repository input cannot be combined with ${option}.`,
+    details: { supportedOptions: supportedOptionsFor(kind) }
+  }));
+}
+function invalidOptionValue(option, value, expected) {
+  return err(createError({
+    code: "INVALID_ARGUMENT",
+    category: "invalid_input",
+    message: `${option} must be ${expected}.`,
+    details: { option, value, expected }
+  }));
+}
+function readRequiredOptionValue(argv, index, option, details) {
+  const value = argv[index + 1];
+  return !value || value.startsWith("-") ? missingOptionValue(option, details) : ok(value);
+}
+function outputFormatConflict(option, supportedOutputOptions) {
+  return err(createError({
+    code: "INVALID_ARGUMENT",
+    category: "invalid_input",
+    message: `${option} cannot be combined with another output format option.`,
+    details: { supportedOutputOptions }
+  }));
+}
+function missingOptionValue(option, details) {
+  return err(createError({
+    code: "INVALID_ARGUMENT",
+    category: "invalid_input",
+    message: `${option} requires a value.`,
+    ...details ? { details } : {}
+  }));
+}
+function supportedOptionsFor(kind) {
+  const common = [
+    "--profile",
+    "--prod",
+    "--all",
+    "--policy",
+    "--config",
+    "--offline",
+    "--cache-dir",
+    "--jobs",
+    "--timeout",
+    "--registry-url",
+    "--registry-token-env",
+    "--allow-host",
+    "--json",
+    "--sarif",
+    "--markdown",
+    "--html",
+    "--language",
+    "--cyclonedx",
+    "--no-waivers",
+    "--lockfile",
+    "--archive",
+    "--workspace-root",
+    "--output",
+    "--open",
+    "--help",
+    "-h"
+  ];
+  return kind === "ci" ? [...common, "--fail-on", "--strict-waivers", "--allow-partial-evidence"] : [...common, "--repo", "--submodules"];
+}
+
 // src/cli/option-values.ts
 import { isIP } from "node:net";
 function parseBoundedPositiveInteger(value, max) {
@@ -18408,16 +18501,6 @@ function parseTopLevelHelpArgs(argv) {
 function isSupportedCommand(value) {
   return typeof value === "string" && SUPPORTED_COMMANDS.includes(value);
 }
-function unexpectedTopLevelArgs(command, extraArgs) {
-  return err(createError({
-    code: "INVALID_ARGUMENT",
-    category: "invalid_input",
-    message: `${command ?? "command"} does not accept those extra arguments.`,
-    details: {
-      extraArgs
-    }
-  }));
-}
 function parseCacheArgs(argv) {
   if (argv.length === 0 || isHelpFlag(argv[0])) {
     return argv.length <= 1 ? ok({ kind: "help", target: "cache" }) : unexpectedTopLevelArgs(argv[0], argv.slice(1));
@@ -18515,14 +18598,6 @@ function parseCacheArgs(argv) {
     ...maxSizeBytes !== undefined ? { maxSizeBytes } : {},
     ...maxAgeMs !== undefined ? { maxAgeMs } : {}
   });
-}
-function cachePruneOnlyOptionError(option, action) {
-  return err(createError({
-    code: "INVALID_ARGUMENT",
-    category: "invalid_input",
-    message: `${option} is supported only by cache prune.`,
-    details: { option, action }
-  }));
 }
 function parseScanArgs(argv) {
   return parseScanLikeArgs(argv, "scan");
@@ -19048,30 +19123,6 @@ function parseScanLikeArgs(argv, kind) {
     ...reportLanguage !== DEFAULT_REPORT_LANGUAGE ? { reportLanguage } : {}
   });
 }
-function multipleRepositoryInputs(kind) {
-  return err(createError({
-    code: "INVALID_ARGUMENT",
-    category: "invalid_input",
-    message: "Specify one repository URL, either positionally or with --repo.",
-    details: { supportedOptions: supportedOptionsFor(kind) }
-  }));
-}
-function repositoryConflict(option, kind) {
-  return err(createError({
-    code: "INVALID_ARGUMENT",
-    category: "invalid_input",
-    message: `Remote repository input cannot be combined with ${option}.`,
-    details: { supportedOptions: supportedOptionsFor(kind) }
-  }));
-}
-function invalidOptionValue(option, value, expected) {
-  return err(createError({
-    code: "INVALID_ARGUMENT",
-    category: "invalid_input",
-    message: `${option} must be ${expected}.`,
-    details: { option, value, expected }
-  }));
-}
 function isFailOnSeverity(value) {
   return FAIL_ON_SEVERITIES.includes(value);
 }
@@ -19080,62 +19131,6 @@ function isRepositorySubmoduleMode(value) {
 }
 function isHelpFlag(value) {
   return value === "--help" || value === "-h";
-}
-function supportedOptionsFor(kind) {
-  const common = [
-    "--profile",
-    "--prod",
-    "--all",
-    "--policy",
-    "--config",
-    "--offline",
-    "--cache-dir",
-    "--jobs",
-    "--timeout",
-    "--registry-url",
-    "--registry-token-env",
-    "--allow-host",
-    "--json",
-    "--sarif",
-    "--markdown",
-    "--html",
-    "--language",
-    "--cyclonedx",
-    "--no-waivers",
-    "--lockfile",
-    "--archive",
-    "--workspace-root",
-    "--output",
-    "--open",
-    "--help",
-    "-h"
-  ];
-  return kind === "ci" ? [...common, "--fail-on", "--strict-waivers", "--allow-partial-evidence"] : [...common, "--repo", "--submodules"];
-}
-function readRequiredOptionValue(argv, index, option, details) {
-  const value = argv[index + 1];
-  if (!value || value.startsWith("-")) {
-    return missingOptionValue(option, details);
-  }
-  return ok(value);
-}
-function missingOptionValue(option, details) {
-  return err(createError({
-    code: "INVALID_ARGUMENT",
-    category: "invalid_input",
-    message: `${option} requires a value.`,
-    ...details ? { details } : {}
-  }));
-}
-function outputFormatConflict(option, supportedOutputOptions) {
-  return err(createError({
-    code: "INVALID_ARGUMENT",
-    category: "invalid_input",
-    message: `${option} cannot be combined with another output format option.`,
-    details: {
-      supportedOutputOptions
-    }
-  }));
 }
 function parseExplainArgs(argv) {
   let profile = "saas";

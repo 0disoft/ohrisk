@@ -15,6 +15,16 @@ import {
 import { err, isErr, ok, type Result } from "../shared/result";
 import { SUPPORTED_COMMANDS, type CliCommand, type HelpTarget } from "./command";
 import {
+  cachePruneOnlyOptionError,
+  invalidOptionValue,
+  multipleRepositoryInputs,
+  outputFormatConflict,
+  readRequiredOptionValue,
+  repositoryConflict,
+  supportedOptionsFor,
+  unexpectedTopLevelArgs
+} from "./argument-errors";
+import {
   isSafeRepositoryRelativePath,
   normalizeHostnameOption,
   normalizeRegistryUrl,
@@ -123,22 +133,6 @@ function parseTopLevelHelpArgs(argv: string[]): Result<CliCommand, OhriskError> 
 
 function isSupportedCommand(value: string | undefined): value is typeof SUPPORTED_COMMANDS[number] {
   return typeof value === "string" && (SUPPORTED_COMMANDS as readonly string[]).includes(value);
-}
-
-function unexpectedTopLevelArgs(
-  command: string | undefined,
-  extraArgs: string[]
-): Result<CliCommand, OhriskError> {
-  return err(
-    createError({
-      code: "INVALID_ARGUMENT",
-      category: "invalid_input",
-      message: `${command ?? "command"} does not accept those extra arguments.`,
-      details: {
-        extraArgs
-      }
-    })
-  );
 }
 
 function parseCacheArgs(argv: string[]): Result<CliCommand, OhriskError> {
@@ -253,20 +247,6 @@ function parseCacheArgs(argv: string[]): Result<CliCommand, OhriskError> {
     ...(maxSizeBytes !== undefined ? { maxSizeBytes } : {}),
     ...(maxAgeMs !== undefined ? { maxAgeMs } : {})
   });
-}
-
-function cachePruneOnlyOptionError(
-  option: string,
-  action: "status" | "clear"
-): Result<CliCommand, OhriskError> {
-  return err(
-    createError({
-      code: "INVALID_ARGUMENT",
-      category: "invalid_input",
-      message: `${option} is supported only by cache prune.`,
-      details: { option, action }
-    })
-  );
 }
 
 function parseScanArgs(argv: string[]): Result<CliCommand, OhriskError> {
@@ -879,48 +859,6 @@ function parseScanLikeArgs(
   });
 }
 
-function multipleRepositoryInputs(
-  kind: "scan" | "ci"
-): Result<CliCommand, OhriskError> {
-  return err(
-    createError({
-      code: "INVALID_ARGUMENT",
-      category: "invalid_input",
-      message: "Specify one repository URL, either positionally or with --repo.",
-      details: { supportedOptions: supportedOptionsFor(kind) }
-    })
-  );
-}
-
-function repositoryConflict(
-  option: string,
-  kind: "scan" | "ci"
-): Result<CliCommand, OhriskError> {
-  return err(
-    createError({
-      code: "INVALID_ARGUMENT",
-      category: "invalid_input",
-      message: `Remote repository input cannot be combined with ${option}.`,
-      details: { supportedOptions: supportedOptionsFor(kind) }
-    })
-  );
-}
-
-function invalidOptionValue(
-  option: string,
-  value: string,
-  expected: string
-): Result<CliCommand, OhriskError> {
-  return err(
-    createError({
-      code: "INVALID_ARGUMENT",
-      category: "invalid_input",
-      message: `${option} must be ${expected}.`,
-      details: { option, value, expected }
-    })
-  );
-}
-
 function isFailOnSeverity(value: string): value is RiskSeverity {
   return (FAIL_ON_SEVERITIES as string[]).includes(value);
 }
@@ -931,84 +869,6 @@ function isRepositorySubmoduleMode(value: string): value is RepositorySubmoduleM
 
 function isHelpFlag(value: string | undefined): boolean {
   return value === "--help" || value === "-h";
-}
-
-function supportedOptionsFor(kind: "scan" | "ci"): string[] {
-  const common = [
-    "--profile",
-    "--prod",
-    "--all",
-    "--policy",
-    "--config",
-    "--offline",
-    "--cache-dir",
-    "--jobs",
-    "--timeout",
-    "--registry-url",
-    "--registry-token-env",
-    "--allow-host",
-    "--json",
-    "--sarif",
-    "--markdown",
-    "--html",
-    "--language",
-    "--cyclonedx",
-    "--no-waivers",
-    "--lockfile",
-    "--archive",
-    "--workspace-root",
-    "--output",
-    "--open",
-    "--help",
-    "-h"
-  ];
-  return kind === "ci"
-    ? [...common, "--fail-on", "--strict-waivers", "--allow-partial-evidence"]
-    : [...common, "--repo", "--submodules"];
-}
-
-function readRequiredOptionValue(
-  argv: string[],
-  index: number,
-  option: string,
-  details?: Record<string, unknown>
-): Result<string, OhriskError> {
-  const value = argv[index + 1];
-  if (!value || value.startsWith("-")) {
-    return missingOptionValue(option, details);
-  }
-
-  return ok(value);
-}
-
-function missingOptionValue(
-  option: string,
-  details?: Record<string, unknown>
-): Result<never, OhriskError> {
-  return err(
-    createError({
-      code: "INVALID_ARGUMENT",
-      category: "invalid_input",
-      message: `${option} requires a value.`,
-      ...(details ? { details } : {})
-    })
-  );
-}
-
-function outputFormatConflict(
-  option: string,
-  supportedOutputOptions: string[]
-): Result<CliCommand, OhriskError> {
-  return err(
-    createError({
-      code: "INVALID_ARGUMENT",
-      category: "invalid_input",
-      message: `${option} cannot be combined with another output format option.`,
-      details: {
-        supportedOutputOptions
-      }
-    })
-  );
 }
 
 function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
