@@ -14,10 +14,11 @@
   major using caret ranges while `bun.lock` continues to pin exact resolved
   versions and integrity hashes. Mutable `latest` exceptions are no longer
   permitted by source hygiene.
-- The 12-case license decision corpus now lives in a source-backed JSON fixture
-  with a rationale per case. Public accuracy documentation reports exact metric
-  denominators and explicitly rejects production accuracy claims from this
-  small regression set.
+- The 20-case license decision corpus now covers profile-sensitive MPL,
+  LGPL, EPL, and AGPL decisions, permissive 0BSD, a source-available alias,
+  and Unlicense commercial-use wording. Public accuracy documentation reports
+  exact metric denominators and explicitly rejects production accuracy claims
+  from this small regression set.
 - The cache command now owns its management, rendering, and failure mapping in
   a dedicated CLI module, reducing the central command assembler without
   changing cache output, exit codes, paths, or JSON shape.

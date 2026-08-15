@@ -108,5 +108,73 @@
     "evidence": { "packageJsonLicense": "Definitely-Not-SPDX-9.9", "files": [], "source": "tarball", "warnings": [] },
     "profile": "saas",
     "expected": { "severity": "unknown", "confidence": "low", "signals": ["malformed"] }
+  },
+  {
+    "id": "mpl-saas",
+    "sourceUrl": "https://spdx.org/licenses/MPL-2.0.html",
+    "rationale": "MPL-2.0 file-level copyleft does not trigger a distribution obligation for ordinary SaaS use.",
+    "evidence": { "packageJsonLicense": "MPL-2.0", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "low", "confidence": "high" }
+  },
+  {
+    "id": "mpl-distributed",
+    "sourceUrl": "https://spdx.org/licenses/MPL-2.0.html",
+    "rationale": "Distributing MPL-2.0 code can create file-level source obligations that require review.",
+    "evidence": { "packageJsonLicense": "MPL-2.0", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "distributed-app",
+    "expected": { "severity": "review", "confidence": "high" }
+  },
+  {
+    "id": "lgpl-distributed",
+    "sourceUrl": "https://spdx.org/licenses/LGPL-2.1-only.html",
+    "rationale": "LGPL-2.1-only distribution has weak-copyleft conditions that need product-specific review.",
+    "evidence": { "packageJsonLicense": "LGPL-2.1-only", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "distributed-app",
+    "expected": { "severity": "review", "confidence": "high" }
+  },
+  {
+    "id": "epl-alias-distributed",
+    "sourceUrl": "https://spdx.org/licenses/EPL-2.0.html",
+    "rationale": "The common EPL 2.0 alias must normalize to EPL-2.0 and retain weak-copyleft distribution review.",
+    "evidence": { "packageJsonLicense": "EPL 2.0", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "distributed-app",
+    "expected": { "severity": "review", "confidence": "medium" }
+  },
+  {
+    "id": "agpl-saas",
+    "sourceUrl": "https://spdx.org/licenses/AGPL-3.0-only.html",
+    "rationale": "AGPL-3.0-only network copyleft is high risk for a SaaS deployment profile.",
+    "evidence": { "packageJsonLicense": "AGPL-3.0-only", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "high", "confidence": "high" }
+  },
+  {
+    "id": "zero-bsd",
+    "sourceUrl": "https://spdx.org/licenses/0BSD.html",
+    "rationale": "The active 0BSD identifier is permissive and should remain low risk when distributing software.",
+    "evidence": { "packageJsonLicense": "0BSD", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "high" }
+  },
+  {
+    "id": "elastic-license-alias",
+    "sourceUrl": "https://spdx.org/licenses/Elastic-2.0.html",
+    "rationale": "The common Elastic License alias denotes Elastic-2.0 source-available restrictions and is high risk for SaaS.",
+    "evidence": { "packageJsonLicense": "Elastic License", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "high", "confidence": "medium", "signals": ["commercial-restriction"] }
+  },
+  {
+    "id": "unlicense-commercial-phrasing",
+    "sourceUrl": "https://unlicense.org/",
+    "rationale": "Unlicense permission for commercial and non-commercial use must not be mistaken for a commercial-use ban.",
+    "evidence": {
+      "files": [{ "path": "LICENSE", "kind": "license", "text": "SPDX-License-Identifier: Unlicense OR MIT\n\nThe UNLICENSE\n\nThis is free and unencumbered software released into the public domain.\n\nAnyone is free to copy, modify, publish, use, compile, sell, or distribute this software, either in source code form or as a compiled binary, for any purpose, commercial or non-commercial, and by any means." }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": { "severity": "low", "confidence": "medium" }
   }
 ]

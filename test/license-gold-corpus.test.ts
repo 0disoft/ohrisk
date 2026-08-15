@@ -69,20 +69,20 @@ describe("license decision gold corpus", () => {
       expectedUnknown: expectedUnknown.length,
       unknownMatches
     }).toEqual({
-      cases: 12,
-      exactMatches: 12,
-      expectedHigh: 3,
-      highTruePositives: 3,
-      expectedNonHigh: 9,
+      cases: 20,
+      exactMatches: 20,
+      expectedHigh: 5,
+      highTruePositives: 5,
+      expectedNonHigh: 15,
       highFalsePositives: 0,
       expectedUnknown: 4,
       unknownMatches: 4
     });
 
     const accuracyDoc = readFileSync(path.join(repoRoot, "docs", "accuracy.md"), "utf8");
-    expect(accuracyDoc).toContain("12/12");
-    expect(accuracyDoc).toContain("3/3");
-    expect(accuracyDoc).toContain("0/9");
+    expect(accuracyDoc).toContain("20/20");
+    expect(accuracyDoc).toContain("5/5");
+    expect(accuracyDoc).toContain("0/15");
     expect(accuracyDoc).toContain("4/4");
     expect(accuracyDoc).toContain("not statistically representative");
   });

@@ -13,7 +13,7 @@ import {
   type RepositorySubmoduleMode
 } from "../repository/github-repository";
 import { err, isErr, ok, type Result } from "../shared/result";
-import { SUPPORTED_COMMANDS, type CliCommand, type HelpTarget } from "./command";
+import { SUPPORTED_COMMANDS, type CliCommand } from "./command";
 import {
   cachePruneOnlyOptionError,
   invalidOptionValue,
