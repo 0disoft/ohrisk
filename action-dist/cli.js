@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 650e5fcc026b595a8c9017b95714c1e6f77dff0884bfbdb791813dcf4a1bea65
+// ohrisk-action-source-sha256: d404aa15e67bf71dcb9d8f9f962da77f5c5c526c3cd1bc3dec262205209b70b5
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19582,7 +19582,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.20";
+var OHRISK_VERSION = "1.14.21";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -43143,7 +43143,7 @@ function cacheOperationError(message, rootDir, cause) {
 }
 
 // src/evidence/collect.ts
-import { createHash as createHash7, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
+import { createHash as createHash8, timingSafeEqual as timingSafeEqual5 } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import {
   closeSync as closeSync4,
@@ -49670,6 +49670,63 @@ function safeGoModuleDisplayName(modulePath) {
   return modulePath.replace(/[^A-Za-z0-9._-]+/gu, "_").slice(-120) || "go-module";
 }
 
+// src/evidence/go-proxy-url.ts
+var GO_MODULE_PROXY_BASE_URL = "https://proxy.golang.org";
+function remoteGoModuleCoordinates(node) {
+  if (!node.resolved) {
+    return { modulePath: node.name, version: node.version };
+  }
+  if (!node.resolved.startsWith("go-module:")) {
+    return;
+  }
+  const specifier = node.resolved.slice("go-module:".length);
+  const separator = specifier.lastIndexOf("@");
+  if (separator <= 0 || separator === specifier.length - 1) {
+    return;
+  }
+  return {
+    modulePath: specifier.slice(0, separator),
+    version: specifier.slice(separator + 1)
+  };
+}
+function goModuleProxyZipUrl(modulePath, version) {
+  return goModuleProxyArtifactUrl(modulePath, version, "zip");
+}
+function goModuleProxyModUrl(modulePath, version) {
+  return goModuleProxyArtifactUrl(modulePath, version, "mod");
+}
+function goModuleProxyArtifactUrl(modulePath, version, extension) {
+  const escapedModulePath = escapeGoProxyModulePath(modulePath);
+  const escapedVersion = escapeGoProxyVersion(version);
+  return escapedModulePath && escapedVersion ? `${GO_MODULE_PROXY_BASE_URL}/${escapedModulePath}/@v/${escapedVersion}.${extension}` : undefined;
+}
+function escapeGoProxyModulePath(modulePath) {
+  if (modulePath === "" || modulePath.startsWith("/") || modulePath.endsWith("/") || !/^[A-Za-z0-9.!_~+\-/]+$/u.test(modulePath)) {
+    return;
+  }
+  const segments = modulePath.split("/");
+  if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+    return;
+  }
+  return escapeGoProxyText(modulePath);
+}
+function escapeGoProxyVersion(version) {
+  return /^v[A-Za-z0-9.!_~+\-]+$/u.test(version) ? escapeGoProxyText(version) : undefined;
+}
+function escapeGoProxyText(value) {
+  let escaped = "";
+  for (const character of value) {
+    if (character === "!") {
+      escaped += "!!";
+    } else if (character >= "A" && character <= "Z") {
+      escaped += `!${character.toLowerCase()}`;
+    } else {
+      escaped += character;
+    }
+  }
+  return escaped;
+}
+
 // src/evidence/maven-jar.ts
 var MAVEN_JAR_MAX_BYTES = 100 * 1024 * 1024;
 var MAVEN_JAR_MAX_ENTRIES = 50000;
@@ -50265,6 +50322,100 @@ function nugetPackageError(input, message, details) {
       ...details
     }
   });
+}
+
+// src/evidence/package-integrity.ts
+import { createHash as createHash7, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
+var SUPPORTED_INTEGRITY_DIGEST_BYTES = {
+  sha1: 20,
+  sha256: 32,
+  sha384: 48,
+  sha512: 64
+};
+function verifyPackageIntegrity(input) {
+  if (!input.integrity) {
+    return ok(undefined);
+  }
+  const supported = parseSupportedIntegrityEntries(input.integrity);
+  if (supported.length === 0) {
+    return err(createError({
+      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
+      category: "unsupported_input",
+      message: "Package artifact integrity could not be verified because no supported digest was found.",
+      details: {
+        packageId: input.packageId,
+        resolved: input.resolvedDetail,
+        integrity: input.integrity,
+        supportedAlgorithms: ["sha512", "sha384", "sha256", "sha1"]
+      }
+    }));
+  }
+  const computed = [];
+  for (const entry of supported) {
+    const actualDigest = createHash7(entry.algorithm).update(input.artifact).digest();
+    const actual = `${entry.algorithm}-${actualDigest.toString("base64")}`;
+    computed.push(actual);
+    if (actualDigest.byteLength === entry.digest.byteLength && timingSafeEqual4(actualDigest, entry.digest)) {
+      return ok(undefined);
+    }
+  }
+  return err(createError({
+    code: "PACKAGE_INTEGRITY_CHECK_FAILED",
+    category: "unsupported_input",
+    message: "Package artifact integrity did not match the lockfile digest.",
+    details: {
+      packageId: input.packageId,
+      resolved: input.resolvedDetail,
+      integrity: input.integrity,
+      computed
+    }
+  }));
+}
+function sha256HexIntegrity(sha2562) {
+  return `sha256-${Buffer.from(sha2562, "hex").toString("base64")}`;
+}
+function parseSupportedIntegrityEntries(integrity2) {
+  return integrity2.split(/\s+/).map((entry) => {
+    const separatorIndex = entry.indexOf("-");
+    if (separatorIndex <= 0) {
+      return;
+    }
+    const algorithm = entry.slice(0, separatorIndex);
+    const digest = entry.slice(separatorIndex + 1);
+    if (!isSupportedIntegrityAlgorithm(algorithm) || digest === "") {
+      return;
+    }
+    const decoded = decodeIntegrityDigest({ algorithm, digest });
+    if (!decoded) {
+      return;
+    }
+    return {
+      algorithm,
+      digest: decoded
+    };
+  }).filter((entry) => entry !== undefined);
+}
+function isSupportedIntegrityAlgorithm(value) {
+  return Object.prototype.hasOwnProperty.call(SUPPORTED_INTEGRITY_DIGEST_BYTES, value);
+}
+function decodeIntegrityDigest(input) {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(input.digest)) {
+    return;
+  }
+  const paddingStart = input.digest.indexOf("=");
+  if (paddingStart !== -1 && !/^=+$/.test(input.digest.slice(paddingStart))) {
+    return;
+  }
+  if (input.digest.length % 4 === 1) {
+    return;
+  }
+  const decoded = Buffer.from(input.digest, "base64");
+  if (decoded.byteLength !== SUPPORTED_INTEGRITY_DIGEST_BYTES[input.algorithm]) {
+    return;
+  }
+  const normalizedInput = input.digest.replace(/=+$/, "");
+  const normalizedDecoded = decoded.toString("base64").replace(/=+$/, "");
+  return normalizedDecoded === normalizedInput ? decoded : undefined;
 }
 
 // src/evidence/pypi-package.ts
@@ -50917,7 +51068,6 @@ var MAVEN_CENTRAL_BASE_URL = "https://repo.maven.apache.org/maven2";
 var MAVEN_CENTRAL_HOSTS = new Set(["repo.maven.apache.org"]);
 var MAVEN_JAR_MAX_BYTES2 = 32 * 1024 * 1024;
 var MAVEN_CHECKSUM_MAX_BYTES = 256;
-var GO_MODULE_PROXY_BASE_URL = "https://proxy.golang.org";
 var GO_MODULE_PROXY_HOSTS = new Set(["proxy.golang.org", "storage.googleapis.com"]);
 var GO_MODULE_MOD_MAX_BYTES3 = 2 * 1024 * 1024;
 var GO_MODULE_TRANSIENT_FETCH_ATTEMPTS = 2;
@@ -50930,12 +51080,6 @@ var CARGO_CRATE_BASE_URL = "https://static.crates.io/crates";
 var CARGO_CRATE_HOSTS = new Set(["static.crates.io"]);
 var ARTIFACT_HOST_RESOLUTION_CACHE_TTL_MS = 60000;
 var ARTIFACT_HOST_RESOLUTION_CACHE_MAX_ENTRIES = 256;
-var SUPPORTED_INTEGRITY_DIGEST_BYTES = {
-  sha1: 20,
-  sha256: 32,
-  sha384: 48,
-  sha512: 64
-};
 async function collectGraphEvidence(input) {
   const evidence = new Array(input.graph.nodes.length);
   const total = input.graph.nodes.length;
@@ -51486,9 +51630,9 @@ function collectLocalPathEvidence(input) {
   }
   const verified = verifyPackageIntegrity({
     packageId: input.node.id,
-    resolved: input.node.resolved,
+    resolvedDetail: safeOptionalUrlForErrorDetails(input.node.resolved),
     integrity: input.node.integrity,
-    tarball: tarball.value
+    artifact: tarball.value
   });
   if (!verified.ok) {
     return err(verified.error);
@@ -51668,7 +51812,7 @@ async function collectRemoteNugetPackageEvidence(input) {
     return catalog;
   }
   const catalogDigest = Buffer.from(catalog.value.packageHash, "base64");
-  if (catalogDigest.length !== lockDigest.length || !timingSafeEqual4(catalogDigest, lockDigest)) {
+  if (catalogDigest.length !== lockDigest.length || !timingSafeEqual5(catalogDigest, lockDigest)) {
     return err(createError({
       code: "PACKAGE_INTEGRITY_CHECK_FAILED",
       category: "unsupported_input",
@@ -51980,60 +52124,6 @@ async function collectRemoteCargoCrateEvidence(input) {
     crate: crate.value,
     artifactMaxBytes: input.artifactMaxBytes
   });
-}
-function remoteGoModuleCoordinates(node) {
-  if (!node.resolved) {
-    return { modulePath: node.name, version: node.version };
-  }
-  if (!node.resolved.startsWith("go-module:")) {
-    return;
-  }
-  const specifier = node.resolved.slice("go-module:".length);
-  const separator = specifier.lastIndexOf("@");
-  if (separator <= 0 || separator === specifier.length - 1) {
-    return;
-  }
-  return {
-    modulePath: specifier.slice(0, separator),
-    version: specifier.slice(separator + 1)
-  };
-}
-function goModuleProxyZipUrl(modulePath, version) {
-  return goModuleProxyArtifactUrl(modulePath, version, "zip");
-}
-function goModuleProxyModUrl(modulePath, version) {
-  return goModuleProxyArtifactUrl(modulePath, version, "mod");
-}
-function goModuleProxyArtifactUrl(modulePath, version, extension) {
-  const escapedModulePath = escapeGoProxyModulePath(modulePath);
-  const escapedVersion = escapeGoProxyVersion(version);
-  return escapedModulePath && escapedVersion ? `${GO_MODULE_PROXY_BASE_URL}/${escapedModulePath}/@v/${escapedVersion}.${extension}` : undefined;
-}
-function escapeGoProxyModulePath(modulePath) {
-  if (modulePath === "" || modulePath.startsWith("/") || modulePath.endsWith("/") || !/^[A-Za-z0-9.!_~+\-/]+$/u.test(modulePath)) {
-    return;
-  }
-  const segments = modulePath.split("/");
-  if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
-    return;
-  }
-  return escapeGoProxyText(modulePath);
-}
-function escapeGoProxyVersion(version) {
-  return /^v[A-Za-z0-9.!_~+\-]+$/u.test(version) ? escapeGoProxyText(version) : undefined;
-}
-function escapeGoProxyText(value) {
-  let escaped = "";
-  for (const character of value) {
-    if (character === "!") {
-      escaped += "!!";
-    } else if (character >= "A" && character <= "Z") {
-      escaped += `!${character.toLowerCase()}`;
-    } else {
-      escaped += character;
-    }
-  }
-  return escaped;
 }
 function readLocalArtifactStats(input) {
   try {
@@ -52410,8 +52500,8 @@ async function collectRemoteMavenJarEvidence(input) {
     return jarBytes.error.category === "network" ? ok(undefined) : jarBytes;
   }
   const expected = Buffer.from(checksum, "hex");
-  const observed = createHash7("sha256").update(jarBytes.value).digest();
-  if (expected.length !== observed.length || !timingSafeEqual4(expected, observed)) {
+  const observed = createHash8("sha256").update(jarBytes.value).digest();
+  if (expected.length !== observed.length || !timingSafeEqual5(expected, observed)) {
     return err(createError({
       code: "PACKAGE_INTEGRITY_CHECK_FAILED",
       category: "unsupported_input",
@@ -52670,9 +52760,9 @@ async function collectRemotePythonDistributionEvidence(input) {
     }
     const verified = verifyPackageIntegrity({
       packageId: input.node.id,
-      resolved: input.resolved,
+      resolvedDetail: safeOptionalUrlForErrorDetails(input.resolved),
       integrity: input.integrity,
-      tarball: artifact.value
+      artifact: artifact.value
     });
     if (!verified.ok) {
       return err(verified.error);
@@ -53016,9 +53106,9 @@ async function collectRemoteTarballEvidence(input) {
     if (!input.skipIntegrityCheck) {
       const verified = verifyPackageIntegrity({
         packageId: input.packageId,
-        resolved: input.resolved,
+        resolvedDetail: safeOptionalUrlForErrorDetails(input.resolved),
         integrity: input.integrity,
-        tarball: tarball.value
+        artifact: tarball.value
       });
       if (!verified.ok) {
         return err(verified.error);
@@ -54093,96 +54183,11 @@ function expandIpv6Hextets(host) {
   });
   return hextets.every((hextet) => hextet !== undefined) ? hextets : undefined;
 }
-function verifyPackageIntegrity(input) {
-  if (!input.integrity) {
-    return ok(undefined);
-  }
-  const supported = parseSupportedIntegrityEntries(input.integrity);
-  if (supported.length === 0) {
-    return err(createError({
-      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
-      category: "unsupported_input",
-      message: "Package artifact integrity could not be verified because no supported digest was found.",
-      details: {
-        packageId: input.packageId,
-        resolved: safeOptionalUrlForErrorDetails(input.resolved),
-        integrity: input.integrity,
-        supportedAlgorithms: ["sha512", "sha384", "sha256", "sha1"]
-      }
-    }));
-  }
-  const computed = [];
-  for (const entry of supported) {
-    const actualDigest = createHash7(entry.algorithm).update(input.tarball).digest();
-    const actual = `${entry.algorithm}-${actualDigest.toString("base64")}`;
-    computed.push(actual);
-    if (actualDigest.byteLength === entry.digest.byteLength && timingSafeEqual4(actualDigest, entry.digest)) {
-      return ok(undefined);
-    }
-  }
-  return err(createError({
-    code: "PACKAGE_INTEGRITY_CHECK_FAILED",
-    category: "unsupported_input",
-    message: "Package artifact integrity did not match the lockfile digest.",
-    details: {
-      packageId: input.packageId,
-      resolved: safeOptionalUrlForErrorDetails(input.resolved),
-      integrity: input.integrity,
-      computed
-    }
-  }));
-}
-function parseSupportedIntegrityEntries(integrity2) {
-  return integrity2.split(/\s+/).map((entry) => {
-    const separatorIndex = entry.indexOf("-");
-    if (separatorIndex <= 0) {
-      return;
-    }
-    const algorithm = entry.slice(0, separatorIndex);
-    const digest = entry.slice(separatorIndex + 1);
-    if (!isSupportedIntegrityAlgorithm(algorithm) || digest === "") {
-      return;
-    }
-    const decoded = decodeIntegrityDigest({ algorithm, digest });
-    if (!decoded) {
-      return;
-    }
-    return {
-      algorithm,
-      digest: decoded
-    };
-  }).filter((entry) => entry !== undefined);
-}
-function isSupportedIntegrityAlgorithm(value) {
-  return Object.prototype.hasOwnProperty.call(SUPPORTED_INTEGRITY_DIGEST_BYTES, value);
-}
-function decodeIntegrityDigest(input) {
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(input.digest)) {
-    return;
-  }
-  const paddingStart = input.digest.indexOf("=");
-  if (paddingStart !== -1 && !/^=+$/.test(input.digest.slice(paddingStart))) {
-    return;
-  }
-  if (input.digest.length % 4 === 1) {
-    return;
-  }
-  const decoded = Buffer.from(input.digest, "base64");
-  if (decoded.byteLength !== SUPPORTED_INTEGRITY_DIGEST_BYTES[input.algorithm]) {
-    return;
-  }
-  const normalizedInput = input.digest.replace(/=+$/, "");
-  const normalizedDecoded = decoded.toString("base64").replace(/=+$/, "");
-  return normalizedDecoded === normalizedInput ? decoded : undefined;
-}
 function npmRegistryPackageVersionUrl(name, version, registryUrl) {
   return `${npmRegistryPackageUrl(name, registryUrl)}/${encodeURIComponent(version)}`;
 }
 function pypiPackageVersionUrl(name, version) {
   return `https://pypi.org/pypi/${encodeURIComponent(name)}/${encodeURIComponent(version)}/json`;
-}
-function sha256HexIntegrity(sha2562) {
-  return `sha256-${Buffer.from(sha2562, "hex").toString("base64")}`;
 }
 function remoteArtifactFilename(resolved) {
   const parsed = parseHttpUrl(resolved);

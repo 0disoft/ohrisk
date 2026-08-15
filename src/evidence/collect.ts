@@ -38,9 +38,20 @@ import {
   collectGoModuleZipEvidence,
   readChecksumVerifiedGoModuleRequirements
 } from "./go-module-zip";
+import {
+  GO_MODULE_PROXY_BASE_URL,
+  goModuleProxyModUrl,
+  goModuleProxyZipUrl,
+  remoteGoModuleCoordinates
+} from "./go-proxy-url";
 import { collectLocalPackageEvidence } from "./local-package";
 import { collectMavenJarEvidence } from "./maven-jar";
 import { collectNugetNupkgEvidence } from "./nuget-nupkg";
+import {
+  parseSupportedIntegrityEntries,
+  sha256HexIntegrity,
+  verifyPackageIntegrity
+} from "./package-integrity";
 import {
   normalizeNugetVersion,
   parseNugetCatalogPackage,
@@ -78,6 +89,8 @@ import {
 } from "../shared/maven-repository";
 import { readTextFileWithLimit } from "../shared/read-text-file";
 import { err, ok, type Result } from "../shared/result";
+
+export { goModuleProxyModUrl, goModuleProxyZipUrl } from "./go-proxy-url";
 
 type ArtifactFetchResponse = {
   ok: boolean;
@@ -187,7 +200,6 @@ const MAVEN_CENTRAL_BASE_URL = "https://repo.maven.apache.org/maven2";
 const MAVEN_CENTRAL_HOSTS = new Set(["repo.maven.apache.org"]);
 const MAVEN_JAR_MAX_BYTES = 32 * 1024 * 1024;
 const MAVEN_CHECKSUM_MAX_BYTES = 256;
-const GO_MODULE_PROXY_BASE_URL = "https://proxy.golang.org";
 const GO_MODULE_PROXY_HOSTS = new Set(["proxy.golang.org", "storage.googleapis.com"]);
 const GO_MODULE_MOD_MAX_BYTES = 2 * 1024 * 1024;
 const GO_MODULE_TRANSIENT_FETCH_ATTEMPTS = 2;
@@ -201,15 +213,6 @@ const CARGO_CRATE_BASE_URL = "https://static.crates.io/crates";
 const CARGO_CRATE_HOSTS = new Set(["static.crates.io"]);
 const ARTIFACT_HOST_RESOLUTION_CACHE_TTL_MS = 60_000;
 const ARTIFACT_HOST_RESOLUTION_CACHE_MAX_ENTRIES = 256;
-
-const SUPPORTED_INTEGRITY_DIGEST_BYTES = {
-  sha1: 20,
-  sha256: 32,
-  sha384: 48,
-  sha512: 64
-} as const;
-
-type SupportedIntegrityAlgorithm = keyof typeof SUPPORTED_INTEGRITY_DIGEST_BYTES;
 
 export async function collectGraphEvidence(input: {
   graph: DependencyGraph;
@@ -932,9 +935,9 @@ function collectLocalPathEvidence(input: {
 
   const verified = verifyPackageIntegrity({
     packageId: input.node.id,
-    resolved: input.node.resolved,
+    resolvedDetail: safeOptionalUrlForErrorDetails(input.node.resolved),
     integrity: input.node.integrity,
-    tarball: tarball.value
+    artifact: tarball.value
   });
 
   if (!verified.ok) {
@@ -1535,82 +1538,6 @@ async function collectRemoteCargoCrateEvidence(input: {
     crate: crate.value,
     artifactMaxBytes: input.artifactMaxBytes
   });
-}
-
-function remoteGoModuleCoordinates(node: DependencyNode): {
-  modulePath: string;
-  version: string;
-} | undefined {
-  if (!node.resolved) {
-    return { modulePath: node.name, version: node.version };
-  }
-  if (!node.resolved.startsWith("go-module:")) {
-    return undefined;
-  }
-  const specifier = node.resolved.slice("go-module:".length);
-  const separator = specifier.lastIndexOf("@");
-  if (separator <= 0 || separator === specifier.length - 1) {
-    return undefined;
-  }
-  return {
-    modulePath: specifier.slice(0, separator),
-    version: specifier.slice(separator + 1)
-  };
-}
-
-export function goModuleProxyZipUrl(modulePath: string, version: string): string | undefined {
-  return goModuleProxyArtifactUrl(modulePath, version, "zip");
-}
-
-export function goModuleProxyModUrl(modulePath: string, version: string): string | undefined {
-  return goModuleProxyArtifactUrl(modulePath, version, "mod");
-}
-
-function goModuleProxyArtifactUrl(
-  modulePath: string,
-  version: string,
-  extension: "mod" | "zip"
-): string | undefined {
-  const escapedModulePath = escapeGoProxyModulePath(modulePath);
-  const escapedVersion = escapeGoProxyVersion(version);
-  return escapedModulePath && escapedVersion
-    ? `${GO_MODULE_PROXY_BASE_URL}/${escapedModulePath}/@v/${escapedVersion}.${extension}`
-    : undefined;
-}
-
-
-function escapeGoProxyModulePath(modulePath: string): string | undefined {
-  if (
-    modulePath === ""
-    || modulePath.startsWith("/")
-    || modulePath.endsWith("/")
-    || !/^[A-Za-z0-9.!_~+\-/]+$/u.test(modulePath)
-  ) {
-    return undefined;
-  }
-  const segments = modulePath.split("/");
-  if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
-    return undefined;
-  }
-  return escapeGoProxyText(modulePath);
-}
-
-function escapeGoProxyVersion(version: string): string | undefined {
-  return /^v[A-Za-z0-9.!_~+\-]+$/u.test(version) ? escapeGoProxyText(version) : undefined;
-}
-
-function escapeGoProxyText(value: string): string {
-  let escaped = "";
-  for (const character of value) {
-    if (character === "!") {
-      escaped += "!!";
-    } else if (character >= "A" && character <= "Z") {
-      escaped += `!${character.toLowerCase()}`;
-    } else {
-      escaped += character;
-    }
-  }
-  return escaped;
 }
 
 function readLocalArtifactStats(input: {
@@ -2445,9 +2372,9 @@ async function collectRemotePythonDistributionEvidence(input: {
 
     const verified = verifyPackageIntegrity({
       packageId: input.node.id,
-      resolved: input.resolved,
+      resolvedDetail: safeOptionalUrlForErrorDetails(input.resolved),
       integrity: input.integrity,
-      tarball: artifact.value
+      artifact: artifact.value
     });
     if (!verified.ok) {
       return err(verified.error);
@@ -2929,9 +2856,9 @@ async function collectRemoteTarballEvidence(input: {
     if (!input.skipIntegrityCheck) {
       const verified = verifyPackageIntegrity({
         packageId: input.packageId,
-        resolved: input.resolved,
+        resolvedDetail: safeOptionalUrlForErrorDetails(input.resolved),
         integrity: input.integrity,
-        tarball: tarball.value
+        artifact: tarball.value
       });
       if (!verified.ok) {
         return err(verified.error);
@@ -4390,126 +4317,6 @@ function expandIpv6Hextets(host: string): Ipv6Hextets | undefined {
     : undefined;
 }
 
-function verifyPackageIntegrity(input: {
-  packageId: string;
-  resolved: string | undefined;
-  integrity: string | undefined;
-  tarball: Buffer;
-}): Result<void, OhriskError> {
-  if (!input.integrity) {
-    return ok(undefined);
-  }
-
-  const supported = parseSupportedIntegrityEntries(input.integrity);
-  if (supported.length === 0) {
-    return err(
-      createError({
-        code: "PACKAGE_INTEGRITY_CHECK_FAILED",
-        category: "unsupported_input",
-        message: "Package artifact integrity could not be verified because no supported digest was found.",
-        details: {
-          packageId: input.packageId,
-          resolved: safeOptionalUrlForErrorDetails(input.resolved),
-          integrity: input.integrity,
-          supportedAlgorithms: ["sha512", "sha384", "sha256", "sha1"]
-        }
-      })
-    );
-  }
-
-  const computed: string[] = [];
-  for (const entry of supported) {
-    const actualDigest = createHash(entry.algorithm).update(input.tarball).digest();
-    const actual = `${entry.algorithm}-${actualDigest.toString("base64")}`;
-    computed.push(actual);
-
-    if (
-      actualDigest.byteLength === entry.digest.byteLength
-      && timingSafeEqual(actualDigest, entry.digest)
-    ) {
-      return ok(undefined);
-    }
-  }
-
-  return err(
-    createError({
-      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
-      category: "unsupported_input",
-      message: "Package artifact integrity did not match the lockfile digest.",
-      details: {
-        packageId: input.packageId,
-        resolved: safeOptionalUrlForErrorDetails(input.resolved),
-        integrity: input.integrity,
-        computed
-      }
-    })
-  );
-}
-
-function parseSupportedIntegrityEntries(
-  integrity: string
-): Array<{ algorithm: SupportedIntegrityAlgorithm; digest: Buffer }> {
-  return integrity
-    .split(/\s+/)
-    .map((entry) => {
-      const separatorIndex = entry.indexOf("-");
-      if (separatorIndex <= 0) {
-        return undefined;
-      }
-
-      const algorithm = entry.slice(0, separatorIndex);
-      const digest = entry.slice(separatorIndex + 1);
-      if (!isSupportedIntegrityAlgorithm(algorithm) || digest === "") {
-        return undefined;
-      }
-
-      const decoded = decodeIntegrityDigest({ algorithm, digest });
-      if (!decoded) {
-        return undefined;
-      }
-
-      return {
-        algorithm,
-        digest: decoded
-      };
-    })
-    .filter((entry): entry is {
-      algorithm: SupportedIntegrityAlgorithm;
-      digest: Buffer;
-    } => entry !== undefined);
-}
-
-function isSupportedIntegrityAlgorithm(value: string): value is SupportedIntegrityAlgorithm {
-  return Object.prototype.hasOwnProperty.call(SUPPORTED_INTEGRITY_DIGEST_BYTES, value);
-}
-
-function decodeIntegrityDigest(input: {
-  algorithm: SupportedIntegrityAlgorithm;
-  digest: string;
-}): Buffer | undefined {
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(input.digest)) {
-    return undefined;
-  }
-
-  const paddingStart = input.digest.indexOf("=");
-  if (paddingStart !== -1 && !/^=+$/.test(input.digest.slice(paddingStart))) {
-    return undefined;
-  }
-
-  if (input.digest.length % 4 === 1) {
-    return undefined;
-  }
-
-  const decoded = Buffer.from(input.digest, "base64");
-  if (decoded.byteLength !== SUPPORTED_INTEGRITY_DIGEST_BYTES[input.algorithm]) {
-    return undefined;
-  }
-
-  const normalizedInput = input.digest.replace(/=+$/, "");
-  const normalizedDecoded = decoded.toString("base64").replace(/=+$/, "");
-  return normalizedDecoded === normalizedInput ? decoded : undefined;
-}
-
 function npmRegistryPackageVersionUrl(
   name: string,
   version: string,
@@ -4520,10 +4327,6 @@ function npmRegistryPackageVersionUrl(
 
 function pypiPackageVersionUrl(name: string, version: string): string {
   return `https://pypi.org/pypi/${encodeURIComponent(name)}/${encodeURIComponent(version)}/json`;
-}
-
-function sha256HexIntegrity(sha256: string): string {
-  return `sha256-${Buffer.from(sha256, "hex").toString("base64")}`;
 }
 
 function remoteArtifactFilename(resolved: string): string | undefined {

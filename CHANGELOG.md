@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Evidence collection now keeps Go proxy URL construction and package artifact
+  integrity parsing in focused modules instead of the central graph collector.
+  Existing exports and fail-closed digest, proxy-host, and error-detail behavior
+  remain unchanged.
 - Archive scans now propagate the command cancellation signal through bounded
   file reads, ZIP/TAR indexing, project discovery, and lazy entry
   materialization. Already-cancelled scans stop before archive parsing, and
