@@ -293,7 +293,9 @@ checksum records.
 Older or versionless modules conservatively retain `go.sum`-only fallback nodes.
 Filesystem and checked-out repository scans use bounded `.go` source imports,
 test files, non-default custom build constraints, and standard `tool` directives
-to identify development roots. Requirements from checksum-verified module ZIP
+to identify development roots. Line and block comments are ignored before
+import declarations are parsed, so comment punctuation cannot truncate an
+import block or hide a production dependency. Requirements from checksum-verified module ZIP
 `go.mod` files or separately checksum-verified fixed-proxy `.mod` responses
 propagate that scope through the selected module graph. A module ZIP without a
 usable root `go.mod` does not contribute an empty requirement set. A module

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Go source scope classification now ignores line and block comment contents
+  before parsing import declarations, so a `)` inside a valid comment cannot
+  hide a later production import and incorrectly downgrade its module.
 - Lockfile and registry license declarations no longer replace independently
   inspectable package artifacts. npm registry records locate exact tarballs,
   Composer uses installed package sources, and mixed dependency/SBOM scans

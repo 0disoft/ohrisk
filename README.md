@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.14.25
+npm install -g ohrisk@1.14.26
 cd your-project
 ohrisk scan
 ```
@@ -171,7 +171,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - pnpm `catalog:` and `catalog:<name>` dependency specifiers are resolved from `pnpm-workspace.yaml`
 - Deno `deno.lock` projects are scanned for npm package dependencies recorded in `npm:` specifiers; root remote URL imports and JSR packages fail closed instead of being silently skipped
 - Rust `Cargo.lock` projects are scanned for crates, using adjacent `Cargo.toml` root dependencies plus literal and segment `*`/`?` Cargo workspace member manifests such as `crates/*`, `crates/app-*`, `tools/?li`, and `crates/*/plugins/*` when available, honoring workspace `exclude` entries, `crate.workspace = true` dependency keys, workspace dependency package aliases, and table-form dependency sections such as `[dependencies.foo]`; traversal is iterative, retains every reachable crate, and stores at most 64 dependency paths per crate with a typed truncation diagnostic; remote scans fetch crates.io archives only from the fixed public artifact host and trust them only after Cargo.lock SHA-256 plus archive identity verification
-- Go `go.work` projects are scanned across workspace modules and apply workspace `replace` directives before module-level replacements; Go `go.mod` projects are scanned for required modules, standard `tool` directives, source imports, build constraints, and Go `replace` directives. Modules imported only by tests or source files that require a non-default custom build tag are development roots. Checksum-verified module `go.mod` edges propagate that scope only when the complete selected Go graph has verified edges. A module ZIP without a usable root `go.mod` may use the separately checksummed fixed-proxy `.mod` response; otherwise its edges remain unavailable and transitive modules stay in production scope. Adjacent `go.sum` entries are checksum records rather than current dependencies on Go 1.17 and later.
+- Go `go.work` projects are scanned across workspace modules and apply workspace `replace` directives before module-level replacements; Go `go.mod` projects are scanned for required modules, standard `tool` directives, source imports, build constraints, and Go `replace` directives. Line and block comments are ignored before import parsing, so comment punctuation cannot hide a production import. Modules imported only by tests or source files that require a non-default custom build tag are development roots. Checksum-verified module `go.mod` edges propagate that scope only when the complete selected Go graph has verified edges. A module ZIP without a usable root `go.mod` may use the separately checksummed fixed-proxy `.mod` response; otherwise its edges remain unavailable and transitive modules stay in production scope. Adjacent `go.sum` entries are checksum records rather than current dependencies on Go 1.17 and later.
 - Python `pylock.toml` and named `pylock.<name>.toml` projects are scanned for versioned PyPI package records and project-root-contained source-tree package records with local source metadata
 - Python `pyproject.toml` projects without a companion lockfile are scanned for exact PEP 621 `name==version` direct dependency pins
 - Python `uv.lock` projects are scanned for PyPI package dependencies, project-root-contained `directory` or `editable` package source records, and remote Git records resolved to a full immutable commit; immutable Git records remain in the graph with unavailable evidence and are never cloned or replaced with same-name PyPI evidence, while iterative graph traversal retains every reachable package and stores at most 64 dependency paths per package with a typed truncation diagnostic
@@ -381,7 +381,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.14.25
+npm install -g ohrisk@1.14.26
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open

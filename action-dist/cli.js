@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 530660aa3cc07453da1275784cec777cdba708c15278800d4ebae306b1b49c82
+// ohrisk-action-source-sha256: 1e025ce97a7dc96bb92329ba73aef12e53d1fb158cc44438c62c42ff8288a179
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19582,7 +19582,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.25";
+var OHRISK_VERSION = "1.14.26";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -25150,7 +25150,7 @@ function evaluateConservativeGoBuildExpression(expression) {
 function readGoImportPaths(input) {
   const paths = [];
   const importPattern = /(?:^|\n)\s*import\s+(?:\(([^)]*)\)|(?:[._A-Za-z][._A-Za-z0-9]*\s+)?(["`][^"`\r\n]+["`]))/gu;
-  for (const match of input.matchAll(importPattern)) {
+  for (const match of maskGoComments(input).matchAll(importPattern)) {
     const values = match[1]?.match(/["`][^"`\r\n]+["`]/gu) ?? (match[2] ? [match[2]] : []);
     for (const value of values) {
       const importPath = value.slice(1, -1);
@@ -25160,6 +25160,67 @@ function readGoImportPaths(input) {
     }
   }
   return paths;
+}
+function maskGoComments(input) {
+  let output = "";
+  let state = "code";
+  for (let index = 0;index < input.length; index += 1) {
+    const character = input[index] ?? "";
+    const next = input[index + 1];
+    if (state === "line-comment") {
+      if (character === "\r" || character === `
+`) {
+        output += character;
+        state = "code";
+      } else {
+        output += " ";
+      }
+      continue;
+    }
+    if (state === "block-comment") {
+      if (character === "*" && next === "/") {
+        output += "  ";
+        index += 1;
+        state = "code";
+      } else {
+        output += character === "\r" || character === `
+` ? character : " ";
+      }
+      continue;
+    }
+    output += character;
+    if (state === "string" || state === "rune") {
+      if (character === "\\" && next !== undefined) {
+        output += next;
+        index += 1;
+      } else if (state === "string" && character === '"' || state === "rune" && character === "'") {
+        state = "code";
+      }
+      continue;
+    }
+    if (state === "raw-string") {
+      if (character === "`") {
+        state = "code";
+      }
+      continue;
+    }
+    if (character === "/" && next === "/") {
+      output += " ";
+      index += 1;
+      state = "line-comment";
+    } else if (character === "/" && next === "*") {
+      output += " ";
+      index += 1;
+      state = "block-comment";
+    } else if (character === '"') {
+      state = "string";
+    } else if (character === "'") {
+      state = "rune";
+    } else if (character === "`") {
+      state = "raw-string";
+    }
+  }
+  return output;
 }
 function parseGoReplaceDirectiveLine(input) {
   const parts = splitGoDirectiveFields(input.line);

@@ -668,7 +668,7 @@ function evaluateConservativeGoBuildExpression(expression: string): boolean {
 function readGoImportPaths(input: string): string[] {
   const paths: string[] = [];
   const importPattern = /(?:^|\n)\s*import\s+(?:\(([^)]*)\)|(?:[._A-Za-z][._A-Za-z0-9]*\s+)?(["`][^"`\r\n]+["`]))/gu;
-  for (const match of input.matchAll(importPattern)) {
+  for (const match of maskGoComments(input).matchAll(importPattern)) {
     const values = match[1]?.match(/["`][^"`\r\n]+["`]/gu)
       ?? (match[2] ? [match[2]] : []);
     for (const value of values) {
@@ -679,6 +679,75 @@ function readGoImportPaths(input: string): string[] {
     }
   }
   return paths;
+}
+
+function maskGoComments(input: string): string {
+  let output = "";
+  let state: "code" | "line-comment" | "block-comment" | "string" | "rune" | "raw-string" = "code";
+
+  for (let index = 0; index < input.length; index += 1) {
+    const character = input[index] ?? "";
+    const next = input[index + 1];
+
+    if (state === "line-comment") {
+      if (character === "\r" || character === "\n") {
+        output += character;
+        state = "code";
+      } else {
+        output += " ";
+      }
+      continue;
+    }
+
+    if (state === "block-comment") {
+      if (character === "*" && next === "/") {
+        output += "  ";
+        index += 1;
+        state = "code";
+      } else {
+        output += character === "\r" || character === "\n" ? character : " ";
+      }
+      continue;
+    }
+
+    output += character;
+    if (state === "string" || state === "rune") {
+      if (character === "\\" && next !== undefined) {
+        output += next;
+        index += 1;
+      } else if (
+        (state === "string" && character === "\"")
+        || (state === "rune" && character === "'")
+      ) {
+        state = "code";
+      }
+      continue;
+    }
+    if (state === "raw-string") {
+      if (character === "`") {
+        state = "code";
+      }
+      continue;
+    }
+
+    if (character === "/" && next === "/") {
+      output += " ";
+      index += 1;
+      state = "line-comment";
+    } else if (character === "/" && next === "*") {
+      output += " ";
+      index += 1;
+      state = "block-comment";
+    } else if (character === "\"") {
+      state = "string";
+    } else if (character === "'") {
+      state = "rune";
+    } else if (character === "`") {
+      state = "raw-string";
+    }
+  }
+
+  return output;
 }
 
 export function parseGoReplaceDirectiveLine(input: {

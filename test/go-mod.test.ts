@@ -196,6 +196,38 @@ describe("parseGoModText", () => {
     });
   });
 
+  test("keeps production imports after parentheses inside comments", () => {
+    for (const comment of ["// )", "/* ) */"]) {
+      const result = parseGoModText(
+        [
+          "module example.com/fixture-go",
+          "go 1.24",
+          "require github.com/acme/runtime v1.0.0",
+          "tool github.com/acme/runtime/cmd/tool"
+        ].join("\n"),
+        "go.mod",
+        {
+          sourceFiles: [{
+            path: "runtime.go",
+            text: [
+              "package fixture",
+              "import (",
+              `  ${comment}`,
+              "  _ \"github.com/acme/runtime/pkg\"",
+              ")"
+            ].join("\n")
+          }]
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+      expect(result.value.nodes[0]?.dependencyType).toBe("production");
+    }
+  });
+
   test("keeps go.sum-only fallback modules for pre-1.17 module graphs", () => {
     const result = parseGoModText(
       [
