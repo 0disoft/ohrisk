@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Cache access-time touches and HTTP revalidation now acquire the same
+  cross-process commit lock as writers and maintenance, then re-read the index
+  and object before publishing. A reader can no longer resurrect an entry after
+  `cache clear` or overwrite a concurrent cache update.
 - The bundled GitHub Action now rejects control characters and symbolic-link
   traversal in existing lockfile, policy, and cache path components. It also
   leaves output-directory creation to the CLI's contained report writer.

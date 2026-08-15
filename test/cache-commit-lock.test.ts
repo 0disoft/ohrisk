@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   utimesSync,
   writeFileSync
@@ -326,6 +327,38 @@ describe("cache commit lock", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("keeps reader touches and revalidation behind the commit lock", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "ohrisk-cache-read-lock-"));
+    try {
+      let now = 1_000;
+      const cache = createArtifactCache(root, {
+        now: () => now,
+        defaultTtlMs: 10_000
+      });
+      const url = "https://registry.example.com/read-lock.tgz";
+      const indexPath = path.join(root, "index", urlKey(url).slice(0, 2), `${urlKey(url)}.json`);
+      const lockPath = path.join(root, MAINTENANCE_LOCK_FILENAME);
+      cache.write(url, Buffer.from("cached payload"));
+
+      writeFileSync(lockPath, "other-process\n", "utf8");
+      now = 2_000;
+      expect(cache.read(url, 4096)?.bytes.toString()).toBe("cached payload");
+      cache.revalidate(url, { expiresAt: 30_000, etag: '"updated"' });
+
+      expect(readCacheIndex(indexPath)).toMatchObject({
+        lastAccessedAt: 1_000,
+        expiresAt: 11_000
+      });
+
+      rmSync(lockPath, { force: true });
+      now = 3_000;
+      expect(cache.read(url, 4096)?.bytes.toString()).toBe("cached payload");
+      expect(readCacheIndex(indexPath)).toMatchObject({ lastAccessedAt: 3_000 });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 function cacheIndexFor(
@@ -360,4 +393,8 @@ function urlKey(url: string): string {
 
 function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+function readCacheIndex(indexPath: string): Record<string, unknown> {
+  return JSON.parse(readFileSync(indexPath, "utf8")) as Record<string, unknown>;
 }

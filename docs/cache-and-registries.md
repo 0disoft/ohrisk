@@ -15,6 +15,9 @@ mutation when either boundary is reached. An interrupted attempt starts the
 same short cooldown so an oversized cache cannot delay every scan. The 2 GiB
 default target, ownership marker, and content-addressed integrity checks remain
 in force; use `cache prune` when a complete cleanup is required immediately.
+Reader access-time touches and HTTP revalidation also use the cross-process
+commit lock and re-read the current index and object before publishing. They
+cannot recreate an entry after `cache clear` or overwrite a concurrent writer.
 
 ## Cache location
 

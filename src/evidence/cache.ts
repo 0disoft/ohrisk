@@ -476,11 +476,17 @@ function readArtifactCacheEntry(input: {
       return undefined;
     }
 
-    const touched: ArtifactCacheIndexV3 = {
-      ...index,
-      lastAccessedAt: input.now
-    };
-    replaceAtomicBestEffort(indexPath, Buffer.from(`${JSON.stringify(touched)}\n`, "utf8"));
+    const touched = updateArtifactCacheIndexUnderCommitLock({
+      rootDir: input.rootDir,
+      url: input.url,
+      now: input.now,
+      defaultTtlMs: input.defaultTtlMs,
+      expectedSha256: index.sha256,
+      update: (current) => ({
+        ...current,
+        lastAccessedAt: input.now
+      })
+    }) ?? index;
     return {
       bytes,
       digest,
@@ -615,6 +621,49 @@ function withCacheCommitLock<T>(
   }
 }
 
+function updateArtifactCacheIndexUnderCommitLock(input: {
+  rootDir: string;
+  url: string;
+  now: number;
+  defaultTtlMs: number;
+  expectedSha256?: string;
+  update: (current: ArtifactCacheIndexV3) => ArtifactCacheIndexV3;
+}): ArtifactCacheIndexV3 | undefined {
+  const lockPath = path.join(input.rootDir, CACHE_MAINTENANCE_LOCK_FILENAME);
+  if (!acquireCacheMaintenanceLock(lockPath, input.now)) {
+    return undefined;
+  }
+  try {
+    if (!hasValidCacheMarker(input.rootDir)) {
+      return undefined;
+    }
+    const indexPath = cacheIndexPath(input.rootDir, input.url);
+    const loaded = readIndexFile(
+      indexPath,
+      cacheUrlKey(input.url),
+      input.now,
+      input.defaultTtlMs
+    );
+    if (
+      !loaded
+      || (input.expectedSha256 !== undefined && loaded.index.sha256 !== input.expectedSha256)
+    ) {
+      return undefined;
+    }
+    const objectPath = cacheObjectPath(input.rootDir, loaded.index.sha256);
+    if (!isRegularFile(objectPath) || statSync(objectPath).size !== loaded.index.size) {
+      return undefined;
+    }
+    const updated = input.update(loaded.index);
+    replaceAtomic(indexPath, Buffer.from(`${JSON.stringify(updated)}\n`, "utf8"));
+    return updated;
+  } catch {
+    return undefined;
+  } finally {
+    removeQuietly(lockPath);
+  }
+}
+
 function revalidateArtifactCacheEntry(input: {
   rootDir: string;
   url: string;
@@ -622,38 +671,29 @@ function revalidateArtifactCacheEntry(input: {
   defaultTtlMs: number;
   metadata?: ArtifactCacheWriteMetadata;
 }): void {
-  if (!hasValidCacheMarker(input.rootDir)) {
-    return;
-  }
-  const indexPath = cacheIndexPath(input.rootDir, input.url);
-  const loaded = readIndexFile(
-    indexPath,
-    cacheUrlKey(input.url),
-    input.now,
-    input.defaultTtlMs
-  );
-  if (!loaded) {
-    return;
-  }
-
   const metadata = normalizeWriteMetadata(input.metadata, input.now, input.defaultTtlMs);
-  const updated: ArtifactCacheIndexV3 = {
-    ...loaded.index,
-    fetchedAt: metadata.fetchedAt,
-    lastAccessedAt: input.now,
-    expiresAt: metadata.expiresAt,
-    ...(metadata.etag
-      ? { etag: metadata.etag }
-      : loaded.index.etag
-        ? { etag: loaded.index.etag }
-        : {}),
-    ...(metadata.lastModified
-      ? { lastModified: metadata.lastModified }
-      : loaded.index.lastModified
-        ? { lastModified: loaded.index.lastModified }
-        : {})
-  };
-  replaceAtomicBestEffort(indexPath, Buffer.from(`${JSON.stringify(updated)}\n`, "utf8"));
+  updateArtifactCacheIndexUnderCommitLock({
+    rootDir: input.rootDir,
+    url: input.url,
+    now: input.now,
+    defaultTtlMs: input.defaultTtlMs,
+    update: (current) => ({
+      ...current,
+      fetchedAt: metadata.fetchedAt,
+      lastAccessedAt: input.now,
+      expiresAt: metadata.expiresAt,
+      ...(metadata.etag
+        ? { etag: metadata.etag }
+        : current.etag
+          ? { etag: current.etag }
+          : {}),
+      ...(metadata.lastModified
+        ? { lastModified: metadata.lastModified }
+        : current.lastModified
+          ? { lastModified: current.lastModified }
+          : {})
+    })
+  });
 }
 
 function removeArtifactCacheEntry(rootDir: string, url: string, now: number): void {
