@@ -5,6 +5,9 @@
 - The cache command now owns its management, rendering, and failure mapping in
   a dedicated CLI module, reducing the central command assembler without
   changing cache output, exit codes, paths, or JSON shape.
+- Workspace-root validation now has one CLI boundary shared by scan, diff, and
+  explain, preserving realpath checks and redacted absolute-path failures while
+  removing that filesystem policy from the central command assembler.
 - Repository community health now includes private vulnerability reporting,
   supported-version and response targets, a focused contribution guide and
   conduct policy, dedicated bug, license-result, and feature issue forms, and a
