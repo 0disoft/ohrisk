@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 1e025ce97a7dc96bb92329ba73aef12e53d1fb158cc44438c62c42ff8288a179
+// ohrisk-action-source-sha256: 24252c1c31b63d65c42089e7efd98c64e1ea4a97857a1912baddb165a314a039
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19582,7 +19582,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.26";
+var OHRISK_VERSION = "1.14.27";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -39765,6 +39765,17 @@ function discoverProject(options = {}) {
         ...selectedLockfiles.length > 1 ? { lockfiles: selectedLockfiles } : {}
       });
     }
+    if (nearestManifestWithoutParentLockfile) {
+      return err(createError({
+        code: "NO_SUPPORTED_LOCKFILE",
+        category: "unsupported_input",
+        message: "Project manifest found, but no supported lockfile exists. Add or select a supported lockfile before scanning dependencies.",
+        details: {
+          rootDir: nearestManifestWithoutParentLockfile,
+          hint: "Run 'ohrisk help scan' to review supported dependency inputs."
+        }
+      }));
+    }
     if (searchMode === "tree") {
       const descendantProject = discoverDescendantProject({
         rootDir: startDir,
@@ -39776,17 +39787,6 @@ function discoverProject(options = {}) {
       if (descendantProject) {
         return descendantProject;
       }
-    }
-    if (nearestManifestWithoutParentLockfile) {
-      return err(createError({
-        code: "NO_SUPPORTED_LOCKFILE",
-        category: "unsupported_input",
-        message: "Project manifest found, but no supported lockfile exists. Add or select a supported lockfile before scanning dependencies.",
-        details: {
-          rootDir: nearestManifestWithoutParentLockfile,
-          hint: "Run 'ohrisk help scan' to review supported dependency inputs."
-        }
-      }));
     }
   } catch (cause) {
     return err(createError({

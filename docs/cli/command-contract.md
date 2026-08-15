@@ -116,7 +116,9 @@ and `web` inputs in one graph with per-lockfile provenance. Automatic fan-out is
 limited to 64 project roots and 128 dependency inputs. `--lockfile` still narrows
 the scan to one explicitly selected repository-relative input. Inputs at each
 selected root are merged without preferring one ecosystem and silently omitting
-the others. Standalone `pyproject.toml` manifests participate in automatic
+the others. If the repository root contains a known dependency manifest but no
+supported lockfile, discovery fails closed instead of selecting nested inputs.
+Standalone `pyproject.toml` manifests participate in automatic
 discovery only when their dependency entries are exact `name==version` pins;
 ranges and direct references require a resolved lockfile and are not treated as
 concrete automatic inputs. Gradle version catalogs likewise participate only

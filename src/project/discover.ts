@@ -490,19 +490,6 @@ export function discoverProject(
       });
     }
 
-    if (searchMode === "tree") {
-      const descendantProject = discoverDescendantProject({
-        rootDir: startDir,
-        allLockfiles: options.allLockfiles ?? false,
-        autoMergeSameRoot: options.autoMergeSameRoot ?? false,
-        autoMergeDescendantProjects: options.autoMergeDescendantProjects ?? false,
-        ...(options.inventory ? { inventory: options.inventory } : {})
-      });
-      if (descendantProject) {
-        return descendantProject;
-      }
-    }
-
     if (nearestManifestWithoutParentLockfile) {
       return err(
         createError({
@@ -515,6 +502,19 @@ export function discoverProject(
           }
         })
       );
+    }
+
+    if (searchMode === "tree") {
+      const descendantProject = discoverDescendantProject({
+        rootDir: startDir,
+        allLockfiles: options.allLockfiles ?? false,
+        autoMergeSameRoot: options.autoMergeSameRoot ?? false,
+        autoMergeDescendantProjects: options.autoMergeDescendantProjects ?? false,
+        ...(options.inventory ? { inventory: options.inventory } : {})
+      });
+      if (descendantProject) {
+        return descendantProject;
+      }
     }
   } catch (cause) {
     return err(

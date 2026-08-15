@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Remote repository discovery now fails closed when the repository root has a
+  known dependency manifest but no supported lockfile. A nested supported
+  project can no longer make that incomplete root project appear scanned.
 - Go source scope classification now ignores line and block comment contents
   before parsing import declarations, so a `)` inside a valid comment cannot
   hide a later production import and incorrectly downgrade its module.

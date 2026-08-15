@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.14.26
+npm install -g ohrisk@1.14.27
 cd your-project
 ohrisk scan
 ```
@@ -356,7 +356,9 @@ trusted. When the repository root has no supported input, Ohrisk recursively
 selects one nested dependency project or merges multiple nested project roots
 into one repository-wide graph with per-lockfile provenance. Automatic fan-out
 is capped at 64 project roots and 128 inputs; `--lockfile <relative-path>` narrows
-the scan explicitly. Absolute and traversal paths are rejected. Remote repository input is supported by `scan`, not `ci`, `diff`, or
+the scan explicitly. A known dependency manifest at the repository root without
+a supported lockfile fails closed instead of being hidden by a nested project.
+Absolute and traversal paths are rejected. Remote repository input is supported by `scan`, not `ci`, `diff`, or
 the composite GitHub Action. See the [CLI command contract](docs/cli/command-contract.md#remote-repository-input)
 for exact limits.
 
@@ -381,7 +383,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.14.26
+npm install -g ohrisk@1.14.27
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open

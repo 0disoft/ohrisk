@@ -2451,6 +2451,39 @@ describe("discoverProject", () => {
     }
   });
 
+  test("does not bypass an unsupported root project during descendant discovery", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-root-manifest-"));
+    const docsRoot = path.join(repositoryRoot, "docs");
+
+    try {
+      mkdirSync(docsRoot, { recursive: true });
+      writeFileSync(
+        path.join(repositoryRoot, "package.json"),
+        JSON.stringify({
+          name: "fixture-needs-lockfile",
+          dependencies: {
+            "risk-package": "1.0.0"
+          }
+        }),
+        "utf8"
+      );
+      writeFileSync(path.join(docsRoot, "requirements.txt"), "sphinx==8.2.3\n", "utf8");
+
+      const result = discoverProject({ cwd: repositoryRoot, searchMode: "tree" });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected root project discovery to fail closed.");
+      }
+      expect(result.error.code).toBe("NO_SUPPORTED_LOCKFILE");
+      expect(result.error.details).toMatchObject({
+        rootDir: repositoryRoot
+      });
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
+    }
+  });
+
   test("keeps a concrete nested SBOM as an ambiguity candidate", () => {
     const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-sbom-"));
     const docsRoot = path.join(repositoryRoot, "docs");
