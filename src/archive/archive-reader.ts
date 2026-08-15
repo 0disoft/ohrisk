@@ -77,7 +77,9 @@ class ArchiveFailure extends Error {
     this.name = "ArchiveFailure";
     this.code = input.code;
     this.category = input.category;
-    this.details = input.details;
+    if (input.details !== undefined) {
+      this.details = input.details;
+    }
   }
 }
 

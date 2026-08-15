@@ -345,7 +345,9 @@ function adapter(
     discover: (project) => projectLockfiles(project)
       .filter((lockfile) => lockfileKindSet.has(lockfile.kind)),
     parse: (project, context) => parseProjectLockfile(project, {
-      pythonLocalSourceRootDir: context?.scanRootDir,
+      ...(context?.scanRootDir === undefined
+        ? {}
+        : { pythonLocalSourceRootDir: context.scanRootDir }),
       ...(context?.mavenExternalPoms ? { mavenExternalPoms: context.mavenExternalPoms } : {})
     }),
     collectEvidence: (input) => packageEcosystemSet.has(input.node.ecosystem)

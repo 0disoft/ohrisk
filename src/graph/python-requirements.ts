@@ -119,8 +119,8 @@ export function parseRequirementsText(
     text: input,
     lockfilePath,
     mode: "requirements",
-    readIncludedFile: options.readIncludedFile,
-    readLocalSourceFile: options.readLocalSourceFile,
+    ...(options.readIncludedFile ? { readIncludedFile: options.readIncludedFile } : {}),
+    ...(options.readLocalSourceFile ? { readLocalSourceFile: options.readLocalSourceFile } : {}),
     constraints,
     seenFiles: new Set<string>(),
     depth: 0
@@ -320,8 +320,8 @@ function parseRequirementsDocument(input: {
       text: included.value.text,
       lockfilePath: included.value.path,
       mode: "constraints",
-      readIncludedFile: input.readIncludedFile,
-      readLocalSourceFile: input.readLocalSourceFile,
+      ...(input.readIncludedFile ? { readIncludedFile: input.readIncludedFile } : {}),
+      ...(input.readLocalSourceFile ? { readLocalSourceFile: input.readLocalSourceFile } : {}),
       constraints: input.constraints,
       seenFiles,
       depth: input.depth + 1
@@ -367,8 +367,8 @@ function parseRequirementsDocument(input: {
         text: included.value.text,
         lockfilePath: included.value.path,
         mode: "requirements",
-        readIncludedFile: input.readIncludedFile,
-        readLocalSourceFile: input.readLocalSourceFile,
+        ...(input.readIncludedFile ? { readIncludedFile: input.readIncludedFile } : {}),
+        ...(input.readLocalSourceFile ? { readLocalSourceFile: input.readLocalSourceFile } : {}),
         constraints: input.constraints,
         seenFiles,
         depth: input.depth + 1
@@ -736,9 +736,10 @@ function mergeRequirementsRecords(
     const via = existing.via === undefined || record.via === undefined
       ? undefined
       : mergeViaAnnotations(existing.via, record.via);
+    const evidence = existing.evidence ?? record.evidence;
     const merged: RequirementsRecord = {
       ...record,
-      evidence: existing.evidence ?? record.evidence
+      ...(evidence ? { evidence } : {})
     };
     if (via === undefined) {
       delete merged.via;

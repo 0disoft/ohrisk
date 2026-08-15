@@ -192,12 +192,12 @@ const DEFAULT_ECOSYSTEM_EVIDENCE_COLLECTORS: EcosystemEvidenceCollectors = {
     packageName: node.name,
     projectRoot
   }),
-  zig: ({ node, projectRoot }) => collectZigPackageEvidence({
+  zig: ({ node, projectRoot }) => collectZigPackageEvidence(omitUndefined({
     packageId: node.id,
     packageName: node.name,
     projectRoot,
     resolved: node.resolved
-  })
+  }))
 };
 
 const ecosystemEvidenceCollectors = new Map<

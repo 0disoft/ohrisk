@@ -16,6 +16,7 @@ import path from "node:path";
 import { performance } from "node:perf_hooks";
 
 import { createError, type OhriskError } from "../shared/errors";
+import { omitUndefined } from "../shared/object";
 import { err, ok, type Result } from "../shared/result";
 import { executeCachePrunePlan } from "./cache-prune-executor";
 import { planCachePrune } from "./cache-prune-plan";
@@ -218,22 +219,22 @@ function createArtifactCacheHandle(
       defaultTtlMs
     }),
     write: (url, bytes, metadata) => {
-      writeArtifactCacheEntry({
+      writeArtifactCacheEntry(omitUndefined({
         rootDir: resolvedRoot,
         url,
         bytes,
         now: now(),
         defaultTtlMs,
         metadata
-      });
+      }));
     },
-    revalidate: (url, metadata) => revalidateArtifactCacheEntry({
+    revalidate: (url, metadata) => revalidateArtifactCacheEntry(omitUndefined({
       rootDir: resolvedRoot,
       url,
       now: now(),
       defaultTtlMs,
       metadata
-    }),
+    })),
     remove: (url) => {
       withCacheCommitLock(resolvedRoot, now(), (): Result<undefined, OhriskError> => {
         removeArtifactCacheEntry(resolvedRoot, url, now());
@@ -746,14 +747,14 @@ function pruneArtifactCache(
     const maxAgeMs = options.maxAgeMs === undefined
       ? undefined
       : normalizeTtl(options.maxAgeMs, 0);
-    const plan = planCachePrune({
+    const plan = planCachePrune(omitUndefined({
       entries: inventory.entries,
       objectSizes: inventory.objectSizes,
       now,
       maxSizeBytes,
       maxAgeMs,
       removeExpired: options.removeExpired
-    });
+    }));
 
     const execution = executeCachePrunePlan({
       entries: inventory.entries,

@@ -91,7 +91,7 @@ export function parsePipfileLockText(
     sectionName: "default",
     value: parsed.value.default,
     dependencyType: "production",
-    readLocalSourceFile: options.readLocalSourceFile
+    ...(options.readLocalSourceFile ? { readLocalSourceFile: options.readLocalSourceFile } : {})
   });
   if (!defaultRecords.ok) {
     return defaultRecords;
@@ -102,7 +102,7 @@ export function parsePipfileLockText(
     sectionName: "develop",
     value: parsed.value.develop,
     dependencyType: "development",
-    readLocalSourceFile: options.readLocalSourceFile
+    ...(options.readLocalSourceFile ? { readLocalSourceFile: options.readLocalSourceFile } : {})
   });
   if (!developRecords.ok) {
     return developRecords;

@@ -49,9 +49,8 @@ export function parseNixFlakeLockfile(
     );
   }
 
-  return parseNixFlakeLockText(lockfileText.value, lockfilePath, {
-    limits: options.limits
-  });
+  return parseNixFlakeLockText(lockfileText.value, lockfilePath,
+    options.limits ? { limits: options.limits } : {});
 }
 
 export function parseNixFlakeLockText(
@@ -108,7 +107,7 @@ export function parseNixFlakeLockText(
     rootRefs: [rootNodeKey],
     childRefs: (nodeKey) => nixChildRefs(nodesObject, nodeKey),
     pathNoun: "input node",
-    limits: options.limits
+    ...(options.limits ? { limits: options.limits } : {})
   });
   if (!pathCollection.ok) {
     return err(pathCollection.error);

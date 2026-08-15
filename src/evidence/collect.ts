@@ -468,7 +468,7 @@ export async function fetchMavenCentralModelPoms(input: {
 
     return ok(documents);
   } finally {
-    artifactCache?.maintain({ signal: input.signal });
+    artifactCache?.maintain(input.signal ? { signal: input.signal } : {});
   }
 }
 
@@ -2908,6 +2908,7 @@ async function readRemoteArtifactBytes(input: {
     return err(preflight.error);
   }
 
+  const requestHeaders = conditionalArtifactRequestHeaders(cached);
   const artifact = await readTransientRemoteArtifactWithRetry({
     attempts: input.transientFetchAttempts ?? 1,
     retryDelayMs: input.transientRetryDelayMs ?? 0,
@@ -2919,7 +2920,7 @@ async function readRemoteArtifactBytes(input: {
     read: () => readArtifactWithTimeout<RemoteArtifactRead>({
       fetchArtifact: input.fetchArtifact,
       url: input.url,
-      requestHeaders: conditionalArtifactRequestHeaders(cached),
+      ...(requestHeaders ? { requestHeaders } : {}),
       timeoutMs: input.fetchTimeoutMs,
       signal: input.signal,
       createAbortError: () => collectionAbortedRemoteError({
@@ -3686,7 +3687,7 @@ async function preflightRemoteArtifactFetchTarget(input: {
     resolutions = await resolveArtifactHostWithTimeout({
       resolveArtifactHost: input.resolveArtifactHost,
       artifactHost,
-      timeoutMs: input.timeoutMs
+      ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs })
     });
   } catch (cause) {
     return err(

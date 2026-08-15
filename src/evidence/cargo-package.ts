@@ -42,7 +42,7 @@ export function collectCargoPackageEvidence(input: {
     projectRoot: input.projectRoot,
     packageName: input.packageName,
     version: input.version,
-    resolved: input.resolved
+    ...(input.resolved === undefined ? {} : { resolved: input.resolved })
   });
 
   if (!packageDir) {

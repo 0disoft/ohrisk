@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 3b36fbfd70b58f257c6cdbd796cdff067542a54f8c1e9cad95b69da883d3cf4a
+// ohrisk-action-source-sha256: 47a878c6c86f4e8d4cc56549a8afca8feb4ac7389659fac818d1c8f302aaa94c
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -28690,9 +28690,7 @@ function parseNixFlakeLockfile(lockfilePath, options = {}) {
       }
     }));
   }
-  return parseNixFlakeLockText(lockfileText.value, lockfilePath, {
-    limits: options.limits
-  });
+  return parseNixFlakeLockText(lockfileText.value, lockfilePath, options.limits ? { limits: options.limits } : {});
 }
 function parseNixFlakeLockText(input, lockfilePath = "flake.lock", options = {}) {
   let parsed;
@@ -28738,7 +28736,7 @@ function parseNixFlakeLockText(input, lockfilePath = "flake.lock", options = {})
     rootRefs: [rootNodeKey],
     childRefs: (nodeKey) => nixChildRefs(nodesObject, nodeKey),
     pathNoun: "input node",
-    limits: options.limits
+    ...options.limits ? { limits: options.limits } : {}
   });
   if (!pathCollection.ok) {
     return err(pathCollection.error);
@@ -32686,7 +32684,7 @@ function parsePipfileLockText(input, lockfilePath = "Pipfile.lock", options = {}
     sectionName: "default",
     value: parsed.value.default,
     dependencyType: "production",
-    readLocalSourceFile: options.readLocalSourceFile
+    ...options.readLocalSourceFile ? { readLocalSourceFile: options.readLocalSourceFile } : {}
   });
   if (!defaultRecords.ok) {
     return defaultRecords;
@@ -32696,7 +32694,7 @@ function parsePipfileLockText(input, lockfilePath = "Pipfile.lock", options = {}
     sectionName: "develop",
     value: parsed.value.develop,
     dependencyType: "development",
-    readLocalSourceFile: options.readLocalSourceFile
+    ...options.readLocalSourceFile ? { readLocalSourceFile: options.readLocalSourceFile } : {}
   });
   if (!developRecords.ok) {
     return developRecords;
@@ -34024,8 +34022,8 @@ function parseRequirementsText(input, lockfilePath = "requirements.txt", options
     text: input,
     lockfilePath,
     mode: "requirements",
-    readIncludedFile: options.readIncludedFile,
-    readLocalSourceFile: options.readLocalSourceFile,
+    ...options.readIncludedFile ? { readIncludedFile: options.readIncludedFile } : {},
+    ...options.readLocalSourceFile ? { readLocalSourceFile: options.readLocalSourceFile } : {},
     constraints,
     seenFiles: new Set,
     depth: 0
@@ -34181,8 +34179,8 @@ function parseRequirementsDocument(input) {
       text: included.value.text,
       lockfilePath: included.value.path,
       mode: "constraints",
-      readIncludedFile: input.readIncludedFile,
-      readLocalSourceFile: input.readLocalSourceFile,
+      ...input.readIncludedFile ? { readIncludedFile: input.readIncludedFile } : {},
+      ...input.readLocalSourceFile ? { readLocalSourceFile: input.readLocalSourceFile } : {},
       constraints: input.constraints,
       seenFiles,
       depth: input.depth + 1
@@ -34222,8 +34220,8 @@ function parseRequirementsDocument(input) {
         text: included.value.text,
         lockfilePath: included.value.path,
         mode: "requirements",
-        readIncludedFile: input.readIncludedFile,
-        readLocalSourceFile: input.readLocalSourceFile,
+        ...input.readIncludedFile ? { readIncludedFile: input.readIncludedFile } : {},
+        ...input.readLocalSourceFile ? { readLocalSourceFile: input.readLocalSourceFile } : {},
         constraints: input.constraints,
         seenFiles,
         depth: input.depth + 1
@@ -34484,9 +34482,10 @@ function mergeRequirementsRecords(target, source) {
       continue;
     }
     const via = existing.via === undefined || record.via === undefined ? undefined : mergeViaAnnotations(existing.via, record.via);
+    const evidence = existing.evidence ?? record.evidence;
     const merged = {
       ...record,
-      evidence: existing.evidence ?? record.evidence
+      ...evidence ? { evidence } : {}
     };
     if (via === undefined) {
       delete merged.via;
@@ -36408,17 +36407,19 @@ function walkCargoDependencies(input) {
     const previousDependencyType = existing?.dependencyType;
     const mergedDependencyType = previousDependencyType ? mergeDependencyType22(previousDependencyType, state.dependencyType) : state.dependencyType;
     const dependencyTypeStrengthened = previousDependencyType !== undefined && mergedDependencyType !== previousDependencyType;
-    const node = existing ?? omitUndefined({
+    const resolved = state.record.source;
+    const integrity = cargoChecksumIntegrity(state.record.checksum);
+    const node = existing ?? {
       id: state.record.id,
       name: state.record.name,
       version: state.record.version,
       ecosystem: "cargo",
-      resolved: state.record.source,
-      integrity: cargoChecksumIntegrity(state.record.checksum),
+      ...resolved === undefined ? {} : { resolved },
+      ...integrity === undefined ? {} : { integrity },
       dependencyType: mergedDependencyType,
       direct: state.direct,
       paths: []
-    });
+    };
     node.direct = node.direct || state.direct;
     node.dependencyType = mergedDependencyType;
     if (!existing) {
@@ -36731,9 +36732,7 @@ function parseSpdxJsonFile(lockfilePath, options = {}) {
       }
     }));
   }
-  return parseSpdxJsonText(lockfileText.value, lockfilePath, {
-    limits: options.limits
-  });
+  return parseSpdxJsonText(lockfileText.value, lockfilePath, options.limits ? { limits: options.limits } : {});
 }
 function parseSpdxJsonText(input, lockfilePath = "spdx.json", options = {}) {
   const parsed = parseSpdxJson(input, lockfilePath);
@@ -36766,7 +36765,7 @@ function parseSpdxDocument(document2, lockfilePath, options = {}) {
     rootRefs,
     childRefs: (nodeKey) => dependencyMap.value.get(nodeKey) ?? [],
     pathNoun: "package",
-    limits: options.limits
+    ...options.limits ? { limits: options.limits } : {}
   });
   if (!pathCollection.ok) {
     return err(pathCollection.error);
@@ -40906,21 +40905,21 @@ function buildParseInput(input) {
   const directoryPackagesProps = findDirectoryPackagesProps(input.source, fileEntries, directory, input.entryRoot);
   if (!directoryPackagesProps.ok)
     return directoryPackagesProps;
-  return ok({
+  const parseInput = {
     kind: input.lockfile.kind,
     text: input.text,
     lockfilePath: input.lockfile.path,
     projectRoot: input.projectRoot,
-    packageJsonText: packageJson.value,
+    ...packageJson.value === undefined ? {} : { packageJsonText: packageJson.value },
     packageJsonPath: syntheticCompanionPath(input.projectRoot, input.entryRoot, packageJsonPath),
-    pnpmWorkspaceText: pnpmWorkspace.value,
+    ...pnpmWorkspace.value === undefined ? {} : { pnpmWorkspaceText: pnpmWorkspace.value },
     pnpmWorkspacePath: syntheticCompanionPath(input.projectRoot, input.entryRoot, joinArchivePath(directory, "pnpm-workspace.yaml")),
-    pyprojectText: pyproject.value,
-    cargoManifestText: cargoManifest.value,
+    ...pyproject.value === undefined ? {} : { pyprojectText: pyproject.value },
+    ...cargoManifest.value === undefined ? {} : { cargoManifestText: cargoManifest.value },
     cargoRootName: archiveBasename(input.entryRoot) || "archive-project",
-    goSumText: goSum.value,
+    ...goSum.value === undefined ? {} : { goSumText: goSum.value },
     goWorkDir: path49.dirname(input.lockfile.path),
-    composerJsonText: composerJson.value,
+    ...composerJson.value === undefined ? {} : { composerJsonText: composerJson.value },
     ...directoryPackagesProps.value ? {
       directoryPackagesPropsText: directoryPackagesProps.value.text,
       directoryPackagesPropsPath: syntheticCompanionPath(input.projectRoot, input.entryRoot, directoryPackagesProps.value.path)
@@ -40954,7 +40953,8 @@ function buildParseInput(input) {
       const modulePom = input.source.readText(moduleEntryPath, LOCKFILE_MAX_BYTES);
       return modulePom.ok ? ok({ path: pomPath, text: modulePom.value }) : modulePom;
     }
-  });
+  };
+  return ok(parseInput);
 }
 function findDirectoryPackagesProps(source, fileEntries, startDir, entryRoot) {
   let directory = startDir;
@@ -41123,7 +41123,9 @@ class ArchiveFailure extends Error {
     this.name = "ArchiveFailure";
     this.code = input.code;
     this.category = input.category;
-    this.details = input.details;
+    if (input.details !== undefined) {
+      this.details = input.details;
+    }
   }
 }
 var CRC32_TABLE2 = buildCrc32Table2();
@@ -42358,22 +42360,22 @@ function createArtifactCacheHandle(rootDir, options, initializeOwnership) {
       defaultTtlMs
     }),
     write: (url, bytes, metadata) => {
-      writeArtifactCacheEntry({
+      writeArtifactCacheEntry(omitUndefined({
         rootDir: resolvedRoot,
         url,
         bytes,
         now: now(),
         defaultTtlMs,
         metadata
-      });
+      }));
     },
-    revalidate: (url, metadata) => revalidateArtifactCacheEntry({
+    revalidate: (url, metadata) => revalidateArtifactCacheEntry(omitUndefined({
       rootDir: resolvedRoot,
       url,
       now: now(),
       defaultTtlMs,
       metadata
-    }),
+    })),
     remove: (url) => {
       withCacheCommitLock(resolvedRoot, now(), () => {
         removeArtifactCacheEntry(resolvedRoot, url, now());
@@ -42740,14 +42742,14 @@ function pruneArtifactCache(rootDir, options, now) {
     const before = statusFromInventory(inventory, now);
     const maxSizeBytes = normalizeMaxSize(options.maxSizeBytes, Number.MAX_SAFE_INTEGER);
     const maxAgeMs = options.maxAgeMs === undefined ? undefined : normalizeTtl(options.maxAgeMs, 0);
-    const plan = planCachePrune({
+    const plan = planCachePrune(omitUndefined({
       entries: inventory.entries,
       objectSizes: inventory.objectSizes,
       now,
       maxSizeBytes,
       maxAgeMs,
       removeExpired: options.removeExpired
-    });
+    }));
     const execution = executeCachePrunePlan({
       entries: inventory.entries,
       objectSizes: inventory.objectSizes,
@@ -43342,7 +43344,7 @@ function collectCargoPackageEvidence(input) {
     projectRoot: input.projectRoot,
     packageName: input.packageName,
     version: input.version,
-    resolved: input.resolved
+    ...input.resolved === undefined ? {} : { resolved: input.resolved }
   });
   if (!packageDir) {
     return ok({
@@ -49428,12 +49430,12 @@ var DEFAULT_ECOSYSTEM_EVIDENCE_COLLECTORS = {
     packageName: node.name,
     projectRoot
   }),
-  zig: ({ node, projectRoot }) => collectZigPackageEvidence({
+  zig: ({ node, projectRoot }) => collectZigPackageEvidence(omitUndefined({
     packageId: node.id,
     packageName: node.name,
     projectRoot,
     resolved: node.resolved
-  })
+  }))
 };
 var ecosystemEvidenceCollectors = new Map(Object.entries(DEFAULT_ECOSYSTEM_EVIDENCE_COLLECTORS));
 function collectEcosystemEvidence(input) {
@@ -49667,7 +49669,7 @@ function adapter(id, lockfileKinds, packageEcosystems) {
     packageEcosystems,
     discover: (project) => projectLockfiles(project).filter((lockfile) => lockfileKindSet.has(lockfile.kind)),
     parse: (project, context) => parseProjectLockfile(project, {
-      pythonLocalSourceRootDir: context?.scanRootDir,
+      ...context?.scanRootDir === undefined ? {} : { pythonLocalSourceRootDir: context.scanRootDir },
       ...context?.mavenExternalPoms ? { mavenExternalPoms: context.mavenExternalPoms } : {}
     }),
     collectEvidence: (input) => packageEcosystemSet.has(input.node.ecosystem) ? collectEcosystemEvidence(input) : undefined
@@ -51415,7 +51417,7 @@ async function fetchMavenCentralModelPoms(input) {
     }
     return ok(documents);
   } finally {
-    artifactCache?.maintain({ signal: input.signal });
+    artifactCache?.maintain(input.signal ? { signal: input.signal } : {});
   }
 }
 function isRecoverableRemoteEvidenceError(error) {
@@ -53285,6 +53287,7 @@ async function readRemoteArtifactBytes(input) {
   if (!preflight.ok) {
     return err(preflight.error);
   }
+  const requestHeaders = conditionalArtifactRequestHeaders(cached);
   const artifact = await readTransientRemoteArtifactWithRetry({
     attempts: input.transientFetchAttempts ?? 1,
     retryDelayMs: input.transientRetryDelayMs ?? 0,
@@ -53296,7 +53299,7 @@ async function readRemoteArtifactBytes(input) {
     read: () => readArtifactWithTimeout({
       fetchArtifact: input.fetchArtifact,
       url: input.url,
-      requestHeaders: conditionalArtifactRequestHeaders(cached),
+      ...requestHeaders ? { requestHeaders } : {},
       timeoutMs: input.fetchTimeoutMs,
       signal: input.signal,
       createAbortError: () => collectionAbortedRemoteError({
@@ -53862,7 +53865,7 @@ async function preflightRemoteArtifactFetchTarget(input) {
     resolutions = await resolveArtifactHostWithTimeout({
       resolveArtifactHost: input.resolveArtifactHost,
       artifactHost,
-      timeoutMs: input.timeoutMs
+      ...input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }
     });
   } catch (cause) {
     return err(createError({
@@ -63719,7 +63722,13 @@ async function runScan(command, io, signal) {
   const reportProgress = command.outputPath ? createScanProgressReporter(io) : undefined;
   reportProgress?.(0, command.kind === "ci" ? "Starting CI scan..." : "Starting scan...");
   if (!repository) {
-    return runScanAt({ command, io, scanCwd: io.cwd, reportProgress, signal });
+    return runScanAt({
+      command,
+      io,
+      scanCwd: io.cwd,
+      ...reportProgress ? { reportProgress } : {},
+      signal
+    });
   }
   reportProgress?.(0, `Cloning ${repository.owner}/${repository.name}...`);
   const cloner = io.cloneRepository ?? cloneGitHubRepository;
@@ -63743,9 +63752,9 @@ async function runScan(command, io, signal) {
       configurationRoot: io.cwd,
       runtimeRoot: io.cwd,
       allowLocalProjectEvidence: false,
-      reportProgress,
+      ...reportProgress ? { reportProgress } : {},
       signal,
-      inventory: cloned.value.inventory,
+      ...cloned.value.inventory ? { inventory: cloned.value.inventory } : {},
       temporaryRoot: cloned.value.rootDir,
       repository: {
         owner: repository.owner,

@@ -1,8 +1,8 @@
-import { omitUndefined } from "../shared/object";
 import { existsSync, readdirSync, type Dirent } from "node:fs";
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
+import { omitUndefined } from "../shared/object";
 import { err, ok, type Result } from "../shared/result";
 import {
   inputFileReadErrorCategory,
@@ -943,17 +943,19 @@ function walkCargoDependencies(input: {
     const dependencyTypeStrengthened = previousDependencyType !== undefined
       && mergedDependencyType !== previousDependencyType;
 
-    const node = existing ?? omitUndefined<DependencyNode>({
+    const resolved = state.record.source;
+    const integrity = cargoChecksumIntegrity(state.record.checksum);
+    const node: DependencyNode = existing ?? {
       id: state.record.id,
       name: state.record.name,
       version: state.record.version,
       ecosystem: "cargo",
-      resolved: state.record.source,
-      integrity: cargoChecksumIntegrity(state.record.checksum),
+      ...(resolved === undefined ? {} : { resolved }),
+      ...(integrity === undefined ? {} : { integrity }),
       dependencyType: mergedDependencyType,
       direct: state.direct,
       paths: []
-    });
+    };
     node.direct = node.direct || state.direct;
     node.dependencyType = mergedDependencyType;
     if (!existing) {

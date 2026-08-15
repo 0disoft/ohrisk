@@ -497,7 +497,13 @@ async function runScan(
   reportProgress?.(0, command.kind === "ci" ? "Starting CI scan..." : "Starting scan...");
 
   if (!repository) {
-    return runScanAt({ command, io, scanCwd: io.cwd, reportProgress, signal });
+    return runScanAt({
+      command,
+      io,
+      scanCwd: io.cwd,
+      ...(reportProgress ? { reportProgress } : {}),
+      signal
+    });
   }
 
   reportProgress?.(0, `Cloning ${repository.owner}/${repository.name}...`);
@@ -523,9 +529,9 @@ async function runScan(
       configurationRoot: io.cwd,
       runtimeRoot: io.cwd,
       allowLocalProjectEvidence: false,
-      reportProgress,
+      ...(reportProgress ? { reportProgress } : {}),
       signal,
-      inventory: cloned.value.inventory,
+      ...(cloned.value.inventory ? { inventory: cloned.value.inventory } : {}),
       temporaryRoot: cloned.value.rootDir,
       repository: {
         owner: repository.owner,

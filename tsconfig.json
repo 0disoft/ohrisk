@@ -6,7 +6,7 @@
     "resolveJsonModule": true,
     "strict": true,
     "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": false,
+    "exactOptionalPropertyTypes": true,
     "types": [
       "bun",
       "node"

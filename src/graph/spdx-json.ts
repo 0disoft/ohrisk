@@ -66,9 +66,8 @@ export function parseSpdxJsonFile(
     );
   }
 
-  return parseSpdxJsonText(lockfileText.value, lockfilePath, {
-    limits: options.limits
-  });
+  return parseSpdxJsonText(lockfileText.value, lockfilePath,
+    options.limits ? { limits: options.limits } : {});
 }
 
 export function parseSpdxJsonText(
@@ -117,7 +116,7 @@ export function parseSpdxDocument(
     rootRefs,
     childRefs: (nodeKey) => dependencyMap.value.get(nodeKey) ?? [],
     pathNoun: "package",
-    limits: options.limits
+    ...(options.limits ? { limits: options.limits } : {})
   });
   if (!pathCollection.ok) {
     return err(pathCollection.error);

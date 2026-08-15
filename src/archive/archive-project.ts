@@ -345,25 +345,25 @@ function buildParseInput(input: {
   );
   if (!directoryPackagesProps.ok) return directoryPackagesProps;
 
-  return ok({
+  const parseInput: LockfileTextParseInput = {
     kind: input.lockfile.kind,
     text: input.text,
     lockfilePath: input.lockfile.path,
     projectRoot: input.projectRoot,
-    packageJsonText: packageJson.value,
+    ...(packageJson.value === undefined ? {} : { packageJsonText: packageJson.value }),
     packageJsonPath: syntheticCompanionPath(input.projectRoot, input.entryRoot, packageJsonPath),
-    pnpmWorkspaceText: pnpmWorkspace.value,
+    ...(pnpmWorkspace.value === undefined ? {} : { pnpmWorkspaceText: pnpmWorkspace.value }),
     pnpmWorkspacePath: syntheticCompanionPath(
       input.projectRoot,
       input.entryRoot,
       joinArchivePath(directory, "pnpm-workspace.yaml")
     ),
-    pyprojectText: pyproject.value,
-    cargoManifestText: cargoManifest.value,
+    ...(pyproject.value === undefined ? {} : { pyprojectText: pyproject.value }),
+    ...(cargoManifest.value === undefined ? {} : { cargoManifestText: cargoManifest.value }),
     cargoRootName: archiveBasename(input.entryRoot) || "archive-project",
-    goSumText: goSum.value,
+    ...(goSum.value === undefined ? {} : { goSumText: goSum.value }),
     goWorkDir: path.dirname(input.lockfile.path),
-    composerJsonText: composerJson.value,
+    ...(composerJson.value === undefined ? {} : { composerJsonText: composerJson.value }),
     ...(directoryPackagesProps.value ? {
       directoryPackagesPropsText: directoryPackagesProps.value.text,
       directoryPackagesPropsPath: syntheticCompanionPath(
@@ -411,7 +411,8 @@ function buildParseInput(input: {
         ? ok({ path: pomPath, text: modulePom.value })
         : modulePom;
     }
-  });
+  };
+  return ok(parseInput);
 }
 
 function findDirectoryPackagesProps(

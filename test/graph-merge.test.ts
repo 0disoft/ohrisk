@@ -232,7 +232,10 @@ describe("mergeDependencyGraphs", () => {
 
   test("preserves accumulated conflicts when stronger evidence is merged later", () => {
     const strongerMit = graphWithMetadataLicense("MIT");
-    strongerMit.graph.embeddedEvidence = strongerMit.graph.embeddedEvidence?.map((evidence) => ({
+    if (strongerMit.graph.embeddedEvidence === undefined) {
+      throw new Error("Expected embedded evidence in the stronger fixture.");
+    }
+    strongerMit.graph.embeddedEvidence = strongerMit.graph.embeddedEvidence.map((evidence) => ({
       ...evidence,
       source: "local" as const
     }));
