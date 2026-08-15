@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
+import corpusJson from "./fixtures/license-gold-corpus.json" with { type: "json" };
 import type { LicenseEvidence } from "../src/evidence/types";
 import type { DependencyNode } from "../src/graph/types";
 import { normalizeLicenseEvidence } from "../src/license/normalize";
@@ -13,6 +17,8 @@ import type { RiskSeverity } from "../src/policy/types";
 
 type GoldCase = {
   id: string;
+  sourceUrl: string;
+  rationale: string;
   evidence: Omit<LicenseEvidence, "packageId">;
   profile: UsageProfile;
   expected: {
@@ -22,151 +28,83 @@ type GoldCase = {
   };
 };
 
-const LICENSE_DECISION_GOLD_CORPUS: GoldCase[] = [
-  {
-    id: "permissive-metadata",
-    evidence: evidence({ packageJsonLicense: "MIT" }),
-    profile: "distributed-app",
-    expected: { severity: "low", confidence: "high" }
-  },
-  {
-    id: "metadata-file-conflict",
-    evidence: evidence({
-      packageJsonLicense: "MIT",
-      files: [licenseFile("LICENSE", "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007")]
-    }),
-    profile: "distributed-app",
-    expected: {
-      severity: "unknown",
-      confidence: "low",
-      signals: ["conflicting-evidence"]
-    }
-  },
-  {
-    id: "dual-license-or",
-    evidence: evidence({ packageJsonLicense: "MIT OR GPL-3.0-only" }),
-    profile: "distributed-app",
-    expected: { severity: "low", confidence: "high" }
-  },
-  {
-    id: "combined-license-and",
-    evidence: evidence({ packageJsonLicense: "MIT AND GPL-3.0-only" }),
-    profile: "distributed-app",
-    expected: { severity: "high", confidence: "high" }
-  },
-  {
-    id: "copyleft-exception",
-    evidence: evidence({
-      packageJsonLicense: "GPL-2.0-only WITH Classpath-exception-2.0"
-    }),
-    profile: "distributed-app",
-    expected: { severity: "review", confidence: "high" }
-  },
-  {
-    id: "deprecated-spdx",
-    evidence: evidence({ packageJsonLicense: "GPL-2.0" }),
-    profile: "distributed-app",
-    expected: { severity: "high", confidence: "medium" }
-  },
-  {
-    id: "custom-license-ref",
-    evidence: evidence({ packageJsonLicense: "LicenseRef-Proprietary-Terms" }),
-    profile: "saas",
-    expected: { severity: "unknown", confidence: "low", signals: ["custom-text"] }
-  },
-  {
-    id: "bsd-four-clause",
-    evidence: evidence({
-      files: [licenseFile("COPYING", [
-        "Redistribution and use in source and binary forms are permitted.",
-        "All advertising materials mentioning features or use of this software must display the following acknowledgement.",
-        "Neither the name of the organization nor the names of its contributors may be used to endorse products."
-      ].join("\n"))]
-    }),
-    profile: "distributed-app",
-    expected: { severity: "review", confidence: "medium" }
-  },
-  {
-    id: "apache-notice",
-    evidence: evidence({
-      packageJsonLicense: "Apache-2.0",
-      files: [{ path: "NOTICE", kind: "notice", text: "Copyright Example Authors" }]
-    }),
-    profile: "distributed-app",
-    expected: { severity: "low", confidence: "high", signals: ["notice-required"] }
-  },
-  {
-    id: "source-available-restriction",
-    evidence: evidence({ packageJsonLicense: "BUSL-1.1" }),
-    profile: "saas",
-    expected: {
-      severity: "high",
-      confidence: "high",
-      signals: ["commercial-restriction"]
-    }
-  },
-  {
-    id: "absent-license-assertion",
-    evidence: evidence({ packageJsonLicense: "NOASSERTION" }),
-    profile: "saas",
-    expected: { severity: "unknown", confidence: "low", signals: ["missing"] }
-  },
-  {
-    id: "unlisted-spdx-shaped-id",
-    evidence: evidence({ packageJsonLicense: "Definitely-Not-SPDX-9.9" }),
-    profile: "saas",
-    expected: { severity: "unknown", confidence: "low", signals: ["malformed"] }
-  }
-];
+const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const corpus = corpusJson as GoldCase[];
 
 describe("license decision gold corpus", () => {
-  for (const item of LICENSE_DECISION_GOLD_CORPUS) {
+  for (const item of corpus) {
     test(item.id, () => {
-      const packageId = `${item.id}@1.0.0`;
-      const normalized = normalizeLicenseEvidence({ packageId, ...item.evidence });
-      const finding = evaluateLicenseRisk({
-        license: normalized,
-        dependency: dependency(packageId),
-        profile: item.profile
-      });
+      expect(item.sourceUrl).toMatch(/^https:\/\//);
+      expect(item.rationale.trim().length).toBeGreaterThan(20);
 
-      expect(finding.severity).toBe(item.expected.severity);
-      expect(normalized.confidence).toBe(item.expected.confidence);
+      const outcome = evaluateCase(item);
+      expect(outcome.severity).toBe(item.expected.severity);
+      expect(outcome.confidence).toBe(item.expected.confidence);
       for (const signal of item.expected.signals ?? []) {
-        expect(normalized.signals).toContain(signal);
+        expect(outcome.signals).toContain(signal);
       }
     });
   }
 
-  test("has zero high-risk false negatives in the pinned corpus", () => {
-    const falseNegatives = LICENSE_DECISION_GOLD_CORPUS
-      .filter((item) => item.expected.severity === "high")
-      .filter((item) => {
-        const packageId = `${item.id}@1.0.0`;
-        const normalized = normalizeLicenseEvidence({ packageId, ...item.evidence });
-        return evaluateLicenseRisk({
-          license: normalized,
-          dependency: dependency(packageId),
-          profile: item.profile
-        }).severity !== "high";
-      })
-      .map((item) => item.id);
+  test("reports the reviewed corpus size and metric denominators without overclaiming", () => {
+    const outcomes = corpus.map((item) => ({ item, actual: evaluateCase(item) }));
+    const exactMatches = outcomes.filter(({ item, actual }) =>
+      item.expected.severity === actual.severity
+      && item.expected.confidence === actual.confidence
+    ).length;
+    const expectedHigh = outcomes.filter(({ item }) => item.expected.severity === "high");
+    const highTruePositives = expectedHigh.filter(({ actual }) => actual.severity === "high").length;
+    const expectedNonHigh = outcomes.filter(({ item }) => item.expected.severity !== "high");
+    const highFalsePositives = expectedNonHigh.filter(({ actual }) => actual.severity === "high").length;
+    const expectedUnknown = outcomes.filter(({ item }) => item.expected.severity === "unknown");
+    const unknownMatches = expectedUnknown.filter(({ actual }) => actual.severity === "unknown").length;
 
-    expect(falseNegatives).toEqual([]);
+    expect({
+      cases: corpus.length,
+      exactMatches,
+      expectedHigh: expectedHigh.length,
+      highTruePositives,
+      expectedNonHigh: expectedNonHigh.length,
+      highFalsePositives,
+      expectedUnknown: expectedUnknown.length,
+      unknownMatches
+    }).toEqual({
+      cases: 12,
+      exactMatches: 12,
+      expectedHigh: 3,
+      highTruePositives: 3,
+      expectedNonHigh: 9,
+      highFalsePositives: 0,
+      expectedUnknown: 4,
+      unknownMatches: 4
+    });
+
+    const accuracyDoc = readFileSync(path.join(repoRoot, "docs", "accuracy.md"), "utf8");
+    expect(accuracyDoc).toContain("12/12");
+    expect(accuracyDoc).toContain("3/3");
+    expect(accuracyDoc).toContain("0/9");
+    expect(accuracyDoc).toContain("4/4");
+    expect(accuracyDoc).toContain("not statistically representative");
   });
 });
 
-function evidence(overrides: Partial<Omit<LicenseEvidence, "packageId">>): Omit<LicenseEvidence, "packageId"> {
+function evaluateCase(item: GoldCase): {
+  severity: RiskSeverity;
+  confidence: NormalizedLicenseConfidence;
+  signals: NormalizedLicenseSignal[];
+} {
+  const packageId = `${item.id}@1.0.0`;
+  const normalized = normalizeLicenseEvidence({ packageId, ...item.evidence });
+  const finding = evaluateLicenseRisk({
+    license: normalized,
+    dependency: dependency(packageId),
+    profile: item.profile
+  });
   return {
-    files: [],
-    source: "tarball",
-    warnings: [],
-    ...overrides
+    severity: finding.severity,
+    confidence: normalized.confidence,
+    signals: normalized.signals
   };
-}
-
-function licenseFile(path: string, text: string): LicenseEvidence["files"][number] {
-  return { path, kind: "license", text };
 }
 
 function dependency(packageId: string): DependencyNode {

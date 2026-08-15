@@ -826,5 +826,6 @@ bun run ../../../src/cli/main.ts scan --profile saas
 - [Profile Guide](https://github.com/0disoft/ohrisk/blob/main/docs/profiles.md) — Choosing between saas and distributed-app
 - [Cache and Registry Configuration](https://github.com/0disoft/ohrisk/blob/main/docs/cache-and-registries.md) — Cache freshness, cleanup, offline mode, and registry authentication
 - [Report Formats Guide](https://github.com/0disoft/ohrisk/blob/main/docs/report-formats.md) — What each output format includes
+- [Accuracy Evidence](https://github.com/0disoft/ohrisk/blob/main/docs/accuracy.md) — Reviewed corpus metrics with explicit denominators and limitations
 - [Remote Fetching Boundary](https://github.com/0disoft/ohrisk/blob/main/docs/remote-fetching.md) — Remote evidence scope and safety rules
 - [한국어 사용 가이드](https://github.com/0disoft/ohrisk/blob/main/docs/ko/README.md) — Korean usage guide for developers

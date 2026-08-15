@@ -1,0 +1,112 @@
+[
+  {
+    "id": "permissive-metadata",
+    "sourceUrl": "https://spdx.org/licenses/MIT.html",
+    "rationale": "An exact active SPDX MIT declaration is permissive for distribution.",
+    "evidence": { "packageJsonLicense": "MIT", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "high" }
+  },
+  {
+    "id": "metadata-file-conflict",
+    "sourceUrl": "https://spdx.dev/learn/handling-license-info/",
+    "rationale": "Contradictory package metadata and recognizable license text cannot be resolved safely.",
+    "evidence": {
+      "packageJsonLicense": "MIT",
+      "files": [{ "path": "LICENSE", "kind": "license", "text": "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007" }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["conflicting-evidence"] }
+  },
+  {
+    "id": "dual-license-or",
+    "sourceUrl": "https://spdx.github.io/spdx-spec/v2.3/SPDX-license-expressions/",
+    "rationale": "An OR expression permits choosing its low-risk MIT branch.",
+    "evidence": { "packageJsonLicense": "MIT OR GPL-3.0-only", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "high" }
+  },
+  {
+    "id": "combined-license-and",
+    "sourceUrl": "https://spdx.github.io/spdx-spec/v2.3/SPDX-license-expressions/",
+    "rationale": "An AND expression requires satisfying its GPL-3.0-only branch when distributing.",
+    "evidence": { "packageJsonLicense": "MIT AND GPL-3.0-only", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "distributed-app",
+    "expected": { "severity": "high", "confidence": "high" }
+  },
+  {
+    "id": "copyleft-exception",
+    "sourceUrl": "https://spdx.org/licenses/Classpath-exception-2.0.html",
+    "rationale": "The classpath exception changes the GPL distribution obligation and requires review.",
+    "evidence": { "packageJsonLicense": "GPL-2.0-only WITH Classpath-exception-2.0", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "distributed-app",
+    "expected": { "severity": "review", "confidence": "high" }
+  },
+  {
+    "id": "deprecated-spdx",
+    "sourceUrl": "https://spdx.org/licenses/GPL-2.0.html",
+    "rationale": "The deprecated ambiguous GPL-2.0 identifier retains GPL distribution risk with reduced confidence.",
+    "evidence": { "packageJsonLicense": "GPL-2.0", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "distributed-app",
+    "expected": { "severity": "high", "confidence": "medium" }
+  },
+  {
+    "id": "custom-license-ref",
+    "sourceUrl": "https://spdx.github.io/spdx-spec/v2.3/other-licensing-information-detected/",
+    "rationale": "A LicenseRef without extracted terms cannot support a known risk decision.",
+    "evidence": { "packageJsonLicense": "LicenseRef-Proprietary-Terms", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["custom-text"] }
+  },
+  {
+    "id": "bsd-four-clause",
+    "sourceUrl": "https://spdx.org/licenses/BSD-4-Clause.html",
+    "rationale": "The advertising clause needs manual distribution review and must not collapse to BSD-3-Clause.",
+    "evidence": {
+      "files": [{ "path": "COPYING", "kind": "license", "text": "Redistribution and use in source and binary forms are permitted.\nAll advertising materials mentioning features or use of this software must display the following acknowledgement.\nNeither the name of the organization nor the names of its contributors may be used to endorse products." }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "review", "confidence": "medium" }
+  },
+  {
+    "id": "apache-notice",
+    "sourceUrl": "https://spdx.org/licenses/Apache-2.0.html",
+    "rationale": "Apache-2.0 remains low risk while a bundled NOTICE creates an explicit preservation signal.",
+    "evidence": {
+      "packageJsonLicense": "Apache-2.0",
+      "files": [{ "path": "NOTICE", "kind": "notice", "text": "Copyright Example Authors" }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "high", "signals": ["notice-required"] }
+  },
+  {
+    "id": "source-available-restriction",
+    "sourceUrl": "https://spdx.org/licenses/BUSL-1.1.html",
+    "rationale": "BUSL-1.1 contains source-available use restrictions and is high risk for SaaS.",
+    "evidence": { "packageJsonLicense": "BUSL-1.1", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "high", "confidence": "high", "signals": ["commercial-restriction"] }
+  },
+  {
+    "id": "absent-license-assertion",
+    "sourceUrl": "https://spdx.github.io/spdx-spec/v2.3/package-information/",
+    "rationale": "NOASSERTION explicitly says that no license conclusion is available.",
+    "evidence": { "packageJsonLicense": "NOASSERTION", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["missing"] }
+  },
+  {
+    "id": "unlisted-spdx-shaped-id",
+    "sourceUrl": "https://spdx.org/licenses/",
+    "rationale": "A syntactically plausible identifier absent from the pinned SPDX list must not be accepted.",
+    "evidence": { "packageJsonLicense": "Definitely-Not-SPDX-9.9", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["malformed"] }
+  }
+]

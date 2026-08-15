@@ -2,6 +2,10 @@
 
 ## 1.15.0 - Unreleased
 
+- The 12-case license decision corpus now lives in a source-backed JSON fixture
+  with a rationale per case. Public accuracy documentation reports exact metric
+  denominators and explicitly rejects production accuracy claims from this
+  small regression set.
 - The cache command now owns its management, rendering, and failure mapping in
   a dedicated CLI module, reducing the central command assembler without
   changing cache output, exit codes, paths, or JSON shape.

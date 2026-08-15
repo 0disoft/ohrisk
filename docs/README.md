@@ -14,5 +14,6 @@ Guides for using Ohrisk effectively.
 - [Policy Configuration](policy.md) — Organization license rules, profile overrides, inheritance, and package exceptions.
 - [Cache and Registry Configuration](cache-and-registries.md) — Persistent cache, offline mode, concurrency, and private registry authentication.
 - [Report Formats Guide](report-formats.md) — What each output format includes and how they handle waiver data.
+- [Accuracy Evidence](accuracy.md) — Reviewed corpus metrics with explicit denominators and limitations.
 - [Remote Fetching Boundary](remote-fetching.md) — Current remote evidence scope, safety rules, and requirements for future registry fetches.
 - [Korean Usage Guide](ko/README.md) — Korean-language overview of Ohrisk features and workflows.
