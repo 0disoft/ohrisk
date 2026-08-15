@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Bounded remote response reading now lives behind a dedicated artifact-response
+  module. The public fetcher type remains available from the original evidence
+  collector path, while stream cancellation, byte ceilings, and content-length
+  checks keep their existing behavior.
 - Evidence collection now keeps Go proxy URL construction and package artifact
   integrity parsing in focused modules instead of the central graph collector.
   Existing exports and fail-closed digest, proxy-host, and error-detail behavior

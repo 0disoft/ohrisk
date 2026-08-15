@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: d404aa15e67bf71dcb9d8f9f962da77f5c5c526c3cd1bc3dec262205209b70b5
+// ohrisk-action-source-sha256: 5ad578a4e6d0e3495cfc93de61a869d4a3b41f041cbce1726b021426cc30f5e6
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19582,7 +19582,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.21";
+var OHRISK_VERSION = "1.14.22";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -43161,6 +43161,95 @@ import { Readable } from "node:stream";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 import { gunzipSync as gunzipSync4 } from "node:zlib";
 
+// src/evidence/artifact-response.ts
+function artifactBodyLimitDetails(limit) {
+  return limit.contentLength === undefined ? {
+    maxBytes: limit.maxBytes,
+    observedBytes: limit.observedBytes
+  } : {
+    maxBytes: limit.maxBytes,
+    observedBytes: limit.observedBytes,
+    contentLength: limit.contentLength
+  };
+}
+async function readResponseBodyWithLimit(input) {
+  const contentLength = readContentLength(input.response.headers);
+  if (contentLength !== undefined && contentLength > input.maxBytes) {
+    cancelReadableBody(input.response.body);
+    return err(input.createTooLargeError({
+      maxBytes: input.maxBytes,
+      observedBytes: contentLength,
+      contentLength
+    }));
+  }
+  if (input.response.body) {
+    return readStreamBodyWithLimit({
+      body: input.response.body,
+      signal: input.signal,
+      maxBytes: input.maxBytes,
+      ...contentLength === undefined ? {} : { contentLength },
+      createTooLargeError: input.createTooLargeError
+    });
+  }
+  return err(input.createUnreadableBodyError());
+}
+function cancelReadableBody(body) {
+  if (!body) {
+    return;
+  }
+  body.cancel().catch(() => {
+    return;
+  });
+}
+async function readStreamBodyWithLimit(input) {
+  const reader = input.body.getReader();
+  const cancelReader = () => {
+    reader.cancel().catch(() => {
+      return;
+    });
+  };
+  const chunks = [];
+  let observedBytes = 0;
+  try {
+    if (input.signal.aborted) {
+      cancelReader();
+    } else {
+      input.signal.addEventListener("abort", cancelReader, { once: true });
+    }
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) {
+        return ok(Buffer.concat(chunks, observedBytes));
+      }
+      observedBytes += chunk.value.byteLength;
+      if (observedBytes > input.maxBytes) {
+        cancelReader();
+        return err(input.createTooLargeError({
+          maxBytes: input.maxBytes,
+          observedBytes,
+          ...input.contentLength === undefined ? {} : { contentLength: input.contentLength }
+        }));
+      }
+      chunks.push(Buffer.from(chunk.value));
+    }
+  } finally {
+    input.signal.removeEventListener("abort", cancelReader);
+    reader.releaseLock();
+  }
+}
+function readContentLength(headers) {
+  const value = headers?.get("content-length");
+  const trimmed = value?.trim();
+  if (trimmed === undefined || trimmed === "") {
+    return;
+  }
+  if (!/^\d+$/.test(trimmed)) {
+    return;
+  }
+  const parsed = Number(trimmed);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
 // src/evidence/cancellation.ts
 class BatchCancellation {
   controller = new AbortController;
@@ -53502,93 +53591,6 @@ function unavailableUnverifiedRemoteTarballEvidence(packageId) {
       "Remote package artifact integrity was not available in the lockfile; tarball contents were not trusted."
     ]
   };
-}
-function artifactBodyLimitDetails(limit) {
-  return limit.contentLength === undefined ? {
-    maxBytes: limit.maxBytes,
-    observedBytes: limit.observedBytes
-  } : {
-    maxBytes: limit.maxBytes,
-    observedBytes: limit.observedBytes,
-    contentLength: limit.contentLength
-  };
-}
-async function readResponseBodyWithLimit(input) {
-  const contentLength = readContentLength(input.response.headers);
-  if (contentLength !== undefined && contentLength > input.maxBytes) {
-    cancelReadableBody(input.response.body);
-    return err(input.createTooLargeError({
-      maxBytes: input.maxBytes,
-      observedBytes: contentLength,
-      contentLength
-    }));
-  }
-  if (input.response.body) {
-    return readStreamBodyWithLimit({
-      body: input.response.body,
-      signal: input.signal,
-      maxBytes: input.maxBytes,
-      ...contentLength === undefined ? {} : { contentLength },
-      createTooLargeError: input.createTooLargeError
-    });
-  }
-  return err(input.createUnreadableBodyError());
-}
-function cancelReadableBody(body) {
-  if (!body) {
-    return;
-  }
-  body.cancel().catch(() => {
-    return;
-  });
-}
-async function readStreamBodyWithLimit(input) {
-  const reader = input.body.getReader();
-  const cancelReader = () => {
-    reader.cancel().catch(() => {
-      return;
-    });
-  };
-  const chunks = [];
-  let observedBytes = 0;
-  try {
-    if (input.signal.aborted) {
-      cancelReader();
-    } else {
-      input.signal.addEventListener("abort", cancelReader, { once: true });
-    }
-    while (true) {
-      const chunk = await reader.read();
-      if (chunk.done) {
-        return ok(Buffer.concat(chunks, observedBytes));
-      }
-      observedBytes += chunk.value.byteLength;
-      if (observedBytes > input.maxBytes) {
-        cancelReader();
-        return err(input.createTooLargeError({
-          maxBytes: input.maxBytes,
-          observedBytes,
-          ...input.contentLength === undefined ? {} : { contentLength: input.contentLength }
-        }));
-      }
-      chunks.push(Buffer.from(chunk.value));
-    }
-  } finally {
-    input.signal.removeEventListener("abort", cancelReader);
-    reader.releaseLock();
-  }
-}
-function readContentLength(headers) {
-  const value = headers?.get("content-length");
-  const trimmed = value?.trim();
-  if (trimmed === undefined || trimmed === "") {
-    return;
-  }
-  if (!/^\d+$/.test(trimmed)) {
-    return;
-  }
-  const parsed = Number(trimmed);
-  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }
 async function readArtifactWithTimeout(input) {
   const controller = new AbortController;
