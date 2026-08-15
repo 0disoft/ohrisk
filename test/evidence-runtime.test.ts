@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -329,6 +329,7 @@ describe("batch cancellation propagation", () => {
         encoding: "utf8"
       }).filter((entry) => entry.endsWith(".json"));
       expect(indexFiles).toHaveLength(1);
+      expect(existsSync(path.join(cacheDir, ".ohrisk-artifact-cache-maintained"))).toBe(false);
     } finally {
       rmSync(cacheDir, { force: true, recursive: true });
     }

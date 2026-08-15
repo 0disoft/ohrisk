@@ -382,7 +382,7 @@ export async function collectGraphEvidence(input: {
 
   try {
     await Promise.all(Array.from({ length: workerCount }, () => collectNext()));
-    artifactCache?.maintain();
+    artifactCache?.maintain({ signal: batchCancellation.signal });
   } finally {
     batchCancellation.dispose();
   }
@@ -480,7 +480,7 @@ export async function fetchMavenCentralModelPoms(input: {
 
     return ok(documents);
   } finally {
-    artifactCache?.maintain();
+    artifactCache?.maintain({ signal: input.signal });
   }
 }
 

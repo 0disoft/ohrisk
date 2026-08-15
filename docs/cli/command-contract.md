@@ -20,7 +20,12 @@ per-request timeout and bounded worker join finish the shutdown. Library
 callers can pass their own `AbortSignal` through the CLI IO interface without
 any process listener being registered. On Windows, Ctrl+C is delivered as
 `SIGINT` and is supported; `SIGTERM` delivery depends on the host and is not
-guaranteed.
+guaranteed. Opportunistic artifact-cache maintenance follows the same signal
+and uses a one-second best-effort work budget. An already cancelled command does
+not start maintenance, and an interrupted pass does not write the completed
+maintenance stamp. Synchronous filesystem operations already in progress cannot
+be preempted mid-call; cancellation is checked between traversal and mutation
+steps.
 
 ## Commands
 

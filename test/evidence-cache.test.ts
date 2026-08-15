@@ -302,6 +302,53 @@ describe("persistent artifact cache", () => {
     }
   });
 
+  test("skips automatic maintenance without mutations when already aborted", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "ohrisk-cache-maintenance-aborted-"));
+    try {
+      const cache = createArtifactCache(root, { maxSizeBytes: 4 });
+      cache.write("https://registry.example.com/first.tgz", Buffer.from("1111"));
+      cache.write("https://registry.example.com/second.tgz", Buffer.from("2222"));
+      const controller = new AbortController();
+      controller.abort();
+
+      cache.maintain({ signal: controller.signal });
+
+      expect(cache.status()).toMatchObject({ ok: true, value: { entryCount: 2, totalBytes: 8 } });
+      expect(existsSync(path.join(root, ".ohrisk-artifact-cache-maintained"))).toBe(false);
+      expect(existsSync(path.join(root, ".ohrisk-artifact-cache-maintenance.lock"))).toBe(false);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  test("releases the lock without mutations when the automatic maintenance budget expires", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "ohrisk-cache-maintenance-budget-"));
+    let clock = 0;
+    try {
+      const cache = createArtifactCache(root, {
+        maxSizeBytes: 4,
+        maintenanceBudgetMs: 6,
+        maintenanceClock: () => clock++
+      });
+      for (let index = 0; index < 32; index += 1) {
+        cache.write(`https://registry.example.com/${index}.tgz`, Buffer.from("1111"));
+      }
+
+      cache.maintain();
+
+      expect(cache.status()).toMatchObject({ ok: true, value: { entryCount: 32, totalBytes: 4 } });
+      expect(existsSync(path.join(root, ".ohrisk-artifact-cache-maintained"))).toBe(false);
+      expect(existsSync(path.join(root, ".ohrisk-artifact-cache-maintenance-attempted"))).toBe(true);
+      expect(existsSync(path.join(root, ".ohrisk-artifact-cache-maintenance.lock"))).toBe(false);
+
+      const clockAfterFirstAttempt = clock;
+      cache.maintain();
+      expect(clock - clockAfterFirstAttempt).toBeLessThanOrEqual(2);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   test("clears only cache-owned children and leaves an empty reusable cache", () => {
     const root = mkdtempSync(path.join(tmpdir(), "ohrisk-cache-clear-"));
     try {

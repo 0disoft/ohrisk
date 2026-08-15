@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 9c9e9c5388b864aa0ce86491ef72d139f3860cb92efc7f55dce260439efac127
+// ohrisk-action-source-sha256: 82202bf6051f8f5c2b788dedcd03486560f8d5dacd0013f99e573665bb877fd6
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19520,7 +19520,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.17";
+var OHRISK_VERSION = "1.14.18";
 
 // src/archive/archive-project.ts
 import path48 from "node:path";
@@ -42156,6 +42156,49 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path49 from "node:path";
+import { performance } from "node:perf_hooks";
+
+// src/evidence/cache-prune-executor.ts
+function executeCachePrunePlan(input) {
+  const removedEntryPaths = new Set;
+  for (const entryPath of input.plan.removeEntryPaths) {
+    if (input.shouldStop()) {
+      return result(false, input.entries, input.objectSizes, removedEntryPaths, new Set, 0, 0, input.retainState ?? true);
+    }
+    if (input.removeEntry(entryPath)) {
+      removedEntryPaths.add(entryPath);
+    }
+  }
+  const remainingEntries = input.entries.filter((entry) => !removedEntryPaths.has(entry.path));
+  const remainingDigests = new Set(remainingEntries.map((entry) => entry.index.sha256));
+  const removedObjectDigests = new Set;
+  let removedObjectCount = 0;
+  let removedBytes = 0;
+  for (const digest of input.plan.removeObjectDigests) {
+    if (remainingDigests.has(digest)) {
+      continue;
+    }
+    if (input.shouldStop()) {
+      return result(false, input.entries, input.objectSizes, removedEntryPaths, removedObjectDigests, removedObjectCount, removedBytes, input.retainState ?? true);
+    }
+    const size = input.objectSizes.get(digest);
+    if (size !== undefined && input.removeObject(digest)) {
+      removedObjectDigests.add(digest);
+      removedObjectCount += 1;
+      removedBytes += size;
+    }
+  }
+  return result(true, input.entries, input.objectSizes, removedEntryPaths, removedObjectDigests, removedObjectCount, removedBytes, input.retainState ?? true);
+}
+function result(completed, entries, objectSizes, removedEntryPaths, removedObjectDigests, removedObjectCount, removedBytes, retainState) {
+  return {
+    completed,
+    remainingEntries: retainState ? entries.filter((entry) => !removedEntryPaths.has(entry.path)) : [],
+    remainingObjectSizes: retainState ? new Map([...objectSizes].filter(([digest]) => !removedObjectDigests.has(digest))) : new Map,
+    removedObjectCount,
+    removedBytes
+  };
+}
 
 // src/evidence/cache-prune-plan.ts
 function planCachePrune(input) {
@@ -42222,8 +42265,10 @@ var CACHE_MARKER_CONTENT = `ohrisk artifact cache v3
 `;
 var CACHE_MAINTENANCE_LOCK_FILENAME = ".ohrisk-artifact-cache-maintenance.lock";
 var CACHE_MAINTENANCE_STAMP_FILENAME = ".ohrisk-artifact-cache-maintained";
+var CACHE_MAINTENANCE_ATTEMPT_STAMP_FILENAME = ".ohrisk-artifact-cache-maintenance-attempted";
 var CACHE_MAINTENANCE_COOLDOWN_MS = 60000;
 var CACHE_MAINTENANCE_LOCK_STALE_MS = 10 * 60000;
+var CACHE_MAINTENANCE_BUDGET_MS = 1000;
 var DEFAULT_ARTIFACT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 var DEFAULT_ARTIFACT_CACHE_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 var MAX_HTTP_CACHE_TTL_MS = 365 * 24 * 60 * 60 * 1000;
@@ -42252,6 +42297,8 @@ function createArtifactCacheHandle(rootDir, options, initializeOwnership) {
   const now = options.now ?? Date.now;
   const defaultTtlMs = normalizeTtl(options.defaultTtlMs, DEFAULT_ARTIFACT_CACHE_TTL_MS);
   const maxSizeBytes = normalizeMaxSize(options.maxSizeBytes, DEFAULT_ARTIFACT_CACHE_MAX_BYTES);
+  const maintenanceBudgetMs = normalizeMaintenanceBudget(options.maintenanceBudgetMs);
+  const maintenanceClock = options.maintenanceClock ?? performance.now.bind(performance);
   if (initializeOwnership) {
     ensureCacheMarker(resolvedRoot);
   }
@@ -42287,14 +42334,18 @@ function createArtifactCacheHandle(rootDir, options, initializeOwnership) {
         return ok(undefined);
       });
     },
-    maintain: () => maintainArtifactCache(resolvedRoot, maxSizeBytes, now()),
+    maintain: (maintenanceOptions = {}) => maintainArtifactCache(resolvedRoot, maxSizeBytes, now(), {
+      ...maintenanceOptions.signal ? { signal: maintenanceOptions.signal } : {},
+      deadline: maintenanceClock() + maintenanceBudgetMs,
+      clock: maintenanceClock
+    }),
     status: () => artifactCacheStatus(resolvedRoot, now()),
     prune: (pruneOptions = {}) => withCacheCommitLock(resolvedRoot, now(), () => pruneArtifactCache(resolvedRoot, pruneOptions, now())),
     clear: () => withCacheCommitLock(resolvedRoot, now(), () => clearArtifactCache(resolvedRoot, now()))
   };
 }
-function maintainArtifactCache(rootDir, maxSizeBytes, now) {
-  if (!hasValidCacheMarker(rootDir) || cacheMaintenanceIsRecent(rootDir, now)) {
+function maintainArtifactCache(rootDir, maxSizeBytes, now, guard) {
+  if (cacheMaintenanceShouldStop(guard) || !hasValidCacheMarker(rootDir) || cacheMaintenanceIsRecent(rootDir, now)) {
     return;
   }
   const lockPath = path49.join(rootDir, CACHE_MAINTENANCE_LOCK_FILENAME);
@@ -42302,14 +42353,12 @@ function maintainArtifactCache(rootDir, maxSizeBytes, now) {
     return;
   }
   try {
-    if (cacheMaintenanceIsRecent(rootDir, now)) {
+    if (cacheMaintenanceShouldStop(guard) || cacheMaintenanceIsRecent(rootDir, now)) {
       return;
     }
-    const pruned = pruneArtifactCache(rootDir, {
-      maxSizeBytes,
-      removeExpired: false
-    }, now, false);
-    if (pruned.ok) {
+    replaceAtomicBestEffort(path49.join(rootDir, CACHE_MAINTENANCE_ATTEMPT_STAMP_FILENAME), Buffer.from(`${now}
+`, "utf8"));
+    if (pruneArtifactCacheAutomatically(rootDir, maxSizeBytes, now, guard)) {
       replaceAtomicBestEffort(path49.join(rootDir, CACHE_MAINTENANCE_STAMP_FILENAME), Buffer.from(`${now}
 `, "utf8"));
     }
@@ -42317,9 +42366,48 @@ function maintainArtifactCache(rootDir, maxSizeBytes, now) {
     removeQuietly(lockPath);
   }
 }
-function cacheMaintenanceIsRecent(rootDir, now) {
+function pruneArtifactCacheAutomatically(rootDir, maxSizeBytes, now, guard) {
   try {
-    const stamp = lstatSync2(path49.join(rootDir, CACHE_MAINTENANCE_STAMP_FILENAME));
+    requireCacheMaintenanceBudget(guard);
+    requireValidCacheMarker(rootDir);
+    const inventory = scanCacheInventory(rootDir, now, guard, false);
+    requireCacheMaintenanceBudget(guard);
+    const plan = planCachePrune({
+      entries: inventory.entries,
+      objectSizes: inventory.objectSizes,
+      now,
+      maxSizeBytes,
+      removeExpired: false
+    });
+    requireCacheMaintenanceBudget(guard);
+    const execution = executeCachePrunePlan({
+      entries: inventory.entries,
+      objectSizes: inventory.objectSizes,
+      plan,
+      retainState: false,
+      shouldStop: () => cacheMaintenanceShouldStop(guard),
+      removeEntry: removeQuietly,
+      removeObject: (digest) => removeQuietly(cacheObjectPath(rootDir, digest))
+    });
+    return execution.completed && !cacheMaintenanceShouldStop(guard);
+  } catch {
+    return false;
+  }
+}
+function cacheMaintenanceShouldStop(guard) {
+  return guard.signal?.aborted === true || guard.clock() >= guard.deadline;
+}
+function requireCacheMaintenanceBudget(guard) {
+  if (guard && cacheMaintenanceShouldStop(guard)) {
+    throw new Error("cache_maintenance_interrupted");
+  }
+}
+function cacheMaintenanceIsRecent(rootDir, now) {
+  return [CACHE_MAINTENANCE_STAMP_FILENAME, CACHE_MAINTENANCE_ATTEMPT_STAMP_FILENAME].some((filename) => cacheMaintenanceStampIsRecent(path49.join(rootDir, filename), now));
+}
+function cacheMaintenanceStampIsRecent(stampPath, now) {
+  try {
+    const stamp = lstatSync2(stampPath);
     return stamp.isFile() && now >= stamp.mtimeMs && now - stamp.mtimeMs < CACHE_MAINTENANCE_COOLDOWN_MS;
   } catch {
     return false;
@@ -42556,7 +42644,7 @@ function artifactCacheStatus(rootDir, now) {
     return err(cacheOperationError("Failed to inspect the artifact cache.", rootDir, cause));
   }
 }
-function pruneArtifactCache(rootDir, options, now, verifyAfter = true) {
+function pruneArtifactCache(rootDir, options, now) {
   try {
     requireValidCacheMarker(rootDir);
     const inventory = scanCacheInventory(rootDir, now);
@@ -42571,41 +42659,23 @@ function pruneArtifactCache(rootDir, options, now, verifyAfter = true) {
       maxAgeMs,
       removeExpired: options.removeExpired
     });
-    const removedEntryPaths = new Set;
-    for (const indexPath of plan.removeEntryPaths) {
-      if (removeQuietly(indexPath)) {
-        removedEntryPaths.add(indexPath);
-      }
-    }
-    const remainingEntries = inventory.entries.filter((entry) => !removedEntryPaths.has(entry.path));
-    const remainingDigests = new Set(remainingEntries.map((entry) => entry.index.sha256));
-    const remainingObjectSizes = new Map(inventory.objectSizes);
-    let removedObjectCount = 0;
-    let removedBytes = 0;
-    for (const digest of plan.removeObjectDigests) {
-      if (remainingDigests.has(digest)) {
-        continue;
-      }
-      const size = remainingObjectSizes.get(digest);
-      if (size !== undefined && removeQuietly(cacheObjectPath(rootDir, digest))) {
-        remainingObjectSizes.delete(digest);
-        removedObjectCount += 1;
-        removedBytes += size;
-      }
-    }
+    const execution = executeCachePrunePlan({
+      entries: inventory.entries,
+      objectSizes: inventory.objectSizes,
+      plan,
+      shouldStop: () => false,
+      removeEntry: removeQuietly,
+      removeObject: (digest) => removeQuietly(cacheObjectPath(rootDir, digest))
+    });
     removeEmptyCacheDirectories(rootDir);
-    const afterInventory = verifyAfter ? scanCacheInventory(rootDir, now) : {
-      entries: remainingEntries,
-      objectSizes: remainingObjectSizes,
-      corruptEntryCount: 0
-    };
+    const afterInventory = scanCacheInventory(rootDir, now);
     const after = statusFromInventory(afterInventory, now);
     return ok({
       before,
       after,
       removedEntryCount: Math.max(0, before.entryCount - after.entryCount),
-      removedObjectCount,
-      removedBytes
+      removedObjectCount: execution.removedObjectCount,
+      removedBytes: execution.removedBytes
     });
   } catch (cause) {
     return err(cacheOperationError("Failed to prune the artifact cache.", rootDir, cause));
@@ -42629,9 +42699,10 @@ function clearArtifactCache(rootDir, now) {
     return err(cacheOperationError("Failed to clear the artifact cache.", rootDir, cause));
   }
 }
-function scanCacheInventory(rootDir, now) {
+function scanCacheInventory(rootDir, now, guard, mutateInvalid = true) {
   const objectSizes = new Map;
-  for (const objectPath of listRegularFiles(path49.join(rootDir, "objects", "sha256"))) {
+  for (const objectPath of listRegularFiles(path49.join(rootDir, "objects", "sha256"), guard)) {
+    requireCacheMaintenanceBudget(guard);
     const digest = path49.basename(objectPath);
     if (!/^[a-f0-9]{64}$/.test(digest)) {
       continue;
@@ -42642,8 +42713,9 @@ function scanCacheInventory(rootDir, now) {
   }
   const entries = [];
   let corruptEntryCount = 0;
-  for (const indexPath of listRegularFiles(path49.join(rootDir, "index"))) {
-    const loaded = readIndexFile(indexPath, undefined, now, DEFAULT_ARTIFACT_CACHE_TTL_MS);
+  for (const indexPath of listRegularFiles(path49.join(rootDir, "index"), guard)) {
+    requireCacheMaintenanceBudget(guard);
+    const loaded = readIndexFile(indexPath, undefined, now, DEFAULT_ARTIFACT_CACHE_TTL_MS, mutateInvalid);
     if (!loaded) {
       corruptEntryCount += 1;
       continue;
@@ -42651,13 +42723,15 @@ function scanCacheInventory(rootDir, now) {
     const expectedFilename = `${loaded.index.key}.json`;
     if (path49.basename(indexPath) !== expectedFilename) {
       corruptEntryCount += 1;
-      removeQuietly(indexPath);
+      if (mutateInvalid)
+        removeQuietly(indexPath);
       continue;
     }
     const objectSize = objectSizes.get(loaded.index.sha256);
     if (objectSize === undefined || objectSize !== loaded.index.size) {
       corruptEntryCount += 1;
-      removeQuietly(indexPath);
+      if (mutateInvalid)
+        removeQuietly(indexPath);
       continue;
     }
     entries.push({ path: indexPath, index: loaded.index });
@@ -42712,19 +42786,21 @@ function removeObjectWhenUnreferenced(rootDir, digest, now) {
     removeQuietly(cacheObjectPath(rootDir, digest));
   }
 }
-function readIndexFile(indexPath, expectedKey, now, defaultTtlMs) {
+function readIndexFile(indexPath, expectedKey, now, defaultTtlMs, mutate = true) {
   if (!isRegularFile(indexPath)) {
     return;
   }
   try {
     const raw = readFileSync(indexPath);
     if (raw.byteLength > CACHE_INDEX_MAX_BYTES) {
-      removeQuietly(indexPath);
+      if (mutate)
+        removeQuietly(indexPath);
       return;
     }
     const parsed = JSON.parse(raw.toString("utf8"));
     if (!isArtifactCacheIndex(parsed, expectedKey)) {
-      removeQuietly(indexPath);
+      if (mutate)
+        removeQuietly(indexPath);
       return;
     }
     if (parsed.version === CACHE_FORMAT_VERSION) {
@@ -42738,11 +42814,14 @@ function readIndexFile(indexPath, expectedKey, now, defaultTtlMs) {
       lastAccessedAt: now,
       expiresAt: Math.min(now, mtime + defaultTtlMs)
     };
-    replaceAtomicBestEffort(indexPath, Buffer.from(`${JSON.stringify(migrated)}
+    if (mutate) {
+      replaceAtomicBestEffort(indexPath, Buffer.from(`${JSON.stringify(migrated)}
 `, "utf8"));
+    }
     return { index: migrated, migrated: true };
   } catch {
-    removeQuietly(indexPath);
+    if (mutate)
+      removeQuietly(indexPath);
     return;
   }
 }
@@ -42805,6 +42884,15 @@ function normalizeTtl(value, fallback) {
 }
 function normalizeMaxSize(value, fallback) {
   return Number.isSafeInteger(value) && (value ?? -1) >= 0 ? value : fallback;
+}
+function normalizeMaintenanceBudget(value) {
+  if (value === undefined) {
+    return CACHE_MAINTENANCE_BUDGET_MS;
+  }
+  if (!Number.isFinite(value) || value < 0) {
+    return CACHE_MAINTENANCE_BUDGET_MS;
+  }
+  return Math.min(1e4, value);
 }
 function isNonNegativeSafeInteger(value) {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
@@ -42892,9 +42980,10 @@ function removeCacheChild(rootDir, childName) {
   }
   rmSync2(childPath, { force: true, recursive: true });
 }
-function listRegularFiles(rootDir) {
+function listRegularFiles(rootDir, guard) {
   const files = [];
   const visit2 = (directory) => {
+    requireCacheMaintenanceBudget(guard);
     let entries;
     try {
       entries = readdirSync8(directory, { withFileTypes: true });
@@ -42902,6 +42991,7 @@ function listRegularFiles(rootDir) {
       return;
     }
     for (const entry of entries) {
+      requireCacheMaintenanceBudget(guard);
       const entryPath = path49.join(directory, entry.name);
       if (entry.isFile()) {
         files.push(entryPath);
@@ -50896,7 +50986,7 @@ async function collectGraphEvidence(input) {
   };
   try {
     await Promise.all(Array.from({ length: workerCount }, () => collectNext()));
-    artifactCache?.maintain();
+    artifactCache?.maintain({ signal: batchCancellation.signal });
   } finally {
     batchCancellation.dispose();
   }
@@ -50972,7 +51062,7 @@ async function fetchMavenCentralModelPoms(input) {
     }
     return ok(documents);
   } finally {
-    artifactCache?.maintain();
+    artifactCache?.maintain({ signal: input.signal });
   }
 }
 function isRecoverableRemoteEvidenceError(error) {
@@ -53056,10 +53146,10 @@ async function readRemoteArtifactBytes(input) {
 }
 async function readTransientRemoteArtifactWithRetry(input) {
   const attempts = Math.max(1, Math.trunc(input.attempts));
-  let result = await input.read();
-  for (let attempt = 1;attempt < attempts && !result.ok; attempt += 1) {
-    if (!isRetryableTransientRemoteError(result.error)) {
-      return result;
+  let result2 = await input.read();
+  for (let attempt = 1;attempt < attempts && !result2.ok; attempt += 1) {
+    if (!isRetryableTransientRemoteError(result2.error)) {
+      return result2;
     }
     if (input.signal?.aborted) {
       return err(input.createAbortError());
@@ -53070,9 +53160,9 @@ async function readTransientRemoteArtifactWithRetry(input) {
         return err(input.createAbortError());
       }
     }
-    result = await input.read();
+    result2 = await input.read();
   }
-  return result;
+  return result2;
 }
 function isRetryableTransientRemoteError(error) {
   if (isCollectionAbortedError(error)) {
@@ -53364,11 +53454,11 @@ async function readArtifactWithTimeout(input) {
       if (!response.ok) {
         return err(response.error);
       }
-      const result = await input.readResponse(response.value, controller.signal);
+      const result2 = await input.readResponse(response.value, controller.signal);
       if (timeoutError) {
         throw timeoutError;
       }
-      return result;
+      return result2;
     }).catch((cause) => {
       if (input.signal?.aborted) {
         return err(input.createAbortError());
@@ -55428,7 +55518,7 @@ function readProfilePolicies(value, filePath) {
     return err(policyParseError({ message: "profiles must be a YAML object.", filePath }));
   }
   const supportedProfiles = new Set(USAGE_PROFILES);
-  const result = new Map;
+  const result2 = new Map;
   for (const [profileName, rawProfile] of Object.entries(value)) {
     if (!supportedProfiles.has(profileName) || !isRecord28(rawProfile)) {
       return err(policyParseError({
@@ -55456,14 +55546,14 @@ function readProfilePolicies(value, filePath) {
     const packages = readPackageRules(rawProfile.packages, filePath, `profiles.${profileName}.packages`);
     if (!packages.ok)
       return packages;
-    result.set(profileName, {
+    result2.set(profileName, {
       allowLicenses: new Set(allow.value),
       denyLicenses: new Set(deny.value),
       severityOverrides: new Map(Object.entries(severity.value)),
       packageRules: new Map(Object.entries(packages.value))
     });
   }
-  return ok(result);
+  return ok(result2);
 }
 function readSeverityOverrides(value, filePath, field = "licenses.severity") {
   if (value === undefined)
@@ -55474,7 +55564,7 @@ function readSeverityOverrides(value, filePath, field = "licenses.severity") {
       filePath
     }));
   }
-  const result = {};
+  const result2 = {};
   for (const [license, severity] of Object.entries(value)) {
     if (license.trim() === "" || typeof severity !== "string" || !RISK_SEVERITIES.has(severity)) {
       return err(policyParseError({
@@ -55483,9 +55573,9 @@ function readSeverityOverrides(value, filePath, field = "licenses.severity") {
         details: { license, severity }
       }));
     }
-    result[license.trim()] = severity;
+    result2[license.trim()] = severity;
   }
-  return ok(result);
+  return ok(result2);
 }
 function readPackageRules(value, filePath, field = "packages") {
   if (value === undefined)
@@ -55493,7 +55583,7 @@ function readPackageRules(value, filePath, field = "packages") {
   if (!isRecord28(value)) {
     return err(policyParseError({ message: `${field} must be a YAML object.`, filePath }));
   }
-  const result = {};
+  const result2 = {};
   for (const [packagePattern, rawRule] of Object.entries(value)) {
     if (packagePattern.trim() === "" || !isRecord28(rawRule)) {
       return err(policyParseError({
@@ -55547,9 +55637,9 @@ function readPackageRules(value, filePath, field = "packages") {
         details: { packagePattern }
       }));
     }
-    result[packagePattern.trim()] = rule;
+    result2[packagePattern.trim()] = rule;
   }
-  return ok(result);
+  return ok(result2);
 }
 function readRegistryAuth(value, filePath) {
   if (value === undefined)
@@ -55557,7 +55647,7 @@ function readRegistryAuth(value, filePath) {
   if (!isRecord28(value)) {
     return err(policyParseError({ message: "network.auth must be a YAML object.", filePath }));
   }
-  const result = {};
+  const result2 = {};
   for (const [host, rawAuth] of Object.entries(value)) {
     if (!isRecord28(rawAuth) || typeof rawAuth.tokenEnv !== "string" || !ENV_NAME_PATTERN.test(rawAuth.tokenEnv)) {
       return err(policyParseError({
@@ -55566,9 +55656,9 @@ function readRegistryAuth(value, filePath) {
         details: { host }
       }));
     }
-    result[host] = { tokenEnv: rawAuth.tokenEnv };
+    result2[host] = { tokenEnv: rawAuth.tokenEnv };
   }
-  return ok(result);
+  return ok(result2);
 }
 function readOptionalRegistryUrl(value, filePath) {
   if (value === undefined)
@@ -56970,9 +57060,9 @@ function resultFor(finding, lockfileUri) {
   };
 }
 function suppressedResultFor(waived, lockfileUri) {
-  const result = resultFor(waived.finding, lockfileUri);
+  const result2 = resultFor(waived.finding, lockfileUri);
   return {
-    ...result,
+    ...result2,
     suppressions: [
       {
         kind: "external",
@@ -56980,7 +57070,7 @@ function suppressedResultFor(waived, lockfileUri) {
       }
     ],
     properties: {
-      ...result.properties,
+      ...result2.properties,
       waived: true,
       waiverMatchedBy: waived.matchedBy,
       waiverReason: waived.waiver.reason
@@ -61228,7 +61318,7 @@ function openReportBuffer(input) {
         finish(ok({ target: localReportUrl(server, token) }));
       }, input.closeDelayMs);
     });
-    const finish = (result) => {
+    const finish = (result2) => {
       if (finished) {
         return;
       }
@@ -61239,7 +61329,7 @@ function openReportBuffer(input) {
       if (closeDelay) {
         clearTimeout(closeDelay);
       }
-      server.close(() => resolve2(result));
+      server.close(() => resolve2(result2));
     };
     server.once("error", (cause) => {
       finish(err(createReportOpenError({
@@ -61250,12 +61340,12 @@ function openReportBuffer(input) {
     server.listen(0, LOOPBACK_HOST, () => {
       const target = localReportUrl(server, token);
       const command = openCommandFor(input.platform, target);
-      const result = input.openCommandRunner(command.command, command.args);
-      if (result.error || result.status !== 0 && !command.allowNonZeroStatus) {
+      const result2 = input.openCommandRunner(command.command, command.args);
+      if (result2.error || result2.status !== 0 && !command.allowNonZeroStatus) {
         finish(err(createReportOpenError({
           reportPath: input.reportPath,
           opener: command.command,
-          cause: result.error?.message ?? `opener exited with status ${result.status ?? "unknown"}`
+          cause: result2.error?.message ?? `opener exited with status ${result2.status ?? "unknown"}`
         })));
         return;
       }
@@ -61282,14 +61372,14 @@ function createReportOpenError(input) {
   });
 }
 function defaultOpenCommandRunner(command, args) {
-  const result = spawnSync(command, args, {
+  const result2 = spawnSync(command, args, {
     stdio: "ignore",
     timeout: OPEN_COMMAND_TIMEOUT_MS,
     windowsHide: true
   });
   return {
-    ...result.error ? { error: result.error } : {},
-    status: result.status
+    ...result2.error ? { error: result2.error } : {},
+    status: result2.status
   };
 }
 function createReportToken() {
@@ -61782,11 +61872,11 @@ function runCache(command, io) {
 `));
   return 0;
 }
-function renderCacheJson(action, configured, result) {
+function renderCacheJson(action, configured, result2) {
   return `${JSON.stringify({
     action,
     cacheLocation: configured ? "configured" : "default",
-    result
+    result: result2
   }, null, 2)}
 `;
 }
@@ -63065,19 +63155,19 @@ function readBaselineGradleDependencyLocksDirectory(input) {
   const texts = [];
   let firstMissingFile;
   for (const entry of entries) {
-    const result = input.readRefFile({
+    const result2 = input.readRefFile({
       projectRoot: input.projectRoot,
       ref: input.ref,
       relativePath: `${input.relativePath.replace(/\\/g, "/").replace(/\/$/, "")}/${entry}`
     });
-    if (isErr(result)) {
-      if (result.error.code === "GIT_REF_FILE_NOT_FOUND") {
-        firstMissingFile ??= result.error;
+    if (isErr(result2)) {
+      if (result2.error.code === "GIT_REF_FILE_NOT_FOUND") {
+        firstMissingFile ??= result2.error;
         continue;
       }
-      return result;
+      return result2;
     }
-    texts.push(result.value);
+    texts.push(result2.value);
   }
   if (texts.length === 0) {
     return firstMissingFile ? err(firstMissingFile) : err(createError({
@@ -63340,18 +63430,18 @@ function readBaselineDirectoryPackagesProps(input) {
   });
 }
 function readOptionalBaselineFile(input) {
-  const result = input.readRefFile({
+  const result2 = input.readRefFile({
     projectRoot: input.projectRoot,
     ref: input.baselineRef,
     relativePath: input.relativePath
   });
-  if (!isErr(result)) {
-    return ok(result.value);
+  if (!isErr(result2)) {
+    return ok(result2.value);
   }
-  if (result.error.code === "GIT_REF_FILE_NOT_FOUND") {
+  if (result2.error.code === "GIT_REF_FILE_NOT_FOUND") {
     return ok(undefined);
   }
-  return err(result.error);
+  return err(result2.error);
 }
 function tryParseObject(input) {
   try {

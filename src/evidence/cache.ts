@@ -13,9 +13,11 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
+import { executeCachePrunePlan } from "./cache-prune-executor";
 import { planCachePrune } from "./cache-prune-plan";
 
 const CACHE_FORMAT_VERSION = 3;
@@ -25,8 +27,10 @@ const CACHE_MARKER_FILENAME = ".ohrisk-artifact-cache";
 const CACHE_MARKER_CONTENT = "ohrisk artifact cache v3\n";
 const CACHE_MAINTENANCE_LOCK_FILENAME = ".ohrisk-artifact-cache-maintenance.lock";
 const CACHE_MAINTENANCE_STAMP_FILENAME = ".ohrisk-artifact-cache-maintained";
+const CACHE_MAINTENANCE_ATTEMPT_STAMP_FILENAME = ".ohrisk-artifact-cache-maintenance-attempted";
 const CACHE_MAINTENANCE_COOLDOWN_MS = 60_000;
 const CACHE_MAINTENANCE_LOCK_STALE_MS = 10 * 60_000;
+const CACHE_MAINTENANCE_BUDGET_MS = 1_000;
 export const DEFAULT_ARTIFACT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 export const DEFAULT_ARTIFACT_CACHE_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_HTTP_CACHE_TTL_MS = 365 * 24 * 60 * 60 * 1000;
@@ -93,10 +97,14 @@ export type ArtifactCache = {
   write: (url: string, bytes: Buffer, metadata?: ArtifactCacheWriteMetadata) => void;
   revalidate: (url: string, metadata?: ArtifactCacheWriteMetadata) => void;
   remove: (url: string) => void;
-  maintain: () => void;
+  maintain: (options?: ArtifactCacheMaintenanceOptions) => void;
   status: () => Result<ArtifactCacheStatus, OhriskError>;
   prune: (options?: ArtifactCachePruneOptions) => Result<ArtifactCachePruneResult, OhriskError>;
   clear: () => Result<ArtifactCacheClearResult, OhriskError>;
+};
+
+export type ArtifactCacheMaintenanceOptions = {
+  signal?: AbortSignal;
 };
 
 type ArtifactCacheIndexV3 = {
@@ -135,6 +143,14 @@ type ArtifactCacheOptions = {
   now?: () => number;
   defaultTtlMs?: number;
   maxSizeBytes?: number;
+  maintenanceBudgetMs?: number;
+  maintenanceClock?: () => number;
+};
+
+type CacheMaintenanceGuard = {
+  signal?: AbortSignal;
+  deadline: number;
+  clock: () => number;
 };
 
 /**
@@ -187,6 +203,8 @@ function createArtifactCacheHandle(
     options.maxSizeBytes,
     DEFAULT_ARTIFACT_CACHE_MAX_BYTES
   );
+  const maintenanceBudgetMs = normalizeMaintenanceBudget(options.maintenanceBudgetMs);
+  const maintenanceClock = options.maintenanceClock ?? performance.now.bind(performance);
   if (initializeOwnership) {
     ensureCacheMarker(resolvedRoot);
   }
@@ -222,7 +240,16 @@ function createArtifactCacheHandle(
         return ok(undefined);
       });
     },
-    maintain: () => maintainArtifactCache(resolvedRoot, maxSizeBytes, now()),
+    maintain: (maintenanceOptions = {}) => maintainArtifactCache(
+      resolvedRoot,
+      maxSizeBytes,
+      now(),
+      {
+        ...(maintenanceOptions.signal ? { signal: maintenanceOptions.signal } : {}),
+        deadline: maintenanceClock() + maintenanceBudgetMs,
+        clock: maintenanceClock
+      }
+    ),
     status: () => artifactCacheStatus(resolvedRoot, now()),
     prune: (pruneOptions = {}) => withCacheCommitLock(
       resolvedRoot,
@@ -237,8 +264,17 @@ function createArtifactCacheHandle(
   };
 }
 
-function maintainArtifactCache(rootDir: string, maxSizeBytes: number, now: number): void {
-  if (!hasValidCacheMarker(rootDir) || cacheMaintenanceIsRecent(rootDir, now)) {
+function maintainArtifactCache(
+  rootDir: string,
+  maxSizeBytes: number,
+  now: number,
+  guard: CacheMaintenanceGuard
+): void {
+  if (
+    cacheMaintenanceShouldStop(guard)
+    || !hasValidCacheMarker(rootDir)
+    || cacheMaintenanceIsRecent(rootDir, now)
+  ) {
     return;
   }
 
@@ -248,14 +284,14 @@ function maintainArtifactCache(rootDir: string, maxSizeBytes: number, now: numbe
   }
 
   try {
-    if (cacheMaintenanceIsRecent(rootDir, now)) {
+    if (cacheMaintenanceShouldStop(guard) || cacheMaintenanceIsRecent(rootDir, now)) {
       return;
     }
-    const pruned = pruneArtifactCache(rootDir, {
-      maxSizeBytes,
-      removeExpired: false
-    }, now, false);
-    if (pruned.ok) {
+    replaceAtomicBestEffort(
+      path.join(rootDir, CACHE_MAINTENANCE_ATTEMPT_STAMP_FILENAME),
+      Buffer.from(`${now}\n`, "utf8")
+    );
+    if (pruneArtifactCacheAutomatically(rootDir, maxSizeBytes, now, guard)) {
       replaceAtomicBestEffort(
         path.join(rootDir, CACHE_MAINTENANCE_STAMP_FILENAME),
         Buffer.from(`${now}\n`, "utf8")
@@ -266,9 +302,58 @@ function maintainArtifactCache(rootDir: string, maxSizeBytes: number, now: numbe
   }
 }
 
-function cacheMaintenanceIsRecent(rootDir: string, now: number): boolean {
+function pruneArtifactCacheAutomatically(
+  rootDir: string,
+  maxSizeBytes: number,
+  now: number,
+  guard: CacheMaintenanceGuard
+): boolean {
   try {
-    const stamp = lstatSync(path.join(rootDir, CACHE_MAINTENANCE_STAMP_FILENAME));
+    requireCacheMaintenanceBudget(guard);
+    requireValidCacheMarker(rootDir);
+    const inventory = scanCacheInventory(rootDir, now, guard, false);
+    requireCacheMaintenanceBudget(guard);
+    const plan = planCachePrune({
+      entries: inventory.entries,
+      objectSizes: inventory.objectSizes,
+      now,
+      maxSizeBytes,
+      removeExpired: false
+    });
+    requireCacheMaintenanceBudget(guard);
+    const execution = executeCachePrunePlan({
+      entries: inventory.entries,
+      objectSizes: inventory.objectSizes,
+      plan,
+      retainState: false,
+      shouldStop: () => cacheMaintenanceShouldStop(guard),
+      removeEntry: removeQuietly,
+      removeObject: (digest) => removeQuietly(cacheObjectPath(rootDir, digest))
+    });
+    return execution.completed && !cacheMaintenanceShouldStop(guard);
+  } catch {
+    return false;
+  }
+}
+
+function cacheMaintenanceShouldStop(guard: CacheMaintenanceGuard): boolean {
+  return guard.signal?.aborted === true || guard.clock() >= guard.deadline;
+}
+
+function requireCacheMaintenanceBudget(guard: CacheMaintenanceGuard | undefined): void {
+  if (guard && cacheMaintenanceShouldStop(guard)) {
+    throw new Error("cache_maintenance_interrupted");
+  }
+}
+
+function cacheMaintenanceIsRecent(rootDir: string, now: number): boolean {
+  return [CACHE_MAINTENANCE_STAMP_FILENAME, CACHE_MAINTENANCE_ATTEMPT_STAMP_FILENAME]
+    .some((filename) => cacheMaintenanceStampIsRecent(path.join(rootDir, filename), now));
+}
+
+function cacheMaintenanceStampIsRecent(stampPath: string, now: number): boolean {
+  try {
+    const stamp = lstatSync(stampPath);
     return stamp.isFile()
       && now >= stamp.mtimeMs
       && now - stamp.mtimeMs < CACHE_MAINTENANCE_COOLDOWN_MS;
@@ -598,8 +683,7 @@ function artifactCacheStatus(
 function pruneArtifactCache(
   rootDir: string,
   options: ArtifactCachePruneOptions,
-  now: number,
-  verifyAfter = true
+  now: number
 ): Result<ArtifactCachePruneResult, OhriskError> {
   try {
     requireValidCacheMarker(rootDir);
@@ -618,48 +702,23 @@ function pruneArtifactCache(
       removeExpired: options.removeExpired
     });
 
-    const removedEntryPaths = new Set<string>();
-    for (const indexPath of plan.removeEntryPaths) {
-      if (removeQuietly(indexPath)) {
-        removedEntryPaths.add(indexPath);
-      }
-    }
-
-    const remainingEntries = inventory.entries.filter(
-      (entry) => !removedEntryPaths.has(entry.path)
-    );
-    const remainingDigests = new Set(
-      remainingEntries.map((entry) => entry.index.sha256)
-    );
-    const remainingObjectSizes = new Map(inventory.objectSizes);
-    let removedObjectCount = 0;
-    let removedBytes = 0;
-    for (const digest of plan.removeObjectDigests) {
-      if (remainingDigests.has(digest)) {
-        continue;
-      }
-      const size = remainingObjectSizes.get(digest);
-      if (size !== undefined && removeQuietly(cacheObjectPath(rootDir, digest))) {
-        remainingObjectSizes.delete(digest);
-        removedObjectCount += 1;
-        removedBytes += size;
-      }
-    }
+    const execution = executeCachePrunePlan({
+      entries: inventory.entries,
+      objectSizes: inventory.objectSizes,
+      plan,
+      shouldStop: () => false,
+      removeEntry: removeQuietly,
+      removeObject: (digest) => removeQuietly(cacheObjectPath(rootDir, digest))
+    });
     removeEmptyCacheDirectories(rootDir);
-    const afterInventory = verifyAfter
-      ? scanCacheInventory(rootDir, now)
-      : {
-          entries: remainingEntries,
-          objectSizes: remainingObjectSizes,
-          corruptEntryCount: 0
-        };
+    const afterInventory = scanCacheInventory(rootDir, now);
     const after = statusFromInventory(afterInventory, now);
     return ok({
       before,
       after,
       removedEntryCount: Math.max(0, before.entryCount - after.entryCount),
-      removedObjectCount,
-      removedBytes
+      removedObjectCount: execution.removedObjectCount,
+      removedBytes: execution.removedBytes
     });
   } catch (cause) {
     return err(cacheOperationError("Failed to prune the artifact cache.", rootDir, cause));
@@ -688,9 +747,15 @@ function clearArtifactCache(
   }
 }
 
-function scanCacheInventory(rootDir: string, now: number): CacheInventory {
+function scanCacheInventory(
+  rootDir: string,
+  now: number,
+  guard?: CacheMaintenanceGuard,
+  mutateInvalid = true
+): CacheInventory {
   const objectSizes = new Map<string, number>();
-  for (const objectPath of listRegularFiles(path.join(rootDir, "objects", "sha256"))) {
+  for (const objectPath of listRegularFiles(path.join(rootDir, "objects", "sha256"), guard)) {
+    requireCacheMaintenanceBudget(guard);
     const digest = path.basename(objectPath);
     if (!/^[a-f0-9]{64}$/.test(digest)) {
       continue;
@@ -704,8 +769,15 @@ function scanCacheInventory(rootDir: string, now: number): CacheInventory {
 
   const entries: CacheIndexRecord[] = [];
   let corruptEntryCount = 0;
-  for (const indexPath of listRegularFiles(path.join(rootDir, "index"))) {
-    const loaded = readIndexFile(indexPath, undefined, now, DEFAULT_ARTIFACT_CACHE_TTL_MS);
+  for (const indexPath of listRegularFiles(path.join(rootDir, "index"), guard)) {
+    requireCacheMaintenanceBudget(guard);
+    const loaded = readIndexFile(
+      indexPath,
+      undefined,
+      now,
+      DEFAULT_ARTIFACT_CACHE_TTL_MS,
+      mutateInvalid
+    );
     if (!loaded) {
       corruptEntryCount += 1;
       continue;
@@ -713,13 +785,13 @@ function scanCacheInventory(rootDir: string, now: number): CacheInventory {
     const expectedFilename = `${loaded.index.key}.json`;
     if (path.basename(indexPath) !== expectedFilename) {
       corruptEntryCount += 1;
-      removeQuietly(indexPath);
+      if (mutateInvalid) removeQuietly(indexPath);
       continue;
     }
     const objectSize = objectSizes.get(loaded.index.sha256);
     if (objectSize === undefined || objectSize !== loaded.index.size) {
       corruptEntryCount += 1;
-      removeQuietly(indexPath);
+      if (mutateInvalid) removeQuietly(indexPath);
       continue;
     }
     entries.push({ path: indexPath, index: loaded.index });
@@ -784,7 +856,8 @@ function readIndexFile(
   indexPath: string,
   expectedKey: string | undefined,
   now: number,
-  defaultTtlMs: number
+  defaultTtlMs: number,
+  mutate = true
 ): { index: ArtifactCacheIndexV3; migrated: boolean } | undefined {
   if (!isRegularFile(indexPath)) {
     return undefined;
@@ -793,12 +866,12 @@ function readIndexFile(
   try {
     const raw = readFileSync(indexPath);
     if (raw.byteLength > CACHE_INDEX_MAX_BYTES) {
-      removeQuietly(indexPath);
+      if (mutate) removeQuietly(indexPath);
       return undefined;
     }
     const parsed = JSON.parse(raw.toString("utf8")) as unknown;
     if (!isArtifactCacheIndex(parsed, expectedKey)) {
-      removeQuietly(indexPath);
+      if (mutate) removeQuietly(indexPath);
       return undefined;
     }
 
@@ -814,10 +887,12 @@ function readIndexFile(
       lastAccessedAt: now,
       expiresAt: Math.min(now, mtime + defaultTtlMs)
     };
-    replaceAtomicBestEffort(indexPath, Buffer.from(`${JSON.stringify(migrated)}\n`, "utf8"));
+    if (mutate) {
+      replaceAtomicBestEffort(indexPath, Buffer.from(`${JSON.stringify(migrated)}\n`, "utf8"));
+    }
     return { index: migrated, migrated: true };
   } catch {
-    removeQuietly(indexPath);
+    if (mutate) removeQuietly(indexPath);
     return undefined;
   }
 }
@@ -924,6 +999,16 @@ function normalizeMaxSize(value: number | undefined, fallback: number): number {
   return Number.isSafeInteger(value) && (value ?? -1) >= 0 ? value! : fallback;
 }
 
+function normalizeMaintenanceBudget(value: number | undefined): number {
+  if (value === undefined) {
+    return CACHE_MAINTENANCE_BUDGET_MS;
+  }
+  if (!Number.isFinite(value) || value < 0) {
+    return CACHE_MAINTENANCE_BUDGET_MS;
+  }
+  return Math.min(10_000, value);
+}
+
 function isNonNegativeSafeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
@@ -1026,9 +1111,10 @@ function removeCacheChild(rootDir: string, childName: string): void {
   rmSync(childPath, { force: true, recursive: true });
 }
 
-function listRegularFiles(rootDir: string): string[] {
+function listRegularFiles(rootDir: string, guard?: CacheMaintenanceGuard): string[] {
   const files: string[] = [];
   const visit = (directory: string): void => {
+    requireCacheMaintenanceBudget(guard);
     let entries: Dirent[];
     try {
       entries = readdirSync(directory, { withFileTypes: true });
@@ -1036,6 +1122,7 @@ function listRegularFiles(rootDir: string): string[] {
       return;
     }
     for (const entry of entries) {
+      requireCacheMaintenanceBudget(guard);
       const entryPath = path.join(directory, entry.name);
       if (entry.isFile()) {
         files.push(entryPath);

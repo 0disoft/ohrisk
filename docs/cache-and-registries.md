@@ -9,8 +9,12 @@ not written to the cache index.
 
 Automatic LRU maintenance runs once after evidence collection instead of after
 every cache write. A cross-process maintenance lock and short cooldown coalesce
-simultaneous scans, while the same 2 GiB default limit, ownership marker, and
-content-addressed integrity checks remain in force.
+simultaneous scans. The scan-time pass follows the command cancellation signal,
+uses a one-second best-effort work budget, and stops before its next cleanup
+mutation when either boundary is reached. An interrupted attempt starts the
+same short cooldown so an oversized cache cannot delay every scan. The 2 GiB
+default target, ownership marker, and content-addressed integrity checks remain
+in force; use `cache prune` when a complete cleanup is required immediately.
 
 ## Cache location
 
@@ -89,10 +93,12 @@ silently goes online.
 
 ## Capacity and cleanup
 
-Successful writes enforce a default 2 GiB physical-object ceiling. When the
-cache exceeds that ceiling, least-recently-used URL entries are removed until
-the referenced object set fits; shared content is retained while another entry
-still references it.
+Automatic maintenance attempts to enforce a default 2 GiB physical-object
+ceiling within its bounded scan-time pass. When the cache exceeds that target,
+least-recently-used URL entries are removed until the referenced object set fits;
+shared content is retained while another entry still references it. A cancelled
+or budget-limited pass may leave cleanup for the next cooldown window or for an
+explicit `cache prune` command.
 
 Use the management command for inspection and explicit cleanup:
 

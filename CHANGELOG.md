@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Automatic artifact-cache maintenance now follows the command cancellation
+  signal and gets a one-second best-effort work budget. It inventories without
+  mutating, checks the budget before each cleanup mutation, releases its shared
+  lock on interruption, and records an attempt cooldown so oversized caches do
+  not delay every scan. Explicit `cache prune` remains the complete cleanup
+  path with an exact post-prune inventory.
 - Automatic artifact-cache maintenance now reuses its initial cache inventory
   when deleting stale indexes and orphan objects instead of walking the cache
   three times and listing objects a fourth time. Explicit `cache prune` keeps
