@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
@@ -39,6 +40,7 @@ const REPORT_SERVER_TIMEOUT_MS = 10_000;
 const REPORT_SERVER_CLOSE_DELAY_MS = 500;
 const OPEN_COMMAND_TIMEOUT_MS = 3_000;
 const REPORT_TOKEN_BYTES = 16;
+const DEFAULT_WINDOWS_DIRECTORY = "C:\\Windows";
 const TEXT_RESPONSE_HEADERS = {
   "content-type": "text/plain; charset=utf-8",
   "referrer-policy": "no-referrer",
@@ -253,10 +255,20 @@ function openCommandFor(
 ): OpenCommand {
   switch (platform) {
     case "win32":
-      return { command: "cmd.exe", args: ["/c", "start", "", target] };
+      return {
+        command: path.win32.join(windowsDirectory(), "System32", "cmd.exe"),
+        args: ["/d", "/c", "start", "", target]
+      };
     case "darwin":
-      return { command: "open", args: [target] };
+      return { command: "/usr/bin/open", args: [target] };
     default:
-      return { command: "xdg-open", args: [target] };
+      return { command: "/usr/bin/xdg-open", args: [target] };
   }
+}
+
+function windowsDirectory(): string {
+  const configured = process.env.SystemRoot ?? process.env.WINDIR;
+  return configured && path.win32.isAbsolute(configured)
+    ? path.win32.normalize(configured)
+    : DEFAULT_WINDOWS_DIRECTORY;
 }

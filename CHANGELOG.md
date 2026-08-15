@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- HTML report opening now invokes the platform opener through a trusted absolute
+  operating-system path instead of executable search through the scanned
+  repository or `PATH`. Windows also disables `cmd.exe` AutoRun processing
+  before dispatching the generated loopback URL.
 - Bounded remote response reading now lives behind a dedicated artifact-response
   module. The public fetcher type remains available from the original evidence
   collector path, while stream cancellation, byte ceilings, and content-length

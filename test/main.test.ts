@@ -3184,6 +3184,7 @@ describe("main", () => {
     const outputRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-html-loopback-"));
     const outputPath = path.join(outputRoot, "scan.html");
     writeFileSync(outputPath, "<!doctype html><title>fixture report</title>", "utf8");
+    let openCommand = "";
     let openedTarget = "";
     let fetchedText = "";
     let badTokenStatus = 0;
@@ -3196,7 +3197,8 @@ describe("main", () => {
       const opener = createReportOpener({
         closeDelayMs: 0,
         serverTimeoutMs: 1000,
-        openCommandRunner: (_command, args) => {
+        openCommandRunner: (command, args) => {
+          openCommand = command;
           openedTarget = args.at(-1) ?? "";
           fetchedTextPromise = (async () => {
             const badTokenResponse = await fetch(openedTarget.replace(/token=[^&]+/, "token=bad"));
@@ -3218,6 +3220,7 @@ describe("main", () => {
       await fetchedTextPromise;
 
       expect(opened.ok).toBe(true);
+      expect(path.isAbsolute(openCommand)).toBe(true);
       expect(openedTarget).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/report\.html\?token=[a-f0-9]{32}$/);
       expect(opened.ok ? opened.value.target : "").toBe(openedTarget);
       expect(badTokenStatus).toBe(403);
@@ -3248,7 +3251,7 @@ describe("main", () => {
         openCommandRunner: (command, args) => {
           openCommand = command;
           openArgs = args;
-          openedTarget = args[3] ?? "";
+          openedTarget = args[4] ?? "";
           fetchedTextPromise = (async () => {
             const response = await fetch(openedTarget);
             fetchedText = await response.text();
@@ -3260,8 +3263,9 @@ describe("main", () => {
       const opened = await opener({ reportPath: outputPath });
       await fetchedTextPromise;
 
-      expect(openCommand).toBe("cmd.exe");
-      expect(openArgs.slice(0, 3)).toEqual(["/c", "start", ""]);
+      expect(path.win32.isAbsolute(openCommand)).toBe(true);
+      expect(path.win32.basename(openCommand).toLowerCase()).toBe("cmd.exe");
+      expect(openArgs.slice(0, 4)).toEqual(["/d", "/c", "start", ""]);
       expect(openedTarget).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/report\.html\?token=[a-f0-9]{32}$/);
       expect(opened.ok).toBe(true);
       expect(opened.ok ? opened.value.target : "").toBe(openedTarget);

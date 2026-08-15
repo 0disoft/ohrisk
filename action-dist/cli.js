@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 5ad578a4e6d0e3495cfc93de61a869d4a3b41f041cbce1726b021426cc30f5e6
+// ohrisk-action-source-sha256: ff801840c498a7b26a69834dff7788318d4d304d845fda0c0f29190a77815677
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -17401,7 +17401,7 @@ function subscribeToResize(stream, listener) {
 }
 // src/cli/main.ts
 import { readdirSync as readdirSync35, realpathSync as realpathSync8, statSync as statSync35 } from "node:fs";
-import path88 from "node:path";
+import path89 from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // src/cli/args.ts
@@ -19582,7 +19582,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.22";
+var OHRISK_VERSION = "1.14.23";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -61318,11 +61318,13 @@ import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readFileSync as readFileSync4 } from "node:fs";
 import { createServer } from "node:http";
+import path87 from "node:path";
 var LOOPBACK_HOST = "127.0.0.1";
 var REPORT_SERVER_TIMEOUT_MS = 1e4;
 var REPORT_SERVER_CLOSE_DELAY_MS = 500;
 var OPEN_COMMAND_TIMEOUT_MS = 3000;
 var REPORT_TOKEN_BYTES = 16;
+var DEFAULT_WINDOWS_DIRECTORY = "C:\\Windows";
 var TEXT_RESPONSE_HEADERS = {
   "content-type": "text/plain; charset=utf-8",
   "referrer-policy": "no-referrer",
@@ -61484,12 +61486,19 @@ function localReportUrl(server, token) {
 function openCommandFor(platform, target) {
   switch (platform) {
     case "win32":
-      return { command: "cmd.exe", args: ["/c", "start", "", target] };
+      return {
+        command: path87.win32.join(windowsDirectory(), "System32", "cmd.exe"),
+        args: ["/d", "/c", "start", "", target]
+      };
     case "darwin":
-      return { command: "open", args: [target] };
+      return { command: "/usr/bin/open", args: [target] };
     default:
-      return { command: "xdg-open", args: [target] };
+      return { command: "/usr/bin/xdg-open", args: [target] };
   }
+}
+function windowsDirectory() {
+  const configured = process.env.SystemRoot ?? process.env.WINDIR;
+  return configured && path87.win32.isAbsolute(configured) ? path87.win32.normalize(configured) : DEFAULT_WINDOWS_DIRECTORY;
 }
 
 // src/report/write-output.ts
@@ -61506,10 +61515,10 @@ import {
   writeFileSync as writeFileSync3
 } from "node:fs";
 import { randomBytes as randomBytes2 } from "node:crypto";
-import path87 from "node:path";
+import path88 from "node:path";
 var writeReportFile = (input) => {
-  const resolvedCwd = path87.resolve(input.cwd);
-  const resolvedPath = path87.resolve(resolvedCwd, input.outputPath);
+  const resolvedCwd = path88.resolve(input.cwd);
+  const resolvedPath = path88.resolve(resolvedCwd, input.outputPath);
   if (!isProjectRelativeOutputPath(input.outputPath) || !isPathInsideOrEqual6(resolvedPath, resolvedCwd)) {
     return err(reportOutputPathOutsideError({
       outputPath: input.outputPath,
@@ -61551,8 +61560,8 @@ var writeReportFile = (input) => {
 };
 function ensureSafeReportParent(input) {
   const realProjectRoot = realpathSync7(input.projectRoot);
-  const parentPath = path87.dirname(input.resolvedPath);
-  const relativeParent = path87.relative(input.projectRoot, parentPath);
+  const parentPath = path88.dirname(input.resolvedPath);
+  const relativeParent = path88.relative(input.projectRoot, parentPath);
   if (relativeParent === "") {
     return ok({
       resolvedPath: input.resolvedPath,
@@ -61560,7 +61569,7 @@ function ensureSafeReportParent(input) {
       realProjectRoot
     });
   }
-  if (relativeParent.startsWith("..") || path87.isAbsolute(relativeParent)) {
+  if (relativeParent.startsWith("..") || path88.isAbsolute(relativeParent)) {
     return err(reportOutputPathOutsideError({
       outputPath: input.outputPath,
       projectRoot: input.projectRoot,
@@ -61571,7 +61580,7 @@ function ensureSafeReportParent(input) {
     }));
   }
   let currentPath = input.projectRoot;
-  for (const segment of relativeParent.split(path87.sep)) {
+  for (const segment of relativeParent.split(path88.sep)) {
     if (segment === "" || segment === "." || segment === "..") {
       return err(reportOutputPathOutsideError({
         outputPath: input.outputPath,
@@ -61582,7 +61591,7 @@ function ensureSafeReportParent(input) {
         reason: "invalid_parent_segment"
       }));
     }
-    const candidatePath = path87.join(currentPath, segment);
+    const candidatePath = path88.join(currentPath, segment);
     const stepResult = resolveOrCreateReportComponent({
       candidatePath,
       outputPath: input.outputPath,
@@ -61755,7 +61764,7 @@ function writeValidatedReportFile(input) {
 }
 function validateResolvedReportPath(input) {
   const realProjectRoot = realpathSync7(input.projectRoot);
-  const realParent = realpathSync7(path87.dirname(input.resolvedPath));
+  const realParent = realpathSync7(path88.dirname(input.resolvedPath));
   const existingOutputIsSymlink = isSymbolicLinkPath(input.resolvedPath);
   if (existingOutputIsSymlink || !isPathInsideOrEqual6(realParent, realProjectRoot)) {
     return err(reportOutputPathOutsideError({
@@ -61774,9 +61783,9 @@ function validateResolvedReportPath(input) {
   });
 }
 function createReportTempPath(realParent, resolvedPath) {
-  const baseName = path87.basename(resolvedPath);
+  const baseName = path88.basename(resolvedPath);
   const suffix = randomBytes2(8).toString("hex");
-  return path87.join(realParent, `.ohrisk-report-${process.pid}-${Date.now()}-${suffix}-${baseName}.tmp`);
+  return path88.join(realParent, `.ohrisk-report-${process.pid}-${Date.now()}-${suffix}-${baseName}.tmp`);
 }
 function promoteTempReportFile(tempPath, resolvedPath) {
   try {
@@ -61849,20 +61858,20 @@ function isSymbolicLinkPath(filePath) {
   }
 }
 function isProjectRelativeOutputPath(outputPath) {
-  if (outputPath.includes("\x00") || path87.isAbsolute(outputPath) || path87.win32.isAbsolute(outputPath) || path87.posix.isAbsolute(outputPath) || /^[A-Za-z]:/.test(outputPath)) {
+  if (outputPath.includes("\x00") || path88.isAbsolute(outputPath) || path88.win32.isAbsolute(outputPath) || path88.posix.isAbsolute(outputPath) || /^[A-Za-z]:/.test(outputPath)) {
     return false;
   }
   return outputPath.split(/[\\/]+/).every((segment) => segment !== "" && segment !== "." && segment !== "..");
 }
 function isPathInsideOrEqual6(childPath, parentPath) {
-  const relativePath = path87.relative(parentPath, childPath);
-  return relativePath === "" || !relativePath.startsWith("..") && !path87.isAbsolute(relativePath);
+  const relativePath = path88.relative(parentPath, childPath);
+  return relativePath === "" || !relativePath.startsWith("..") && !path88.isAbsolute(relativePath);
 }
 function isSameRealPath(leftPath, rightPath) {
   if (process.platform === "win32") {
-    return path87.normalize(leftPath).toLowerCase() === path87.normalize(rightPath).toLowerCase();
+    return path88.normalize(leftPath).toLowerCase() === path88.normalize(rightPath).toLowerCase();
   }
-  return path87.normalize(leftPath) === path87.normalize(rightPath);
+  return path88.normalize(leftPath) === path88.normalize(rightPath);
 }
 
 // src/cli/main.ts
@@ -61910,9 +61919,9 @@ async function main(argv = process.argv.slice(2), io = defaultIO()) {
 function runCache(command, io) {
   const env = io.env ?? process.env;
   const configuredCacheDir = command.cacheDir ?? env.OHRISK_CACHE_DIR;
-  const cacheDir = configuredCacheDir ? path88.resolve(io.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(env);
+  const cacheDir = configuredCacheDir ? path89.resolve(io.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(env);
   const cache = openArtifactCacheForManagement(cacheDir);
-  const location = configuredCacheDir ? path88.relative(io.cwd, cacheDir) || "." : cacheDir;
+  const location = configuredCacheDir ? path89.relative(io.cwd, cacheDir) || "." : cacheDir;
   if (command.action === "status") {
     const status = cache.status();
     if (!status.ok) {
@@ -62523,7 +62532,7 @@ function discoverFilesystemProject(input) {
     return discovered;
   }
   const lockfileCount = discovered.value.lockfiles?.length ?? 1;
-  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, lockfileCount > 1 ? `Reading ${lockfileCount} lockfiles...` : `Reading ${path88.basename(discovered.value.lockfile.path)}...`);
+  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, lockfileCount > 1 ? `Reading ${lockfileCount} lockfiles...` : `Reading ${path89.basename(discovered.value.lockfile.path)}...`);
   return discovered;
 }
 async function evaluateProjectScan(input) {
@@ -62720,7 +62729,7 @@ function resolveEvidenceRuntimeOptions(input) {
     }
   }
   const configuredCacheDir = input.cacheDir ?? input.env.OHRISK_CACHE_DIR;
-  const cacheDir = configuredCacheDir ? path88.resolve(input.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(input.env);
+  const cacheDir = configuredCacheDir ? path89.resolve(input.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(input.env);
   return ok({
     offline: input.offline,
     cacheDir,
@@ -62881,7 +62890,7 @@ function readBaselineGoWorkModuleInputs(input) {
     const sourceFiles = input.baselineFiles ? readBaselineGoSourceFiles({
       projectRoot: input.project.rootDir,
       baselineRef: input.baselineRef,
-      moduleRootRelativePath: path88.posix.dirname(modulePath.goModRelativePath),
+      moduleRootRelativePath: path89.posix.dirname(modulePath.goModRelativePath),
       baselineFiles: input.baselineFiles,
       readRefFile: input.readRefFile
     }) : ok(undefined);
@@ -62954,7 +62963,7 @@ function loadBaselineProjectGraph(input) {
     if (baselineLockfiles.length === 0 && listed.value.includes("package.json")) {
       baselineLockfiles = [{
         kind: "package-json",
-        path: path88.join(projectRoot, "package.json")
+        path: path89.join(projectRoot, "package.json")
       }];
     }
   } else {
@@ -62973,7 +62982,7 @@ function loadBaselineProjectGraph(input) {
   if (baselineLockfiles.length === 0) {
     return ok({
       graph: {
-        rootName: path88.basename(projectRoot),
+        rootName: path89.basename(projectRoot),
         lockfilePath: `${input.baselineRef}:<none>`,
         lockfilePaths: [],
         nodes: []
@@ -62989,7 +62998,7 @@ function loadBaselineProjectGraph(input) {
       lockfile,
       baselineRef: input.baselineRef,
       readRefFile: input.readRefFile,
-      rootNameHint: input.currentProject.scanGraph.rootName ?? path88.basename(projectRoot),
+      rootNameHint: input.currentProject.scanGraph.rootName ?? path89.basename(projectRoot),
       ...baselineFiles ? { baselineFiles } : {}
     });
     if (isErr(parsed)) {
@@ -63025,7 +63034,7 @@ function parseBaselineLockfileGraph(input) {
   if (isErr(baselineLockfile)) {
     return baselineLockfile;
   }
-  const lockfileDirectory = path88.posix.dirname(relativeLockfilePath);
+  const lockfileDirectory = path89.posix.dirname(relativeLockfilePath);
   const relativeCompanionPath = (filename) => lockfileDirectory === "." ? filename : `${lockfileDirectory}/${filename}`;
   const packageJsonRelativePath = relativeCompanionPath("package.json");
   const baselinePackageJson = input.lockfile.kind === "yarn-lock" ? input.readRefFile({
@@ -63168,7 +63177,7 @@ function parseBaselineLockfileGraph(input) {
     ...baselineGoSum.value ? { goSumText: baselineGoSum.value } : {},
     ...baselineGoSourceFiles.value ? { goSourceFiles: baselineGoSourceFiles.value } : {},
     ...baselineGoWorkModules.value?.length ? { goWorkModuleInputs: baselineGoWorkModules.value } : {},
-    goWorkDir: path88.dirname(input.lockfile.path),
+    goWorkDir: path89.dirname(input.lockfile.path),
     ...baselineComposerJson.value ? { composerJsonText: baselineComposerJson.value } : {},
     ...baselineDirectoryPackagesProps.value?.text ? { directoryPackagesPropsText: baselineDirectoryPackagesProps.value.text } : {},
     ...baselineDirectoryPackagesProps.value?.path ? { directoryPackagesPropsPath: baselineDirectoryPackagesProps.value.path } : {},
@@ -63206,8 +63215,8 @@ function diffLockfileKey(lockfile) {
   return `${lockfile.kind}\x00${lockfile.path}`;
 }
 function projectRelativeLockfilePath(projectRoot, lockfilePath) {
-  const relativePath = path88.relative(projectRoot, lockfilePath).replace(/\\/g, "/");
-  return relativePath === "" ? path88.basename(lockfilePath) : relativePath;
+  const relativePath = path89.relative(projectRoot, lockfilePath).replace(/\\/g, "/");
+  return relativePath === "" ? path89.basename(lockfilePath) : relativePath;
 }
 function readBaselinePrimaryLockfile(input) {
   if (isGradleDependencyLocksDirectory(input.lockfilePath)) {
@@ -63227,7 +63236,7 @@ function readBaselineGradleDependencyLocksDirectory(input) {
       const prefix = `${normalizedDirectory}/`;
       entries = [...input.baselineFiles].filter((entry) => entry.startsWith(prefix)).map((entry) => entry.slice(prefix.length)).filter((entry) => !entry.includes("/") && entry.toLowerCase().endsWith(".lockfile")).sort();
     } else {
-      entries = readdirSync35(input.lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile5(path88.join(input.lockfilePath, entry))).sort();
+      entries = readdirSync35(input.lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile5(path89.join(input.lockfilePath, entry))).sort();
     }
   } catch (cause) {
     return err(createError({
@@ -63272,7 +63281,7 @@ function readBaselineGradleDependencyLocksDirectory(input) {
 `));
 }
 function baselineLockfilePathForKind(input) {
-  return input.kind === "gradle-lock" ? path88.join(input.rootName, input.relativeLockfilePath) : `${input.baselineRef}:${input.relativeLockfilePath}`;
+  return input.kind === "gradle-lock" ? path89.join(input.rootName, input.relativeLockfilePath) : `${input.baselineRef}:${input.relativeLockfilePath}`;
 }
 function readBaselineCargoMemberManifests(input) {
   const memberManifestPaths = input.baselineFiles ? findCargoWorkspaceMemberManifestPathsFromRelativePaths({
@@ -63338,7 +63347,7 @@ function readBaselineYarnWorkspacePackageJsons(input) {
 }
 function createBaselineRequirementsIncludedFileReader(input) {
   return ({ includePath, fromFilePath, directive }) => {
-    if (path88.isAbsolute(includePath)) {
+    if (path89.isAbsolute(includePath)) {
       return err(createError({
         code: "REQUIREMENTS_PARSE_FAILED",
         category: "unsupported_input",
@@ -63351,7 +63360,7 @@ function createBaselineRequirementsIncludedFileReader(input) {
       }));
     }
     const fromRelativePath = stripBaselineRefPrefix(fromFilePath, input.baselineRef);
-    const includedRelativePath = normalizeBaselineRelativePath(path88.join(path88.dirname(fromRelativePath), includePath));
+    const includedRelativePath = normalizeBaselineRelativePath(path89.join(path89.dirname(fromRelativePath), includePath));
     if (!includedRelativePath) {
       return err(createError({
         code: "REQUIREMENTS_PARSE_FAILED",
@@ -63411,7 +63420,7 @@ function baselinePythonLocalSourceErrorsForKind(kind) {
 }
 function createBaselinePythonLocalSourceFileReader(input) {
   return ({ sourcePath, relativeFilePath, fromFilePath }) => {
-    if (path88.isAbsolute(sourcePath)) {
+    if (path89.isAbsolute(sourcePath)) {
       return err(createError({
         code: input.errors.parseCode,
         category: "unsupported_input",
@@ -63424,7 +63433,7 @@ function createBaselinePythonLocalSourceFileReader(input) {
       }));
     }
     const fromRelativePath = stripBaselineRefPrefix(fromFilePath, input.baselineRef);
-    const sourceRelativePath = normalizeBaselineRelativePath(path88.join(path88.dirname(fromRelativePath), sourcePath));
+    const sourceRelativePath = normalizeBaselineRelativePath(path89.join(path89.dirname(fromRelativePath), sourcePath));
     if (!sourceRelativePath) {
       return err(createError({
         code: input.errors.parseCode,
@@ -63437,7 +63446,7 @@ function createBaselinePythonLocalSourceFileReader(input) {
         }
       }));
     }
-    const sourceFileRelativePath = normalizeBaselineRelativePath(path88.join(sourceRelativePath, relativeFilePath));
+    const sourceFileRelativePath = normalizeBaselineRelativePath(path89.join(sourceRelativePath, relativeFilePath));
     if (!sourceFileRelativePath) {
       return err(createError({
         code: input.errors.parseCode,
@@ -63470,18 +63479,18 @@ function stripBaselineRefPrefix(filePath, baselineRef) {
   return filePath.startsWith(prefix) ? filePath.slice(prefix.length) : filePath;
 }
 function normalizeBaselineRelativePath(relativePath) {
-  const normalized = path88.normalize(relativePath).replace(/\\/g, "/");
-  if (normalized === "." || normalized.startsWith("../") || normalized === ".." || path88.isAbsolute(normalized)) {
+  const normalized = path89.normalize(relativePath).replace(/\\/g, "/");
+  if (normalized === "." || normalized.startsWith("../") || normalized === ".." || path89.isAbsolute(normalized)) {
     return;
   }
   return normalized;
 }
 function isGradleDependencyLocksDirectory(lockfilePath) {
-  const segments = path88.normalize(lockfilePath).split(path88.sep);
+  const segments = path89.normalize(lockfilePath).split(path89.sep);
   return segments.length >= 2 && segments[segments.length - 1] === "dependency-locks" && segments[segments.length - 2] === "gradle";
 }
 function findBaselineDirectoryPackagesPropsPath(input) {
-  let current = path88.posix.dirname(projectRelativeLockfilePath(input.projectRoot, input.projectFilePath));
+  let current = path89.posix.dirname(projectRelativeLockfilePath(input.projectRoot, input.projectFilePath));
   while (true) {
     const candidate = current === "." ? "Directory.Packages.props" : `${current}/Directory.Packages.props`;
     if (input.baselineFiles.has(candidate)) {
@@ -63490,7 +63499,7 @@ function findBaselineDirectoryPackagesPropsPath(input) {
     if (current === ".") {
       return;
     }
-    const parent = path88.posix.dirname(current);
+    const parent = path89.posix.dirname(current);
     current = parent === current ? "." : parent;
   }
 }
@@ -63499,7 +63508,7 @@ function readBaselineDirectoryPackagesProps(input) {
     projectRoot: input.project.rootDir,
     projectFilePath: input.project.lockfile.path,
     baselineFiles: input.baselineFiles
-  }) : normalizeBaselineRelativePath(path88.relative(input.project.rootDir, findNearestDirectoryPackagesPropsPath(input.project.lockfile.path) ?? ""));
+  }) : normalizeBaselineRelativePath(path89.relative(input.project.rootDir, findNearestDirectoryPackagesPropsPath(input.project.lockfile.path) ?? ""));
   if (!relativePath) {
     return ok(undefined);
   }
@@ -63921,7 +63930,7 @@ function resolveWorkspaceRootPath(input) {
   if (!input.workspaceRootPath) {
     return ok(undefined);
   }
-  const resolvedPath = path88.resolve(input.cwd, input.workspaceRootPath);
+  const resolvedPath = path89.resolve(input.cwd, input.workspaceRootPath);
   try {
     const realPath = realpathSync8(resolvedPath);
     if (!statSync35(realPath).isDirectory()) {
@@ -63933,7 +63942,7 @@ function resolveWorkspaceRootPath(input) {
   }
 }
 function workspaceRootInvalidError2(workspaceRootPath) {
-  const absolute = path88.isAbsolute(workspaceRootPath);
+  const absolute = path89.isAbsolute(workspaceRootPath);
   return createError({
     code: "INVALID_ARGUMENT",
     category: "invalid_input",
@@ -63951,7 +63960,7 @@ function isCliEntrypoint(metaUrl, argvPath) {
   try {
     return realpathSync8(fileURLToPath4(metaUrl)) === realpathSync8(argvPath);
   } catch {
-    return path88.resolve(fileURLToPath4(metaUrl)) === path88.resolve(argvPath);
+    return path89.resolve(fileURLToPath4(metaUrl)) === path89.resolve(argvPath);
   }
 }
 function isFile5(pathname) {

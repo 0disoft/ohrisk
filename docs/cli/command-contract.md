@@ -309,6 +309,11 @@ open version expressions fail closed instead of being guessed.
 
 ## Output Requirements
 
+When `--open` is requested, the generated loopback report URL is dispatched
+through a trusted absolute operating-system opener path. Ohrisk does not search
+the scanned repository or `PATH` for an opener executable; Windows also disables
+`cmd.exe` AutoRun processing for the dispatch.
+
 - JSON, Markdown, HTML, SARIF, and CycloneDX behavior is owned by `docs/report-formats.md`.
 - Scan, diff, and explain JSON documents include `$schema` and `schemaVersion`; incompatible contract changes require a schema-version change. Schema 3.0 rejects unknown properties, separates diff classifications, and validates typed evidence and dependency-graph diagnostics alongside findings, licenses, policy summaries, waivers, thresholds, and lockfile changes. Explain JSON includes its redacted policy summary and the fixed `license-only` policy scope.
 - `.ohrisk-waivers.json` has its own closed Draft 2020-12 input contract at `schemas/waiver-file.schema.json`; the parser and schema both reject unknown root and item fields.
