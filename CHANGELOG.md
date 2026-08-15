@@ -8,6 +8,8 @@
 - Optional TypeScript properties now distinguish absent fields from explicit
   `undefined`, keeping parser and evidence inputs aligned with their runtime
   wire shapes.
+- Type checking now includes dependency declaration files instead of hiding
+  incompatible library types behind `skipLibCheck`.
 - Development manifests now allow compatible updates within each reviewed
   major using caret ranges while `bun.lock` continues to pin exact resolved
   versions and integrity hashes. Mutable `latest` exceptions are no longer

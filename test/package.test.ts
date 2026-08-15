@@ -27,7 +27,14 @@ describe("package metadata", () => {
     };
     const tsconfig = JSON.parse(
       readFileSync(path.join(repoRoot, "tsconfig.json"), "utf8")
-    ) as { include?: string[] };
+    ) as {
+      include?: string[];
+      compilerOptions?: {
+        noUncheckedIndexedAccess?: boolean;
+        exactOptionalPropertyTypes?: boolean;
+        skipLibCheck?: boolean;
+      };
+    };
     const releaseTsconfig = JSON.parse(
       readFileSync(path.join(repoRoot, "tsconfig.release.json"), "utf8")
     ) as { extends?: string; files?: unknown; include?: unknown; exclude?: unknown };
@@ -78,6 +85,9 @@ describe("package metadata", () => {
       "test/**/*.ts",
       "scripts/**/*.ts"
     ]));
+    expect(tsconfig.compilerOptions?.noUncheckedIndexedAccess).toBe(true);
+    expect(tsconfig.compilerOptions?.exactOptionalPropertyTypes).toBe(true);
+    expect(tsconfig.compilerOptions?.skipLibCheck).toBe(false);
     expect(existsSync(path.join(repoRoot, "tsconfig.release.json"))).toBe(true);
     expect(existsSync(path.join(repoRoot, "tsconfig.strict-source.json"))).toBe(false);
     expect(releaseTsconfig.extends).toBe("./tsconfig.json");

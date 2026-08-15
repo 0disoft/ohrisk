@@ -11,7 +11,7 @@
       "bun",
       "node"
     ],
-    "skipLibCheck": true,
+    "skipLibCheck": false,
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "noImplicitReturns": true,
