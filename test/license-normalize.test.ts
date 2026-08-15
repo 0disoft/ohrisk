@@ -350,7 +350,7 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
-  test("treats local private packages without license metadata as internal evidence", () => {
+  test("does not treat package.json private as package ownership evidence", () => {
     expect(
       normalizeLicenseEvidence({
         packageId: "private-local-package@1.0.0",
@@ -365,13 +365,13 @@ describe("normalizeLicenseEvidence", () => {
       packageId: "private-local-package@1.0.0",
       choices: [],
       joiner: "single",
-      signals: ["internal-private"],
+      signals: ["missing"],
       evidenceSources: [
         "source: local",
         "package.json private: true",
         "warning: No LICENSE, LICENCE, UNLICENSE, COPYING, or NOTICE file found."
       ],
-      confidence: "high"
+      confidence: "low"
     });
   });
 

@@ -55,28 +55,9 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
   }
   addNonPackageRestrictionSources(evidenceSources, commercialRestriction);
 
-  if (evidence.packageJsonPrivate && evidence.source === "local") {
-    signals.push("internal-private");
-  }
-
   let licenseExpression = readLicenseExpressionEvidence(evidence);
 
   if (!licenseExpression) {
-    if (signals.includes("internal-private")) {
-      if (evidence.files.length > 0) {
-        signals.push("custom-text");
-      }
-
-      return {
-        packageId: evidence.packageId,
-        choices: [],
-        joiner: "single",
-        signals,
-        evidenceSources,
-        confidence: "high"
-      };
-    }
-
     signals.push("missing");
 
     if (evidence.files.length > 0) {

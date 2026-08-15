@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `package.json private: true` is now retained only as provenance and no longer
+  treated as proof that an unlicensed local dependency is organization-owned.
+  Without independent license evidence, the package remains `unknown`.
 - Cache access-time touches and HTTP revalidation now acquire the same
   cross-process commit lock as writers and maintenance, then re-read the index
   and object before publishing. A reader can no longer resurrect an entry after

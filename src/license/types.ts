@@ -6,8 +6,7 @@ export type NormalizedLicenseSignal =
   | "conflicting-evidence"
   | "custom-text"
   | "commercial-restriction"
-  | "notice-required"
-  | "internal-private";
+  | "notice-required";
 
 export type NormalizedLicenseConfidence =
   | "high"

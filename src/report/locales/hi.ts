@@ -238,8 +238,6 @@ function hindiEvidenceRecoveryHint(hint: EvidenceRecoveryHint): string {
 
 function hindiFindingReason(finding: RiskFinding, profile: string): string {
   switch (finding.reason) {
-    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
-      return "स्थानीय पैकेज package.json में private है, इसलिए अनुपस्थित सार्वजनिक लाइसेंस metadata को internal package साक्ष्य माना गया है।";
     case `License expression is low risk for ${profile}.`:
       return `लाइसेंस expression ${profile} के लिए कम जोखिम है।`;
     case `License expression should be reviewed before shipping under ${profile}.`:

@@ -238,8 +238,6 @@ function spanishEvidenceRecoveryHint(hint: EvidenceRecoveryHint): string {
 
 function spanishFindingReason(finding: RiskFinding, profile: string): string {
   switch (finding.reason) {
-    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
-      return "El paquete local está marcado como private en package.json, así que la falta de metadatos públicos de licencia se trata como evidencia de paquete interno.";
     case `License expression is low risk for ${profile}.`:
       return `La expresión de licencia es de bajo riesgo para ${profile}.`;
     case `License expression should be reviewed before shipping under ${profile}.`:

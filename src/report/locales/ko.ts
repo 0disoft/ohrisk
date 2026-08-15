@@ -236,8 +236,6 @@ function koreanEvidenceRecoveryHint(hint: EvidenceRecoveryHint): string {
 
 function koreanFindingReason(finding: RiskFinding, profile: string): string {
   switch (finding.reason) {
-    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
-      return "로컬 패키지가 package.json에서 private로 표시되어 있어, 공개 라이선스 메타데이터 누락을 내부 패키지 근거로 처리했습니다.";
     case `License expression is low risk for ${profile}.`:
       return `라이선스 표현식은 ${profile} 기준에서 낮은 위험입니다.`;
     case `License expression should be reviewed before shipping under ${profile}.`:

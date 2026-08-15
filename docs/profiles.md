@@ -76,6 +76,11 @@ separate asset decision.
 | Missing or malformed | (no license declared) | unknown | unknown |
 | Unrecognized | (license not in Ohrisk's known set) | unknown | unknown |
 
+The npm `package.json` field `private: true` prevents accidental publication;
+it does not prove that the package is owned by the scanning organization. A
+private package without license evidence therefore remains `unknown` unless an
+independent organization policy supplies an explicit license decision.
+
 Severities shown assume a single-license expression. For `OR` expressions
 (e.g., `MIT OR GPL-3.0`), Ohrisk uses the least risky branch. For `AND`
 expressions, it uses the riskiest branch.

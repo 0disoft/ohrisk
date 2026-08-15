@@ -238,8 +238,6 @@ function turkishEvidenceRecoveryHint(hint: EvidenceRecoveryHint): string {
 
 function turkishFindingReason(finding: RiskFinding, profile: string): string {
   switch (finding.reason) {
-    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
-      return "Yerel paket package.json içinde private olarak işaretli, bu yüzden eksik genel lisans metadata'sı dahili paket kanıtı olarak değerlendirildi.";
     case `License expression is low risk for ${profile}.`:
       return `Lisans ifadesi ${profile} için düşük riskli.`;
     case `License expression should be reviewed before shipping under ${profile}.`:

@@ -238,8 +238,6 @@ function indonesianEvidenceRecoveryHint(hint: EvidenceRecoveryHint): string {
 
 function indonesianFindingReason(finding: RiskFinding, profile: string): string {
   switch (finding.reason) {
-    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
-      return "Paket lokal ditandai private di package.json, jadi metadata lisensi publik yang hilang diperlakukan sebagai bukti paket internal.";
     case `License expression is low risk for ${profile}.`:
       return `License expression berisiko rendah untuk ${profile}.`;
     case `License expression should be reviewed before shipping under ${profile}.`:

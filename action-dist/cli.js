@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 0bab758fe47e3196c110503cdbecc7046ea285587ede40cedf825e3517d80697
+// ohrisk-action-source-sha256: 8dd10fa74b67f2a78d45dfdb44d09d9d9c78ab5e7edc1d96e5e5d5c62ee15504
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19582,7 +19582,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.32";
+var OHRISK_VERSION = "1.14.33";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -54690,24 +54690,8 @@ function normalizeLicenseEvidence(evidence) {
     signals.push("commercial-restriction");
   }
   addNonPackageRestrictionSources(evidenceSources, commercialRestriction);
-  if (evidence.packageJsonPrivate && evidence.source === "local") {
-    signals.push("internal-private");
-  }
   let licenseExpression = readLicenseExpressionEvidence(evidence);
   if (!licenseExpression) {
-    if (signals.includes("internal-private")) {
-      if (evidence.files.length > 0) {
-        signals.push("custom-text");
-      }
-      return {
-        packageId: evidence.packageId,
-        choices: [],
-        joiner: "single",
-        signals,
-        evidenceSources,
-        confidence: "high"
-      };
-    }
     signals.push("missing");
     if (evidence.files.length > 0) {
       signals.push("custom-text");
@@ -55953,9 +55937,6 @@ function classifySeverity(license, profile, policy) {
   if (license.signals.includes("commercial-restriction") && !hasCommercialRestrictionChoice(license)) {
     return "high";
   }
-  if (license.signals.includes("internal-private") && !license.signals.includes("malformed") && !license.signals.includes("conflicting-evidence")) {
-    return "low";
-  }
   if (license.signals.includes("missing") || license.signals.includes("malformed") || license.signals.includes("conflicting-evidence")) {
     return "unknown";
   }
@@ -56024,9 +56005,6 @@ function explainSeverity(license, profile, severity, policy) {
   }
   switch (severity) {
     case "low":
-      if (license.signals.includes("internal-private") && license.choices.length === 0) {
-        return "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.";
-      }
       return `License expression is low risk for ${profile}.`;
     case "review":
       return `License expression should be reviewed before shipping under ${profile}.`;
@@ -56075,7 +56053,7 @@ function collectPolicyTerms(node, terms) {
 }
 function buildEvidence(license, dependency) {
   const evidence = [
-    license.original ? `license: ${license.original}` : license.signals.includes("internal-private") ? "license: private package" : "license: missing",
+    license.original ? `license: ${license.original}` : "license: missing",
     `dependency: ${dependency.dependencyType}`,
     dependency.direct ? "direct dependency" : "transitive dependency",
     ...license.evidenceSources
@@ -57516,8 +57494,6 @@ function koreanEvidenceRecoveryHint(hint) {
 }
 function koreanFindingReason(finding, profile) {
   switch (finding.reason) {
-    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
-      return "로컬 패키지가 package.json에서 private로 표시되어 있어, 공개 라이선스 메타데이터 누락을 내부 패키지 근거로 처리했습니다.";
     case `License expression is low risk for ${profile}.`:
       return `라이선스 표현식은 ${profile} 기준에서 낮은 위험입니다.`;
     case `License expression should be reviewed before shipping under ${profile}.`:
@@ -57769,8 +57745,6 @@ function spanishEvidenceRecoveryHint(hint) {
 }
 function spanishFindingReason(finding, profile) {
   switch (finding.reason) {
-    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
-      return "El paquete local está marcado como private en package.json, así que la falta de metadatos públicos de licencia se trata como evidencia de paquete interno.";
     case `License expression is low risk for ${profile}.`:
       return `La expresión de licencia es de bajo riesgo para ${profile}.`;
     case `License expression should be reviewed before shipping under ${profile}.`:
@@ -58022,8 +57996,6 @@ function frenchEvidenceRecoveryHint(hint) {
 }
 function frenchFindingReason(finding, profile) {
   switch (finding.reason) {
-    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
-      return "Le paquet local est marqué private dans package.json; les métadonnées publiques de licence manquantes sont donc traitées comme évidence de paquet interne.";
     case `License expression is low risk for ${profile}.`:
       return `L'expression de licence présente un faible risque pour ${profile}.`;
     case `License expression should be reviewed before shipping under ${profile}.`:
@@ -58275,8 +58247,6 @@ function chineseEvidenceRecoveryHint(hint) {
 }
 function chineseFindingReason(finding, profile) {
   switch (finding.reason) {
-    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
-      return "本地包在 package.json 中标记为 private，因此缺失的公开许可证元数据会被视为内部包证据。";
     case `License expression is low risk for ${profile}.`:
       return `许可证表达式对 ${profile} 来说是低风险。`;
     case `License expression should be reviewed before shipping under ${profile}.`:
@@ -58528,8 +58498,6 @@ function hindiEvidenceRecoveryHint(hint) {
 }
 function hindiFindingReason(finding, profile) {
   switch (finding.reason) {
-    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
-      return "स्थानीय पैकेज package.json में private है, इसलिए अनुपस्थित सार्वजनिक लाइसेंस metadata को internal package साक्ष्य माना गया है।";
     case `License expression is low risk for ${profile}.`:
       return `लाइसेंस expression ${profile} के लिए कम जोखिम है।`;
     case `License expression should be reviewed before shipping under ${profile}.`:
@@ -58781,8 +58749,6 @@ function japaneseEvidenceRecoveryHint(hint) {
 }
 function japaneseFindingReason(finding, profile) {
   switch (finding.reason) {
-    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
-      return "ローカルパッケージが package.json で private と示されているため、不足している公開ライセンスメタデータは内部パッケージ根拠として扱われます。";
     case `License expression is low risk for ${profile}.`:
       return `ライセンス expression は ${profile} では低リスクです。`;
     case `License expression should be reviewed before shipping under ${profile}.`:
@@ -59034,8 +59000,6 @@ function indonesianEvidenceRecoveryHint(hint) {
 }
 function indonesianFindingReason(finding, profile) {
   switch (finding.reason) {
-    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
-      return "Paket lokal ditandai private di package.json, jadi metadata lisensi publik yang hilang diperlakukan sebagai bukti paket internal.";
     case `License expression is low risk for ${profile}.`:
       return `License expression berisiko rendah untuk ${profile}.`;
     case `License expression should be reviewed before shipping under ${profile}.`:
@@ -59287,8 +59251,6 @@ function turkishEvidenceRecoveryHint(hint) {
 }
 function turkishFindingReason(finding, profile) {
   switch (finding.reason) {
-    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
-      return "Yerel paket package.json içinde private olarak işaretli, bu yüzden eksik genel lisans metadata'sı dahili paket kanıtı olarak değerlendirildi.";
     case `License expression is low risk for ${profile}.`:
       return `Lisans ifadesi ${profile} için düşük riskli.`;
     case `License expression should be reviewed before shipping under ${profile}.`:
@@ -59540,8 +59502,6 @@ function russianEvidenceRecoveryHint(hint) {
 }
 function russianFindingReason(finding, profile) {
   switch (finding.reason) {
-    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
-      return "Локальный пакет отмечен как private в package.json, поэтому отсутствующие публичные метаданные лицензии считаются доказательством внутреннего пакета.";
     case `License expression is low risk for ${profile}.`:
       return `Лицензионное выражение имеет низкий риск для ${profile}.`;
     case `License expression should be reviewed before shipping under ${profile}.`:
@@ -59793,8 +59753,6 @@ function germanEvidenceRecoveryHint(hint) {
 }
 function germanFindingReason(finding, profile) {
   switch (finding.reason) {
-    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
-      return "Das lokale Paket ist in package.json als private markiert, daher werden fehlende öffentliche Lizenzmetadaten als Nachweis für ein internes Paket behandelt.";
     case `License expression is low risk for ${profile}.`:
       return `Der Lizenzausdruck ist für ${profile} risikoarm.`;
     case `License expression should be reviewed before shipping under ${profile}.`:

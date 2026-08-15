@@ -238,8 +238,6 @@ function japaneseEvidenceRecoveryHint(hint: EvidenceRecoveryHint): string {
 
 function japaneseFindingReason(finding: RiskFinding, profile: string): string {
   switch (finding.reason) {
-    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
-      return "ローカルパッケージが package.json で private と示されているため、不足している公開ライセンスメタデータは内部パッケージ根拠として扱われます。";
     case `License expression is low risk for ${profile}.`:
       return `ライセンス expression は ${profile} では低リスクです。`;
     case `License expression should be reviewed before shipping under ${profile}.`:

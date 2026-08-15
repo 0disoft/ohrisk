@@ -8691,19 +8691,19 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         }>;
       };
       expect(payload.dependencyGraph.total).toBe(1);
-      expect(payload.licenses.missing).toBe(0);
-      expect(payload.risks.unknown).toBe(0);
-      expect(payload.risks.low).toBe(1);
+      expect(payload.licenses.missing).toBe(1);
+      expect(payload.risks.unknown).toBe(1);
+      expect(payload.risks.low).toBe(0);
       expect(payload.findings).toEqual([
         expect.objectContaining({
           packageId: "local-package@1.0.0",
-          severity: "low",
-          recommendation: "allow",
-          reason: "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.",
+          severity: "unknown",
+          recommendation: "collect-evidence",
+          reason: "Package metadata does not declare a license expression.",
           evidence: expect.arrayContaining([
-            "license: private package",
+            "license: missing",
             "package.json private: true",
-            "signals: internal-private"
+            "signals: missing"
           ])
         })
       ]);

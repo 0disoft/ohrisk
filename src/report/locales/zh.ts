@@ -238,8 +238,6 @@ function chineseEvidenceRecoveryHint(hint: EvidenceRecoveryHint): string {
 
 function chineseFindingReason(finding: RiskFinding, profile: string): string {
   switch (finding.reason) {
-    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
-      return "本地包在 package.json 中标记为 private，因此缺失的公开许可证元数据会被视为内部包证据。";
     case `License expression is low risk for ${profile}.`:
       return `许可证表达式对 ${profile} 来说是低风险。`;
     case `License expression should be reviewed before shipping under ${profile}.`:

@@ -238,8 +238,6 @@ function russianEvidenceRecoveryHint(hint: EvidenceRecoveryHint): string {
 
 function russianFindingReason(finding: RiskFinding, profile: string): string {
   switch (finding.reason) {
-    case "Local package is marked private in package.json, so missing public license metadata is treated as internal package evidence.":
-      return "Локальный пакет отмечен как private в package.json, поэтому отсутствующие публичные метаданные лицензии считаются доказательством внутреннего пакета.";
     case `License expression is low risk for ${profile}.`:
       return `Лицензионное выражение имеет низкий риск для ${profile}.`;
     case `License expression should be reviewed before shipping under ${profile}.`:
