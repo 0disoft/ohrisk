@@ -174,21 +174,24 @@ describe("Ohrisk GitHub Action", () => {
     const actionSource = readFileSync(path.join(repoRoot, "action.yml"), "utf8");
 
     expect(actionSource).toContain("require_relative_workspace_path");
+    expect(actionSource).toContain("require_relative_workspace_no_symlinks");
+    expect(actionSource).toContain('[[ "$value" =~ [[:cntrl:]] ]]');
+    expect(actionSource).toContain("must not contain control characters");
     expect(actionSource).toContain('[[ "$normalized" == /* || "$normalized" =~ ^[A-Za-z]: ]]');
     expect(actionSource).toContain('"."|./*|*/.|*/./*|*//*|*/)');
     expect(actionSource).toContain("must not contain empty or . path segments");
     expect(actionSource).toContain('if [ "$segment" = ".." ]; then');
     expect(actionSource).toContain(
-      'require_relative_workspace_path "lockfile" "$OHRISK_LOCKFILE"'
+      'require_relative_workspace_no_symlinks "lockfile" "$OHRISK_LOCKFILE"'
     );
     expect(actionSource).toContain(
       'require_relative_workspace_file "archive" "$OHRISK_ARCHIVE"'
     );
     expect(actionSource).toContain(
-      'require_relative_workspace_path "policy" "$OHRISK_POLICY"'
+      'require_relative_workspace_no_symlinks "policy" "$OHRISK_POLICY"'
     );
     expect(actionSource).toContain(
-      'require_relative_workspace_path "cache-dir" "$OHRISK_CACHE_DIR"'
+      'require_relative_workspace_no_symlinks "cache-dir" "$OHRISK_CACHE_DIR"'
     );
     expect(actionSource).toContain(
       'require_relative_workspace_path "output" "$OHRISK_OUTPUT"'
@@ -208,7 +211,8 @@ describe("Ohrisk GitHub Action", () => {
     expect(actionSource).toContain("OHRISK_ALLOW_HOSTS");
     expect(actionSource).toContain("tr ',' '\\n'");
     expect(actionSource).toContain('args+=("--allow-host" "$host")');
-    expect(actionSource).toContain('mkdir -p "$(dirname -- "$OHRISK_OUTPUT")"');
+    expect(actionSource).not.toContain('mkdir -p "$(dirname -- "$OHRISK_OUTPUT")"');
+    expect(actionSource).toContain('echo "report-path=$OHRISK_OUTPUT" >> "$GITHUB_OUTPUT"');
   });
 
   test("documents tagged, bundled, and offline action usage", () => {

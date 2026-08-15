@@ -53,8 +53,12 @@ ranges, Git references, and local package paths are rejected.
 The `lockfile`, `archive`, `policy`, `cache-dir`, and `output` inputs must be
 repository-relative paths. The action rejects absolute paths, Windows drive
 paths, UNC paths, empty segments, `.` segments, and `..` segments before the
-CLI runs. `archive` must additionally name an existing regular file inside the
-checked-out repository; symbolic-link traversal is rejected.
+CLI runs. Control characters are rejected. Existing path components for
+`lockfile`, `policy`, and `cache-dir` must not be symbolic links. `archive`
+must additionally name an existing regular file inside the checked-out
+repository, and symbolic-link traversal is rejected. The action never creates
+an output parent before invoking the CLI; the contained report writer performs
+and revalidates that operation.
 
 ## Network boundary
 

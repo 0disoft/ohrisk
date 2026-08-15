@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: b3304244077668c933ab1209d9200dc34d66d74361dcb145c4bd20ccb08fd220
+// ohrisk-action-source-sha256: 91a298362d29b14218b2649c788bb40928b23df275e6a9cb7deba1691d50824b
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19582,7 +19582,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.30";
+var OHRISK_VERSION = "1.14.31";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";

@@ -7,7 +7,7 @@ Examples for running Ohrisk in GitHub Actions.
 Use the tagged action for a reproducible PR gate:
 
 ```yaml
-- uses: 0disoft/ohrisk@v1.14.30
+- uses: 0disoft/ohrisk@v1.14.31
   with:
     prod: "true"
     fail-on: high
@@ -18,9 +18,9 @@ an npm version at workflow runtime. The optional `version` input accepts only an
 exact semantic version and asserts that the bundle contains that version:
 
 ```yaml
-- uses: 0disoft/ohrisk@v1.14.30
+- uses: 0disoft/ohrisk@v1.14.31
   with:
-    version: 1.14.30
+    version: 1.14.31
 ```
 
 Mutable npm tags, Git URLs, local paths, and version ranges are rejected. A
@@ -34,7 +34,7 @@ threshold.
 Generate an HTML report artifact:
 
 ```yaml
-- uses: 0disoft/ohrisk@v1.14.30
+- uses: 0disoft/ohrisk@v1.14.31
   with:
     command: scan
     format: html
@@ -50,7 +50,10 @@ Generate an HTML report artifact:
 The `output`, `lockfile`, `policy`, and `cache-dir` inputs must be
 repository-relative paths. Absolute paths, Windows drive paths, UNC paths,
 empty path segments, `.` segments, and `..` segments are rejected before the
-CLI runs.
+CLI runs. Control characters are rejected, and existing path components for
+`lockfile`, `policy`, and `cache-dir` must not be symbolic links. The action
+does not pre-create the output directory; the CLI's contained report writer
+owns that operation.
 
 Compare a pull request against a baseline ref with the bundled action:
 
@@ -59,7 +62,7 @@ Compare a pull request against a baseline ref with the bundled action:
   with:
     fetch-depth: 0
 
-- uses: 0disoft/ohrisk@v1.14.30
+- uses: 0disoft/ohrisk@v1.14.31
   with:
     command: diff
     baseline-ref: origin/main
@@ -82,11 +85,11 @@ CI:
 - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
   with:
     node-version: 24
-- run: npm install -g ohrisk@1.14.30
+- run: npm install -g ohrisk@1.14.31
 ```
 
 A global install is useful when several steps invoke Ohrisk. For one command,
-`npx ohrisk@1.14.30`, `pnpm dlx ohrisk@1.14.30`, or an equivalent exact-version
+`npx ohrisk@1.14.31`, `pnpm dlx ohrisk@1.14.31`, or an equivalent exact-version
 runner also works.
 
 ## PR gate
@@ -106,7 +109,7 @@ Commit `.ohrisk.yml` at the project root or pass a repository-relative policy
 file explicitly:
 
 ```yaml
-- uses: 0disoft/ohrisk@v1.14.30
+- uses: 0disoft/ohrisk@v1.14.31
   with:
     policy: compliance/ohrisk.yml
     prod: "true"

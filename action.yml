@@ -191,6 +191,11 @@ runs:
             exit 1
           fi
 
+          if [[ "$value" =~ [[:cntrl:]] ]]; then
+            echo "::error::${name} must not contain control characters."
+            exit 1
+          fi
+
           if [[ "$normalized" == /* || "$normalized" =~ ^[A-Za-z]: ]]; then
             echo "::error::${name} must be a repository-relative path."
             exit 1
@@ -207,6 +212,23 @@ runs:
           for segment in "${path_segments[@]}"; do
             if [ "$segment" = ".." ]; then
               echo "::error::${name} must not contain .. path segments."
+              exit 1
+            fi
+          done
+        }
+
+        require_relative_workspace_no_symlinks() {
+          local name="$1"
+          local value="$2"
+          local normalized="${value//\\//}"
+          local current="."
+
+          require_relative_workspace_path "$name" "$value"
+          IFS="/" read -r -a path_segments <<< "$normalized"
+          for segment in "${path_segments[@]}"; do
+            current="${current}/${segment}"
+            if [ -L "$current" ]; then
+              echo "::error::${name} must stay inside the repository and must not traverse symbolic links."
               exit 1
             fi
           done
@@ -306,7 +328,7 @@ runs:
         fi
 
         if [ -n "$OHRISK_LOCKFILE" ]; then
-          require_relative_workspace_path "lockfile" "$OHRISK_LOCKFILE"
+          require_relative_workspace_no_symlinks "lockfile" "$OHRISK_LOCKFILE"
           args+=("--lockfile" "$OHRISK_LOCKFILE")
         fi
 
@@ -316,7 +338,7 @@ runs:
         fi
 
         if [ -n "$OHRISK_POLICY" ]; then
-          require_relative_workspace_path "policy" "$OHRISK_POLICY"
+          require_relative_workspace_no_symlinks "policy" "$OHRISK_POLICY"
           args+=("--policy" "$OHRISK_POLICY")
         fi
 
@@ -338,7 +360,6 @@ runs:
 
         if [ -n "$OHRISK_OUTPUT" ]; then
           require_relative_workspace_path "output" "$OHRISK_OUTPUT"
-          mkdir -p "$(dirname -- "$OHRISK_OUTPUT")"
           args+=("--output" "$OHRISK_OUTPUT")
           echo "report-path=$OHRISK_OUTPUT" >> "$GITHUB_OUTPUT"
         fi
@@ -356,7 +377,7 @@ runs:
         fi
 
         if [ -n "$OHRISK_CACHE_DIR" ]; then
-          require_relative_workspace_path "cache-dir" "$OHRISK_CACHE_DIR"
+          require_relative_workspace_no_symlinks "cache-dir" "$OHRISK_CACHE_DIR"
           args+=("--cache-dir" "$OHRISK_CACHE_DIR")
         fi
 

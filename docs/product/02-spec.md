@@ -88,6 +88,9 @@ The composite action in `action.yml` runs the checked-in CLI bundle without npm
 resolution at workflow runtime. It supports `scan`, `ci`, and `diff`; diff
 requires a caller-provided baseline ref and caller-managed Git history.
 Repository-relative path validation for `lockfile`, `policy`, `cache-dir`, and
-`output` is part of the public action contract. The optional `archive` input is
+`output` is part of the public action contract. Control characters and
+symbolic-link traversal through existing input or cache path components are
+rejected, and output parents are created only by the CLI's contained writer.
+The optional `archive` input is
 a contained repository-relative regular file, is forwarded only for `scan` and
 `ci`, conflicts with `lockfile`, and remains compatible with `all`.

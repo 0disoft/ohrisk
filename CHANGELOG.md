@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The bundled GitHub Action now rejects control characters and symbolic-link
+  traversal in existing lockfile, policy, and cache path components. It also
+  leaves output-directory creation to the CLI's contained report writer.
 - Modern pub.dev lock records now take the SHA-256-verified archive path before
   project-local Pub evidence. Attacker-controlled `.dart_tool` or `.pub-cache`
   content can no longer bypass archive integrity and package identity checks.
