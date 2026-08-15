@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: d01662db03dc12f9c8e44848ed94b7d61135a3e41e6f27df085d5536935c5f97
+// ohrisk-action-source-sha256: 8a3b3df9f8edf18f3d7ddb4c75ba79a28dbbb49f6f2845b3c62aefbb5aa6de1a
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -17404,9 +17404,6 @@ import { readdirSync as readdirSync35, realpathSync as realpathSync9, statSync a
 import path92 from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
-// src/cli/args.ts
-import { isIP } from "node:net";
-
 // src/shared/errors.ts
 function createError(error) {
   return error;
@@ -18245,6 +18242,91 @@ function sanitizeGitDiagnostic(value) {
   return lastLine || "Git did not provide a diagnostic.";
 }
 
+// src/cli/option-values.ts
+import { isIP } from "node:net";
+function parseBoundedPositiveInteger(value, max) {
+  if (!/^[1-9][0-9]*$/.test(value)) {
+    return;
+  }
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed <= max ? parsed : undefined;
+}
+function parseDurationMilliseconds(value) {
+  const match = /^(\d+)(ms|s|m)?$/.exec(value.trim().toLowerCase());
+  if (!match?.[1]) {
+    return;
+  }
+  const amount = Number(match[1]);
+  const unit = match[2] ?? "ms";
+  const multiplier = unit === "m" ? 60000 : unit === "s" ? 1000 : 1;
+  const milliseconds = amount * multiplier;
+  return Number.isSafeInteger(milliseconds) ? milliseconds : undefined;
+}
+function parseCacheAgeMilliseconds(value) {
+  const match = /^(\d+)(ms|s|m|h|d)?$/.exec(value.trim().toLowerCase());
+  if (!match?.[1]) {
+    return;
+  }
+  const amount = Number(match[1]);
+  const unit = match[2] ?? "ms";
+  const multiplier = unit === "d" ? 86400000 : unit === "h" ? 3600000 : unit === "m" ? 60000 : unit === "s" ? 1000 : 1;
+  const milliseconds = amount * multiplier;
+  return Number.isSafeInteger(milliseconds) ? milliseconds : undefined;
+}
+function parseByteSize(value) {
+  const match = /^(\d+)(b|kb|mb|gb|tb|kib|mib|gib|tib)?$/i.exec(value.trim());
+  if (!match?.[1]) {
+    return;
+  }
+  const amount = Number(match[1]);
+  const unit = match[2]?.toLowerCase() ?? "b";
+  const multipliers = {
+    b: 1,
+    kb: 1000,
+    mb: 1e6,
+    gb: 1e9,
+    tb: 1000000000000,
+    kib: 1024,
+    mib: 1048576,
+    gib: 1073741824,
+    tib: 1099511627776
+  };
+  const bytes = amount * (multipliers[unit] ?? 0);
+  return Number.isSafeInteger(bytes) ? bytes : undefined;
+}
+function normalizeRegistryUrl(value) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/\.$/, "");
+    if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || !isAllowedRegistryHostname(host)) {
+      return;
+    }
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return;
+  }
+}
+function normalizeHostnameOption(value) {
+  const host = value.trim().toLowerCase().replace(/\.$/, "");
+  if (!host || host.includes(":") || host.includes("/") || host.includes("@")) {
+    return;
+  }
+  try {
+    const url = new URL(`https://${host}`);
+    return url.hostname === host && isAllowedRegistryHostname(host) ? host : undefined;
+  } catch {
+    return;
+  }
+}
+function isSafeRepositoryRelativePath(value) {
+  const normalized = value.replace(/\\/g, "/");
+  const segments = normalized.split("/");
+  return normalized !== "" && !normalized.startsWith("/") && !/^[A-Za-z]:/.test(normalized) && !normalized.includes("\x00") && segments.every((segment) => segment !== "" && segment !== "." && segment !== "..");
+}
+function isAllowedRegistryHostname(host) {
+  return isIP(host) === 0 && host !== "localhost" && !host.endsWith(".localhost");
+}
+
 // src/cli/args.ts
 var FAIL_ON_SEVERITIES = ["high", "unknown", "review", "low"];
 var SCAN_OUTPUT_FORMAT_OPTIONS = ["--json", "--sarif", "--markdown", "--html", "--cyclonedx"];
@@ -18980,93 +19062,11 @@ function invalidOptionValue(option, value, expected) {
     details: { option, value, expected }
   }));
 }
-function parseBoundedPositiveInteger(value, max) {
-  if (!/^[1-9][0-9]*$/.test(value)) {
-    return;
-  }
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed <= max ? parsed : undefined;
-}
-function parseDurationMilliseconds(value) {
-  const match = /^(\d+)(ms|s|m)?$/.exec(value.trim().toLowerCase());
-  if (!match?.[1]) {
-    return;
-  }
-  const amount = Number(match[1]);
-  const unit = match[2] ?? "ms";
-  const multiplier = unit === "m" ? 60000 : unit === "s" ? 1000 : 1;
-  const milliseconds = amount * multiplier;
-  return Number.isSafeInteger(milliseconds) ? milliseconds : undefined;
-}
-function parseCacheAgeMilliseconds(value) {
-  const match = /^(\d+)(ms|s|m|h|d)?$/.exec(value.trim().toLowerCase());
-  if (!match?.[1]) {
-    return;
-  }
-  const amount = Number(match[1]);
-  const unit = match[2] ?? "ms";
-  const multiplier = unit === "d" ? 86400000 : unit === "h" ? 3600000 : unit === "m" ? 60000 : unit === "s" ? 1000 : 1;
-  const milliseconds = amount * multiplier;
-  return Number.isSafeInteger(milliseconds) ? milliseconds : undefined;
-}
-function parseByteSize(value) {
-  const match = /^(\d+)(b|kb|mb|gb|tb|kib|mib|gib|tib)?$/i.exec(value.trim());
-  if (!match?.[1]) {
-    return;
-  }
-  const amount = Number(match[1]);
-  const unit = match[2]?.toLowerCase() ?? "b";
-  const multipliers = {
-    b: 1,
-    kb: 1000,
-    mb: 1e6,
-    gb: 1e9,
-    tb: 1000000000000,
-    kib: 1024,
-    mib: 1048576,
-    gib: 1073741824,
-    tib: 1099511627776
-  };
-  const bytes = amount * (multipliers[unit] ?? 0);
-  return Number.isSafeInteger(bytes) ? bytes : undefined;
-}
-function normalizeRegistryUrl(value) {
-  try {
-    const url = new URL(value);
-    const host = url.hostname.toLowerCase().replace(/\.$/, "");
-    if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || !isAllowedRegistryHostname(host)) {
-      return;
-    }
-    return url.toString().replace(/\/$/, "");
-  } catch {
-    return;
-  }
-}
-function normalizeHostnameOption(value) {
-  const host = value.trim().toLowerCase().replace(/\.$/, "");
-  if (!host || host.includes(":") || host.includes("/") || host.includes("@")) {
-    return;
-  }
-  try {
-    const url = new URL(`https://${host}`);
-    return url.hostname === host && isAllowedRegistryHostname(host) ? host : undefined;
-  } catch {
-    return;
-  }
-}
-function isAllowedRegistryHostname(host) {
-  return isIP(host) === 0 && host !== "localhost" && !host.endsWith(".localhost");
-}
 function isFailOnSeverity(value) {
   return FAIL_ON_SEVERITIES.includes(value);
 }
 function isRepositorySubmoduleMode(value) {
   return value === "ignore" || value === "reject";
-}
-function isSafeRepositoryRelativePath(value) {
-  const normalized = value.replace(/\\/g, "/");
-  const segments = normalized.split("/");
-  return normalized !== "" && !normalized.startsWith("/") && !/^[A-Za-z]:/.test(normalized) && !normalized.includes("\x00") && segments.every((segment) => segment !== "" && segment !== "." && segment !== "..");
 }
 function isHelpFlag(value) {
   return value === "--help" || value === "-h";

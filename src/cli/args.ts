@@ -1,5 +1,3 @@
-import { isIP } from "node:net";
-
 import { createError, type OhriskError } from "../shared/errors";
 import { isUsageProfile, USAGE_PROFILES, type UsageProfile } from "../policy/profiles";
 import type { RiskSeverity } from "../policy/types";
@@ -15,6 +13,15 @@ import {
   type RepositorySubmoduleMode
 } from "../repository/github-repository";
 import { err, isErr, ok, type Result } from "../shared/result";
+import {
+  isSafeRepositoryRelativePath,
+  normalizeHostnameOption,
+  normalizeRegistryUrl,
+  parseBoundedPositiveInteger,
+  parseByteSize,
+  parseCacheAgeMilliseconds,
+  parseDurationMilliseconds
+} from "./option-values";
 
 const FAIL_ON_SEVERITIES: RiskSeverity[] = ["high", "unknown", "review", "low"];
 const SCAN_OUTPUT_FORMAT_OPTIONS = ["--json", "--sarif", "--markdown", "--html", "--cyclonedx"];
@@ -1014,121 +1021,12 @@ function invalidOptionValue(
   );
 }
 
-function parseBoundedPositiveInteger(value: string, max: number): number | undefined {
-  if (!/^[1-9][0-9]*$/.test(value)) {
-    return undefined;
-  }
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed <= max ? parsed : undefined;
-}
-
-function parseDurationMilliseconds(value: string): number | undefined {
-  const match = /^(\d+)(ms|s|m)?$/.exec(value.trim().toLowerCase());
-  if (!match?.[1]) {
-    return undefined;
-  }
-  const amount = Number(match[1]);
-  const unit = match[2] ?? "ms";
-  const multiplier = unit === "m" ? 60_000 : unit === "s" ? 1_000 : 1;
-  const milliseconds = amount * multiplier;
-  return Number.isSafeInteger(milliseconds) ? milliseconds : undefined;
-}
-
-function parseCacheAgeMilliseconds(value: string): number | undefined {
-  const match = /^(\d+)(ms|s|m|h|d)?$/.exec(value.trim().toLowerCase());
-  if (!match?.[1]) {
-    return undefined;
-  }
-  const amount = Number(match[1]);
-  const unit = match[2] ?? "ms";
-  const multiplier = unit === "d"
-    ? 86_400_000
-    : unit === "h"
-      ? 3_600_000
-      : unit === "m"
-        ? 60_000
-        : unit === "s"
-          ? 1_000
-          : 1;
-  const milliseconds = amount * multiplier;
-  return Number.isSafeInteger(milliseconds) ? milliseconds : undefined;
-}
-
-function parseByteSize(value: string): number | undefined {
-  const match = /^(\d+)(b|kb|mb|gb|tb|kib|mib|gib|tib)?$/i.exec(value.trim());
-  if (!match?.[1]) {
-    return undefined;
-  }
-  const amount = Number(match[1]);
-  const unit = match[2]?.toLowerCase() ?? "b";
-  const multipliers: Readonly<Record<string, number>> = {
-    b: 1,
-    kb: 1_000,
-    mb: 1_000_000,
-    gb: 1_000_000_000,
-    tb: 1_000_000_000_000,
-    kib: 1_024,
-    mib: 1_048_576,
-    gib: 1_073_741_824,
-    tib: 1_099_511_627_776
-  };
-  const bytes = amount * (multipliers[unit] ?? 0);
-  return Number.isSafeInteger(bytes) ? bytes : undefined;
-}
-
-function normalizeRegistryUrl(value: string): string | undefined {
-  try {
-    const url = new URL(value);
-    const host = url.hostname.toLowerCase().replace(/\.$/, "");
-    if (
-      url.protocol !== "https:"
-      || url.username
-      || url.password
-      || url.search
-      || url.hash
-      || !isAllowedRegistryHostname(host)
-    ) {
-      return undefined;
-    }
-    return url.toString().replace(/\/$/, "");
-  } catch {
-    return undefined;
-  }
-}
-
-function normalizeHostnameOption(value: string): string | undefined {
-  const host = value.trim().toLowerCase().replace(/\.$/, "");
-  if (!host || host.includes(":") || host.includes("/") || host.includes("@")) {
-    return undefined;
-  }
-  try {
-    const url = new URL(`https://${host}`);
-    return url.hostname === host && isAllowedRegistryHostname(host) ? host : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function isAllowedRegistryHostname(host: string): boolean {
-  return isIP(host) === 0 && host !== "localhost" && !host.endsWith(".localhost");
-}
-
 function isFailOnSeverity(value: string): value is RiskSeverity {
   return (FAIL_ON_SEVERITIES as string[]).includes(value);
 }
 
 function isRepositorySubmoduleMode(value: string): value is RepositorySubmoduleMode {
   return value === "ignore" || value === "reject";
-}
-
-function isSafeRepositoryRelativePath(value: string): boolean {
-  const normalized = value.replace(/\\/g, "/");
-  const segments = normalized.split("/");
-  return normalized !== ""
-    && !normalized.startsWith("/")
-    && !/^[A-Za-z]:/.test(normalized)
-    && !normalized.includes("\0")
-    && segments.every((segment) => segment !== "" && segment !== "." && segment !== "..");
 }
 
 function isHelpFlag(value: string | undefined): boolean {
