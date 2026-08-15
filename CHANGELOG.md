@@ -2,6 +2,10 @@
 
 ## 1.15.0 - Unreleased
 
+- Development manifests now allow compatible updates within each reviewed
+  major using caret ranges while `bun.lock` continues to pin exact resolved
+  versions and integrity hashes. Mutable `latest` exceptions are no longer
+  permitted by source hygiene.
 - The 12-case license decision corpus now lives in a source-backed JSON fixture
   with a rationale per case. Public accuracy documentation reports exact metric
   denominators and explicitly rejects production accuracy claims from this

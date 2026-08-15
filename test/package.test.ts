@@ -44,12 +44,12 @@ describe("package metadata", () => {
     expect(packageJson.publishConfig?.access).toBe("public");
     expect(packageJson.repository?.url).toBe("git+https://github.com/0disoft/ohrisk.git");
     expect(packageJson.dependencies?.["@0disoft/laqu"]).toBeUndefined();
-    expect(packageJson.devDependencies?.["@0disoft/laqu"]).toBe("latest");
-    expect(packageJson.devDependencies?.["@types/bun"]).toBe("1.3.14");
-    expect(packageJson.devDependencies?.["@types/node"]).toBe("26.2.0");
-    expect(packageJson.devDependencies?.["@yarnpkg/lockfile"]).toBe("1.1.0");
-    expect(packageJson.devDependencies?.typescript).toBe("7.0.2");
-    expect(packageJson.devDependencies?.yaml).toBe("2.9.0");
+    expect(packageJson.devDependencies?.["@0disoft/laqu"]).toBe("^1.1.8");
+    expect(packageJson.devDependencies?.["@types/bun"]).toBe("^1.3.14");
+    expect(packageJson.devDependencies?.["@types/node"]).toBe("^26.2.0");
+    expect(packageJson.devDependencies?.["@yarnpkg/lockfile"]).toBe("^1.1.0");
+    expect(packageJson.devDependencies?.typescript).toBe("^7.0.2");
+    expect(packageJson.devDependencies?.yaml).toBe("^2.9.0");
 
     expect(packageJson.scripts?.build).toBe("bun scripts/build.ts");
     expect(packageJson.scripts?.["build:action"]).toBe("bun scripts/build-action.ts");

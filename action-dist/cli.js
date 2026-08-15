@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 3c51434d50a217d32430d2e48fd6c48dc8c5b58e26b6e34768254b18fb715ed2
+// ohrisk-action-source-sha256: 01b718e84fabad0b791eccb660ce511cf2a7c35056245ec3941cd47de8b603e3
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19728,12 +19728,12 @@ var package_default = {
     "schemas"
   ],
   devDependencies: {
-    "@0disoft/laqu": "latest",
-    "@types/bun": "1.3.14",
-    "@types/node": "26.2.0",
-    "@yarnpkg/lockfile": "1.1.0",
-    typescript: "7.0.2",
-    yaml: "2.9.0"
+    "@0disoft/laqu": "^1.1.8",
+    "@types/bun": "^1.3.14",
+    "@types/node": "^26.2.0",
+    "@yarnpkg/lockfile": "^1.1.0",
+    typescript: "^7.0.2",
+    yaml: "^2.9.0"
   }
 };
 
