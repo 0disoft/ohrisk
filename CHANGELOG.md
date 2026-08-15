@@ -2,6 +2,10 @@
 
 ## 1.15.0 - Unreleased
 
+- Repository community health now includes private vulnerability reporting,
+  supported-version and response targets, a focused contribution guide and
+  conduct policy, dedicated bug, license-result, and feature issue forms, and a
+  CLI-specific pull request template. Product documents now name their owner.
 - CI now runs the complete release and coverage gate once on Linux while
   Windows and macOS retain bounded filesystem, path, archive, cache, package,
   and installed-CLI smoke checks. Superseded runs are cancelled, and the

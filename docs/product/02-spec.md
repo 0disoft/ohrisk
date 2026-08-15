@@ -1,7 +1,7 @@
 # Product Specification
 
 - Status: Project-owned
-- Owner: UNASSIGNED
+- Owner: 0disoft
 
 ## Product Contract
 

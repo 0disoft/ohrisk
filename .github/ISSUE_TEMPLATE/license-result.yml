@@ -1,0 +1,54 @@
+name: License result correction
+description: Report a false positive, false negative, unknown, or evidence mismatch.
+title: "license-result: "
+labels:
+  - license-result
+body:
+  - type: markdown
+    attributes:
+      value: Use public evidence only. Remove credentials, private package data, and unrelated report contents.
+  - type: dropdown
+    id: result-kind
+    attributes:
+      label: Result kind
+      options:
+        - False positive
+        - False negative
+        - Unexpected unknown
+        - Evidence or scope mismatch
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Ohrisk version
+      placeholder: Output of ohrisk --version
+    validations:
+      required: true
+  - type: input
+    id: package
+    attributes:
+      label: Package and version
+      placeholder: Package URL or ecosystem coordinate
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed finding
+      description: Include profile, dependency scope, reason, and sanitized evidence.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected classification and rationale
+    validations:
+      required: true
+  - type: textarea
+    id: sources
+    attributes:
+      label: Authoritative public sources
+      description: Link package metadata, license files, registry records, or upstream documentation.
+    validations:
+      required: true

@@ -26,7 +26,7 @@ function extractSection(text: string, heading: string): string {
 }
 
 describe("documentation contract", () => {
-  test("README Documentation section links are package-safe GitHub docs URLs", () => {
+  test("README Documentation section links stay on reviewed repository documents", () => {
     const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
     const section = extractSection(readme, "## Documentation");
     expect(section).not.toBe("");
@@ -37,7 +37,7 @@ describe("documentation contract", () => {
 
     for (const link of links) {
       expect(link.url, `${link.text}: ${link.url}`).toMatch(
-        /^https:\/\/github\.com\/0disoft\/ohrisk\/blob\/main\/docs\/[\w/-]+\.md(?:#[\w.-]+)?$/
+        /^https:\/\/github\.com\/0disoft\/ohrisk\/blob\/main\/(?:docs\/[\w/-]+|SECURITY|CONTRIBUTING)\.md(?:#[\w.-]+)?$/
       );
     }
   });

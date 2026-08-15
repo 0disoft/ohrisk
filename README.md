@@ -816,6 +816,8 @@ bun run ../../../src/cli/main.ts scan --profile saas
 
 ## Documentation
 
+- [Security Policy](https://github.com/0disoft/ohrisk/blob/main/SECURITY.md) — Private vulnerability reporting and supported-version policy
+- [Contributing Guide](https://github.com/0disoft/ohrisk/blob/main/CONTRIBUTING.md) — Development workflow, change boundaries, and ecosystem additions
 - [Documentation Index](https://github.com/0disoft/ohrisk/blob/main/docs/README.md) — All guides in one place
 - [GitHub Actions Guide](https://github.com/0disoft/ohrisk/blob/main/docs/github-actions.md) — PR gates, comments, SARIF upload, and waiver drift checks
 - [Risky Demo](https://github.com/0disoft/ohrisk/blob/main/docs/risky-demo.md) — Run the bundled fixture to see high, review, unknown, and low findings

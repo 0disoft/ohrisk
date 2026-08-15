@@ -1,29 +1,15 @@
-## What changed
+## Problem
 
-## Why
+## Change
 
-## Related spec
+## User-visible impact
 
-## Related ADR
+<!-- Include CLI, report, schema, finding ID, waiver, or documentation changes. -->
 
-## API contract changes
+## Compatibility and security impact
 
-## DB schema changes
-
-## Hygiene file changes
-
-## Risk
+<!-- Note trust-boundary, network, archive, path, cache, migration, or rollback effects. -->
 
 ## Validation
 
-## Skipped validation and reasons
-
-## Design review checklist confirmation
-
-## Performance budget confirmation
-
-## Security baseline confirmation
-
-## Testing standard confirmation
-
-## Rollback or recovery path
+<!-- List exact commands and results. Explain skipped checks and remaining risk. -->

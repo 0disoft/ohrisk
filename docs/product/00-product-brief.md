@@ -1,7 +1,7 @@
 # Product Brief
 
 - Status: Project-owned
-- Owner: UNASSIGNED
+- Owner: 0disoft
 
 ## Purpose
 
