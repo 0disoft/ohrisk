@@ -95,7 +95,7 @@ import {
   type ScanReportInput
 } from "../report/scan-report";
 import { openReportFile, type ReportOpener } from "../report/open-report";
-import { writeReportFile, type ReportWriter } from "../report/write-output";
+import type { ReportWriter } from "../report/write-output";
 import {
   cloneGitHubRepository,
   type RepositoryCloner
@@ -114,6 +114,11 @@ import { err, isErr, ok, type Result } from "../shared/result";
 import { runCacheCommand } from "./cache-command";
 import type { CliCommand } from "./command";
 import { renderHelp } from "./help";
+import {
+  emitReport,
+  formatReportOpenWarning,
+  reportFormatLabel
+} from "./report-output";
 import {
   closeScanProgressReporter,
   createEvidenceProgressReporter,
@@ -2427,46 +2432,6 @@ function tryParseObject(input: string): Record<string, unknown> | undefined {
   }
 }
 
-function emitReport(input: {
-  contents: string;
-  outputPath: string | undefined;
-  io: CliIO;
-  suppressSuccessMessage?: boolean;
-}): Result<string | undefined, OhriskError> {
-  if (!input.outputPath) {
-    input.io.stdout(input.contents);
-    return ok(undefined);
-  }
-
-  const writer = input.io.writeReport ?? writeReportFile;
-  const written = writer({
-    cwd: input.io.cwd,
-    outputPath: input.outputPath,
-    contents: input.contents
-  });
-
-  if (isErr(written)) {
-    return written;
-  }
-
-  if (!input.suppressSuccessMessage) {
-    input.io.stderr(`Wrote report to ${written.value}`);
-  }
-  return ok(written.value);
-}
-
-function formatReportOpenWarning(error: OhriskError): string {
-  const opener =
-    typeof error.details?.opener === "string" && error.details.opener.trim() !== ""
-      ? ` with ${error.details.opener}`
-      : "";
-  const cause =
-    typeof error.details?.cause === "string" && error.details.cause.trim() !== ""
-      ? ` Cause: ${error.details.cause}`
-      : "";
-  return `Could not open report${opener}: ${error.message}${cause}`;
-}
-
 function redactTemporaryPath(error: OhriskError, temporaryRoot: string): OhriskError {
   return {
     ...error,
@@ -2503,26 +2468,6 @@ function redactTemporaryPathText(value: string, temporaryRoot: string): string {
     value
   );
 }
-
-function reportFormatLabel(command: Extract<CliCommand, { kind: "scan" | "ci" }>): string {
-  if (command.json) {
-    return "JSON";
-  }
-  if (command.sarif) {
-    return "SARIF";
-  }
-  if (command.markdown) {
-    return "Markdown";
-  }
-  if (command.html) {
-    return "HTML";
-  }
-  if (command.cyclonedx) {
-    return "CycloneDX";
-  }
-  return "terminal";
-}
-
 
 function renderVersion(): string {
   return `ohrisk ${OHRISK_VERSION}`;
