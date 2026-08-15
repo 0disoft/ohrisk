@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Archive scans now propagate the command cancellation signal through bounded
+  file reads, ZIP/TAR indexing, project discovery, and lazy entry
+  materialization. Already-cancelled scans stop before archive parsing, and
+  later cancellation is checked alongside the existing work-deadline
+  checkpoints without weakening archive integrity or expansion limits.
 - Remote repository checkout verification now measures the complete temporary
   staging tree while validating materialized files and building the discovery
   inventory in one directory pass. Git metadata still counts toward the 1 GiB

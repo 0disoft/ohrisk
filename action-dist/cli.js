@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 3f968b79fa18ebbb23c0f2a750dd1cd3d06e6e156defe2e1d3a5349212d6d6b8
+// ohrisk-action-source-sha256: 650e5fcc026b595a8c9017b95714c1e6f77dff0884bfbdb791813dcf4a1bea65
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19582,7 +19582,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.19";
+var OHRISK_VERSION = "1.14.20";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -41164,6 +41164,7 @@ function readArchiveFile(input) {
   const safeName = safeBasename(input.archivePath);
   try {
     const limits = resolveLimits(input.limits);
+    checkArchiveCancellation(input.signal, safeName);
     const cwd = realpathSync2(resolve(input.cwd));
     const filePath = realpathSync2(resolve(cwd, input.archivePath));
     const relativePath = relative(cwd, filePath);
@@ -41172,12 +41173,13 @@ function readArchiveFile(input) {
         basename: safeName
       });
     }
-    const bytes = readFileBytesWithLimit(filePath, limits.inputBytes, safeName);
+    const bytes = readFileBytesWithLimit(filePath, limits.inputBytes, safeName, input.signal);
     return readOwnedArchiveBuffer({
       displayName: relativePath.split(sep).join("/"),
       bytes,
       limits,
-      ...input.now ? { now: input.now } : {}
+      ...input.now ? { now: input.now } : {},
+      ...input.signal ? { signal: input.signal } : {}
     });
   } catch (cause) {
     return err(toOhriskError(cause, "ARCHIVE_READ_FAILED", "filesystem", safeName));
@@ -41187,6 +41189,7 @@ function readArchiveBytes(input) {
   const safeName = safeBasename(input.displayName);
   try {
     const limits = resolveLimits(input.limits);
+    checkArchiveCancellation(input.signal, safeName);
     enforceLimit("inputBytes", limits.inputBytes, input.bytes.byteLength, safeName);
     return readOwnedArchiveBuffer({
       ...input,
@@ -41202,7 +41205,7 @@ function readOwnedArchiveBuffer(input) {
   try {
     const limits = resolveLimits(input.limits);
     enforceLimit("inputBytes", limits.inputBytes, input.bytes.byteLength, safeName);
-    const budget = createBudget(limits, input.now);
+    const budget = createBudget(limits, input.now, input.signal);
     checkDeadline(budget, safeName);
     const format = detectFormat(input.bytes, input.formatHint, safeName);
     const indexed = format === "zip" ? parseZip(input.bytes, budget, safeName) : parseTarContainer(input.bytes, format, budget, safeName);
@@ -41852,9 +41855,10 @@ function resolveLimits(overrides) {
   }
   return resolved;
 }
-function readFileBytesWithLimit(filePath, maxBytes, archiveName) {
+function readFileBytesWithLimit(filePath, maxBytes, archiveName, signal) {
   let descriptor;
   try {
+    checkArchiveCancellation(signal, archiveName);
     descriptor = openSync3(filePath, "r");
     const initial = fstatSync(descriptor, { bigint: true });
     if (!initial.isFile()) {
@@ -41869,12 +41873,14 @@ function readFileBytesWithLimit(filePath, maxBytes, archiveName) {
     const bytes = Buffer.allocUnsafe(expectedBytes);
     let offset = 0;
     while (offset < expectedBytes) {
+      checkArchiveCancellation(signal, archiveName);
       const bytesRead = readSync3(descriptor, bytes, offset, expectedBytes - offset, offset);
       if (bytesRead === 0) {
         archiveFileChanged(archiveName);
       }
       offset += bytesRead;
     }
+    checkArchiveCancellation(signal, archiveName);
     const growthProbe = Buffer.allocUnsafe(1);
     const additionalBytes = readSync3(descriptor, growthProbe, 0, 1, expectedBytes);
     const final = fstatSync(descriptor, { bigint: true });
@@ -41899,11 +41905,12 @@ function archiveFileChanged(archiveName) {
     basename: archiveName
   });
 }
-function createBudget(limits, now) {
+function createBudget(limits, now, signal) {
   const clock = now ?? Date.now;
   return {
     limits,
     now: clock,
+    ...signal ? { signal } : {},
     startedAt: clock(),
     materializedBytes: 0
   };
@@ -41912,10 +41919,20 @@ function checkDeadline(budget, archiveName, entryPath) {
   checkDeadlineSince(budget, budget.startedAt, archiveName, entryPath);
 }
 function checkDeadlineSince(budget, startedAt, archiveName, entryPath) {
+  checkArchiveCancellation(budget.signal, archiveName, entryPath);
   const observed = Math.max(0, budget.now() - startedAt);
   if (observed > budget.limits.workDeadlineMs) {
     limitFailure("workDeadlineMs", budget.limits.workDeadlineMs, observed, archiveName, entryPath);
   }
+}
+function checkArchiveCancellation(signal, archiveName, entryPath) {
+  if (!signal?.aborted)
+    return;
+  fail("ARCHIVE_READ_FAILED", "invalid_input", "Archive operation was cancelled.", {
+    basename: archiveName,
+    reason: "cancelled",
+    ...entryPath ? { entryPath } : {}
+  });
 }
 function chargeMaterialization(budget, amount, archiveName, entryPath) {
   const observed = safeAdd(budget.materializedBytes, amount, archiveName);
@@ -62362,7 +62379,8 @@ async function scanProject(input) {
       allLockfiles: input.allLockfiles,
       prodOnly: input.prodOnly,
       now: input.now,
-      ...input.progress ? { progress: input.progress } : {}
+      ...input.progress ? { progress: input.progress } : {},
+      ...input.signal ? { signal: input.signal } : {}
     });
     if (isErr(loaded)) {
       return loaded;
@@ -62449,7 +62467,8 @@ function loadArchiveProjectGraph(input) {
   const archive = readArchiveFile({
     cwd: input.cwd,
     archivePath: input.archivePath,
-    now: input.now
+    now: input.now,
+    ...input.signal ? { signal: input.signal } : {}
   });
   if (isErr(archive)) {
     return archive;

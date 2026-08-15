@@ -55,6 +55,7 @@ type InternalErrorDetails = {
   basename?: unknown;
   entryPath?: unknown;
   format?: unknown;
+  reason?: unknown;
   limit?: unknown;
   max?: unknown;
   observed?: unknown;
@@ -83,6 +84,7 @@ class ArchiveFailure extends Error {
 type Budget = {
   limits: ArchiveLimits;
   now: () => number;
+  signal?: AbortSignal;
   startedAt: number;
   materializedBytes: number;
 };
@@ -115,6 +117,7 @@ export function readArchiveFile(
 
   try {
     const limits = resolveLimits(input.limits);
+    checkArchiveCancellation(input.signal, safeName);
     const cwd = realpathSync(resolve(input.cwd));
     const filePath = realpathSync(resolve(cwd, input.archivePath));
     const relativePath = relative(cwd, filePath);
@@ -124,12 +127,18 @@ export function readArchiveFile(
       });
     }
 
-    const bytes = readFileBytesWithLimit(filePath, limits.inputBytes, safeName);
+    const bytes = readFileBytesWithLimit(
+      filePath,
+      limits.inputBytes,
+      safeName,
+      input.signal
+    );
     return readOwnedArchiveBuffer({
       displayName: relativePath.split(sep).join("/"),
       bytes,
       limits,
-      ...(input.now ? { now: input.now } : {})
+      ...(input.now ? { now: input.now } : {}),
+      ...(input.signal ? { signal: input.signal } : {})
     });
   } catch (cause) {
     return err(toOhriskError(cause, "ARCHIVE_READ_FAILED", "filesystem", safeName));
@@ -143,6 +152,7 @@ export function readArchiveBytes(
 
   try {
     const limits = resolveLimits(input.limits);
+    checkArchiveCancellation(input.signal, safeName);
     enforceLimit("inputBytes", limits.inputBytes, input.bytes.byteLength, safeName);
     return readOwnedArchiveBuffer({
       ...input,
@@ -169,7 +179,7 @@ function readOwnedArchiveBuffer(
     const limits = resolveLimits(input.limits);
     enforceLimit("inputBytes", limits.inputBytes, input.bytes.byteLength, safeName);
 
-    const budget = createBudget(limits, input.now);
+    const budget = createBudget(limits, input.now, input.signal);
     checkDeadline(budget, safeName);
     const format = detectFormat(input.bytes, input.formatHint, safeName);
     const indexed = format === "zip"
@@ -992,9 +1002,15 @@ function resolveLimits(overrides: Partial<ArchiveLimits> | undefined): ArchiveLi
   return resolved;
 }
 
-function readFileBytesWithLimit(filePath: string, maxBytes: number, archiveName: string): Buffer {
+function readFileBytesWithLimit(
+  filePath: string,
+  maxBytes: number,
+  archiveName: string,
+  signal?: AbortSignal
+): Buffer {
   let descriptor: number | undefined;
   try {
+    checkArchiveCancellation(signal, archiveName);
     descriptor = openSync(filePath, "r");
     const initial = fstatSync(descriptor, { bigint: true });
     if (!initial.isFile()) {
@@ -1010,12 +1026,14 @@ function readFileBytesWithLimit(filePath: string, maxBytes: number, archiveName:
     const bytes = Buffer.allocUnsafe(expectedBytes);
     let offset = 0;
     while (offset < expectedBytes) {
+      checkArchiveCancellation(signal, archiveName);
       const bytesRead = readSync(descriptor, bytes, offset, expectedBytes - offset, offset);
       if (bytesRead === 0) {
         archiveFileChanged(archiveName);
       }
       offset += bytesRead;
     }
+    checkArchiveCancellation(signal, archiveName);
 
     const growthProbe = Buffer.allocUnsafe(1);
     const additionalBytes = readSync(descriptor, growthProbe, 0, 1, expectedBytes);
@@ -1058,11 +1076,16 @@ function archiveFileChanged(archiveName: string): never {
   });
 }
 
-function createBudget(limits: ArchiveLimits, now: (() => number) | undefined): Budget {
+function createBudget(
+  limits: ArchiveLimits,
+  now: (() => number) | undefined,
+  signal: AbortSignal | undefined
+): Budget {
   const clock = now ?? Date.now;
   return {
     limits,
     now: clock,
+    ...(signal ? { signal } : {}),
     startedAt: clock(),
     materializedBytes: 0
   };
@@ -1078,10 +1101,24 @@ function checkDeadlineSince(
   archiveName: string,
   entryPath?: string
 ): void {
+  checkArchiveCancellation(budget.signal, archiveName, entryPath);
   const observed = Math.max(0, budget.now() - startedAt);
   if (observed > budget.limits.workDeadlineMs) {
     limitFailure("workDeadlineMs", budget.limits.workDeadlineMs, observed, archiveName, entryPath);
   }
+}
+
+function checkArchiveCancellation(
+  signal: AbortSignal | undefined,
+  archiveName: string,
+  entryPath?: string
+): void {
+  if (!signal?.aborted) return;
+  fail("ARCHIVE_READ_FAILED", "invalid_input", "Archive operation was cancelled.", {
+    basename: archiveName,
+    reason: "cancelled",
+    ...(entryPath ? { entryPath } : {})
+  });
 }
 
 function chargeMaterialization(

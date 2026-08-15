@@ -229,6 +229,32 @@ describe("archive reader", () => {
     expect(errorCode(archive.value.readEntry("data.txt"))).toBe("ARCHIVE_INTEGRITY_FAILED");
   });
 
+  test("stops archive indexing and lazy materialization after cancellation", () => {
+    const preAborted = new AbortController();
+    preAborted.abort();
+    const indexed = readArchiveBytes({
+      displayName: "cancelled.zip",
+      bytes: createZip({ "data.txt": "unused" }),
+      signal: preAborted.signal
+    });
+    expect(errorCode(indexed)).toBe("ARCHIVE_READ_FAILED");
+    if (!indexed.ok) expect(indexed.error.details?.reason).toBe("cancelled");
+
+    const controller = new AbortController();
+    const archive = readArchiveBytes({
+      displayName: "cancel-lazy.zip",
+      bytes: createZip({ "data.txt": "crc protected" }),
+      signal: controller.signal
+    });
+    expect(archive.ok).toBe(true);
+    if (!archive.ok) return;
+
+    controller.abort();
+    const materialized = archive.value.readEntry("data.txt");
+    expect(errorCode(materialized)).toBe("ARCHIVE_READ_FAILED");
+    if (!materialized.ok) expect(materialized.error.details?.reason).toBe("cancelled");
+  });
+
   test("starts a fresh deadline for lazy ZIP materialization after the source was idle", () => {
     let now = 0;
     const archive = readArchiveBytes({

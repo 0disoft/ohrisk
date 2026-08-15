@@ -27,6 +27,12 @@ maintenance stamp. Synchronous filesystem operations already in progress cannot
 be preempted mid-call; cancellation is checked between traversal and mutation
 steps.
 
+Archive file reads, ZIP/TAR indexing, archived project discovery, and lazy
+entry materialization use the same cancellation signal at their bounded work
+checkpoints. A synchronous filesystem or decompression call already in progress
+cannot be preempted mid-call; the next checkpoint terminates the archive scan
+without producing a report.
+
 ## Commands
 
 | Command | Contract |

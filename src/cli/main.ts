@@ -817,7 +817,8 @@ async function scanProject(input: {
       allLockfiles: input.allLockfiles,
       prodOnly: input.prodOnly,
       now: input.now,
-      ...(input.progress ? { progress: input.progress } : {})
+      ...(input.progress ? { progress: input.progress } : {}),
+      ...(input.signal ? { signal: input.signal } : {})
     });
     if (isErr(loaded)) {
       return loaded;
@@ -927,6 +928,7 @@ function loadArchiveProjectGraph(input: {
   prodOnly: boolean;
   now: ScanClock;
   progress?: ScanProgressReporter;
+  signal?: AbortSignal;
 }): Result<{
   project: ProjectInput;
   scanGraph: DependencyGraph;
@@ -935,7 +937,8 @@ function loadArchiveProjectGraph(input: {
   const archive = readArchiveFile({
     cwd: input.cwd,
     archivePath: input.archivePath,
-    now: input.now
+    now: input.now,
+    ...(input.signal ? { signal: input.signal } : {})
   });
   if (isErr(archive)) {
     return archive;

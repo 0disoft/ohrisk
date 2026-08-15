@@ -44,6 +44,7 @@ export type ReadArchiveFileInput = {
   archivePath: string;
   limits?: Partial<ArchiveLimits>;
   now?: () => number;
+  signal?: AbortSignal;
 };
 
 export type ReadArchiveBytesInput = {
@@ -52,4 +53,5 @@ export type ReadArchiveBytesInput = {
   formatHint?: ArchiveFormat;
   limits?: Partial<ArchiveLimits>;
   now?: () => number;
+  signal?: AbortSignal;
 };
