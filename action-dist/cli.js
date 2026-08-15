@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 279823748d144a11f850a2b86367dbb9af613f8b041162dca45acd583183db56
+// ohrisk-action-source-sha256: 861920db3d5e615fd99461a582d3f0fdd364b455dc50d47a8c530e089749928d
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19596,7 +19596,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.46";
+var OHRISK_VERSION = "1.14.47";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -42281,9 +42281,23 @@ function cacheMaintenanceIsRecent(rootDir, now) {
 function cacheMaintenanceStampIsRecent(stampPath, now) {
   try {
     const stamp = lstatSync3(stampPath);
-    return stamp.isFile() && now >= stamp.mtimeMs && now - stamp.mtimeMs < CACHE_MAINTENANCE_COOLDOWN_MS;
+    const recordedAt = readCacheMaintenanceStampTimestamp(stampPath, stamp.size) ?? stamp.mtimeMs;
+    return stamp.isFile() && now >= recordedAt && now - recordedAt < CACHE_MAINTENANCE_COOLDOWN_MS;
   } catch {
     return false;
+  }
+}
+function readCacheMaintenanceStampTimestamp(stampPath, size) {
+  if (size < 2 || size > 32)
+    return;
+  try {
+    const raw = readFileSync(stampPath, "utf8");
+    if (!/^(?:0|[1-9]\d*)\n$/u.test(raw))
+      return;
+    const timestamp = Number(raw.slice(0, -1));
+    return Number.isSafeInteger(timestamp) && timestamp >= 0 ? timestamp : undefined;
+  } catch {
+    return;
   }
 }
 function acquireCacheMaintenanceLock(lockPath, now) {

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Automatic artifact-cache maintenance now honors the logical timestamp stored
+  in its cooldown stamp before falling back to filesystem metadata. Filesystems
+  that record an `mtime` after the captured maintenance time no longer trigger
+  an immediate redundant retry after an expired maintenance budget.
 - Shared artifact evidence classification now recognizes third-party notice and
   license bundles, `COPYRIGHT`, `AUTHORS`, `PATENTS`, `LEGAL`, `.license`
   sidecars, and files directly inside `LICENSES/`. Missing-evidence diagnostics

@@ -327,6 +327,7 @@ describe("persistent artifact cache", () => {
     try {
       const cache = createArtifactCache(root, {
         maxSizeBytes: 4,
+        now: () => 1_000,
         maintenanceBudgetMs: 6,
         maintenanceClock: () => clock++
       });

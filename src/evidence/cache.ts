@@ -354,11 +354,24 @@ function cacheMaintenanceIsRecent(rootDir: string, now: number): boolean {
 function cacheMaintenanceStampIsRecent(stampPath: string, now: number): boolean {
   try {
     const stamp = lstatSync(stampPath);
+    const recordedAt = readCacheMaintenanceStampTimestamp(stampPath, stamp.size) ?? stamp.mtimeMs;
     return stamp.isFile()
-      && now >= stamp.mtimeMs
-      && now - stamp.mtimeMs < CACHE_MAINTENANCE_COOLDOWN_MS;
+      && now >= recordedAt
+      && now - recordedAt < CACHE_MAINTENANCE_COOLDOWN_MS;
   } catch {
     return false;
+  }
+}
+
+function readCacheMaintenanceStampTimestamp(stampPath: string, size: number): number | undefined {
+  if (size < 2 || size > 32) return undefined;
+  try {
+    const raw = readFileSync(stampPath, "utf8");
+    if (!/^(?:0|[1-9]\d*)\n$/u.test(raw)) return undefined;
+    const timestamp = Number(raw.slice(0, -1));
+    return Number.isSafeInteger(timestamp) && timestamp >= 0 ? timestamp : undefined;
+  } catch {
+    return undefined;
   }
 }
 
