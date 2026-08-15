@@ -95,7 +95,8 @@ describe("package metadata", () => {
 
     expect(mainEntrypoint.startsWith("#!/usr/bin/env node")).toBe(true);
     expect(mainEntrypoint).toContain("isCliEntrypoint(import.meta.url, process.argv[1])");
-    expect(versionSource).toContain(`OHRISK_VERSION = "${packageVersion}"`);
+    expect(versionSource).toContain('from "../../package.json" with { type: "json" }');
+    expect(versionSource).toContain("packageMetadata.version");
     expect(buildScript).toContain("assertVersionContract()");
     expect(buildScript).toContain('rmSync("dist"');
     expect(buildScript).toContain('rmSync("action-dist"');
@@ -106,6 +107,7 @@ describe("package metadata", () => {
     expect(bundleScript).toContain("assertPortableCliBundle(bundlePath)");
     expect(bundleScript).not.toContain("${process.platform}");
     expect(bundleScript).toContain("assertBuiltCliVersion");
+    expect(bundleScript).not.toContain("readSourceVersion");
     expect(actionCheck).toContain("action-dist/cli.js is stale");
     expect(actionCheck).toContain("actionBundleSourceFingerprint()");
     expect(actionCheck).toContain("assertBuiltCliVersion(freshBundle, packageVersion)");

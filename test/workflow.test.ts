@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const packageVersion = readPackageVersion();
+const publicVersion = readLatestReleasedVersion();
 const CHECKOUT_ACTION =
   "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0";
 const SETUP_NODE_ACTION =
@@ -76,10 +76,16 @@ describe("npm publish workflow", () => {
     expect(workflow).toContain('npm view "$package_spec" dist.integrity');
     expect(workflow).not.toContain('npm view "${package_name}" version');
     expect(workflow).not.toContain('npm view "${package_name}" dist.tarball');
-    expect(workflow).toContain("CHANGELOG.md does not contain");
+    expect(workflow).toContain("run: bun run release:notes > release-notes.md");
     expect(workflow).toContain("gh release create \"$GITHUB_REF_NAME\"");
+    expect(workflow.indexOf("- name: Write release notes")).toBeGreaterThan(
+      workflow.indexOf("- name: Run release verification")
+    );
+    expect(workflow.indexOf("- name: Write release notes")).toBeLessThan(
+      workflow.indexOf("- name: Publish package")
+    );
     expect(workflow).not.toMatch(/uses:\s+[^\s]+@v\d+/);
-    expect(workflow).not.toContain("release:");
+    expect(workflow).not.toMatch(/^\s+release:\s*$/m);
   });
 });
 
@@ -221,9 +227,9 @@ describe("Ohrisk GitHub Action", () => {
     const docs = readFileSync(path.join(repoRoot, "docs", "ci.md"), "utf8");
 
     expect(docs).toContain("## Dedicated action");
-    expect(docs).toContain(`uses: 0disoft/ohrisk@v${packageVersion}`);
+    expect(docs).toContain(`uses: 0disoft/ohrisk@v${publicVersion}`);
     expect(docs).toContain("contains its own bundled `ohrisk` CLI");
-    expect(docs).toContain(`version: ${packageVersion}`);
+    expect(docs).toContain(`version: ${publicVersion}`);
     expect(docs).toContain("Mutable npm tags");
     expect(docs).toContain("format: html");
     expect(docs).toContain("path: reports/ohrisk.html");
@@ -241,14 +247,9 @@ describe("Ohrisk GitHub Action", () => {
   });
 });
 
-function readPackageVersion(): string {
-  const packageJson = JSON.parse(
-    readFileSync(path.join(repoRoot, "package.json"), "utf8")
-  ) as { version?: unknown };
-
-  if (typeof packageJson.version !== "string") {
-    throw new Error("package.json must contain a string version.");
-  }
-
-  return packageJson.version;
+function readLatestReleasedVersion(): string {
+  const changelog = readFileSync(path.join(repoRoot, "CHANGELOG.md"), "utf8");
+  const version = /^##\s+(\d+\.\d+\.\d+)\s+-\s+\d{4}-\d{2}-\d{2}\s*$/m.exec(changelog)?.[1];
+  if (!version) throw new Error("CHANGELOG.md must contain a dated release section.");
+  return version;
 }

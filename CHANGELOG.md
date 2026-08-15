@@ -1,7 +1,11 @@
 # Changelog
 
-## Unreleased
+## 1.15.0 - Unreleased
 
+- Release preparation now validates dated release notes before npm publication,
+  keeps public usage examples on the latest published release while a candidate
+  remains unreleased, and derives the CLI version from `package.json` instead
+  of maintaining a second literal version constant.
 - Automatic artifact-cache maintenance now honors the logical timestamp stored
   in its cooldown stamp before falling back to filesystem metadata. Filesystems
   that record an `mtime` after the captured maintenance time no longer trigger

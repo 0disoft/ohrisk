@@ -1,6 +1,6 @@
 {
   "name": "ohrisk",
-  "version": "1.14.47",
+  "version": "1.15.0",
   "description": "Catch open-source license risk before your PR ships.",
   "license": "MIT",
   "type": "module",
@@ -117,6 +117,7 @@
     "lint": "tsc -p tsconfig.lint.json && bun scripts/check-source-hygiene.ts",
     "format:check": "bun scripts/check-format.ts",
     "version:sync": "bun scripts/sync-version-references.ts",
+    "release:notes": "bun scripts/extract-release-notes.ts",
     "verify:docs": "bun scripts/check-version-references.ts",
     "check:action-bundle": "bun scripts/check-action-bundle.ts",
     "check": "bun run format:check && bun run lint && bun run typecheck && bun run verify:docs && bun run test:schemas && bun test && bun run test:fuzz && bun run check:action-bundle",

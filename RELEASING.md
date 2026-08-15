@@ -14,12 +14,18 @@ settings.
   `ohrisk` package.
 - The npm registry does not already contain the release version.
 - GitHub Actions billing is available for the automated publish workflow.
+- `CHANGELOG.md` contains a dated section for the exact `package.json` version;
+  an `Unreleased` candidate heading is intentionally rejected.
+- `git ls-remote --tags origin refs/tags/v1.15.0` prints no existing remote tag.
 
 ## Local Gate
 
-Run the release-ready local gate before tagging:
+Synchronize candidate and public documentation, extract the exact release notes,
+and run the release-ready local gate before tagging:
 
 ```bash
+bun run version:sync
+bun run release:notes > release-notes.md
 bun run verify:release
 ```
 
@@ -39,16 +45,21 @@ file's example tag when needed, push `main`, then push a version tag matching
 `package.json`:
 
 ```bash
-git tag v1.14.47
-git push origin v1.14.47
+git tag v1.15.0
+git push origin v1.15.0
 ```
 
 The publish workflow verifies that the tag version matches `package.json`, runs
-the local release gate, publishes the package to npm when that exact version is
-not already present, verifies the exact `package@version` registry metadata
-(version, tarball URL, and integrity), and creates a GitHub Release from the
-matching `CHANGELOG.md` section. The postcheck does not depend on the mutable
-`latest` dist-tag.
+the local release gate, and extracts a dated, non-empty `CHANGELOG.md` section
+before any irreversible registry write. It then publishes the package to npm
+when that exact version is not already present, verifies the exact
+`package@version` registry metadata (version, tarball URL, and integrity), and
+creates a GitHub Release from the prevalidated notes. The postcheck does not
+depend on the mutable `latest` dist-tag.
+
+Public install and Action examples track the latest dated changelog release,
+while this file tracks the candidate package version. This keeps `main`
+documentation runnable while the next version is still marked `Unreleased`.
 
 ## Manual Recovery
 
@@ -58,9 +69,9 @@ locally after confirming npm authentication:
 ```bash
 npm whoami
 npm publish --access public --provenance
-npm view ohrisk@1.14.47 version
-npm view ohrisk@1.14.47 dist.tarball
-npm view ohrisk@1.14.47 dist.integrity
+npm view ohrisk@1.15.0 version
+npm view ohrisk@1.15.0 dist.tarball
+npm view ohrisk@1.15.0 dist.integrity
 ```
 
 After manual recovery, create or update the matching GitHub Release using the

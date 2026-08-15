@@ -1,20 +1,23 @@
 import { readFileSync } from "node:fs";
 
 import {
-  VERSION_REFERENCE_FILES,
+  CANDIDATE_VERSION_REFERENCE_FILES,
+  PUBLIC_VERSION_REFERENCE_FILES,
+  readLatestReleasedVersion,
   readPackageVersion,
-  synchronizedVersionText
+  synchronizedCandidateVersionText,
+  synchronizedPublicVersionText
 } from "./version-references";
 
-const version = readPackageVersion();
+const packageVersion = readPackageVersion();
+const releasedVersion = readLatestReleasedVersion();
 const failures: string[] = [];
 
-for (const file of VERSION_REFERENCE_FILES) {
-  const current = readFileSync(file, "utf8");
-  const expected = synchronizedVersionText(current, version);
-  if (expected !== current) {
-    failures.push(`${file}: run bun run version:sync`);
-  }
+for (const file of PUBLIC_VERSION_REFERENCE_FILES) {
+  check(file, releasedVersion, synchronizedPublicVersionText);
+}
+for (const file of CANDIDATE_VERSION_REFERENCE_FILES) {
+  check(file, packageVersion, synchronizedCandidateVersionText);
 }
 
 const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
@@ -45,4 +48,15 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`Version reference contract passed for Ohrisk ${version}.`);
+console.log(`Version reference contract passed (public ${releasedVersion}, candidate ${packageVersion}).`);
+
+function check(
+  file: string,
+  version: string,
+  transform: (text: string, version: string) => string
+): void {
+  const current = readFileSync(file, "utf8");
+  if (transform(current, version) !== current) {
+    failures.push(`${file}: run bun run version:sync`);
+  }
+}

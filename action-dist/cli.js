@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 861920db3d5e615fd99461a582d3f0fdd364b455dc50d47a8c530e089749928d
+// ohrisk-action-source-sha256: ff00e8771b29dd4180d74e2108c6aba6d62f50167e2c0a2d27e1af6331c1f887
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19594,9 +19594,150 @@ function isCommandCancelled(signal) {
 function renderCommandCancelled(commandLabel) {
   return `${commandLabel} cancelled.`;
 }
+// package.json
+var package_default = {
+  name: "ohrisk",
+  version: "1.15.0",
+  description: "Catch open-source license risk before your PR ships.",
+  license: "MIT",
+  type: "module",
+  packageManager: "bun@1.3.14",
+  engines: {
+    node: ">=24.0.0"
+  },
+  bin: {
+    ohrisk: "dist/cli.js"
+  },
+  repository: {
+    type: "git",
+    url: "git+https://github.com/0disoft/ohrisk.git"
+  },
+  bugs: {
+    url: "https://github.com/0disoft/ohrisk/issues"
+  },
+  homepage: "https://github.com/0disoft/ohrisk#readme",
+  keywords: [
+    "bun",
+    "bazel",
+    "bzlmod",
+    "cargo",
+    "carthage",
+    "central-package-management",
+    "cli",
+    "cocoapods",
+    "compliance",
+    "conan",
+    "conda",
+    "composer",
+    "cpan",
+    "cpanfile",
+    "cpp",
+    "cran",
+    "cyclonedx",
+    "dart",
+    "deno",
+    "dotnet",
+    "elixir",
+    "environment-yml",
+    "erlang",
+    "flake-lock",
+    "gem",
+    "go",
+    "go-work",
+    "golang",
+    "flutter",
+    "gradle",
+    "hackage",
+    "haskell",
+    "helm",
+    "hex",
+    "hcl",
+    "infrastructure",
+    "java",
+    "julia",
+    "license",
+    "lua",
+    "luarocks",
+    "maven",
+    "maven-bom",
+    "nix",
+    "nuget",
+    "npm",
+    "open-source",
+    "pdm",
+    "pdm-lock",
+    "perl",
+    "php",
+    "pipenv",
+    "pipfile",
+    "poetry",
+    "pnpm",
+    "pypi",
+    "pub",
+    "python",
+    "pylock",
+    "r",
+    "rebar",
+    "renv",
+    "requirements",
+    "rebar3",
+    "risk",
+    "ruby",
+    "rust",
+    "sbom",
+    "spdx",
+    "stack",
+    "supply-chain",
+    "swift",
+    "swiftpm",
+    "terraform",
+    "unity",
+    "upm",
+    "uv",
+    "vcpkg",
+    "version-catalog",
+    "yarn",
+    "zig"
+  ],
+  publishConfig: {
+    access: "public"
+  },
+  scripts: {
+    build: "bun scripts/build.ts",
+    "build:action": "bun scripts/build-action.ts",
+    prepack: "bun scripts/build.ts",
+    scan: "bun run src/cli/main.ts scan",
+    test: "bun test",
+    "test:coverage": "bun scripts/check-coverage.ts",
+    "test:fuzz": "bun test test/parser-fuzz.test.ts",
+    typecheck: "tsc -p tsconfig.json",
+    lint: "tsc -p tsconfig.lint.json && bun scripts/check-source-hygiene.ts",
+    "format:check": "bun scripts/check-format.ts",
+    "version:sync": "bun scripts/sync-version-references.ts",
+    "release:notes": "bun scripts/extract-release-notes.ts",
+    "verify:docs": "bun scripts/check-version-references.ts",
+    "check:action-bundle": "bun scripts/check-action-bundle.ts",
+    check: "bun run format:check && bun run lint && bun run typecheck && bun run verify:docs && bun run test:schemas && bun test && bun run test:fuzz && bun run check:action-bundle",
+    "verify:release": "bun run check && bun run test:coverage && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts",
+    "test:schemas": "bun test test/report-schema.test.ts"
+  },
+  files: [
+    "CHANGELOG.md",
+    "dist",
+    "schemas"
+  ],
+  devDependencies: {
+    "@0disoft/laqu": "latest",
+    "@types/bun": "1.3.14",
+    "@types/node": "26.2.0",
+    "@yarnpkg/lockfile": "1.1.0",
+    typescript: "7.0.2",
+    yaml: "2.9.0"
+  }
+};
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.47";
+var OHRISK_VERSION = package_default.version;
 
 // src/archive/archive-project.ts
 import path49 from "node:path";

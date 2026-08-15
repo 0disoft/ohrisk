@@ -7,6 +7,18 @@ const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageVersion = readPackageVersion();
 
 describe("release documentation", () => {
+  test("keeps public install examples on the latest dated release", () => {
+    const changelog = readFileSync(path.join(repoRoot, "CHANGELOG.md"), "utf8");
+    const latestReleasedVersion = /^##\s+(\d+\.\d+\.\d+)\s+-\s+\d{4}-\d{2}-\d{2}\s*$/m.exec(changelog)?.[1];
+    const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
+
+    expect(latestReleasedVersion).toBeDefined();
+    expect(readme).toContain(`npm install -g ohrisk@${latestReleasedVersion}`);
+    if (latestReleasedVersion !== packageVersion) {
+      expect(readme).not.toContain(`npm install -g ohrisk@${packageVersion}`);
+    }
+  });
+
   test("keeps automated publish gates explicit", () => {
     const releasing = readFileSync(path.join(repoRoot, "RELEASING.md"), "utf8");
 

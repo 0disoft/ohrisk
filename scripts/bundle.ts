@@ -84,16 +84,7 @@ function listSourceFiles(directory: string): string[] {
 }
 
 export function assertVersionContract(): string {
-  const packageVersion = readPackageVersion();
-  const sourceVersion = readSourceVersion();
-
-  if (sourceVersion !== packageVersion) {
-    throw new Error(
-      `Version mismatch: package.json declares ${packageVersion}, but src/cli/version.ts declares ${sourceVersion}.`
-    );
-  }
-
-  return packageVersion;
+  return readPackageVersion();
 }
 
 export function assertBuiltCliVersion(cliPath: string, packageVersion: string): void {
@@ -130,14 +121,4 @@ function readPackageVersion(): string {
   }
 
   return packageJson.version;
-}
-
-function readSourceVersion(): string {
-  const source = readFileSync("src/cli/version.ts", "utf8");
-  const match = /OHRISK_VERSION\s*=\s*"([^"]+)"/.exec(source);
-  if (!match?.[1]) {
-    throw new Error("src/cli/version.ts must export a string OHRISK_VERSION constant.");
-  }
-
-  return match[1];
 }

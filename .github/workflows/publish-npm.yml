@@ -52,6 +52,9 @@ jobs:
       - name: Run release verification
         run: bun run verify:release
 
+      - name: Write release notes
+        run: bun run release:notes > release-notes.md
+
       - name: Check npm publish state
         id: npm_state
         run: |
@@ -98,23 +101,6 @@ jobs:
 
           echo "::error::npm metadata for ${package_spec} did not expose the exact version, tarball, and integrity after ${max_attempts} attempts."
           exit 1
-
-      - name: Write release notes
-        run: |
-          node --input-type=commonjs <<'NODE' > release-notes.md
-          const fs = require("node:fs");
-          const version = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
-          const changelog = fs.readFileSync("CHANGELOG.md", "utf8").replace(/\r\n/g, "\n");
-          const escapedVersion = version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          const startMatch = changelog.match(new RegExp(`^##\\s+${escapedVersion}\\b.*$`, "m"));
-          if (!startMatch || startMatch.index === undefined) {
-            throw new Error(`CHANGELOG.md does not contain a ${version} release section.`);
-          }
-          const start = startMatch.index;
-          const next = changelog.slice(start + startMatch[0].length).search(/^##\s+/m);
-          const end = next === -1 ? changelog.length : start + startMatch[0].length + next;
-          process.stdout.write(changelog.slice(start, end).trim() + "\n");
-          NODE
 
       - name: Create GitHub release
         env:
