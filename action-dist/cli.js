@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: ff801840c498a7b26a69834dff7788318d4d304d845fda0c0f29190a77815677
+// ohrisk-action-source-sha256: 0fb4c5fd2ba7abeb763eee1ebd48ce58d3bfab440bfdb04a27ae4d3ea02da9a3
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19582,7 +19582,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.23";
+var OHRISK_VERSION = "1.14.24";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -20057,7 +20057,7 @@ function collectConflictingLicenseClaims(left, right) {
   return combined.length > 1 ? combined.sort() : [];
 }
 function licenseClaimValues(evidence) {
-  const values = [];
+  const values = [...evidence.conflictingLicenseClaims ?? []];
   if (evidence.packageJsonLicense) {
     values.push(evidence.packageJsonLicense);
   }

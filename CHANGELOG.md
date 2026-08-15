@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Multi-artifact evidence merging now preserves previously discovered license
+  conflicts when later, stronger evidence is combined for the same package.
 - HTML report opening now invokes the platform opener through a trusted absolute
   operating-system path instead of executable search through the scanned
   repository or `PATH`. Windows also disables `cmd.exe` AutoRun processing

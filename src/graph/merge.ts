@@ -265,7 +265,7 @@ function collectConflictingLicenseClaims(
 }
 
 function licenseClaimValues(evidence: LicenseEvidence): string[] {
-  const values: string[] = [];
+  const values: string[] = [...(evidence.conflictingLicenseClaims ?? [])];
   if (evidence.packageJsonLicense) {
     values.push(evidence.packageJsonLicense);
   }

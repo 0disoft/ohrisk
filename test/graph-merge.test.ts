@@ -230,6 +230,26 @@ describe("mergeDependencyGraphs", () => {
     expect(forward.embeddedEvidence).toEqual(reversed.embeddedEvidence);
   });
 
+  test("preserves accumulated conflicts when stronger evidence is merged later", () => {
+    const strongerMit = graphWithMetadataLicense("MIT");
+    strongerMit.graph.embeddedEvidence = strongerMit.graph.embeddedEvidence?.map((evidence) => ({
+      ...evidence,
+      source: "local" as const
+    }));
+
+    const merged = mergeDependencyGraphs([
+      graphWithMetadataLicense("SSPL-1.0"),
+      graphWithMetadataLicense("MIT"),
+      strongerMit
+    ]);
+
+    expect(merged.embeddedEvidence).toEqual([expect.objectContaining({
+      metadataLicense: "MIT",
+      source: "local",
+      conflictingLicenseClaims: ["MIT", "SSPL-1.0"]
+    })]);
+  });
+
   test("deduplicates identical license claims across artifacts", () => {
     const merged = mergeDependencyGraphs([
       graphWithMetadataLicense("MIT"),
