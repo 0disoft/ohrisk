@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: ff00e8771b29dd4180d74e2108c6aba6d62f50167e2c0a2d27e1af6331c1f887
+// ohrisk-action-source-sha256: 1f3e95a04ceba35d12a51549c0412aefb868ad4862d162ff0a85f89f166d2805
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19708,6 +19708,7 @@ var package_default = {
     prepack: "bun scripts/build.ts",
     scan: "bun run src/cli/main.ts scan",
     test: "bun test",
+    "test:platform": "bun test test/archive-interop.test.ts test/evidence-cache.test.ts test/git-ref-file.test.ts test/github-repository.test.ts test/materialized-checkout.test.ts test/write-output.test.ts",
     "test:coverage": "bun scripts/check-coverage.ts",
     "test:fuzz": "bun test test/parser-fuzz.test.ts",
     typecheck: "tsc -p tsconfig.json",

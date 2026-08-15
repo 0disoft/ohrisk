@@ -14,7 +14,7 @@ const SETUP_BUN_ACTION =
   "oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6";
 
 describe("release check workflow", () => {
-  test("runs every release gate on Linux, macOS, and Windows", () => {
+  test("runs the full release gate once and bounded platform smoke checks", () => {
     const workflow = readFileSync(
       path.join(repoRoot, ".github", "workflows", "ci.yml"),
       "utf8"
@@ -25,16 +25,22 @@ describe("release check workflow", () => {
       engines?: { node?: string };
       packageManager?: string;
     };
+    const parsedWorkflow = parseYaml(workflow) as {
+      jobs?: Record<string, unknown>;
+    };
 
     expect(packageJson.packageManager).toBe("bun@1.3.14");
     expect(packageJson.engines?.node).toBe(">=24.0.0");
     expect(workflow).toContain("name: Release Check");
     expect(workflow).toContain("pull_request:");
     expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).toContain("name: Test and pack (${{ matrix.os }})");
+    expect(workflow).toContain("group: release-check-${{ github.workflow }}-${{ github.ref }}");
+    expect(workflow).toContain("cancel-in-progress: true");
+    expect(workflow).toContain("name: Release gate (Linux)");
+    expect(workflow).toContain("runs-on: ubuntu-latest");
+    expect(workflow).toContain("name: Platform smoke (${{ matrix.os }})");
     expect(workflow).toContain("runs-on: ${{ matrix.os }}");
     expect(workflow).toContain("fail-fast: false");
-    expect(workflow).toContain("- ubuntu-latest");
     expect(workflow).toContain("- macos-latest");
     expect(workflow).toContain("- windows-latest");
     expect(workflow).toContain(`uses: ${CHECKOUT_ACTION}`);
@@ -43,7 +49,14 @@ describe("release check workflow", () => {
     expect(workflow).toContain(`uses: ${SETUP_NODE_ACTION}`);
     expect(workflow).toContain("node-version: 24");
     expect(workflow).toContain("bun install --frozen-lockfile");
-    expect(workflow).toContain("run: bun run verify:release");
+    expect(workflow.match(/run: bun run verify:release/g)).toHaveLength(1);
+    expect(workflow).toContain("run: bun run test:platform");
+    expect(workflow).toContain("run: bun run scripts/package-smoke.ts");
+    expect(workflow).not.toContain("run: bun run test:coverage");
+    expect(Object.keys(parsedWorkflow.jobs ?? {}).sort()).toEqual([
+      "platform-smoke",
+      "release-gate"
+    ]);
     expect(workflow).not.toMatch(/uses:\s+[^\s]+@v\d+/);
   });
 });

@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   unlinkSync,
   utimesSync,
   writeFileSync
@@ -339,12 +340,22 @@ describe("persistent artifact cache", () => {
 
       expect(cache.status()).toMatchObject({ ok: true, value: { entryCount: 32, totalBytes: 4 } });
       expect(existsSync(path.join(root, ".ohrisk-artifact-cache-maintained"))).toBe(false);
-      expect(existsSync(path.join(root, ".ohrisk-artifact-cache-maintenance-attempted"))).toBe(true);
+      const attemptPath = path.join(root, ".ohrisk-artifact-cache-maintenance-attempted");
+      expect(existsSync(attemptPath)).toBe(true);
       expect(existsSync(path.join(root, ".ohrisk-artifact-cache-maintenance.lock"))).toBe(false);
 
-      const clockAfterFirstAttempt = clock;
+      utimesSync(attemptPath, new Date(0), new Date(0));
+      const attemptedStampBeforeRetry = {
+        bytes: readFileSync(attemptPath, "utf8"),
+        modifiedAt: statSync(attemptPath).mtimeMs
+      };
+      const statusBeforeRetry = cache.status();
       cache.maintain();
-      expect(clock - clockAfterFirstAttempt).toBeLessThanOrEqual(2);
+
+      expect(cache.status()).toEqual(statusBeforeRetry);
+      expect(readFileSync(attemptPath, "utf8")).toBe(attemptedStampBeforeRetry.bytes);
+      expect(statSync(attemptPath).mtimeMs).toBe(attemptedStampBeforeRetry.modifiedAt);
+      expect(existsSync(path.join(root, ".ohrisk-artifact-cache-maintenance.lock"))).toBe(false);
     } finally {
       rmSync(root, { force: true, recursive: true });
     }

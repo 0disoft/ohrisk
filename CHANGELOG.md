@@ -2,6 +2,11 @@
 
 ## 1.15.0 - Unreleased
 
+- CI now runs the complete release and coverage gate once on Linux while
+  Windows and macOS retain bounded filesystem, path, archive, cache, package,
+  and installed-CLI smoke checks. Superseded runs are cancelled, and the
+  artifact-cache maintenance regression now asserts only externally observable
+  files and cache state instead of an internal clock call count.
 - Release preparation now validates dated release notes before npm publication,
   keeps public usage examples on the latest published release while a candidate
   remains unreleased, and derives the CLI version from `package.json` instead

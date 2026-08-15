@@ -58,6 +58,8 @@ describe("package metadata", () => {
     expect(packageJson.scripts?.lint).toBe("tsc -p tsconfig.lint.json && bun scripts/check-source-hygiene.ts");
     expect(packageJson.scripts?.["format:check"]).toBe("bun scripts/check-format.ts");
     expect(packageJson.scripts?.["test:fuzz"]).toBe("bun test test/parser-fuzz.test.ts");
+    expect(packageJson.scripts?.["test:platform"]).toContain("test/evidence-cache.test.ts");
+    expect(packageJson.scripts?.["test:platform"]).toContain("test/write-output.test.ts");
     expect(packageJson.scripts?.["test:coverage"]).toBe("bun scripts/check-coverage.ts");
     expect(packageJson.scripts?.["check:action-bundle"])
       .toBe("bun scripts/check-action-bundle.ts");

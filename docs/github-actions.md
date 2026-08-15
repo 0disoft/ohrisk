@@ -10,9 +10,11 @@ license evidence early; they do not replace legal review.
 ## Bundled action
 
 The repository's composite action runs its checked-in CLI bundle and supports
-`scan`, `ci`, and `diff`. Its release gate rebuilds the CLI on Linux, Windows,
-and macOS and requires every build to match the checked-in bundle byte for
-byte. A diff invocation requires a baseline ref:
+`scan`, `ci`, and `diff`. The Linux release gate runs the complete test,
+coverage, bundle, package, and installed-CLI checks once. Windows and macOS run
+bounded filesystem, path, archive, cache, package, and installed-CLI smoke
+checks without repeating the complete coverage suite. A diff invocation
+requires a baseline ref:
 
 ```yaml
 - uses: actions/checkout@v7

@@ -81,6 +81,7 @@ SARIF must grant `security-events: write` to the upload step.
 Any input, version, path, network, or shell behavior change must update
 `action.yml`, the action documentation, and the contract tests. The bundled
 `action-dist/cli.js` must be rebuilt from the same source version before a tag
-is published. A fresh build must match the checked-in bundle byte for byte on
-the Linux, Windows, and macOS release-check runners; platform markers and
-absolute build-machine paths are forbidden.
+is published. The Linux release gate must match a fresh build to the checked-in
+bundle byte for byte. Windows and macOS must pass the bounded platform and
+installed-package smoke suite; platform markers and absolute build-machine
+paths are forbidden.
