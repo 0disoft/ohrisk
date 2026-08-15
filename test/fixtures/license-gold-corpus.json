@@ -176,5 +176,101 @@
     },
     "profile": "saas",
     "expected": { "severity": "low", "confidence": "medium" }
+  },
+  {
+    "id": "gpl-saas-review",
+    "sourceUrl": "https://spdx.org/licenses/GPL-3.0-only.html",
+    "rationale": "GPL-3.0-only is strong copyleft, but ordinary SaaS use without distribution requires review rather than an automatic high classification.",
+    "evidence": { "packageJsonLicense": "GPL-3.0-only", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "review", "confidence": "high" }
+  },
+  {
+    "id": "gpl-or-later-distributed",
+    "sourceUrl": "https://spdx.org/licenses/GPL-3.0-or-later.html",
+    "rationale": "Distributing GPL-3.0-or-later code invokes strong-copyleft obligations and remains high risk under the distribution profile.",
+    "evidence": { "packageJsonLicense": "GPL-3.0-or-later", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "distributed-app",
+    "expected": { "severity": "high", "confidence": "high" }
+  },
+  {
+    "id": "lgpl-saas-review",
+    "sourceUrl": "https://spdx.org/licenses/LGPL-3.0-only.html",
+    "rationale": "LGPL-3.0-only weak copyleft needs integration-specific review even when the product is delivered as SaaS.",
+    "evidence": { "packageJsonLicense": "LGPL-3.0-only", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "review", "confidence": "high" }
+  },
+  {
+    "id": "epl-saas-review",
+    "sourceUrl": "https://spdx.org/licenses/EPL-2.0.html",
+    "rationale": "EPL-2.0 weak copyleft remains a review decision because the applicable obligations depend on product integration and delivery.",
+    "evidence": { "packageJsonLicense": "EPL-2.0", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "review", "confidence": "high" }
+  },
+  {
+    "id": "agpl-or-later-saas",
+    "sourceUrl": "https://spdx.org/licenses/AGPL-3.0-or-later.html",
+    "rationale": "AGPL-3.0-or-later network copyleft is high risk for a SaaS deployment just as the version-only form is.",
+    "evidence": { "packageJsonLicense": "AGPL-3.0-or-later", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "high", "confidence": "high" }
+  },
+  {
+    "id": "sspl-saas",
+    "sourceUrl": "https://spdx.org/licenses/SSPL-1.0.html",
+    "rationale": "SSPL-1.0 is a source-available restriction license and is high risk for SaaS deployment.",
+    "evidence": { "packageJsonLicense": "SSPL-1.0", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "high", "confidence": "high", "signals": ["commercial-restriction"] }
+  },
+  {
+    "id": "sspl-alias-saas",
+    "sourceUrl": "https://spdx.org/licenses/SSPL-1.0.html",
+    "rationale": "The common SSPL alias must retain the SSPL-1.0 restriction while lowering confidence because normalization used an alias.",
+    "evidence": { "packageJsonLicense": "SSPL", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "high", "confidence": "medium", "signals": ["commercial-restriction"] }
+  },
+  {
+    "id": "commons-clause-saas",
+    "sourceUrl": "https://commonsclause.com/",
+    "rationale": "Commons Clause restricts selling the software and therefore requires a high-risk SaaS decision.",
+    "evidence": { "packageJsonLicense": "Commons-Clause", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "high", "confidence": "high" }
+  },
+  {
+    "id": "polyform-noncommercial-saas",
+    "sourceUrl": "https://polyformproject.org/licenses/noncommercial/1.0.0/",
+    "rationale": "PolyForm Noncommercial explicitly limits permitted purposes and is high risk for commercial SaaS use.",
+    "evidence": { "packageJsonLicense": "PolyForm-Noncommercial-1.0.0", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "high", "confidence": "high", "signals": ["commercial-restriction"] }
+  },
+  {
+    "id": "explicit-unlicensed",
+    "sourceUrl": "https://docs.npmjs.com/cli/v11/configuring-npm/package-json#license",
+    "rationale": "An explicit UNLICENSED declaration withholds permission and must block approval until rights are clarified.",
+    "evidence": { "packageJsonLicense": "UNLICENSED", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "high", "confidence": "high" }
+  },
+  {
+    "id": "permissive-and-expression",
+    "sourceUrl": "https://spdx.github.io/spdx-spec/v2.3/SPDX-license-expressions/",
+    "rationale": "An AND expression containing only MIT and Apache-2.0 remains low risk because both required branches are permissive.",
+    "evidence": { "packageJsonLicense": "MIT AND Apache-2.0", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "high" }
+  },
+  {
+    "id": "permissive-or-strong-copyleft",
+    "sourceUrl": "https://spdx.github.io/spdx-spec/v2.3/SPDX-license-expressions/",
+    "rationale": "An OR expression permits selecting Apache-2.0 instead of GPL-3.0-only and therefore remains low risk for distribution.",
+    "evidence": { "packageJsonLicense": "Apache-2.0 OR GPL-3.0-only", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "high" }
   }
 ]

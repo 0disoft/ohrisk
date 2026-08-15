@@ -9,14 +9,14 @@ test evaluates the same normalizer and policy path used by the CLI.
 
 | Metric | Result |
 | --- | --- |
-| Exact severity and confidence matches | 20/20 |
-| Expected high-risk cases classified high | 5/5 |
-| Expected non-high cases incorrectly classified high | 0/15 |
+| Exact severity and confidence matches | 32/32 |
+| Expected high-risk cases classified high | 12/12 |
+| Expected non-high cases incorrectly classified high | 0/20 |
 | Expected unknown cases classified unknown | 4/4 |
 
 This is a small regression corpus and is not statistically representative of
 package registries, real repositories, or all license text. In particular,
-`5/5` is a test result with a denominator of five, not a general high-risk
+`12/12` is a test result with a denominator of twelve, not a general high-risk
 recall claim. It must not be presented as evidence that Ohrisk has zero false
 negatives in production.
 
