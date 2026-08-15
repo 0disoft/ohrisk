@@ -123,6 +123,7 @@ export type LockfileTextParseInput = {
   requirementsIncludedFileReader?: RequirementsIncludedFileReader;
   pythonLocalSourceFileReader?: PythonLocalSourceFileReader;
   mavenProjectPomReader?: MavenProjectPomReader;
+  mavenExternalPoms?: ReadonlyMap<string, MavenExternalPomDocument>;
 };
 
 export type ProjectLockfileParseOptions = {
@@ -319,7 +320,8 @@ export function parseLockfileTextForKind(
     case "maven-pom":
       return parseMavenPomText(input.text, input.lockfilePath, omitUndefined({
         projectRoot: input.projectRoot,
-        readProjectPom: input.mavenProjectPomReader
+        readProjectPom: input.mavenProjectPomReader,
+        externalPoms: input.mavenExternalPoms
       }));
     case "nuget-lock":
       return parseNugetLockText(input.text, input.lockfilePath);

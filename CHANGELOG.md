@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Both sides of `diff` now use the same bounded Maven Central parent and
+  imported-BOM model resolver as `scan` and `ci`, including exact identity
+  checks and offline artifact-cache reuse. Baseline managed versions no longer
+  fail merely because the POM came from a Git ref.
 - `diff` now collects baseline npm `file:` and relative workspace package
   evidence from the requested Git ref, including an explicit workspace root.
   Baseline evidence collection no longer reads the current worktree's local

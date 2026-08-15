@@ -3031,6 +3031,18 @@ describe("main", () => {
           "  <groupId>org.example</groupId>",
           "  <artifactId>fixture-maven-bom</artifactId>",
           "  <version>0.9.0</version>",
+          "  <dependencyManagement><dependencies>",
+          "    <dependency>",
+          "      <groupId>org.junit</groupId>",
+          "      <artifactId>junit-bom</artifactId>",
+          "      <version>5.14.4</version>",
+          "      <type>pom</type><scope>import</scope>",
+          "    </dependency>",
+          "  </dependencies></dependencyManagement>",
+          "  <dependencies><dependency>",
+          "    <groupId>org.junit.jupiter</groupId>",
+          "    <artifactId>junit-jupiter-engine</artifactId>",
+          "  </dependency></dependencies>",
           "</project>"
         ].join("\n")
       });
@@ -3044,7 +3056,7 @@ describe("main", () => {
       expect(diffExitCode).toBe(0);
       expect(diff.stderr).toEqual([]);
       expect(diff.stdout.join("\n")).toContain(
-        "org.junit.jupiter:junit-jupiter-engine@5.14.4"
+        "Findings: 1 current, 1 baseline, 0 new, 0 changed, 0 resolved"
       );
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });

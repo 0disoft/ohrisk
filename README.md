@@ -17,7 +17,7 @@ Ohrisk is a risk decision aid, not legal advice. It reports `low`, `review`,
 Install and run your first scan in under a minute:
 
 ```bash
-npm install -g ohrisk@1.14.37
+npm install -g ohrisk@1.14.38
 cd your-project
 ohrisk scan
 ```
@@ -215,7 +215,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - Python `.venv` and `venv` `*.dist-info/METADATA` package evidence, plus project-root-contained local source metadata and license files for `uv.lock`, `pylock.toml`, `requirements.txt`, `Pipfile.lock`, and `pdm.lock` local source entries, before unavailable fallback
 - exact-version PyPI release evidence for locked Python packages, using release metadata only to select SHA-256-verified source distributions or wheels; license evidence comes only from identity-checked `PKG-INFO`, `METADATA`, and license files inside the verified artifact, and a distribution that exceeds archive inspection limits remains `unknown` without aborting unrelated package findings
 - local Maven `.m2/repository` POMs for Maven parent/BOM version management and package license evidence, including bounded parent-POM license inheritance
-- exact Maven Central parent/imported-BOM POMs for dependency-version resolution during filesystem `scan` and `ci` runs, with a 32-document scan limit, 2 MiB per-POM limit, eight-level model depth, exact identity checks, cache reuse, and fail-closed incomplete-model handling
+- exact Maven Central parent/imported-BOM POMs for dependency-version resolution during filesystem `scan`, `ci`, and both current and baseline `diff` parsing, with a 32-document limit per parsed side, 2 MiB per-POM limit, eight-level model depth, exact identity checks, cache reuse, and fail-closed incomplete-model handling
 - exact-version Maven Central POM evidence for Maven and Gradle coordinates when local POM evidence is unavailable, plus project-declared HTTPS repositories whose exact hosts are explicitly allowed; all POM requests retain bounded parent inheritance, cache, offline, timeout, redirect, identity, and response-size checks
 - checksum-verified Maven JAR license-file fallback when the selected POM chain has no license name, requiring a same-repository SHA-256 sidecar and exact embedded `META-INF/maven/<groupId>/<artifactId>/pom.properties` identity before root or `META-INF` license files are trusted
 - Bazel module license evidence uses local Bazel registry `local_path` sources from file-based registries when present; remote Bazel registry metadata fetching is not scanned yet
@@ -294,7 +294,7 @@ The current implementation is the first local dependency-risk vertical slice:
 
 Central approval workflows, GitHub App checks, Go `go.work` use paths outside the project root, Go local `replace` paths outside the project root, pre-1.17 Go module graph reconstruction beyond the conservative `go.sum` fallback
 reconstruction, unpinned or short-reference uv remote VCS entries, Pipenv and PDM remote VCS entries, uv, Pipenv, and PDM local source paths outside the project root, remote VCS `requirements.txt` entries, unpinned requirements ranges without exact constraint pins,
-remote parent/BOM model resolution from project-declared or alternate Maven repositories, remote Maven model resolution for `diff` and archive inputs, Maven transitive graph
+remote parent/BOM model resolution from project-declared or alternate Maven repositories, remote Maven model resolution for archive inputs, Maven transitive graph
 resolution, unapproved project-declared Maven repositories, Gradle graph reconstruction, Gradle version catalog rich versions, bundle aliases, plugin aliases, and usage-site configuration reconstruction, Bazel `MODULE.bazel` `include()` expansion, Bazel overrides, module extensions, `MODULE.bazel.lock` graph reconstruction, remote Bazel registry metadata fetching, Conan 1 graph lock support, Conan binary package ID and remote ConanCenter
 artifact fetching, unpinned or ranged Conda `environment.yml` specs, Conda environment transitive dependency reconstruction, explicit per-platform `conda-<platform>.lock` exports, remote Conda channel artifact fetching,
 Conda build/channel/subdir Package URL qualifiers, Terraform module scanning, remote Terraform Registry metadata fetching, Helm transitive chart graph
@@ -383,7 +383,7 @@ for the supported subset and exact limits.
 Beginner HTML report flow on Windows PowerShell:
 
 ```powershell
-npm install -g ohrisk@1.14.37
+npm install -g ohrisk@1.14.38
 ohrisk version
 cd C:\path\to\your\project
 ohrisk scan --html --output reports\ohrisk-report.html --open

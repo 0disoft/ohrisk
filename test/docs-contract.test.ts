@@ -132,10 +132,10 @@ describe("documentation contract", () => {
     expect(remoteBoundary).toContain("https://repo.maven.apache.org/maven2/");
     expect(remoteBoundary).toContain("eight inherited parent/BOM levels");
     expect(normalizedRemoteBoundary).toContain(
-      "Filesystem `scan` and `ci` inputs may resolve at most 32 exact Maven Central parent or imported-BOM model POMs"
+      "Filesystem `scan`, `ci`, and each side of `diff` may resolve at most 32 exact Maven Central parent or imported-BOM model POMs"
     );
     expect(normalizedRemoteBoundary).toContain(
-      "`diff`, archive inputs, and project-declared or alternate Maven repositories do not use remote model resolution"
+      "Archive inputs and project-declared or alternate Maven repositories do not use remote model resolution"
     );
     expect(normalizedCommandContract).toContain(
       "each bounded to 2 MiB and eight parent/BOM levels"

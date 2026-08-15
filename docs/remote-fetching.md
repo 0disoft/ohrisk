@@ -233,10 +233,10 @@ restore the project and rerun Ohrisk locally, selecting
 likewise be extracted and restored locally or rebuilt with a hash-bearing lock;
 Ohrisk never restores an untrusted project during a scan.
 
-Filesystem `scan` and `ci` inputs may resolve at most 32 exact Maven Central
+Filesystem `scan`, `ci`, and each side of `diff` may resolve at most 32 exact Maven Central
 parent or imported-BOM model POMs. Resolution reparses the project only after
 every requested document is present and identity-checked, and fails the scan if
-the complete model cannot be proven. `diff`, archive inputs, and project-declared
+the complete model cannot be proven. Archive inputs and project-declared
 or alternate Maven repositories do not use remote model resolution; those paths
 continue to require locally available model POMs.
 
@@ -289,7 +289,7 @@ cached chain can reproduce package evidence offline; any missing link remains
 unavailable and cannot trigger DNS or HTTP work.
 
 Exact Maven Central model POMs use the same cache and offline rules. An offline
-filesystem `scan` or `ci` run may resolve parent/BOM versions from valid cached
+filesystem `scan`, `ci`, or `diff` run may resolve parent/BOM versions from valid cached
 POM bytes, while a missing, corrupt, oversized, or identity-mismatched entry
 fails the model resolution without DNS or HTTP work.
 

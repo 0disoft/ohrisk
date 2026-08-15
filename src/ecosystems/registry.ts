@@ -220,13 +220,29 @@ export async function parseProjectDependencyGraphWithRemoteMavenPoms(input: {
   onFetch?: (requests: MissingExternalMavenPom[]) => void;
   maxRemotePoms?: number;
 }): Promise<Result<DependencyGraph, OhriskError>> {
+  return resolveWithRemoteMavenPoms({
+    parse: (externalPoms) => parseProjectDependencyGraph(input.project, {
+      ...(externalPoms.size > 0 ? { mavenExternalPoms: externalPoms } : {})
+    }),
+    fetchRemotePoms: input.fetchRemotePoms,
+    ...(input.onFetch ? { onFetch: input.onFetch } : {}),
+    ...(input.maxRemotePoms !== undefined ? { maxRemotePoms: input.maxRemotePoms } : {})
+  });
+}
+
+export async function resolveWithRemoteMavenPoms<T>(input: {
+  parse: (
+    externalPoms: ReadonlyMap<string, MavenExternalPomDocument>
+  ) => Result<T, OhriskError>;
+  fetchRemotePoms: RemoteMavenPomFetcher;
+  onFetch?: (requests: MissingExternalMavenPom[]) => void;
+  maxRemotePoms?: number;
+}): Promise<Result<T, OhriskError>> {
   const externalPoms = new Map<string, MavenExternalPomDocument>();
   const maxRemotePoms = input.maxRemotePoms ?? MAX_REMOTE_MAVEN_MODEL_POMS;
 
   while (true) {
-    const parsed = parseProjectDependencyGraph(input.project, {
-      ...(externalPoms.size > 0 ? { mavenExternalPoms: externalPoms } : {})
-    });
+    const parsed = input.parse(externalPoms);
     if (parsed.ok) {
       return parsed;
     }

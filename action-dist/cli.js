@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: eed91890804c16a0f6d9216cb108f33190595377203f36834d27b370cf77f9ec
+// ohrisk-action-source-sha256: 73cf6651339c459b03b8995e23368aea0e63dd99d4911a23b34f08fccaa0554c
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -19596,7 +19596,7 @@ function renderCommandCancelled(commandLabel) {
 }
 
 // src/cli/version.ts
-var OHRISK_VERSION = "1.14.37";
+var OHRISK_VERSION = "1.14.38";
 
 // src/archive/archive-project.ts
 import path49 from "node:path";
@@ -39334,7 +39334,8 @@ function parseLockfileTextForKind(input) {
     case "maven-pom":
       return parseMavenPomText(input.text, input.lockfilePath, omitUndefined({
         projectRoot: input.projectRoot,
-        readProjectPom: input.mavenProjectPomReader
+        readProjectPom: input.mavenProjectPomReader,
+        externalPoms: input.mavenExternalPoms
       }));
     case "nuget-lock":
       return parseNugetLockText(input.text, input.lockfilePath);
@@ -49217,12 +49218,20 @@ function parseProjectDependencyGraph(project, context = {}) {
   return ok(mergeDependencyGraphs(parsedGraphs));
 }
 async function parseProjectDependencyGraphWithRemoteMavenPoms(input) {
+  return resolveWithRemoteMavenPoms({
+    parse: (externalPoms) => parseProjectDependencyGraph(input.project, {
+      ...externalPoms.size > 0 ? { mavenExternalPoms: externalPoms } : {}
+    }),
+    fetchRemotePoms: input.fetchRemotePoms,
+    ...input.onFetch ? { onFetch: input.onFetch } : {},
+    ...input.maxRemotePoms !== undefined ? { maxRemotePoms: input.maxRemotePoms } : {}
+  });
+}
+async function resolveWithRemoteMavenPoms(input) {
   const externalPoms = new Map;
   const maxRemotePoms = input.maxRemotePoms ?? MAX_REMOTE_MAVEN_MODEL_POMS;
   while (true) {
-    const parsed = parseProjectDependencyGraph(input.project, {
-      ...externalPoms.size > 0 ? { mavenExternalPoms: externalPoms } : {}
-    });
+    const parsed = input.parse(externalPoms);
     if (parsed.ok) {
       return parsed;
     }
@@ -62181,15 +62190,16 @@ async function runDiff(command, io, signal) {
     io.stderr(formatError(evidenceRuntime.error));
     return exitCodeForError(evidenceRuntime.error);
   }
+  const fetchRemoteMavenPoms = (requests) => fetchMavenCentralModelPoms({
+    requests,
+    offline: evidenceRuntime.value.offline,
+    signal,
+    ...evidenceRuntime.value.timeoutMs === undefined ? {} : { fetchTimeoutMs: evidenceRuntime.value.timeoutMs },
+    ...evidenceRuntime.value.cacheDir === undefined ? {} : { cacheDir: evidenceRuntime.value.cacheDir }
+  });
   const currentGraph = await parseProjectDependencyGraphWithRemoteMavenPoms({
     project: currentProject.value,
-    fetchRemotePoms: (requests) => fetchMavenCentralModelPoms({
-      requests,
-      offline: evidenceRuntime.value.offline,
-      signal,
-      ...evidenceRuntime.value.timeoutMs === undefined ? {} : { fetchTimeoutMs: evidenceRuntime.value.timeoutMs },
-      ...evidenceRuntime.value.cacheDir === undefined ? {} : { cacheDir: evidenceRuntime.value.cacheDir }
-    })
+    fetchRemotePoms: fetchRemoteMavenPoms
   });
   if (isErr(currentGraph)) {
     io.stderr(formatError(currentGraph.error));
@@ -62205,13 +62215,17 @@ async function runDiff(command, io, signal) {
   }
   const readRefFile = io.readRefFile ?? readGitRefFile;
   const listRefFiles = io.listRefFiles ?? listGitRefFiles;
-  const baselineProject = loadBaselineProjectGraph({
-    currentProject: currentProjectGraph,
-    baselineRef: command.baselineRef,
-    allLockfiles: command.allLockfiles ?? false,
-    readRefFile,
-    listRefFiles,
-    ...workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}
+  const baselineProject = await resolveWithRemoteMavenPoms({
+    parse: (mavenExternalPoms) => loadBaselineProjectGraph({
+      currentProject: currentProjectGraph,
+      baselineRef: command.baselineRef,
+      allLockfiles: command.allLockfiles ?? false,
+      readRefFile,
+      listRefFiles,
+      ...mavenExternalPoms.size > 0 ? { mavenExternalPoms } : {},
+      ...workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}
+    }),
+    fetchRemotePoms: fetchRemoteMavenPoms
   });
   if (isErr(baselineProject)) {
     io.stderr(formatError(baselineProject.error));
@@ -63164,6 +63178,7 @@ function loadBaselineProjectGraph(input) {
       baselineRef: input.baselineRef,
       readRefFile: input.readRefFile,
       rootNameHint: input.currentProject.scanGraph.rootName ?? path90.basename(projectRoot),
+      ...input.mavenExternalPoms ? { mavenExternalPoms: input.mavenExternalPoms } : {},
       ...baselineFiles ? { baselineFiles } : {}
     });
     if (isErr(parsed)) {
@@ -63376,7 +63391,8 @@ function parseBaselineLockfileGraph(input) {
     projectRoot: input.projectRoot,
     requirementsRootName: input.rootNameHint,
     ...baselineRequirementsReader ? { requirementsIncludedFileReader: baselineRequirementsReader } : {},
-    ...baselinePythonSourceReader ? { pythonLocalSourceFileReader: baselinePythonSourceReader } : {}
+    ...baselinePythonSourceReader ? { pythonLocalSourceFileReader: baselinePythonSourceReader } : {},
+    ...input.mavenExternalPoms ? { mavenExternalPoms: input.mavenExternalPoms } : {}
   });
 }
 function buildDiffLockfileChanges(input) {

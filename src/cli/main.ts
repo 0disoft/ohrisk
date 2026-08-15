@@ -38,7 +38,8 @@ import {
   hasGitRefLocalNpmPackage
 } from "../evidence/git-ref-local-package";
 import {
-  parseProjectDependencyGraphWithRemoteMavenPoms
+  parseProjectDependencyGraphWithRemoteMavenPoms,
+  resolveWithRemoteMavenPoms
 } from "../ecosystems/registry";
 import type { LicenseEvidence } from "../evidence/types";
 import {
@@ -51,6 +52,7 @@ import {
   findNearestDirectoryPackagesPropsPath
 } from "../graph/dotnet-nuget-lock";
 import type { GoSourceFile } from "../graph/go-mod";
+import type { MavenExternalPomDocument } from "../graph/java-maven-pom";
 import {
   findGoWorkModulePaths,
   type GoWorkModuleInput
@@ -373,9 +375,8 @@ async function runDiff(
     return exitCodeForError(evidenceRuntime.error);
   }
 
-  const currentGraph = await parseProjectDependencyGraphWithRemoteMavenPoms({
-    project: currentProject.value,
-    fetchRemotePoms: (requests) => fetchMavenCentralModelPoms({
+  const fetchRemoteMavenPoms = (requests: Parameters<typeof fetchMavenCentralModelPoms>[0]["requests"]) =>
+    fetchMavenCentralModelPoms({
       requests,
       offline: evidenceRuntime.value.offline,
       signal,
@@ -385,7 +386,10 @@ async function runDiff(
       ...(evidenceRuntime.value.cacheDir === undefined
         ? {}
         : { cacheDir: evidenceRuntime.value.cacheDir })
-    })
+    });
+  const currentGraph = await parseProjectDependencyGraphWithRemoteMavenPoms({
+    project: currentProject.value,
+    fetchRemotePoms: fetchRemoteMavenPoms
   });
   if (isErr(currentGraph)) {
     io.stderr(formatError(currentGraph.error));
@@ -403,13 +407,17 @@ async function runDiff(
 
   const readRefFile = io.readRefFile ?? readGitRefFile;
   const listRefFiles = io.listRefFiles ?? listGitRefFiles;
-  const baselineProject = loadBaselineProjectGraph({
-    currentProject: currentProjectGraph,
-    baselineRef: command.baselineRef,
-    allLockfiles: command.allLockfiles ?? false,
-    readRefFile,
-    listRefFiles,
-    ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {})
+  const baselineProject = await resolveWithRemoteMavenPoms({
+    parse: (mavenExternalPoms) => loadBaselineProjectGraph({
+      currentProject: currentProjectGraph,
+      baselineRef: command.baselineRef,
+      allLockfiles: command.allLockfiles ?? false,
+      readRefFile,
+      listRefFiles,
+      ...(mavenExternalPoms.size > 0 ? { mavenExternalPoms } : {}),
+      ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {})
+    }),
+    fetchRemotePoms: fetchRemoteMavenPoms
   });
 
   if (isErr(baselineProject)) {
@@ -1704,6 +1712,7 @@ export function loadBaselineProjectGraph(input: {
   readRefFile: GitRefFileReader;
   listRefFiles: GitRefFileLister;
   workspaceRoot?: string;
+  mavenExternalPoms?: ReadonlyMap<string, MavenExternalPomDocument>;
 }): Result<BaselineProjectGraph, OhriskError> {
   const projectRoot = input.currentProject.project.rootDir;
   const evidenceSnapshotRoot = input.workspaceRoot ?? projectRoot;
@@ -1772,6 +1781,7 @@ export function loadBaselineProjectGraph(input: {
       baselineRef: input.baselineRef,
       readRefFile: input.readRefFile,
       rootNameHint: input.currentProject.scanGraph.rootName ?? path.basename(projectRoot),
+      ...(input.mavenExternalPoms ? { mavenExternalPoms: input.mavenExternalPoms } : {}),
       ...(baselineFiles ? { baselineFiles } : {})
     });
     if (isErr(parsed)) {
@@ -1832,6 +1842,7 @@ function parseBaselineLockfileGraph(input: {
   readRefFile: GitRefFileReader;
   rootNameHint: string;
   baselineFiles?: ReadonlySet<string>;
+  mavenExternalPoms?: ReadonlyMap<string, MavenExternalPomDocument>;
 }): Result<DependencyGraph, OhriskError> {
   const relativeLockfilePath = projectRelativeLockfilePath(
     input.projectRoot,
@@ -2067,7 +2078,8 @@ function parseBaselineLockfileGraph(input: {
       : {}),
     ...(baselinePythonSourceReader
       ? { pythonLocalSourceFileReader: baselinePythonSourceReader }
-      : {})
+      : {}),
+    ...(input.mavenExternalPoms ? { mavenExternalPoms: input.mavenExternalPoms } : {})
   });
 }
 

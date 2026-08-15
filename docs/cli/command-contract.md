@@ -43,7 +43,7 @@ without producing a report.
 | `ohrisk explain <expr>` | Classify one license expression for the selected profile without scanning a project; `--policy` applies license-level organization rules only. |
 | `ohrisk cache status|prune|clear` | Inspect or clean the persistent artifact cache without scanning a project. |
 
-`scan` and the current side of `diff` use the same dependency graph parser,
+`scan`, `ci`, and both sides of `diff` use the same dependency graph parser,
 including bounded Maven parent and imported-BOM resolution through the
 configured artifact cache and network policy.
 
@@ -193,10 +193,10 @@ dependency, and managed dependency coordinates are resolved before matching;
 exact reactor-internal module
 dependencies are excluded from the external package graph. External parent and
 imported BOM versions use already available local Maven repository POMs first.
-Filesystem `scan` and `ci` runs may then fetch at most 32 exact, identity-checked
+Filesystem `scan`, `ci`, and each side of `diff` may then fetch at most 32 exact, identity-checked
 Maven Central model POMs, each bounded to 2 MiB and eight parent/BOM levels, and
 reuse them from the artifact cache in `--offline` mode. Incomplete model
-resolution fails closed. `diff`, archive inputs, and project-declared or
+resolution fails closed. Archive inputs and project-declared or
 alternate Maven repositories remain local-only for dependency-model resolution.
 Package license evidence may separately fall back to exact-version Maven Central
 POMs, explicitly allowed project repositories, and a bounded inherited
