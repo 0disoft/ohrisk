@@ -23,7 +23,11 @@ import {
   repositoryConflict,
   unexpectedTopLevelArgs
 } from "./argument-errors";
-import { supportedCacheOptions, supportedOptionsFor } from "./command-spec";
+import {
+  CLI_DEFAULTS,
+  supportedCacheOptions,
+  supportedOptionsFor
+} from "./command-spec";
 import {
   isSafeRepositoryRelativePath,
   normalizeHostnameOption,
@@ -156,7 +160,7 @@ function parseCacheArgs(argv: string[]): Result<CliCommand, OhriskError> {
     );
   }
 
-  let json = false;
+  let json = CLI_DEFAULTS.json;
   let cacheDir: string | undefined;
   let maxSizeBytes: number | undefined;
   let maxAgeMs: number | undefined;
@@ -255,24 +259,24 @@ function parseScanLikeArgs(
   argv: string[],
   kind: "scan" | "ci"
 ): Result<CliCommand, OhriskError> {
-  let profile: UsageProfile = "saas";
-  let prodOnly = false;
-  let json = false;
-  let sarif = false;
-  let markdown = false;
-  let html = false;
-  let reportLanguage: ReportLanguage = DEFAULT_REPORT_LANGUAGE;
+  let profile: UsageProfile = CLI_DEFAULTS.profile;
+  let prodOnly = CLI_DEFAULTS.prodOnly;
+  let json = CLI_DEFAULTS.json;
+  let sarif = CLI_DEFAULTS.sarif;
+  let markdown = CLI_DEFAULTS.markdown;
+  let html = CLI_DEFAULTS.html;
+  let reportLanguage: ReportLanguage = CLI_DEFAULTS.reportLanguage;
   let reportLanguageSet = false;
-  let cyclonedx = false;
-  let noWaivers = false;
+  let cyclonedx = CLI_DEFAULTS.cyclonedx;
+  let noWaivers = CLI_DEFAULTS.noWaivers;
   let lockfilePath: string | undefined;
   let archivePath: string | undefined;
   let repository: GitHubRepository | undefined;
-  let submoduleMode: RepositorySubmoduleMode = "ignore";
+  let submoduleMode: RepositorySubmoduleMode = CLI_DEFAULTS.submoduleMode;
   let submoduleModeSet = false;
-  let allLockfiles = false;
+  let allLockfiles = CLI_DEFAULTS.allLockfiles;
   let policyPath: string | undefined;
-  let offline = false;
+  let offline = CLI_DEFAULTS.offline;
   let cacheDir: string | undefined;
   let jobs: number | undefined;
   let timeoutMs: number | undefined;
@@ -281,10 +285,10 @@ function parseScanLikeArgs(
   const allowedHosts: string[] = [];
   let workspaceRootPath: string | undefined;
   let outputPath: string | undefined;
-  let openReport = false;
-  let failOn: RiskSeverity = "high";
-  let strictWaivers = false;
-  let allowPartialEvidence = false;
+  let openReport = CLI_DEFAULTS.openReport;
+  let failOn: RiskSeverity = CLI_DEFAULTS.failOn;
+  let strictWaivers = CLI_DEFAULTS.strictWaivers;
+  let allowPartialEvidence = CLI_DEFAULTS.allowPartialEvidence;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -866,8 +870,8 @@ function isHelpFlag(value: string | undefined): boolean {
 }
 
 function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
-  let profile: UsageProfile = "saas";
-  let json = false;
+  let profile: UsageProfile = CLI_DEFAULTS.profile;
+  let json = CLI_DEFAULTS.json;
   let policyPath: string | undefined;
   let workspaceRootPath: string | undefined;
   let outputPath: string | undefined;
@@ -986,14 +990,14 @@ function parseExplainArgs(argv: string[]): Result<CliCommand, OhriskError> {
 }
 
 function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
-  let profile: UsageProfile = "saas";
-  let prodOnly = false;
-  let json = false;
-  let markdown = false;
+  let profile: UsageProfile = CLI_DEFAULTS.profile;
+  let prodOnly = CLI_DEFAULTS.prodOnly;
+  let json = CLI_DEFAULTS.json;
+  let markdown = CLI_DEFAULTS.markdown;
   let lockfilePath: string | undefined;
-  let allLockfiles = false;
+  let allLockfiles = CLI_DEFAULTS.allLockfiles;
   let policyPath: string | undefined;
-  let offline = false;
+  let offline = CLI_DEFAULTS.offline;
   let cacheDir: string | undefined;
   let jobs: number | undefined;
   let timeoutMs: number | undefined;

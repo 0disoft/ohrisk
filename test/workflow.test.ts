@@ -4,6 +4,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 
+import {
+  ACTION_INPUT_DEFAULTS,
+  CLI_DEFAULTS
+} from "../src/cli/command-spec";
+
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const publicVersion = readLatestReleasedVersion();
 const CHECKOUT_ACTION =
@@ -105,10 +110,6 @@ describe("npm publish workflow", () => {
 describe("Ohrisk GitHub Action", () => {
   test("uses the bundled CLI by default and permits only exact overrides", () => {
     const actionSource = readFileSync(path.join(repoRoot, "action.yml"), "utf8");
-    const cliArgsSource = readFileSync(
-      path.join(repoRoot, "src", "cli", "args.ts"),
-      "utf8"
-    );
     const action = parseYaml(actionSource) as {
       inputs?: Record<string, { default?: string; required?: boolean }>;
       name?: string;
@@ -127,18 +128,10 @@ describe("Ohrisk GitHub Action", () => {
 
     expect(action.name).toBe("Ohrisk");
     expect(action.runs?.using).toBe("composite");
-    expect(action.inputs?.version?.default).toBe("bundled");
-    expect(action.inputs?.["node-version"]?.default).toBe("24");
-    expect(action.inputs?.["setup-node"]?.default).toBe("true");
-    expect(action.inputs?.command?.default).toBe("ci");
-    expect(action.inputs?.profile?.default).toBe("saas");
-    expect(action.inputs?.prod?.default).toBe("true");
-    expect(action.inputs?.["fail-on"]?.default).toBe("");
-    expect(action.inputs?.["baseline-ref"]?.default).toBe("");
-    expect(action.inputs?.archive?.default).toBe("");
-    expect(cliArgsSource).toContain('let failOn: RiskSeverity = "high"');
-    expect(action.inputs?.all?.default).toBe("false");
-    expect(action.inputs?.offline?.default).toBe("false");
+    for (const [name, expectedDefault] of Object.entries(ACTION_INPUT_DEFAULTS)) {
+      expect(action.inputs?.[name]?.default).toBe(expectedDefault);
+    }
+    expect(CLI_DEFAULTS.failOn).toBe("high");
     expect(action.inputs?.repo).toBeUndefined();
     expect(action.inputs?.format?.default).toBe("text");
     expect(action.outputs?.["report-path"]?.value).toBe(

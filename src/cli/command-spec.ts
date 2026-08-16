@@ -1,6 +1,78 @@
 import type { CacheAction, HelpTarget } from "./command";
+import type { UsageProfile } from "../policy/profiles";
+import type { RiskSeverity } from "../policy/types";
+import {
+  DEFAULT_REPORT_LANGUAGE,
+  type ReportLanguage
+} from "../report/language";
+import type { RepositorySubmoduleMode } from "../repository/github-repository";
 
 export type OptionSpecCommand = "scan" | "ci" | "diff" | "explain";
+
+export type CliDefaults = {
+  profile: UsageProfile;
+  prodOnly: boolean;
+  json: boolean;
+  sarif: boolean;
+  markdown: boolean;
+  html: boolean;
+  reportLanguage: ReportLanguage;
+  cyclonedx: boolean;
+  noWaivers: boolean;
+  submoduleMode: RepositorySubmoduleMode;
+  allLockfiles: boolean;
+  offline: boolean;
+  openReport: boolean;
+  failOn: RiskSeverity;
+  strictWaivers: boolean;
+  allowPartialEvidence: boolean;
+};
+
+export const CLI_DEFAULTS: CliDefaults = {
+  profile: "saas",
+  prodOnly: false,
+  json: false,
+  sarif: false,
+  markdown: false,
+  html: false,
+  reportLanguage: DEFAULT_REPORT_LANGUAGE,
+  cyclonedx: false,
+  noWaivers: false,
+  submoduleMode: "ignore",
+  allLockfiles: false,
+  offline: false,
+  openReport: false,
+  failOn: "high",
+  strictWaivers: false,
+  allowPartialEvidence: false
+};
+
+export const ACTION_INPUT_DEFAULTS = {
+  version: "bundled",
+  "node-version": "24",
+  "setup-node": "true",
+  command: "ci",
+  "baseline-ref": "",
+  profile: CLI_DEFAULTS.profile,
+  prod: "true",
+  "fail-on": "",
+  lockfile: "",
+  archive: "",
+  all: "false",
+  policy: "",
+  format: "text",
+  output: "",
+  "no-waivers": "false",
+  "strict-waivers": "false",
+  "allow-partial-evidence": "false",
+  offline: "false",
+  "cache-dir": "",
+  jobs: "",
+  timeout: "",
+  "registry-url": "",
+  "registry-token-env": "",
+  "allow-hosts": ""
+} as const;
 
 export const COMMAND_USAGE = {
   scan: "ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",

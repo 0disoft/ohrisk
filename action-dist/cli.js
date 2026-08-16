@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 6cf8f1f1dad8caf60fc71e737d0821220e495b7ae9986de54468a0b5dc568e2f
+// ohrisk-action-source-sha256: 805f295c49ac30016d555beae4d5448c7e4e413bca979ee76208206c879aa8a0
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -15413,6 +15413,50 @@ var SUPPORTED_COMMANDS = [
 ];
 
 // src/cli/command-spec.ts
+var CLI_DEFAULTS = {
+  profile: "saas",
+  prodOnly: false,
+  json: false,
+  sarif: false,
+  markdown: false,
+  html: false,
+  reportLanguage: DEFAULT_REPORT_LANGUAGE,
+  cyclonedx: false,
+  noWaivers: false,
+  submoduleMode: "ignore",
+  allLockfiles: false,
+  offline: false,
+  openReport: false,
+  failOn: "high",
+  strictWaivers: false,
+  allowPartialEvidence: false
+};
+var ACTION_INPUT_DEFAULTS = {
+  version: "bundled",
+  "node-version": "24",
+  "setup-node": "true",
+  command: "ci",
+  "baseline-ref": "",
+  profile: CLI_DEFAULTS.profile,
+  prod: "true",
+  "fail-on": "",
+  lockfile: "",
+  archive: "",
+  all: "false",
+  policy: "",
+  format: "text",
+  output: "",
+  "no-waivers": "false",
+  "strict-waivers": "false",
+  "allow-partial-evidence": "false",
+  offline: "false",
+  "cache-dir": "",
+  jobs: "",
+  timeout: "",
+  "registry-url": "",
+  "registry-token-env": "",
+  "allow-hosts": ""
+};
 var COMMAND_USAGE = {
   scan: "ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
   ci: "ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--allow-partial-evidence] [--output <file>] [--open]",
@@ -15753,7 +15797,7 @@ function parseCacheArgs(argv) {
       }
     }));
   }
-  let json = false;
+  let json = CLI_DEFAULTS.json;
   let cacheDir;
   let maxSizeBytes;
   let maxAgeMs;
@@ -15837,24 +15881,24 @@ function parseCiArgs(argv) {
   return parseScanLikeArgs(argv, "ci");
 }
 function parseScanLikeArgs(argv, kind) {
-  let profile = "saas";
-  let prodOnly = false;
-  let json = false;
-  let sarif = false;
-  let markdown = false;
-  let html = false;
-  let reportLanguage = DEFAULT_REPORT_LANGUAGE;
+  let profile = CLI_DEFAULTS.profile;
+  let prodOnly = CLI_DEFAULTS.prodOnly;
+  let json = CLI_DEFAULTS.json;
+  let sarif = CLI_DEFAULTS.sarif;
+  let markdown = CLI_DEFAULTS.markdown;
+  let html = CLI_DEFAULTS.html;
+  let reportLanguage = CLI_DEFAULTS.reportLanguage;
   let reportLanguageSet = false;
-  let cyclonedx = false;
-  let noWaivers = false;
+  let cyclonedx = CLI_DEFAULTS.cyclonedx;
+  let noWaivers = CLI_DEFAULTS.noWaivers;
   let lockfilePath;
   let archivePath;
   let repository;
-  let submoduleMode = "ignore";
+  let submoduleMode = CLI_DEFAULTS.submoduleMode;
   let submoduleModeSet = false;
-  let allLockfiles = false;
+  let allLockfiles = CLI_DEFAULTS.allLockfiles;
   let policyPath;
-  let offline = false;
+  let offline = CLI_DEFAULTS.offline;
   let cacheDir;
   let jobs;
   let timeoutMs;
@@ -15863,10 +15907,10 @@ function parseScanLikeArgs(argv, kind) {
   const allowedHosts = [];
   let workspaceRootPath;
   let outputPath;
-  let openReport = false;
-  let failOn = "high";
-  let strictWaivers = false;
-  let allowPartialEvidence = false;
+  let openReport = CLI_DEFAULTS.openReport;
+  let failOn = CLI_DEFAULTS.failOn;
+  let strictWaivers = CLI_DEFAULTS.strictWaivers;
+  let allowPartialEvidence = CLI_DEFAULTS.allowPartialEvidence;
   for (let index = 0;index < argv.length; index += 1) {
     const arg = argv[index];
     if (!arg) {
@@ -16364,8 +16408,8 @@ function isHelpFlag(value) {
   return value === "--help" || value === "-h";
 }
 function parseExplainArgs(argv) {
-  let profile = "saas";
-  let json = false;
+  let profile = CLI_DEFAULTS.profile;
+  let json = CLI_DEFAULTS.json;
   let policyPath;
   let workspaceRootPath;
   let outputPath;
@@ -16468,14 +16512,14 @@ function parseExplainArgs(argv) {
   });
 }
 function parseDiffArgs(argv) {
-  let profile = "saas";
-  let prodOnly = false;
-  let json = false;
-  let markdown = false;
+  let profile = CLI_DEFAULTS.profile;
+  let prodOnly = CLI_DEFAULTS.prodOnly;
+  let json = CLI_DEFAULTS.json;
+  let markdown = CLI_DEFAULTS.markdown;
   let lockfilePath;
-  let allLockfiles = false;
+  let allLockfiles = CLI_DEFAULTS.allLockfiles;
   let policyPath;
-  let offline = false;
+  let offline = CLI_DEFAULTS.offline;
   let cacheDir;
   let jobs;
   let timeoutMs;
