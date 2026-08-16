@@ -5,6 +5,17 @@
 - Updated the bundled `@0disoft/laqu` development dependency from 1.1.8 to
   1.1.9 while preserving compatible-major declaration ranges and exact Bun
   lockfile integrity.
+- The CLI command specification now owns defaults, option aliases, conflict and
+  requirement rules, output-format groups, help syntax, and Action value
+  vocabularies. Parser errors, rendered help, the bundled Action, and public
+  Action documentation are protected by contract-drift tests.
+- The bundled Action now rejects an invalid `setup-node` Boolean string instead
+  of silently treating it as disabled. All documented Boolean inputs accept
+  only the literal strings `true` and `false`.
+- Baseline diff preparation, remote repository scans, and scan policy and waiver
+  assembly now live in focused CLI modules. The central command entry point is
+  below the repository's 40 KiB refactoring threshold without changing report,
+  parser, waiver, or exit-code behavior.
 
 - Release verification now separates static contracts from the complete test
   suite and runs all tests once under coverage. Schema and parser-fuzz tests

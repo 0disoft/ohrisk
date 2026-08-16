@@ -40,9 +40,9 @@ publication.
 
 ## Automated Publish
 
-After updating `package.json`, `src/cli/version.ts`, `CHANGELOG.md`, and this
-file's example tag when needed, push `main`, then push a version tag matching
-`package.json`:
+After updating `package.json` and `CHANGELOG.md`, run `bun run version:sync` to
+update candidate references such as this file's example tag. Then push `main`
+and a version tag matching `package.json`:
 
 ```bash
 git tag v1.15.1
