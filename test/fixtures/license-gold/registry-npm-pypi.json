@@ -1,0 +1,194 @@
+[
+  {
+    "id": "npm-artifact-agpl-over-registry-mit",
+    "sourceUrl": "https://docs.npmjs.com/files/package.json/#license",
+    "rationale": "Integrity-verified npm artifact metadata declaring AGPL must win over a permissive registry-only license claim.",
+    "registryContext": { "ecosystem": "npm", "artifactVerified": true, "ignoredRegistryLicense": "MIT" },
+    "evidence": { "packageJsonLicense": "AGPL-3.0-only", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "high", "confidence": "high" }
+  },
+  {
+    "id": "npm-artifact-mit-over-registry-gpl",
+    "sourceUrl": "https://docs.npmjs.com/files/package.json/#license",
+    "rationale": "A restrictive registry-only claim must not replace the MIT declaration inside the integrity-verified npm artifact.",
+    "registryContext": { "ecosystem": "npm", "artifactVerified": true, "ignoredRegistryLicense": "GPL-3.0-only" },
+    "evidence": { "packageJsonLicense": "MIT", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "high" }
+  },
+  {
+    "id": "npm-artifact-file-only-mit",
+    "sourceUrl": "https://spdx.org/licenses/MIT.html",
+    "rationale": "A verified npm artifact without license metadata may use recognizable MIT file text at reduced confidence.",
+    "registryContext": { "ecosystem": "npm", "artifactVerified": true },
+    "evidence": {
+      "files": [{ "path": "LICENSE", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "medium" }
+  },
+  {
+    "id": "npm-artifact-pointer-gpl-file",
+    "sourceUrl": "https://docs.npmjs.com/files/package.json/#license",
+    "rationale": "A malformed npm SEE LICENSE pointer may fall back to a recognizable GPL file from the verified artifact.",
+    "registryContext": { "ecosystem": "npm", "artifactVerified": true },
+    "evidence": {
+      "packageJsonLicense": "SEE LICENSE IN COPYING",
+      "files": [{ "path": "COPYING", "kind": "copying", "text": "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\nTERMS AND CONDITIONS" }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "high", "confidence": "medium" }
+  },
+  {
+    "id": "npm-artifact-metadata-file-conflict",
+    "sourceUrl": "https://docs.npmjs.com/files/package.json/#license",
+    "rationale": "MIT package metadata and GPL file text inside the same verified npm artifact are conflicting evidence.",
+    "registryContext": { "ecosystem": "npm", "artifactVerified": true },
+    "evidence": {
+      "packageJsonLicense": "MIT",
+      "files": [{ "path": "COPYING", "kind": "copying", "text": "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\nTERMS AND CONDITIONS" }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["conflicting-evidence"] }
+  },
+  {
+    "id": "npm-legacy-licenses-array",
+    "sourceUrl": "https://docs.npmjs.com/files/package.json/#license",
+    "rationale": "The deprecated npm licenses array remains compatible but must not receive modern high-confidence metadata status.",
+    "registryContext": { "ecosystem": "npm", "artifactVerified": true },
+    "evidence": {
+      "packageJsonLicenses": [{ "type": "MIT" }, { "type": "Apache-2.0" }],
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "medium" }
+  },
+  {
+    "id": "npm-artifact-unlicensed-over-registry-mit",
+    "sourceUrl": "https://docs.npmjs.com/files/package.json/#license",
+    "rationale": "UNLICENSED inside the verified npm artifact withholds permission even when registry metadata claims MIT.",
+    "registryContext": { "ecosystem": "npm", "artifactVerified": true, "ignoredRegistryLicense": "MIT" },
+    "evidence": { "packageJsonLicense": "UNLICENSED", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "high", "confidence": "high" }
+  },
+  {
+    "id": "pypi-artifact-mit-over-registry-agpl",
+    "sourceUrl": "https://packaging.python.org/en/latest/specifications/core-metadata/#license-expression",
+    "rationale": "The wheel License-Expression applies to that distribution and must replace a conflicting registry-only AGPL claim.",
+    "registryContext": { "ecosystem": "pypi", "artifactVerified": true, "ignoredRegistryLicense": "AGPL-3.0-only" },
+    "evidence": { "metadataLicense": "MIT", "metadataLicenseKind": "declared", "metadataSource": "package.dist-info/METADATA", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "low", "confidence": "high" }
+  },
+  {
+    "id": "pypi-artifact-agpl-over-registry-mit",
+    "sourceUrl": "https://packaging.python.org/en/latest/specifications/core-metadata/#license-expression",
+    "rationale": "A verified wheel AGPL License-Expression must not be hidden by a permissive PyPI project metadata claim.",
+    "registryContext": { "ecosystem": "pypi", "artifactVerified": true, "ignoredRegistryLicense": "MIT" },
+    "evidence": { "metadataLicense": "AGPL-3.0-only", "metadataLicenseKind": "declared", "metadataSource": "package.dist-info/METADATA", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "saas",
+    "expected": { "severity": "high", "confidence": "high" }
+  },
+  {
+    "id": "pypi-expression-file-conflict",
+    "sourceUrl": "https://packaging.python.org/en/latest/specifications/core-metadata/#license-expression",
+    "rationale": "A wheel MIT License-Expression and recognizable GPL license file conflict inside the same distribution.",
+    "registryContext": { "ecosystem": "pypi", "artifactVerified": true },
+    "evidence": {
+      "metadataLicense": "MIT",
+      "metadataLicenseKind": "declared",
+      "metadataSource": "package.dist-info/METADATA",
+      "files": [{ "path": "package.dist-info/licenses/COPYING", "kind": "copying", "text": "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\nTERMS AND CONDITIONS" }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["conflicting-evidence"] }
+  },
+  {
+    "id": "pypi-classifier-with-matching-file",
+    "sourceUrl": "https://packaging.python.org/en/latest/specifications/core-metadata/#classifier-multiple-use",
+    "rationale": "A deprecated PyPI license classifier corroborated by an MIT file remains usable only at medium confidence.",
+    "registryContext": { "ecosystem": "pypi", "artifactVerified": true },
+    "evidence": {
+      "metadataLicense": "MIT",
+      "metadataLicenseKind": "classifier",
+      "metadataSource": "package.dist-info/METADATA",
+      "files": [{ "path": "package.dist-info/licenses/LICENSE", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "medium" }
+  },
+  {
+    "id": "pypi-classifier-only",
+    "sourceUrl": "https://packaging.python.org/en/latest/specifications/core-metadata/#classifier-multiple-use",
+    "rationale": "A deprecated Apache license classifier without file corroboration remains compatible but not high-confidence evidence.",
+    "registryContext": { "ecosystem": "pypi", "artifactVerified": true },
+    "evidence": { "metadataLicense": "Apache-2.0", "metadataLicenseKind": "classifier", "metadataSource": "package.dist-info/METADATA", "files": [], "source": "tarball", "warnings": [] },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "medium" }
+  },
+  {
+    "id": "pypi-legacy-prose-file-fallback",
+    "sourceUrl": "https://packaging.python.org/en/latest/specifications/core-metadata/#license",
+    "rationale": "Malformed legacy License prose may fall back to a recognizable MIT file from the same verified distribution.",
+    "registryContext": { "ecosystem": "pypi", "artifactVerified": true },
+    "evidence": {
+      "metadataLicense": "Copyright 2010 Example Authors",
+      "metadataLicenseKind": "declared",
+      "metadataSource": "package.dist-info/METADATA",
+      "files": [{ "path": "package.dist-info/licenses/LICENSE", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "medium" }
+  },
+  {
+    "id": "pypi-expression-with-matching-files",
+    "sourceUrl": "https://packaging.python.org/en/latest/guides/licensing-examples-and-user-scenarios/#advanced-example",
+    "rationale": "An explicit MIT OR GPL expression defines how its two matching wheel license files combine.",
+    "registryContext": { "ecosystem": "pypi", "artifactVerified": true },
+    "evidence": {
+      "metadataLicense": "MIT OR GPL-3.0-only",
+      "metadataLicenseKind": "declared",
+      "metadataSource": "package.dist-info/METADATA",
+      "files": [
+        { "path": "package.dist-info/licenses/LICENSE-MIT", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." },
+        { "path": "package.dist-info/licenses/COPYING", "kind": "copying", "text": "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\nTERMS AND CONDITIONS" }
+      ],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "high" }
+  },
+  {
+    "id": "pypi-files-without-expression",
+    "sourceUrl": "https://packaging.python.org/en/latest/specifications/core-metadata/#license-file-multiple-use",
+    "rationale": "Multiple distinct wheel license files without a License-Expression do not reveal their AND or OR relationship.",
+    "registryContext": { "ecosystem": "pypi", "artifactVerified": true },
+    "evidence": {
+      "files": [
+        { "path": "package.dist-info/licenses/LICENSE-MIT", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." },
+        { "path": "package.dist-info/licenses/COPYING", "kind": "copying", "text": "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\nTERMS AND CONDITIONS" }
+      ],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["conflicting-evidence"] }
+  }
+]

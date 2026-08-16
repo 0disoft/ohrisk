@@ -109,7 +109,7 @@ describe("collectPythonPackageEvidence", () => {
       expect(evidence.value.metadataLicense).toBe("MIT");
       expect(normalizeLicenseEvidence(evidence.value)).toMatchObject({
         expression: "MIT",
-        confidence: "high"
+        confidence: "medium"
       });
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });

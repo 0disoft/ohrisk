@@ -15,6 +15,7 @@ import { classifyEvidenceFile } from "../src/evidence/license-files";
 import { collectLocalPackageEvidence } from "../src/evidence/local-package";
 import { collectTarballEvidence } from "../src/evidence/tarball";
 import { parseBunLockfile } from "../src/graph/npm-bun-lock";
+import { normalizeLicenseEvidence } from "../src/license/normalize";
 import { formatError } from "../src/shared/errors";
 import { createZip } from "./helpers/zip";
 
@@ -1802,6 +1803,10 @@ describe("collectGraphEvidence", () => {
       packageJsonLicense: "AGPL-3.0-only",
       source: "tarball"
     })]);
+    expect(normalizeLicenseEvidence(evidence.value[0]!)).toMatchObject({
+      original: "AGPL-3.0-only",
+      choices: ["AGPL-3.0-only"]
+    });
   });
 
   test("reuses bounded artifact host resolutions across registry requests", async () => {

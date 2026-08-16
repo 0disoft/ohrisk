@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: a91c311fc28b293073ef9ef3bc7c90200a200cc16be3c3542f83c2dd80b2d131
+// ohrisk-action-source-sha256: 365b11bf96a43df809d4a40b90d5f78b77b07df4b6d3c5c120192992f4243eeb
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -53422,7 +53422,7 @@ function normalizeLicenseEvidence(evidence) {
     ...parsed.exceptions.length > 0 ? { exceptions: parsed.exceptions } : {},
     signals,
     evidenceSources,
-    confidence: signals.includes("conflicting-evidence") || signals.includes("custom-text") ? "low" : usesDeprecatedSpdx || parsed.usedAlias || licenseExpression.source === "license-file" ? "medium" : "high"
+    confidence: signals.includes("conflicting-evidence") || signals.includes("custom-text") ? "low" : usesDeprecatedSpdx || parsed.usedAlias || licenseExpression.source === "license-file" || evidence.metadataLicenseKind === "classifier" || evidence.packageJsonLicenses !== undefined ? "medium" : "high"
   }, parsed.ast);
 }
 function comparableLicenseId(licenseId) {

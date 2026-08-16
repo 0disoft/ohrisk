@@ -7,6 +7,7 @@ import adversarialEvidenceJson from "./fixtures/license-gold/adversarial-evidenc
 import expressionsJson from "./fixtures/license-gold/expressions.json" with { type: "json" };
 import fileEvidenceJson from "./fixtures/license-gold/file-evidence.json" with { type: "json" };
 import metadataJson from "./fixtures/license-gold/metadata.json" with { type: "json" };
+import registryNpmPyPiJson from "./fixtures/license-gold/registry-npm-pypi.json" with { type: "json" };
 import restrictionsJson from "./fixtures/license-gold/restrictions.json" with { type: "json" };
 import type { LicenseEvidence } from "../src/evidence/types";
 import type { DependencyNode } from "../src/graph/types";
@@ -25,6 +26,11 @@ type GoldCase = {
   rationale: string;
   evidence: Omit<LicenseEvidence, "packageId">;
   profile: UsageProfile;
+  registryContext?: {
+    ecosystem: "npm" | "pypi" | "maven" | "cargo";
+    artifactVerified: boolean;
+    ignoredRegistryLicense?: string;
+  };
   expected: {
     severity: RiskSeverity;
     confidence: NormalizedLicenseConfidence;
@@ -38,7 +44,8 @@ const corpus = [
   ...metadataJson,
   ...expressionsJson,
   ...restrictionsJson,
-  ...fileEvidenceJson
+  ...fileEvidenceJson,
+  ...registryNpmPyPiJson
 ] as GoldCase[];
 
 describe("license decision gold corpus", () => {
@@ -80,22 +87,36 @@ describe("license decision gold corpus", () => {
       expectedUnknown: expectedUnknown.length,
       unknownMatches
     }).toEqual({
-      cases: 50,
-      exactMatches: 50,
-      expectedHigh: 13,
-      highTruePositives: 13,
-      expectedNonHigh: 37,
+      cases: 65,
+      exactMatches: 65,
+      expectedHigh: 17,
+      highTruePositives: 17,
+      expectedNonHigh: 48,
       highFalsePositives: 0,
-      expectedUnknown: 15,
-      unknownMatches: 15
+      expectedUnknown: 18,
+      unknownMatches: 18
     });
 
     const accuracyDoc = readFileSync(path.join(repoRoot, "docs", "accuracy.md"), "utf8");
-    expect(accuracyDoc).toContain("50/50");
-    expect(accuracyDoc).toContain("13/13");
-    expect(accuracyDoc).toContain("0/37");
-    expect(accuracyDoc).toContain("15/15");
+    expect(accuracyDoc).toContain("65/65");
+    expect(accuracyDoc).toContain("17/17");
+    expect(accuracyDoc).toContain("0/48");
+    expect(accuracyDoc).toContain("18/18");
     expect(accuracyDoc).toContain("not statistically representative");
+  });
+
+  test("keeps registry claims outside verified artifact evidence", () => {
+    const registryCases = corpus.filter((item) => item.registryContext !== undefined);
+    expect(registryCases).toHaveLength(15);
+
+    for (const item of registryCases) {
+      expect(item.registryContext?.artifactVerified).toBe(true);
+      expect(item.evidence.source).toBe("tarball");
+      const ignoredClaim = item.registryContext?.ignoredRegistryLicense;
+      if (ignoredClaim) {
+        expect(declaredLicenseClaims(item.evidence)).not.toContain(ignoredClaim);
+      }
+    }
   });
 });
 
@@ -116,6 +137,21 @@ function evaluateCase(item: GoldCase): {
     confidence: normalized.confidence,
     signals: normalized.signals
   };
+}
+
+function declaredLicenseClaims(evidence: Omit<LicenseEvidence, "packageId">): string[] {
+  return [
+    evidence.packageJsonLicense,
+    evidence.metadataLicense,
+    ...(Array.isArray(evidence.packageJsonLicenses)
+      ? evidence.packageJsonLicenses.flatMap((item) =>
+          typeof item === "object" && item !== null && "type" in item
+            ? [String(item.type)]
+            : typeof item === "string"
+              ? [item]
+              : [])
+      : [])
+  ].filter((claim): claim is string => claim !== undefined);
 }
 
 function dependency(packageId: string): DependencyNode {

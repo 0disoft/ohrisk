@@ -17,7 +17,8 @@
   major using caret ranges while `bun.lock` continues to pin exact resolved
   versions and integrity hashes. Mutable `latest` exceptions are no longer
   permitted by source hygiene.
-- The 50-case license decision corpus now covers truncated and materially
+- The 65-case license decision corpus now covers npm and PyPI registry metadata
+  anomalies and verified-artifact precedence, as well as truncated and materially
   altered license text, multiple LICENSE and NOTICE files, and contradictory
   metadata/file claims in addition to profile-sensitive MPL, GPL,
   LGPL, EPL, and AGPL decisions, permissive compound expressions, explicit

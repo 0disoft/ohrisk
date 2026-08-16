@@ -375,6 +375,28 @@ describe("PyPI release evidence", () => {
     }
   });
 
+  test("uses verified wheel licensing instead of conflicting PyPI project metadata", async () => {
+    const wheel = exampleWheel("AGPL-3.0-only");
+    const result = await collectGraphEvidence({
+      graph: graphFor("pypi"),
+      projectRoot: process.cwd(),
+      allowLocalProjectEvidence: false,
+      fetchArtifact: async (url) => okResponse(url === PYPI_METADATA_URL ? pypiMetadata(wheel) : wheel)
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value[0]).toMatchObject({
+      metadataLicense: "AGPL-3.0-only",
+      metadataSource: "example_pkg-1.2.3.dist-info/METADATA",
+      source: "tarball"
+    });
+    expect(normalizeLicenseEvidence(result.value[0]!)).toMatchObject({
+      original: "AGPL-3.0-only",
+      choices: ["AGPL-3.0-only"]
+    });
+  });
+
   test("turns stalled PyPI metadata fetches into unavailable evidence", async () => {
     let fetchSignal: AbortSignal | undefined;
     const result = await collectGraphEvidence({

@@ -190,7 +190,11 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     evidenceSources,
     confidence: signals.includes("conflicting-evidence") || signals.includes("custom-text")
       ? "low"
-      : usesDeprecatedSpdx || parsed.usedAlias || licenseExpression.source === "license-file"
+      : usesDeprecatedSpdx
+        || parsed.usedAlias
+        || licenseExpression.source === "license-file"
+        || evidence.metadataLicenseKind === "classifier"
+        || evidence.packageJsonLicenses !== undefined
         ? "medium"
         : "high"
   }, parsed.ast);
