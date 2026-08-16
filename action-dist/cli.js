@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 863b8f66676cee1b0c828e9ed953ea9c93c683d7b90a9954423459834e5048f7
+// ohrisk-action-source-sha256: a4e1e3accfe38daaf862de15ab1f3e8b31dc7ffeee3d8696ec4ac42b1c9d7620
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -40910,6 +40910,62 @@ function readContentLength(headers) {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
+// src/evidence/artifact-url.ts
+function parseHttpUrl(value) {
+  try {
+    const url = new URL(value);
+    return (url.protocol === "https:" || url.protocol === "http:") && url.hostname !== "" ? url : undefined;
+  } catch {
+    return;
+  }
+}
+function redactUrlCredentialsInDetails(details) {
+  const redacted = { ...details };
+  for (const key of [
+    "registryUrl",
+    "resolved",
+    "tarballUrl",
+    "artifactPath",
+    "redirectFrom",
+    "redirectUrl",
+    "redirectLocation"
+  ]) {
+    const value = redacted[key];
+    if (typeof value === "string") {
+      redacted[key] = safeUrlForErrorDetails(value);
+    }
+  }
+  return redacted;
+}
+function safeOptionalUrlForErrorDetails(value) {
+  return value === undefined ? undefined : safeUrlForErrorDetails(value);
+}
+function safeErrorCauseForDetails(cause) {
+  return safeUrlForErrorDetails(cause instanceof Error ? cause.message : String(cause));
+}
+function safeUrlForErrorDetails(value) {
+  try {
+    const url = new URL(value);
+    if (url.username === "" && url.password === "" && url.search === "" && url.hash === "") {
+      return redactUrlCredentialsInText(value);
+    }
+    if (url.username !== "") {
+      url.username = "redacted";
+    }
+    if (url.password !== "") {
+      url.password = "redacted";
+    }
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return redactUrlCredentialsInText(value);
+  }
+}
+function redactUrlCredentialsInText(value) {
+  return value.replace(/([a-z][a-z0-9+.-]*:\/\/)([^@/?#\s\\]*)(@)/gi, "$1redacted$3").replace(/([a-z][a-z0-9+.-]*:\/)([^@/?#\s\\]*)(@)/gi, "$1redacted$3").replace(/([a-z][a-z0-9+.-]{1,}:\\+)([^@/?#\s\\]*)(@)/gi, "$1redacted$3");
+}
+
 // src/evidence/cancellation.ts
 class BatchCancellation {
   controller = new AbortController;
@@ -51581,38 +51637,6 @@ async function resolveArtifactHostWithTimeout(input) {
     }
   }
 }
-function parseHttpUrl(value) {
-  try {
-    const url = new URL(value);
-    return (url.protocol === "https:" || url.protocol === "http:") && url.hostname !== "" ? url : undefined;
-  } catch {
-    return;
-  }
-}
-function redactUrlCredentialsInDetails(details) {
-  const redacted = { ...details };
-  for (const key of [
-    "registryUrl",
-    "resolved",
-    "tarballUrl",
-    "artifactPath",
-    "redirectFrom",
-    "redirectUrl",
-    "redirectLocation"
-  ]) {
-    const value = redacted[key];
-    if (typeof value === "string") {
-      redacted[key] = safeUrlForErrorDetails(value);
-    }
-  }
-  return redacted;
-}
-function safeOptionalUrlForErrorDetails(value) {
-  return value === undefined ? undefined : safeUrlForErrorDetails(value);
-}
-function safeErrorCauseForDetails(cause) {
-  return safeUrlForErrorDetails(cause instanceof Error ? cause.message : String(cause));
-}
 
 class BlockedArtifactRemoteAddressError extends Error {
   hostname;
@@ -51655,28 +51679,6 @@ function createRemoteArtifactExceptionError(input) {
       cause: safeErrorCauseForDetails(input.cause)
     }
   });
-}
-function safeUrlForErrorDetails(value) {
-  try {
-    const url = new URL(value);
-    if (url.username === "" && url.password === "" && url.search === "" && url.hash === "") {
-      return redactUrlCredentialsInText(value);
-    }
-    if (url.username !== "") {
-      url.username = "redacted";
-    }
-    if (url.password !== "") {
-      url.password = "redacted";
-    }
-    url.search = "";
-    url.hash = "";
-    return url.toString();
-  } catch {
-    return redactUrlCredentialsInText(value);
-  }
-}
-function redactUrlCredentialsInText(value) {
-  return value.replace(/([a-z][a-z0-9+.-]*:\/\/)([^@/?#\s\\]*)(@)/gi, "$1redacted$3").replace(/([a-z][a-z0-9+.-]*:\/)([^@/?#\s\\]*)(@)/gi, "$1redacted$3").replace(/([a-z][a-z0-9+.-]{1,}:\\+)([^@/?#\s\\]*)(@)/gi, "$1redacted$3");
 }
 function isExplicitlyAllowedArtifactHost(hostname, allowedHosts) {
   const host = normalizeUrlHostname(hostname);

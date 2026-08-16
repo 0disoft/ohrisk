@@ -35,6 +35,13 @@ import {
   type ArtifactFetcher
 } from "./artifact-response";
 import {
+  parseHttpUrl,
+  redactUrlCredentialsInDetails,
+  safeErrorCauseForDetails,
+  safeOptionalUrlForErrorDetails,
+  safeUrlForErrorDetails
+} from "./artifact-url";
+import {
   abortableDelay,
   BatchCancellation,
   isAbortErrorLike,
@@ -3773,45 +3780,6 @@ async function resolveArtifactHostWithTimeout(input: {
   }
 }
 
-function parseHttpUrl(value: string): URL | undefined {
-  try {
-    const url = new URL(value);
-    return (url.protocol === "https:" || url.protocol === "http:") && url.hostname !== ""
-      ? url
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function redactUrlCredentialsInDetails(details: Record<string, unknown>): Record<string, unknown> {
-  const redacted = { ...details };
-  for (const key of [
-    "registryUrl",
-    "resolved",
-    "tarballUrl",
-    "artifactPath",
-    "redirectFrom",
-    "redirectUrl",
-    "redirectLocation"
-  ]) {
-    const value = redacted[key];
-    if (typeof value === "string") {
-      redacted[key] = safeUrlForErrorDetails(value);
-    }
-  }
-
-  return redacted;
-}
-
-function safeOptionalUrlForErrorDetails(value: string | undefined): string | undefined {
-  return value === undefined ? undefined : safeUrlForErrorDetails(value);
-}
-
-function safeErrorCauseForDetails(cause: unknown): string {
-  return safeUrlForErrorDetails(cause instanceof Error ? cause.message : String(cause));
-}
-
 class BlockedArtifactRemoteAddressError extends Error {
   readonly hostname: string;
   readonly remoteAddress: string;
@@ -3869,50 +3837,6 @@ function createRemoteArtifactExceptionError(input: {
       cause: safeErrorCauseForDetails(input.cause)
     }
   });
-}
-
-function safeUrlForErrorDetails(value: string): string {
-  try {
-    const url = new URL(value);
-    if (
-      url.username === ""
-      && url.password === ""
-      && url.search === ""
-      && url.hash === ""
-    ) {
-      return redactUrlCredentialsInText(value);
-    }
-
-    if (url.username !== "") {
-      url.username = "redacted";
-    }
-    if (url.password !== "") {
-      url.password = "redacted";
-    }
-
-    url.search = "";
-    url.hash = "";
-
-    return url.toString();
-  } catch {
-    return redactUrlCredentialsInText(value);
-  }
-}
-
-function redactUrlCredentialsInText(value: string): string {
-  return value
-    .replace(
-      /([a-z][a-z0-9+.-]*:\/\/)([^@/?#\s\\]*)(@)/gi,
-      "$1redacted$3"
-    )
-    .replace(
-      /([a-z][a-z0-9+.-]*:\/)([^@/?#\s\\]*)(@)/gi,
-      "$1redacted$3"
-    )
-    .replace(
-      /([a-z][a-z0-9+.-]{1,}:\\+)([^@/?#\s\\]*)(@)/gi,
-      "$1redacted$3"
-    );
 }
 
 function isExplicitlyAllowedArtifactHost(
