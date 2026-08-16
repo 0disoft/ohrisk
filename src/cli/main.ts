@@ -37,24 +37,15 @@ import {
   type GitRefFileReader
 } from "../git/ref-file";
 import { refineGoDependencyScopes } from "../graph/go-scope";
-import type { DependencyGraph, DependencyNode } from "../graph/types";
+import type { DependencyGraph } from "../graph/types";
 import { normalizeAllLicenseEvidence, normalizeLicenseEvidence } from "../license/normalize";
-import type { NormalizedLicense } from "../license/types";
 import { evaluateLicenseRisk, evaluateLicenseRisks } from "../policy/evaluate";
 import {
   readPolicyConfig,
   summarizePolicyConfig,
-  type PolicyConfigSummary,
   type ResolvedPolicyConfig
 } from "../policy/config";
 import { hasFindingAtOrAbove } from "../policy/severity";
-import type { RiskFinding } from "../policy/types";
-import {
-  applyRiskWaivers,
-  readRiskWaivers,
-  type RiskWaiver,
-  type WaivedRiskFinding
-} from "../policy/waivers";
 import { renderCycloneDxReport } from "../report/cyclonedx-report";
 import { renderDiffReport } from "../report/diff-report";
 import { renderExplainReport } from "../report/explain-report";
@@ -109,9 +100,17 @@ import {
   type ScanClock,
   type ScanProgressReporter
 } from "./scan-progress";
+import {
+  evaluateScanPolicyAndWaivers,
+  filterGraphBeforeEvidence,
+  filterGraphForProdOnly,
+  hasWaiverDrift,
+  type ScanResult
+} from "./scan-policy";
 import { resolveWorkspaceRootPath } from "./workspace-root";
 
 export { loadBaselineProjectGraph } from "./baseline-project";
+export { filterGraphBeforeEvidence } from "./scan-policy";
 
 export type CliIO = {
   cwd: string;
@@ -126,18 +125,6 @@ export type CliIO = {
   openReport?: ReportOpener;
   cloneRepository?: RepositoryCloner;
   signal?: AbortSignal;
-};
-
-type ScanResult = {
-  project: ProjectInput;
-  graph: DependencyGraph;
-  evidence: LicenseEvidence[];
-  normalizedLicenses: NormalizedLicense[];
-  riskFindings: RiskFinding[];
-  waivedFindings: WaivedRiskFinding[];
-  expiredWaivers: RiskWaiver[];
-  unmatchedWaivers: RiskWaiver[];
-  policy: PolicyConfigSummary;
 };
 
 type EvidenceRuntimeOptions = {
@@ -666,13 +653,6 @@ async function runScanAt(input: {
   return 0;
 }
 
-function hasWaiverDrift(input: {
-  expiredWaivers: unknown[];
-  unmatchedWaivers: unknown[];
-}): boolean {
-  return input.expiredWaivers.length > 0 || input.unmatchedWaivers.length > 0;
-}
-
 async function scanProject(input: {
   cwd: string;
   configurationRoot?: string;
@@ -933,116 +913,16 @@ async function evaluateProjectScan(input: {
   }
 
   input.progress?.(SCAN_PROGRESS_EVALUATE_PERCENT, "Evaluating license risk...");
-  const scanGraph = filterGraphForProdOnly(
-    refineGoDependencyScopes(input.scanGraph, evidence.value),
-    input.prodOnly
-  );
-  const scanNodeIds = new Set(scanGraph.nodes.map((node) => node.id));
-  const relevantEvidence = evidence.value.filter((item) => scanNodeIds.has(item.packageId));
-  const normalizedLicenses = normalizeAllLicenseEvidence(relevantEvidence);
-  const riskFindings = evaluateLicenseRisks({
-    licenses: normalizedLicenses,
-    dependencies: scanGraph.nodes,
-    profile: input.profile,
-    policy: input.policy
-  });
-  if (!input.applyWaivers) {
-    return ok({
-      project: input.project,
-      graph: scanGraph,
-      evidence: relevantEvidence,
-      normalizedLicenses,
-      riskFindings,
-      waivedFindings: [],
-      expiredWaivers: [],
-      unmatchedWaivers: [],
-      policy: summarizePolicyConfig(input.policy)
-    });
-  }
-
-  const waivers = readRiskWaivers(input.configurationRoot ?? input.project.rootDir);
-
-  if (isErr(waivers)) {
-    return waivers;
-  }
-
-  const appliedWaivers = applyRiskWaivers({
-    findings: riskFindings,
-    waivers: waivers.value
-  });
-
-  return ok({
+  return evaluateScanPolicyAndWaivers({
     project: input.project,
-    graph: scanGraph,
-    evidence: relevantEvidence,
-    normalizedLicenses,
-    riskFindings: appliedWaivers.activeFindings,
-    waivedFindings: appliedWaivers.waivedFindings,
-    expiredWaivers: appliedWaivers.expiredWaivers,
-    unmatchedWaivers: appliedWaivers.unmatchedWaivers,
-    policy: summarizePolicyConfig(input.policy)
+    collectionGraph: input.scanGraph,
+    evidence: evidence.value,
+    profile: input.profile,
+    policy: input.policy,
+    prodOnly: input.prodOnly,
+    applyWaivers: input.applyWaivers,
+    ...(input.configurationRoot ? { configurationRoot: input.configurationRoot } : {})
   });
-}
-
-function filterGraphForProdOnly(graph: DependencyGraph, prodOnly: boolean): DependencyGraph {
-  if (!prodOnly) {
-    return graph;
-  }
-
-  const productionNodeIds = new Set(
-    graph.nodes
-      .filter(isProductionRelevantDependency)
-      .map((node) => node.id)
-  );
-  const dependencyPathSegments = dependencyPathSegmentSets(graph.nodes, productionNodeIds);
-  const nodes = graph.nodes
-    .filter((node) => productionNodeIds.has(node.id))
-    .map((node) => {
-      const paths = node.paths.filter((dependencyPath) =>
-        isProductionRelevantPath(dependencyPath, dependencyPathSegments)
-      );
-
-      return {
-        ...node,
-        direct: paths.some((dependencyPath) =>
-          isDirectDependencyPath(dependencyPath, dependencyPathSegments.all)
-        ),
-        paths
-      };
-    })
-    .filter((node) => node.paths.length > 0);
-  const nodeIds = new Set(nodes.map((node) => node.id));
-
-  const embeddedEvidence = graph.embeddedEvidence?.filter((evidence) =>
-    nodeIds.has(evidence.packageId)
-  );
-  return {
-    ...graph,
-    nodes,
-    ...(embeddedEvidence ? { embeddedEvidence } : {})
-  };
-}
-
-export function filterGraphBeforeEvidence(graph: DependencyGraph, prodOnly: boolean): DependencyGraph {
-  if (!prodOnly) {
-    return graph;
-  }
-  const productionGraph = filterGraphForProdOnly(graph, true);
-  const productionNodesById = new Map(productionGraph.nodes.map((node) => [node.id, node]));
-  const nodes = graph.nodes.flatMap((node) => {
-    if (node.ecosystem === "go") {
-      return [node];
-    }
-    const productionNode = productionNodesById.get(node.id);
-    return productionNode ? [productionNode] : [];
-  });
-  const nodeIds = new Set(nodes.map((node) => node.id));
-  const embeddedEvidence = graph.embeddedEvidence?.filter((item) => nodeIds.has(item.packageId));
-  return {
-    ...graph,
-    nodes,
-    ...(embeddedEvidence ? { embeddedEvidence } : {})
-  };
 }
 
 async function collectEvidenceForGraph(input: {
@@ -1285,51 +1165,6 @@ function invalidRuntimeOption(
     message,
     details
   });
-}
-
-function isProductionRelevantDependency(node: DependencyNode): boolean {
-  return node.dependencyType !== "development";
-}
-
-function dependencyPathSegmentSets(
-  nodes: DependencyNode[],
-  productionNodeIds: Set<string>
-): {
-  all: Set<string>;
-  production: Set<string>;
-} {
-  const all = new Set<string>();
-  const production = new Set<string>();
-
-  for (const node of nodes) {
-    all.add(node.id);
-    if (productionNodeIds.has(node.id)) {
-      production.add(node.id);
-    }
-    for (const installName of node.installNames ?? []) {
-      const segment = `${installName} -> ${node.id}`;
-      all.add(segment);
-      if (productionNodeIds.has(node.id)) {
-        production.add(segment);
-      }
-    }
-  }
-
-  return { all, production };
-}
-
-function isProductionRelevantPath(
-  pathSegments: string[],
-  dependencyPathSegments: { all: Set<string>; production: Set<string> }
-): boolean {
-  return pathSegments.slice(1).every((segment) =>
-    !dependencyPathSegments.all.has(segment)
-    || dependencyPathSegments.production.has(segment)
-  );
-}
-
-function isDirectDependencyPath(pathSegments: string[], dependencyPathSegments: Set<string>): boolean {
-  return pathSegments.slice(1).filter((segment) => dependencyPathSegments.has(segment)).length <= 1;
 }
 
 function renderVersion(): string {
