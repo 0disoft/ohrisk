@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: e9cf2ad644687ee4a81177e5d569c608baf193b49aba210e7b8a931cd3bef2e7
+// ohrisk-action-source-sha256: ad49a04c8cf3c59b0a37d819aec1941a034a7bf980fdc074949bb3fb4d34aa06
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -16926,8 +16926,9 @@ var package_default = {
     "release:notes": "bun scripts/extract-release-notes.ts",
     "verify:docs": "bun scripts/check-version-references.ts",
     "check:action-bundle": "bun scripts/check-action-bundle.ts",
-    check: "bun run format:check && bun run lint && bun run typecheck && bun run verify:docs && bun run test:schemas && bun test && bun run test:fuzz && bun run check:action-bundle",
-    "verify:release": "bun run check && bun run test:coverage && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts",
+    "check:static": "bun run format:check && bun run lint && bun run typecheck && bun run verify:docs && bun run check:action-bundle",
+    check: "bun run check:static && bun test",
+    "verify:release": "bun run check:static && bun run test:coverage && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts",
     "test:schemas": "bun test test/report-schema.test.ts"
   },
   files: [

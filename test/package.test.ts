@@ -71,14 +71,13 @@ describe("package metadata", () => {
     expect(packageJson.scripts?.["test:coverage"]).toBe("bun scripts/check-coverage.ts");
     expect(packageJson.scripts?.["check:action-bundle"])
       .toBe("bun scripts/check-action-bundle.ts");
-    expect(packageJson.scripts?.check).toContain("bun run typecheck");
-    expect(packageJson.scripts?.check).toContain("bun run verify:docs");
-    expect(packageJson.scripts?.check).toContain("bun test");
-    expect(packageJson.scripts?.check).toContain("bun run test:fuzz");
-    expect(packageJson.scripts?.["verify:release"]).toContain("bun run check");
-    expect(packageJson.scripts?.["verify:release"]).toContain("bun run test:coverage");
-    expect(packageJson.scripts?.["verify:release"]).toContain("npm pack --silent --dry-run --json");
-    expect(packageJson.scripts?.["verify:release"]).toContain("scripts/package-smoke.ts");
+    expect(packageJson.scripts?.["check:static"]).toBe(
+      "bun run format:check && bun run lint && bun run typecheck && bun run verify:docs && bun run check:action-bundle"
+    );
+    expect(packageJson.scripts?.check).toBe("bun run check:static && bun test");
+    expect(packageJson.scripts?.["verify:release"]).toBe(
+      "bun run check:static && bun run test:coverage && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts"
+    );
 
     expect(new Set(tsconfig.include)).toEqual(new Set([
       "src/**/*.ts",

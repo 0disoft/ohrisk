@@ -129,12 +129,20 @@ try {
 if (packageJson.scripts?.["test:schemas"] !== "bun test test/report-schema.test.ts") {
   failures.push("package.json test:schemas must execute the machine-report schema contract tests");
 }
-if (!packageJson.scripts?.check?.includes("bun run test:schemas")) {
-  failures.push("package.json check must validate machine-report schemas");
+if (packageJson.scripts?.check !== "bun run check:static && bun test") {
+  failures.push("package.json check must run the static gate followed by the complete Bun suite");
 }
 
-if (!packageJson.scripts?.["verify:release"]?.includes("bun run test:coverage")) {
-  failures.push("package.json verify:release must enforce coverage thresholds");
+const expectedStaticCheck =
+  "bun run format:check && bun run lint && bun run typecheck && bun run verify:docs && bun run check:action-bundle";
+if (packageJson.scripts?.["check:static"] !== expectedStaticCheck) {
+  failures.push("package.json check:static must preserve every non-test release contract");
+}
+
+const expectedReleaseVerification =
+  "bun run check:static && bun run test:coverage && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts";
+if (packageJson.scripts?.["verify:release"] !== expectedReleaseVerification) {
+  failures.push("package.json verify:release must run static checks, one coverage suite, pack, and smoke");
 }
 
 if (failures.length > 0) {

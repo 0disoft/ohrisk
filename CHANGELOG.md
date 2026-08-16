@@ -2,6 +2,9 @@
 
 ## 1.15.0 - Unreleased
 
+- Release verification now separates static contracts from the complete test
+  suite and runs all tests once under coverage. Schema and parser-fuzz tests
+  remain part of Bun's full discovery without duplicate standalone passes.
 - The complete TypeScript project now enforces `noUncheckedIndexedAccess`.
   Parsers, path code, and generated test fixtures explicitly reject missing
   indexed values instead of hiding them behind non-null assertions.
