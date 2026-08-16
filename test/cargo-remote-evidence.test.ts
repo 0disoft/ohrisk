@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { collectGraphEvidence } from "../src/evidence/collect";
+import { normalizeLicenseEvidence } from "../src/license/normalize";
 import { createTarGz } from "./helpers/tar";
 
 describe("remote Cargo crate evidence", () => {
@@ -44,6 +45,32 @@ describe("remote Cargo crate evidence", () => {
       warnings: []
     });
     expect(evidence.value[0]?.files.map((file) => file.path)).toEqual(["LICENSE"]);
+  });
+
+  test("flags conflicting manifest and file licenses inside a verified crate", async () => {
+    const crate = cargoCrate("conflict-crate", "1.2.3", {
+      COPYING: "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\nTERMS AND CONDITIONS"
+    }, "MIT");
+    const evidence = await collectGraphEvidence({
+      graph: cargoGraph({
+        name: "conflict-crate",
+        version: "1.2.3",
+        integrity: sha256Integrity(crate),
+        resolved: "registry+https://github.com/rust-lang/crates.io-index"
+      }),
+      projectRoot: ".",
+      allowLocalProjectEvidence: false,
+      resolveArtifactHost: async () => [{ address: "1.1.1.1", family: 4 }],
+      fetchArtifact: async (url) => artifactResponse(crate, url)
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) throw new Error(evidence.error.message);
+    expect(normalizeLicenseEvidence(evidence.value[0]!)).toMatchObject({
+      original: "MIT",
+      signals: ["conflicting-evidence"],
+      confidence: "low"
+    });
   });
 
   test("does not fetch crates without checksums or from non-crates.io sources", async () => {
@@ -224,7 +251,8 @@ describe("remote Cargo crate evidence", () => {
 function cargoCrate(
   name: string,
   version: string,
-  files: Record<string, string>
+  files: Record<string, string>,
+  license = "Apache-2.0"
 ): Buffer {
   const root = `${name}-${version}`;
   return createTarGz({
@@ -232,7 +260,7 @@ function cargoCrate(
       "[package]",
       `name = "${name}"`,
       `version = "${version}"`,
-      "license = \"Apache-2.0\""
+      `license = "${license}"`
     ].join("\n"),
     ...Object.fromEntries(Object.entries(files).map(([fileName, contents]) => [
       `${root}/${fileName}`,

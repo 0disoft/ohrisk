@@ -10,14 +10,14 @@ used by the CLI.
 
 | Metric | Result |
 | --- | --- |
-| Exact severity and confidence matches | 65/65 |
-| Expected high-risk cases classified high | 17/17 |
-| Expected non-high cases incorrectly classified high | 0/48 |
-| Expected unknown cases classified unknown | 18/18 |
+| Exact severity and confidence matches | 80/80 |
+| Expected high-risk cases classified high | 23/23 |
+| Expected non-high cases incorrectly classified high | 0/57 |
+| Expected unknown cases classified unknown | 22/22 |
 
 This is a small regression corpus and is not statistically representative of
 package registries, real repositories, or all license text. In particular,
-`17/17` is a test result with a denominator of seventeen, not a general high-risk
+`23/23` is a test result with a denominator of twenty-three, not a general high-risk
 recall claim. It must not be presented as evidence that Ohrisk has zero false
 negatives in production.
 
@@ -28,6 +28,9 @@ license-text match; an explicit `SPDX-License-Identifier` remains a declaration.
 The npm and PyPI registry shard records verified-artifact precedence over
 registry-only license claims, PyPI distribution-scoped `License-Expression`,
 deprecated classifier confidence, and npm legacy metadata compatibility.
+The Maven and Cargo shard covers free-form Maven POM names, POM and verified-JAR
+conflicts, inherited claims, Cargo SPDX expression semantics, custom
+`license-file` terms, and manifest/file conflicts inside checksum-verified crates.
 
 ## Expansion rules
 

@@ -17,9 +17,11 @@
   major using caret ranges while `bun.lock` continues to pin exact resolved
   versions and integrity hashes. Mutable `latest` exceptions are no longer
   permitted by source hygiene.
-- The 65-case license decision corpus now covers npm and PyPI registry metadata
-  anomalies and verified-artifact precedence, as well as truncated and materially
-  altered license text, multiple LICENSE and NOTICE files, and contradictory
+- The 80-case license decision corpus now covers Maven POM and verified-JAR
+  conflicts plus Cargo manifest and checksum-verified crate anomalies, alongside
+  npm and PyPI registry metadata anomalies, verified-artifact precedence,
+  truncated and materially altered license text, multiple LICENSE and NOTICE
+  files, and contradictory
   metadata/file claims in addition to profile-sensitive MPL, GPL,
   LGPL, EPL, and AGPL decisions, permissive compound expressions, explicit
   unlicensed metadata, source-available licenses and aliases, and Unlicense

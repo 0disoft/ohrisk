@@ -7,6 +7,7 @@ import adversarialEvidenceJson from "./fixtures/license-gold/adversarial-evidenc
 import expressionsJson from "./fixtures/license-gold/expressions.json" with { type: "json" };
 import fileEvidenceJson from "./fixtures/license-gold/file-evidence.json" with { type: "json" };
 import metadataJson from "./fixtures/license-gold/metadata.json" with { type: "json" };
+import registryMavenCargoJson from "./fixtures/license-gold/registry-maven-cargo.json" with { type: "json" };
 import registryNpmPyPiJson from "./fixtures/license-gold/registry-npm-pypi.json" with { type: "json" };
 import restrictionsJson from "./fixtures/license-gold/restrictions.json" with { type: "json" };
 import type { LicenseEvidence } from "../src/evidence/types";
@@ -45,7 +46,8 @@ const corpus = [
   ...expressionsJson,
   ...restrictionsJson,
   ...fileEvidenceJson,
-  ...registryNpmPyPiJson
+  ...registryNpmPyPiJson,
+  ...registryMavenCargoJson
 ] as GoldCase[];
 
 describe("license decision gold corpus", () => {
@@ -87,27 +89,27 @@ describe("license decision gold corpus", () => {
       expectedUnknown: expectedUnknown.length,
       unknownMatches
     }).toEqual({
-      cases: 65,
-      exactMatches: 65,
-      expectedHigh: 17,
-      highTruePositives: 17,
-      expectedNonHigh: 48,
+      cases: 80,
+      exactMatches: 80,
+      expectedHigh: 23,
+      highTruePositives: 23,
+      expectedNonHigh: 57,
       highFalsePositives: 0,
-      expectedUnknown: 18,
-      unknownMatches: 18
+      expectedUnknown: 22,
+      unknownMatches: 22
     });
 
     const accuracyDoc = readFileSync(path.join(repoRoot, "docs", "accuracy.md"), "utf8");
-    expect(accuracyDoc).toContain("65/65");
-    expect(accuracyDoc).toContain("17/17");
-    expect(accuracyDoc).toContain("0/48");
-    expect(accuracyDoc).toContain("18/18");
+    expect(accuracyDoc).toContain("80/80");
+    expect(accuracyDoc).toContain("23/23");
+    expect(accuracyDoc).toContain("0/57");
+    expect(accuracyDoc).toContain("22/22");
     expect(accuracyDoc).toContain("not statistically representative");
   });
 
   test("keeps registry claims outside verified artifact evidence", () => {
     const registryCases = corpus.filter((item) => item.registryContext !== undefined);
-    expect(registryCases).toHaveLength(15);
+    expect(registryCases).toHaveLength(30);
 
     for (const item of registryCases) {
       expect(item.registryContext?.artifactVerified).toBe(true);

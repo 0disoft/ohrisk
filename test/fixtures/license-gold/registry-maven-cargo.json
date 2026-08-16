@@ -1,0 +1,228 @@
+[
+  {
+    "id": "maven-pom-agpl-matches-verified-jar",
+    "sourceUrl": "https://maven.apache.org/pom.html#Licenses",
+    "rationale": "An AGPL license name in the Maven POM corroborated by the checksum- and identity-verified JAR remains high risk for SaaS use.",
+    "registryContext": { "ecosystem": "maven", "artifactVerified": true },
+    "evidence": {
+      "metadataLicense": "AGPL-3.0-only",
+      "metadataSource": "Maven repository pom.xml",
+      "files": [{ "path": "META-INF/LICENSE", "kind": "license", "text": "GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007\nTERMS AND CONDITIONS" }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": { "severity": "high", "confidence": "high" }
+  },
+  {
+    "id": "maven-pom-apache-alias-matches-verified-jar",
+    "sourceUrl": "https://maven.apache.org/pom.html#Licenses",
+    "rationale": "A recognized free-form Maven license name corroborated by the verified JAR is usable but retains alias-level confidence.",
+    "registryContext": { "ecosystem": "maven", "artifactVerified": true },
+    "evidence": {
+      "metadataLicense": "Apache License, Version 2.0",
+      "metadataSource": "Maven repository pom.xml",
+      "files": [{ "path": "META-INF/LICENSE", "kind": "license", "text": "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION" }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "medium" }
+  },
+  {
+    "id": "maven-verified-jar-gpl-without-pom-license",
+    "sourceUrl": "https://maven.apache.org/ref/3-LATEST/maven-model/maven.html#class_license",
+    "rationale": "A recognizable GPL file in a verified Maven JAR remains actionable when the POM does not declare a license name.",
+    "registryContext": { "ecosystem": "maven", "artifactVerified": true },
+    "evidence": {
+      "files": [{ "path": "META-INF/COPYING", "kind": "copying", "text": "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\nTERMS AND CONDITIONS" }],
+      "source": "tarball",
+      "warnings": ["Maven POM did not declare a license name."]
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "high", "confidence": "medium" }
+  },
+  {
+    "id": "maven-pom-mit-conflicts-with-verified-jar-gpl",
+    "sourceUrl": "https://maven.apache.org/pom.html#Licenses",
+    "rationale": "A permissive Maven POM name and restrictive verified JAR license text are contradictory package evidence and require review.",
+    "registryContext": { "ecosystem": "maven", "artifactVerified": true },
+    "evidence": {
+      "metadataLicense": "MIT",
+      "metadataSource": "Maven repository pom.xml",
+      "files": [{ "path": "META-INF/COPYING", "kind": "copying", "text": "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\nTERMS AND CONDITIONS" }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["conflicting-evidence"] }
+  },
+  {
+    "id": "maven-parent-agpl-conflicts-with-verified-jar-mit",
+    "sourceUrl": "https://maven.apache.org/pom.html#Inheritance_v._Aggregation",
+    "rationale": "An inherited AGPL claim and a verified child JAR containing MIT text disagree about the package license and must remain unknown.",
+    "registryContext": { "ecosystem": "maven", "artifactVerified": true },
+    "evidence": {
+      "metadataLicense": "AGPL-3.0-only",
+      "metadataSource": "Maven repository parent pom.xml",
+      "files": [{ "path": "META-INF/LICENSE", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["conflicting-evidence"] }
+  },
+  {
+    "id": "maven-explicit-choice-with-matching-jar-files",
+    "sourceUrl": "https://spdx.github.io/spdx-spec/v2.3/SPDX-license-expressions/",
+    "rationale": "An explicit SPDX OR expression states the choice relationship that otherwise cannot be inferred from multiple Maven legal files.",
+    "registryContext": { "ecosystem": "maven", "artifactVerified": true },
+    "evidence": {
+      "metadataLicense": "MIT OR Apache-2.0",
+      "metadataSource": "Maven repository pom.xml",
+      "files": [
+        { "path": "META-INF/LICENSE-MIT", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." },
+        { "path": "META-INF/LICENSE-APACHE", "kind": "license", "text": "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION" }
+      ],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "high" }
+  },
+  {
+    "id": "maven-explicit-and-includes-gpl",
+    "sourceUrl": "https://spdx.github.io/spdx-spec/v2.3/SPDX-license-expressions/",
+    "rationale": "An explicit Maven SPDX expression requiring both MIT and GPL retains the restrictive branch for distributed applications.",
+    "registryContext": { "ecosystem": "maven", "artifactVerified": true },
+    "evidence": {
+      "metadataLicense": "MIT AND GPL-3.0-only",
+      "metadataSource": "Maven repository pom.xml",
+      "files": [
+        { "path": "META-INF/LICENSE-MIT", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." },
+        { "path": "META-INF/COPYING", "kind": "copying", "text": "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\nTERMS AND CONDITIONS" }
+      ],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "high", "confidence": "high" }
+  },
+  {
+    "id": "cargo-manifest-agpl-matches-crate-file",
+    "sourceUrl": "https://doc.rust-lang.org/cargo/reference/manifest.html#the-license-and-license-file-fields",
+    "rationale": "The SPDX AGPL expression inside a checksum-verified crate remains high risk when its packaged license file agrees.",
+    "registryContext": { "ecosystem": "cargo", "artifactVerified": true },
+    "evidence": {
+      "metadataLicense": "AGPL-3.0-only",
+      "metadataSource": "Cargo.toml",
+      "files": [{ "path": "LICENSE", "kind": "license", "text": "GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007\nTERMS AND CONDITIONS" }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": { "severity": "high", "confidence": "high" }
+  },
+  {
+    "id": "cargo-manifest-mit-conflicts-with-crate-gpl",
+    "sourceUrl": "https://doc.rust-lang.org/cargo/reference/manifest.html#the-license-and-license-file-fields",
+    "rationale": "A Cargo manifest claiming MIT while the same verified crate contains GPL text is conflicting package evidence.",
+    "registryContext": { "ecosystem": "cargo", "artifactVerified": true },
+    "evidence": {
+      "metadataLicense": "MIT",
+      "metadataSource": "Cargo.toml",
+      "files": [{ "path": "COPYING", "kind": "copying", "text": "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\nTERMS AND CONDITIONS" }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["conflicting-evidence"] }
+  },
+  {
+    "id": "cargo-license-file-only-mit",
+    "sourceUrl": "https://doc.rust-lang.org/cargo/reference/manifest.html#the-license-and-license-file-fields",
+    "rationale": "Cargo permits a nonstandard license-file in lieu of a license expression, so recognizable packaged MIT text remains usable at file confidence.",
+    "registryContext": { "ecosystem": "cargo", "artifactVerified": true },
+    "evidence": {
+      "files": [{ "path": "legal/terms.txt", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." }],
+      "source": "tarball",
+      "warnings": ["Cargo.toml did not declare a package license."]
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "medium" }
+  },
+  {
+    "id": "cargo-dual-license-choice-with-files",
+    "sourceUrl": "https://doc.rust-lang.org/cargo/reference/manifest.html#the-license-and-license-file-fields",
+    "rationale": "Cargo defines OR as a user choice, so matching MIT and Apache files preserve the permissive dual-license outcome.",
+    "registryContext": { "ecosystem": "cargo", "artifactVerified": true },
+    "evidence": {
+      "metadataLicense": "MIT OR Apache-2.0",
+      "metadataSource": "Cargo.toml",
+      "files": [
+        { "path": "LICENSE-MIT", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." },
+        { "path": "LICENSE-APACHE", "kind": "license", "text": "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION" }
+      ],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "high" }
+  },
+  {
+    "id": "cargo-and-expression-includes-gpl",
+    "sourceUrl": "https://doc.rust-lang.org/cargo/reference/manifest.html#the-license-and-license-file-fields",
+    "rationale": "Cargo defines AND as simultaneous obligations, so a GPL branch cannot be bypassed by the accompanying MIT license.",
+    "registryContext": { "ecosystem": "cargo", "artifactVerified": true },
+    "evidence": {
+      "metadataLicense": "MIT AND GPL-3.0-only",
+      "metadataSource": "Cargo.toml",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "high", "confidence": "high" }
+  },
+  {
+    "id": "cargo-crate-without-license-evidence",
+    "sourceUrl": "https://doc.rust-lang.org/cargo/reference/manifest.html#the-license-and-license-file-fields",
+    "rationale": "A verified crate lacking both a manifest license expression and a usable packaged license file remains unknown.",
+    "registryContext": { "ecosystem": "cargo", "artifactVerified": true },
+    "evidence": {
+      "files": [],
+      "source": "tarball",
+      "warnings": ["Cargo.toml did not declare a package license.", "Checksum-verified Cargo crate did not contain a package license evidence file."]
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["missing"] }
+  },
+  {
+    "id": "cargo-commercial-license-file",
+    "sourceUrl": "https://doc.rust-lang.org/cargo/reference/manifest.html#the-license-and-license-file-fields",
+    "rationale": "A custom Cargo license-file that explicitly prohibits commercial use remains high risk for a SaaS product.",
+    "registryContext": { "ecosystem": "cargo", "artifactVerified": true },
+    "evidence": {
+      "files": [{ "path": "LICENSE-COMMERCIAL", "kind": "license", "text": "Commercial use is prohibited." }],
+      "source": "tarball",
+      "warnings": ["Cargo.toml did not declare a package license."]
+    },
+    "profile": "saas",
+    "expected": { "severity": "high", "confidence": "low", "signals": ["commercial-restriction", "custom-text"] }
+  },
+  {
+    "id": "cargo-bsd-manifest-without-file",
+    "sourceUrl": "https://doc.rust-lang.org/cargo/reference/manifest.html#the-license-and-license-file-fields",
+    "rationale": "A valid BSD-3-Clause expression inside a checksum-verified Cargo manifest remains usable even when no extra legal file is packaged.",
+    "registryContext": { "ecosystem": "cargo", "artifactVerified": true },
+    "evidence": {
+      "metadataLicense": "BSD-3-Clause",
+      "metadataSource": "Cargo.toml",
+      "files": [],
+      "source": "tarball",
+      "warnings": ["Checksum-verified Cargo crate did not contain a package license evidence file."]
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "high" }
+  }
+]
