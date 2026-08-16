@@ -24,6 +24,7 @@ import {
 } from "./argument-errors";
 import {
   CLI_DEFAULTS,
+  CLI_FAIL_ON_SEVERITIES,
   findViolatedCommandOptionRule,
   outputFormatOptionsFor,
   supportedCacheOptions,
@@ -41,7 +42,6 @@ import {
   parseDurationMilliseconds
 } from "./option-values";
 
-const FAIL_ON_SEVERITIES: RiskSeverity[] = ["high", "unknown", "review", "low"];
 const BASELINE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 
 export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
@@ -602,7 +602,7 @@ function parseScanLikeArgs(
         }
 
         const value = readRequiredOptionValue(argv, index, "--fail-on", {
-          supportedSeverities: FAIL_ON_SEVERITIES
+          supportedSeverities: CLI_FAIL_ON_SEVERITIES
         });
         if (isErr(value)) {
           return value;
@@ -615,7 +615,7 @@ function parseScanLikeArgs(
               category: "invalid_input",
               message: `Unsupported fail-on severity "${value.value}".`,
               details: {
-                supportedSeverities: FAIL_ON_SEVERITIES
+                supportedSeverities: CLI_FAIL_ON_SEVERITIES
               }
             })
           );
@@ -808,7 +808,7 @@ function parseScanLikeArgs(
 }
 
 function isFailOnSeverity(value: string): value is RiskSeverity {
-  return (FAIL_ON_SEVERITIES as string[]).includes(value);
+  return (CLI_FAIL_ON_SEVERITIES as readonly string[]).includes(value);
 }
 
 function isRepositorySubmoduleMode(value: string): value is RepositorySubmoduleMode {
@@ -1159,7 +1159,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
       }
       case "--fail-on": {
         const value = readRequiredOptionValue(argv, index, "--fail-on", {
-          supportedSeverities: FAIL_ON_SEVERITIES
+          supportedSeverities: CLI_FAIL_ON_SEVERITIES
         });
         if (isErr(value)) {
           return value;
@@ -1172,7 +1172,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
               category: "invalid_input",
               message: `Unsupported fail-on severity "${value.value}".`,
               details: {
-                supportedSeverities: FAIL_ON_SEVERITIES
+                supportedSeverities: CLI_FAIL_ON_SEVERITIES
               }
             })
           );

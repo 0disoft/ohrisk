@@ -5,7 +5,13 @@ import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 
 import {
+  ACTION_BOOLEAN_INPUTS,
+  ACTION_COMMANDS,
+  ACTION_DIFF_REPORT_FORMATS,
   ACTION_INPUT_DEFAULTS,
+  ACTION_PROFILE_VALUES,
+  ACTION_REPORT_FORMATS,
+  CLI_FAIL_ON_SEVERITIES,
   CLI_DEFAULTS
 } from "../src/cli/command-spec";
 
@@ -111,7 +117,7 @@ describe("Ohrisk GitHub Action", () => {
   test("uses the bundled CLI by default and permits only exact overrides", () => {
     const actionSource = readFileSync(path.join(repoRoot, "action.yml"), "utf8");
     const action = parseYaml(actionSource) as {
-      inputs?: Record<string, { default?: string; required?: boolean }>;
+      inputs?: Record<string, { default?: string; description?: string; required?: boolean }>;
       name?: string;
       outputs?: Record<string, { value?: string }>;
       runs?: {
@@ -130,6 +136,10 @@ describe("Ohrisk GitHub Action", () => {
     expect(action.runs?.using).toBe("composite");
     for (const [name, expectedDefault] of Object.entries(ACTION_INPUT_DEFAULTS)) {
       expect(action.inputs?.[name]?.default).toBe(expectedDefault);
+    }
+    for (const name of ACTION_BOOLEAN_INPUTS) {
+      const value = action.inputs?.[name]?.default;
+      expect(value === "true" || value === "false").toBe(true);
     }
     expect(CLI_DEFAULTS.failOn).toBe("high");
     expect(action.inputs?.repo).toBeUndefined();
@@ -152,6 +162,13 @@ describe("Ohrisk GitHub Action", () => {
     expect(actionSource).toContain("${OHRISK_ACTION_PATH}/action-dist/cli.js");
     expect(actionSource).toContain("version must be bundled or an exact semantic version");
     expect(actionSource).toContain("does not match bundled Ohrisk");
+    expect(actionSource).toContain("setup-node must be true or false");
+    expect(action.inputs?.command?.description).toContain(naturalList(ACTION_COMMANDS));
+    expect(action.inputs?.profile?.description).toContain(naturalList(ACTION_PROFILE_VALUES));
+    expect(action.inputs?.format?.description).toContain(naturalList(ACTION_REPORT_FORMATS));
+    expect(action.inputs?.["fail-on"]?.description).toContain(
+      naturalList(CLI_FAIL_ON_SEVERITIES)
+    );
     expect(actionSource).toContain(
       'node "${OHRISK_ACTION_PATH}/action-dist/cli.js" "${args[@]}"'
     );
@@ -171,6 +188,12 @@ describe("Ohrisk GitHub Action", () => {
     );
     expect(actionSource).toContain(
       "format must be text, json, or markdown when command=diff"
+    );
+    expect(actionSource).toContain(
+      `format must be ${naturalList(ACTION_DIFF_REPORT_FORMATS)} when command=diff`
+    );
+    expect(actionSource).toContain(
+      `format must be ${naturalList(ACTION_REPORT_FORMATS)}`
     );
     expect(actionSource).toContain(
       "no-waivers is not supported when command=diff"
@@ -251,7 +274,34 @@ describe("Ohrisk GitHub Action", () => {
     expect(docs).not.toContain("0disoft/ohrisk@main");
     expect(docs).not.toContain("version: latest");
   });
+
+  test("keeps Action input documentation aligned with the command specification", () => {
+    const inputs = readFileSync(
+      path.join(repoRoot, "docs", "github-action", "inputs-and-outputs.md"),
+      "utf8"
+    );
+    const contract = readFileSync(
+      path.join(repoRoot, "docs", "github-action", "action-contract.md"),
+      "utf8"
+    );
+    const normalized = `${inputs}\n${contract}`.replace(/`/g, "").replace(/\s+/g, " ");
+
+    expect(normalized).toContain(naturalList(ACTION_COMMANDS));
+    expect(normalized).toContain(naturalList(ACTION_PROFILE_VALUES));
+    expect(normalized).toContain(naturalList(ACTION_REPORT_FORMATS));
+    expect(normalized).toContain(naturalList(ACTION_DIFF_REPORT_FORMATS));
+    expect(normalized).toContain(naturalList(CLI_FAIL_ON_SEVERITIES));
+    for (const input of ACTION_BOOLEAN_INPUTS) {
+      expect(inputs).toContain(`\`${input}\``);
+    }
+  });
 });
+
+function naturalList(values: readonly string[]): string {
+  if (values.length < 2) return values[0] ?? "";
+  if (values.length === 2) return `${values[0]} or ${values[1]}`;
+  return `${values.slice(0, -1).join(", ")}, or ${values.at(-1)}`;
+}
 
 function readLatestReleasedVersion(): string {
   const changelog = readFileSync(path.join(repoRoot, "CHANGELOG.md"), "utf8");

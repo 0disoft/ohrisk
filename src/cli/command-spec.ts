@@ -1,5 +1,5 @@
 import type { CacheAction, HelpTarget } from "./command";
-import type { UsageProfile } from "../policy/profiles";
+import { USAGE_PROFILES, type UsageProfile } from "../policy/profiles";
 import type { RiskSeverity } from "../policy/types";
 import {
   DEFAULT_REPORT_LANGUAGE,
@@ -73,6 +73,38 @@ export const ACTION_INPUT_DEFAULTS = {
   "registry-token-env": "",
   "allow-hosts": ""
 } as const;
+
+export const CLI_FAIL_ON_SEVERITIES: readonly RiskSeverity[] = [
+  "high",
+  "unknown",
+  "review",
+  "low"
+];
+
+export const ACTION_COMMANDS = ["scan", "ci", "diff"] as const;
+
+export const ACTION_REPORT_FORMATS = [
+  "text",
+  "json",
+  "sarif",
+  "markdown",
+  "html",
+  "cyclonedx"
+] as const;
+
+export const ACTION_DIFF_REPORT_FORMATS = ["text", "json", "markdown"] as const;
+
+export const ACTION_BOOLEAN_INPUTS = [
+  "setup-node",
+  "prod",
+  "all",
+  "no-waivers",
+  "strict-waivers",
+  "allow-partial-evidence",
+  "offline"
+] as const satisfies readonly (keyof typeof ACTION_INPUT_DEFAULTS)[];
+
+export const ACTION_PROFILE_VALUES = USAGE_PROFILES;
 
 export type CommandRuleStage = "input" | "scope" | "output";
 

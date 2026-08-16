@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 1efd6ee52ade3b62e2248f192546b3f50992c6e52012ff0ee9dc781a7e83a4ce
+// ohrisk-action-source-sha256: 863b8f66676cee1b0c828e9ed953ea9c93c683d7b90a9954423459834e5048f7
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -15457,6 +15457,12 @@ var ACTION_INPUT_DEFAULTS = {
   "registry-token-env": "",
   "allow-hosts": ""
 };
+var CLI_FAIL_ON_SEVERITIES = [
+  "high",
+  "unknown",
+  "review",
+  "low"
+];
 var COMMAND_OPTION_RULES = [
   {
     id: "all-lockfile-conflict",
@@ -16112,7 +16118,6 @@ function isAllowedRegistryHostname(host) {
 }
 
 // src/cli/args.ts
-var FAIL_ON_SEVERITIES = ["high", "unknown", "review", "low"];
 var BASELINE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 function parseArgs(argv) {
   if (argv.length === 0) {
@@ -16581,7 +16586,7 @@ function parseScanLikeArgs(argv, kind) {
           }));
         }
         const value = readRequiredOptionValue(argv, index, "--fail-on", {
-          supportedSeverities: FAIL_ON_SEVERITIES
+          supportedSeverities: CLI_FAIL_ON_SEVERITIES
         });
         if (isErr(value)) {
           return value;
@@ -16592,7 +16597,7 @@ function parseScanLikeArgs(argv, kind) {
             category: "invalid_input",
             message: `Unsupported fail-on severity "${value.value}".`,
             details: {
-              supportedSeverities: FAIL_ON_SEVERITIES
+              supportedSeverities: CLI_FAIL_ON_SEVERITIES
             }
           }));
         }
@@ -16778,7 +16783,7 @@ function parseScanLikeArgs(argv, kind) {
   });
 }
 function isFailOnSeverity(value) {
-  return FAIL_ON_SEVERITIES.includes(value);
+  return CLI_FAIL_ON_SEVERITIES.includes(value);
 }
 function isRepositorySubmoduleMode(value) {
   return value === "ignore" || value === "reject";
@@ -17078,7 +17083,7 @@ function parseDiffArgs(argv) {
       }
       case "--fail-on": {
         const value = readRequiredOptionValue(argv, index, "--fail-on", {
-          supportedSeverities: FAIL_ON_SEVERITIES
+          supportedSeverities: CLI_FAIL_ON_SEVERITIES
         });
         if (isErr(value)) {
           return value;
@@ -17089,7 +17094,7 @@ function parseDiffArgs(argv) {
             category: "invalid_input",
             message: `Unsupported fail-on severity "${value.value}".`,
             details: {
-              supportedSeverities: FAIL_ON_SEVERITIES
+              supportedSeverities: CLI_FAIL_ON_SEVERITIES
             }
           }));
         }

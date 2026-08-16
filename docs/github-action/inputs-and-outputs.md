@@ -14,7 +14,7 @@
 | `baseline-ref` | Git baseline ref required by `command: diff`; rejected for `scan` and `ci`, and rejected when it starts like a CLI option. |
 | `profile` | `saas` or `distributed-app`; defaults to `saas`. |
 | `prod` | Boolean string controlling production dependency filtering. |
-| `fail-on` | Optional `ci` or `diff` severity threshold. Empty forwards no flag, so `ci` keeps the CLI default of `high`; `scan` rejects a non-empty value. |
+| `fail-on` | Optional `ci` or `diff` severity threshold: `high`, `unknown`, `review`, or `low`. Empty forwards no flag, so `ci` keeps the CLI default of `high`; `scan` rejects a non-empty value. |
 | `lockfile` | Optional repository-relative lockfile path. Cannot be combined with `all`. |
 | `archive` | Optional repository-relative regular file containing a ZIP, TAR, TAR.GZ, or TGZ project. Supported by `scan` and `ci`, forwarded as `--archive`, rejected for `diff`, and mutually exclusive with `lockfile`. Symbolic-link traversal is rejected. |
 | `all` | Boolean string that scans every supported lockfile in the detected project root. |
@@ -40,7 +40,7 @@
 
 ## Validation
 
-Boolean inputs accept only `true` or `false`. Paths are validated before any
+Boolean inputs, including `setup-node`, accept only `true` or `false`. Paths are validated before any
 directory is created, exact version syntax and bundle equality are checked before the scan runs, and the
 action rejects incompatible `lockfile` plus `all` and `archive` plus `lockfile`
 inputs. `archive` may be combined with `all`.

@@ -11,7 +11,7 @@ inputs:
     required: false
     default: "24"
   setup-node:
-    description: Run actions/setup-node before executing Ohrisk.
+    description: Boolean string controlling whether actions/setup-node runs.
     required: false
     default: "true"
   command:
@@ -23,7 +23,7 @@ inputs:
     required: false
     default: ""
   profile:
-    description: Risk profile.
+    description: "Risk profile: saas or distributed-app."
     required: false
     default: saas
   prod:
@@ -31,7 +31,7 @@ inputs:
     required: false
     default: "true"
   fail-on:
-    description: Optional severity threshold for ohrisk ci or ohrisk diff. The CLI ci default remains high when empty.
+    description: Optional high, unknown, review, or low threshold for ohrisk ci or ohrisk diff. The CLI ci default remains high when empty.
     required: false
     default: ""
   lockfile:
@@ -51,7 +51,7 @@ inputs:
     required: false
     default: ""
   format:
-    description: Report format.
+    description: "Report format: text, json, sarif, markdown, html, or cyclonedx."
     required: false
     default: text
   output:
@@ -118,8 +118,17 @@ runs:
       env:
         OHRISK_ACTION_PATH: ${{ github.action_path }}
         OHRISK_REQUESTED_VERSION: ${{ inputs.version }}
+        OHRISK_SETUP_NODE: ${{ inputs.setup-node }}
       run: |
         set -euo pipefail
+
+        case "$OHRISK_SETUP_NODE" in
+          true|false) ;;
+          *)
+            echo "::error::setup-node must be true or false."
+            exit 1
+            ;;
+        esac
 
         version_output="$(node "${OHRISK_ACTION_PATH}/action-dist/cli.js" version)"
         read -r cli_name bundled_version extra <<< "$version_output"

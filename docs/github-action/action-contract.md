@@ -9,6 +9,9 @@ The composite action optionally runs a commit-SHA-pinned `actions/setup-node`
 step, then invokes the CLI bundled in `action-dist/cli.js`. The default path
 performs no npm package resolution.
 
+Every Boolean input, including `setup-node`, is validated as the literal string
+`true` or `false`; other values fail before Ohrisk scans the project.
+
 The action never resolves or installs an npm package at workflow runtime. The
 optional `version` input is an assertion against the version embedded in the
 bundle, so a workflow fails before scanning when its expected CLI version does
@@ -22,7 +25,7 @@ values are rejected before the CLI runs, and `scan` and `ci` reject that input.
 The `fail-on` input defaults to empty. That makes `scan`
 usable without an incompatible threshold while leaving `ci` at the CLI-owned
 default threshold of `high`; explicit thresholds are supported for `ci` and
-`diff`.
+`diff`: `high`, `unknown`, `review`, or `low`.
 
 The action does not fetch Git history. The calling workflow owns checkout depth
 and baseline availability, so `diff` callers must configure `actions/checkout`
