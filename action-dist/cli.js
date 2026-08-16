@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 1565d460bbdbf5d562732ce7f1f52250b04c2c9516c16dd3679f0e2bd1de298f
+// ohrisk-action-source-sha256: 1efd6ee52ade3b62e2248f192546b3f50992c6e52012ff0ee9dc781a7e83a4ce
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -15594,84 +15594,382 @@ var COMMAND_DETAIL_USAGE = {
   ],
   version: ["ohrisk version", "ohrisk --version", "ohrisk -v"]
 };
-var SCAN_AND_CI_OPTIONS = [
-  "--profile",
-  "--prod",
-  "--all",
-  "--policy",
-  "--config",
-  "--offline",
-  "--cache-dir",
-  "--jobs",
-  "--timeout",
-  "--registry-url",
-  "--registry-token-env",
-  "--allow-host",
-  "--json",
-  "--sarif",
-  "--markdown",
-  "--html",
-  "--language",
-  "--cyclonedx",
-  "--no-waivers",
-  "--lockfile",
-  "--archive",
-  "--workspace-root",
-  "--output",
-  "--open",
-  "--help",
-  "-h"
-];
-var COMMAND_OPTIONS = {
-  scan: [...SCAN_AND_CI_OPTIONS, "--repo", "--submodules"],
+var HELP_OPTION_SPECS = {
+  profile: {
+    options: ["--profile"],
+    syntax: "--profile <profile>",
+    description: `Usage profile. Defaults to ${CLI_DEFAULTS.profile}.`
+  },
+  lockfile: {
+    options: ["--lockfile"],
+    syntax: "--lockfile <path>",
+    description: "Use a specific supported lockfile path."
+  },
+  archive: {
+    options: ["--archive"],
+    syntax: "--archive <path>",
+    description: "Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk."
+  },
+  repo: {
+    options: ["--repo"],
+    syntax: "--repo <url>",
+    description: "Scan public GitHub; auto-select one nested dependency project."
+  },
+  submodules: {
+    options: ["--submodules"],
+    syntax: "--submodules <mode>",
+    description: "Ignore with an incomplete-coverage warning (default), or reject."
+  },
+  all: {
+    options: ["--all"],
+    syntax: "--all",
+    description: "Discover and merge every supported lockfile in the project root.",
+    overrides: { diff: "Compare every supported lockfile in both revisions." }
+  },
+  policy: {
+    options: ["--policy", "--config"],
+    syntax: "--policy <path>",
+    description: "Use a workspace-contained policy file instead of .ohrisk.yml.",
+    overrides: { explain: "Apply license rules from a workspace-contained policy file." }
+  },
+  workspaceRoot: {
+    options: ["--workspace-root"],
+    syntax: "--workspace-root <path>",
+    description: "Trust local file: package evidence inside this workspace root.",
+    overrides: { explain: "Set the boundary for local policy inheritance." }
+  },
+  prod: {
+    options: ["--prod"],
+    syntax: "--prod",
+    description: "Exclude development-only dependencies."
+  },
+  noWaivers: {
+    options: ["--no-waivers"],
+    syntax: "--no-waivers",
+    description: "Ignore local .ohrisk-waivers.json files."
+  },
+  offline: {
+    options: ["--offline"],
+    syntax: "--offline",
+    description: "Disable network requests and use local or cached evidence only."
+  },
+  cacheDir: {
+    options: ["--cache-dir"],
+    syntax: "--cache-dir <path>",
+    description: "Use a persistent artifact cache directory.",
+    overrides: { cache: "Manage this cache directory instead of the default cache." }
+  },
+  jobs: {
+    options: ["--jobs"],
+    syntax: "--jobs <1..64>",
+    description: "Set evidence collection concurrency. Defaults to 8."
+  },
+  timeout: {
+    options: ["--timeout"],
+    syntax: "--timeout <duration>",
+    description: "Set the per-request timeout from 100ms to 10m."
+  },
+  registryUrl: {
+    options: ["--registry-url"],
+    syntax: "--registry-url <url>",
+    description: "Use an HTTPS npm-compatible registry base URL."
+  },
+  registryTokenEnv: {
+    options: ["--registry-token-env"],
+    syntax: "--registry-token-env <name>",
+    description: "Read a registry bearer token from this environment variable."
+  },
+  allowHost: {
+    options: ["--allow-host"],
+    syntax: "--allow-host <hostname>",
+    description: "Add an artifact hostname to the allowlist; repeatable."
+  },
+  json: {
+    options: ["--json"],
+    syntax: "--json",
+    description: "Print machine-readable output.",
+    overrides: { cache: "Print machine-readable output without an absolute cache path." }
+  },
+  sarif: {
+    options: ["--sarif"],
+    syntax: "--sarif",
+    description: "Print SARIF 2.1.0 output for code scanning upload."
+  },
+  markdown: {
+    options: ["--markdown"],
+    syntax: "--markdown",
+    description: "Print a Markdown report for PRs or release notes."
+  },
+  html: {
+    options: ["--html"],
+    syntax: "--html",
+    description: "Render HTML; remote scans save it in the current directory.",
+    overrides: {
+      scan: "Render HTML; remote scans default to <repository>-ohrisk.html.",
+      ci: "Print a browser-friendly HTML report."
+    }
+  },
+  language: {
+    options: ["--language"],
+    syntax: "--language <en|ko|es|fr|zh|hi|ja|id|tr|ru|de>",
+    description: `Set the HTML report language. Defaults to ${CLI_DEFAULTS.reportLanguage}.`
+  },
+  cyclonedx: {
+    options: ["--cyclonedx"],
+    syntax: "--cyclonedx",
+    description: "Print a CycloneDX 1.5 SBOM as JSON."
+  },
+  output: {
+    options: ["--output"],
+    syntax: "--output <file>",
+    description: "Write report output to a project-relative file instead of stdout."
+  },
+  open: {
+    options: ["--open"],
+    syntax: "--open",
+    description: "Open the written HTML report after scan completion."
+  },
+  failOn: {
+    options: ["--fail-on"],
+    syntax: "--fail-on <severity>",
+    description: `CI threshold. Defaults to ${CLI_DEFAULTS.failOn} for ci.`,
+    overrides: {
+      ci: `CI threshold. Defaults to ${CLI_DEFAULTS.failOn}.`,
+      diff: "Optional diff threshold."
+    }
+  },
+  allowPartialEvidence: {
+    options: ["--allow-partial-evidence"],
+    syntax: "--allow-partial-evidence",
+    description: "Let ci pass when evidence or repository coverage is partial."
+  },
+  strictWaivers: {
+    options: ["--strict-waivers"],
+    syntax: "--strict-waivers",
+    description: "Fail CI when local waivers are expired or unmatched."
+  },
+  maxSize: {
+    options: ["--max-size"],
+    syntax: "--max-size <size>",
+    description: "Keep cache objects within a size such as 512MiB or 2GB."
+  },
+  maxAge: {
+    options: ["--max-age"],
+    syntax: "--max-age <duration>",
+    description: "Remove entries unused for a duration such as 24h or 7d."
+  },
+  help: {
+    options: ["--help", "-h"],
+    syntax: "--help, -h",
+    description: "Print this help text."
+  },
+  version: {
+    options: ["--version", "-v"],
+    syntax: "--version, -v",
+    description: "Print the Ohrisk package version."
+  }
+};
+var HELP_OPTION_ORDER = {
+  top: [
+    "profile",
+    "lockfile",
+    "archive",
+    "repo",
+    "submodules",
+    "all",
+    "policy",
+    "workspaceRoot",
+    "prod",
+    "noWaivers",
+    "offline",
+    "cacheDir",
+    "jobs",
+    "timeout",
+    "registryUrl",
+    "registryTokenEnv",
+    "allowHost",
+    "json",
+    "sarif",
+    "markdown",
+    "html",
+    "language",
+    "cyclonedx",
+    "output",
+    "open",
+    "failOn",
+    "allowPartialEvidence",
+    "strictWaivers",
+    "help",
+    "version"
+  ],
+  scan: [
+    "profile",
+    "lockfile",
+    "archive",
+    "repo",
+    "submodules",
+    "all",
+    "policy",
+    "workspaceRoot",
+    "prod",
+    "noWaivers",
+    "offline",
+    "cacheDir",
+    "jobs",
+    "timeout",
+    "registryUrl",
+    "registryTokenEnv",
+    "allowHost",
+    "json",
+    "sarif",
+    "markdown",
+    "html",
+    "language",
+    "cyclonedx",
+    "output",
+    "open",
+    "help"
+  ],
   ci: [
-    ...SCAN_AND_CI_OPTIONS,
-    "--fail-on",
-    "--strict-waivers",
-    "--allow-partial-evidence"
+    "profile",
+    "lockfile",
+    "archive",
+    "all",
+    "policy",
+    "workspaceRoot",
+    "prod",
+    "noWaivers",
+    "offline",
+    "cacheDir",
+    "jobs",
+    "timeout",
+    "registryUrl",
+    "registryTokenEnv",
+    "allowHost",
+    "json",
+    "sarif",
+    "markdown",
+    "html",
+    "language",
+    "cyclonedx",
+    "failOn",
+    "allowPartialEvidence",
+    "strictWaivers",
+    "output",
+    "open",
+    "help"
   ],
   diff: [
-    "--profile",
-    "--prod",
-    "--lockfile",
-    "--all",
-    "--policy",
-    "--config",
-    "--offline",
-    "--cache-dir",
-    "--jobs",
-    "--timeout",
-    "--registry-url",
-    "--registry-token-env",
-    "--allow-host",
-    "--workspace-root",
-    "--json",
-    "--markdown",
-    "--output",
-    "--fail-on",
-    "--help",
-    "-h"
+    "profile",
+    "lockfile",
+    "all",
+    "policy",
+    "workspaceRoot",
+    "prod",
+    "offline",
+    "cacheDir",
+    "jobs",
+    "timeout",
+    "registryUrl",
+    "registryTokenEnv",
+    "allowHost",
+    "json",
+    "markdown",
+    "failOn",
+    "output",
+    "help"
+  ],
+  cache: ["cacheDir", "maxSize", "maxAge", "json", "help"],
+  explain: ["profile", "policy", "workspaceRoot", "json", "output", "help"],
+  help: ["help"],
+  version: ["help"]
+};
+var CACHE_ACTION_DESCRIPTIONS = {
+  status: "Show entry, object, size, freshness, and corruption counts.",
+  prune: "Remove expired, old, orphaned, or least-recently-used entries.",
+  clear: "Remove all Ohrisk cache entries and objects."
+};
+function helpOptionLinesFor(target) {
+  const width = target === "cache" ? 22 : 23;
+  return HELP_OPTION_ORDER[target].map((key) => {
+    const spec = HELP_OPTION_SPECS[key];
+    const description = spec.overrides?.[target] ?? spec.description;
+    return `  ${spec.syntax.padEnd(width, " ")}${description}`;
+  });
+}
+var SCAN_AND_CI_OPTION_KEYS = [
+  "profile",
+  "prod",
+  "all",
+  "policy",
+  "offline",
+  "cacheDir",
+  "jobs",
+  "timeout",
+  "registryUrl",
+  "registryTokenEnv",
+  "allowHost",
+  "json",
+  "sarif",
+  "markdown",
+  "html",
+  "language",
+  "cyclonedx",
+  "noWaivers",
+  "lockfile",
+  "archive",
+  "workspaceRoot",
+  "output",
+  "open",
+  "help"
+];
+var COMMAND_OPTION_KEYS = {
+  scan: [...SCAN_AND_CI_OPTION_KEYS, "repo", "submodules"],
+  ci: [
+    ...SCAN_AND_CI_OPTION_KEYS,
+    "failOn",
+    "strictWaivers",
+    "allowPartialEvidence"
+  ],
+  diff: [
+    "profile",
+    "prod",
+    "lockfile",
+    "all",
+    "policy",
+    "offline",
+    "cacheDir",
+    "jobs",
+    "timeout",
+    "registryUrl",
+    "registryTokenEnv",
+    "allowHost",
+    "workspaceRoot",
+    "json",
+    "markdown",
+    "output",
+    "failOn",
+    "help"
   ],
   explain: [
-    "--profile",
-    "--policy",
-    "--workspace-root",
-    "--json",
-    "--output",
-    "--help",
-    "-h"
+    "profile",
+    "policy",
+    "workspaceRoot",
+    "json",
+    "output",
+    "help"
   ]
 };
-var CACHE_OPTIONS = {
-  status: ["--cache-dir", "--json", "--help", "-h"],
-  prune: ["--cache-dir", "--json", "--max-size", "--max-age", "--help", "-h"],
-  clear: ["--cache-dir", "--json", "--help", "-h"]
+var CACHE_OPTION_KEYS = {
+  status: ["cacheDir", "json", "help"],
+  prune: ["cacheDir", "json", "maxSize", "maxAge", "help"],
+  clear: ["cacheDir", "json", "help"]
 };
 function supportedOptionsFor(kind) {
-  return [...COMMAND_OPTIONS[kind]];
+  return COMMAND_OPTION_KEYS[kind].flatMap((key) => [...HELP_OPTION_SPECS[key].options]);
 }
 function supportedCacheOptions(action) {
-  return [...CACHE_OPTIONS[action]];
+  return CACHE_OPTION_KEYS[action].flatMap((key) => [...HELP_OPTION_SPECS[key].options]);
 }
 
 // src/cli/argument-errors.ts
@@ -60968,36 +61266,7 @@ function renderTopLevelHelp() {
     ...Object.entries(COMMAND_DESCRIPTIONS).map(([command, description]) => `  ${command.padEnd(8, " ")}${description}`),
     "",
     "Options:",
-    "  --profile <profile>    Usage profile. Defaults to saas.",
-    "  --lockfile <path>      Use a specific supported lockfile path.",
-    "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
-    "  --repo <url>           Scan public GitHub; auto-select one nested dependency project.",
-    "  --submodules <mode>    Ignore with an incomplete-coverage warning (default), or reject.",
-    "  --all                  Discover and merge every supported lockfile in the project root.",
-    "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
-    "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
-    "  --prod                 Exclude development-only dependencies.",
-    "  --no-waivers           Ignore local .ohrisk-waivers.json files.",
-    "  --offline             Disable network requests and use local or cached evidence only.",
-    "  --cache-dir <path>    Use a persistent artifact cache directory.",
-    "  --jobs <1..64>        Set evidence collection concurrency. Defaults to 8.",
-    "  --timeout <duration>  Set the per-request timeout from 100ms to 10m.",
-    "  --registry-url <url>  Use an HTTPS npm-compatible registry base URL.",
-    "  --registry-token-env <name> Read a registry bearer token from this environment variable.",
-    "  --allow-host <hostname> Add an artifact hostname to the allowlist; repeatable.",
-    "  --json                 Print machine-readable output.",
-    "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
-    "  --markdown             Print a Markdown report for PRs or release notes.",
-    "  --html                 Render HTML; remote scans save it in the current directory.",
-    "  --language <en|ko|es|fr|zh|hi|ja|id|tr|ru|de> Set the HTML report language. Defaults to en.",
-    "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
-    "  --output <file>        Write report output to a project-relative file instead of stdout.",
-    "  --open                 Open the written HTML report after scan completion.",
-    "  --fail-on <severity>   CI threshold. Defaults to high for ci.",
-    "  --allow-partial-evidence  Let ci pass when evidence or repository coverage is partial.",
-    "  --strict-waivers       Fail CI when local waivers are expired or unmatched.",
-    "  --help, -h             Print this help text.",
-    "  --version, -v          Print the Ohrisk package version."
+    ...helpOptionLinesFor("top")
   ].join(`
 `);
 }
@@ -61009,32 +61278,7 @@ function renderScanHelp() {
     `  ${COMMAND_DETAIL_USAGE.scan}`,
     "",
     "Options:",
-    "  --profile <profile>    Usage profile. Defaults to saas.",
-    "  --lockfile <path>      Use a specific supported lockfile path.",
-    "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
-    "  --repo <url>           Scan public GitHub; auto-select one nested dependency project.",
-    "  --submodules <mode>    Ignore with an incomplete-coverage warning (default), or reject.",
-    "  --all                  Discover and merge every supported lockfile in the project root.",
-    "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
-    "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
-    "  --prod                 Exclude development-only dependencies.",
-    "  --no-waivers           Ignore local .ohrisk-waivers.json files.",
-    "  --offline             Disable network requests and use local or cached evidence only.",
-    "  --cache-dir <path>    Use a persistent artifact cache directory.",
-    "  --jobs <1..64>        Set evidence collection concurrency. Defaults to 8.",
-    "  --timeout <duration>  Set the per-request timeout from 100ms to 10m.",
-    "  --registry-url <url>  Use an HTTPS npm-compatible registry base URL.",
-    "  --registry-token-env <name> Read a registry bearer token from this environment variable.",
-    "  --allow-host <hostname> Add an artifact hostname to the allowlist; repeatable.",
-    "  --json                 Print machine-readable output.",
-    "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
-    "  --markdown             Print a Markdown report for PRs or release notes.",
-    "  --html                 Render HTML; remote scans default to <repository>-ohrisk.html.",
-    "  --language <en|ko|es|fr|zh|hi|ja|id|tr|ru|de> Set the HTML report language. Defaults to en.",
-    "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
-    "  --output <file>        Write report output to a project-relative file instead of stdout.",
-    "  --open                 Open the written HTML report after scan completion.",
-    "  --help, -h             Print this help text."
+    ...helpOptionLinesFor("scan")
   ].join(`
 `);
 }
@@ -61046,33 +61290,7 @@ function renderCiHelp() {
     `  ${COMMAND_DETAIL_USAGE.ci}`,
     "",
     "Options:",
-    "  --profile <profile>    Usage profile. Defaults to saas.",
-    "  --lockfile <path>      Use a specific supported lockfile path.",
-    "  --archive <path>       Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk.",
-    "  --all                  Discover and merge every supported lockfile in the project root.",
-    "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
-    "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
-    "  --prod                 Exclude development-only dependencies.",
-    "  --no-waivers           Ignore local .ohrisk-waivers.json files.",
-    "  --offline             Disable network requests and use local or cached evidence only.",
-    "  --cache-dir <path>    Use a persistent artifact cache directory.",
-    "  --jobs <1..64>        Set evidence collection concurrency. Defaults to 8.",
-    "  --timeout <duration>  Set the per-request timeout from 100ms to 10m.",
-    "  --registry-url <url>  Use an HTTPS npm-compatible registry base URL.",
-    "  --registry-token-env <name> Read a registry bearer token from this environment variable.",
-    "  --allow-host <hostname> Add an artifact hostname to the allowlist; repeatable.",
-    "  --json                 Print machine-readable output.",
-    "  --sarif                Print SARIF 2.1.0 output for code scanning upload.",
-    "  --markdown             Print a Markdown report for PRs or release notes.",
-    "  --html                 Print a browser-friendly HTML report.",
-    "  --language <en|ko|es|fr|zh|hi|ja|id|tr|ru|de> Set the HTML report language. Defaults to en.",
-    "  --cyclonedx            Print a CycloneDX 1.5 SBOM as JSON.",
-    "  --fail-on <severity>   CI threshold. Defaults to high.",
-    "  --allow-partial-evidence  Let ci pass when evidence or repository coverage is partial.",
-    "  --strict-waivers       Fail CI when local waivers are expired or unmatched.",
-    "  --output <file>        Write report output to a project-relative file instead of stdout.",
-    "  --open                 Open the written HTML report after scan completion.",
-    "  --help, -h             Print this help text."
+    ...helpOptionLinesFor("ci")
   ].join(`
 `);
 }
@@ -61084,24 +61302,7 @@ function renderDiffHelp() {
     `  ${COMMAND_DETAIL_USAGE.diff}`,
     "",
     "Options:",
-    "  --profile <profile>    Usage profile. Defaults to saas.",
-    "  --lockfile <path>      Use a specific supported lockfile path.",
-    "  --all                  Compare every supported lockfile in both revisions.",
-    "  --policy <path>        Use a workspace-contained policy file instead of .ohrisk.yml.",
-    "  --workspace-root <path> Trust local file: package evidence inside this workspace root.",
-    "  --prod                 Exclude development-only dependencies.",
-    "  --offline             Disable network requests and use local or cached evidence only.",
-    "  --cache-dir <path>    Use a persistent artifact cache directory.",
-    "  --jobs <1..64>        Set evidence collection concurrency. Defaults to 8.",
-    "  --timeout <duration>  Set the per-request timeout from 100ms to 10m.",
-    "  --registry-url <url>  Use an HTTPS npm-compatible registry base URL.",
-    "  --registry-token-env <name> Read a registry bearer token from this environment variable.",
-    "  --allow-host <hostname> Add an artifact hostname to the allowlist; repeatable.",
-    "  --json                 Print machine-readable output.",
-    "  --markdown             Print a Markdown report for PRs or release notes.",
-    "  --fail-on <severity>   Optional diff threshold.",
-    "  --output <file>        Write report output to a project-relative file instead of stdout.",
-    "  --help, -h             Print this help text."
+    ...helpOptionLinesFor("diff")
   ].join(`
 `);
 }
@@ -61113,16 +61314,10 @@ function renderCacheHelp() {
     ...COMMAND_DETAIL_USAGE.cache.map((usage) => `  ${usage}`),
     "",
     "Actions:",
-    "  status                Show entry, object, size, freshness, and corruption counts.",
-    "  prune                 Remove expired, old, orphaned, or least-recently-used entries.",
-    "  clear                 Remove all Ohrisk cache entries and objects.",
+    ...Object.entries(CACHE_ACTION_DESCRIPTIONS).map(([action, description]) => `  ${action.padEnd(22, " ")}${description}`),
     "",
     "Options:",
-    "  --cache-dir <path>    Manage this cache directory instead of the default cache.",
-    "  --max-size <size>     Keep cache objects within a size such as 512MiB or 2GB.",
-    "  --max-age <duration>  Remove entries unused for a duration such as 24h or 7d.",
-    "  --json                Print machine-readable output without an absolute cache path.",
-    "  --help, -h            Print this help text."
+    ...helpOptionLinesFor("cache")
   ].join(`
 `);
 }
@@ -61134,12 +61329,7 @@ function renderExplainHelp() {
     `  ${COMMAND_DETAIL_USAGE.explain}`,
     "",
     "Options:",
-    "  --profile <profile>    Usage profile. Defaults to saas.",
-    "  --policy <path>        Apply license rules from a workspace-contained policy file.",
-    "  --workspace-root <path> Set the boundary for local policy inheritance.",
-    "  --json                 Print machine-readable output.",
-    "  --output <file>        Write report output to a project-relative file instead of stdout.",
-    "  --help, -h             Print this help text."
+    ...helpOptionLinesFor("explain")
   ].join(`
 `);
 }
@@ -61151,16 +61341,10 @@ function renderHelpCommandHelp() {
     `  ${COMMAND_DETAIL_USAGE.help}`,
     "",
     "Commands:",
-    "  scan",
-    "  ci",
-    "  diff",
-    "  explain",
-    "  cache",
-    "  help",
-    "  version",
+    ...Object.keys(COMMAND_DESCRIPTIONS).map((command) => `  ${command}`),
     "",
     "Options:",
-    "  --help, -h             Print this help text."
+    ...helpOptionLinesFor("help")
   ].join(`
 `);
 }
@@ -61172,7 +61356,7 @@ function renderVersionHelp() {
     ...COMMAND_DETAIL_USAGE.version.map((usage) => `  ${usage}`),
     "",
     "Options:",
-    "  --help, -h             Print this help text."
+    ...helpOptionLinesFor("version")
   ].join(`
 `);
 }

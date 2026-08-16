@@ -3,11 +3,22 @@ import { describe, expect, test } from "bun:test";
 import { parseArgs } from "../src/cli/args";
 import {
   COMMAND_OPTION_RULES,
+  documentedOptionsFor,
   supportedCacheOptions,
   supportedOptionsFor
 } from "../src/cli/command-spec";
 
 describe("parseArgs", () => {
+  test("documents every primary command option exposed by the parser", () => {
+    for (const command of ["scan", "ci", "diff", "explain"] as const) {
+      const primaryOptions = supportedOptionsFor(command).filter(
+        (option) => option !== "--config" && option !== "-h"
+      );
+      expect(documentedOptionsFor(command)).toEqual(expect.arrayContaining(primaryOptions));
+      expect(primaryOptions).toEqual(expect.arrayContaining(documentedOptionsFor(command)));
+    }
+  });
+
   test("parses positional and explicit GitHub repository inputs", () => {
     for (const argv of [
       ["scan", "--html", "https://github.com/0disoft/laqu.git"],
