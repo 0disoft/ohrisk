@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 1c593eceec397799892661c7d45948209e51092755327c72b6ea22b23a417ccd
+// ohrisk-action-source-sha256: 55c6da7b8c819c8772f579642ab83604dca97019b405e6ec64d83e944e790517
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -16804,7 +16804,7 @@ function renderCommandCancelled(commandLabel) {
 // package.json
 var package_default = {
   name: "ohrisk",
-  version: "1.15.0",
+  version: "1.15.1",
   description: "Catch open-source license risk before your PR ships.",
   license: "MIT",
   type: "module",
@@ -16938,7 +16938,7 @@ var package_default = {
     "schemas"
   ],
   devDependencies: {
-    "@0disoft/laqu": "^1.1.8",
+    "@0disoft/laqu": "^1.1.9",
     "@types/bun": "^1.3.14",
     "@types/node": "^26.2.0",
     "@yarnpkg/lockfile": "^1.1.0",
@@ -61650,10 +61650,10 @@ function reportFormatLabel(command) {
   return "terminal";
 }
 
-// node_modules/.bun/@0disoft+laqu@1.1.8/node_modules/@0disoft/laqu/dist/runtime.js
+// node_modules/.bun/@0disoft+laqu@1.1.9/node_modules/@0disoft/laqu/dist/runtime.js
 import { AsyncLocalStorage } from "node:async_hooks";
 
-// node_modules/.bun/@0disoft+laqu@1.1.8/node_modules/@0disoft/laqu/dist/unicode-width-ranges.js
+// node_modules/.bun/@0disoft+laqu@1.1.9/node_modules/@0disoft/laqu/dist/unicode-width-ranges.js
 var wideRanges = [
   4352,
   4447,
@@ -62271,7 +62271,7 @@ var ambiguousRanges = [
   1114109
 ];
 
-// node_modules/.bun/@0disoft+laqu@1.1.8/node_modules/@0disoft/laqu/dist/width.js
+// node_modules/.bun/@0disoft+laqu@1.1.9/node_modules/@0disoft/laqu/dist/width.js
 var ansiPattern = new RegExp(String.raw`\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007]*(?:\u0007|\u001b\\)|[@-Z\\-_])`, "g");
 var resetSequence = "\x1B[0m";
 var unsafeControlPattern = new RegExp(String.raw`[\u0000-\u0008\u000a-\u001f\u007f-\u009f]`, "g");
@@ -62590,7 +62590,7 @@ function isSgrActive(state) {
   return state.intensity || state.italic || state.underline || state.blink || state.inverse || state.conceal || state.strike || state.overline || state.foreground || state.background || state.underlineColor;
 }
 
-// node_modules/.bun/@0disoft+laqu@1.1.8/node_modules/@0disoft/laqu/dist/output-coordinator.js
+// node_modules/.bun/@0disoft+laqu@1.1.9/node_modules/@0disoft/laqu/dist/output-coordinator.js
 class LaquOutputError extends Error {
   code;
   name = "LaquOutputError";
@@ -62964,7 +62964,7 @@ function eraseLines(count) {
   return output;
 }
 
-// node_modules/.bun/@0disoft+laqu@1.1.8/node_modules/@0disoft/laqu/dist/events.js
+// node_modules/.bun/@0disoft+laqu@1.1.9/node_modules/@0disoft/laqu/dist/events.js
 var LAQU_EVENT_SCHEMA = "laqu.event";
 var LAQU_EVENT_SCHEMA_VERSION = 1;
 function taskEvent(task) {
@@ -63021,7 +63021,7 @@ function eventProgress(progress) {
   }
 }
 
-// node_modules/.bun/@0disoft+laqu@1.1.8/node_modules/@0disoft/laqu/dist/theme.js
+// node_modules/.bun/@0disoft+laqu@1.1.9/node_modules/@0disoft/laqu/dist/theme.js
 var defaultTokens = {
   successSymbol: "✓",
   failSymbol: "×",
@@ -63088,7 +63088,7 @@ function sanitizeToken(value, name) {
   return sanitizeText(value);
 }
 
-// node_modules/.bun/@0disoft+laqu@1.1.8/node_modules/@0disoft/laqu/dist/renderer.js
+// node_modules/.bun/@0disoft+laqu@1.1.9/node_modules/@0disoft/laqu/dist/renderer.js
 function chooseRenderer(options) {
   if (options.policy === "silent" || options.policy === "never") {
     return { renderer: new NullRenderer, live: false, jsonSerialization: "none" };
@@ -63346,7 +63346,7 @@ function progressBar(ratio, overrun, theme) {
   return `[${theme.tokens.progressComplete.repeat(completed)}${theme.tokens.progressIncomplete.repeat(incomplete)}${tail}]`;
 }
 
-// node_modules/.bun/@0disoft+laqu@1.1.8/node_modules/@0disoft/laqu/dist/task-store.js
+// node_modules/.bun/@0disoft+laqu@1.1.9/node_modules/@0disoft/laqu/dist/task-store.js
 class TaskStore {
   #tasks = new Map;
   #rootIds = new Set;
@@ -63812,7 +63812,7 @@ function clamp01(value) {
   return Math.min(1, Math.max(0, value));
 }
 
-// node_modules/.bun/@0disoft+laqu@1.1.8/node_modules/@0disoft/laqu/dist/runtime.js
+// node_modules/.bun/@0disoft+laqu@1.1.9/node_modules/@0disoft/laqu/dist/runtime.js
 var defaultFlushHz = 15;
 var fatalShutdownTimeoutMs = 250;
 var liveStreamLeases = new WeakSet;

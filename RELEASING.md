@@ -16,7 +16,7 @@ settings.
 - GitHub Actions billing is available for the automated publish workflow.
 - `CHANGELOG.md` contains a dated section for the exact `package.json` version;
   an `Unreleased` candidate heading is intentionally rejected.
-- `git ls-remote --tags origin refs/tags/v1.15.0` prints no existing remote tag.
+- `git ls-remote --tags origin refs/tags/v1.15.1` prints no existing remote tag.
 
 ## Local Gate
 
@@ -45,8 +45,8 @@ file's example tag when needed, push `main`, then push a version tag matching
 `package.json`:
 
 ```bash
-git tag v1.15.0
-git push origin v1.15.0
+git tag v1.15.1
+git push origin v1.15.1
 ```
 
 The publish workflow verifies that the tag version matches `package.json`, runs
@@ -69,9 +69,9 @@ locally after confirming npm authentication:
 ```bash
 npm whoami
 npm publish --access public --provenance
-npm view ohrisk@1.15.0 version
-npm view ohrisk@1.15.0 dist.tarball
-npm view ohrisk@1.15.0 dist.integrity
+npm view ohrisk@1.15.1 version
+npm view ohrisk@1.15.1 dist.tarball
+npm view ohrisk@1.15.1 dist.integrity
 ```
 
 After manual recovery, create or update the matching GitHub Release using the

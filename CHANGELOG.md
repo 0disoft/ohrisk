@@ -1,6 +1,10 @@
 # Changelog
 
-## 1.15.0 - Unreleased
+## 1.15.1 - Unreleased
+
+- Updated the bundled `@0disoft/laqu` development dependency from 1.1.8 to
+  1.1.9 while preserving compatible-major declaration ranges and exact Bun
+  lockfile integrity.
 
 - Release verification now separates static contracts from the complete test
   suite and runs all tests once under coverage. Schema and parser-fuzz tests

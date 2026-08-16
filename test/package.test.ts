@@ -51,7 +51,7 @@ describe("package metadata", () => {
     expect(packageJson.publishConfig?.access).toBe("public");
     expect(packageJson.repository?.url).toBe("git+https://github.com/0disoft/ohrisk.git");
     expect(packageJson.dependencies?.["@0disoft/laqu"]).toBeUndefined();
-    expect(packageJson.devDependencies?.["@0disoft/laqu"]).toBe("^1.1.8");
+    expect(packageJson.devDependencies?.["@0disoft/laqu"]).toBe("^1.1.9");
     expect(packageJson.devDependencies?.["@types/bun"]).toBe("^1.3.14");
     expect(packageJson.devDependencies?.["@types/node"]).toBe("^26.2.0");
     expect(packageJson.devDependencies?.["@yarnpkg/lockfile"]).toBe("^1.1.0");

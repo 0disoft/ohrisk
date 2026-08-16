@@ -1,6 +1,6 @@
 {
   "name": "ohrisk",
-  "version": "1.15.0",
+  "version": "1.15.1",
   "description": "Catch open-source license risk before your PR ships.",
   "license": "MIT",
   "type": "module",
@@ -134,7 +134,7 @@
     "schemas"
   ],
   "devDependencies": {
-    "@0disoft/laqu": "^1.1.8",
+    "@0disoft/laqu": "^1.1.9",
     "@types/bun": "^1.3.14",
     "@types/node": "^26.2.0",
     "@yarnpkg/lockfile": "^1.1.0",
