@@ -1,0 +1,94 @@
+[
+  {
+    "id": "metadata-file-conflict",
+    "sourceUrl": "https://spdx.dev/learn/handling-license-info/",
+    "rationale": "Contradictory package metadata and recognizable license text cannot be resolved safely.",
+    "evidence": {
+      "packageJsonLicense": "MIT",
+      "files": [
+        {
+          "path": "LICENSE",
+          "kind": "license",
+          "text": "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007"
+        }
+      ],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": {
+      "severity": "unknown",
+      "confidence": "low",
+      "signals": [
+        "conflicting-evidence"
+      ]
+    }
+  },
+  {
+    "id": "bsd-four-clause",
+    "sourceUrl": "https://spdx.org/licenses/BSD-4-Clause.html",
+    "rationale": "The advertising clause needs manual distribution review and must not collapse to BSD-3-Clause.",
+    "evidence": {
+      "files": [
+        {
+          "path": "COPYING",
+          "kind": "license",
+          "text": "Redistribution and use in source and binary forms are permitted.\nAll advertising materials mentioning features or use of this software must display the following acknowledgement.\nNeither the name of the organization nor the names of its contributors may be used to endorse products."
+        }
+      ],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": {
+      "severity": "review",
+      "confidence": "medium"
+    }
+  },
+  {
+    "id": "apache-notice",
+    "sourceUrl": "https://spdx.org/licenses/Apache-2.0.html",
+    "rationale": "Apache-2.0 remains low risk while a bundled NOTICE creates an explicit preservation signal.",
+    "evidence": {
+      "packageJsonLicense": "Apache-2.0",
+      "files": [
+        {
+          "path": "NOTICE",
+          "kind": "notice",
+          "text": "Copyright Example Authors"
+        }
+      ],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": {
+      "severity": "low",
+      "confidence": "high",
+      "signals": [
+        "notice-required"
+      ]
+    }
+  },
+  {
+    "id": "unlicense-commercial-phrasing",
+    "sourceUrl": "https://unlicense.org/",
+    "rationale": "Unlicense permission for commercial and non-commercial use must not be mistaken for a commercial-use ban.",
+    "evidence": {
+      "files": [
+        {
+          "path": "LICENSE",
+          "kind": "license",
+          "text": "SPDX-License-Identifier: Unlicense OR MIT\n\nThe UNLICENSE\n\nThis is free and unencumbered software released into the public domain.\n\nAnyone is free to copy, modify, publish, use, compile, sell, or distribute this software, either in source code form or as a compiled binary, for any purpose, commercial or non-commercial, and by any means."
+        }
+      ],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": {
+      "severity": "low",
+      "confidence": "medium"
+    }
+  }
+]

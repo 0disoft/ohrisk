@@ -20,9 +20,10 @@
 - The 32-case license decision corpus now covers profile-sensitive MPL, GPL,
   LGPL, EPL, and AGPL decisions, permissive compound expressions, explicit
   unlicensed metadata, source-available licenses and aliases, and Unlicense
-  commercial-use wording. Public accuracy documentation reports exact metric
-  denominators and explicitly rejects production accuracy claims from this
-  small regression set.
+  commercial-use wording. Category shards keep future corpus growth reviewable,
+  and duplicate case IDs are rejected. Public accuracy documentation reports
+  exact metric denominators and explicitly rejects production accuracy claims
+  from this small regression set.
 - The cache command now owns its management, rendering, and failure mapping in
   a dedicated CLI module, reducing the central command assembler without
   changing cache output, exit codes, paths, or JSON shape.

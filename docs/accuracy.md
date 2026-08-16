@@ -1,9 +1,10 @@
 # Accuracy Evidence
 
-Ohrisk keeps a reviewed license-decision corpus at
-`test/fixtures/license-gold-corpus.json`. Each case records a public source,
-the expected decision, and the rationale for that expectation. The release
-test evaluates the same normalizer and policy path used by the CLI.
+Ohrisk keeps a reviewed, category-sharded license-decision corpus under
+`test/fixtures/license-gold/*.json`. Each case records a public source, the
+expected decision, and the rationale for that expectation. The release test
+rejects duplicate case IDs and evaluates the same normalizer and policy path
+used by the CLI.
 
 ## Current pinned baseline
 

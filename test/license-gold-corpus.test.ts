@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import corpusJson from "./fixtures/license-gold-corpus.json" with { type: "json" };
+import expressionsJson from "./fixtures/license-gold/expressions.json" with { type: "json" };
+import fileEvidenceJson from "./fixtures/license-gold/file-evidence.json" with { type: "json" };
+import metadataJson from "./fixtures/license-gold/metadata.json" with { type: "json" };
+import restrictionsJson from "./fixtures/license-gold/restrictions.json" with { type: "json" };
 import type { LicenseEvidence } from "../src/evidence/types";
 import type { DependencyNode } from "../src/graph/types";
 import { normalizeLicenseEvidence } from "../src/license/normalize";
@@ -29,7 +32,12 @@ type GoldCase = {
 };
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const corpus = corpusJson as GoldCase[];
+const corpus = [
+  ...metadataJson,
+  ...expressionsJson,
+  ...restrictionsJson,
+  ...fileEvidenceJson
+] as GoldCase[];
 
 describe("license decision gold corpus", () => {
   for (const item of corpus) {
@@ -47,6 +55,7 @@ describe("license decision gold corpus", () => {
   }
 
   test("reports the reviewed corpus size and metric denominators without overclaiming", () => {
+    expect(new Set(corpus.map((item) => item.id)).size).toBe(corpus.length);
     const outcomes = corpus.map((item) => ({ item, actual: evaluateCase(item) }));
     const exactMatches = outcomes.filter(({ item, actual }) =>
       item.expected.severity === actual.severity

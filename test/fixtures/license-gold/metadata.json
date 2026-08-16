@@ -1,0 +1,107 @@
+[
+  {
+    "id": "permissive-metadata",
+    "sourceUrl": "https://spdx.org/licenses/MIT.html",
+    "rationale": "An exact active SPDX MIT declaration is permissive for distribution.",
+    "evidence": {
+      "packageJsonLicense": "MIT",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": {
+      "severity": "low",
+      "confidence": "high"
+    }
+  },
+  {
+    "id": "deprecated-spdx",
+    "sourceUrl": "https://spdx.org/licenses/GPL-2.0.html",
+    "rationale": "The deprecated ambiguous GPL-2.0 identifier retains GPL distribution risk with reduced confidence.",
+    "evidence": {
+      "packageJsonLicense": "GPL-2.0",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": {
+      "severity": "high",
+      "confidence": "medium"
+    }
+  },
+  {
+    "id": "custom-license-ref",
+    "sourceUrl": "https://spdx.github.io/spdx-spec/v2.3/other-licensing-information-detected/",
+    "rationale": "A LicenseRef without extracted terms cannot support a known risk decision.",
+    "evidence": {
+      "packageJsonLicense": "LicenseRef-Proprietary-Terms",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": {
+      "severity": "unknown",
+      "confidence": "low",
+      "signals": [
+        "custom-text"
+      ]
+    }
+  },
+  {
+    "id": "absent-license-assertion",
+    "sourceUrl": "https://spdx.github.io/spdx-spec/v2.3/package-information/",
+    "rationale": "NOASSERTION explicitly says that no license conclusion is available.",
+    "evidence": {
+      "packageJsonLicense": "NOASSERTION",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": {
+      "severity": "unknown",
+      "confidence": "low",
+      "signals": [
+        "missing"
+      ]
+    }
+  },
+  {
+    "id": "unlisted-spdx-shaped-id",
+    "sourceUrl": "https://spdx.org/licenses/",
+    "rationale": "A syntactically plausible identifier absent from the pinned SPDX list must not be accepted.",
+    "evidence": {
+      "packageJsonLicense": "Definitely-Not-SPDX-9.9",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": {
+      "severity": "unknown",
+      "confidence": "low",
+      "signals": [
+        "malformed"
+      ]
+    }
+  },
+  {
+    "id": "zero-bsd",
+    "sourceUrl": "https://spdx.org/licenses/0BSD.html",
+    "rationale": "The active 0BSD identifier is permissive and should remain low risk when distributing software.",
+    "evidence": {
+      "packageJsonLicense": "0BSD",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": {
+      "severity": "low",
+      "confidence": "high"
+    }
+  }
+]

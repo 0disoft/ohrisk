@@ -1,0 +1,242 @@
+[
+  {
+    "id": "dual-license-or",
+    "sourceUrl": "https://spdx.github.io/spdx-spec/v2.3/SPDX-license-expressions/",
+    "rationale": "An OR expression permits choosing its low-risk MIT branch.",
+    "evidence": {
+      "packageJsonLicense": "MIT OR GPL-3.0-only",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": {
+      "severity": "low",
+      "confidence": "high"
+    }
+  },
+  {
+    "id": "combined-license-and",
+    "sourceUrl": "https://spdx.github.io/spdx-spec/v2.3/SPDX-license-expressions/",
+    "rationale": "An AND expression requires satisfying its GPL-3.0-only branch when distributing.",
+    "evidence": {
+      "packageJsonLicense": "MIT AND GPL-3.0-only",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": {
+      "severity": "high",
+      "confidence": "high"
+    }
+  },
+  {
+    "id": "copyleft-exception",
+    "sourceUrl": "https://spdx.org/licenses/Classpath-exception-2.0.html",
+    "rationale": "The classpath exception changes the GPL distribution obligation and requires review.",
+    "evidence": {
+      "packageJsonLicense": "GPL-2.0-only WITH Classpath-exception-2.0",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": {
+      "severity": "review",
+      "confidence": "high"
+    }
+  },
+  {
+    "id": "mpl-saas",
+    "sourceUrl": "https://spdx.org/licenses/MPL-2.0.html",
+    "rationale": "MPL-2.0 file-level copyleft does not trigger a distribution obligation for ordinary SaaS use.",
+    "evidence": {
+      "packageJsonLicense": "MPL-2.0",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": {
+      "severity": "low",
+      "confidence": "high"
+    }
+  },
+  {
+    "id": "mpl-distributed",
+    "sourceUrl": "https://spdx.org/licenses/MPL-2.0.html",
+    "rationale": "Distributing MPL-2.0 code can create file-level source obligations that require review.",
+    "evidence": {
+      "packageJsonLicense": "MPL-2.0",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": {
+      "severity": "review",
+      "confidence": "high"
+    }
+  },
+  {
+    "id": "lgpl-distributed",
+    "sourceUrl": "https://spdx.org/licenses/LGPL-2.1-only.html",
+    "rationale": "LGPL-2.1-only distribution has weak-copyleft conditions that need product-specific review.",
+    "evidence": {
+      "packageJsonLicense": "LGPL-2.1-only",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": {
+      "severity": "review",
+      "confidence": "high"
+    }
+  },
+  {
+    "id": "epl-alias-distributed",
+    "sourceUrl": "https://spdx.org/licenses/EPL-2.0.html",
+    "rationale": "The common EPL 2.0 alias must normalize to EPL-2.0 and retain weak-copyleft distribution review.",
+    "evidence": {
+      "packageJsonLicense": "EPL 2.0",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": {
+      "severity": "review",
+      "confidence": "medium"
+    }
+  },
+  {
+    "id": "agpl-saas",
+    "sourceUrl": "https://spdx.org/licenses/AGPL-3.0-only.html",
+    "rationale": "AGPL-3.0-only network copyleft is high risk for a SaaS deployment profile.",
+    "evidence": {
+      "packageJsonLicense": "AGPL-3.0-only",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": {
+      "severity": "high",
+      "confidence": "high"
+    }
+  },
+  {
+    "id": "gpl-saas-review",
+    "sourceUrl": "https://spdx.org/licenses/GPL-3.0-only.html",
+    "rationale": "GPL-3.0-only is strong copyleft, but ordinary SaaS use without distribution requires review rather than an automatic high classification.",
+    "evidence": {
+      "packageJsonLicense": "GPL-3.0-only",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": {
+      "severity": "review",
+      "confidence": "high"
+    }
+  },
+  {
+    "id": "gpl-or-later-distributed",
+    "sourceUrl": "https://spdx.org/licenses/GPL-3.0-or-later.html",
+    "rationale": "Distributing GPL-3.0-or-later code invokes strong-copyleft obligations and remains high risk under the distribution profile.",
+    "evidence": {
+      "packageJsonLicense": "GPL-3.0-or-later",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": {
+      "severity": "high",
+      "confidence": "high"
+    }
+  },
+  {
+    "id": "lgpl-saas-review",
+    "sourceUrl": "https://spdx.org/licenses/LGPL-3.0-only.html",
+    "rationale": "LGPL-3.0-only weak copyleft needs integration-specific review even when the product is delivered as SaaS.",
+    "evidence": {
+      "packageJsonLicense": "LGPL-3.0-only",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": {
+      "severity": "review",
+      "confidence": "high"
+    }
+  },
+  {
+    "id": "epl-saas-review",
+    "sourceUrl": "https://spdx.org/licenses/EPL-2.0.html",
+    "rationale": "EPL-2.0 weak copyleft remains a review decision because the applicable obligations depend on product integration and delivery.",
+    "evidence": {
+      "packageJsonLicense": "EPL-2.0",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": {
+      "severity": "review",
+      "confidence": "high"
+    }
+  },
+  {
+    "id": "agpl-or-later-saas",
+    "sourceUrl": "https://spdx.org/licenses/AGPL-3.0-or-later.html",
+    "rationale": "AGPL-3.0-or-later network copyleft is high risk for a SaaS deployment just as the version-only form is.",
+    "evidence": {
+      "packageJsonLicense": "AGPL-3.0-or-later",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": {
+      "severity": "high",
+      "confidence": "high"
+    }
+  },
+  {
+    "id": "permissive-and-expression",
+    "sourceUrl": "https://spdx.github.io/spdx-spec/v2.3/SPDX-license-expressions/",
+    "rationale": "An AND expression containing only MIT and Apache-2.0 remains low risk because both required branches are permissive.",
+    "evidence": {
+      "packageJsonLicense": "MIT AND Apache-2.0",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": {
+      "severity": "low",
+      "confidence": "high"
+    }
+  },
+  {
+    "id": "permissive-or-strong-copyleft",
+    "sourceUrl": "https://spdx.github.io/spdx-spec/v2.3/SPDX-license-expressions/",
+    "rationale": "An OR expression permits selecting Apache-2.0 instead of GPL-3.0-only and therefore remains low risk for distribution.",
+    "evidence": {
+      "packageJsonLicense": "Apache-2.0 OR GPL-3.0-only",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": {
+      "severity": "low",
+      "confidence": "high"
+    }
+  }
+]

@@ -1,0 +1,129 @@
+[
+  {
+    "id": "source-available-restriction",
+    "sourceUrl": "https://spdx.org/licenses/BUSL-1.1.html",
+    "rationale": "BUSL-1.1 contains source-available use restrictions and is high risk for SaaS.",
+    "evidence": {
+      "packageJsonLicense": "BUSL-1.1",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": {
+      "severity": "high",
+      "confidence": "high",
+      "signals": [
+        "commercial-restriction"
+      ]
+    }
+  },
+  {
+    "id": "elastic-license-alias",
+    "sourceUrl": "https://spdx.org/licenses/Elastic-2.0.html",
+    "rationale": "The common Elastic License alias denotes Elastic-2.0 source-available restrictions and is high risk for SaaS.",
+    "evidence": {
+      "packageJsonLicense": "Elastic License",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": {
+      "severity": "high",
+      "confidence": "medium",
+      "signals": [
+        "commercial-restriction"
+      ]
+    }
+  },
+  {
+    "id": "sspl-saas",
+    "sourceUrl": "https://spdx.org/licenses/SSPL-1.0.html",
+    "rationale": "SSPL-1.0 is a source-available restriction license and is high risk for SaaS deployment.",
+    "evidence": {
+      "packageJsonLicense": "SSPL-1.0",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": {
+      "severity": "high",
+      "confidence": "high",
+      "signals": [
+        "commercial-restriction"
+      ]
+    }
+  },
+  {
+    "id": "sspl-alias-saas",
+    "sourceUrl": "https://spdx.org/licenses/SSPL-1.0.html",
+    "rationale": "The common SSPL alias must retain the SSPL-1.0 restriction while lowering confidence because normalization used an alias.",
+    "evidence": {
+      "packageJsonLicense": "SSPL",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": {
+      "severity": "high",
+      "confidence": "medium",
+      "signals": [
+        "commercial-restriction"
+      ]
+    }
+  },
+  {
+    "id": "commons-clause-saas",
+    "sourceUrl": "https://commonsclause.com/",
+    "rationale": "Commons Clause restricts selling the software and therefore requires a high-risk SaaS decision.",
+    "evidence": {
+      "packageJsonLicense": "Commons-Clause",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": {
+      "severity": "high",
+      "confidence": "high"
+    }
+  },
+  {
+    "id": "polyform-noncommercial-saas",
+    "sourceUrl": "https://polyformproject.org/licenses/noncommercial/1.0.0/",
+    "rationale": "PolyForm Noncommercial explicitly limits permitted purposes and is high risk for commercial SaaS use.",
+    "evidence": {
+      "packageJsonLicense": "PolyForm-Noncommercial-1.0.0",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": {
+      "severity": "high",
+      "confidence": "high",
+      "signals": [
+        "commercial-restriction"
+      ]
+    }
+  },
+  {
+    "id": "explicit-unlicensed",
+    "sourceUrl": "https://docs.npmjs.com/cli/v11/configuring-npm/package-json#license",
+    "rationale": "An explicit UNLICENSED declaration withholds permission and must block approval until rights are clarified.",
+    "evidence": {
+      "packageJsonLicense": "UNLICENSED",
+      "files": [],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "saas",
+    "expected": {
+      "severity": "high",
+      "confidence": "high"
+    }
+  }
+]
