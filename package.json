@@ -115,6 +115,7 @@
     "test:coverage": "bun scripts/check-coverage.ts",
     "test:fuzz": "bun test test/parser-fuzz.test.ts",
     "eval:heldout": "bun scripts/evaluate-license-heldout.ts",
+    "eval:heldout:tools": "bun scripts/compare-license-heldout-tools.ts",
     "typecheck": "tsc -p tsconfig.json",
     "lint": "tsc -p tsconfig.lint.json && bun scripts/check-source-hygiene.ts",
     "format:check": "bun scripts/check-format.ts",

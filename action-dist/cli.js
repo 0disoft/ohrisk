@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 9ec9df2554fe77b1fc47bce17c6a8c8331db0ee74dc993bd182c716a5ca9415e
+// ohrisk-action-source-sha256: 22a26c422a53c4882561ce1b449eaea9e7e5b50f403569e36002b0bab097f6a6
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -16920,6 +16920,7 @@ var package_default = {
     "test:coverage": "bun scripts/check-coverage.ts",
     "test:fuzz": "bun test test/parser-fuzz.test.ts",
     "eval:heldout": "bun scripts/evaluate-license-heldout.ts",
+    "eval:heldout:tools": "bun scripts/compare-license-heldout-tools.ts",
     typecheck: "tsc -p tsconfig.json",
     lint: "tsc -p tsconfig.lint.json && bun scripts/check-source-hygiene.ts",
     "format:check": "bun scripts/check-format.ts",

@@ -53,3 +53,17 @@ part of release verification. It produces a Markdown decision and tool-
 disagreement report. ScanCode and Licensee observations remain explicitly
 `not-run` until those exact tools and versions are executed independently;
 missing observations are never counted as agreement.
+
+Run `bun run eval:heldout:tools` in an evaluation environment where the
+`scancode` and `licensee` executables are already on `PATH`. The command
+materializes each case in an isolated temporary directory, runs ScanCode once
+and Licensee once per case without a shell, records the reported tool versions,
+prints the same Markdown report, and removes the temporary inputs. It exits
+non-zero if either tool is unavailable, times out, returns malformed output, or
+if Ohrisk misses an expected decision. External disagreements remain reportable
+review evidence rather than automatically proving either tool correct.
+
+The comparison deliberately preserves the tools' different scopes. ScanCode
+examines license and package metadata, while Licensee primarily identifies
+project license files and supports only selected package metadata. A disagreement
+can therefore describe a scope difference rather than a detector defect.

@@ -32,6 +32,9 @@
 - Release verification now evaluates a separate 20-case held-out license set
   and prints a Markdown report that distinguishes Ohrisk decision mismatches,
   ScanCode or Licensee disagreements, and external tools that were not run.
+- A separate `eval:heldout:tools` command now materializes the held-out cases,
+  invokes installed ScanCode and Licensee executables through bounded shell-free
+  processes, records tool versions, and cleans its temporary inputs.
 - The cache command now owns its management, rendering, and failure mapping in
   a dedicated CLI module, reducing the central command assembler without
   changing cache output, exit codes, paths, or JSON shape.

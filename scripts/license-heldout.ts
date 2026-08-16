@@ -252,7 +252,9 @@ function setEquals(left: ReadonlySet<string>, right: ReadonlySet<string>): boole
 
 function renderExternalComparison(item: ExternalLicenseToolComparison): string {
   const expression = item.expressions.length > 0 ? item.expressions.join(", ") : "none";
-  return markdownCell(`${item.status}: ${expression}`);
+  const version = item.version ? ` v${item.version}` : "";
+  const note = item.note ? ` (${item.note})` : "";
+  return markdownCell(`${item.status}${version}: ${expression}${note}`);
 }
 
 function markdownCell(value: string): string {

@@ -70,6 +70,8 @@ describe("package metadata", () => {
     expect(packageJson.scripts?.["test:platform"]).toContain("test/write-output.test.ts");
     expect(packageJson.scripts?.["test:coverage"]).toBe("bun scripts/check-coverage.ts");
     expect(packageJson.scripts?.["eval:heldout"]).toBe("bun scripts/evaluate-license-heldout.ts");
+    expect(packageJson.scripts?.["eval:heldout:tools"])
+      .toBe("bun scripts/compare-license-heldout-tools.ts");
     expect(packageJson.scripts?.["check:action-bundle"])
       .toBe("bun scripts/check-action-bundle.ts");
     expect(packageJson.scripts?.["check:static"]).toBe(
