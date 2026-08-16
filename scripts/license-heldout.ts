@@ -46,6 +46,8 @@ export type ExternalLicenseToolComparison = {
 
 export type HeldoutLicenseEvaluation = {
   id: string;
+  sourceUrl: string;
+  rationale: string;
   expected: HeldoutLicenseCase["expected"];
   actual: HeldoutLicenseCase["expected"];
   exactDecisionMatch: boolean;
@@ -65,6 +67,51 @@ export type HeldoutLicenseSummary = {
   licenseeDisagreements: number;
   unavailableToolObservations: number;
 };
+
+export function validateHeldoutLicenseDataset(
+  input: unknown,
+  expectedCases = 20
+): string[] {
+  if (!Array.isArray(input)) {
+    return ["Held-out dataset root must be an array."];
+  }
+  const errors: string[] = [];
+  if (input.length !== expectedCases) {
+    errors.push(`Held-out dataset must contain exactly ${expectedCases} cases; found ${input.length}.`);
+  }
+  const ids = new Set<string>();
+  for (const [index, candidate] of input.entries()) {
+    if (!isRecord(candidate)) {
+      errors.push(`Held-out case ${index + 1} must be an object.`);
+      continue;
+    }
+    const id = candidate.id;
+    if (typeof id !== "string" || !/^[a-z0-9][a-z0-9-]*$/u.test(id)) {
+      errors.push(`Held-out case ${index + 1} has an invalid id.`);
+    } else if (ids.has(id)) {
+      errors.push(`Held-out case id is duplicated: ${id}.`);
+    } else {
+      ids.add(id);
+    }
+    if (typeof candidate.sourceUrl !== "string" || !candidate.sourceUrl.startsWith("https://")) {
+      errors.push(`Held-out case ${String(id)} must use an HTTPS source URL.`);
+    }
+    if (typeof candidate.rationale !== "string" || candidate.rationale.trim().length < 20) {
+      errors.push(`Held-out case ${String(id)} must include a reviewable rationale.`);
+    }
+    if (!isRecord(candidate.external)) {
+      errors.push(`Held-out case ${String(id)} must include external observations.`);
+      continue;
+    }
+    for (const tool of ["scancode", "licensee"] as const) {
+      const observation = candidate.external[tool];
+      if (!isRecord(observation) || !isExternalStatus(observation.status)) {
+        errors.push(`Held-out case ${String(id)} has an invalid ${tool} observation.`);
+      }
+    }
+  }
+  return errors;
+}
 
 export function evaluateHeldoutLicenseCases(
   cases: readonly HeldoutLicenseCase[]
@@ -110,13 +157,14 @@ export function renderHeldoutLicenseReport(input: {
     "",
     "## Cases",
     "",
-    "| Case | Expected | Actual | Ohrisk expression | ScanCode | Licensee |",
-    "| --- | --- | --- | --- | --- | --- |"
+    "| Case | Source | Expected | Actual | Ohrisk expression | ScanCode | Licensee |",
+    "| --- | --- | --- | --- | --- | --- | --- |"
   ];
 
   for (const item of input.evaluations) {
     lines.push([
       markdownCell(item.id),
+      `[source](${item.sourceUrl})`,
       `${item.expected.severity}/${item.expected.confidence}`,
       `${item.actual.severity}/${item.actual.confidence}`,
       markdownCell(item.ohriskExpression ?? "none"),
@@ -145,6 +193,8 @@ function evaluateHeldoutLicenseCase(item: HeldoutLicenseCase): HeldoutLicenseEva
     : new Set(normalized.choices);
   return {
     id: item.id,
+    sourceUrl: item.sourceUrl,
+    rationale: item.rationale,
     expected: item.expected,
     actual,
     exactDecisionMatch: actual.severity === item.expected.severity
@@ -219,4 +269,15 @@ function heldoutDependency(packageId: string): DependencyNode {
     direct: true,
     paths: [["heldout-evaluation", packageId]]
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isExternalStatus(value: unknown): value is ExternalLicenseToolStatus {
+  return value === "detected"
+    || value === "no-detection"
+    || value === "not-run"
+    || value === "error";
 }

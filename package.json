@@ -114,6 +114,7 @@
     "test:platform": "bun test test/archive-interop.test.ts test/evidence-cache.test.ts test/git-ref-file.test.ts test/github-repository.test.ts test/materialized-checkout.test.ts test/write-output.test.ts",
     "test:coverage": "bun scripts/check-coverage.ts",
     "test:fuzz": "bun test test/parser-fuzz.test.ts",
+    "eval:heldout": "bun scripts/evaluate-license-heldout.ts",
     "typecheck": "tsc -p tsconfig.json",
     "lint": "tsc -p tsconfig.lint.json && bun scripts/check-source-hygiene.ts",
     "format:check": "bun scripts/check-format.ts",
@@ -123,7 +124,7 @@
     "check:action-bundle": "bun scripts/check-action-bundle.ts",
     "check:static": "bun run format:check && bun run lint && bun run typecheck && bun run verify:docs && bun run check:action-bundle",
     "check": "bun run check:static && bun test",
-    "verify:release": "bun run check:static && bun run test:coverage && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts",
+    "verify:release": "bun run check:static && bun run test:coverage && bun run eval:heldout && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts",
     "test:schemas": "bun test test/report-schema.test.ts"
   },
   "files": [

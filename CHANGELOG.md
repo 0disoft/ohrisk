@@ -29,6 +29,9 @@
   and duplicate case IDs are rejected. Public accuracy documentation reports
   exact metric denominators and explicitly rejects production accuracy claims
   from this small regression set.
+- Release verification now evaluates a separate 20-case held-out license set
+  and prints a Markdown report that distinguishes Ohrisk decision mismatches,
+  ScanCode or Licensee disagreements, and external tools that were not run.
 - The cache command now owns its management, rendering, and failure mapping in
   a dedicated CLI module, reducing the central command assembler without
   changing cache output, exit codes, paths, or JSON shape.

@@ -69,6 +69,7 @@ describe("package metadata", () => {
     expect(packageJson.scripts?.["test:platform"]).toContain("test/evidence-cache.test.ts");
     expect(packageJson.scripts?.["test:platform"]).toContain("test/write-output.test.ts");
     expect(packageJson.scripts?.["test:coverage"]).toBe("bun scripts/check-coverage.ts");
+    expect(packageJson.scripts?.["eval:heldout"]).toBe("bun scripts/evaluate-license-heldout.ts");
     expect(packageJson.scripts?.["check:action-bundle"])
       .toBe("bun scripts/check-action-bundle.ts");
     expect(packageJson.scripts?.["check:static"]).toBe(
@@ -76,7 +77,7 @@ describe("package metadata", () => {
     );
     expect(packageJson.scripts?.check).toBe("bun run check:static && bun test");
     expect(packageJson.scripts?.["verify:release"]).toBe(
-      "bun run check:static && bun run test:coverage && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts"
+      "bun run check:static && bun run test:coverage && bun run eval:heldout && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts"
     );
 
     expect(new Set(tsconfig.include)).toEqual(new Set([

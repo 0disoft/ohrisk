@@ -140,9 +140,11 @@ if (packageJson.scripts?.["check:static"] !== expectedStaticCheck) {
 }
 
 const expectedReleaseVerification =
-  "bun run check:static && bun run test:coverage && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts";
+  "bun run check:static && bun run test:coverage && bun run eval:heldout && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts";
 if (packageJson.scripts?.["verify:release"] !== expectedReleaseVerification) {
-  failures.push("package.json verify:release must run static checks, one coverage suite, pack, and smoke");
+  failures.push(
+    "package.json verify:release must run static checks, one coverage suite, held-out evaluation, pack, and smoke"
+  );
 }
 
 if (failures.length > 0) {

@@ -1,12 +1,21 @@
 import { describe, expect, test } from "bun:test";
 
+import heldoutJson from "../evaluation/license-heldout.json" with { type: "json" };
 import {
   evaluateHeldoutLicenseCases,
   renderHeldoutLicenseReport,
+  validateHeldoutLicenseDataset,
   type HeldoutLicenseCase
 } from "../scripts/license-heldout";
 
 describe("held-out license evaluation", () => {
+  test("keeps the release-only dataset structurally separate from the tuning corpus", () => {
+    expect(validateHeldoutLicenseDataset(heldoutJson)).toEqual([]);
+    expect(heldoutJson).toHaveLength(20);
+    expect(heldoutJson.every((item) => item.external.scancode.status === "not-run")).toBe(true);
+    expect(heldoutJson.every((item) => item.external.licensee.status === "not-run")).toBe(true);
+  });
+
   test("separates Ohrisk mismatches, external disagreements, and unavailable tools", () => {
     const result = evaluateHeldoutLicenseCases([
       heldoutCase({
@@ -61,7 +70,7 @@ describe("held-out license evaluation", () => {
     expect(report).toContain("| Cases | 1 |");
     expect(report).toContain("| ScanCode disagreements | 0 |");
     expect(report).toContain("| Licensee disagreements | 1 |");
-    expect(report).toContain("| pipe\\|newline case | low/high | low/high |");
+    expect(report).toContain("| pipe\\|newline case | [source](https://example.test/license) | low/high | low/high |");
     expect(report.endsWith("\n")).toBe(true);
   });
 
@@ -83,6 +92,24 @@ describe("held-out license evaluation", () => {
       scancode: { status: "disagree" },
       licensee: { status: "agree" }
     });
+  });
+
+  test("rejects duplicate ids and incomplete external observations", () => {
+    const invalid = heldoutCase({
+      id: "duplicate-case",
+      license: "MIT",
+      expected: { severity: "low", confidence: "high" },
+      scancode: { status: "not-run" },
+      licensee: { status: "not-run" }
+    });
+    expect(validateHeldoutLicenseDataset([
+      invalid,
+      invalid,
+      { ...invalid, id: "missing-external", external: undefined }
+    ], 3)).toEqual([
+      "Held-out case id is duplicated: duplicate-case.",
+      "Held-out case missing-external must include external observations."
+    ]);
   });
 });
 

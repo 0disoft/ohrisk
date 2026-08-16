@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 365b11bf96a43df809d4a40b90d5f78b77b07df4b6d3c5c120192992f4243eeb
+// ohrisk-action-source-sha256: 9ec9df2554fe77b1fc47bce17c6a8c8331db0ee74dc993bd182c716a5ca9415e
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -16919,6 +16919,7 @@ var package_default = {
     "test:platform": "bun test test/archive-interop.test.ts test/evidence-cache.test.ts test/git-ref-file.test.ts test/github-repository.test.ts test/materialized-checkout.test.ts test/write-output.test.ts",
     "test:coverage": "bun scripts/check-coverage.ts",
     "test:fuzz": "bun test test/parser-fuzz.test.ts",
+    "eval:heldout": "bun scripts/evaluate-license-heldout.ts",
     typecheck: "tsc -p tsconfig.json",
     lint: "tsc -p tsconfig.lint.json && bun scripts/check-source-hygiene.ts",
     "format:check": "bun scripts/check-format.ts",
@@ -16928,7 +16929,7 @@ var package_default = {
     "check:action-bundle": "bun scripts/check-action-bundle.ts",
     "check:static": "bun run format:check && bun run lint && bun run typecheck && bun run verify:docs && bun run check:action-bundle",
     check: "bun run check:static && bun test",
-    "verify:release": "bun run check:static && bun run test:coverage && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts",
+    "verify:release": "bun run check:static && bun run test:coverage && bun run eval:heldout && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts",
     "test:schemas": "bun test test/report-schema.test.ts"
   },
   files: [

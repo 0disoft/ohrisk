@@ -44,3 +44,12 @@ Future published accuracy claims require a larger independently reviewed set,
 held-out cases, explicit sampling, and disagreement reports against other
 tools. A difference from another scanner is evidence to investigate, not proof
 that either tool is correct.
+
+## Held-out release evaluation
+
+The 20-case set in `evaluation/license-heldout.json` is separate from the
+80-case tuning corpus and is evaluated only by `bun run eval:heldout`, which is
+part of release verification. It produces a Markdown decision and tool-
+disagreement report. ScanCode and Licensee observations remain explicitly
+`not-run` until those exact tools and versions are executed independently;
+missing observations are never counted as agreement.
