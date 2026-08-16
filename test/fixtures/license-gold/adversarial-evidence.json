@@ -1,0 +1,251 @@
+[
+  {
+    "id": "truncated-mit-permission-only",
+    "sourceUrl": "https://spdx.org/licenses/MIT.html",
+    "rationale": "A partial MIT grant without the preservation and warranty terms is insufficient to identify the complete license text.",
+    "evidence": {
+      "files": [{ "path": "LICENSE", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy" }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["missing", "custom-text"] }
+  },
+  {
+    "id": "truncated-mit-warranty-only",
+    "sourceUrl": "https://spdx.org/licenses/MIT.html",
+    "rationale": "The MIT warranty disclaimer alone does not establish the omitted permission and preservation conditions.",
+    "evidence": {
+      "files": [{ "path": "LICENSE", "kind": "license", "text": "THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND" }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["missing", "custom-text"] }
+  },
+  {
+    "id": "mutated-mit-grant",
+    "sourceUrl": "https://spdx.org/licenses/MIT.html",
+    "rationale": "A materially corrupted permission sentence must not be promoted to a recognized MIT license from its disclaimer alone.",
+    "evidence": {
+      "files": [{ "path": "LICENSE", "kind": "license", "text": "Permission is hearby granted, for a fee, to selected persons obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["missing", "custom-text"] }
+  },
+  {
+    "id": "truncated-gpl-header-only",
+    "sourceUrl": "https://spdx.org/licenses/GPL-3.0-only.html",
+    "rationale": "A GPL title and version line without operative terms is not enough evidence for a complete strong-copyleft classification.",
+    "evidence": {
+      "files": [{ "path": "COPYING", "kind": "copying", "text": "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007" }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["missing", "custom-text"] }
+  },
+  {
+    "id": "truncated-apache-header-only",
+    "sourceUrl": "https://spdx.org/licenses/Apache-2.0.html",
+    "rationale": "An Apache title and version line without the grant or terms must not be treated as the complete permissive license.",
+    "evidence": {
+      "files": [{ "path": "LICENSE", "kind": "license", "text": "Apache License\nVersion 2.0, January 2004" }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["missing", "custom-text"] }
+  },
+  {
+    "id": "spdx-tag-survives-short-file",
+    "sourceUrl": "https://spdx.github.io/spdx-spec/v2.3/using-SPDX-short-identifiers-in-source-files/",
+    "rationale": "An explicit SPDX identifier is a declaration and remains usable even when the containing file has no full license body.",
+    "evidence": {
+      "files": [{ "path": "LICENSE", "kind": "license", "text": "SPDX-License-Identifier: Apache-2.0" }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "medium" }
+  },
+  {
+    "id": "duplicate-mit-license-files",
+    "sourceUrl": "https://spdx.org/licenses/MIT.html",
+    "rationale": "Two files containing the same recognizable MIT terms corroborate one license rather than creating a conflict.",
+    "evidence": {
+      "files": [
+        { "path": "LICENSE", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." },
+        { "path": "LICENSE-MIT", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." }
+      ],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "medium" }
+  },
+  {
+    "id": "undeclared-distinct-license-files",
+    "sourceUrl": "https://spdx.github.io/spdx-spec/v3.0.1/annexes/spdx-license-expressions/",
+    "rationale": "Separate MIT and Apache files without an AND or OR declaration do not reveal how the terms combine and must fail closed.",
+    "evidence": {
+      "files": [
+        { "path": "LICENSE-MIT", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." },
+        { "path": "LICENSE-APACHE", "kind": "license", "text": "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION" }
+      ],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["conflicting-evidence"] }
+  },
+  {
+    "id": "declared-or-with-matching-files",
+    "sourceUrl": "https://spdx.github.io/spdx-spec/v3.0.1/annexes/spdx-license-expressions/",
+    "rationale": "An explicit MIT OR Apache-2.0 declaration resolves the relationship between its two matching license files.",
+    "evidence": {
+      "metadataLicense": "MIT OR Apache-2.0",
+      "metadataLicenseKind": "declared",
+      "files": [
+        { "path": "LICENSE-MIT", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." },
+        { "path": "LICENSE-APACHE", "kind": "license", "text": "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION" }
+      ],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "high" }
+  },
+  {
+    "id": "declared-and-with-matching-files",
+    "sourceUrl": "https://spdx.github.io/spdx-spec/v3.0.1/annexes/spdx-license-expressions/",
+    "rationale": "An explicit MIT AND Apache-2.0 declaration states that both permissive terms apply and matches the bundled files.",
+    "evidence": {
+      "packageJsonLicense": "MIT AND Apache-2.0",
+      "files": [
+        { "path": "LICENSE-MIT", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." },
+        { "path": "LICENSE-APACHE", "kind": "license", "text": "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION" }
+      ],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "high" }
+  },
+  {
+    "id": "apache-multiple-notices",
+    "sourceUrl": "https://spdx.org/licenses/Apache-2.0.html",
+    "rationale": "Multiple NOTICE files retain the Apache permissive decision while preserving one notice-required signal.",
+    "evidence": {
+      "packageJsonLicense": "Apache-2.0",
+      "files": [
+        { "path": "NOTICE", "kind": "notice", "text": "Copyright Example Authors" },
+        { "path": "THIRD-PARTY-NOTICES", "kind": "notice", "text": "Bundled attributions" }
+      ],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "high", "signals": ["notice-required"] }
+  },
+  {
+    "id": "classifier-with-distinct-files",
+    "sourceUrl": "https://packaging.python.org/en/latest/specifications/core-metadata/#classifier-multiple-use",
+    "rationale": "A broad metadata classifier cannot resolve two distinct recognized license files into a reliable package expression.",
+    "evidence": {
+      "metadataLicense": "MIT",
+      "metadataLicenseKind": "classifier",
+      "files": [
+        { "path": "LICENSE-MIT", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." },
+        { "path": "LICENSE-APACHE", "kind": "license", "text": "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION" }
+      ],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["conflicting-evidence"] }
+  },
+  {
+    "id": "apache-metadata-gpl-file-conflict",
+    "sourceUrl": "https://spdx.dev/learn/handling-license-info/",
+    "rationale": "Apache-2.0 metadata contradicts a recognizable GPL-3.0-only file and cannot support a permissive decision.",
+    "evidence": {
+      "metadataLicense": "Apache-2.0",
+      "files": [{ "path": "COPYING", "kind": "copying", "text": "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\nTERMS AND CONDITIONS" }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["conflicting-evidence"] }
+  },
+  {
+    "id": "gpl-metadata-mit-file-conflict",
+    "sourceUrl": "https://spdx.dev/learn/handling-license-info/",
+    "rationale": "GPL-3.0-only metadata and recognizable MIT file evidence conflict, so neither risk level should silently win.",
+    "evidence": {
+      "metadataLicense": "GPL-3.0-only",
+      "files": [{ "path": "LICENSE", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["conflicting-evidence"] }
+  },
+  {
+    "id": "single-metadata-extra-copyleft-file",
+    "sourceUrl": "https://spdx.dev/learn/handling-license-info/",
+    "rationale": "Apache metadata does not account for an additional GPL file, even when a matching Apache file is also present.",
+    "evidence": {
+      "packageJsonLicense": "Apache-2.0",
+      "files": [
+        { "path": "LICENSE-APACHE", "kind": "license", "text": "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION" },
+        { "path": "COPYING", "kind": "copying", "text": "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\nTERMS AND CONDITIONS" }
+      ],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["conflicting-evidence"] }
+  },
+  {
+    "id": "malformed-metadata-recognized-mit-file",
+    "sourceUrl": "https://docs.npmjs.com/cli/v11/configuring-npm/package-json#license",
+    "rationale": "A malformed SEE LICENSE declaration may fall back to the recognizable referenced MIT file with reduced confidence.",
+    "evidence": {
+      "packageJsonLicense": "SEE LICENSE IN LICENSE",
+      "files": [{ "path": "LICENSE", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "low", "confidence": "medium" }
+  },
+  {
+    "id": "deprecated-gpl-equivalent-file",
+    "sourceUrl": "https://spdx.org/licenses/GPL-3.0.html",
+    "rationale": "Deprecated GPL-3.0 metadata is equivalent to a GPL-3.0-only file and remains high risk with reduced confidence.",
+    "evidence": {
+      "packageJsonLicense": "GPL-3.0",
+      "files": [{ "path": "COPYING", "kind": "copying", "text": "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\nTERMS AND CONDITIONS" }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "high", "confidence": "medium" }
+  },
+  {
+    "id": "unlicensed-metadata-mit-file-conflict",
+    "sourceUrl": "https://docs.npmjs.com/cli/v11/configuring-npm/package-json#license",
+    "rationale": "UNLICENSED metadata and a recognizable MIT file are contradictory rights claims and must not silently become either high or low.",
+    "evidence": {
+      "packageJsonLicense": "UNLICENSED",
+      "files": [{ "path": "LICENSE", "kind": "license", "text": "Permission is hereby granted, free of charge, to any person obtaining a copy.\nTHE SOFTWARE IS PROVIDED \"AS IS\"." }],
+      "source": "tarball",
+      "warnings": []
+    },
+    "profile": "distributed-app",
+    "expected": { "severity": "unknown", "confidence": "low", "signals": ["conflicting-evidence"] }
+  }
+]

@@ -157,7 +157,8 @@ describe("PyPI release evidence", () => {
       ].join("\n"),
       "factorio_rcon_py-2.1.3.dist-info/LICENSE": [
         "GNU LESSER GENERAL PUBLIC LICENSE",
-        "Version 2.1, February 1999"
+        "Version 2.1, February 1999",
+        "TERMS AND CONDITIONS"
       ].join("\n")
     });
     const result = collectPythonDistributionEvidence({
@@ -174,7 +175,7 @@ describe("PyPI release evidence", () => {
     expect(result.value.files).toEqual([{
       path: "factorio_rcon_py-2.1.3.dist-info/LICENSE",
       kind: "license",
-      text: "GNU LESSER GENERAL PUBLIC LICENSE\nVersion 2.1, February 1999"
+      text: "GNU LESSER GENERAL PUBLIC LICENSE\nVersion 2.1, February 1999\nTERMS AND CONDITIONS"
     }]);
     expect(result.value.warnings).not.toContain(
       "No supported license, notice, attribution, or legal evidence file found in the Python distribution."
@@ -209,7 +210,7 @@ describe("PyPI release evidence", () => {
         ""
       ].join("\n"),
       "example_pkg-1.2.3.dist-info/licenses/LICENSE-APACHE":
-        "Apache License\nVersion 2.0, January 2004",
+        "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION",
       "example_pkg-1.2.3.dist-info/licenses/LICENSE-MIT": [
         "Permission is hereby granted, free of charge, to any person obtaining a copy",
         "THE SOFTWARE IS PROVIDED \"AS IS\""

@@ -9,7 +9,7 @@
         {
           "path": "LICENSE",
           "kind": "license",
-          "text": "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007"
+          "text": "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\nTERMS AND CONDITIONS"
         }
       ],
       "source": "tarball",

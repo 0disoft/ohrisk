@@ -138,7 +138,7 @@ describe("Maven Central evidence", () => {
   test("uses checksum and embedded identity verified Maven JAR license evidence", async () => {
     const jar = createZip({
       "META-INF/maven/org.example/demo/pom.properties": "groupId=org.example\nartifactId=demo\nversion=1.2.3\n",
-      "META-INF/LICENSE": "GNU GENERAL PUBLIC LICENSE Version 3"
+      "META-INF/LICENSE": "GNU GENERAL PUBLIC LICENSE Version 3\nTERMS AND CONDITIONS"
     });
     const checksum = createHash("sha256").update(jar).digest("hex");
     const requests: string[] = [];

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import adversarialEvidenceJson from "./fixtures/license-gold/adversarial-evidence.json" with { type: "json" };
 import expressionsJson from "./fixtures/license-gold/expressions.json" with { type: "json" };
 import fileEvidenceJson from "./fixtures/license-gold/file-evidence.json" with { type: "json" };
 import metadataJson from "./fixtures/license-gold/metadata.json" with { type: "json" };
@@ -33,6 +34,7 @@ type GoldCase = {
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const corpus = [
+  ...adversarialEvidenceJson,
   ...metadataJson,
   ...expressionsJson,
   ...restrictionsJson,
@@ -78,21 +80,21 @@ describe("license decision gold corpus", () => {
       expectedUnknown: expectedUnknown.length,
       unknownMatches
     }).toEqual({
-      cases: 32,
-      exactMatches: 32,
-      expectedHigh: 12,
-      highTruePositives: 12,
-      expectedNonHigh: 20,
+      cases: 50,
+      exactMatches: 50,
+      expectedHigh: 13,
+      highTruePositives: 13,
+      expectedNonHigh: 37,
       highFalsePositives: 0,
-      expectedUnknown: 4,
-      unknownMatches: 4
+      expectedUnknown: 15,
+      unknownMatches: 15
     });
 
     const accuracyDoc = readFileSync(path.join(repoRoot, "docs", "accuracy.md"), "utf8");
-    expect(accuracyDoc).toContain("32/32");
-    expect(accuracyDoc).toContain("12/12");
-    expect(accuracyDoc).toContain("0/20");
-    expect(accuracyDoc).toContain("4/4");
+    expect(accuracyDoc).toContain("50/50");
+    expect(accuracyDoc).toContain("13/13");
+    expect(accuracyDoc).toContain("0/37");
+    expect(accuracyDoc).toContain("15/15");
     expect(accuracyDoc).toContain("not statistically representative");
   });
 });

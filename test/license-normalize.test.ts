@@ -716,6 +716,8 @@ describe("normalizeLicenseEvidence", () => {
             "GNU GENERAL PUBLIC LICENSE",
             "Version 3, 29 June 2007",
             "",
+            "TERMS AND CONDITIONS",
+            "",
             "13. Use with the GNU Affero General Public License.",
             "Notwithstanding any other provision of this License, you have permission to link or combine",
             "any covered work with a work licensed under version 3 of the GNU Affero General Public License."
@@ -776,7 +778,7 @@ describe("normalizeLicenseEvidence", () => {
         {
           path: "LICENSE-APACHE",
           kind: "license",
-          text: "Apache License\nVersion 2.0, January 2004"
+          text: "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION"
         },
         {
           path: "LICENSE-MIT",
@@ -866,7 +868,7 @@ describe("normalizeLicenseEvidence", () => {
         {
           path: "LICENSE-APACHE",
           kind: "license",
-          text: "Apache License\nVersion 2.0, January 2004"
+          text: "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION"
         },
         {
           path: "LICENSE-MIT",

@@ -10,16 +10,21 @@ used by the CLI.
 
 | Metric | Result |
 | --- | --- |
-| Exact severity and confidence matches | 32/32 |
-| Expected high-risk cases classified high | 12/12 |
-| Expected non-high cases incorrectly classified high | 0/20 |
-| Expected unknown cases classified unknown | 4/4 |
+| Exact severity and confidence matches | 50/50 |
+| Expected high-risk cases classified high | 13/13 |
+| Expected non-high cases incorrectly classified high | 0/37 |
+| Expected unknown cases classified unknown | 15/15 |
 
 This is a small regression corpus and is not statistically representative of
 package registries, real repositories, or all license text. In particular,
-`12/12` is a test result with a denominator of twelve, not a general high-risk
+`13/13` is a test result with a denominator of thirteen, not a general high-risk
 recall claim. It must not be presented as evidence that Ohrisk has zero false
 negatives in production.
+
+The current adversarial shard includes incomplete or materially altered license
+text, duplicate and distinct legal files, NOTICE bundles, and contradictory
+metadata/file claims. A title and version line alone is not treated as a full
+license-text match; an explicit `SPDX-License-Identifier` remains a declaration.
 
 ## Expansion rules
 

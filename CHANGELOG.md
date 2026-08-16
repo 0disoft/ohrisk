@@ -17,7 +17,9 @@
   major using caret ranges while `bun.lock` continues to pin exact resolved
   versions and integrity hashes. Mutable `latest` exceptions are no longer
   permitted by source hygiene.
-- The 32-case license decision corpus now covers profile-sensitive MPL, GPL,
+- The 50-case license decision corpus now covers truncated and materially
+  altered license text, multiple LICENSE and NOTICE files, and contradictory
+  metadata/file claims in addition to profile-sensitive MPL, GPL,
   LGPL, EPL, and AGPL decisions, permissive compound expressions, explicit
   unlicensed metadata, source-available licenses and aliases, and Unlicense
   commercial-use wording. Category shards keep future corpus growth reviewable,

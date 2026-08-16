@@ -22,7 +22,7 @@ describe("collectGoModuleEvidence", () => {
       mkdirSync(moduleDir, { recursive: true });
       writeFileSync(
         path.join(moduleDir, "LICENSE"),
-        "GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007\n",
+        "GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007\nTERMS AND CONDITIONS\n",
         "utf8"
       );
       writeFileSync(
@@ -110,7 +110,7 @@ describe("collectGoModuleEvidence", () => {
       mkdirSync(moduleDir, { recursive: true });
       writeFileSync(
         path.join(moduleDir, "LICENSE"),
-        "GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007\n",
+        "GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007\nTERMS AND CONDITIONS\n",
         "utf8"
       );
 

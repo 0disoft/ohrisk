@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: ad49a04c8cf3c59b0a37d819aec1941a034a7bf980fdc074949bb3fb4d34aa06
+// ohrisk-action-source-sha256: a91c311fc28b293073ef9ef3bc7c90200a200cc16be3c3542f83c2dd80b2d131
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -53325,7 +53325,8 @@ function normalizeLicenseEvidence(evidence) {
   const evidenceSources = describeEvidenceSources(evidence);
   const licenseFileExpressions = readLicenseFileExpressions(evidence);
   const distinctLicenseFileExpressions = new Set(licenseFileExpressions.map((match) => match.expression));
-  if (evidence.metadataLicenseKind === "classifier" && distinctLicenseFileExpressions.size > 1) {
+  const packageLicenseExpression = readPackageLicenseExpression(evidence);
+  if (distinctLicenseFileExpressions.size > 1 && (!packageLicenseExpression || evidence.metadataLicenseKind === "classifier")) {
     if (!signals.includes("conflicting-evidence")) {
       signals.push("conflicting-evidence");
     }
@@ -53684,7 +53685,7 @@ function recognizeStandardLicenseText(text) {
   if (/\bEclipse Public License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
     return "EPL-2.0";
   }
-  if (/\bApache License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
+  if (isRecognizableApacheLicenseText(text)) {
     return "Apache-2.0";
   }
   if (/\bCreative Commons Legal Code\b[\s\S]*\bCC0 1\.0 Universal\b/i.test(text)) {
@@ -53744,6 +53745,9 @@ var GNU_LICENSE_SIGNATURES = [
   }
 ];
 function recognizeGnuLicenseText(text) {
+  if (!/\bTERMS AND CONDITIONS\b/i.test(text)) {
+    return;
+  }
   let earliest;
   for (const signature of GNU_LICENSE_SIGNATURES) {
     const match = signature.pattern.exec(text);
@@ -53752,6 +53756,11 @@ function recognizeGnuLicenseText(text) {
     }
   }
   return earliest?.expression;
+}
+function isRecognizableApacheLicenseText(text) {
+  const fullLicense = /\bApache License\b[\s\S]*\bVersion 2\.0\b/i.test(text) && /\bTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\b/i.test(text);
+  const standardHeader = /\bLicensed under the Apache License, Version 2\.0\b/i.test(text) && /\bAS IS["”]? BASIS\b/i.test(text) && /\blimitations under the License\b/i.test(text);
+  return fullLicense || standardHeader;
 }
 function readSpdxLicenseIdentifier(text) {
   for (const line of text.split(/\r?\n/)) {

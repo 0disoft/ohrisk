@@ -51,8 +51,12 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
   const distinctLicenseFileExpressions = new Set(
     licenseFileExpressions.map((match) => match.expression)
   );
+  const packageLicenseExpression = readPackageLicenseExpression(evidence);
 
-  if (evidence.metadataLicenseKind === "classifier" && distinctLicenseFileExpressions.size > 1) {
+  if (
+    distinctLicenseFileExpressions.size > 1
+    && (!packageLicenseExpression || evidence.metadataLicenseKind === "classifier")
+  ) {
     if (!signals.includes("conflicting-evidence")) {
       signals.push("conflicting-evidence");
     }
@@ -544,7 +548,7 @@ function recognizeStandardLicenseText(text: string): string | undefined {
     return "EPL-2.0";
   }
 
-  if (/\bApache License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
+  if (isRecognizableApacheLicenseText(text)) {
     return "Apache-2.0";
   }
 
@@ -631,6 +635,10 @@ const GNU_LICENSE_SIGNATURES = [
 ] as const;
 
 function recognizeGnuLicenseText(text: string): string | undefined {
+  if (!/\bTERMS AND CONDITIONS\b/i.test(text)) {
+    return undefined;
+  }
+
   let earliest: { expression: string; index: number } | undefined;
 
   for (const signature of GNU_LICENSE_SIGNATURES) {
@@ -641,6 +649,15 @@ function recognizeGnuLicenseText(text: string): string | undefined {
   }
 
   return earliest?.expression;
+}
+
+function isRecognizableApacheLicenseText(text: string): boolean {
+  const fullLicense = /\bApache License\b[\s\S]*\bVersion 2\.0\b/i.test(text)
+    && /\bTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\b/i.test(text);
+  const standardHeader = /\bLicensed under the Apache License, Version 2\.0\b/i.test(text)
+    && /\bAS IS["”]? BASIS\b/i.test(text)
+    && /\blimitations under the License\b/i.test(text);
+  return fullLicense || standardHeader;
 }
 
 function readSpdxLicenseIdentifier(text: string): string | undefined {

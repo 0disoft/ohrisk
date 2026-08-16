@@ -1702,7 +1702,7 @@ describe("main", () => {
       );
       writeFileSync(
         path.join(moduleDir, "LICENSE"),
-        "GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007\n",
+        "GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007\nTERMS AND CONDITIONS\n",
         "utf8"
       );
 
@@ -1760,7 +1760,7 @@ describe("main", () => {
       );
       writeFileSync(
         path.join(moduleDir, "LICENSE"),
-        "GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007\n",
+        "GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007\nTERMS AND CONDITIONS\n",
         "utf8"
       );
 
@@ -1833,7 +1833,7 @@ describe("main", () => {
       );
       writeFileSync(
         path.join(moduleDir, "LICENSE"),
-        "GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007\n",
+        "GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007\nTERMS AND CONDITIONS\n",
         "utf8"
       );
 
@@ -6906,7 +6906,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       );
       writeFileSync(
         path.join(packageDir, "LICENSE"),
-        "GNU AFFERO GENERAL PUBLIC LICENSE Version 3",
+        "GNU AFFERO GENERAL PUBLIC LICENSE Version 3\nTERMS AND CONDITIONS",
         "utf8"
       );
 
@@ -7299,7 +7299,11 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         ].join("\n"),
         "utf8"
       );
-      writeFileSync(path.join(providerDir, "LICENSE"), "GNU Affero General Public License version 3", "utf8");
+      writeFileSync(
+        path.join(providerDir, "LICENSE"),
+        "GNU Affero General Public License version 3\nTERMS AND CONDITIONS",
+        "utf8"
+      );
 
       const { io, stdout, stderr } = createTestIO(projectRoot);
       const exitCode = await main(["scan"], io);
@@ -7390,7 +7394,11 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         }),
         "utf8"
       );
-      writeFileSync(path.join(inputDir, "LICENSE"), "GNU Affero General Public License version 3", "utf8");
+      writeFileSync(
+        path.join(inputDir, "LICENSE"),
+        "GNU Affero General Public License version 3\nTERMS AND CONDITIONS",
+        "utf8"
+      );
 
       const { io, stdout, stderr } = createTestIO(projectRoot);
       const exitCode = await main(["scan"], io);
