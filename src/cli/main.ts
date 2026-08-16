@@ -68,7 +68,6 @@ import {
 import { openReportFile, type ReportOpener } from "../report/open-report";
 import type { ReportWriter } from "../report/write-output";
 import {
-  cloneGitHubRepository,
   type RepositoryCloner
 } from "../repository/github-repository";
 import type { RepositoryTreeInventory } from "../repository/tree-inventory";
@@ -92,6 +91,10 @@ import {
   formatReportOpenWarning,
   reportFormatLabel
 } from "./report-output";
+import {
+  redactTemporaryPath,
+  runRemoteRepositoryScan
+} from "./remote-repository-scan";
 import {
   closeScanProgressReporter,
   createEvidenceProgressReporter,
@@ -481,57 +484,23 @@ async function runScan(
     });
   }
 
-  reportProgress?.(0, `Cloning ${repository.owner}/${repository.name}...`);
-  const cloner = io.cloneRepository ?? cloneGitHubRepository;
   const submoduleMode = command.kind === "scan" ? command.submoduleMode ?? "ignore" : "ignore";
-  const cloned = await cloner(repository, { submodules: submoduleMode });
-  if (isErr(cloned)) {
-    await closeScanProgressReporter(reportProgress, "failure");
-    io.stderr(formatError(cloned.error));
-    return exitCodeForError(cloned.error);
-  }
-
-  try {
-    if (isCommandCancelled(signal)) {
-      await closeScanProgressReporter(reportProgress, "failure");
-      io.stderr(renderCommandCancelled("Scan"));
-      return COMMAND_CANCELLED_EXIT_CODE;
-    }
-    return await runScanAt({
+  return runRemoteRepositoryScan({
+    repository,
+    submoduleMode,
+    invocationCwd: io.cwd,
+    signal,
+    ...(reportProgress ? { reportProgress } : {}),
+    ...(io.cloneRepository ? { cloneRepository: io.cloneRepository } : {}),
+    stderr: io.stderr,
+    scan: (context) => runScanAt({
       command,
       io,
-      scanCwd: cloned.value.rootDir,
-      configurationRoot: io.cwd,
-      runtimeRoot: io.cwd,
-      allowLocalProjectEvidence: false,
+      ...context,
       ...(reportProgress ? { reportProgress } : {}),
-      signal,
-      ...(cloned.value.inventory ? { inventory: cloned.value.inventory } : {}),
-      temporaryRoot: cloned.value.rootDir,
-      repository: {
-        owner: repository.owner,
-        name: repository.name,
-        submodules: {
-          mode: submoduleMode,
-          skippedCount: cloned.value.submodules.total,
-          skippedPaths: cloned.value.submodules.paths,
-          pathsTruncated: cloned.value.submodules.pathsTruncated
-        },
-        symbolicLinks: {
-          skippedCount: cloned.value.symbolicLinks.total,
-          skippedPaths: cloned.value.symbolicLinks.paths,
-          pathsTruncated: cloned.value.symbolicLinks.pathsTruncated
-        },
-        nonPortablePaths: {
-          skippedCount: cloned.value.nonPortablePaths.total,
-          skippedPaths: cloned.value.nonPortablePaths.paths,
-          pathsTruncated: cloned.value.nonPortablePaths.pathsTruncated
-        }
-      }
-    });
-  } finally {
-    cloned.value.cleanup();
-  }
+      signal
+    })
+  });
 }
 
 async function runScanAt(input: {
@@ -1361,43 +1330,6 @@ function isProductionRelevantPath(
 
 function isDirectDependencyPath(pathSegments: string[], dependencyPathSegments: Set<string>): boolean {
   return pathSegments.slice(1).filter((segment) => dependencyPathSegments.has(segment)).length <= 1;
-}
-
-function redactTemporaryPath(error: OhriskError, temporaryRoot: string): OhriskError {
-  return {
-    ...error,
-    message: redactTemporaryPathText(error.message, temporaryRoot),
-    ...(error.details
-      ? { details: redactTemporaryPathValue(error.details, temporaryRoot) as Record<string, unknown> }
-      : {})
-  };
-}
-
-function redactTemporaryPathValue(value: unknown, temporaryRoot: string): unknown {
-  if (typeof value === "string") {
-    return redactTemporaryPathText(value, temporaryRoot);
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => redactTemporaryPathValue(item, temporaryRoot));
-  }
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, redactTemporaryPathValue(item, temporaryRoot)])
-    );
-  }
-  return value;
-}
-
-function redactTemporaryPathText(value: string, temporaryRoot: string): string {
-  const variants = [
-    temporaryRoot,
-    temporaryRoot.replace(/\\/g, "/"),
-    temporaryRoot.replace(/\//g, "\\")
-  ];
-  return variants.reduce(
-    (redacted, variant) => redacted.split(variant).join("<temporary repository>"),
-    value
-  );
 }
 
 function renderVersion(): string {

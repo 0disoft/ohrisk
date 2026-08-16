@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 7f667b5e9fb0624fb27eccb0dd908c61b96083db36cba72dfe0b7563d2a9749e
+// ohrisk-action-source-sha256: 1c593eceec397799892661c7d45948209e51092755327c72b6ea22b23a417ccd
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -64598,6 +64598,82 @@ function normalizeScanProgressPercent(rawPercent) {
   return Math.round(Math.min(100, Math.max(0, rawPercent)));
 }
 
+// src/cli/remote-repository-scan.ts
+async function runRemoteRepositoryScan(input) {
+  input.reportProgress?.(0, `Cloning ${input.repository.owner}/${input.repository.name}...`);
+  const cloner = input.cloneRepository ?? cloneGitHubRepository;
+  const cloned = await cloner(input.repository, { submodules: input.submoduleMode });
+  if (isErr(cloned)) {
+    await closeScanProgressReporter(input.reportProgress, "failure");
+    input.stderr(formatError(cloned.error));
+    return exitCodeForError(cloned.error);
+  }
+  try {
+    if (isCommandCancelled(input.signal)) {
+      await closeScanProgressReporter(input.reportProgress, "failure");
+      input.stderr(renderCommandCancelled("Scan"));
+      return COMMAND_CANCELLED_EXIT_CODE;
+    }
+    return await input.scan({
+      scanCwd: cloned.value.rootDir,
+      configurationRoot: input.invocationCwd,
+      runtimeRoot: input.invocationCwd,
+      allowLocalProjectEvidence: false,
+      temporaryRoot: cloned.value.rootDir,
+      ...cloned.value.inventory ? { inventory: cloned.value.inventory } : {},
+      repository: {
+        owner: input.repository.owner,
+        name: input.repository.name,
+        submodules: {
+          mode: input.submoduleMode,
+          skippedCount: cloned.value.submodules.total,
+          skippedPaths: cloned.value.submodules.paths,
+          pathsTruncated: cloned.value.submodules.pathsTruncated
+        },
+        symbolicLinks: {
+          skippedCount: cloned.value.symbolicLinks.total,
+          skippedPaths: cloned.value.symbolicLinks.paths,
+          pathsTruncated: cloned.value.symbolicLinks.pathsTruncated
+        },
+        nonPortablePaths: {
+          skippedCount: cloned.value.nonPortablePaths.total,
+          skippedPaths: cloned.value.nonPortablePaths.paths,
+          pathsTruncated: cloned.value.nonPortablePaths.pathsTruncated
+        }
+      }
+    });
+  } finally {
+    cloned.value.cleanup();
+  }
+}
+function redactTemporaryPath(error, temporaryRoot) {
+  return {
+    ...error,
+    message: redactTemporaryPathText(error.message, temporaryRoot),
+    ...error.details ? { details: redactTemporaryPathValue(error.details, temporaryRoot) } : {}
+  };
+}
+function redactTemporaryPathValue(value, temporaryRoot) {
+  if (typeof value === "string") {
+    return redactTemporaryPathText(value, temporaryRoot);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactTemporaryPathValue(item, temporaryRoot));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactTemporaryPathValue(item, temporaryRoot)]));
+  }
+  return value;
+}
+function redactTemporaryPathText(value, temporaryRoot) {
+  const variants = [
+    temporaryRoot,
+    temporaryRoot.replace(/\\/g, "/"),
+    temporaryRoot.replace(/\//g, "\\")
+  ];
+  return variants.reduce((redacted, variant) => redacted.split(variant).join("<temporary repository>"), value);
+}
+
 // src/cli/workspace-root.ts
 import { realpathSync as realpathSync8, statSync as statSync36 } from "node:fs";
 import path92 from "node:path";
@@ -64905,56 +64981,23 @@ async function runScan(command, io, signal) {
       signal
     });
   }
-  reportProgress?.(0, `Cloning ${repository.owner}/${repository.name}...`);
-  const cloner = io.cloneRepository ?? cloneGitHubRepository;
   const submoduleMode = command.kind === "scan" ? command.submoduleMode ?? "ignore" : "ignore";
-  const cloned = await cloner(repository, { submodules: submoduleMode });
-  if (isErr(cloned)) {
-    await closeScanProgressReporter(reportProgress, "failure");
-    io.stderr(formatError(cloned.error));
-    return exitCodeForError(cloned.error);
-  }
-  try {
-    if (isCommandCancelled(signal)) {
-      await closeScanProgressReporter(reportProgress, "failure");
-      io.stderr(renderCommandCancelled("Scan"));
-      return COMMAND_CANCELLED_EXIT_CODE;
-    }
-    return await runScanAt({
+  return runRemoteRepositoryScan({
+    repository,
+    submoduleMode,
+    invocationCwd: io.cwd,
+    signal,
+    ...reportProgress ? { reportProgress } : {},
+    ...io.cloneRepository ? { cloneRepository: io.cloneRepository } : {},
+    stderr: io.stderr,
+    scan: (context) => runScanAt({
       command,
       io,
-      scanCwd: cloned.value.rootDir,
-      configurationRoot: io.cwd,
-      runtimeRoot: io.cwd,
-      allowLocalProjectEvidence: false,
+      ...context,
       ...reportProgress ? { reportProgress } : {},
-      signal,
-      ...cloned.value.inventory ? { inventory: cloned.value.inventory } : {},
-      temporaryRoot: cloned.value.rootDir,
-      repository: {
-        owner: repository.owner,
-        name: repository.name,
-        submodules: {
-          mode: submoduleMode,
-          skippedCount: cloned.value.submodules.total,
-          skippedPaths: cloned.value.submodules.paths,
-          pathsTruncated: cloned.value.submodules.pathsTruncated
-        },
-        symbolicLinks: {
-          skippedCount: cloned.value.symbolicLinks.total,
-          skippedPaths: cloned.value.symbolicLinks.paths,
-          pathsTruncated: cloned.value.symbolicLinks.pathsTruncated
-        },
-        nonPortablePaths: {
-          skippedCount: cloned.value.nonPortablePaths.total,
-          skippedPaths: cloned.value.nonPortablePaths.paths,
-          pathsTruncated: cloned.value.nonPortablePaths.pathsTruncated
-        }
-      }
-    });
-  } finally {
-    cloned.value.cleanup();
-  }
+      signal
+    })
+  });
 }
 async function runScanAt(input) {
   const { command, io, reportProgress, signal } = input;
@@ -65504,33 +65547,6 @@ function isProductionRelevantPath(pathSegments, dependencyPathSegments) {
 }
 function isDirectDependencyPath(pathSegments, dependencyPathSegments) {
   return pathSegments.slice(1).filter((segment) => dependencyPathSegments.has(segment)).length <= 1;
-}
-function redactTemporaryPath(error, temporaryRoot) {
-  return {
-    ...error,
-    message: redactTemporaryPathText(error.message, temporaryRoot),
-    ...error.details ? { details: redactTemporaryPathValue(error.details, temporaryRoot) } : {}
-  };
-}
-function redactTemporaryPathValue(value, temporaryRoot) {
-  if (typeof value === "string") {
-    return redactTemporaryPathText(value, temporaryRoot);
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => redactTemporaryPathValue(item, temporaryRoot));
-  }
-  if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactTemporaryPathValue(item, temporaryRoot)]));
-  }
-  return value;
-}
-function redactTemporaryPathText(value, temporaryRoot) {
-  const variants = [
-    temporaryRoot,
-    temporaryRoot.replace(/\\/g, "/"),
-    temporaryRoot.replace(/\//g, "\\")
-  ];
-  return variants.reduce((redacted, variant) => redacted.split(variant).join("<temporary repository>"), value);
 }
 function renderVersion() {
   return `ohrisk ${OHRISK_VERSION}`;
