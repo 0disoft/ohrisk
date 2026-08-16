@@ -38,18 +38,6 @@ export function multipleRepositoryInputs(
   }));
 }
 
-export function repositoryConflict(
-  option: string,
-  kind: "scan" | "ci"
-): Result<CliCommand, OhriskError> {
-  return err(createError({
-    code: "INVALID_ARGUMENT",
-    category: "invalid_input",
-    message: `Remote repository input cannot be combined with ${option}.`,
-    details: { supportedOptions: supportedOptionsFor(kind) }
-  }));
-}
-
 export function invalidOptionValue(
   option: string,
   value: string,

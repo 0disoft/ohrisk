@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
 import { parseArgs } from "../src/cli/args";
-import { supportedCacheOptions, supportedOptionsFor } from "../src/cli/command-spec";
+import {
+  COMMAND_OPTION_RULES,
+  supportedCacheOptions,
+  supportedOptionsFor
+} from "../src/cli/command-spec";
 
 describe("parseArgs", () => {
   test("parses positional and explicit GitHub repository inputs", () => {
@@ -1060,6 +1064,41 @@ describe("parseArgs", () => {
         throw new Error("Expected unknown option to fail.");
       }
       expect(parsed.error.details?.supportedOptions).toEqual(expectedOptions);
+    }
+  });
+
+  test("enforces every declarative command option rule", () => {
+    const cases = {
+      "all-lockfile-conflict": ["scan", "--all", "--lockfile", "package-lock.json"],
+      "archive-lockfile-conflict": [
+        "scan", "--archive", "project.zip", "--lockfile", "package-lock.json"
+      ],
+      "archive-workspace-conflict": [
+        "scan", "--archive", "project.zip", "--workspace-root", "."
+      ],
+      "repository-archive-conflict": [
+        "scan", "--repo", "https://github.com/0disoft/laqu", "--archive", "project.zip"
+      ],
+      "repository-workspace-conflict": [
+        "scan", "--repo", "https://github.com/0disoft/laqu", "--workspace-root", "."
+      ],
+      "repository-offline-conflict": [
+        "scan", "--repo", "https://github.com/0disoft/laqu", "--offline"
+      ],
+      "submodules-repository-requirement": ["scan", "--submodules", "ignore"],
+      "waiver-mode-conflict": ["ci", "--no-waivers", "--strict-waivers"],
+      "open-html-output-requirement": ["scan", "--open"],
+      "language-html-requirement": ["scan", "--language", "ko"]
+    } as const;
+
+    expect(COMMAND_OPTION_RULES.map((rule) => rule.id)).toEqual(Object.keys(cases));
+    for (const rule of COMMAND_OPTION_RULES) {
+      const parsed = parseArgs([...cases[rule.id as keyof typeof cases]]);
+      expect(parsed.ok).toBe(false);
+      if (parsed.ok) {
+        throw new Error(`Expected ${rule.id} to fail.`);
+      }
+      expect(parsed.error.message).toBe(rule.message);
     }
   });
 

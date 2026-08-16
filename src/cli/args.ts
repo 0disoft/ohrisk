@@ -20,13 +20,16 @@ import {
   multipleRepositoryInputs,
   outputFormatConflict,
   readRequiredOptionValue,
-  repositoryConflict,
   unexpectedTopLevelArgs
 } from "./argument-errors";
 import {
   CLI_DEFAULTS,
+  findViolatedCommandOptionRule,
+  outputFormatOptionsFor,
   supportedCacheOptions,
-  supportedOptionsFor
+  supportedOptionsFor,
+  type CommandOptionRule,
+  type OptionSpecCommand
 } from "./command-spec";
 import {
   isSafeRepositoryRelativePath,
@@ -39,8 +42,6 @@ import {
 } from "./option-values";
 
 const FAIL_ON_SEVERITIES: RiskSeverity[] = ["high", "unknown", "review", "low"];
-const SCAN_OUTPUT_FORMAT_OPTIONS = ["--json", "--sarif", "--markdown", "--html", "--cyclonedx"];
-const DIFF_OUTPUT_FORMAT_OPTIONS = ["--json", "--markdown"];
 const BASELINE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 
 export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
@@ -289,6 +290,7 @@ function parseScanLikeArgs(
   let failOn: RiskSeverity = CLI_DEFAULTS.failOn;
   let strictWaivers = CLI_DEFAULTS.strictWaivers;
   let allowPartialEvidence = CLI_DEFAULTS.allowPartialEvidence;
+  const outputFormatOptions = outputFormatOptionsFor(kind);
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -513,28 +515,28 @@ function parseScanLikeArgs(
       }
       case "--json":
         if (sarif || markdown || html || cyclonedx) {
-          return outputFormatConflict("--json", SCAN_OUTPUT_FORMAT_OPTIONS);
+          return outputFormatConflict("--json", outputFormatOptions);
         }
 
         json = true;
         break;
       case "--sarif":
         if (json || markdown || html || cyclonedx) {
-          return outputFormatConflict("--sarif", SCAN_OUTPUT_FORMAT_OPTIONS);
+          return outputFormatConflict("--sarif", outputFormatOptions);
         }
 
         sarif = true;
         break;
       case "--markdown":
         if (json || sarif || html || cyclonedx) {
-          return outputFormatConflict("--markdown", SCAN_OUTPUT_FORMAT_OPTIONS);
+          return outputFormatConflict("--markdown", outputFormatOptions);
         }
 
         markdown = true;
         break;
       case "--html":
         if (json || sarif || markdown || cyclonedx) {
-          return outputFormatConflict("--html", SCAN_OUTPUT_FORMAT_OPTIONS);
+          return outputFormatConflict("--html", outputFormatOptions);
         }
 
         html = true;
@@ -567,7 +569,7 @@ function parseScanLikeArgs(
       }
       case "--cyclonedx":
         if (json || sarif || markdown || html) {
-          return outputFormatConflict("--cyclonedx", SCAN_OUTPUT_FORMAT_OPTIONS);
+          return outputFormatConflict("--cyclonedx", outputFormatOptions);
         }
 
         cyclonedx = true;
@@ -682,41 +684,28 @@ function parseScanLikeArgs(
     }
   }
 
-  if (allLockfiles && lockfilePath) {
-    return err(
-      createError({
-        code: "INVALID_ARGUMENT",
-        category: "invalid_input",
-        message: "--all cannot be combined with --lockfile.",
-        details: { supportedOptions: supportedOptionsFor(kind) }
-      })
-    );
-  }
+  const presentOptions = new Set<string>();
+  if (allLockfiles) presentOptions.add("--all");
+  if (lockfilePath) presentOptions.add("--lockfile");
+  if (archivePath) presentOptions.add("--archive");
+  if (workspaceRootPath) presentOptions.add("--workspace-root");
+  if (repository) presentOptions.add("--repo");
+  if (submoduleModeSet) presentOptions.add("--submodules");
+  if (offline) presentOptions.add("--offline");
+  if (noWaivers) presentOptions.add("--no-waivers");
+  if (strictWaivers) presentOptions.add("--strict-waivers");
+  if (html) presentOptions.add("--html");
+  if (outputPath) presentOptions.add("--output");
+  if (openReport) presentOptions.add("--open");
+  if (reportLanguageSet) presentOptions.add("--language");
 
-  if (archivePath && lockfilePath) {
-    return err(
-      createError({
-        code: "INVALID_ARGUMENT",
-        category: "invalid_input",
-        message: "--archive cannot be combined with --lockfile.",
-        details: { supportedOptions: supportedOptionsFor(kind) }
-      })
-    );
-  }
-
-  if (archivePath && workspaceRootPath) {
-    return err(
-      createError({
-        code: "INVALID_ARGUMENT",
-        category: "invalid_input",
-        message: "--archive cannot be combined with --workspace-root.",
-        details: { supportedOptions: supportedOptionsFor(kind) }
-      })
-    );
-  }
-
-  if (repository && archivePath) {
-    return repositoryConflict("--archive", kind);
+  const inputRule = findViolatedCommandOptionRule({
+    command: kind,
+    stage: "input",
+    presentOptions
+  });
+  if (inputRule) {
+    return commandOptionRuleError(kind, inputRule);
   }
 
   if (repository && lockfilePath && !isSafeRepositoryRelativePath(lockfilePath)) {
@@ -733,66 +722,27 @@ function parseScanLikeArgs(
     );
   }
 
-  if (repository && workspaceRootPath) {
-    return repositoryConflict("--workspace-root", kind);
-  }
-
-  if (repository && offline) {
-    return repositoryConflict("--offline", kind);
-  }
-
-  if (submoduleModeSet && !repository) {
-    return err(
-      createError({
-        code: "INVALID_ARGUMENT",
-        category: "invalid_input",
-        message: "--submodules requires a public GitHub repository input.",
-        details: { supportedOptions: supportedOptionsFor(kind) }
-      })
-    );
-  }
-
-  if (kind === "ci" && noWaivers && strictWaivers) {
-    return err(
-      createError({
-        code: "INVALID_ARGUMENT",
-        category: "invalid_input",
-        message: "--no-waivers cannot be combined with --strict-waivers.",
-        details: {
-          supportedOptions: supportedOptionsFor(kind)
-        }
-      })
-    );
+  const scopeRule = findViolatedCommandOptionRule({
+    command: kind,
+    stage: "scope",
+    presentOptions
+  });
+  if (scopeRule) {
+    return commandOptionRuleError(kind, scopeRule);
   }
 
   if (repository && html && !outputPath) {
     outputPath = `${repository.name}-ohrisk.html`;
+    presentOptions.add("--output");
   }
 
-  if (openReport && (!html || !outputPath)) {
-    return err(
-      createError({
-        code: "INVALID_ARGUMENT",
-        category: "invalid_input",
-        message: "--open requires --html and --output.",
-        details: {
-          supportedOptions: supportedOptionsFor(kind)
-        }
-      })
-    );
-  }
-
-  if (reportLanguageSet && !html) {
-    return err(
-      createError({
-        code: "INVALID_ARGUMENT",
-        category: "invalid_input",
-        message: "--language currently requires --html.",
-        details: {
-          supportedOptions: supportedOptionsFor(kind)
-        }
-      })
-    );
+  const outputRule = findViolatedCommandOptionRule({
+    command: kind,
+    stage: "output",
+    presentOptions
+  });
+  if (outputRule) {
+    return commandOptionRuleError(kind, outputRule);
   }
 
   if (kind === "ci") {
@@ -863,6 +813,22 @@ function isFailOnSeverity(value: string): value is RiskSeverity {
 
 function isRepositorySubmoduleMode(value: string): value is RepositorySubmoduleMode {
   return value === "ignore" || value === "reject";
+}
+
+function commandOptionRuleError(
+  kind: OptionSpecCommand,
+  rule: CommandOptionRule
+): Result<CliCommand, OhriskError> {
+  return err(
+    createError({
+      code: "INVALID_ARGUMENT",
+      category: "invalid_input",
+      message: rule.message,
+      details: kind === "diff"
+        ? { conflictingOptions: [rule.option, ...rule.relatedOptions] }
+        : { supportedOptions: supportedOptionsFor(kind) }
+    })
+  );
 }
 
 function isHelpFlag(value: string | undefined): boolean {
@@ -1008,6 +974,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
   let outputPath: string | undefined;
   let failOn: RiskSeverity | undefined;
   let baselineRef: string | undefined;
+  const outputFormatOptions = outputFormatOptionsFor("diff");
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -1168,14 +1135,14 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
       }
       case "--json":
         if (markdown) {
-          return outputFormatConflict("--json", DIFF_OUTPUT_FORMAT_OPTIONS);
+          return outputFormatConflict("--json", outputFormatOptions);
         }
 
         json = true;
         break;
       case "--markdown":
         if (json) {
-          return outputFormatConflict("--markdown", DIFF_OUTPUT_FORMAT_OPTIONS);
+          return outputFormatConflict("--markdown", outputFormatOptions);
         }
 
         markdown = true;
@@ -1251,17 +1218,16 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
     }
   }
 
-  if (allLockfiles && lockfilePath) {
-    return err(
-      createError({
-        code: "INVALID_ARGUMENT",
-        category: "invalid_input",
-        message: "--all cannot be combined with --lockfile.",
-        details: {
-          conflictingOptions: ["--all", "--lockfile"]
-        }
-      })
-    );
+  const inputRule = findViolatedCommandOptionRule({
+    command: "diff",
+    stage: "input",
+    presentOptions: new Set([
+      ...(allLockfiles ? ["--all"] : []),
+      ...(lockfilePath ? ["--lockfile"] : [])
+    ])
+  });
+  if (inputRule) {
+    return commandOptionRuleError("diff", inputRule);
   }
 
   if (!baselineRef) {

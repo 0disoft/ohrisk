@@ -74,6 +74,142 @@ export const ACTION_INPUT_DEFAULTS = {
   "allow-hosts": ""
 } as const;
 
+export type CommandRuleStage = "input" | "scope" | "output";
+
+export type CommandOptionRule = {
+  id: string;
+  stage: CommandRuleStage;
+  commands: readonly OptionSpecCommand[];
+  option: string;
+  kind: "conflicts" | "requires-all";
+  relatedOptions: readonly string[];
+  message: string;
+};
+
+export const COMMAND_OPTION_RULES: readonly CommandOptionRule[] = [
+  {
+    id: "all-lockfile-conflict",
+    stage: "input",
+    commands: ["scan", "ci", "diff"],
+    option: "--all",
+    kind: "conflicts",
+    relatedOptions: ["--lockfile"],
+    message: "--all cannot be combined with --lockfile."
+  },
+  {
+    id: "archive-lockfile-conflict",
+    stage: "input",
+    commands: ["scan", "ci"],
+    option: "--archive",
+    kind: "conflicts",
+    relatedOptions: ["--lockfile"],
+    message: "--archive cannot be combined with --lockfile."
+  },
+  {
+    id: "archive-workspace-conflict",
+    stage: "input",
+    commands: ["scan", "ci"],
+    option: "--archive",
+    kind: "conflicts",
+    relatedOptions: ["--workspace-root"],
+    message: "--archive cannot be combined with --workspace-root."
+  },
+  {
+    id: "repository-archive-conflict",
+    stage: "input",
+    commands: ["scan"],
+    option: "--repo",
+    kind: "conflicts",
+    relatedOptions: ["--archive"],
+    message: "Remote repository input cannot be combined with --archive."
+  },
+  {
+    id: "repository-workspace-conflict",
+    stage: "scope",
+    commands: ["scan"],
+    option: "--repo",
+    kind: "conflicts",
+    relatedOptions: ["--workspace-root"],
+    message: "Remote repository input cannot be combined with --workspace-root."
+  },
+  {
+    id: "repository-offline-conflict",
+    stage: "scope",
+    commands: ["scan"],
+    option: "--repo",
+    kind: "conflicts",
+    relatedOptions: ["--offline"],
+    message: "Remote repository input cannot be combined with --offline."
+  },
+  {
+    id: "submodules-repository-requirement",
+    stage: "scope",
+    commands: ["scan"],
+    option: "--submodules",
+    kind: "requires-all",
+    relatedOptions: ["--repo"],
+    message: "--submodules requires a public GitHub repository input."
+  },
+  {
+    id: "waiver-mode-conflict",
+    stage: "scope",
+    commands: ["ci"],
+    option: "--no-waivers",
+    kind: "conflicts",
+    relatedOptions: ["--strict-waivers"],
+    message: "--no-waivers cannot be combined with --strict-waivers."
+  },
+  {
+    id: "open-html-output-requirement",
+    stage: "output",
+    commands: ["scan", "ci"],
+    option: "--open",
+    kind: "requires-all",
+    relatedOptions: ["--html", "--output"],
+    message: "--open requires --html and --output."
+  },
+  {
+    id: "language-html-requirement",
+    stage: "output",
+    commands: ["scan", "ci"],
+    option: "--language",
+    kind: "requires-all",
+    relatedOptions: ["--html"],
+    message: "--language currently requires --html."
+  }
+];
+
+const OUTPUT_FORMAT_OPTIONS = {
+  scan: ["--json", "--sarif", "--markdown", "--html", "--cyclonedx"],
+  ci: ["--json", "--sarif", "--markdown", "--html", "--cyclonedx"],
+  diff: ["--json", "--markdown"],
+  explain: ["--json"]
+} as const satisfies Record<OptionSpecCommand, readonly string[]>;
+
+export function outputFormatOptionsFor(kind: OptionSpecCommand): string[] {
+  return [...OUTPUT_FORMAT_OPTIONS[kind]];
+}
+
+export function findViolatedCommandOptionRule(input: {
+  command: OptionSpecCommand;
+  stage: CommandRuleStage;
+  presentOptions: ReadonlySet<string>;
+}): CommandOptionRule | undefined {
+  return COMMAND_OPTION_RULES.find((rule) => {
+    if (
+      rule.stage !== input.stage
+      || !rule.commands.includes(input.command)
+      || !input.presentOptions.has(rule.option)
+    ) {
+      return false;
+    }
+
+    return rule.kind === "conflicts"
+      ? rule.relatedOptions.some((option) => input.presentOptions.has(option))
+      : rule.relatedOptions.some((option) => !input.presentOptions.has(option));
+  });
+}
+
 export const COMMAND_USAGE = {
   scan: "ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
   ci: "ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--allow-partial-evidence] [--output <file>] [--open]",
