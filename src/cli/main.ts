@@ -340,7 +340,7 @@ async function runDiff(
     return exitCodeForError(current.error);
   }
 
-const completeness = buildDiffEvidenceCompleteness({
+  const completeness = buildDiffEvidenceCompleteness({
   baseline: buildScanCompleteness({ evidence: relevantBaselineEvidence }),
   current: buildScanCompleteness({ evidence: current.value.evidence })
 });
@@ -385,7 +385,7 @@ const diff = diffRiskFindings({
     return exitCodeForError(emitted.error);
   }
 
-if (completeness.status === "partial") {
+  if (completeness.status === "partial") {
   io.stderr(renderIncompleteDiffEvidence(completeness));
   return 1;
 }

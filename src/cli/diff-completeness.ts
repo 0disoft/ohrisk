@@ -1,4 +1,3 @@
-\
 import type { ScanCompleteness } from "../report/scan-report";
 
 export type DiffEvidenceCompleteness = {
