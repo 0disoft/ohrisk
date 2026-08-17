@@ -29,179 +29,81 @@ jobs:
         with:
           bun-version: 1.3.14
 
-      - name: Apply fail-closed diff completeness gate
-        shell: bash
+      - name: Repair generated sources
+        shell: python
         run: |
-          set +e
-          python <<'PY' 2>&1 | tee agent-diff-patch.txt
           from pathlib import Path
-          import re
-          import textwrap
 
-          Path("src/cli/diff-completeness.ts").write_text(textwrap.dedent(r'''\
-          import type { ScanCompleteness } from "../report/scan-report";
-
-          export type DiffEvidenceCompleteness = {
-            status: "complete" | "partial";
-            baseline: ScanCompleteness;
-            current: ScanCompleteness;
-          };
-
-          export function buildDiffEvidenceCompleteness(input: {
-            baseline: ScanCompleteness;
-            current: ScanCompleteness;
-          }): DiffEvidenceCompleteness {
-            return {
-              status: input.baseline.status === "complete" && input.current.status === "complete"
-                ? "complete"
-                : "partial",
-              baseline: input.baseline,
-              current: input.current
-            };
-          }
-
-          export function renderIncompleteDiffEvidence(
-            completeness: DiffEvidenceCompleteness
-          ): string {
-            const revisions = [
-              ...(completeness.baseline.status === "partial"
-                ? [`baseline (${renderCounts(completeness.baseline)})`]
-                : []),
-              ...(completeness.current.status === "partial"
-                ? [`current (${renderCounts(completeness.current)})`]
-                : [])
-            ];
-            return `Diff evidence is partial for ${revisions.join(" and ")}. `
-              + "Treat the result as indeterminate and retry after evidence collection succeeds.\n";
-          }
-
-          function renderCounts(completeness: ScanCompleteness): string {
-            return `${completeness.unavailablePackageCount} unavailable packages, `
-              + `${completeness.skippedRepositoryEntryCount} skipped repository entries`;
-          }
-          '''), encoding="utf-8")
+          for file_name in (
+              "src/cli/diff-completeness.ts",
+              "test/diff-completeness.test.ts",
+          ):
+              path = Path(file_name)
+              source = path.read_text(encoding="utf-8")
+              if source.startswith("\\\n"):
+                  source = source[2:]
+              path.write_text(source, encoding="utf-8")
 
           main = Path("src/cli/main.ts")
           source = main.read_text(encoding="utf-8")
-
-          if 'from "./diff-completeness";' not in source:
-              source, count = re.subn(
-                  r'(import \{ runCacheCommand \} from "\./cache-command";\n)',
-                  r'''\1import {
-            buildDiffEvidenceCompleteness,
-            renderIncompleteDiffEvidence
-          } from "./diff-completeness";
-          ''',
-                  source,
-                  count=1,
-              )
-              if count != 1:
-                  raise SystemExit(f"diff completeness import anchor count: {count}")
-
-          if "const completeness = buildDiffEvidenceCompleteness" not in source:
-              source, count = re.subn(
-                  r'  const diff = diffRiskFindings\(\{\n    baselineFindings,\n    currentFindings: current\.value\.riskFindings\n  \}\);',
-                  textwrap.dedent('''\
-                    const completeness = buildDiffEvidenceCompleteness({
-                      baseline: buildScanCompleteness({ evidence: relevantBaselineEvidence }),
-                      current: buildScanCompleteness({ evidence: current.value.evidence })
-                    });
-                    const diff = diffRiskFindings({
-                      baselineFindings,
-                      currentFindings: current.value.riskFindings
-                    });'''),
-                  source,
-                  count=1,
-              )
-              if count != 1:
-                  raise SystemExit(f"diff construction anchor count: {count}")
-
-          if 'io.stderr(renderIncompleteDiffEvidence(completeness));' not in source:
-              source, count = re.subn(
-                  r'  if \(command\.failOn && hasFindingAtOrAbove\(diff\.introducedFindings, command\.failOn\)\) \{\n    return 1;\n  \}',
-                  textwrap.dedent('''\
-                    if (completeness.status === "partial") {
-                      io.stderr(renderIncompleteDiffEvidence(completeness));
-                      return 1;
-                    }
-
-                    if (command.failOn && hasFindingAtOrAbove(diff.introducedFindings, command.failOn)) {
-                      return 1;
-                    }'''),
-                  source,
-                  count=1,
-              )
-              if count != 1:
-                  raise SystemExit(f"diff failure anchor count: {count}")
-
-          main.write_text("\n".join(line.rstrip() for line in source.splitlines()) + "\n", encoding="utf-8")
-
-          Path("test/diff-completeness.test.ts").write_text(textwrap.dedent(r'''\
-          import { describe, expect, test } from "bun:test";
-
-          import {
-            buildDiffEvidenceCompleteness,
-            renderIncompleteDiffEvidence
-          } from "../src/cli/diff-completeness";
-
-          describe("diff evidence completeness", () => {
-            test("is complete only when both revisions have complete evidence", () => {
-              const complete = {
-                status: "complete",
-                unavailablePackageCount: 0,
-                skippedRepositoryEntryCount: 0
-              } as const;
-              const partial = {
-                status: "partial",
-                unavailablePackageCount: 1,
-                skippedRepositoryEntryCount: 2
-              } as const;
-
-              expect(buildDiffEvidenceCompleteness({
-                baseline: complete,
-                current: complete
-              }).status).toBe("complete");
-              expect(buildDiffEvidenceCompleteness({
-                baseline: complete,
-                current: partial
-              }).status).toBe("partial");
-            });
-
-            test("identifies every partial revision in the failure message", () => {
-              const completeness = buildDiffEvidenceCompleteness({
-                baseline: {
-                  status: "partial",
-                  unavailablePackageCount: 2,
-                  skippedRepositoryEntryCount: 0
-                },
-                current: {
-                  status: "partial",
-                  unavailablePackageCount: 1,
-                  skippedRepositoryEntryCount: 3
-                }
-              });
-
-              expect(renderIncompleteDiffEvidence(completeness)).toBe(
-                "Diff evidence is partial for baseline (2 unavailable packages, 0 skipped repository entries) "
-                + "and current (1 unavailable packages, 3 skipped repository entries). "
-                + "Treat the result as indeterminate and retry after evidence collection succeeds.\n"
-              );
-            });
+          old_diff = '''const completeness = buildDiffEvidenceCompleteness({
+            baseline: buildScanCompleteness({ evidence: relevantBaselineEvidence }),
+            current: buildScanCompleteness({ evidence: current.value.evidence })
           });
-          '''), encoding="utf-8")
+          const diff = diffRiskFindings({
+            baselineFindings,
+            currentFindings: current.value.riskFindings
+          });'''
+          new_diff = '''  const completeness = buildDiffEvidenceCompleteness({
+            baseline: buildScanCompleteness({ evidence: relevantBaselineEvidence }),
+            current: buildScanCompleteness({ evidence: current.value.evidence })
+          });
+          const diff = diffRiskFindings({
+            baselineFindings,
+            currentFindings: current.value.riskFindings
+          });'''
+          if source.count(old_diff) != 1:
+              raise SystemExit(f"expected one unindented diff block, found {source.count(old_diff)}")
+          source = source.replace(old_diff, new_diff)
 
-          Path("agent-diff-patch.txt").unlink(missing_ok=True)
-          Path("agent-diff-verify.txt").unlink(missing_ok=True)
-          PY
-          status=${PIPESTATUS[0]}
-          echo "exit_status=$status" >> agent-diff-patch.txt
-          exit "$status"
+          old_gate = '''if (completeness.status === "partial") {
+            io.stderr(renderIncompleteDiffEvidence(completeness));
+            return 1;
+          }
+
+          if (command.failOn && hasFindingAtOrAbove(diff.introducedFindings, command.failOn)) {
+            return 1;
+          }'''
+          new_gate = '''  if (completeness.status === "partial") {
+            io.stderr(renderIncompleteDiffEvidence(completeness));
+            return 1;
+          }
+
+          if (command.failOn && hasFindingAtOrAbove(diff.introducedFindings, command.failOn)) {
+            return 1;
+          }'''
+          if source.count(old_gate) != 1:
+              raise SystemExit(f"expected one unindented gate block, found {source.count(old_gate)}")
+          main.write_text(source.replace(old_gate, new_gate), encoding="utf-8")
+
+          for file_name in (
+              "agent-diff-patch.txt",
+              "agent-diff-build.txt",
+              "agent-diff-verify.txt",
+          ):
+              Path(file_name).unlink(missing_ok=True)
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
       - name: Rebuild checked-in Action bundle
-        run: bun run build:action
+        shell: bash
+        run: |
+          set +e
+          bun run build:action 2>&1 | tee agent-diff-build.txt
+          status=${PIPESTATUS[0]}
+          echo "exit_status=$status" >> agent-diff-build.txt
+          exit "$status"
 
       - name: Verify release gate
         shell: bash
@@ -225,7 +127,7 @@ jobs:
         if: success()
         run: |
           rm .github/workflows/agent-diff-completeness.yml
-          rm -f agent-diff-patch.txt agent-diff-verify.txt
+          rm -f agent-diff-patch.txt agent-diff-build.txt agent-diff-verify.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
