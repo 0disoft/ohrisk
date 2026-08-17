@@ -30,171 +30,225 @@ jobs:
           bun-version: 1.3.14
 
       - name: Add explicit partial-evidence override for diff
-        shell: python
+        shell: bash
         run: |
+          set +e
+          python <<'PY' 2>&1 | tee agent-diff-patch.txt
           from pathlib import Path
           import re
 
-          def replace_once(file_name: str, old: str, new: str) -> None:
-              path = Path(file_name)
-              source = path.read_text(encoding="utf-8")
-              if source.count(old) != 1:
-                  raise SystemExit(f"{file_name}: expected one anchor, found {source.count(old)}")
-              path.write_text(source.replace(old, new), encoding="utf-8")
+          def replace_once(source: str, old: str, new: str, label: str) -> str:
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one anchor, found {count}")
+              return source.replace(old, new)
 
-          replace_once(
-              "src/cli/command.ts",
-              '''      outputPath?: string;
-                    failOn?: RiskSeverity;
-                  }
-              ''',
-              '''      outputPath?: string;
-                    failOn?: RiskSeverity;
-                    allowPartialEvidence: boolean;
-                  }
-              '''
-          )
+          command_path = Path("src/cli/command.ts")
+          command_source = command_path.read_text(encoding="utf-8")
+          diff_start = command_source.index('  | {\n      kind: "diff";')
+          diff_end = command_source.index('  | {\n      kind: "explain";', diff_start)
+          diff_block = command_source[diff_start:diff_end]
+          if "allowPartialEvidence" not in diff_block:
+              diff_block = replace_once(
+                  diff_block,
+                  '      failOn?: RiskSeverity;\n',
+                  '      failOn?: RiskSeverity;\n      allowPartialEvidence: boolean;\n',
+                  "diff command property"
+              )
+              command_source = command_source[:diff_start] + diff_block + command_source[diff_end:]
+          command_path.write_text(command_source, encoding="utf-8")
 
-          args = Path("src/cli/args.ts")
-          source = args.read_text(encoding="utf-8")
-          source = source.replace(
-              '''  let failOn: RiskSeverity | undefined;
-                let baselineRef: string | undefined;
-              ''',
-              '''  let failOn: RiskSeverity | undefined;
-                let allowPartialEvidence = CLI_DEFAULTS.allowPartialEvidence;
-                let baselineRef: string | undefined;
-              ''',
-              1
-          )
-          source = source.replace(
-              '''      case "--help":
-                    case "-h":
-                      return ok({ kind: "help", target: "diff" });
-              ''',
-              '''      case "--allow-partial-evidence":
-                      allowPartialEvidence = true;
-                      break;
-                    case "--help":
-                    case "-h":
-                      return ok({ kind: "help", target: "diff" });
-              ''',
-              1
-          )
-          source = source.replace(
-              '''    ...(outputPath ? { outputPath } : {}),
-                ...(failOn ? { failOn } : {})
-              });
-              ''',
-              '''    ...(outputPath ? { outputPath } : {}),
-                ...(failOn ? { failOn } : {}),
-                allowPartialEvidence
-              });
-              ''',
-              1
-          )
-          args.write_text(source, encoding="utf-8")
+          args_path = Path("src/cli/args.ts")
+          args_source = args_path.read_text(encoding="utf-8")
+          args_start = args_source.index("function parseDiffArgs(")
+          args_end = args_source.index("function validateBaselineRef(", args_start)
+          args_block = args_source[args_start:args_end]
+          if "let allowPartialEvidence" not in args_block:
+              args_block = replace_once(
+                  args_block,
+                  '  let failOn: RiskSeverity | undefined;\n',
+                  '  let failOn: RiskSeverity | undefined;\n  let allowPartialEvidence = CLI_DEFAULTS.allowPartialEvidence;\n',
+                  "diff parser default"
+              )
+          if 'case "--allow-partial-evidence":' not in args_block:
+              args_block = replace_once(
+                  args_block,
+                  '      case "--help":\n      case "-h":\n        return ok({ kind: "help", target: "diff" });\n',
+                  '      case "--allow-partial-evidence":\n        allowPartialEvidence = true;\n        break;\n      case "--help":\n      case "-h":\n        return ok({ kind: "help", target: "diff" });\n',
+                  "diff parser option"
+              )
+          if "allowPartialEvidence\n  });" not in args_block:
+              args_block = replace_once(
+                  args_block,
+                  '    ...(outputPath ? { outputPath } : {}),\n    ...(failOn ? { failOn } : {})\n  });\n',
+                  '    ...(outputPath ? { outputPath } : {}),\n    ...(failOn ? { failOn } : {}),\n    allowPartialEvidence\n  });\n',
+                  "diff parser result"
+              )
+          args_source = args_source[:args_start] + args_block + args_source[args_end:]
+          args_path.write_text(args_source, encoding="utf-8")
 
-          spec = Path("src/cli/command-spec.ts")
-          source = spec.read_text(encoding="utf-8")
-          source = source.replace(
-              '''[--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",''',
-              '''[--json|--markdown] [--fail-on high|unknown|review|low] [--allow-partial-evidence] [--output <file>]",''',
-              1
-          )
-          source = source.replace(
-              '''    description: "Let ci pass when evidence or repository coverage is partial."
-              ''',
-              '''    description: "Let ci pass when evidence or repository coverage is partial.",
-                    overrides: { diff: "Let diff return success when either revision has partial evidence." }
-              ''',
-              1
-          )
-          source = source.replace(
-              '''    "failOn", "output", "help"
-                ],
-              ''',
-              '''    "failOn", "allowPartialEvidence", "output", "help"
-                ],
-              ''',
-              1
-          )
-          source = source.replace(
-              '''    "failOn", "help"
-                ],
-              ''',
-              '''    "failOn", "allowPartialEvidence", "help"
-                ],
-              ''',
-              1
-          )
-          spec.write_text(source, encoding="utf-8")
+          spec_path = Path("src/cli/command-spec.ts")
+          spec_source = spec_path.read_text(encoding="utf-8")
+          usage_old = '[--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",'
+          usage_new = '[--json|--markdown] [--fail-on high|unknown|review|low] [--allow-partial-evidence] [--output <file>]",'
+          if usage_new not in spec_source:
+              spec_source = replace_once(spec_source, usage_old, usage_new, "diff usage")
+          description_old = '    description: "Let ci pass when evidence or repository coverage is partial."\n'
+          description_new = '    description: "Let ci pass when evidence or repository coverage is partial.",\n    overrides: { diff: "Let diff return success when either revision has partial evidence." }\n'
+          if "Let diff return success" not in spec_source:
+              spec_source = replace_once(
+                  spec_source,
+                  description_old,
+                  description_new,
+                  "partial evidence help override"
+              )
+          help_order_old = '''  diff: [
+            "profile", "lockfile", "all", "policy", "workspaceRoot", "prod", "offline", "cacheDir",
+            "jobs", "timeout", "registryUrl", "registryTokenEnv", "allowHost", "json", "markdown",
+            "failOn", "output", "help"
+          ],'''
+          help_order_new = '''  diff: [
+            "profile", "lockfile", "all", "policy", "workspaceRoot", "prod", "offline", "cacheDir",
+            "jobs", "timeout", "registryUrl", "registryTokenEnv", "allowHost", "json", "markdown",
+            "failOn", "allowPartialEvidence", "output", "help"
+          ],'''
+          if help_order_new not in spec_source:
+              spec_source = replace_once(
+                  spec_source,
+                  help_order_old,
+                  help_order_new,
+                  "diff help option order"
+              )
+          option_keys_old = '''  diff: [
+            "profile", "prod", "lockfile", "all", "policy", "offline", "cacheDir", "jobs", "timeout",
+            "registryUrl", "registryTokenEnv", "allowHost", "workspaceRoot", "json", "markdown", "output",
+            "failOn", "help"
+          ],'''
+          option_keys_new = '''  diff: [
+            "profile", "prod", "lockfile", "all", "policy", "offline", "cacheDir", "jobs", "timeout",
+            "registryUrl", "registryTokenEnv", "allowHost", "workspaceRoot", "json", "markdown", "output",
+            "failOn", "allowPartialEvidence", "help"
+          ],'''
+          if option_keys_new not in spec_source:
+              spec_source = replace_once(
+                  spec_source,
+                  option_keys_old,
+                  option_keys_new,
+                  "diff supported option keys"
+              )
+          spec_path.write_text(spec_source, encoding="utf-8")
 
-          main = Path("src/cli/main.ts")
-          source = main.read_text(encoding="utf-8")
+          main_path = Path("src/cli/main.ts")
+          main_source = main_path.read_text(encoding="utf-8")
           old_gate = '  if (completeness.status === "partial") {'
           new_gate = '  if (completeness.status === "partial" && !command.allowPartialEvidence) {'
-          if source.count(old_gate) != 1:
-              raise SystemExit(f"main partial gate count: {source.count(old_gate)}")
-          main.write_text(source.replace(old_gate, new_gate), encoding="utf-8")
+          if new_gate not in main_source:
+              main_source = replace_once(main_source, old_gate, new_gate, "diff partial gate")
+          main_path.write_text(main_source, encoding="utf-8")
 
-          tests = Path("test/main.test.ts")
-          source = tests.read_text(encoding="utf-8")
-          log = Path("agent-diff-verify.txt").read_text(encoding="utf-8")
+          tests_path = Path("test/main.test.ts")
+          test_lines = tests_path.read_text(encoding="utf-8").splitlines()
+          verify_log = Path("agent-diff-verify.txt").read_text(encoding="utf-8")
           failing_lines = sorted({
               int(value)
-              for value in re.findall(r'test/main\.test\.ts:(\d+):\d+', log)
+              for value in re.findall(r'test/main\.test\.ts:(\d+):\d+', verify_log)
           }, reverse=True)
-          lines = source.splitlines()
-          changed = 0
-          for line_number in failing_lines:
-              index = line_number - 1
-              if index < 0 or index >= len(lines):
+          if not failing_lines:
+              raise SystemExit("no failing diff fixture locations were found")
+          updated_calls = 0
+          for expected_line in failing_lines:
+              expectation_index = expected_line - 1
+              call_start = next(
+                  (
+                      index
+                      for index in range(expectation_index, max(-1, expectation_index - 80), -1)
+                      if "await main([" in test_lines[index]
+                  ),
+                  None
+              )
+              if call_start is None:
+                  raise SystemExit(f"could not locate main call before line {expected_line}")
+              call_end = next(
+                  (
+                      index
+                      for index in range(call_start, min(len(test_lines), call_start + 80))
+                      if "]," in test_lines[index]
+                  ),
+                  None
+              )
+              if call_end is None:
+                  raise SystemExit(f"could not locate main call end before line {expected_line}")
+              call_text = "\n".join(test_lines[call_start:call_end + 1])
+              if '"diff"' not in call_text:
+                  raise SystemExit(f"nearest call before line {expected_line} is not diff")
+              if '"--allow-partial-evidence"' in call_text:
                   continue
-              if ".toBe(0);" not in lines[index]:
-                  continue
-              lines[index] = lines[index].replace(".toBe(0);", ".toBe(1);")
-              changed += 1
-          if changed == 0:
-              raise SystemExit("no partial diff expectations were updated")
-          tests.write_text("\n".join(lines) + "\n", encoding="utf-8")
+              if call_start == call_end:
+                  test_lines[call_start] = test_lines[call_start].replace(
+                      '"main",',
+                      '"main", "--allow-partial-evidence",',
+                      1
+                  )
+              else:
+                  baseline_index = next(
+                      (
+                          index
+                          for index in range(call_start, call_end + 1)
+                          if '"main",' in test_lines[index]
+                      ),
+                      None
+                  )
+                  if baseline_index is None:
+                      raise SystemExit(f"could not locate baseline argument before line {expected_line}")
+                  indentation = test_lines[baseline_index][:len(test_lines[baseline_index]) - len(test_lines[baseline_index].lstrip())]
+                  test_lines.insert(
+                      baseline_index + 1,
+                      indentation + '"--allow-partial-evidence",'
+                  )
+              updated_calls += 1
+          if updated_calls == 0:
+              raise SystemExit("no partial diff fixtures were updated")
+          tests_path.write_text("\n".join(test_lines) + "\n", encoding="utf-8")
 
-          completeness_test = Path("test/diff-completeness.test.ts")
-          source = completeness_test.read_text(encoding="utf-8")
-          source = source.replace(
-              'import { describe, expect, test } from "bun:test";\n',
-              'import { describe, expect, test } from "bun:test";\n\nimport { parseArgs } from "../src/cli/args";\n',
-              1
-          )
-          source = source.replace(
-              '''  test("identifies every partial revision in the failure message", () => {
-              ''',
-              '''  test("parses an explicit partial-evidence override for diff", () => {
-                    const parsed = parseArgs([
-                      "diff",
-                      "main",
-                      "--allow-partial-evidence"
-                    ]);
+          completeness_test_path = Path("test/diff-completeness.test.ts")
+          completeness_source = completeness_test_path.read_text(encoding="utf-8")
+          if 'from "../src/cli/args";' not in completeness_source:
+              completeness_source = replace_once(
+                  completeness_source,
+                  'import { describe, expect, test } from "bun:test";\n',
+                  'import { describe, expect, test } from "bun:test";\n\nimport { parseArgs } from "../src/cli/args";\n',
+                  "diff parser test import"
+              )
+          if "parses an explicit partial-evidence override for diff" not in completeness_source:
+              marker = '  test("identifies every partial revision in the failure message", () => {\n'
+              parser_test = '''  test("parses an explicit partial-evidence override for diff", () => {
+            const parsed = parseArgs(["diff", "main", "--allow-partial-evidence"]);
 
-                    expect(parsed.ok).toBe(true);
-                    if (!parsed.ok || parsed.value.kind !== "diff") {
-                      throw new Error("Expected a parsed diff command.");
-                    }
-                    expect(parsed.value.allowPartialEvidence).toBe(true);
-                  });
+            expect(parsed.ok).toBe(true);
+            if (!parsed.ok || parsed.value.kind !== "diff") {
+              throw new Error("Expected a parsed diff command.");
+            }
+            expect(parsed.value.allowPartialEvidence).toBe(true);
+          });
 
-                  test("identifies every partial revision in the failure message", () => {
-              ''',
-              1
-          )
-          completeness_test.write_text(source, encoding="utf-8")
+          '''
+              completeness_source = replace_once(
+                  completeness_source,
+                  marker,
+                  parser_test + marker,
+                  "diff parser test"
+              )
+          completeness_test_path.write_text(completeness_source, encoding="utf-8")
 
           for file_name in (
-              "agent-diff-patch.txt",
               "agent-diff-build.txt",
               "agent-diff-verify.txt",
           ):
               Path(file_name).unlink(missing_ok=True)
+          PY
+          status=${PIPESTATUS[0]}
+          echo "exit_status=$status" >> agent-diff-patch.txt
+          exit "$status"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
