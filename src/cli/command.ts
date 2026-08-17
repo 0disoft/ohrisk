@@ -107,6 +107,7 @@ export type CliCommand =
       workspaceRootPath?: string;
       outputPath?: string;
       failOn?: RiskSeverity;
+      allowPartialEvidence: boolean;
     }
   | {
       kind: "explain";
