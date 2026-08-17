@@ -1,4 +1,4 @@
-name: Apply baseline policy isolation
+name: Finalize baseline policy isolation
 
 on:
   push:
@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  apply:
+  finalize:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -29,17 +29,13 @@ jobs:
         with:
           bun-version: 1.3.14
 
-      - name: Load baseline policy from the selected git ref
+      - name: Wire baseline policy into diff
         shell: bash
         run: |
           set +e
           python <<'PY' 2>&1 | tee agent-policy-patch.txt
           from pathlib import Path
-          import re
           import textwrap
-
-          def write(file_name: str, value: str) -> None:
-              Path(file_name).write_text(textwrap.dedent(value).lstrip("\n"), encoding="utf-8")
 
           def replace_once(source: str, old: str, new: str, label: str) -> str:
               count = source.count(old)
@@ -47,568 +43,197 @@ jobs:
                   raise SystemExit(f"{label}: expected one anchor, found {count}")
               return source.replace(old, new)
 
-          write("src/policy/ref-config.ts", r'''
-          import { Buffer } from "node:buffer";
-          import {
-            mkdirSync,
-            mkdtempSync,
-            realpathSync,
-            rmSync,
-            statSync,
-            writeFileSync
-          } from "node:fs";
-          import { tmpdir } from "node:os";
-          import path from "node:path";
-
-          import { parse as parseYaml } from "yaml";
-
-          import type { GitRefFileReader } from "../git/ref-file";
-          import { createError, type OhriskError } from "../shared/errors";
-          import { err, ok, type Result } from "../shared/result";
-          import {
-            emptyPolicyConfig,
-            readPolicyConfig,
-            type ResolvedPolicyConfig
-          } from "./config";
-
-          const POLICY_FILENAME = ".ohrisk.yml";
-          const POLICY_MAX_BYTES = 1024 * 1024;
-          const POLICY_MAX_INHERITANCE_DEPTH = 8;
-
-          export function readPolicyConfigFromRef(input: {
-            projectRoot: string;
-            workspaceRoot?: string;
-            ref: string;
-            readRefFile: GitRefFileReader;
-            policyPath?: string;
-          }): Result<ResolvedPolicyConfig, OhriskError> {
-            const roots = resolvePolicyRoots(input.projectRoot, input.workspaceRoot);
-            if (!roots.ok) {
-              return roots;
-            }
-
-            const requestedPath = input.policyPath
-              ? path.resolve(roots.value.projectRoot, input.policyPath)
-              : path.join(roots.value.projectRoot, POLICY_FILENAME);
-            const requestedRelative = relativePolicyPath(
-              roots.value.workspaceRoot,
-              requestedPath
-            );
-            if (!requestedRelative.ok) {
-              return requestedRelative;
-            }
-
-            let temporaryRoot: string | undefined;
-            try {
-              temporaryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-policy-ref-"));
-              const materialized = materializePolicyFile({
-                workspaceRoot: roots.value.workspaceRoot,
-                temporaryRoot,
-                ref: input.ref,
-                relativePath: requestedRelative.value,
-                readRefFile: input.readRefFile,
-                visited: new Set(),
-                depth: 0,
-                allowMissing: input.policyPath === undefined
-              });
-              if (!materialized.ok) {
-                return materialized;
-              }
-              if (!materialized.value) {
-                return ok(emptyPolicyConfig());
-              }
-
-              const projectRelative = path.relative(
-                roots.value.workspaceRoot,
-                roots.value.projectRoot
-              );
-              const temporaryProjectRoot = path.join(temporaryRoot, projectRelative);
-              mkdirSync(temporaryProjectRoot, { recursive: true });
-              const temporaryPolicyPath = path.join(
-                temporaryRoot,
-                ...requestedRelative.value.split("/")
-              );
-
-              return readPolicyConfig({
-                projectRoot: temporaryProjectRoot,
-                workspaceRoot: temporaryRoot,
-                ...(input.policyPath
-                  ? { policyPath: path.relative(temporaryProjectRoot, temporaryPolicyPath) }
-                  : {})
-              });
-            } catch (cause) {
-              return err(createError({
-                code: "POLICY_FILE_READ_FAILED",
-                category: "filesystem",
-                message: "Could not materialize the baseline policy workspace.",
-                details: { cause: errorMessage(cause), ref: input.ref }
-              }));
-            } finally {
-              if (temporaryRoot) {
-                removeTemporaryRoot(temporaryRoot);
-              }
-            }
-          }
-
-          function materializePolicyFile(input: {
-            workspaceRoot: string;
-            temporaryRoot: string;
-            ref: string;
-            relativePath: string;
-            readRefFile: GitRefFileReader;
-            visited: Set<string>;
-            depth: number;
-            allowMissing: boolean;
-          }): Result<boolean, OhriskError> {
-            if (input.depth > POLICY_MAX_INHERITANCE_DEPTH) {
-              return err(policyRefError(
-                "Policy inheritance exceeded the supported depth in the baseline ref.",
-                input
-              ));
-            }
-            if (input.visited.has(input.relativePath)) {
-              return ok(true);
-            }
-
-            const read = input.readRefFile({
-              projectRoot: input.workspaceRoot,
-              ref: input.ref,
-              relativePath: input.relativePath
-            });
-            if (!read.ok) {
-              if (read.error.code === "GIT_REF_FILE_NOT_FOUND" && input.allowMissing) {
-                return ok(false);
-              }
-              return err(policyRefError(
-                "Could not read a policy file from the baseline git ref.",
-                input,
-                { causeCode: read.error.code, cause: read.error.message }
-              ));
-            }
-            if (Buffer.byteLength(read.value, "utf8") > POLICY_MAX_BYTES) {
-              return err(policyRefError(
-                "Policy file exceeded the maximum supported size in the baseline ref.",
-                input,
-                { maxBytes: POLICY_MAX_BYTES }
-              ));
-            }
-
-            const target = path.join(input.temporaryRoot, ...input.relativePath.split("/"));
-            mkdirSync(path.dirname(target), { recursive: true });
-            writeFileSync(target, read.value, "utf8");
-
-            const nextVisited = new Set(input.visited);
-            nextVisited.add(input.relativePath);
-            for (const inheritedPath of discoverInheritedPolicyPaths(read.value)) {
-              const resolved = resolveInheritedPolicyPath(input.relativePath, inheritedPath);
-              if (!resolved) {
-                continue;
-              }
-              const inherited = materializePolicyFile({
-                ...input,
-                relativePath: resolved,
-                visited: nextVisited,
-                depth: input.depth + 1,
-                allowMissing: false
-              });
-              if (!inherited.ok) {
-                return inherited;
-              }
-            }
-            return ok(true);
-          }
-
-          function discoverInheritedPolicyPaths(text: string): string[] {
-            let document: unknown;
-            try {
-              document = parseYaml(text);
-            } catch {
-              return [];
-            }
-            if (!isRecord(document)) {
-              return [];
-            }
-            const value = document.extends;
-            if (typeof value === "string") {
-              return [value];
-            }
-            if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
-              return [];
-            }
-            return value as string[];
-          }
-
-          function resolveInheritedPolicyPath(
-            parentRelativePath: string,
-            inheritedPath: string
-          ): string | undefined {
-            const normalizedInput = inheritedPath.replaceAll("\\", "/");
-            if (
-              normalizedInput.trim() === ""
-              || /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(normalizedInput)
-              || path.posix.isAbsolute(normalizedInput)
-              || /^[A-Za-z]:\//.test(normalizedInput)
-            ) {
-              return undefined;
-            }
-            const resolved = path.posix.normalize(path.posix.join(
-              path.posix.dirname(parentRelativePath),
-              normalizedInput
-            ));
-            return resolved === ".." || resolved.startsWith("../") ? undefined : resolved;
-          }
-
-          function resolvePolicyRoots(
-            projectRoot: string,
-            workspaceRoot: string | undefined
-          ): Result<{ projectRoot: string; workspaceRoot: string }, OhriskError> {
-            try {
-              const realProjectRoot = realDirectory(projectRoot);
-              const realWorkspaceRoot = realDirectory(workspaceRoot ?? projectRoot);
-              const relative = path.relative(realWorkspaceRoot, realProjectRoot);
-              if (relative.startsWith("..") || path.isAbsolute(relative)) {
-                throw new Error("Project root is outside the policy workspace root.");
-              }
-              return ok({
-                projectRoot: realProjectRoot,
-                workspaceRoot: realWorkspaceRoot
-              });
-            } catch (cause) {
-              return err(createError({
-                code: "POLICY_FILE_READ_FAILED",
-                category: "filesystem",
-                message: "Policy workspace root must be a readable directory.",
-                details: { cause: errorMessage(cause) }
-              }));
-            }
-          }
-
-          function realDirectory(directory: string): string {
-            const resolved = realpathSync(directory);
-            if (!statSync(resolved).isDirectory()) {
-              throw new Error("Not a directory.");
-            }
-            return resolved;
-          }
-
-          function relativePolicyPath(
-            workspaceRoot: string,
-            filePath: string
-          ): Result<string, OhriskError> {
-            const relative = path.relative(workspaceRoot, filePath);
-            if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
-              return err(createError({
-                code: "POLICY_FILE_READ_FAILED",
-                category: "filesystem",
-                message: "Policy files must stay inside the workspace root.",
-                details: { filePath, workspaceRoot }
-              }));
-            }
-            return ok(relative.split(path.sep).join("/"));
-          }
-
-          function policyRefError(
-            message: string,
-            input: { ref: string; relativePath: string },
-            details: Record<string, unknown> = {}
-          ): OhriskError {
-            return createError({
-              code: "POLICY_FILE_READ_FAILED",
-              category: "filesystem",
-              message,
-              details: {
-                ref: input.ref,
-                relativePath: input.relativePath,
-                ...details
-              }
-            });
-          }
-
-          function removeTemporaryRoot(root: string): void {
-            try {
-              rmSync(root, { force: true, recursive: true });
-            } catch {
-              // The scan result is more important than best-effort temporary cleanup.
-            }
-          }
-
-          function isRecord(value: unknown): value is Record<string, unknown> {
-            return typeof value === "object" && value !== null && !Array.isArray(value);
-          }
-
-          function errorMessage(cause: unknown): string {
-            return cause instanceof Error ? cause.message : String(cause);
-          }
-          ''')
-
-          write("test/policy-ref-config.test.ts", r'''
-          import { describe, expect, test } from "bun:test";
-          import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-          import { tmpdir } from "node:os";
-          import path from "node:path";
-
-          import type { GitRefFileReader } from "../src/git/ref-file";
-          import { readPolicyConfigFromRef } from "../src/policy/ref-config";
-          import { createError } from "../src/shared/errors";
-          import { err, ok } from "../src/shared/result";
-
-          function withWorkspace(run: (workspace: string, project: string) => void): void {
-            const workspace = mkdtempSync(path.join(tmpdir(), "ohrisk-policy-ref-test-"));
-            const project = path.join(workspace, "apps", "api");
-            mkdirSync(project, { recursive: true });
-            try {
-              run(workspace, project);
-            } finally {
-              rmSync(workspace, { force: true, recursive: true });
-            }
-          }
-
-          function mapReader(files: ReadonlyMap<string, string>): GitRefFileReader {
-            return ({ relativePath }) => files.has(relativePath)
-              ? ok(files.get(relativePath) ?? "")
-              : err(createError({
-                  code: "GIT_REF_FILE_NOT_FOUND",
-                  category: "invalid_input",
-                  message: "missing baseline file",
-                  details: { relativePath }
-                }));
-          }
-
-          describe("baseline policy configuration", () => {
-            test("loads inherited policy files from the selected git ref", () => {
-              withWorkspace((workspace, project) => {
-                const result = readPolicyConfigFromRef({
-                  projectRoot: project,
-                  workspaceRoot: workspace,
-                  ref: "main",
-                  readRefFile: mapReader(new Map([
-                    ["base.yml", [
-                      "version: 1",
-                      "licenses:",
-                      "  severity:",
-                      "    AGPL-3.0-only: high"
-                    ].join("\n") + "\n"],
-                    ["apps/api/.ohrisk.yml", [
-                      "version: 1",
-                      "extends: ../../base.yml",
-                      "packages:",
-                      "  'agpl-child@0.1.0':",
-                      "    severity: review"
-                    ].join("\n") + "\n"]
-                  ]))
-                });
-
-                expect(result.ok).toBe(true);
-                if (!result.ok) throw new Error(result.error.message);
-                expect(result.value.severityOverrides.get("AGPL-3.0-only")).toBe("high");
-                expect(result.value.packageRules.get("agpl-child@0.1.0")?.severity).toBe("review");
-                expect(result.value.sourceFiles).toEqual([
-                  "base.yml",
-                  "apps/api/.ohrisk.yml"
-                ]);
-              });
-            });
-
-            test("returns an empty policy when the default baseline policy is absent", () => {
-              withWorkspace((workspace, project) => {
-                const result = readPolicyConfigFromRef({
-                  projectRoot: project,
-                  workspaceRoot: workspace,
-                  ref: "main",
-                  readRefFile: mapReader(new Map())
-                });
-
-                expect(result.ok).toBe(true);
-                if (!result.ok) throw new Error(result.error.message);
-                expect(result.value.sourceFiles).toEqual([]);
-              });
-            });
-          });
-          ''')
-
           main_path = Path("src/cli/main.ts")
-          main_source = main_path.read_text(encoding="utf-8")
-          main_source = replace_once(
-              main_source,
-              'import { hasFindingAtOrAbove } from "../policy/severity";\n',
-              'import { readPolicyConfigFromRef } from "../policy/ref-config";\nimport { hasFindingAtOrAbove } from "../policy/severity";\n',
-              "baseline policy import"
+          source = main_path.read_text(encoding="utf-8")
+          if 'from "../policy/ref-config";' not in source:
+              source = replace_once(
+                  source,
+                  'import { hasFindingAtOrAbove } from "../policy/severity";\n',
+                  'import { readPolicyConfigFromRef } from "../policy/ref-config";\nimport { hasFindingAtOrAbove } from "../policy/severity";\n',
+                  "baseline policy import"
+              )
+
+          run_start = source.index("async function runDiff(")
+          run_end = source.index("async function runExplain(", run_start)
+          run = source[run_start:run_end]
+
+          if "const baselinePolicy = readPolicyConfigFromRef" not in run:
+              marker = '  const evidenceRuntime = resolveEvidenceRuntimeOptions({\n'
+              insertion = '''  const readRefFile = io.readRefFile ?? readGitRefFile;
+              const baselinePolicy = readPolicyConfigFromRef({
+                projectRoot: currentProject.value.rootDir,
+                ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}),
+                ref: command.baselineRef,
+                readRefFile,
+                ...(command.policyPath ? { policyPath: command.policyPath } : {})
+              });
+              if (isErr(baselinePolicy)) {
+                io.stderr(formatError(baselinePolicy.error));
+                return exitCodeForError(baselinePolicy.error);
+              }
+
+              '''
+              run = replace_once(run, marker, insertion + marker, "baseline policy load")
+
+          duplicate_reader = '  const readRefFile = io.readRefFile ?? readGitRefFile;\n  const listRefFiles = io.listRefFiles ?? listGitRefFiles;\n'
+          if run.count(duplicate_reader) == 1:
+              run = run.replace(
+                  duplicate_reader,
+                  '  const listRefFiles = io.listRefFiles ?? listGitRefFiles;\n'
+              )
+
+          if "const baselineEvidenceRuntime = resolveEvidenceRuntimeOptions" not in run:
+              fetch_marker = '  const fetchRemoteMavenPoms = ('
+              baseline_runtime = '''  const baselineEvidenceRuntime = resolveEvidenceRuntimeOptions({
+                cwd: io.cwd,
+                projectRoot: currentProject.value.rootDir,
+                policy: baselinePolicy.value,
+                offline: command.offline ?? false,
+                ...(command.cacheDir ? { cacheDir: command.cacheDir } : {}),
+                ...(command.jobs !== undefined ? { jobs: command.jobs } : {}),
+                ...(command.timeoutMs !== undefined ? { timeoutMs: command.timeoutMs } : {}),
+                ...(command.registryUrl ? { registryUrl: command.registryUrl } : {}),
+                ...(command.registryTokenEnv ? { registryTokenEnv: command.registryTokenEnv } : {}),
+                allowedHosts: command.allowedHosts ?? [],
+                env: io.env ?? process.env
+              });
+              if (isErr(baselineEvidenceRuntime)) {
+                io.stderr(formatError(baselineEvidenceRuntime.error));
+                return exitCodeForError(baselineEvidenceRuntime.error);
+              }
+
+              '''
+              run = replace_once(
+                  run,
+                  fetch_marker,
+                  baseline_runtime + fetch_marker,
+                  "baseline evidence runtime"
+              )
+
+          if "const fetchBaselineRemoteMavenPoms" not in run:
+              current_graph_marker = '  const currentGraph = await parseProjectDependencyGraphWithRemoteMavenPoms({\n'
+              baseline_fetcher = '''  const fetchBaselineRemoteMavenPoms = (
+                requests: Parameters<typeof fetchMavenCentralModelPoms>[0]["requests"]
+              ) => fetchMavenCentralModelPoms({
+                requests,
+                offline: baselineEvidenceRuntime.value.offline,
+                signal,
+                ...(baselineEvidenceRuntime.value.timeoutMs === undefined
+                  ? {}
+                  : { fetchTimeoutMs: baselineEvidenceRuntime.value.timeoutMs }),
+                ...(baselineEvidenceRuntime.value.cacheDir === undefined
+                  ? {}
+                  : { cacheDir: baselineEvidenceRuntime.value.cacheDir })
+              });
+              '''
+              run = replace_once(
+                  run,
+                  current_graph_marker,
+                  baseline_fetcher + current_graph_marker,
+                  "baseline Maven fetcher"
+              )
+
+          baseline_start = run.index("  const baselineProject = await resolveWithRemoteMavenPoms({")
+          baseline_end = run.index("  if (isErr(baselineProject))", baseline_start)
+          baseline_block = run[baseline_start:baseline_end]
+          baseline_block = replace_once(
+              baseline_block,
+              '    fetchRemotePoms: fetchRemoteMavenPoms\n',
+              '    fetchRemotePoms: fetchBaselineRemoteMavenPoms\n',
+              "baseline Maven policy"
           )
+          run = run[:baseline_start] + baseline_block + run[baseline_end:]
 
-          policy_anchor = '''  if (isErr(policy)) {
-            io.stderr(formatError(policy.error));
-            return exitCodeForError(policy.error);
-          }
-
-          const evidenceRuntime = resolveEvidenceRuntimeOptions({'''
-          policy_value = '''  if (isErr(policy)) {
-            io.stderr(formatError(policy.error));
-            return exitCodeForError(policy.error);
-          }
-
-          const readRefFile = io.readRefFile ?? readGitRefFile;
-          const baselinePolicy = readPolicyConfigFromRef({
-            projectRoot: currentProject.value.rootDir,
-            ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}),
-            ref: command.baselineRef,
-            readRefFile,
-            ...(command.policyPath ? { policyPath: command.policyPath } : {})
-          });
-          if (isErr(baselinePolicy)) {
-            io.stderr(formatError(baselinePolicy.error));
-            return exitCodeForError(baselinePolicy.error);
-          }
-
-          const evidenceRuntime = resolveEvidenceRuntimeOptions({'''
-          main_source = replace_once(
-              main_source,
-              policy_anchor,
-              policy_value,
-              "baseline policy load"
+          evidence_start = run.index("  const baselineEvidence = await collectEvidenceForGraph({")
+          evidence_end = run.index("  if (isErr(baselineEvidence))", evidence_start)
+          evidence_block = run[evidence_start:evidence_end]
+          evidence_block = replace_once(
+              evidence_block,
+              '    evidenceRuntime: evidenceRuntime.value,\n',
+              '    evidenceRuntime: baselineEvidenceRuntime.value,\n',
+              "baseline evidence policy"
           )
+          run = run[:evidence_start] + evidence_block + run[evidence_end:]
 
-          runtime_anchor = '''  if (isErr(evidenceRuntime)) {
-            io.stderr(formatError(evidenceRuntime.error));
-            return exitCodeForError(evidenceRuntime.error);
-          }
+          finding_start = run.index("  const baselineFindings = evaluateLicenseRisks({")
+          finding_end = run.index("  const current = await evaluateProjectScan({", finding_start)
+          finding_block = run[finding_start:finding_end]
+          finding_block = replace_once(
+              finding_block,
+              '    policy: policy.value\n',
+              '    policy: baselinePolicy.value\n',
+              "baseline risk policy"
+          )
+          run = run[:finding_start] + finding_block + run[finding_end:]
 
-          const fetchRemoteMavenPoms ='''
-          runtime_value = '''  if (isErr(evidenceRuntime)) {
-            io.stderr(formatError(evidenceRuntime.error));
-            return exitCodeForError(evidenceRuntime.error);
-          }
-
-          const baselineEvidenceRuntime = resolveEvidenceRuntimeOptions({
-            cwd: io.cwd,
-            projectRoot: currentProject.value.rootDir,
-            policy: baselinePolicy.value,
-            offline: command.offline ?? false,
-            ...(command.cacheDir ? { cacheDir: command.cacheDir } : {}),
-            ...(command.jobs !== undefined ? { jobs: command.jobs } : {}),
-            ...(command.timeoutMs !== undefined ? { timeoutMs: command.timeoutMs } : {}),
-            ...(command.registryUrl ? { registryUrl: command.registryUrl } : {}),
-            ...(command.registryTokenEnv ? { registryTokenEnv: command.registryTokenEnv } : {}),
-            allowedHosts: command.allowedHosts ?? [],
-            env: io.env ?? process.env
-          });
-          if (isErr(baselineEvidenceRuntime)) {
-            io.stderr(formatError(baselineEvidenceRuntime.error));
-            return exitCodeForError(baselineEvidenceRuntime.error);
-          }
-
-          const fetchRemoteMavenPoms ='''
-          main_source = replace_once(
-              main_source,
-              runtime_anchor,
-              runtime_value,
-              "baseline evidence runtime"
-          )
-
-          fetch_anchor = '''  const currentGraph = await parseProjectDependencyGraphWithRemoteMavenPoms({'''
-          fetch_value = '''  const fetchBaselineRemoteMavenPoms = (
-            requests: Parameters<typeof fetchMavenCentralModelPoms>[0]["requests"]
-          ) => fetchMavenCentralModelPoms({
-            requests,
-            offline: baselineEvidenceRuntime.value.offline,
-            signal,
-            ...(baselineEvidenceRuntime.value.timeoutMs === undefined
-              ? {}
-              : { fetchTimeoutMs: baselineEvidenceRuntime.value.timeoutMs }),
-            ...(baselineEvidenceRuntime.value.cacheDir === undefined
-              ? {}
-              : { cacheDir: baselineEvidenceRuntime.value.cacheDir })
-          });
-          const currentGraph = await parseProjectDependencyGraphWithRemoteMavenPoms({'''
-          main_source = replace_once(
-              main_source,
-              fetch_anchor,
-              fetch_value,
-              "baseline Maven fetcher"
-          )
-
-          main_source = replace_once(
-              main_source,
-              '  const readRefFile = io.readRefFile ?? readGitRefFile;\n  const listRefFiles = io.listRefFiles ?? listGitRefFiles;\n',
-              '  const listRefFiles = io.listRefFiles ?? listGitRefFiles;\n',
-              "duplicate ref reader"
-          )
-          main_source = replace_once(
-              main_source,
-              '    fetchRemotePoms: fetchRemoteMavenPoms\n  });\n\n  if (isErr(baselineProject)) {',
-              '    fetchRemotePoms: fetchBaselineRemoteMavenPoms\n  });\n\n  if (isErr(baselineProject)) {',
-              "baseline Maven runtime"
-          )
-          main_source = replace_once(
-              main_source,
-              '    evidenceRuntime: evidenceRuntime.value,\n    signal,\n',
-              '    evidenceRuntime: baselineEvidenceRuntime.value,\n    signal,\n',
-              "baseline evidence runtime use"
-          )
-          main_source = replace_once(
-              main_source,
-              '    policy: policy.value\n  });\n  const current = await evaluateProjectScan({',
-              '    policy: baselinePolicy.value\n  });\n  const current = await evaluateProjectScan({',
-              "baseline policy evaluation"
-          )
-          main_path.write_text("\n".join(line.rstrip() for line in main_source.splitlines()) + "\n", encoding="utf-8")
+          source = source[:run_start] + run + source[run_end:]
+          main_path.write_text("\n".join(line.rstrip() for line in source.splitlines()) + "\n", encoding="utf-8")
 
           tests_path = Path("test/main.test.ts")
-          tests_source = tests_path.read_text(encoding="utf-8")
-          integration_test = textwrap.dedent(r'''
-            test("evaluates baseline findings with the policy stored in the baseline ref", async () => {
-              const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-baseline-policy-diff-"));
+          tests = tests_path.read_text(encoding="utf-8")
+          if "evaluates baseline findings with the policy stored in the baseline ref" not in tests:
+              marker = '  test("does not apply local waivers to git ref diff findings", async () => {\n'
+              test_case = textwrap.dedent(r'''
+                test("evaluates baseline findings with the policy stored in the baseline ref", async () => {
+                  const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-baseline-policy-diff-"));
 
-              try {
-                cpSync(path.join(fixturesDir, "bun-project"), projectRoot, { recursive: true });
-                writeFileSync(
-                  path.join(projectRoot, ".ohrisk.yml"),
-                  [
-                    "version: 1",
-                    "packages:",
-                    "  'agpl-child@0.1.0':",
-                    "    severity: low",
-                    "    recommendation: allow"
-                  ].join("\n") + "\n",
-                  "utf8"
-                );
+                  try {
+                    cpSync(path.join(fixturesDir, "bun-project"), projectRoot, { recursive: true });
+                    writeFileSync(
+                      path.join(projectRoot, ".ohrisk.yml"),
+                      [
+                        "version: 1",
+                        "packages:",
+                        "  'agpl-child@0.1.0':",
+                        "    severity: low",
+                        "    recommendation: allow"
+                      ].join("\n") + "\n",
+                      "utf8"
+                    );
 
-                const { io, stdout, stderr } = createTestIO(projectRoot);
-                Object.assign(io, createBaselineSnapshotIO(projectRoot, {
-                  ".ohrisk.yml": "version: 1\n"
-                }));
+                    const { io, stdout, stderr } = createTestIO(projectRoot);
+                    Object.assign(io, createBaselineSnapshotIO(projectRoot, {
+                      ".ohrisk.yml": "version: 1\n"
+                    }));
 
-                const exitCode = await main(["diff", "main", "--prod", "--json"], io);
+                    const exitCode = await main(["diff", "main", "--prod", "--json"], io);
 
-                expect(exitCode).toBe(0);
-                expect(stderr).toEqual([]);
-                const payload = JSON.parse(stdout.join("\n")) as {
-                  changedFindingCount: number;
-                  changedFindings: Array<{
-                    packageId: string;
-                    previousSeverity: string;
-                    severity: string;
-                  }>;
-                };
-                expect(payload.changedFindingCount).toBe(1);
-                expect(payload.changedFindings).toContainEqual(expect.objectContaining({
-                  packageId: "agpl-child@0.1.0",
-                  previousSeverity: "high",
-                  severity: "low"
-                }));
-              } finally {
-                rmSync(projectRoot, { recursive: true, force: true });
-              }
-            });
+                    expect(exitCode).toBe(0);
+                    expect(stderr).toEqual([]);
+                    const payload = JSON.parse(stdout.join("\n")) as {
+                      changedFindingCount: number;
+                      changedFindings: Array<{
+                        packageId: string;
+                        previousSeverity: string;
+                        severity: string;
+                      }>;
+                    };
+                    expect(payload.changedFindingCount).toBe(1);
+                    expect(payload.changedFindings).toContainEqual(expect.objectContaining({
+                      packageId: "agpl-child@0.1.0",
+                      previousSeverity: "high",
+                      severity: "low"
+                    }));
+                  } finally {
+                    rmSync(projectRoot, { recursive: true, force: true });
+                  }
+                });
 
-          ''')
-          marker = '  test("does not apply local waivers to git ref diff findings", async () => {\n'
-          tests_source = replace_once(
-              tests_source,
-              marker,
-              integration_test + marker,
-              "baseline policy integration test"
-          )
-          tests_path.write_text("\n".join(line.rstrip() for line in tests_source.splitlines()) + "\n", encoding="utf-8")
+              ''')
+              tests = replace_once(
+                  tests,
+                  marker,
+                  test_case + marker,
+                  "baseline policy integration test"
+              )
+              tests_path.write_text("\n".join(line.rstrip() for line in tests.splitlines()) + "\n", encoding="utf-8")
+
+          for file_name in (
+              "agent-policy-patch.txt",
+              "agent-policy-build.txt",
+              "agent-policy-verify.txt",
+          ):
+              Path(file_name).unlink(missing_ok=True)
           PY
           status=${PIPESTATUS[0]}
           echo "exit_status=$status" >> agent-policy-patch.txt
