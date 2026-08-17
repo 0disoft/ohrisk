@@ -58,22 +58,63 @@ describe("finding identity", () => {
     expect(encodedDelimiter).not.toBe(rawDelimiter);
   });
 
-  test("escapes fingerprint delimiters inside reason and evidence components", () => {
-    const fingerprint = buildFindingFingerprint({
-      id: "package@1.0.0::production::direct::root>package@1.0.0",
-      severity: "high",
-      recommendation: "replace",
-      reason: "reason::with>delimiters",
-      evidence: ["license: MIT | Apache-2.0", "path > LICENSE"]
-    });
 
-    expect(
-      fingerprint.startsWith("package@1.0.0::production::direct::root>package@1.0.0::high::replace::")
-    ).toBe(true);
-    expect(fingerprint).toContain("reason%3A%3Awith%3Edelimiters");
-    expect(fingerprint).toContain("license%3A MIT %7C Apache-2.0");
-    expect(fingerprint).toContain("path %3E LICENSE");
-  });
+test("canonicalizes unordered semantic license facts in finding fingerprints", () => {
+  const input: Parameters<typeof buildFindingFingerprint>[0] = {
+    id: "package@1.0.0::production::direct::root>package@1.0.0",
+    severity: "high",
+    recommendation: "replace",
+    license: {
+      expression: "MIT OR Apache-2.0",
+      choices: ["MIT", "Apache-2.0"],
+      joiner: "or",
+      signals: ["notice-required", "conflicting-evidence"],
+      evidenceSources: ["package.json", "LICENSE"],
+      confidence: "high",
+      exceptions: ["Classpath-exception-2.0"]
+    }
+  };
+  const reordered: Parameters<typeof buildFindingFingerprint>[0] = {
+    ...input,
+    license: {
+      ...input.license,
+      choices: ["Apache-2.0", "MIT", "MIT"],
+      signals: ["conflicting-evidence", "notice-required"],
+      evidenceSources: ["LICENSE", "package.json"],
+      exceptions: ["Classpath-exception-2.0", "Classpath-exception-2.0"]
+    }
+  };
+
+  expect(buildFindingFingerprint(reordered)).toBe(buildFindingFingerprint(input));
+});
+
+test("changes finding fingerprints only when risk semantics change", () => {
+  const input: Parameters<typeof buildFindingFingerprint>[0] = {
+    id: "package@1.0.0::production::direct::root>package@1.0.0",
+    severity: "high",
+    recommendation: "replace",
+    license: {
+      expression: "MIT OR Apache-2.0",
+      choices: ["MIT", "Apache-2.0"],
+      joiner: "or",
+      signals: [],
+      evidenceSources: ["package.json"],
+      confidence: "high",
+      exceptions: []
+    }
+  };
+  const changed: Parameters<typeof buildFindingFingerprint>[0] = {
+    ...input,
+    license: {
+      ...input.license,
+      expression: "MIT AND Apache-2.0",
+      joiner: "and"
+    }
+  };
+
+  expect(buildFindingFingerprint(changed)).not.toBe(buildFindingFingerprint(input));
+});
+
 
   test("keeps finding IDs stable under path array permutation and duplicates", () => {
     const base = {

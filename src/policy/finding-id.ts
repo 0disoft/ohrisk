@@ -1,3 +1,5 @@
+
+import type { NormalizedLicense } from "../license/types";
 import type { RiskFinding } from "./types";
 
 export function buildFindingId(input: {
@@ -65,20 +67,52 @@ function comparePaths(left: string[], right: string[]): number {
   return 0;
 }
 
+
 export function buildFindingFingerprint(input: {
   id: string;
   severity: RiskFinding["severity"];
   recommendation: RiskFinding["recommendation"];
-  reason: string;
-  evidence: string[];
+  license: Pick<
+    NormalizedLicense,
+    | "expression"
+    | "choices"
+    | "joiner"
+    | "signals"
+    | "evidenceSources"
+    | "confidence"
+    | "exceptions"
+  >;
 }): string {
+  const semanticLicense = JSON.stringify({
+    expression: input.license.expression ?? null,
+    choices: canonicalStringSet(input.license.choices),
+    joiner: input.license.joiner,
+    signals: canonicalStringSet(input.license.signals),
+    evidenceSources: canonicalStringSet(input.license.evidenceSources),
+    confidence: input.license.confidence,
+    exceptions: canonicalStringSet(input.license.exceptions ?? [])
+  });
+
   return [
     input.id,
     encodeFindingComponent(input.severity),
     encodeFindingComponent(input.recommendation),
-    encodeFindingComponent(input.reason),
-    input.evidence.map(encodeFindingComponent).join("|")
+    encodeFindingComponent(semanticLicense)
   ].join("::");
+}
+
+function canonicalStringSet(values: readonly string[]): string[] {
+  return [...new Set(values)].sort(compareStrings);
+}
+
+function compareStrings(left: string, right: string): number {
+  if (left < right) {
+    return -1;
+  }
+  if (left > right) {
+    return 1;
+  }
+  return 0;
 }
 
 function encodeFindingComponent(value: string): string {
