@@ -29,192 +29,39 @@ jobs:
         with:
           bun-version: 1.3.14
 
-      - name: Finish partial-evidence override wiring
-        shell: bash
+      - name: Align parser expectations
+        shell: python
         run: |
-          set +e
-          python <<'PY' 2>&1 | tee agent-diff-patch.txt
           from pathlib import Path
-          import re
 
-          def replace_once(source: str, old: str, new: str, label: str) -> str:
-              count = source.count(old)
-              if count != 1:
-                  raise SystemExit(f"{label}: expected one anchor, found {count}")
-              return source.replace(old, new)
+          path = Path("test/args.test.ts")
+          source = path.read_text(encoding="utf-8")
+          anchors = [
+              '      failOn: "unknown"\n    });',
+              '      allLockfiles: true\n    });',
+          ]
+          replacements = [
+              '      failOn: "unknown",\n      allowPartialEvidence: false\n    });',
+              '      allLockfiles: true,\n      allowPartialEvidence: false\n    });',
+          ]
+          for old, new in zip(anchors, replacements, strict=True):
+              if source.count(old) != 1:
+                  raise SystemExit(f"expected one parser assertion anchor, found {source.count(old)}")
+              source = source.replace(old, new)
+          path.write_text(source, encoding="utf-8")
 
-          spec_path = Path("src/cli/command-spec.ts")
-          spec_source = spec_path.read_text(encoding="utf-8")
-          usage_old = '[--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",'
-          usage_new = '[--json|--markdown] [--fail-on high|unknown|review|low] [--allow-partial-evidence] [--output <file>]",'
-          if usage_new not in spec_source:
-              spec_source = replace_once(spec_source, usage_old, usage_new, "diff usage")
-
-          if "Let diff return success when either revision has partial evidence." not in spec_source:
-              spec_source = replace_once(
-                  spec_source,
-                  '    description: "Let ci pass when evidence or repository coverage is partial."\n',
-                  '    description: "Let ci pass when evidence or repository coverage is partial.",\n    overrides: { diff: "Let diff return success when either revision has partial evidence." }\n',
-                  "partial evidence help override"
-              )
-
-          help_start = spec_source.index("const HELP_OPTION_ORDER")
-          help_diff_start = spec_source.index("  diff: [", help_start)
-          help_diff_end = spec_source.index("  cache:", help_diff_start)
-          help_diff_block = spec_source[help_diff_start:help_diff_end]
-          if '"allowPartialEvidence"' not in help_diff_block:
-              help_diff_block = replace_once(
-                  help_diff_block,
-                  '"failOn", "output", "help"',
-                  '"failOn", "allowPartialEvidence", "output", "help"',
-                  "diff help option order"
-              )
-              spec_source = (
-                  spec_source[:help_diff_start]
-                  + help_diff_block
-                  + spec_source[help_diff_end:]
-              )
-
-          keys_start = spec_source.index("const COMMAND_OPTION_KEYS")
-          keys_diff_start = spec_source.index("  diff: [", keys_start)
-          keys_diff_end = spec_source.index("  explain:", keys_diff_start)
-          keys_diff_block = spec_source[keys_diff_start:keys_diff_end]
-          if '"allowPartialEvidence"' not in keys_diff_block:
-              keys_diff_block = replace_once(
-                  keys_diff_block,
-                  '"failOn", "help"',
-                  '"failOn", "allowPartialEvidence", "help"',
-                  "diff supported option keys"
-              )
-              spec_source = (
-                  spec_source[:keys_diff_start]
-                  + keys_diff_block
-                  + spec_source[keys_diff_end:]
-              )
-          spec_path.write_text(spec_source, encoding="utf-8")
-
-          main_path = Path("src/cli/main.ts")
-          main_source = main_path.read_text(encoding="utf-8")
-          old_gate = '  if (completeness.status === "partial") {'
-          new_gate = '  if (completeness.status === "partial" && !command.allowPartialEvidence) {'
-          if new_gate not in main_source:
-              main_source = replace_once(main_source, old_gate, new_gate, "diff partial gate")
-          main_path.write_text(main_source, encoding="utf-8")
-
-          tests_path = Path("test/main.test.ts")
-          test_lines = tests_path.read_text(encoding="utf-8").splitlines()
-          verify_log = Path("agent-diff-verify.txt").read_text(encoding="utf-8")
-          failing_lines = sorted({
-              int(value)
-              for value in re.findall(r'test/main\.test\.ts:(\d+):\d+', verify_log)
-          }, reverse=True)
-          if not failing_lines:
-              raise SystemExit("no failing diff fixture locations were found")
-          updated_calls = 0
-          for expected_line in failing_lines:
-              expectation_index = expected_line - 1
-              call_start = next(
-                  (
-                      index
-                      for index in range(expectation_index, max(-1, expectation_index - 80), -1)
-                      if "await main([" in test_lines[index]
-                  ),
-                  None
-              )
-              if call_start is None:
-                  raise SystemExit(f"could not locate main call before line {expected_line}")
-              call_end = next(
-                  (
-                      index
-                      for index in range(call_start, min(len(test_lines), call_start + 80))
-                      if "]," in test_lines[index]
-                  ),
-                  None
-              )
-              if call_end is None:
-                  raise SystemExit(f"could not locate main call end before line {expected_line}")
-              call_text = "\n".join(test_lines[call_start:call_end + 1])
-              if '"diff"' not in call_text:
-                  raise SystemExit(f"nearest call before line {expected_line} is not diff")
-              if '"--allow-partial-evidence"' in call_text:
-                  continue
-              if call_start == call_end:
-                  test_lines[call_start] = test_lines[call_start].replace(
-                      '"main",',
-                      '"main", "--allow-partial-evidence",',
-                      1
-                  )
-              else:
-                  baseline_index = next(
-                      (
-                          index
-                          for index in range(call_start, call_end + 1)
-                          if '"main",' in test_lines[index]
-                      ),
-                      None
-                  )
-                  if baseline_index is None:
-                      raise SystemExit(f"could not locate baseline argument before line {expected_line}")
-                  indentation = test_lines[baseline_index][
-                      :len(test_lines[baseline_index]) - len(test_lines[baseline_index].lstrip())
-                  ]
-                  test_lines.insert(
-                      baseline_index + 1,
-                      indentation + '"--allow-partial-evidence",'
-                  )
-              updated_calls += 1
-          if updated_calls == 0:
-              raise SystemExit("no partial diff fixtures were updated")
-          tests_path.write_text("\n".join(test_lines) + "\n", encoding="utf-8")
-
-          completeness_test_path = Path("test/diff-completeness.test.ts")
-          completeness_source = completeness_test_path.read_text(encoding="utf-8")
-          if 'from "../src/cli/args";' not in completeness_source:
-              completeness_source = replace_once(
-                  completeness_source,
-                  'import { describe, expect, test } from "bun:test";\n',
-                  'import { describe, expect, test } from "bun:test";\n\nimport { parseArgs } from "../src/cli/args";\n',
-                  "diff parser test import"
-              )
-          if "parses an explicit partial-evidence override for diff" not in completeness_source:
-              marker = '  test("identifies every partial revision in the failure message", () => {\n'
-              parser_test = '''  test("parses an explicit partial-evidence override for diff", () => {
-            const parsed = parseArgs(["diff", "main", "--allow-partial-evidence"]);
-
-            expect(parsed.ok).toBe(true);
-            if (!parsed.ok || parsed.value.kind !== "diff") {
-              throw new Error("Expected a parsed diff command.");
-            }
-            expect(parsed.value.allowPartialEvidence).toBe(true);
-          });
-
-          '''
-              completeness_source = replace_once(
-                  completeness_source,
-                  marker,
-                  parser_test + marker,
-                  "diff parser test"
-              )
-          completeness_test_path.write_text(completeness_source, encoding="utf-8")
-
-          for file_name in ("agent-diff-build.txt", "agent-diff-verify.txt"):
+          for file_name in (
+              "agent-diff-patch.txt",
+              "agent-diff-build.txt",
+              "agent-diff-verify.txt",
+          ):
               Path(file_name).unlink(missing_ok=True)
-          PY
-          status=${PIPESTATUS[0]}
-          echo "exit_status=$status" >> agent-diff-patch.txt
-          exit "$status"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
       - name: Rebuild checked-in Action bundle
-        shell: bash
-        run: |
-          set +e
-          bun run build:action 2>&1 | tee agent-diff-build.txt
-          status=${PIPESTATUS[0]}
-          echo "exit_status=$status" >> agent-diff-build.txt
-          exit "$status"
+        run: bun run build:action
 
       - name: Verify release gate
         shell: bash
@@ -238,7 +85,7 @@ jobs:
         if: success()
         run: |
           rm .github/workflows/agent-diff-completeness.yml
-          rm -f agent-diff-patch.txt agent-diff-build.txt agent-diff-verify.txt
+          rm -f agent-diff-verify.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
