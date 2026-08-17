@@ -1,3 +1,4 @@
+\
 import type { ScanCompleteness } from "../report/scan-report";
 
 export type DiffEvidenceCompleteness = {
@@ -31,8 +32,7 @@ export function renderIncompleteDiffEvidence(
       : [])
   ];
   return `Diff evidence is partial for ${revisions.join(" and ")}. `
-    + "Treat the result as indeterminate and retry after evidence collection succeeds.
-";
+    + "Treat the result as indeterminate and retry after evidence collection succeeds.\n";
 }
 
 function renderCounts(completeness: ScanCompleteness): string {

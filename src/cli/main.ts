@@ -75,6 +75,10 @@ import {
   loadBaselineProjectGraph
 } from "./baseline-project";
 import { runCacheCommand } from "./cache-command";
+import {
+  buildDiffEvidenceCompleteness,
+  renderIncompleteDiffEvidence
+} from "./diff-completeness";
 import type { CliCommand } from "./command";
 import { renderHelp } from "./help";
 import {
@@ -336,10 +340,14 @@ async function runDiff(
     return exitCodeForError(current.error);
   }
 
-  const diff = diffRiskFindings({
-    baselineFindings,
-    currentFindings: current.value.riskFindings
-  });
+const completeness = buildDiffEvidenceCompleteness({
+  baseline: buildScanCompleteness({ evidence: relevantBaselineEvidence }),
+  current: buildScanCompleteness({ evidence: current.value.evidence })
+});
+const diff = diffRiskFindings({
+  baselineFindings,
+  currentFindings: current.value.riskFindings
+});
 
   const output = renderDiffReport({
     baselineRef: command.baselineRef,
@@ -377,9 +385,14 @@ async function runDiff(
     return exitCodeForError(emitted.error);
   }
 
-  if (command.failOn && hasFindingAtOrAbove(diff.introducedFindings, command.failOn)) {
-    return 1;
-  }
+if (completeness.status === "partial") {
+  io.stderr(renderIncompleteDiffEvidence(completeness));
+  return 1;
+}
+
+if (command.failOn && hasFindingAtOrAbove(diff.introducedFindings, command.failOn)) {
+  return 1;
+}
 
   return 0;
 }
