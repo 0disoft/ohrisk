@@ -1,4 +1,4 @@
-name: Apply diff evidence completeness gate
+name: Finalize diff evidence completeness gate
 
 on:
   push:
@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  apply:
+  finalize:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -29,15 +29,16 @@ jobs:
         with:
           bun-version: 1.3.14
 
-      - name: Add fail-closed diff completeness gate
+      - name: Apply fail-closed diff completeness gate
         shell: bash
         run: |
           set +e
           python <<'PY' 2>&1 | tee agent-diff-patch.txt
           from pathlib import Path
+          import re
           import textwrap
 
-          Path("src/cli/diff-completeness.ts").write_text(textwrap.dedent('''\
+          Path("src/cli/diff-completeness.ts").write_text(textwrap.dedent(r'''\
           import type { ScanCompleteness } from "../report/scan-report";
 
           export type DiffEvidenceCompleteness = {
@@ -82,53 +83,60 @@ jobs:
 
           main = Path("src/cli/main.ts")
           source = main.read_text(encoding="utf-8")
-          import_anchor = 'import { runCacheCommand } from "./cache-command";\n'
-          import_value = import_anchor + '''import {
+
+          if 'from "./diff-completeness";' not in source:
+              source, count = re.subn(
+                  r'(import \{ runCacheCommand \} from "\./cache-command";\n)',
+                  r'''\1import {
             buildDiffEvidenceCompleteness,
             renderIncompleteDiffEvidence
           } from "./diff-completeness";
-          '''
-          if source.count(import_anchor) != 1:
-              raise SystemExit(f"diff completeness import anchor count: {source.count(import_anchor)}")
-          source = source.replace(import_anchor, import_value)
+          ''',
+                  source,
+                  count=1,
+              )
+              if count != 1:
+                  raise SystemExit(f"diff completeness import anchor count: {count}")
 
-          diff_anchor = '''  const diff = diffRiskFindings({
-            baselineFindings,
-            currentFindings: current.value.riskFindings
-          });
-          '''
-          diff_value = '''  const completeness = buildDiffEvidenceCompleteness({
-            baseline: buildScanCompleteness({ evidence: relevantBaselineEvidence }),
-            current: buildScanCompleteness({ evidence: current.value.evidence })
-          });
-          const diff = diffRiskFindings({
-            baselineFindings,
-            currentFindings: current.value.riskFindings
-          });
-          '''
-          if source.count(diff_anchor) != 1:
-              raise SystemExit(f"diff construction anchor count: {source.count(diff_anchor)}")
-          source = source.replace(diff_anchor, diff_value)
+          if "const completeness = buildDiffEvidenceCompleteness" not in source:
+              source, count = re.subn(
+                  r'  const diff = diffRiskFindings\(\{\n    baselineFindings,\n    currentFindings: current\.value\.riskFindings\n  \}\);',
+                  textwrap.dedent('''\
+                    const completeness = buildDiffEvidenceCompleteness({
+                      baseline: buildScanCompleteness({ evidence: relevantBaselineEvidence }),
+                      current: buildScanCompleteness({ evidence: current.value.evidence })
+                    });
+                    const diff = diffRiskFindings({
+                      baselineFindings,
+                      currentFindings: current.value.riskFindings
+                    });'''),
+                  source,
+                  count=1,
+              )
+              if count != 1:
+                  raise SystemExit(f"diff construction anchor count: {count}")
 
-          failure_anchor = '''  if (command.failOn && hasFindingAtOrAbove(diff.introducedFindings, command.failOn)) {
-            return 1;
-          }
-          '''
-          failure_value = '''  if (completeness.status === "partial") {
-            io.stderr(renderIncompleteDiffEvidence(completeness));
-            return 1;
-          }
+          if 'io.stderr(renderIncompleteDiffEvidence(completeness));' not in source:
+              source, count = re.subn(
+                  r'  if \(command\.failOn && hasFindingAtOrAbove\(diff\.introducedFindings, command\.failOn\)\) \{\n    return 1;\n  \}',
+                  textwrap.dedent('''\
+                    if (completeness.status === "partial") {
+                      io.stderr(renderIncompleteDiffEvidence(completeness));
+                      return 1;
+                    }
 
-          if (command.failOn && hasFindingAtOrAbove(diff.introducedFindings, command.failOn)) {
-            return 1;
-          }
-          '''
-          if source.count(failure_anchor) != 1:
-              raise SystemExit(f"diff failure anchor count: {source.count(failure_anchor)}")
-          source = source.replace(failure_anchor, failure_value)
+                    if (command.failOn && hasFindingAtOrAbove(diff.introducedFindings, command.failOn)) {
+                      return 1;
+                    }'''),
+                  source,
+                  count=1,
+              )
+              if count != 1:
+                  raise SystemExit(f"diff failure anchor count: {count}")
+
           main.write_text("\n".join(line.rstrip() for line in source.splitlines()) + "\n", encoding="utf-8")
 
-          Path("test/diff-completeness.test.ts").write_text(textwrap.dedent('''\
+          Path("test/diff-completeness.test.ts").write_text(textwrap.dedent(r'''\
           import { describe, expect, test } from "bun:test";
 
           import {
@@ -181,6 +189,9 @@ jobs:
             });
           });
           '''), encoding="utf-8")
+
+          Path("agent-diff-patch.txt").unlink(missing_ok=True)
+          Path("agent-diff-verify.txt").unlink(missing_ok=True)
           PY
           status=${PIPESTATUS[0]}
           echo "exit_status=$status" >> agent-diff-patch.txt
