@@ -44,16 +44,34 @@ jobs:
               path.write_text("\n".join(line.rstrip() for line in lines) + "\n", encoding="utf-8")
 
           Path("agent-verification.txt").unlink(missing_ok=True)
+          Path("agent-finalize.txt").unlink(missing_ok=True)
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
       - name: Verify release gate
-        run: bun run verify:release
+        shell: bash
+        run: |
+          set +e
+          bun run verify:release 2>&1 | tee agent-finalize.txt
+          status=${PIPESTATUS[0]}
+          echo "exit_status=$status" >> agent-finalize.txt
+          exit "$status"
+
+      - name: Persist failed diagnostics
+        if: failure()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "🤖 chore: capture final semantic fingerprint diagnostics"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Commit verified change
+        if: success()
         run: |
           rm .github/workflows/agent-semantic-fingerprints.yml
+          rm -f agent-finalize.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
