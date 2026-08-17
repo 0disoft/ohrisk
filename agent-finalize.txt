@@ -3,9 +3,25 @@ $ bun run format:check && bun run lint && bun run typecheck && bun run verify:do
 $ bun scripts/check-format.ts
 Formatting contract passed for 385 files.
 $ tsc -p tsconfig.lint.json && bun scripts/check-source-hygiene.ts
-test/finding-id.test.ts(87,17): error TS2322: Type '"metadata-conflict"' is not assignable to type 'NormalizedLicenseSignal'.
-test/finding-id.test.ts(98,36): error TS2322: Type '"metadata-conflict"' is not assignable to type 'NormalizedLicenseSignal'.
-error: script "lint" exited with code 1
+Source hygiene contract passed.
+$ tsc -p tsconfig.json
+$ bun scripts/check-version-references.ts
+Version reference contract passed (public 1.14.1, candidate 1.15.1).
+$ bun scripts/check-action-bundle.ts
+22 |   const freshBytes = readFileSync(freshBundle);
+23 |   const checkedInBytes = readFileSync(checkedInBundle);
+24 |   const checkedInSourceFingerprint = readSourceFingerprint(checkedInBytes);
+25 |   const expectedSourceFingerprint = actionBundleSourceFingerprint();
+26 |   if (checkedInSourceFingerprint !== expectedSourceFingerprint) {
+27 |     throw new Error(
+                   ^
+error: action-dist/cli.js is stale. Run bun run build:action.
+checked-in source sha256: 5e6dc12009fb0064046ec4ebd674cf88c290fe02d368ff30217493f147c4779f
+expected source sha256:   a1271c8fa188b1e3ece3e58ae920df1b8c839a657041bc0b02e09026552feba5
+      at /home/runner/work/ohrisk/ohrisk/scripts/check-action-bundle.ts:27:15
+
+Bun v1.3.14 (Linux x64)
+error: script "check:action-bundle" exited with code 1
 error: script "check:static" exited with code 1
 error: script "verify:release" exited with code 1
 exit_status=1

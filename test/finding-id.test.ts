@@ -84,7 +84,7 @@ test("canonicalizes unordered semantic license facts in finding fingerprints", (
       expression: "MIT OR Apache-2.0",
       choices: ["MIT", "Apache-2.0"],
       joiner: "or",
-      signals: ["metadata-conflict", "notice-required"],
+      signals: ["conflicting-evidence", "notice-required"],
       evidenceSources: ["package.json", "LICENSE"],
       confidence: "high",
       exceptions: ["Classpath-exception-2.0"]
@@ -95,7 +95,7 @@ test("canonicalizes unordered semantic license facts in finding fingerprints", (
     license: {
       ...input.license,
       choices: ["Apache-2.0", "MIT", "MIT"],
-      signals: ["notice-required", "metadata-conflict"],
+      signals: ["notice-required", "conflicting-evidence"],
       evidenceSources: ["LICENSE", "package.json"],
       exceptions: ["Classpath-exception-2.0", "Classpath-exception-2.0"]
     }
