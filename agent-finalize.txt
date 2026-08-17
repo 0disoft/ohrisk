@@ -1,0 +1,15 @@
+$ bun run check:static && bun run test:coverage && bun run eval:heldout && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts
+$ bun run format:check && bun run lint && bun run typecheck && bun run verify:docs && bun run check:action-bundle
+$ bun scripts/check-format.ts
+Formatting contract passed for 385 files.
+$ tsc -p tsconfig.lint.json && bun scripts/check-source-hygiene.ts
+src/policy/waivers.ts(241,7): error TS2353: Object literal may only specify known properties, and 'reason' does not exist in type '{ id: string; severity: RiskSeverity; recommendation: RiskRecommendation; license: Pick<NormalizedLicense, "choices" | "confidence" | ... 4 more ... | "signals">; }'.
+src/report/scan-report.ts(745,7): error TS2353: Object literal may only specify known properties, and 'reason' does not exist in type '{ id: string; severity: RiskSeverity; recommendation: RiskRecommendation; license: Pick<NormalizedLicense, "choices" | "confidence" | ... 4 more ... | "signals">; }'.
+test/diff-compare.test.ts(139,7): error TS2353: Object literal may only specify known properties, and 'reason' does not exist in type '{ id: string; severity: RiskSeverity; recommendation: RiskRecommendation; license: Pick<NormalizedLicense, "choices" | "confidence" | ... 4 more ... | "signals">; }'.
+test/html-report.test.ts(81,7): error TS2353: Object literal may only specify known properties, and 'reason' does not exist in type '{ id: string; severity: RiskSeverity; recommendation: RiskRecommendation; license: Pick<NormalizedLicense, "choices" | "confidence" | ... 4 more ... | "signals">; }'.
+test/waivers.test.ts(30,5): error TS2353: Object literal may only specify known properties, and 'reason' does not exist in type '{ id: string; severity: RiskSeverity; recommendation: RiskRecommendation; license: Pick<NormalizedLicense, "choices" | "confidence" | ... 4 more ... | "signals">; }'.
+test/waivers.test.ts(165,7): error TS2353: Object literal may only specify known properties, and 'reason' does not exist in type '{ id: string; severity: RiskSeverity; recommendation: RiskRecommendation; license: Pick<NormalizedLicense, "choices" | "confidence" | ... 4 more ... | "signals">; }'.
+error: script "lint" exited with code 1
+error: script "check:static" exited with code 1
+error: script "verify:release" exited with code 1
+exit_status=1

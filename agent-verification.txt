@@ -1,9 +1,0 @@
-$ bun run check:static && bun run test:coverage && bun run eval:heldout && npm pack --silent --dry-run --json && bun run scripts/package-smoke.ts
-$ bun run format:check && bun run lint && bun run typecheck && bun run verify:docs && bun run check:action-bundle
-$ bun scripts/check-format.ts
-Formatting contract failed:
-- src/policy/evaluate.ts:135: trailing whitespace
-error: script "format:check" exited with code 1
-error: script "check:static" exited with code 1
-error: script "verify:release" exited with code 1
-exit_status=1

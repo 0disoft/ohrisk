@@ -132,7 +132,7 @@ export function evaluateLicenseRisk(input: {
 
   return {
     id,
-    
+
 fingerprint: buildFindingFingerprint({
       id,
       severity,
