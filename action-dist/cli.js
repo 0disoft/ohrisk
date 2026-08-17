@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 5e6dc12009fb0064046ec4ebd674cf88c290fe02d368ff30217493f147c4779f
+// ohrisk-action-source-sha256: 802f85ee69a4084ef0b10857cd423bceb563ea4eda8318a544480e335ffe95f3
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -14559,8 +14559,8 @@ ${indent}`);
 
 // src/cli/main.ts
 import { isIP as isIP4 } from "node:net";
-import { realpathSync as realpathSync9 } from "node:fs";
-import path94 from "node:path";
+import { realpathSync as realpathSync10 } from "node:fs";
+import path95 from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // src/shared/errors.ts
@@ -55235,6 +55235,207 @@ function compareFindings(left, right) {
   return left.packageId.localeCompare(right.packageId);
 }
 
+// src/policy/ref-config.ts
+import { Buffer as Buffer4 } from "node:buffer";
+import {
+  mkdirSync as mkdirSync2,
+  mkdtempSync as mkdtempSync2,
+  realpathSync as realpathSync7,
+  rmSync as rmSync3,
+  statSync as statSync36,
+  writeFileSync as writeFileSync3
+} from "node:fs";
+import { tmpdir as tmpdir2 } from "node:os";
+import path84 from "node:path";
+var POLICY_FILENAME2 = ".ohrisk.yml";
+var POLICY_MAX_BYTES2 = 1024 * 1024;
+var POLICY_MAX_INHERITANCE_DEPTH2 = 8;
+function readPolicyConfigFromRef(input) {
+  const roots = resolvePolicyRoots(input.projectRoot, input.workspaceRoot);
+  if (!roots.ok) {
+    return roots;
+  }
+  const requestedPath = input.policyPath ? path84.resolve(roots.value.projectRoot, input.policyPath) : path84.join(roots.value.projectRoot, POLICY_FILENAME2);
+  const requestedRelative = relativePolicyPath(roots.value.workspaceRoot, requestedPath);
+  if (!requestedRelative.ok) {
+    return requestedRelative;
+  }
+  let temporaryRoot;
+  try {
+    temporaryRoot = mkdtempSync2(path84.join(tmpdir2(), "ohrisk-policy-ref-"));
+    const materialized = materializePolicyFile({
+      workspaceRoot: roots.value.workspaceRoot,
+      temporaryRoot,
+      ref: input.ref,
+      relativePath: requestedRelative.value,
+      readRefFile: input.readRefFile,
+      visited: new Set,
+      depth: 0,
+      allowMissing: input.policyPath === undefined
+    });
+    if (!materialized.ok) {
+      return materialized;
+    }
+    if (!materialized.value) {
+      return ok(emptyPolicyConfig());
+    }
+    const projectRelative = path84.relative(roots.value.workspaceRoot, roots.value.projectRoot);
+    const temporaryProjectRoot = path84.join(temporaryRoot, projectRelative);
+    mkdirSync2(temporaryProjectRoot, { recursive: true });
+    const temporaryPolicyPath = path84.join(temporaryRoot, ...requestedRelative.value.split("/"));
+    return readPolicyConfig({
+      projectRoot: temporaryProjectRoot,
+      workspaceRoot: temporaryRoot,
+      ...input.policyPath ? { policyPath: path84.relative(temporaryProjectRoot, temporaryPolicyPath) } : {}
+    });
+  } catch (cause) {
+    return err(createError({
+      code: "POLICY_FILE_READ_FAILED",
+      category: "filesystem",
+      message: "Could not materialize the baseline policy workspace.",
+      details: { cause: errorMessage2(cause), ref: input.ref }
+    }));
+  } finally {
+    if (temporaryRoot) {
+      removeTemporaryRoot(temporaryRoot);
+    }
+  }
+}
+function materializePolicyFile(input) {
+  if (input.depth > POLICY_MAX_INHERITANCE_DEPTH2) {
+    return err(policyRefError("Policy inheritance exceeded the supported depth in the baseline ref.", input));
+  }
+  if (input.visited.has(input.relativePath)) {
+    return ok(true);
+  }
+  const read = input.readRefFile({
+    projectRoot: input.workspaceRoot,
+    ref: input.ref,
+    relativePath: input.relativePath
+  });
+  if (!read.ok) {
+    if (read.error.code === "GIT_REF_FILE_NOT_FOUND" && input.allowMissing) {
+      return ok(false);
+    }
+    return err(policyRefError("Could not read a policy file from the baseline git ref.", input, { causeCode: read.error.code, cause: read.error.message }));
+  }
+  if (Buffer4.byteLength(read.value, "utf8") > POLICY_MAX_BYTES2) {
+    return err(policyRefError("Policy file exceeded the maximum supported size in the baseline ref.", input, { maxBytes: POLICY_MAX_BYTES2 }));
+  }
+  const target = path84.join(input.temporaryRoot, ...input.relativePath.split("/"));
+  mkdirSync2(path84.dirname(target), { recursive: true });
+  writeFileSync3(target, read.value, "utf8");
+  const nextVisited = new Set(input.visited);
+  nextVisited.add(input.relativePath);
+  for (const inheritedPath of discoverInheritedPolicyPaths(read.value)) {
+    const resolved = resolveInheritedPolicyPath(input.relativePath, inheritedPath);
+    if (!resolved) {
+      continue;
+    }
+    const inherited = materializePolicyFile({
+      ...input,
+      relativePath: resolved,
+      visited: nextVisited,
+      depth: input.depth + 1,
+      allowMissing: false
+    });
+    if (!inherited.ok) {
+      return inherited;
+    }
+  }
+  return ok(true);
+}
+function discoverInheritedPolicyPaths(text) {
+  let document2;
+  try {
+    document2 = $parse(text);
+  } catch {
+    return [];
+  }
+  if (!isRecord29(document2)) {
+    return [];
+  }
+  const value = document2.extends;
+  if (typeof value === "string") {
+    return [value];
+  }
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    return [];
+  }
+  return value;
+}
+function resolveInheritedPolicyPath(parentRelativePath, inheritedPath) {
+  const normalizedInput = inheritedPath.replaceAll("\\", "/");
+  if (normalizedInput.trim() === "" || /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(normalizedInput) || path84.posix.isAbsolute(normalizedInput) || /^[A-Za-z]:\//.test(normalizedInput)) {
+    return;
+  }
+  const resolved = path84.posix.normalize(path84.posix.join(path84.posix.dirname(parentRelativePath), normalizedInput));
+  return resolved === ".." || resolved.startsWith("../") ? undefined : resolved;
+}
+function resolvePolicyRoots(projectRoot, workspaceRoot) {
+  try {
+    const realProjectRoot = realDirectory2(projectRoot);
+    const realWorkspaceRoot = realDirectory2(workspaceRoot ?? projectRoot);
+    const relative2 = path84.relative(realWorkspaceRoot, realProjectRoot);
+    if (relative2.startsWith("..") || path84.isAbsolute(relative2)) {
+      throw new Error("Project root is outside the policy workspace root.");
+    }
+    return ok({
+      projectRoot: realProjectRoot,
+      workspaceRoot: realWorkspaceRoot
+    });
+  } catch (cause) {
+    return err(createError({
+      code: "POLICY_FILE_READ_FAILED",
+      category: "filesystem",
+      message: "Policy workspace root must be a readable directory.",
+      details: { cause: errorMessage2(cause) }
+    }));
+  }
+}
+function realDirectory2(directory) {
+  const resolved = realpathSync7(directory);
+  if (!statSync36(resolved).isDirectory()) {
+    throw new Error("Not a directory.");
+  }
+  return resolved;
+}
+function relativePolicyPath(workspaceRoot, filePath) {
+  const relative2 = path84.relative(workspaceRoot, filePath);
+  if (relative2 === "" || relative2.startsWith("..") || path84.isAbsolute(relative2)) {
+    return err(createError({
+      code: "POLICY_FILE_READ_FAILED",
+      category: "filesystem",
+      message: "Policy files must stay inside the workspace root.",
+      details: { filePath, workspaceRoot }
+    }));
+  }
+  return ok(relative2.split(path84.sep).join("/"));
+}
+function policyRefError(message, input, details = {}) {
+  return createError({
+    code: "POLICY_FILE_READ_FAILED",
+    category: "filesystem",
+    message,
+    details: {
+      ref: input.ref,
+      relativePath: input.relativePath,
+      ...details
+    }
+  });
+}
+function removeTemporaryRoot(root) {
+  try {
+    rmSync3(root, { force: true, recursive: true });
+  } catch {}
+}
+function isRecord29(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function errorMessage2(cause) {
+  return cause instanceof Error ? cause.message : String(cause);
+}
+
 // src/policy/severity.ts
 function countFindingsAtOrAbove(findings, threshold) {
   return findings.filter((finding) => severityRank2(finding.severity) >= severityRank2(threshold)).length;
@@ -55256,7 +55457,7 @@ function severityRank2(severity) {
 }
 
 // src/report/cyclonedx-report.ts
-import path84 from "node:path";
+import path85 from "node:path";
 function renderCycloneDxReport(input) {
   const licensesByPackageId = new Map(input.normalizedLicenses.map((license) => [license.packageId, license]));
   const findingsByPackageId = new Map(input.riskFindings.map((finding) => [finding.packageId, finding]));
@@ -55376,11 +55577,11 @@ function archiveProperties(project) {
   ];
 }
 function projectRelativePath2(projectRoot, targetPath) {
-  const relativePath = path84.relative(projectRoot, targetPath);
-  if (relativePath && !relativePath.startsWith("..") && !path84.isAbsolute(relativePath)) {
+  const relativePath = path85.relative(projectRoot, targetPath);
+  if (relativePath && !relativePath.startsWith("..") && !path85.isAbsolute(relativePath)) {
     return relativePath.replace(/\\/g, "/");
   }
-  return path84.basename(targetPath);
+  return path85.basename(targetPath);
 }
 function renderComponent(input) {
   const licenses = input.license ? renderLicenses(input.license) : [];
@@ -55483,8 +55684,8 @@ function directChildRefsByNodeId(nodes) {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const childIdsByNodeId = new Map;
   for (const candidate of nodes) {
-    for (const path85 of candidate.paths) {
-      const packagePath = path85.map(packageIdFromPathSegment);
+    for (const path86 of candidate.paths) {
+      const packagePath = path86.map(packageIdFromPathSegment);
       for (let index = 0;index < packagePath.length - 1; index += 1) {
         const parentId = packagePath[index];
         const childId = packagePath[index + 1];
@@ -55816,7 +56017,7 @@ function formatNormalizedExpression(license) {
 }
 
 // src/report/sarif-report.ts
-import path85 from "node:path";
+import path86 from "node:path";
 var SARIF_SCHEMA_URL = "https://json.schemastore.org/sarif-2.1.0.json";
 var RULES = [
   ruleFor("high", "High license risk", "A dependency has license evidence that is high risk for the selected profile."),
@@ -55888,7 +56089,7 @@ function renderSarifReport(input) {
   }, null, 2);
 }
 function sarifLockfileUri(input) {
-  const relativePath = path85.relative(input.project.rootDir, input.project.lockfile.path).replace(/\\/g, "/") || path85.basename(input.project.lockfile.path);
+  const relativePath = path86.relative(input.project.rootDir, input.project.lockfile.path).replace(/\\/g, "/") || path86.basename(input.project.lockfile.path);
   if (!input.project.source) {
     return relativePath;
   }
@@ -56033,7 +56234,7 @@ function securitySeverityFor(severity) {
 }
 
 // src/report/scan-report.ts
-import path86 from "node:path";
+import path87 from "node:path";
 
 // src/report/locales/en.ts
 var ENGLISH_TEXT = {
@@ -59721,18 +59922,18 @@ function disabledPolicySummary() {
   };
 }
 function displayProjectPath(project, targetPath) {
-  const relativePath = path86.relative(project.rootDir, targetPath);
-  if (relativePath && !relativePath.startsWith("..") && !path86.isAbsolute(relativePath)) {
+  const relativePath = path87.relative(project.rootDir, targetPath);
+  if (relativePath && !relativePath.startsWith("..") && !path87.isAbsolute(relativePath)) {
     const normalizedPath = relativePath.replace(/\\/g, "/");
     return project.source ? `${project.source.displayPath}!/${archiveEntryPath(project, normalizedPath)}` : normalizedPath;
   }
-  return path86.basename(targetPath);
+  return path87.basename(targetPath);
 }
 function displayLockfilePath(project) {
   return displayProjectPath(project, project.lockfile.path);
 }
 function displayLockfileDirectoryPath(project) {
-  const directoryPath = path86.dirname(displayLockfilePath(project));
+  const directoryPath = path87.dirname(displayLockfilePath(project));
   return directoryPath === "" ? "." : directoryPath;
 }
 function markdownProjectLabel(input) {
@@ -60156,7 +60357,7 @@ import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readFileSync as readFileSync4 } from "node:fs";
 import { createServer } from "node:http";
-import path87 from "node:path";
+import path88 from "node:path";
 var LOOPBACK_HOST = "127.0.0.1";
 var REPORT_SERVER_TIMEOUT_MS = 1e4;
 var REPORT_SERVER_CLOSE_DELAY_MS = 500;
@@ -60325,7 +60526,7 @@ function openCommandFor(platform, target) {
   switch (platform) {
     case "win32":
       return {
-        command: path87.win32.join(windowsDirectory(), "System32", "cmd.exe"),
+        command: path88.win32.join(windowsDirectory(), "System32", "cmd.exe"),
         args: ["/d", "/c", "start", "", target]
       };
     case "darwin":
@@ -60336,16 +60537,16 @@ function openCommandFor(platform, target) {
 }
 function windowsDirectory() {
   const configured = process.env.SystemRoot ?? process.env.WINDIR;
-  return configured && path87.win32.isAbsolute(configured) ? path87.win32.normalize(configured) : DEFAULT_WINDOWS_DIRECTORY;
+  return configured && path88.win32.isAbsolute(configured) ? path88.win32.normalize(configured) : DEFAULT_WINDOWS_DIRECTORY;
 }
 
 // src/cli/baseline-project.ts
-import { Buffer as Buffer4 } from "node:buffer";
-import { readdirSync as readdirSync35, statSync as statSync36 } from "node:fs";
-import path89 from "node:path";
+import { Buffer as Buffer5 } from "node:buffer";
+import { readdirSync as readdirSync35, statSync as statSync37 } from "node:fs";
+import path90 from "node:path";
 
 // src/evidence/git-ref-local-package.ts
-import path88 from "node:path";
+import path89 from "node:path";
 function hasGitRefLocalNpmPackage(graph) {
   return graph.nodes.some((node) => node.ecosystem === "npm" && localPackageSpecifier(node.resolved) !== undefined);
 }
@@ -60414,13 +60615,13 @@ function localPackageSpecifier(resolved) {
   }
 }
 function resolveLocalPackageDirectory(input) {
-  if (input.specifier.includes("\x00") || path88.posix.isAbsolute(input.specifier) || path88.win32.isAbsolute(input.specifier)) {
+  if (input.specifier.includes("\x00") || path89.posix.isAbsolute(input.specifier) || path89.win32.isAbsolute(input.specifier)) {
     return;
   }
-  const lockfileDirectory = path88.dirname(path88.resolve(input.projectRoot, input.lockfileRelativePath));
-  const absolutePackageDirectory = path88.resolve(lockfileDirectory, input.specifier);
-  const snapshotRelativePath = path88.relative(input.snapshotRoot, absolutePackageDirectory);
-  if (snapshotRelativePath === ".." || snapshotRelativePath.startsWith(`..${path88.sep}`) || path88.isAbsolute(snapshotRelativePath)) {
+  const lockfileDirectory = path89.dirname(path89.resolve(input.projectRoot, input.lockfileRelativePath));
+  const absolutePackageDirectory = path89.resolve(lockfileDirectory, input.specifier);
+  const snapshotRelativePath = path89.relative(input.snapshotRoot, absolutePackageDirectory);
+  if (snapshotRelativePath === ".." || snapshotRelativePath.startsWith(`..${path89.sep}`) || path89.isAbsolute(snapshotRelativePath)) {
     return;
   }
   return snapshotRelativePath === "" ? "" : snapshotRelativePath.replace(/\\/g, "/");
@@ -60458,7 +60659,7 @@ function readBaselineGoWorkModuleInputs(input) {
     const sourceFiles = input.baselineFiles ? readBaselineGoSourceFiles({
       projectRoot: input.project.rootDir,
       baselineRef: input.baselineRef,
-      moduleRootRelativePath: path89.posix.dirname(modulePath.goModRelativePath),
+      moduleRootRelativePath: path90.posix.dirname(modulePath.goModRelativePath),
       baselineFiles: input.baselineFiles,
       readRefFile: input.readRefFile
     }) : ok(undefined);
@@ -60503,7 +60704,7 @@ function readBaselineGoSourceFiles(input) {
     if (isErr(text)) {
       return text;
     }
-    totalBytes += Buffer4.byteLength(text.value, "utf8");
+    totalBytes += Buffer5.byteLength(text.value, "utf8");
     if (totalBytes > BASELINE_GO_SOURCE_MAX_BYTES) {
       return ok([]);
     }
@@ -60532,7 +60733,7 @@ function loadBaselineProjectGraph(input) {
     if (baselineLockfiles.length === 0 && listed.value.includes("package.json")) {
       baselineLockfiles = [{
         kind: "package-json",
-        path: path89.join(projectRoot, "package.json")
+        path: path90.join(projectRoot, "package.json")
       }];
     }
   } else {
@@ -60551,7 +60752,7 @@ function loadBaselineProjectGraph(input) {
   if (baselineLockfiles.length === 0) {
     return ok({
       graph: {
-        rootName: path89.basename(projectRoot),
+        rootName: path90.basename(projectRoot),
         lockfilePath: `${input.baselineRef}:<none>`,
         lockfilePaths: [],
         nodes: []
@@ -60568,7 +60769,7 @@ function loadBaselineProjectGraph(input) {
       lockfile,
       baselineRef: input.baselineRef,
       readRefFile: input.readRefFile,
-      rootNameHint: input.currentProject.scanGraph.rootName ?? path89.basename(projectRoot),
+      rootNameHint: input.currentProject.scanGraph.rootName ?? path90.basename(projectRoot),
       ...input.mavenExternalPoms ? { mavenExternalPoms: input.mavenExternalPoms } : {},
       ...baselineFiles ? { baselineFiles } : {}
     });
@@ -60631,7 +60832,7 @@ function parseBaselineLockfileGraph(input) {
   if (isErr(baselineLockfile)) {
     return baselineLockfile;
   }
-  const lockfileDirectory = path89.posix.dirname(relativeLockfilePath);
+  const lockfileDirectory = path90.posix.dirname(relativeLockfilePath);
   const relativeCompanionPath = (filename) => lockfileDirectory === "." ? filename : `${lockfileDirectory}/${filename}`;
   const packageJsonRelativePath = relativeCompanionPath("package.json");
   const baselinePackageJson = input.lockfile.kind === "yarn-lock" ? input.readRefFile({
@@ -60774,7 +60975,7 @@ function parseBaselineLockfileGraph(input) {
     ...baselineGoSum.value ? { goSumText: baselineGoSum.value } : {},
     ...baselineGoSourceFiles.value ? { goSourceFiles: baselineGoSourceFiles.value } : {},
     ...baselineGoWorkModules.value?.length ? { goWorkModuleInputs: baselineGoWorkModules.value } : {},
-    goWorkDir: path89.dirname(input.lockfile.path),
+    goWorkDir: path90.dirname(input.lockfile.path),
     ...baselineComposerJson.value ? { composerJsonText: baselineComposerJson.value } : {},
     ...baselineDirectoryPackagesProps.value?.text ? { directoryPackagesPropsText: baselineDirectoryPackagesProps.value.text } : {},
     ...baselineDirectoryPackagesProps.value?.path ? { directoryPackagesPropsPath: baselineDirectoryPackagesProps.value.path } : {},
@@ -60813,8 +61014,8 @@ function diffLockfileKey(lockfile) {
   return `${lockfile.kind}\x00${lockfile.path}`;
 }
 function projectRelativeLockfilePath(projectRoot, lockfilePath) {
-  const relativePath = path89.relative(projectRoot, lockfilePath).replace(/\\/g, "/");
-  return relativePath === "" ? path89.basename(lockfilePath) : relativePath;
+  const relativePath = path90.relative(projectRoot, lockfilePath).replace(/\\/g, "/");
+  return relativePath === "" ? path90.basename(lockfilePath) : relativePath;
 }
 function readBaselinePrimaryLockfile(input) {
   if (isGradleDependencyLocksDirectory(input.lockfilePath)) {
@@ -60834,7 +61035,7 @@ function readBaselineGradleDependencyLocksDirectory(input) {
       const prefix = `${normalizedDirectory}/`;
       entries = [...input.baselineFiles].filter((entry) => entry.startsWith(prefix)).map((entry) => entry.slice(prefix.length)).filter((entry) => !entry.includes("/") && entry.toLowerCase().endsWith(".lockfile")).sort();
     } else {
-      entries = readdirSync35(input.lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile5(path89.join(input.lockfilePath, entry))).sort();
+      entries = readdirSync35(input.lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile5(path90.join(input.lockfilePath, entry))).sort();
     }
   } catch (cause) {
     return err(createError({
@@ -60879,7 +61080,7 @@ function readBaselineGradleDependencyLocksDirectory(input) {
 `));
 }
 function baselineLockfilePathForKind(input) {
-  return input.kind === "gradle-lock" ? path89.join(input.rootName, input.relativeLockfilePath) : `${input.baselineRef}:${input.relativeLockfilePath}`;
+  return input.kind === "gradle-lock" ? path90.join(input.rootName, input.relativeLockfilePath) : `${input.baselineRef}:${input.relativeLockfilePath}`;
 }
 function readBaselineCargoMemberManifests(input) {
   const memberManifestPaths = input.baselineFiles ? findCargoWorkspaceMemberManifestPathsFromRelativePaths({
@@ -60945,7 +61146,7 @@ function readBaselineYarnWorkspacePackageJsons(input) {
 }
 function createBaselineRequirementsIncludedFileReader(input) {
   return ({ includePath, fromFilePath, directive }) => {
-    if (path89.isAbsolute(includePath)) {
+    if (path90.isAbsolute(includePath)) {
       return err(createError({
         code: "REQUIREMENTS_PARSE_FAILED",
         category: "unsupported_input",
@@ -60958,7 +61159,7 @@ function createBaselineRequirementsIncludedFileReader(input) {
       }));
     }
     const fromRelativePath = stripBaselineRefPrefix(fromFilePath, input.baselineRef);
-    const includedRelativePath = normalizeBaselineRelativePath(path89.join(path89.dirname(fromRelativePath), includePath));
+    const includedRelativePath = normalizeBaselineRelativePath(path90.join(path90.dirname(fromRelativePath), includePath));
     if (!includedRelativePath) {
       return err(createError({
         code: "REQUIREMENTS_PARSE_FAILED",
@@ -61018,7 +61219,7 @@ function baselinePythonLocalSourceErrorsForKind(kind) {
 }
 function createBaselinePythonLocalSourceFileReader(input) {
   return ({ sourcePath, relativeFilePath, fromFilePath }) => {
-    if (path89.isAbsolute(sourcePath)) {
+    if (path90.isAbsolute(sourcePath)) {
       return err(createError({
         code: input.errors.parseCode,
         category: "unsupported_input",
@@ -61031,7 +61232,7 @@ function createBaselinePythonLocalSourceFileReader(input) {
       }));
     }
     const fromRelativePath = stripBaselineRefPrefix(fromFilePath, input.baselineRef);
-    const sourceRelativePath = normalizeBaselineRelativePath(path89.join(path89.dirname(fromRelativePath), sourcePath));
+    const sourceRelativePath = normalizeBaselineRelativePath(path90.join(path90.dirname(fromRelativePath), sourcePath));
     if (!sourceRelativePath) {
       return err(createError({
         code: input.errors.parseCode,
@@ -61044,7 +61245,7 @@ function createBaselinePythonLocalSourceFileReader(input) {
         }
       }));
     }
-    const sourceFileRelativePath = normalizeBaselineRelativePath(path89.join(sourceRelativePath, relativeFilePath));
+    const sourceFileRelativePath = normalizeBaselineRelativePath(path90.join(sourceRelativePath, relativeFilePath));
     if (!sourceFileRelativePath) {
       return err(createError({
         code: input.errors.parseCode,
@@ -61077,18 +61278,18 @@ function stripBaselineRefPrefix(filePath, baselineRef) {
   return filePath.startsWith(prefix) ? filePath.slice(prefix.length) : filePath;
 }
 function normalizeBaselineRelativePath(relativePath) {
-  const normalized = path89.normalize(relativePath).replace(/\\/g, "/");
-  if (normalized === "." || normalized.startsWith("../") || normalized === ".." || path89.isAbsolute(normalized)) {
+  const normalized = path90.normalize(relativePath).replace(/\\/g, "/");
+  if (normalized === "." || normalized.startsWith("../") || normalized === ".." || path90.isAbsolute(normalized)) {
     return;
   }
   return normalized;
 }
 function isGradleDependencyLocksDirectory(lockfilePath) {
-  const segments = path89.normalize(lockfilePath).split(path89.sep);
+  const segments = path90.normalize(lockfilePath).split(path90.sep);
   return segments.length >= 2 && segments[segments.length - 1] === "dependency-locks" && segments[segments.length - 2] === "gradle";
 }
 function findBaselineDirectoryPackagesPropsPath(input) {
-  let current = path89.posix.dirname(projectRelativeLockfilePath(input.projectRoot, input.projectFilePath));
+  let current = path90.posix.dirname(projectRelativeLockfilePath(input.projectRoot, input.projectFilePath));
   while (true) {
     const candidate = current === "." ? "Directory.Packages.props" : `${current}/Directory.Packages.props`;
     if (input.baselineFiles.has(candidate)) {
@@ -61097,7 +61298,7 @@ function findBaselineDirectoryPackagesPropsPath(input) {
     if (current === ".") {
       return;
     }
-    const parent = path89.posix.dirname(current);
+    const parent = path90.posix.dirname(current);
     current = parent === current ? "." : parent;
   }
 }
@@ -61106,7 +61307,7 @@ function readBaselineDirectoryPackagesProps(input) {
     projectRoot: input.project.rootDir,
     projectFilePath: input.project.lockfile.path,
     baselineFiles: input.baselineFiles
-  }) : normalizeBaselineRelativePath(path89.relative(input.project.rootDir, findNearestDirectoryPackagesPropsPath(input.project.lockfile.path) ?? ""));
+  }) : normalizeBaselineRelativePath(path90.relative(input.project.rootDir, findNearestDirectoryPackagesPropsPath(input.project.lockfile.path) ?? ""));
   if (!relativePath) {
     return ok(undefined);
   }
@@ -61148,20 +61349,20 @@ function tryParseObject(input) {
 }
 function isFile5(pathname) {
   try {
-    return statSync36(pathname).isFile();
+    return statSync37(pathname).isFile();
   } catch {
     return false;
   }
 }
 
 // src/cli/cache-command.ts
-import path90 from "node:path";
+import path91 from "node:path";
 function runCacheCommand(command, io) {
   const env = io.env ?? process.env;
   const configuredCacheDir = command.cacheDir ?? env.OHRISK_CACHE_DIR;
-  const cacheDir = configuredCacheDir ? path90.resolve(io.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(env);
+  const cacheDir = configuredCacheDir ? path91.resolve(io.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(env);
   const cache = openArtifactCacheForManagement(cacheDir);
-  const location = configuredCacheDir ? path90.relative(io.cwd, cacheDir) || "." : cacheDir;
+  const location = configuredCacheDir ? path91.relative(io.cwd, cacheDir) || "." : cacheDir;
   if (command.action === "status") {
     const status = cache.status();
     if (!status.ok) {
@@ -61379,18 +61580,18 @@ import {
   constants,
   fsyncSync,
   lstatSync as lstatSync4,
-  mkdirSync as mkdirSync2,
+  mkdirSync as mkdirSync3,
   openSync as openSync5,
-  realpathSync as realpathSync7,
+  realpathSync as realpathSync8,
   renameSync as renameSync2,
-  rmSync as rmSync3,
-  writeFileSync as writeFileSync3
+  rmSync as rmSync4,
+  writeFileSync as writeFileSync4
 } from "node:fs";
 import { randomBytes as randomBytes2 } from "node:crypto";
-import path91 from "node:path";
+import path92 from "node:path";
 var writeReportFile = (input) => {
-  const resolvedCwd = path91.resolve(input.cwd);
-  const resolvedPath = path91.resolve(resolvedCwd, input.outputPath);
+  const resolvedCwd = path92.resolve(input.cwd);
+  const resolvedPath = path92.resolve(resolvedCwd, input.outputPath);
   if (!isProjectRelativeOutputPath(input.outputPath) || !isPathInsideOrEqual6(resolvedPath, resolvedCwd)) {
     return err(reportOutputPathOutsideError({
       outputPath: input.outputPath,
@@ -61431,9 +61632,9 @@ var writeReportFile = (input) => {
   }
 };
 function ensureSafeReportParent(input) {
-  const realProjectRoot = realpathSync7(input.projectRoot);
-  const parentPath = path91.dirname(input.resolvedPath);
-  const relativeParent = path91.relative(input.projectRoot, parentPath);
+  const realProjectRoot = realpathSync8(input.projectRoot);
+  const parentPath = path92.dirname(input.resolvedPath);
+  const relativeParent = path92.relative(input.projectRoot, parentPath);
   if (relativeParent === "") {
     return ok({
       resolvedPath: input.resolvedPath,
@@ -61441,7 +61642,7 @@ function ensureSafeReportParent(input) {
       realProjectRoot
     });
   }
-  if (relativeParent.startsWith("..") || path91.isAbsolute(relativeParent)) {
+  if (relativeParent.startsWith("..") || path92.isAbsolute(relativeParent)) {
     return err(reportOutputPathOutsideError({
       outputPath: input.outputPath,
       projectRoot: input.projectRoot,
@@ -61452,7 +61653,7 @@ function ensureSafeReportParent(input) {
     }));
   }
   let currentPath = input.projectRoot;
-  for (const segment of relativeParent.split(path91.sep)) {
+  for (const segment of relativeParent.split(path92.sep)) {
     if (segment === "" || segment === "." || segment === "..") {
       return err(reportOutputPathOutsideError({
         outputPath: input.outputPath,
@@ -61463,7 +61664,7 @@ function ensureSafeReportParent(input) {
         reason: "invalid_parent_segment"
       }));
     }
-    const candidatePath = path91.join(currentPath, segment);
+    const candidatePath = path92.join(currentPath, segment);
     const stepResult = resolveOrCreateReportComponent({
       candidatePath,
       outputPath: input.outputPath,
@@ -61495,7 +61696,7 @@ function resolveOrCreateReportComponent(input) {
       }));
     }
     try {
-      mkdirSync2(input.candidatePath);
+      mkdirSync3(input.candidatePath);
     } catch (mkdirCause) {
       if (!isAlreadyExistsError(mkdirCause)) {
         return err(reportWriteFailedError({
@@ -61529,7 +61730,7 @@ function resolveOrCreateReportComponent(input) {
     }));
   }
   try {
-    return ok(realpathSync7(input.candidatePath));
+    return ok(realpathSync8(input.candidatePath));
   } catch (cause) {
     return err(reportWriteFailedError({
       outputPath: input.outputPath,
@@ -61541,7 +61742,7 @@ function resolveOrCreateReportComponent(input) {
 function resolveReportParentSymlink(input) {
   let realTarget;
   try {
-    realTarget = realpathSync7(input.symlinkPath);
+    realTarget = realpathSync8(input.symlinkPath);
   } catch (cause) {
     return err(reportWriteFailedError({
       outputPath: input.outputPath,
@@ -61582,7 +61783,7 @@ function writeValidatedReportFile(input) {
   try {
     tempPath = createReportTempPath(input.validatedPath.realParent, input.resolvedPath);
     tempFileDescriptor = openSync5(tempPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 384);
-    writeFileSync3(tempFileDescriptor, `${input.contents}
+    writeFileSync4(tempFileDescriptor, `${input.contents}
 `, "utf8");
     fsyncSync(tempFileDescriptor);
     closeSync5(tempFileDescriptor);
@@ -61630,13 +61831,13 @@ function writeValidatedReportFile(input) {
       closeReportTempFile(tempFileDescriptor);
     }
     if (tempPath !== undefined) {
-      rmSync3(tempPath, { force: true });
+      rmSync4(tempPath, { force: true });
     }
   }
 }
 function validateResolvedReportPath(input) {
-  const realProjectRoot = realpathSync7(input.projectRoot);
-  const realParent = realpathSync7(path91.dirname(input.resolvedPath));
+  const realProjectRoot = realpathSync8(input.projectRoot);
+  const realParent = realpathSync8(path92.dirname(input.resolvedPath));
   const existingOutputIsSymlink = isSymbolicLinkPath(input.resolvedPath);
   if (existingOutputIsSymlink || !isPathInsideOrEqual6(realParent, realProjectRoot)) {
     return err(reportOutputPathOutsideError({
@@ -61655,9 +61856,9 @@ function validateResolvedReportPath(input) {
   });
 }
 function createReportTempPath(realParent, resolvedPath) {
-  const baseName = path91.basename(resolvedPath);
+  const baseName = path92.basename(resolvedPath);
   const suffix = randomBytes2(8).toString("hex");
-  return path91.join(realParent, `.ohrisk-report-${process.pid}-${Date.now()}-${suffix}-${baseName}.tmp`);
+  return path92.join(realParent, `.ohrisk-report-${process.pid}-${Date.now()}-${suffix}-${baseName}.tmp`);
 }
 function promoteTempReportFile(tempPath, resolvedPath) {
   try {
@@ -61675,7 +61876,7 @@ function promoteTempReportFile(tempPath, resolvedPath) {
   if (!existingTarget.isFile()) {
     throw new Error("Report output path exists and is not a regular file.");
   }
-  rmSync3(resolvedPath, { force: false });
+  rmSync4(resolvedPath, { force: false });
   renameSync2(tempPath, resolvedPath);
 }
 function isReplaceBlockedByExistingTarget(cause) {
@@ -61730,20 +61931,20 @@ function isSymbolicLinkPath(filePath) {
   }
 }
 function isProjectRelativeOutputPath(outputPath) {
-  if (outputPath.includes("\x00") || path91.isAbsolute(outputPath) || path91.win32.isAbsolute(outputPath) || path91.posix.isAbsolute(outputPath) || /^[A-Za-z]:/.test(outputPath)) {
+  if (outputPath.includes("\x00") || path92.isAbsolute(outputPath) || path92.win32.isAbsolute(outputPath) || path92.posix.isAbsolute(outputPath) || /^[A-Za-z]:/.test(outputPath)) {
     return false;
   }
   return outputPath.split(/[\\/]+/).every((segment) => segment !== "" && segment !== "." && segment !== "..");
 }
 function isPathInsideOrEqual6(childPath, parentPath) {
-  const relativePath = path91.relative(parentPath, childPath);
-  return relativePath === "" || !relativePath.startsWith("..") && !path91.isAbsolute(relativePath);
+  const relativePath = path92.relative(parentPath, childPath);
+  return relativePath === "" || !relativePath.startsWith("..") && !path92.isAbsolute(relativePath);
 }
 function isSameRealPath(leftPath, rightPath) {
   if (process.platform === "win32") {
-    return path91.normalize(leftPath).toLowerCase() === path91.normalize(rightPath).toLowerCase();
+    return path92.normalize(leftPath).toLowerCase() === path92.normalize(rightPath).toLowerCase();
   }
-  return path91.normalize(leftPath) === path91.normalize(rightPath);
+  return path92.normalize(leftPath) === path92.normalize(rightPath);
 }
 
 // src/cli/report-output.ts
@@ -64816,13 +65017,13 @@ function redactTemporaryPathText(value, temporaryRoot) {
 
 // src/policy/waivers.ts
 import { existsSync as existsSync48 } from "node:fs";
-import path92 from "node:path";
+import path93 from "node:path";
 var DEFAULT_WAIVER_FILE_NAME = ".ohrisk-waivers.json";
 var WAIVER_FILE_MAX_BYTES = 1024 * 1024;
 var WAIVER_ROOT_KEYS = new Set(["waivers"]);
 var WAIVER_KEYS = new Set(["id", "fingerprint", "reason", "expiresOn"]);
 function readRiskWaivers(projectRoot, options) {
-  const waiverPath = path92.join(projectRoot, DEFAULT_WAIVER_FILE_NAME);
+  const waiverPath = path93.join(projectRoot, DEFAULT_WAIVER_FILE_NAME);
   if (!existsSync48(waiverPath)) {
     return ok([]);
   }
@@ -64908,7 +65109,7 @@ function applyRiskWaivers(input) {
   };
 }
 function parseWaivers(value) {
-  if (!isRecord29(value)) {
+  if (!isRecord30(value)) {
     return err("Ohrisk waiver file must be an object with a waivers array.");
   }
   const unknownRootKeys = unknownKeys(value, WAIVER_ROOT_KEYS);
@@ -64929,7 +65130,7 @@ function parseWaivers(value) {
   return ok(waivers);
 }
 function parseWaiver(value, index) {
-  if (!isRecord29(value)) {
+  if (!isRecord30(value)) {
     return err(`Waiver at index ${index} must be an object.`);
   }
   const unknownWaiverKeys = unknownKeys(value, WAIVER_KEYS);
@@ -65001,7 +65202,7 @@ function isIsoDate(value) {
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
-function isRecord29(value) {
+function isRecord30(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -65126,16 +65327,16 @@ function isDirectDependencyPath(pathSegments, dependencyPathSegments) {
 }
 
 // src/cli/workspace-root.ts
-import { realpathSync as realpathSync8, statSync as statSync37 } from "node:fs";
-import path93 from "node:path";
+import { realpathSync as realpathSync9, statSync as statSync38 } from "node:fs";
+import path94 from "node:path";
 function resolveWorkspaceRootPath(input) {
   if (!input.workspaceRootPath) {
     return ok(undefined);
   }
-  const resolvedPath = path93.resolve(input.cwd, input.workspaceRootPath);
+  const resolvedPath = path94.resolve(input.cwd, input.workspaceRootPath);
   try {
-    const realPath = realpathSync8(resolvedPath);
-    if (!statSync37(realPath).isDirectory()) {
+    const realPath = realpathSync9(resolvedPath);
+    if (!statSync38(realPath).isDirectory()) {
       return err(workspaceRootInvalidError2(input.workspaceRootPath));
     }
     return ok(realPath);
@@ -65144,7 +65345,7 @@ function resolveWorkspaceRootPath(input) {
   }
 }
 function workspaceRootInvalidError2(workspaceRootPath) {
-  const absolute = path93.isAbsolute(workspaceRootPath);
+  const absolute = path94.isAbsolute(workspaceRootPath);
   return createError({
     code: "INVALID_ARGUMENT",
     category: "invalid_input",
@@ -65215,6 +65416,18 @@ async function runDiff(command, io, signal) {
     io.stderr(formatError(policy.error));
     return exitCodeForError(policy.error);
   }
+  const readRefFile = io.readRefFile ?? readGitRefFile;
+  const baselinePolicy = readPolicyConfigFromRef({
+    projectRoot: currentProject.value.rootDir,
+    ...workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {},
+    ref: command.baselineRef,
+    readRefFile,
+    ...command.policyPath ? { policyPath: command.policyPath } : {}
+  });
+  if (isErr(baselinePolicy)) {
+    io.stderr(formatError(baselinePolicy.error));
+    return exitCodeForError(baselinePolicy.error);
+  }
   const evidenceRuntime = resolveEvidenceRuntimeOptions({
     cwd: io.cwd,
     projectRoot: currentProject.value.rootDir,
@@ -65232,12 +65445,36 @@ async function runDiff(command, io, signal) {
     io.stderr(formatError(evidenceRuntime.error));
     return exitCodeForError(evidenceRuntime.error);
   }
+  const baselineEvidenceRuntime = resolveEvidenceRuntimeOptions({
+    cwd: io.cwd,
+    projectRoot: currentProject.value.rootDir,
+    policy: baselinePolicy.value,
+    offline: command.offline ?? false,
+    ...command.cacheDir ? { cacheDir: command.cacheDir } : {},
+    ...command.jobs !== undefined ? { jobs: command.jobs } : {},
+    ...command.timeoutMs !== undefined ? { timeoutMs: command.timeoutMs } : {},
+    ...command.registryUrl ? { registryUrl: command.registryUrl } : {},
+    ...command.registryTokenEnv ? { registryTokenEnv: command.registryTokenEnv } : {},
+    allowedHosts: command.allowedHosts ?? [],
+    env: io.env ?? process.env
+  });
+  if (isErr(baselineEvidenceRuntime)) {
+    io.stderr(formatError(baselineEvidenceRuntime.error));
+    return exitCodeForError(baselineEvidenceRuntime.error);
+  }
   const fetchRemoteMavenPoms = (requests) => fetchMavenCentralModelPoms({
     requests,
     offline: evidenceRuntime.value.offline,
     signal,
     ...evidenceRuntime.value.timeoutMs === undefined ? {} : { fetchTimeoutMs: evidenceRuntime.value.timeoutMs },
     ...evidenceRuntime.value.cacheDir === undefined ? {} : { cacheDir: evidenceRuntime.value.cacheDir }
+  });
+  const fetchBaselineRemoteMavenPoms = (requests) => fetchMavenCentralModelPoms({
+    requests,
+    offline: baselineEvidenceRuntime.value.offline,
+    signal,
+    ...baselineEvidenceRuntime.value.timeoutMs === undefined ? {} : { fetchTimeoutMs: baselineEvidenceRuntime.value.timeoutMs },
+    ...baselineEvidenceRuntime.value.cacheDir === undefined ? {} : { cacheDir: baselineEvidenceRuntime.value.cacheDir }
   });
   const currentGraph = await parseProjectDependencyGraphWithRemoteMavenPoms({
     project: currentProject.value,
@@ -65255,7 +65492,6 @@ async function runDiff(command, io, signal) {
     io.stderr(renderCommandCancelled("Diff"));
     return COMMAND_CANCELLED_EXIT_CODE;
   }
-  const readRefFile = io.readRefFile ?? readGitRefFile;
   const listRefFiles = io.listRefFiles ?? listGitRefFiles;
   const baselineProject = await resolveWithRemoteMavenPoms({
     parse: (mavenExternalPoms) => loadBaselineProjectGraph({
@@ -65267,7 +65503,7 @@ async function runDiff(command, io, signal) {
       ...mavenExternalPoms.size > 0 ? { mavenExternalPoms } : {},
       ...workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}
     }),
-    fetchRemotePoms: fetchRemoteMavenPoms
+    fetchRemotePoms: fetchBaselineRemoteMavenPoms
   });
   if (isErr(baselineProject)) {
     io.stderr(formatError(baselineProject.error));
@@ -65278,7 +65514,7 @@ async function runDiff(command, io, signal) {
     graph: baselineCollectionGraph,
     projectRoot: currentProject.value.rootDir,
     allowLocalProjectEvidence: false,
-    evidenceRuntime: evidenceRuntime.value,
+    evidenceRuntime: baselineEvidenceRuntime.value,
     signal,
     ...workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}
   });
@@ -65298,7 +65534,7 @@ async function runDiff(command, io, signal) {
     licenses: baselineLicenses,
     dependencies: baselineScanGraph.nodes,
     profile: command.profile,
-    policy: policy.value
+    policy: baselinePolicy.value
   });
   const current = await evaluateProjectScan({
     ...currentProjectGraph,
@@ -65706,7 +65942,7 @@ function discoverFilesystemProject(input) {
     return discovered;
   }
   const lockfileCount = discovered.value.lockfiles?.length ?? 1;
-  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, lockfileCount > 1 ? `Reading ${lockfileCount} lockfiles...` : `Reading ${path94.basename(discovered.value.lockfile.path)}...`);
+  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, lockfileCount > 1 ? `Reading ${lockfileCount} lockfiles...` : `Reading ${path95.basename(discovered.value.lockfile.path)}...`);
   return discovered;
 }
 async function evaluateProjectScan(input) {
@@ -65843,7 +66079,7 @@ function resolveEvidenceRuntimeOptions(input) {
     }
   }
   const configuredCacheDir = input.cacheDir ?? input.env.OHRISK_CACHE_DIR;
-  const cacheDir = configuredCacheDir ? path94.resolve(input.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(input.env);
+  const cacheDir = configuredCacheDir ? path95.resolve(input.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(input.env);
   return ok({
     offline: input.offline,
     cacheDir,
@@ -65902,9 +66138,9 @@ function isCliEntrypoint(metaUrl, argvPath) {
     return false;
   }
   try {
-    return realpathSync9(fileURLToPath4(metaUrl)) === realpathSync9(argvPath);
+    return realpathSync10(fileURLToPath4(metaUrl)) === realpathSync10(argvPath);
   } catch {
-    return path94.resolve(fileURLToPath4(metaUrl)) === path94.resolve(argvPath);
+    return path95.resolve(fileURLToPath4(metaUrl)) === path95.resolve(argvPath);
   }
 }
 function defaultIO() {

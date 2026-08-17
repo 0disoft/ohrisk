@@ -45,6 +45,7 @@ import {
   summarizePolicyConfig,
   type ResolvedPolicyConfig
 } from "../policy/config";
+import { readPolicyConfigFromRef } from "../policy/ref-config";
 import { hasFindingAtOrAbove } from "../policy/severity";
 import { renderCycloneDxReport } from "../report/cyclonedx-report";
 import { renderDiffReport } from "../report/diff-report";
@@ -210,7 +211,20 @@ async function runDiff(
     return exitCodeForError(policy.error);
   }
 
-  const evidenceRuntime = resolveEvidenceRuntimeOptions({
+  const readRefFile = io.readRefFile ?? readGitRefFile;
+    const baselinePolicy = readPolicyConfigFromRef({
+      projectRoot: currentProject.value.rootDir,
+      ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}),
+      ref: command.baselineRef,
+      readRefFile,
+      ...(command.policyPath ? { policyPath: command.policyPath } : {})
+    });
+    if (isErr(baselinePolicy)) {
+      io.stderr(formatError(baselinePolicy.error));
+      return exitCodeForError(baselinePolicy.error);
+    }
+
+      const evidenceRuntime = resolveEvidenceRuntimeOptions({
     cwd: io.cwd,
     projectRoot: currentProject.value.rootDir,
     policy: policy.value,
@@ -228,7 +242,25 @@ async function runDiff(
     return exitCodeForError(evidenceRuntime.error);
   }
 
-  const fetchRemoteMavenPoms = (requests: Parameters<typeof fetchMavenCentralModelPoms>[0]["requests"]) =>
+  const baselineEvidenceRuntime = resolveEvidenceRuntimeOptions({
+      cwd: io.cwd,
+      projectRoot: currentProject.value.rootDir,
+      policy: baselinePolicy.value,
+      offline: command.offline ?? false,
+      ...(command.cacheDir ? { cacheDir: command.cacheDir } : {}),
+      ...(command.jobs !== undefined ? { jobs: command.jobs } : {}),
+      ...(command.timeoutMs !== undefined ? { timeoutMs: command.timeoutMs } : {}),
+      ...(command.registryUrl ? { registryUrl: command.registryUrl } : {}),
+      ...(command.registryTokenEnv ? { registryTokenEnv: command.registryTokenEnv } : {}),
+      allowedHosts: command.allowedHosts ?? [],
+      env: io.env ?? process.env
+    });
+    if (isErr(baselineEvidenceRuntime)) {
+      io.stderr(formatError(baselineEvidenceRuntime.error));
+      return exitCodeForError(baselineEvidenceRuntime.error);
+    }
+
+      const fetchRemoteMavenPoms = (requests: Parameters<typeof fetchMavenCentralModelPoms>[0]["requests"]) =>
     fetchMavenCentralModelPoms({
       requests,
       offline: evidenceRuntime.value.offline,
@@ -240,7 +272,20 @@ async function runDiff(
         ? {}
         : { cacheDir: evidenceRuntime.value.cacheDir })
     });
-  const currentGraph = await parseProjectDependencyGraphWithRemoteMavenPoms({
+  const fetchBaselineRemoteMavenPoms = (
+      requests: Parameters<typeof fetchMavenCentralModelPoms>[0]["requests"]
+    ) => fetchMavenCentralModelPoms({
+      requests,
+      offline: baselineEvidenceRuntime.value.offline,
+      signal,
+      ...(baselineEvidenceRuntime.value.timeoutMs === undefined
+        ? {}
+        : { fetchTimeoutMs: baselineEvidenceRuntime.value.timeoutMs }),
+      ...(baselineEvidenceRuntime.value.cacheDir === undefined
+        ? {}
+        : { cacheDir: baselineEvidenceRuntime.value.cacheDir })
+    });
+      const currentGraph = await parseProjectDependencyGraphWithRemoteMavenPoms({
     project: currentProject.value,
     fetchRemotePoms: fetchRemoteMavenPoms
   });
@@ -258,7 +303,6 @@ async function runDiff(
     return COMMAND_CANCELLED_EXIT_CODE;
   }
 
-  const readRefFile = io.readRefFile ?? readGitRefFile;
   const listRefFiles = io.listRefFiles ?? listGitRefFiles;
   const baselineProject = await resolveWithRemoteMavenPoms({
     parse: (mavenExternalPoms) => loadBaselineProjectGraph({
@@ -270,7 +314,7 @@ async function runDiff(
       ...(mavenExternalPoms.size > 0 ? { mavenExternalPoms } : {}),
       ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {})
     }),
-    fetchRemotePoms: fetchRemoteMavenPoms
+    fetchRemotePoms: fetchBaselineRemoteMavenPoms
   });
 
   if (isErr(baselineProject)) {
@@ -286,7 +330,7 @@ async function runDiff(
     graph: baselineCollectionGraph,
     projectRoot: currentProject.value.rootDir,
     allowLocalProjectEvidence: false,
-    evidenceRuntime: evidenceRuntime.value,
+    evidenceRuntime: baselineEvidenceRuntime.value,
     signal,
     ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {})
   });
@@ -313,7 +357,7 @@ async function runDiff(
     licenses: baselineLicenses,
     dependencies: baselineScanGraph.nodes,
     profile: command.profile,
-    policy: policy.value
+    policy: baselinePolicy.value
   });
   const current = await evaluateProjectScan({
     ...currentProjectGraph,

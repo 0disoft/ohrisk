@@ -8011,6 +8011,52 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
     }
   });
 
+
+test("evaluates baseline findings with the policy stored in the baseline ref", async () => {
+  const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-baseline-policy-diff-"));
+
+  try {
+    cpSync(path.join(fixturesDir, "bun-project"), projectRoot, { recursive: true });
+    writeFileSync(
+      path.join(projectRoot, ".ohrisk.yml"),
+      [
+        "version: 1",
+        "packages:",
+        "  'agpl-child@0.1.0':",
+        "    severity: low",
+        "    recommendation: allow"
+      ].join("\n") + "\n",
+      "utf8"
+    );
+
+    const { io, stdout, stderr } = createTestIO(projectRoot);
+    Object.assign(io, createBaselineSnapshotIO(projectRoot, {
+      ".ohrisk.yml": "version: 1\n"
+    }));
+
+    const exitCode = await main(["diff", "main", "--prod", "--json"], io);
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+    const payload = JSON.parse(stdout.join("\n")) as {
+      changedFindingCount: number;
+      changedFindings: Array<{
+        packageId: string;
+        previousSeverity: string;
+        severity: string;
+      }>;
+    };
+    expect(payload.changedFindingCount).toBe(1);
+    expect(payload.changedFindings).toContainEqual(expect.objectContaining({
+      packageId: "agpl-child@0.1.0",
+      previousSeverity: "high",
+      severity: "low"
+    }));
+  } finally {
+    rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
   test("does not apply local waivers to git ref diff findings", async () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-diff-waiver-project-"));
     const baselineLockfile = [

@@ -1,2 +1,1 @@
-baseline policy load: expected one anchor, found 0
-exit_status=1
+exit_status=0
