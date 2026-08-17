@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
+import { parseArgs } from "../src/cli/args";
+
 import {
   buildDiffEvidenceCompleteness,
   renderIncompleteDiffEvidence
@@ -27,6 +29,16 @@ describe("diff evidence completeness", () => {
       current: partial
     }).status).toBe("partial");
   });
+
+  test("parses an explicit partial-evidence override for diff", () => {
+  const parsed = parseArgs(["diff", "main", "--allow-partial-evidence"]);
+
+  expect(parsed.ok).toBe(true);
+  if (!parsed.ok || parsed.value.kind !== "diff") {
+    throw new Error("Expected a parsed diff command.");
+  }
+  expect(parsed.value.allowPartialEvidence).toBe(true);
+});
 
   test("identifies every partial revision in the failure message", () => {
     const completeness = buildDiffEvidenceCompleteness({

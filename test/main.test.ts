@@ -3049,6 +3049,7 @@ describe("main", () => {
       const diffExitCode = await main([
         "diff",
         "main",
+        "--allow-partial-evidence",
         "--offline",
         "--cache-dir",
         cacheDir
@@ -5420,7 +5421,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         return ok(contents);
       };
 
-      const exitCode = await main(["diff", "main", "--all", "--json"], io);
+      const exitCode = await main(["diff", "main", "--allow-partial-evidence", "--all", "--json"], io);
 
       expect(exitCode).toBe(0);
       expect(stderr).toEqual([]);
@@ -5539,7 +5540,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         throw new Error(`Unexpected baseline path: ${relativePath}`);
       };
 
-      const exitCode = await main(["diff", "main", "--json", "--prod"], io);
+      const exitCode = await main(["diff", "main", "--allow-partial-evidence", "--json", "--prod"], io);
 
       expect(exitCode).toBe(0);
       expect(stderr).toEqual([]);
@@ -5614,7 +5615,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         }));
       };
 
-      const exitCode = await main(["diff", "main", "--json", "--prod"], io);
+      const exitCode = await main(["diff", "main", "--allow-partial-evidence", "--json", "--prod"], io);
 
       expect(exitCode).toBe(0);
       expect(stderr).toEqual([]);
@@ -5690,7 +5691,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         throw new Error(`Unexpected baseline path: ${relativePath}`);
       };
 
-      const exitCode = await main(["diff", "main", "--json", "--prod"], io);
+      const exitCode = await main(["diff", "main", "--allow-partial-evidence", "--json", "--prod"], io);
 
       expect(exitCode).toBe(0);
       expect(stderr).toEqual([]);
@@ -5762,7 +5763,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         throw new Error(`Unexpected baseline path: ${relativePath}`);
       };
 
-      const exitCode = await main(["diff", "main", "--json", "--prod"], io);
+      const exitCode = await main(["diff", "main", "--allow-partial-evidence", "--json", "--prod"], io);
 
       expect(exitCode).toBe(0);
       expect(stderr).toEqual([]);
@@ -6149,7 +6150,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         throw new Error(`Unexpected baseline path: ${relativePath}`);
       };
 
-      const exitCode = await main(["diff", "main", "--json", "--prod"], io);
+      const exitCode = await main(["diff", "main", "--allow-partial-evidence", "--json", "--prod"], io);
 
       expect(exitCode).toBe(0);
       expect(stderr).toEqual([]);
@@ -6285,7 +6286,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         throw new Error(`Unexpected baseline path: ${relativePath}`);
       };
 
-      const exitCode = await main(["diff", "main", "--json", "--prod"], io);
+      const exitCode = await main(["diff", "main", "--allow-partial-evidence", "--json", "--prod"], io);
 
       expect(exitCode).toBe(0);
       expect(stderr).toEqual([]);
@@ -6342,7 +6343,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         throw new Error(`Unexpected baseline path: ${relativePath}`);
       };
 
-      const exitCode = await main(["diff", "main", "--json", "--prod"], io);
+      const exitCode = await main(["diff", "main", "--allow-partial-evidence", "--json", "--prod"], io);
 
       expect(exitCode).toBe(0);
       expect(stderr).toEqual([]);
@@ -6407,7 +6408,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         throw new Error(`Unexpected baseline path: ${relativePath}`);
       };
 
-      const exitCode = await main(["diff", "main", "--json", "--prod"], io);
+      const exitCode = await main(["diff", "main", "--allow-partial-evidence", "--json", "--prod"], io);
 
       expect(exitCode).toBe(0);
       expect(stderr).toEqual([]);
@@ -6484,7 +6485,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         throw new Error(`Unexpected baseline path: ${relativePath}`);
       };
 
-      const exitCode = await main(["diff", "main", "--json", "--prod"], io);
+      const exitCode = await main(["diff", "main", "--allow-partial-evidence", "--json", "--prod"], io);
 
       expect(exitCode).toBe(0);
       expect(stderr).toEqual([]);
@@ -7992,7 +7993,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
         throw new Error(`Unexpected baseline path: ${relativePath}`);
       };
 
-      const exitCode = await main(["diff", "main", "--json", "--prod"], io);
+      const exitCode = await main(["diff", "main", "--allow-partial-evidence", "--json", "--prod"], io);
 
       expect(exitCode).toBe(0);
       expect(stderr).toEqual([]);

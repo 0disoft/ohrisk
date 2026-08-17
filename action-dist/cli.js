@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 7c51799bdad3d4859dae03b9ea5205b3358af505556c77bcb3dd0a030807cdd7
+// ohrisk-action-source-sha256: 55f1a1863a3c60b3dab48e484dda5ea393d75492b781b07f76665b19c1881906
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -15575,7 +15575,7 @@ function findViolatedCommandOptionRule(input) {
 var COMMAND_USAGE = {
   scan: "ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
   ci: "ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--allow-partial-evidence] [--output <file>] [--open]",
-  diff: "ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
+  diff: "ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--allow-partial-evidence] [--output <file>]",
   explain: "ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
   cache: "ohrisk cache status|prune|clear [--cache-dir <path>] [--json]",
   help: "ohrisk help [command]",
@@ -15747,7 +15747,8 @@ var HELP_OPTION_SPECS = {
   allowPartialEvidence: {
     options: ["--allow-partial-evidence"],
     syntax: "--allow-partial-evidence",
-    description: "Let ci pass when evidence or repository coverage is partial."
+    description: "Let ci pass when evidence or repository coverage is partial.",
+    overrides: { diff: "Let diff return success when either revision has partial evidence." }
   },
   strictWaivers: {
     options: ["--strict-waivers"],
@@ -15882,6 +15883,7 @@ var HELP_OPTION_ORDER = {
     "json",
     "markdown",
     "failOn",
+    "allowPartialEvidence",
     "output",
     "help"
   ],
@@ -15955,6 +15957,7 @@ var COMMAND_OPTION_KEYS = {
     "markdown",
     "output",
     "failOn",
+    "allowPartialEvidence",
     "help"
   ],
   explain: [
@@ -16921,6 +16924,7 @@ function parseDiffArgs(argv) {
   let workspaceRootPath;
   let outputPath;
   let failOn;
+  let allowPartialEvidence = CLI_DEFAULTS.allowPartialEvidence;
   let baselineRef;
   const outputFormatOptions = outputFormatOptionsFor("diff");
   for (let index = 0;index < argv.length; index += 1) {
@@ -17102,6 +17106,9 @@ function parseDiffArgs(argv) {
         index += 1;
         break;
       }
+      case "--allow-partial-evidence":
+        allowPartialEvidence = true;
+        break;
       case "--help":
       case "-h":
         return ok({ kind: "help", target: "diff" });
@@ -17175,7 +17182,8 @@ function parseDiffArgs(argv) {
     ...allowedHosts.length > 0 ? { allowedHosts: [...new Set(allowedHosts)] } : {},
     ...workspaceRootPath ? { workspaceRootPath } : {},
     ...outputPath ? { outputPath } : {},
-    ...failOn ? { failOn } : {}
+    ...failOn ? { failOn } : {},
+    allowPartialEvidence
   });
 }
 function validateBaselineRef(ref) {
@@ -65379,7 +65387,7 @@ async function runDiff(command, io, signal) {
     io.stderr(formatError(emitted.error));
     return exitCodeForError(emitted.error);
   }
-  if (completeness.status === "partial") {
+  if (completeness.status === "partial" && !command.allowPartialEvidence) {
     io.stderr(renderIncompleteDiffEvidence(completeness));
     return 1;
   }

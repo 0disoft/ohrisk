@@ -385,7 +385,7 @@ const diff = diffRiskFindings({
     return exitCodeForError(emitted.error);
   }
 
-  if (completeness.status === "partial") {
+  if (completeness.status === "partial" && !command.allowPartialEvidence) {
   io.stderr(renderIncompleteDiffEvidence(completeness));
   return 1;
 }
