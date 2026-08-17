@@ -2,7 +2,7 @@ import { packageUrl } from "../graph/package-url";
 import type { DependencyNode } from "../graph/types";
 import type { NormalizedLicense } from "../license/types";
 import type { SpdxExpressionNode, SpdxLicenseNode } from "../license/spdx";
-import { buildFindingFingerprint, buildFindingId } from "./finding-id";
+import { buildFindingId, buildSemanticFindingFingerprint } from "./finding-id";
 import type { UsageProfile } from "./profiles";
 import {
   evaluationPolicyForProfile,
@@ -130,17 +130,15 @@ export function evaluateLicenseRisk(input: {
     paths
   });
 
-  return {
+return {
+  id,
+  fingerprint: buildSemanticFindingFingerprint({
     id,
-
-fingerprint: buildFindingFingerprint({
-      id,
-      severity,
-      recommendation,
-      license: input.license
-    }),
-
-    packageId,
+    severity,
+    recommendation,
+    license: input.license
+  }),
+  packageId,
     severity,
     reason,
     action,

@@ -3,12 +3,8 @@ $ bun run format:check && bun run lint && bun run typecheck && bun run verify:do
 $ bun scripts/check-format.ts
 Formatting contract passed for 385 files.
 $ tsc -p tsconfig.lint.json && bun scripts/check-source-hygiene.ts
-src/policy/waivers.ts(241,7): error TS2353: Object literal may only specify known properties, and 'reason' does not exist in type '{ id: string; severity: RiskSeverity; recommendation: RiskRecommendation; license: Pick<NormalizedLicense, "choices" | "confidence" | ... 4 more ... | "signals">; }'.
-src/report/scan-report.ts(745,7): error TS2353: Object literal may only specify known properties, and 'reason' does not exist in type '{ id: string; severity: RiskSeverity; recommendation: RiskRecommendation; license: Pick<NormalizedLicense, "choices" | "confidence" | ... 4 more ... | "signals">; }'.
-test/diff-compare.test.ts(139,7): error TS2353: Object literal may only specify known properties, and 'reason' does not exist in type '{ id: string; severity: RiskSeverity; recommendation: RiskRecommendation; license: Pick<NormalizedLicense, "choices" | "confidence" | ... 4 more ... | "signals">; }'.
-test/html-report.test.ts(81,7): error TS2353: Object literal may only specify known properties, and 'reason' does not exist in type '{ id: string; severity: RiskSeverity; recommendation: RiskRecommendation; license: Pick<NormalizedLicense, "choices" | "confidence" | ... 4 more ... | "signals">; }'.
-test/waivers.test.ts(30,5): error TS2353: Object literal may only specify known properties, and 'reason' does not exist in type '{ id: string; severity: RiskSeverity; recommendation: RiskRecommendation; license: Pick<NormalizedLicense, "choices" | "confidence" | ... 4 more ... | "signals">; }'.
-test/waivers.test.ts(165,7): error TS2353: Object literal may only specify known properties, and 'reason' does not exist in type '{ id: string; severity: RiskSeverity; recommendation: RiskRecommendation; license: Pick<NormalizedLicense, "choices" | "confidence" | ... 4 more ... | "signals">; }'.
+test/finding-id.test.ts(87,17): error TS2322: Type '"metadata-conflict"' is not assignable to type 'NormalizedLicenseSignal'.
+test/finding-id.test.ts(98,36): error TS2322: Type '"metadata-conflict"' is not assignable to type 'NormalizedLicenseSignal'.
 error: script "lint" exited with code 1
 error: script "check:static" exited with code 1
 error: script "verify:release" exited with code 1

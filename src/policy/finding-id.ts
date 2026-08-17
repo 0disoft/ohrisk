@@ -1,4 +1,3 @@
-
 import type { NormalizedLicense } from "../license/types";
 import type { RiskFinding } from "./types";
 
@@ -67,8 +66,23 @@ function comparePaths(left: string[], right: string[]): number {
   return 0;
 }
 
-
 export function buildFindingFingerprint(input: {
+  id: string;
+  severity: RiskFinding["severity"];
+  recommendation: RiskFinding["recommendation"];
+  reason: string;
+  evidence: string[];
+}): string {
+  return [
+    input.id,
+    encodeFindingComponent(input.severity),
+    encodeFindingComponent(input.recommendation),
+    encodeFindingComponent(input.reason),
+    input.evidence.map(encodeFindingComponent).join("|")
+  ].join("::");
+}
+
+export function buildSemanticFindingFingerprint(input: {
   id: string;
   severity: RiskFinding["severity"];
   recommendation: RiskFinding["recommendation"];
