@@ -1,4 +1,4 @@
-name: Apply semantic finding fingerprints
+name: Finalize semantic finding fingerprints
 
 on:
   push:
@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  apply:
+  finalize:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -29,187 +29,33 @@ jobs:
         with:
           bun-version: 1.3.14
 
-      - name: Make fingerprints semantic
+      - name: Normalize changed sources
         shell: python
         run: |
           from pathlib import Path
-          import re
-          import textwrap
 
-          def replace_once(file_name: str, pattern: str, replacement: str) -> None:
-              path = Path(file_name)
-              source = path.read_text(encoding="utf-8")
-              updated, count = re.subn(pattern, textwrap.dedent(replacement), source, count=1, flags=re.DOTALL)
-              if count != 1:
-                  raise SystemExit(f"expected one replacement anchor in {file_name}, found {count}")
-              path.write_text(updated, encoding="utf-8")
-
-          replace_once(
+          for file_name in (
               "src/policy/finding-id.ts",
-              r'import type \{ RiskFinding \} from "\./types";\n',
-              '''
-              import type { NormalizedLicense } from "../license/types";
-              import type { RiskFinding } from "./types";
-              '''
-          )
-
-          replace_once(
-              "src/policy/finding-id.ts",
-              r'export function buildFindingFingerprint\(input: \{.*?\n\}\n\n(?=function encodeFindingComponent)',
-              '''
-              export function buildFindingFingerprint(input: {
-                id: string;
-                severity: RiskFinding["severity"];
-                recommendation: RiskFinding["recommendation"];
-                license: Pick<
-                  NormalizedLicense,
-                  | "expression"
-                  | "choices"
-                  | "joiner"
-                  | "signals"
-                  | "evidenceSources"
-                  | "confidence"
-                  | "exceptions"
-                >;
-              }): string {
-                const semanticLicense = JSON.stringify({
-                  expression: input.license.expression ?? null,
-                  choices: canonicalStringSet(input.license.choices),
-                  joiner: input.license.joiner,
-                  signals: canonicalStringSet(input.license.signals),
-                  evidenceSources: canonicalStringSet(input.license.evidenceSources),
-                  confidence: input.license.confidence,
-                  exceptions: canonicalStringSet(input.license.exceptions ?? [])
-                });
-
-                return [
-                  input.id,
-                  encodeFindingComponent(input.severity),
-                  encodeFindingComponent(input.recommendation),
-                  encodeFindingComponent(semanticLicense)
-                ].join("::");
-              }
-
-              function canonicalStringSet(values: readonly string[]): string[] {
-                return [...new Set(values)].sort(compareStrings);
-              }
-
-              function compareStrings(left: string, right: string): number {
-                if (left < right) {
-                  return -1;
-                }
-                if (left > right) {
-                  return 1;
-                }
-                return 0;
-              }
-
-              '''
-          )
-
-          replace_once(
               "src/policy/evaluate.ts",
-              r'fingerprint: buildFindingFingerprint\(\{\s*id,\s*severity,\s*recommendation,\s*reason,\s*evidence\s*\}\),',
-              '''
-              fingerprint: buildFindingFingerprint({
-                    id,
-                    severity,
-                    recommendation,
-                    license: input.license
-                  }),
-              '''
-          )
-
-          replace_once(
               "test/finding-id.test.ts",
-              r'  test\("escapes fingerprint delimiters inside reason and evidence components".*?\n  \}\);',
-              '''
-                test("canonicalizes unordered semantic license facts in finding fingerprints", () => {
-                  const input: Parameters<typeof buildFindingFingerprint>[0] = {
-                    id: "package@1.0.0::production::direct::root>package@1.0.0",
-                    severity: "high",
-                    recommendation: "replace",
-                    license: {
-                      expression: "MIT OR Apache-2.0",
-                      choices: ["MIT", "Apache-2.0"],
-                      joiner: "or",
-                      signals: ["notice-required", "conflicting-evidence"],
-                      evidenceSources: ["package.json", "LICENSE"],
-                      confidence: "high",
-                      exceptions: ["Classpath-exception-2.0"]
-                    }
-                  };
-                  const reordered: Parameters<typeof buildFindingFingerprint>[0] = {
-                    ...input,
-                    license: {
-                      ...input.license,
-                      choices: ["Apache-2.0", "MIT", "MIT"],
-                      signals: ["conflicting-evidence", "notice-required"],
-                      evidenceSources: ["LICENSE", "package.json"],
-                      exceptions: ["Classpath-exception-2.0", "Classpath-exception-2.0"]
-                    }
-                  };
+          ):
+              path = Path(file_name)
+              lines = path.read_text(encoding="utf-8").splitlines()
+              path.write_text("\n".join(line.rstrip() for line in lines) + "\n", encoding="utf-8")
 
-                  expect(buildFindingFingerprint(reordered)).toBe(buildFindingFingerprint(input));
-                });
-
-                test("changes finding fingerprints only when risk semantics change", () => {
-                  const input: Parameters<typeof buildFindingFingerprint>[0] = {
-                    id: "package@1.0.0::production::direct::root>package@1.0.0",
-                    severity: "high",
-                    recommendation: "replace",
-                    license: {
-                      expression: "MIT OR Apache-2.0",
-                      choices: ["MIT", "Apache-2.0"],
-                      joiner: "or",
-                      signals: [],
-                      evidenceSources: ["package.json"],
-                      confidence: "high",
-                      exceptions: []
-                    }
-                  };
-                  const changed: Parameters<typeof buildFindingFingerprint>[0] = {
-                    ...input,
-                    license: {
-                      ...input.license,
-                      expression: "MIT AND Apache-2.0",
-                      joiner: "and"
-                    }
-                  };
-
-                  expect(buildFindingFingerprint(changed)).not.toBe(buildFindingFingerprint(input));
-                });
-              '''
-          )
+          Path("agent-verification.txt").unlink(missing_ok=True)
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
       - name: Verify release gate
-        shell: bash
-        run: |
-          set +e
-          bun run verify:release 2>&1 | tee agent-verification.txt
-          status=${PIPESTATUS[0]}
-          echo "exit_status=$status" >> agent-verification.txt
-          exit "$status"
-
-      - name: Persist failed diagnostics
-        if: failure()
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/policy/finding-id.ts src/policy/evaluate.ts test/finding-id.test.ts agent-verification.txt
-          git commit -m "🤖 chore: capture semantic fingerprint diagnostics"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+        run: bun run verify:release
 
       - name: Commit verified change
-        if: success()
         run: |
           rm .github/workflows/agent-semantic-fingerprints.yml
-          rm -f agent-verification.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/policy/finding-id.ts src/policy/evaluate.ts test/finding-id.test.ts .github/workflows/agent-semantic-fingerprints.yml
+          git add -A
           git commit -m "🛡️ fix: make finding fingerprints semantic" -m "Stop diff identity from changing when explanatory prose is edited. Fingerprints now encode normalized license semantics, source provenance, severity, and recommendation using deterministic set ordering." -m "Validation: bun run verify:release"
           git push origin "HEAD:${GITHUB_REF_NAME}"
