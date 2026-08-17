@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 5e6dc12009fb0064046ec4ebd674cf88c290fe02d368ff30217493f147c4779f
+// ohrisk-action-source-sha256: a1271c8fa188b1e3ece3e58ae920df1b8c839a657041bc0b02e09026552feba5
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -54225,6 +54225,35 @@ function buildFindingFingerprint(input) {
     input.evidence.map(encodeFindingComponent).join("|")
   ].join("::");
 }
+function buildSemanticFindingFingerprint(input) {
+  const semanticLicense = JSON.stringify({
+    expression: input.license.expression ?? null,
+    choices: canonicalStringSet(input.license.choices),
+    joiner: input.license.joiner,
+    signals: canonicalStringSet(input.license.signals),
+    evidenceSources: canonicalStringSet(input.license.evidenceSources),
+    confidence: input.license.confidence,
+    exceptions: canonicalStringSet(input.license.exceptions ?? [])
+  });
+  return [
+    input.id,
+    encodeFindingComponent(input.severity),
+    encodeFindingComponent(input.recommendation),
+    encodeFindingComponent(semanticLicense)
+  ].join("::");
+}
+function canonicalStringSet(values) {
+  return [...new Set(values)].sort(compareStrings);
+}
+function compareStrings(left, right) {
+  if (left < right) {
+    return -1;
+  }
+  if (left > right) {
+    return 1;
+  }
+  return 0;
+}
 function encodeFindingComponent(value) {
   return value.replace(/%/g, "%25").replace(/:/g, "%3A").replace(/>/g, "%3E").replace(/\|/g, "%7C");
 }
@@ -54972,12 +55001,11 @@ function evaluateLicenseRisk(input) {
   });
   return {
     id,
-    fingerprint: buildFindingFingerprint({
+    fingerprint: buildSemanticFindingFingerprint({
       id,
       severity,
       recommendation,
-      reason,
-      evidence
+      license: input.license
     }),
     packageId,
     severity,
