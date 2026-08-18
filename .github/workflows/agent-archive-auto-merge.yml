@@ -29,127 +29,10 @@ jobs:
         with:
           bun-version: 1.3.14
 
-      - name: Apply archive auto-merge fix
-        shell: bash
+      - name: Remove previous diagnostics
         run: |
-          set +e
           rm -f agent-archive-patch.txt agent-archive-build.txt agent-archive-test.txt
           rm -f agent-archive-live.txt agent-archive-verify.txt
-          python <<'PY' 2>&1 | tee agent-archive-patch.txt
-          from pathlib import Path
-          import textwrap
-
-          def replace_once(source: str, old: str, new: str, label: str) -> str:
-              count = source.count(old)
-              if count != 1:
-                  raise SystemExit(f"{label}: expected one anchor, found {count}")
-              return source.replace(old, new)
-
-          main_path = Path("src/cli/main.ts")
-          source = main_path.read_text(encoding="utf-8")
-          source = replace_once(
-              source,
-              '    ...(input.repository ? { autoMergeSameRoot: true } : {}),\n',
-              '    ...(input.repository || command.archivePath ? { autoMergeSameRoot: true } : {}),\n',
-              "scan input auto merge"
-          )
-          source = replace_once(
-              source,
-              '      allLockfiles: input.allLockfiles,\n      prodOnly: input.prodOnly,\n',
-              '      allLockfiles: input.allLockfiles,\n      autoMergeSameRoot: input.autoMergeSameRoot ?? false,\n      prodOnly: input.prodOnly,\n',
-              "archive loader call"
-          )
-          source = replace_once(
-              source,
-              '  allLockfiles: boolean;\n  prodOnly: boolean;\n',
-              '  allLockfiles: boolean;\n  autoMergeSameRoot: boolean;\n  prodOnly: boolean;\n',
-              "archive loader input"
-          )
-          source = replace_once(
-              source,
-              '  const loaded = loadArchiveProject({\n    source: archive.value,\n    allLockfiles: input.allLockfiles\n  });\n',
-              '  const loaded = loadArchiveProject({\n    source: archive.value,\n    allLockfiles: input.allLockfiles || input.autoMergeSameRoot\n  });\n',
-              "archive project selection"
-          )
-          main_path.write_text(source, encoding="utf-8")
-
-          Path("test/archive-cli-auto-merge.test.ts").write_text(textwrap.dedent('''\
-          import { describe, expect, test } from "bun:test";
-          import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-          import { tmpdir } from "node:os";
-          import path from "node:path";
-
-          import { main, type CliIO } from "../src/cli/main";
-          import { createTarGz } from "./helpers/tar";
-
-          describe("archive CLI project discovery", () => {
-            test("automatically merges supported lockfiles at one archive project root", async () => {
-              const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-archive-auto-merge-"));
-              const archivePath = path.join(projectRoot, "repository.tar.gz");
-
-              try {
-                writeFileSync(archivePath, createTarGz({
-                  "archive-app/Cargo.toml": [
-                    "[package]",
-                    'name = "archive-app"',
-                    'version = "0.1.0"',
-                    'edition = "2024"'
-                  ].join("\\n") + "\\n",
-                  "archive-app/Cargo.lock": [
-                    "version = 3",
-                    "",
-                    "[[package]]",
-                    'name = "archive-app"',
-                    'version = "0.1.0"'
-                  ].join("\\n") + "\\n",
-                  "archive-app/package.json": JSON.stringify({
-                    name: "archive-app",
-                    version: "0.1.0"
-                  }),
-                  "archive-app/package-lock.json": JSON.stringify({
-                    name: "archive-app",
-                    version: "0.1.0",
-                    lockfileVersion: 3,
-                    packages: {
-                      "": {
-                        name: "archive-app",
-                        version: "0.1.0"
-                      }
-                    }
-                  })
-                }));
-
-                const stdout: string[] = [];
-                const stderr: string[] = [];
-                const io: CliIO = {
-                  cwd: projectRoot,
-                  stdout: (text) => stdout.push(text),
-                  stderr: (text) => stderr.push(text)
-                };
-                const exitCode = await main([
-                  "scan",
-                  "--html",
-                  "--archive",
-                  archivePath,
-                  "--offline"
-                ], io);
-
-                expect(exitCode).toBe(0);
-                expect(stderr).toEqual([]);
-                const html = stdout.join("\\n");
-                expect(html.toLowerCase()).toContain("<!doctype html");
-                expect(html).toContain("Cargo.lock");
-                expect(html).toContain("package-lock.json");
-              } finally {
-                rmSync(projectRoot, { force: true, recursive: true });
-              }
-            });
-          });
-          '''), encoding="utf-8")
-          PY
-          status=${PIPESTATUS[0]}
-          echo "exit_status=$status" >> agent-archive-patch.txt
-          exit "$status"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -188,7 +71,11 @@ jobs:
             echo "download_exit_status=$download_status" | tee agent-archive-live.txt
             exit "$download_status"
           fi
-          bun src/cli/main.ts scan --html --archive "$archive" >"$report" 2>"$stderr"
+          (
+            cd /tmp
+            bun "$GITHUB_WORKSPACE/src/cli/main.ts" scan --html --archive "$archive" \
+              >"$report" 2>"$stderr"
+          )
           scan_status=$?
           {
             echo "scan_exit_status=$scan_status"
