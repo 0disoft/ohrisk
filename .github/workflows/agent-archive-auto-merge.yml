@@ -33,6 +33,8 @@ jobs:
         shell: bash
         run: |
           set +e
+          rm -f agent-archive-patch.txt agent-archive-build.txt agent-archive-test.txt
+          rm -f agent-archive-live.txt agent-archive-verify.txt
           python <<'PY' 2>&1 | tee agent-archive-patch.txt
           from pathlib import Path
           import textwrap
@@ -53,44 +55,25 @@ jobs:
           )
           source = replace_once(
               source,
-              '''      allLockfiles: input.allLockfiles,
-                    prodOnly: input.prodOnly,
-              ''',
-              '''      allLockfiles: input.allLockfiles,
-                    autoMergeSameRoot: input.autoMergeSameRoot ?? false,
-                    prodOnly: input.prodOnly,
-              ''',
+              '      allLockfiles: input.allLockfiles,\n      prodOnly: input.prodOnly,\n',
+              '      allLockfiles: input.allLockfiles,\n      autoMergeSameRoot: input.autoMergeSameRoot ?? false,\n      prodOnly: input.prodOnly,\n',
               "archive loader call"
           )
           source = replace_once(
               source,
-              '''  allLockfiles: boolean;
-                prodOnly: boolean;
-              ''',
-              '''  allLockfiles: boolean;
-                autoMergeSameRoot: boolean;
-                prodOnly: boolean;
-              ''',
+              '  allLockfiles: boolean;\n  prodOnly: boolean;\n',
+              '  allLockfiles: boolean;\n  autoMergeSameRoot: boolean;\n  prodOnly: boolean;\n',
               "archive loader input"
           )
           source = replace_once(
               source,
-              '''  const loaded = loadArchiveProject({
-                source: archive.value,
-                allLockfiles: input.allLockfiles
-              });
-              ''',
-              '''  const loaded = loadArchiveProject({
-                source: archive.value,
-                allLockfiles: input.allLockfiles || input.autoMergeSameRoot
-              });
-              ''',
+              '  const loaded = loadArchiveProject({\n    source: archive.value,\n    allLockfiles: input.allLockfiles\n  });\n',
+              '  const loaded = loadArchiveProject({\n    source: archive.value,\n    allLockfiles: input.allLockfiles || input.autoMergeSameRoot\n  });\n',
               "archive project selection"
           )
           main_path.write_text(source, encoding="utf-8")
 
-          test_path = Path("test/archive-cli-auto-merge.test.ts")
-          test_path.write_text(textwrap.dedent('''\
+          Path("test/archive-cli-auto-merge.test.ts").write_text(textwrap.dedent('''\
           import { describe, expect, test } from "bun:test";
           import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
           import { tmpdir } from "node:os";
