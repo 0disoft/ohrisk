@@ -1,0 +1,366 @@
+name: Randomized HTML repository scans
+
+on:
+  push:
+    branches:
+      - test/random-html-inputs-20260818
+
+permissions:
+  contents: write
+
+concurrency:
+  group: random-html-inputs-20260818
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout Ohrisk
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run five URL scans and five archive scans
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: python
+        run: |
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          import os
+          import random
+          import subprocess
+          import time
+          import urllib.error
+          import urllib.request
+          from pathlib import Path
+          from typing import Any
+
+          seed = 20260818
+          randomizer = random.Random(seed)
+          root = Path.cwd()
+          cli = root / "src" / "cli" / "main.ts"
+          work_root = root / ".random-html-work"
+          work_root.mkdir(exist_ok=True)
+
+          candidates = [
+              {"repo": "BurntSushi/toml", "branch": "master", "ecosystem": "go"},
+              {"repo": "slack-go/slack", "branch": "master", "ecosystem": "go"},
+              {"repo": "thoas/go-funk", "branch": "main", "ecosystem": "go"},
+              {"repo": "uptrace/bun", "branch": "master", "ecosystem": "go"},
+              {"repo": "mailru/easyjson", "branch": "master", "ecosystem": "go"},
+              {"repo": "tidwall/buntdb", "branch": "master", "ecosystem": "go"},
+              {"repo": "uber-go/automaxprocs", "branch": "master", "ecosystem": "go"},
+              {"repo": "superfly/litefs", "branch": "main", "ecosystem": "go"},
+              {"repo": "imroc/req", "branch": "master", "ecosystem": "go"},
+              {"repo": "streadway/amqp", "branch": "master", "ecosystem": "go"},
+              {"repo": "tokio-rs/mini-redis", "branch": "master", "ecosystem": "rust"},
+              {"repo": "anordal/shellharden", "branch": "master", "ecosystem": "rust"},
+              {"repo": "dtolnay/proc-macro-workshop", "branch": "master", "ecosystem": "rust"},
+              {"repo": "borgo-lang/borgo", "branch": "main", "ecosystem": "rust"},
+              {"repo": "cberner/redb", "branch": "master", "ecosystem": "rust"},
+              {"repo": "rusterlium/rustler", "branch": "master", "ecosystem": "rust"},
+              {"repo": "yoav-lavi/melody", "branch": "main", "ecosystem": "rust"},
+              {"repo": "gyscos/cursive", "branch": "main", "ecosystem": "rust"},
+              {"repo": "PistonDevelopers/piston", "branch": "master", "ecosystem": "rust"},
+              {"repo": "ggez/ggez", "branch": "master", "ecosystem": "rust"},
+          ]
+
+          supported_root_inputs = {
+              "go.mod",
+              "Cargo.lock",
+              "bun.lock",
+              "bun.lockb",
+              "package-lock.json",
+              "pnpm-lock.yaml",
+              "yarn.lock",
+              "deno.lock",
+              "poetry.lock",
+              "Pipfile.lock",
+              "pdm.lock",
+              "uv.lock",
+              "pylock.toml",
+              "requirements.txt",
+              "pom.xml",
+              "gradle.lockfile",
+              "composer.lock",
+              "Gemfile.lock",
+          }
+
+          token = os.environ.get("GITHUB_TOKEN", "")
+
+          def github_json(url: str) -> Any:
+              headers = {
+                  "Accept": "application/vnd.github+json",
+                  "User-Agent": "ohrisk-random-html-validation",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              }
+              if token:
+                  headers["Authorization"] = f"Bearer {token}"
+              request = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+
+          eligible: list[dict[str, str]] = []
+          rejected: list[dict[str, str]] = []
+          for candidate in candidates:
+              repo = candidate["repo"]
+              branch = candidate["branch"]
+              try:
+                  entries = github_json(
+                      f"https://api.github.com/repos/{repo}/contents?ref={branch}"
+                  )
+                  names = {
+                      entry.get("name")
+                      for entry in entries
+                      if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+                  }
+                  matched = sorted(names & supported_root_inputs)
+                  if matched:
+                      eligible.append({**candidate, "rootInput": matched[0]})
+                  else:
+                      rejected.append({**candidate, "reason": "no supported root input"})
+              except Exception as error:
+                  rejected.append({**candidate, "reason": f"metadata error: {error}"})
+
+          randomizer.shuffle(eligible)
+          if len(eligible) < 10:
+              raise SystemExit(f"Only {len(eligible)} eligible repositories were found")
+
+          selected = eligible[:10]
+          url_cases = selected[:5]
+          archive_cases = selected[5:]
+          results: list[dict[str, Any]] = []
+
+          def download_bounded(url: str, destination: Path, max_bytes: int = 80 * 1024 * 1024) -> None:
+              headers = {"User-Agent": "ohrisk-random-html-validation"}
+              if token:
+                  headers["Authorization"] = f"Bearer {token}"
+              request = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(request, timeout=90) as response, destination.open("wb") as output:
+                  total = 0
+                  while True:
+                      chunk = response.read(1024 * 1024)
+                      if not chunk:
+                          break
+                      total += len(chunk)
+                      if total > max_bytes:
+                          raise RuntimeError(f"archive exceeded {max_bytes} bytes")
+                      output.write(chunk)
+
+          def validate_html(case_dir: Path, stdout: str) -> tuple[bool, int, str | None, str | None]:
+              generated = sorted(case_dir.glob("*.html"))
+              if not generated and "<html" in stdout.lower():
+                  stdout_report = case_dir / "stdout-report.html"
+                  stdout_report.write_text(stdout, encoding="utf-8")
+                  generated = [stdout_report]
+              if not generated:
+                  return False, 0, None, None
+              report = max(generated, key=lambda item: item.stat().st_size)
+              data = report.read_bytes()
+              prefix = data[:512 * 1024].decode("utf-8", errors="replace").lower()
+              valid = "<html" in prefix and "ohrisk" in prefix
+              return valid, len(data), report.name, hashlib.sha256(data).hexdigest()
+
+          def run_case(
+              *,
+              mode: str,
+              index: int,
+              candidate: dict[str, str],
+              archive_format: str | None = None,
+          ) -> dict[str, Any]:
+              repo = candidate["repo"]
+              branch = candidate["branch"]
+              case_dir = work_root / f"{mode}-{index}-{repo.replace('/', '-') }"
+              case_dir.mkdir(parents=True, exist_ok=True)
+              repository_url = f"https://github.com/{repo}"
+              if mode == "url":
+                  target_url = repository_url + (".git" if index % 2 == 0 else "")
+                  command = ["bun", str(cli), "scan", "--html", target_url]
+                  input_url = target_url
+              else:
+                  assert archive_format is not None
+                  suffix = ".zip" if archive_format == "zip" else ".tar.gz"
+                  archive_url = (
+                      f"https://github.com/{repo}/archive/refs/heads/{branch}{suffix}"
+                  )
+                  archive_path = case_dir / f"repository{suffix}"
+                  download_started = time.monotonic()
+                  try:
+                      download_bounded(archive_url, archive_path)
+                      download_ms = round((time.monotonic() - download_started) * 1000)
+                  except Exception as error:
+                      return {
+                          "mode": mode,
+                          "index": index,
+                          **candidate,
+                          "archiveFormat": archive_format,
+                          "input": archive_url,
+                          "command": f"ohrisk scan --html --archive {archive_path.name}",
+                          "exitCode": None,
+                          "durationMs": None,
+                          "downloadMs": round((time.monotonic() - download_started) * 1000),
+                          "htmlValid": False,
+                          "htmlBytes": 0,
+                          "error": f"download failed: {error}",
+                      }
+                  command = [
+                      "bun",
+                      str(cli),
+                      "scan",
+                      "--html",
+                      "--archive",
+                      str(archive_path),
+                  ]
+                  input_url = archive_url
+
+              started = time.monotonic()
+              try:
+                  completed = subprocess.run(
+                      command,
+                      cwd=case_dir,
+                      env=os.environ.copy(),
+                      text=True,
+                      capture_output=True,
+                      timeout=240,
+                      check=False,
+                  )
+                  duration_ms = round((time.monotonic() - started) * 1000)
+                  stdout = completed.stdout
+                  stderr = completed.stderr
+                  exit_code: int | None = completed.returncode
+                  process_error: str | None = None
+              except subprocess.TimeoutExpired as error:
+                  duration_ms = round((time.monotonic() - started) * 1000)
+                  stdout = error.stdout if isinstance(error.stdout, str) else ""
+                  stderr = error.stderr if isinstance(error.stderr, str) else ""
+                  exit_code = None
+                  process_error = "scan timed out after 240 seconds"
+
+              (case_dir / "stdout.txt").write_text(stdout, encoding="utf-8")
+              (case_dir / "stderr.txt").write_text(stderr, encoding="utf-8")
+              html_valid, html_bytes, html_file, html_sha256 = validate_html(case_dir, stdout)
+              result: dict[str, Any] = {
+                  "mode": mode,
+                  "index": index,
+                  **candidate,
+                  "input": input_url,
+                  "command": (
+                      f"ohrisk scan --html {input_url}"
+                      if mode == "url"
+                      else f"ohrisk scan --html --archive repository.{archive_format}"
+                  ),
+                  "exitCode": exit_code,
+                  "durationMs": duration_ms,
+                  "htmlValid": html_valid,
+                  "htmlBytes": html_bytes,
+                  "htmlFile": html_file,
+                  "htmlSha256": html_sha256,
+                  "stdoutBytes": len(stdout.encode("utf-8")),
+                  "stderrBytes": len(stderr.encode("utf-8")),
+                  "stderrTail": stderr[-2000:],
+              }
+              if archive_format:
+                  result["archiveFormat"] = archive_format
+              if process_error:
+                  result["error"] = process_error
+              result["passed"] = exit_code == 0 and html_valid
+              return result
+
+          for index, candidate in enumerate(url_cases, start=1):
+              results.append(run_case(mode="url", index=index, candidate=candidate))
+
+          archive_formats = ["zip", "tar.gz", "zip", "tar.gz", "zip"]
+          for index, (candidate, archive_format) in enumerate(
+              zip(archive_cases, archive_formats, strict=True),
+              start=1,
+          ):
+              results.append(
+                  run_case(
+                      mode="archive",
+                      index=index,
+                      candidate=candidate,
+                      archive_format=archive_format,
+                  )
+              )
+
+          passed = sum(1 for result in results if result.get("passed"))
+          summary = {
+              "seed": seed,
+              "ohriskCommit": os.environ.get("GITHUB_SHA"),
+              "selected": selected,
+              "eligibleCount": len(eligible),
+              "rejectedCandidates": rejected,
+              "passed": passed,
+              "failed": len(results) - passed,
+              "results": results,
+          }
+          Path("random-html-results.json").write_text(
+              json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+
+          lines = [
+              "# Randomized HTML scan results",
+              "",
+              f"Seed: `{seed}`",
+              "",
+              f"Result: `{passed}/{len(results)}` passed",
+              "",
+              "| Mode | Repository | Root input | Format | Exit | HTML | Bytes | Time |",
+              "| --- | --- | --- | --- | ---: | --- | ---: | ---: |",
+          ]
+          for result in results:
+              lines.append(
+                  "| "
+                  + " | ".join([
+                      str(result["mode"]),
+                      str(result["repo"]),
+                      str(result["rootInput"]),
+                      str(result.get("archiveFormat", "repository URL")),
+                      str(result.get("exitCode")),
+                      "pass" if result.get("htmlValid") else "fail",
+                      str(result.get("htmlBytes", 0)),
+                      f"{result.get('durationMs')} ms",
+                  ])
+                  + " |"
+              )
+          failures = [result for result in results if not result.get("passed")]
+          if failures:
+              lines.extend(["", "## Failures", ""])
+              for failure in failures:
+                  lines.extend([
+                      f"### {failure['mode']} {failure['repo']}",
+                      "",
+                      f"Command: `{failure['command']}`",
+                      "",
+                      f"Exit: `{failure.get('exitCode')}`",
+                      "",
+                      "```text",
+                      str(failure.get("error") or failure.get("stderrTail") or "No diagnostics"),
+                      "```",
+                      "",
+                  ])
+          Path("random-html-results.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+      - name: Commit test evidence
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add random-html-results.json random-html-results.md
+          git commit -m "🧪 test: record randomized HTML scan results"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
