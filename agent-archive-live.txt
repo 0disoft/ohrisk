@@ -1,6 +1,0 @@
-scan_exit_status=2
-report_bytes=0
-stderr:
-Ohrisk could not complete the command.
-ARCHIVE_READ_FAILED: Archive path is outside the working directory.
-basename: melody-main.tar.gz
