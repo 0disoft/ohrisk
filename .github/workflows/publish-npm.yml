@@ -12,14 +12,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
-    name: Publish to npm
-    environment: npm
+  prepare_release:
+    name: Verify tag and prepare draft release
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
-      id-token: write
+    outputs:
+      release_is_draft: ${{ steps.draft_release.outputs.release_is_draft }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -54,6 +55,116 @@ jobs:
 
       - name: Write release notes
         run: bun run release:notes > release-notes.md
+
+      - name: Create or refresh draft GitHub release
+        id: draft_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            release_is_draft="$(
+              gh release view "$GITHUB_REF_NAME" --json isDraft --jq '.isDraft'
+            )"
+            if [ "$release_is_draft" = "true" ]; then
+              gh release edit "$GITHUB_REF_NAME" \
+                --draft \
+                --title "$GITHUB_REF_NAME" \
+                --notes-file release-notes.md
+              echo "release_is_draft=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "Release ${GITHUB_REF_NAME} is already published."
+              echo "release_is_draft=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --draft \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file release-notes.md
+            echo "release_is_draft=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  standalone:
+    name: Build standalone executables (${{ matrix.os }})
+    needs: prepare_release
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            targets: "--target linux-x64 --target linux-arm64"
+          - os: macos-latest
+            targets: "--target macos-x64 --target macos-arm64"
+          - os: windows-latest
+            targets: "--target windows-x64 --target windows-arm64"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build standalone executables
+        shell: bash
+        run: bun run build:standalone -- ${{ matrix.targets }}
+
+      - name: Upload standalone executables to draft release
+        if: needs.prepare_release.outputs.release_is_draft == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for asset in release/standalone/ohrisk-*; do
+            if [ ! -f "$asset" ]; then
+              echo "::error::Standalone asset glob did not resolve to a regular file."
+              exit 1
+            fi
+            gh release upload "$GITHUB_REF_NAME" "$asset" --clobber
+          done
+
+  publish:
+    name: Publish to npm
+    needs:
+      - prepare_release
+      - standalone
+    environment: npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
       - name: Check npm publish state
         id: npm_state
@@ -102,16 +213,68 @@ jobs:
           echo "::error::npm metadata for ${package_spec} did not expose the exact version, tarball, and integrity after ${max_attempts} attempts."
           exit 1
 
-      - name: Create GitHub release
+  finalize-release:
+    name: Verify assets and publish GitHub release
+    needs:
+      - prepare_release
+      - publish
+    if: needs.prepare_release.outputs.release_is_draft == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download and verify standalone release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            echo "Release ${GITHUB_REF_NAME} already exists."
-            exit 0
-          fi
+          set -euo pipefail
+          mkdir -p release-assets
+          assets=(
+            ohrisk-linux-arm64
+            ohrisk-linux-x64
+            ohrisk-macos-arm64
+            ohrisk-macos-x64
+            ohrisk-windows-arm64.exe
+            ohrisk-windows-x64.exe
+          )
 
-          gh release create "$GITHUB_REF_NAME" \
-            --verify-tag \
-            --title "$GITHUB_REF_NAME" \
-            --notes-file release-notes.md
+          for asset in "${assets[@]}"; do
+            gh release download "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern "$asset" \
+              --dir release-assets
+            if [ ! -f "release-assets/$asset" ]; then
+              echo "::error::Draft release is missing standalone asset $asset."
+              exit 1
+            fi
+          done
+
+          (
+            cd release-assets
+            printf '%s\n' "${assets[@]}" | LC_ALL=C sort | while IFS= read -r asset; do
+              sha256sum "$asset"
+            done > SHA256SUMS
+          )
+
+      - name: Upload checksum manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            release-assets/SHA256SUMS \
+            --clobber
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_is_draft="$(
+            gh release view "$GITHUB_REF_NAME" --json isDraft --jq '.isDraft'
+          )"
+          if [ "$release_is_draft" = "true" ]; then
+            gh release edit "$GITHUB_REF_NAME" --draft=false
+          else
+            echo "Release ${GITHUB_REF_NAME} is already published."
+          fi
