@@ -47,7 +47,7 @@ jobs:
         run: bun run verify:release
 
       - name: Build and smoke native standalone executable
-        run: bun run build:standalone -- --native
+        run: bun scripts/build-standalone.ts --native
 
   platform-smoke:
     name: Platform smoke (${{ matrix.os }})
@@ -84,4 +84,4 @@ jobs:
         run: bun run scripts/package-smoke.ts
 
       - name: Build and smoke native standalone executable
-        run: bun run build:standalone -- --native
+        run: bun scripts/build-standalone.ts --native
