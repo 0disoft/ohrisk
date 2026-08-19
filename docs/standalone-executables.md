@@ -7,7 +7,7 @@ Node.js or Bun runtime:
 | --- | --- | --- | --- |
 | `ohrisk-linux-x64` | Linux | x64 | glibc, baseline x64 CPU |
 | `ohrisk-linux-arm64` | Linux | arm64 | glibc |
-| `ohrisk-macos-x64` | macOS | Intel x64 | baseline x64 CPU |
+| `ohrisk-macos-x64` | macOS | Intel x64 | Intel x64 |
 | `ohrisk-macos-arm64` | macOS | Apple Silicon | arm64 |
 | `ohrisk-windows-x64.exe` | Windows | x64 | baseline x64 CPU |
 | `ohrisk-windows-arm64.exe` | Windows | arm64 | Windows on ARM |
@@ -55,7 +55,9 @@ chmod +x ohrisk-macos-arm64
 ```
 
 Choose `ohrisk-macos-x64` on an Intel Mac and
-`ohrisk-macos-arm64` on Apple Silicon.
+`ohrisk-macos-arm64` on Apple Silicon. The release table promises the operating
+system and architecture only; it does not claim compatibility with every legacy
+Intel CPU generation.
 
 ## Verify and run on Windows PowerShell
 
@@ -95,16 +97,17 @@ The tag workflow follows this order:
 
 1. Verify the tag, package version, tests, package smoke, and release notes.
 2. Create or refresh a draft GitHub Release.
-3. Build all six targets with the pinned Bun version.
-4. Check each executable format and architecture header.
-5. Execute `version` and `explain MIT --json` for the native target on each
-   runner.
-6. Upload the executables to the draft release.
+3. Cross-build all six targets on the pinned Linux Bun runner.
+4. Check every executable format and architecture header, then execute the
+   Linux native target through `version` and `explain MIT --json`.
+5. Upload the six executables to the draft release.
+6. Download the exact native Windows and macOS assets from the draft release on
+   their target runners and execute the same version and explain smoke checks.
 7. Publish and verify the npm package.
-8. Download the release assets again, calculate one deterministic
+8. Download all release executables again, calculate one deterministic
    `SHA256SUMS`, upload it, and publish the GitHub Release.
 
-A failed build, smoke check, npm verification, or checksum step leaves the
-GitHub Release in draft state. Rerunning the same tag workflow replaces assets
-with the same names and can complete the interrupted release without publishing
-a second npm version.
+A failed build, header check, target-runtime smoke, npm verification, or checksum
+step leaves the GitHub Release in draft state. Rerunning the same tag workflow
+replaces assets with the same names and can complete the interrupted release
+without publishing a second npm version.
