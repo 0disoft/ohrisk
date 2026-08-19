@@ -172,7 +172,7 @@ describe("standalone executable validation", () => {
 });
 
 describe("standalone release wiring", () => {
-  test("keeps package, CI, tag publishing, and docs aligned", () => {
+  test("keeps CI, tag publishing, and docs aligned", () => {
     const ci = readFileSync(
       path.join(repoRoot, ".github", "workflows", "ci.yml"),
       "utf8"
@@ -195,13 +195,16 @@ describe("standalone release wiring", () => {
     );
     const gitignore = readFileSync(path.join(repoRoot, ".gitignore"), "utf8");
 
-    expect(ci.match(/bun scripts\/build-standalone\.ts --native/g)).toHaveLength(2);
+    expect(ci).toContain("name: Cross-build all standalone release executables");
+    expect(ci.match(/bun scripts\/build-standalone\.ts/g)).toHaveLength(1);
+    expect(ci).not.toContain("build-standalone.ts --native");
 
-    expect(publish).toContain("name: Build standalone executables");
-    expect(publish).toContain("needs: prepare_release");
-    expect(publish).toContain("--target linux-x64 --target linux-arm64");
-    expect(publish).toContain("--target macos-x64 --target macos-arm64");
-    expect(publish).toContain("--target windows-x64 --target windows-arm64");
+    expect(publish).toContain("name: Cross-build standalone executables");
+    expect(publish).toContain("run: bun scripts/build-standalone.ts");
+    expect(publish).toContain("name: Smoke standalone release");
+    expect(publish).toContain("RUNNER_OS/$RUNNER_ARCH");
+    expect(publish).toContain("gh release download \"$GITHUB_REF_NAME\"");
+    expect(publish).toContain("- standalone-smoke");
     for (const candidate of STANDALONE_TARGETS) {
       expect(publish).toContain(candidate.assetName);
     }
@@ -210,9 +213,10 @@ describe("standalone release wiring", () => {
     expect(publish).toContain("gh release upload \"$GITHUB_REF_NAME\"");
     expect(publish).toContain(STANDALONE_CHECKSUM_FILENAME);
     expect(publish).toContain("--draft=false");
-    expect(publish.indexOf("name: Build standalone executables")).toBeLessThan(
-      publish.indexOf("name: Publish to npm")
-    );
+    expect(publish.indexOf("name: Cross-build standalone executables"))
+      .toBeLessThan(publish.indexOf("name: Smoke standalone release"));
+    expect(publish.indexOf("name: Smoke standalone release"))
+      .toBeLessThan(publish.indexOf("name: Publish to npm"));
 
     expect(docsIndex).toContain(
       "[Standalone Executables](standalone-executables.md)"
