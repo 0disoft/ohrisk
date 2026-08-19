@@ -108,7 +108,6 @@
   "scripts": {
     "build": "bun scripts/build.ts",
     "build:action": "bun scripts/build-action.ts",
-    "build:standalone": "bun scripts/build-standalone.ts",
     "prepack": "bun scripts/build.ts",
     "scan": "bun run src/cli/main.ts scan",
     "test": "bun test",
