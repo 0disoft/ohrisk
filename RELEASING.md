@@ -34,7 +34,7 @@ binary before tagging:
 bun run version:sync
 bun run release:notes > release-notes.md
 bun run verify:release
-bun run build:standalone -- --native
+bun scripts/build-standalone.ts --native
 ```
 
 `bun run verify:release` runs the scoped TypeScript typecheck for release
@@ -44,8 +44,8 @@ Action bundle byte for byte, verifies the npm package contents with a dry-run
 pack, then installs the packed tarball into a temporary npm consumer project and
 runs the packaged `ohrisk` bin through Node.js.
 
-`bun run build:standalone -- --native` compiles one executable for the current
-runner, checks its executable format and architecture header, verifies
+`bun scripts/build-standalone.ts --native` compiles one executable for the
+current runner, checks its executable format and architecture header, verifies
 `ohrisk <version>`, and executes `ohrisk explain MIT --json`. The release-check
 workflow runs this native build on Linux, Windows, and macOS without duplicating
 the complete coverage suite.
@@ -53,7 +53,7 @@ the complete coverage suite.
 Use repeatable explicit targets when inspecting a cross-build locally:
 
 ```bash
-bun run build:standalone -- \
+bun scripts/build-standalone.ts \
   --target linux-x64 \
   --target linux-arm64
 ```
@@ -118,7 +118,7 @@ Standalone recovery must use a draft GitHub Release. Build all targets, inspect
 manifest from the bytes downloaded back from the release before publication:
 
 ```bash
-bun run build:standalone
+bun scripts/build-standalone.ts
 gh release upload v1.15.1 release/standalone/ohrisk-* --clobber
 ```
 
