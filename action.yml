@@ -74,6 +74,10 @@ inputs:
     description: Disable remote evidence requests and use only local evidence or cache entries.
     required: false
     default: "false"
+  cache:
+    description: Persist the Ohrisk artifact cache between workflow runs with actions/cache.
+    required: false
+    default: "false"
   cache-dir:
     description: Repository-relative persistent artifact cache directory.
     required: false
@@ -103,6 +107,9 @@ outputs:
   report-path:
     description: Report output path when the output input is set.
     value: ${{ steps.run.outputs.report-path }}
+  cache-hit:
+    description: Exact-match result from the persistent artifact cache restore.
+    value: ${{ steps.artifact-cache.outputs.cache-hit }}
 
 runs:
   using: composite
@@ -154,6 +161,206 @@ runs:
           fi
         fi
 
+    - name: Resolve Ohrisk artifact cache
+      id: cache-settings
+      shell: bash
+      env:
+        OHRISK_PERSIST_CACHE: ${{ inputs.cache }}
+        OHRISK_CACHE_DIR: ${{ inputs.cache-dir }}
+        OHRISK_ARCHIVE: ${{ inputs.archive }}
+      run: |
+        set -euo pipefail
+
+        require_relative_workspace_path() {
+          local name="$1"
+          local value="$2"
+          local normalized="${value//\\//}"
+
+          if [ -z "$value" ]; then
+            echo "::error::${name} must not be empty."
+            exit 1
+          fi
+
+          if [[ "$value" =~ [[:cntrl:]] ]]; then
+            echo "::error::${name} must not contain control characters."
+            exit 1
+          fi
+
+          if [[ "$normalized" == /* || "$normalized" =~ ^[A-Za-z]: ]]; then
+            echo "::error::${name} must be a repository-relative path."
+            exit 1
+          fi
+
+          case "$normalized" in
+            "."|./*|*/.|*/./*|*//*|*/)
+              echo "::error::${name} must not contain empty or . path segments."
+              exit 1
+              ;;
+          esac
+
+          IFS="/" read -r -a path_segments <<< "$normalized"
+          for segment in "${path_segments[@]}"; do
+            if [ "$segment" = ".." ]; then
+              echo "::error::${name} must not contain .. path segments."
+              exit 1
+            fi
+          done
+        }
+
+        require_relative_workspace_no_symlinks() {
+          local name="$1"
+          local value="$2"
+          local normalized="${value//\\//}"
+          local current="."
+
+          require_relative_workspace_path "$name" "$value"
+          IFS="/" read -r -a path_segments <<< "$normalized"
+          for segment in "${path_segments[@]}"; do
+            current="${current}/${segment}"
+            if [ -L "$current" ]; then
+              echo "::error::${name} must stay inside the repository and must not traverse symbolic links."
+              exit 1
+            fi
+          done
+        }
+
+        require_relative_workspace_file() {
+          local name="$1"
+          local value="$2"
+          local normalized="${value//\\//}"
+          local current="."
+
+          require_relative_workspace_path "$name" "$value"
+          IFS="/" read -r -a path_segments <<< "$normalized"
+          for segment in "${path_segments[@]}"; do
+            current="${current}/${segment}"
+            if [ -L "$current" ]; then
+              echo "::error::${name} must stay inside the repository and must not traverse symbolic links."
+              exit 1
+            fi
+          done
+          if [ ! -f "$normalized" ]; then
+            echo "::error::${name} must name a repository-relative regular file."
+            exit 1
+          fi
+        }
+
+        require_safe_cache_restore_target() {
+          local value="$1"
+          node --input-type=module - "$value" <<'NODE'
+        import {
+          existsSync,
+          lstatSync,
+          opendirSync,
+          readFileSync
+        } from "node:fs";
+        import path from "node:path";
+
+        const cacheDir = process.argv[2];
+        if (!cacheDir) {
+          throw new Error("Cache directory argument is missing.");
+        }
+        if (!existsSync(cacheDir)) {
+          process.exit(0);
+        }
+
+        const fail = (message) => {
+          process.stdout.write(`::error::cache-dir ${message}\n`);
+          process.exit(1);
+        };
+        const target = lstatSync(cacheDir);
+        if (target.isSymbolicLink() || !target.isDirectory()) {
+          fail("must be absent or an Ohrisk-owned directory before restore.");
+        }
+        const directory = opendirSync(cacheDir);
+        const firstEntry = directory.readSync();
+        directory.closeSync();
+        if (!firstEntry) {
+          process.exit(0);
+        }
+
+        const expectedMarker = "ohrisk artifact cache v3\n";
+        const markerPath = path.join(cacheDir, ".ohrisk-artifact-cache");
+        if (!existsSync(markerPath)) {
+          fail("is non-empty and does not contain the Ohrisk ownership marker.");
+        }
+        const marker = lstatSync(markerPath);
+        if (
+          marker.isSymbolicLink()
+          || !marker.isFile()
+          || marker.size !== Buffer.byteLength(expectedMarker)
+        ) {
+          fail("contains an invalid Ohrisk ownership marker.");
+        }
+        if (readFileSync(markerPath, "utf8") !== expectedMarker) {
+          fail("contains an unsupported Ohrisk ownership marker.");
+        }
+        NODE
+        }
+
+        case "$OHRISK_PERSIST_CACHE" in
+          true|false) ;;
+          *)
+            echo "::error::cache must be true or false."
+            exit 1
+            ;;
+        esac
+
+        effective_cache_dir="$OHRISK_CACHE_DIR"
+        if [ "$OHRISK_PERSIST_CACHE" = "true" ] && [ -z "$effective_cache_dir" ]; then
+          effective_cache_dir=".ohrisk-cache"
+        fi
+
+        if [ -n "$effective_cache_dir" ]; then
+          require_relative_workspace_no_symlinks "cache-dir" "$effective_cache_dir"
+          echo "cache-dir=$effective_cache_dir" >> "$GITHUB_OUTPUT"
+        fi
+
+        if [ "$OHRISK_PERSIST_CACHE" = "true" ]; then
+          require_safe_cache_restore_target "$effective_cache_dir"
+
+          archive_digest="no-archive"
+          if [ -n "$OHRISK_ARCHIVE" ]; then
+            require_relative_workspace_file "archive" "$OHRISK_ARCHIVE"
+            archive_digest="$(
+              node --input-type=module - "$OHRISK_ARCHIVE" <<'NODE'
+        import { createHash } from "node:crypto";
+        import { createReadStream } from "node:fs";
+
+        const archivePath = process.argv[2];
+        if (!archivePath) {
+          throw new Error("Archive path argument is missing.");
+        }
+
+        const hash = createHash("sha256");
+        for await (const chunk of createReadStream(archivePath)) {
+          hash.update(chunk);
+        }
+        process.stdout.write(hash.digest("hex"));
+        NODE
+            )"
+          fi
+
+          dependency_digest="${{ hashFiles('**/*lock*', '**/*.lock', '**/*.lockfile', '**/*.resolved', '**/*snapshot*', '**/package.json', '**/pyproject.toml', '**/requirements*.txt', '**/pom.xml', '**/*.csproj', '**/packages.config', '**/MODULE.bazel', '**/gradle/libs.versions.toml', '**/vcpkg.json', '**/environment.yml', '**/environment.yaml', '**/Chart.yaml', '**/Manifest.toml', '**/build.zig.zon', '**/*.spdx*', '**/*.cdx.*', '!**/node_modules/**', '!**/.git/**', '!**/.ohrisk-cache/**') }}"
+          if [ -z "$dependency_digest" ]; then
+            dependency_digest="no-dependency-inputs"
+          fi
+
+          cache_key="ohrisk-artifacts-v1-${{ runner.os }}-${{ runner.arch }}-${dependency_digest}-${archive_digest}"
+          echo "cache-key=$cache_key" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Restore Ohrisk artifact cache
+      id: artifact-cache
+      if: ${{ inputs.cache == 'true' }}
+      continue-on-error: true
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ github.workspace }}/${{ steps.cache-settings.outputs.cache-dir }}
+        key: ${{ steps.cache-settings.outputs.cache-key }}
+        restore-keys: |
+          ohrisk-artifacts-v1-${{ runner.os }}-${{ runner.arch }}-
+
     - name: Run Ohrisk
       id: run
       shell: bash
@@ -174,7 +381,7 @@ runs:
         OHRISK_STRICT_WAIVERS: ${{ inputs.strict-waivers }}
         OHRISK_ALLOW_PARTIAL_EVIDENCE: ${{ inputs.allow-partial-evidence }}
         OHRISK_OFFLINE: ${{ inputs.offline }}
-        OHRISK_CACHE_DIR: ${{ inputs.cache-dir }}
+        OHRISK_CACHE_DIR: ${{ steps.cache-settings.outputs.cache-dir }}
         OHRISK_JOBS: ${{ inputs.jobs }}
         OHRISK_TIMEOUT: ${{ inputs.timeout }}
         OHRISK_REGISTRY_URL: ${{ inputs.registry-url }}
@@ -459,3 +666,12 @@ runs:
         fi
 
         node "${OHRISK_ACTION_PATH}/action-dist/cli.js" "${args[@]}"
+
+    - name: Save Ohrisk artifact cache
+      id: artifact-cache-save
+      if: ${{ !cancelled() && inputs.cache == 'true' && steps.cache-settings.outcome == 'success' && (steps.run.outcome == 'success' || steps.run.outcome == 'failure') && steps.artifact-cache.outputs.cache-hit != 'true' }}
+      continue-on-error: true
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ github.workspace }}/${{ steps.cache-settings.outputs.cache-dir }}
+        key: ${{ steps.cache-settings.outputs.cache-key }}
