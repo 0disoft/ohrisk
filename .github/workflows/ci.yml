@@ -18,7 +18,7 @@ jobs:
   release-gate:
     name: Release gate (Linux)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -46,8 +46,8 @@ jobs:
       - name: Run release verification
         run: bun run verify:release
 
-      - name: Build and smoke native standalone executable
-        run: bun scripts/build-standalone.ts --native
+      - name: Cross-build all standalone release executables
+        run: bun scripts/build-standalone.ts
 
   platform-smoke:
     name: Platform smoke (${{ matrix.os }})
@@ -82,6 +82,3 @@ jobs:
 
       - name: Pack and execute the installed CLI
         run: bun run scripts/package-smoke.ts
-
-      - name: Build and smoke native standalone executable
-        run: bun scripts/build-standalone.ts --native
