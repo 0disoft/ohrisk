@@ -118,7 +118,7 @@ jobs:
 
       - name: Build standalone executables
         shell: bash
-        run: bun run build:standalone -- ${{ matrix.targets }}
+        run: bun scripts/build-standalone.ts ${{ matrix.targets }}
 
       - name: Upload standalone executables to draft release
         if: needs.prepare_release.outputs.release_is_draft == 'true'
