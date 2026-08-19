@@ -173,9 +173,6 @@ describe("standalone executable validation", () => {
 
 describe("standalone release wiring", () => {
   test("keeps package, CI, tag publishing, and docs aligned", () => {
-    const packageJson = JSON.parse(
-      readFileSync(path.join(repoRoot, "package.json"), "utf8")
-    ) as { scripts?: Record<string, string> };
     const ci = readFileSync(
       path.join(repoRoot, ".github", "workflows", "ci.yml"),
       "utf8"
@@ -198,9 +195,7 @@ describe("standalone release wiring", () => {
     );
     const gitignore = readFileSync(path.join(repoRoot, ".gitignore"), "utf8");
 
-    expect(packageJson.scripts?.["build:standalone"])
-      .toBe("bun scripts/build-standalone.ts");
-    expect(ci.match(/bun run build:standalone -- --native/g)).toHaveLength(2);
+    expect(ci.match(/bun scripts\/build-standalone\.ts --native/g)).toHaveLength(2);
 
     expect(publish).toContain("name: Build standalone executables");
     expect(publish).toContain("needs: prepare_release");
