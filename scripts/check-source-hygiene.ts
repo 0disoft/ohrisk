@@ -10,6 +10,8 @@ const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   files?: string[];
+  exports?: Record<string, string | { types?: string }>;
+  typesVersions?: Record<string, Record<string, string[]>>;
   scripts?: Record<string, string>;
 };
 
@@ -55,6 +57,47 @@ for (const required of ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"]) {
 
 if (!packageJson.files?.includes("schemas")) {
   failures.push("package.json files must include schemas");
+}
+
+const reportTypesExport = packageJson.exports?.["./report-types"];
+if (
+  typeof reportTypesExport !== "object"
+  || reportTypesExport === null
+  || reportTypesExport.types !== "./dist/report-types.d.ts"
+) {
+  failures.push("package.json must export the packaged report type declarations");
+}
+
+const expectedSchemaExports = {
+  "./schemas/common": "./schemas/common.schema.json",
+  "./schemas/scan-report": "./schemas/scan-report.schema.json",
+  "./schemas/diff-report": "./schemas/diff-report.schema.json",
+  "./schemas/explain-report": "./schemas/explain-report.schema.json",
+  "./schemas/waiver-file": "./schemas/waiver-file.schema.json"
+} as const;
+
+for (const [subpath, target] of Object.entries(expectedSchemaExports)) {
+  if (packageJson.exports?.[subpath] !== target) {
+    failures.push(`package.json export ${subpath} must target ${target}`);
+  }
+}
+
+if (packageJson.exports?.["./schemas/*"] !== "./schemas/*") {
+  failures.push("package.json must preserve direct access to packaged schema files");
+}
+if (packageJson.exports?.["./dist/*"] !== "./dist/*") {
+  failures.push("package.json must preserve direct access to packaged dist files");
+}
+
+const reportTypeTargets = packageJson.typesVersions?.["*"]?.["report-types"];
+if (
+  reportTypeTargets?.length !== 1
+  || reportTypeTargets[0] !== "dist/report-types.d.ts"
+) {
+  failures.push("package.json typesVersions must resolve report-types for legacy TypeScript");
+}
+if (!existsSync(path.join("types", "report-types.d.ts"))) {
+  failures.push("types/report-types.d.ts is missing");
 }
 
 for (const schemaName of [

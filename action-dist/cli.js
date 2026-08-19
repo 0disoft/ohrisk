@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 5e6dc12009fb0064046ec4ebd674cf88c290fe02d368ff30217493f147c4779f
+// ohrisk-action-source-sha256: 0e05a6e64ffb8d781d2d9c35bef9cb80db95cb4da732dff5ea63198befa98177
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -17252,6 +17252,29 @@ var package_default = {
   },
   bin: {
     ohrisk: "dist/cli.js"
+  },
+  exports: {
+    "./report-types": {
+      types: "./dist/report-types.d.ts"
+    },
+    "./schemas/common": "./schemas/common.schema.json",
+    "./schemas/scan-report": "./schemas/scan-report.schema.json",
+    "./schemas/diff-report": "./schemas/diff-report.schema.json",
+    "./schemas/explain-report": "./schemas/explain-report.schema.json",
+    "./schemas/waiver-file": "./schemas/waiver-file.schema.json",
+    "./schemas/*": "./schemas/*",
+    "./dist/*": "./dist/*",
+    "./CHANGELOG.md": "./CHANGELOG.md",
+    "./README.md": "./README.md",
+    "./LICENSE": "./LICENSE",
+    "./package.json": "./package.json"
+  },
+  typesVersions: {
+    "*": {
+      "report-types": [
+        "dist/report-types.d.ts"
+      ]
+    }
   },
   repository: {
     type: "git",
@@ -55584,7 +55607,7 @@ function renderDiffReport(input) {
   const nextAction = nextActionFor(input.diff.introducedFindings);
   const thresholdSummary = buildThresholdSummary(input.diff.introducedFindings, input.failOn);
   if (input.json) {
-    return JSON.stringify({
+    const report = {
       $schema: OHRISK_DIFF_REPORT_SCHEMA,
       schemaVersion: OHRISK_REPORT_SCHEMA_VERSION,
       status: "risk_diff_evaluated",
@@ -55609,7 +55632,8 @@ function renderDiffReport(input) {
       newFindings: input.diff.newFindings,
       changedFindings: input.diff.changedFindings,
       resolvedFindings: input.diff.resolvedFindings
-    }, null, 2);
+    };
+    return JSON.stringify(report, null, 2);
   }
   if (input.markdown) {
     return renderMarkdownReport(input);
@@ -55757,7 +55781,7 @@ function nextActionFor(findings) {
 // src/report/explain-report.ts
 function renderExplainReport(input) {
   if (input.json) {
-    return JSON.stringify({
+    const report = {
       $schema: OHRISK_EXPLAIN_REPORT_SCHEMA,
       schemaVersion: OHRISK_REPORT_SCHEMA_VERSION,
       status: "license_explained",
@@ -55767,7 +55791,8 @@ function renderExplainReport(input) {
       policy: input.policy,
       license: serializableNormalizedLicense(input.normalizedLicense),
       finding: input.finding
-    }, null, 2);
+    };
+    return JSON.stringify(report, null, 2);
   }
   return [
     "Ohrisk explain",
@@ -58773,7 +58798,7 @@ function renderScanReport(input) {
   const thresholdSummary = buildThresholdSummary(input.riskFindings, input.failOn);
   const waiverDriftSummary = buildWaiverDriftSummary(input);
   if (input.json) {
-    return JSON.stringify({
+    const report = {
       $schema: OHRISK_SCAN_REPORT_SCHEMA,
       schemaVersion: OHRISK_REPORT_SCHEMA_VERSION,
       status: "profile_risk_evaluated",
@@ -58804,7 +58829,8 @@ function renderScanReport(input) {
       waivedFindings: input.waivedFindings,
       expiredWaivers: input.expiredWaivers,
       unmatchedWaivers: input.unmatchedWaivers
-    }, null, 2);
+    };
+    return JSON.stringify(report, null, 2);
   }
   if (input.markdown) {
     return renderMarkdownReport2(input, summary);

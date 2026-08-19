@@ -1,3 +1,4 @@
+import type { ExplainReport } from "../../types/report-types";
 import type { NormalizedLicense } from "../license/types";
 import type { RiskFinding } from "../policy/types";
 import type { UsageProfile } from "../policy/profiles";
@@ -18,8 +19,7 @@ export type ExplainReportInput = {
 
 export function renderExplainReport(input: ExplainReportInput): string {
   if (input.json) {
-    return JSON.stringify(
-      {
+    const report = {
         $schema: OHRISK_EXPLAIN_REPORT_SCHEMA,
         schemaVersion: OHRISK_REPORT_SCHEMA_VERSION,
         status: "license_explained",
@@ -29,10 +29,8 @@ export function renderExplainReport(input: ExplainReportInput): string {
         policy: input.policy,
         license: serializableNormalizedLicense(input.normalizedLicense),
         finding: input.finding
-      },
-      null,
-      2
-    );
+    } satisfies ExplainReport;
+    return JSON.stringify(report, null, 2);
   }
 
   return [

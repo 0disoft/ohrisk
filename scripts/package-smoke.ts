@@ -44,6 +44,7 @@ try {
   );
 
   run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarballPath], consumerDir);
+  assertPublishedModuleSurface(consumerDir, repoRoot);
   const consumerBinDir = path.join(consumerDir, "node_modules", ".bin");
 
   const smokeOutput = runWithPath("ohrisk", ["version"], consumerDir, consumerBinDir).trim();
@@ -101,6 +102,102 @@ try {
   assertMarkdownReport(markdownOutput);
 } finally {
   rmSync(workspace, { force: true, recursive: true });
+}
+
+function assertPublishedModuleSurface(consumerDir: string, repoRoot: string): void {
+  const schemaSmokePath = path.join(consumerDir, "schema-smoke.mjs");
+  writeFileSync(
+    schemaSmokePath,
+    [
+      'import commonSchema from "ohrisk/schemas/common" with { type: "json" };',
+      'import scanSchema from "ohrisk/schemas/scan-report" with { type: "json" };',
+      'import diffSchema from "ohrisk/schemas/diff-report" with { type: "json" };',
+      'import explainSchema from "ohrisk/schemas/explain-report" with { type: "json" };',
+      'import waiverSchema from "ohrisk/schemas/waiver-file" with { type: "json" };',
+      'import explicitScanSchema from "ohrisk/schemas/scan-report.schema.json" with { type: "json" };',
+      "",
+      "const expected = new Map([",
+      '  [commonSchema.$id, "urn:ohrisk:schema:common:3.5.0"],',
+      '  [scanSchema.$id, "urn:ohrisk:schema:scan-report:3.5.0"],',
+      '  [diffSchema.$id, "urn:ohrisk:schema:diff-report:3.5.0"],',
+      '  [explainSchema.$id, "urn:ohrisk:schema:explain-report:3.5.0"],',
+      '  [waiverSchema.$id, "urn:ohrisk:schema:waiver-file:1.0.0"],',
+      '  [explicitScanSchema.$id, "urn:ohrisk:schema:scan-report:3.5.0"]',
+      "]);",
+      "",
+      "for (const [actual, wanted] of expected) {",
+      "  if (actual !== wanted) {",
+      "    throw new Error(`Expected schema ${wanted} but received ${String(actual)}.`);",
+      "  }",
+      "}",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  run("node", [schemaSmokePath], consumerDir);
+
+  const typeSmokePath = path.join(consumerDir, "report-types-smoke.ts");
+  writeFileSync(
+    typeSmokePath,
+    [
+      "import type {",
+      "  DiffReport,",
+      "  ExplainReport,",
+      "  Finding,",
+      "  ReportSchemaVersion,",
+      "  ScanReport,",
+      "  WaiverFile,",
+      "  WaiverFileSchemaId",
+      '} from "ohrisk/report-types";',
+      'import scanSchema from "ohrisk/schemas/scan-report" with { type: "json" };',
+      'import diffSchema from "ohrisk/schemas/diff-report" with { type: "json" };',
+      "",
+      "declare const scanReport: ScanReport;",
+      "declare const diffReport: DiffReport;",
+      "declare const explainReport: ExplainReport;",
+      "const finding: Finding | undefined = scanReport.findings[0];",
+      "const introduced: Finding[] = diffReport.findings;",
+      "const explained: Finding = explainReport.finding;",
+      'const schemaVersion: ReportSchemaVersion = "3.5.0";',
+      'const waiverSchemaId: WaiverFileSchemaId = "urn:ohrisk:schema:waiver-file:1.0.0";',
+      "const waiverFile: WaiverFile = { waivers: [] };",
+      "void [",
+      "  finding,",
+      "  introduced,",
+      "  explained,",
+      "  schemaVersion,",
+      "  waiverSchemaId,",
+      "  waiverFile,",
+      "  scanSchema,",
+      "  diffSchema",
+      "];",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  const tscPath = path.join(repoRoot, "node_modules", "typescript", "bin", "tsc");
+  run(
+    "node",
+    [
+      tscPath,
+      "--noEmit",
+      "--strict",
+      "--exactOptionalPropertyTypes",
+      "--noUncheckedIndexedAccess",
+      "--skipLibCheck",
+      "false",
+      "--module",
+      "NodeNext",
+      "--moduleResolution",
+      "NodeNext",
+      "--target",
+      "ES2022",
+      "--resolveJsonModule",
+      typeSmokePath
+    ],
+    consumerDir
+  );
 }
 
 function run(command: string, args: string[], cwd: string): string {
