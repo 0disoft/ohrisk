@@ -7,7 +7,7 @@ import {
 } from "../report/language";
 import type { RepositorySubmoduleMode } from "../repository/github-repository";
 
-export type OptionSpecCommand = "scan" | "ci" | "diff" | "explain";
+export type OptionSpecCommand = "init" | "scan" | "ci" | "diff" | "explain";
 
 export type CliDefaults = {
   profile: UsageProfile;
@@ -212,6 +212,7 @@ export const COMMAND_OPTION_RULES: readonly CommandOptionRule[] = [
 ];
 
 const OUTPUT_FORMAT_OPTIONS = {
+  init: [],
   scan: ["--json", "--sarif", "--markdown", "--html", "--cyclonedx"],
   ci: ["--json", "--sarif", "--markdown", "--html", "--cyclonedx"],
   diff: ["--json", "--markdown"],
@@ -243,6 +244,7 @@ export function findViolatedCommandOptionRule(input: {
 }
 
 export const COMMAND_USAGE = {
+  init: "ohrisk init [--profile saas|distributed-app] [--fail-on high|unknown|review|low] [--no-workflow] [--waivers]",
   scan: "ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
   ci: "ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--allow-partial-evidence] [--output <file>] [--open]",
   diff: "ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
@@ -253,6 +255,7 @@ export const COMMAND_USAGE = {
 } as const satisfies Record<HelpTarget, string>;
 
 export const COMMAND_DESCRIPTIONS = {
+  init: "Create a project policy and pull-request workflow.",
   scan: "Find the current project and prepare a license-risk scan.",
   ci: "Run a scan and exit non-zero when findings meet the fail threshold.",
   diff: "Compare current findings against a baseline git ref.",
@@ -446,6 +449,16 @@ const HELP_OPTION_SPECS = {
     syntax: "--max-age <duration>",
     description: "Remove entries unused for a duration such as 24h or 7d."
   },
+  noWorkflow: {
+    options: ["--no-workflow"],
+    syntax: "--no-workflow",
+    description: "Create local configuration without a GitHub Actions workflow."
+  },
+  waiverTemplate: {
+    options: ["--waivers"],
+    syntax: "--waivers",
+    description: "Create an empty .ohrisk-waivers.json decision-record template."
+  },
   help: {
     options: ["--help", "-h"],
     syntax: "--help, -h",
@@ -466,8 +479,9 @@ const HELP_OPTION_ORDER = {
     "workspaceRoot", "prod", "noWaivers", "offline", "cacheDir", "jobs", "timeout",
     "registryUrl", "registryTokenEnv", "allowHost", "json", "sarif", "markdown", "html",
     "language", "cyclonedx", "output", "open", "failOn", "allowPartialEvidence",
-    "strictWaivers", "help", "version"
+    "strictWaivers", "noWorkflow", "waiverTemplate", "help", "version"
   ],
+  init: ["profile", "failOn", "noWorkflow", "waiverTemplate", "help"],
   scan: [
     "profile", "lockfile", "archive", "repo", "submodules", "all", "policy",
     "workspaceRoot", "prod", "noWaivers", "offline", "cacheDir", "jobs", "timeout",
@@ -514,6 +528,7 @@ const SCAN_AND_CI_OPTION_KEYS = [
 ] as const satisfies readonly HelpOptionKey[];
 
 const COMMAND_OPTION_KEYS = {
+  init: ["profile", "failOn", "noWorkflow", "waiverTemplate", "help"],
   scan: [...SCAN_AND_CI_OPTION_KEYS, "repo", "submodules"],
   ci: [
     ...SCAN_AND_CI_OPTION_KEYS,

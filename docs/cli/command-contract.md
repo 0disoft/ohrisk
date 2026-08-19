@@ -37,6 +37,7 @@ without producing a report.
 
 | Command | Contract |
 | --- | --- |
+| `ohrisk init` | Detect the nearest supported project and create a starter policy, an optional waiver template, and a version-pinned pull-request workflow without overwriting existing files. |
 | `ohrisk scan` | Scan local, archive, or supported public GitHub repository dependency evidence and render a non-failing report unless input preparation or output/write fails. |
 | `ohrisk ci` | Run a scan and exit non-zero when active findings meet `--fail-on` after waiver handling. |
 | `ohrisk diff <ref>` | Compare findings against a git baseline and classify new, meaningfully changed, and resolved risk. |
@@ -49,6 +50,7 @@ configured artifact cache and network policy.
 
 ## Stable Options
 
+- `init --profile <profile>` and `init --fail-on <severity>` configure the generated pull-request gate. `--no-workflow` skips GitHub Actions scaffolding and `--waivers` adds an empty `.ohrisk-waivers.json`. Initialization is create-only: existing regular files are reported as unchanged or preserved and are never overwritten.
 - `--lockfile <path>` selects one supported input; `--all` discovers and merges all supported lockfiles at the selected project root. They are mutually exclusive for scan, CI, and diff. A remote repository scan automatically merges multiple supported inputs at its one selected project root; local, archive, CI, and diff inputs keep the explicit `--all` opt-in.
 - `scan|ci --archive <path>` scans a ZIP, TAR, TAR.GZ, or TGZ as a read-only in-memory virtual project. It is mutually exclusive with `--lockfile` and `--workspace-root`, may be combined with `--all`, and is not supported by `diff`.
 - `scan [repository-url]` and `scan --repo <url>` scan one public GitHub HTTPS repository through a bounded temporary shallow clone. Remote repository input may combine with a safe repository-relative `--lockfile`, is mutually exclusive with `--archive`, `--workspace-root`, and `--offline`, and is not supported by `ci`, `diff`, or the GitHub Action input contract.

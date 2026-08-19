@@ -2,6 +2,7 @@
 
 ## 1.15.1 - Unreleased
 
+- Added `ohrisk init` to detect the nearest supported project and create a minimal policy, a version-pinned pull-request gate, and an optional empty waiver template without overwriting user-owned files.
 - Updated the bundled `@0disoft/laqu` development dependency from 1.1.8 to
   1.1.9 while preserving compatible-major declaration ranges and exact Bun
   lockfile integrity.

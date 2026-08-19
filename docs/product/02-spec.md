@@ -46,6 +46,7 @@ and modules without an exact ZIP checksum are never sent to the proxy.
 
 ## Commands
 
+- `ohrisk init`: creates a minimal project policy, an optional empty waiver file, and a version-pinned pull-request workflow without overwriting existing files.
 - `ohrisk scan`: non-failing local scan and report generation.
 - `ohrisk ci`: CI gate that exits non-zero when active findings meet `--fail-on`.
 - `ohrisk diff <ref>`: compares current findings against a git baseline, separates new, changed, and resolved findings, and independently discovers and merges current/baseline input sets with `--all`.
