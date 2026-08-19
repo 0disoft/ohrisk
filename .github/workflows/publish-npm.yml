@@ -85,22 +85,13 @@ jobs:
           fi
 
   standalone:
-    name: Build standalone executables (${{ matrix.os }})
+    name: Cross-build standalone executables
     needs: prepare_release
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    if: needs.prepare_release.outputs.release_is_draft == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
     permissions:
       contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            targets: "--target linux-x64 --target linux-arm64"
-          - os: macos-latest
-            targets: "--target macos-x64 --target macos-arm64"
-          - os: windows-latest
-            targets: "--target windows-x64 --target windows-arm64"
 
     steps:
       - name: Checkout
@@ -116,16 +107,14 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build standalone executables
-        shell: bash
-        run: bun scripts/build-standalone.ts ${{ matrix.targets }}
+      - name: Build and validate all standalone executables
+        run: bun scripts/build-standalone.ts
 
       - name: Upload standalone executables to draft release
-        if: needs.prepare_release.outputs.release_is_draft == 'true'
-        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           for asset in release/standalone/ohrisk-*; do
             if [ ! -f "$asset" ]; then
               echo "::error::Standalone asset glob did not resolve to a regular file."
@@ -134,11 +123,82 @@ jobs:
             gh release upload "$GITHUB_REF_NAME" "$asset" --clobber
           done
 
+  standalone-smoke:
+    name: Smoke standalone release (${{ matrix.os }})
+    needs:
+      - prepare_release
+      - standalone
+    if: needs.prepare_release.outputs.release_is_draft == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - macos-latest
+
+    steps:
+      - name: Download and execute native release asset
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          case "$RUNNER_OS/$RUNNER_ARCH" in
+            Windows/X64) asset="ohrisk-windows-x64.exe" ;;
+            Windows/ARM64) asset="ohrisk-windows-arm64.exe" ;;
+            macOS/X64) asset="ohrisk-macos-x64" ;;
+            macOS/ARM64) asset="ohrisk-macos-arm64" ;;
+            *)
+              echo "::error::No standalone asset is defined for $RUNNER_OS/$RUNNER_ARCH."
+              exit 1
+              ;;
+          esac
+
+          mkdir -p release-smoke
+          gh release download "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$asset" \
+            --dir release-smoke
+
+          executable="./release-smoke/$asset"
+          if [ ! -f "$executable" ]; then
+            echo "::error::Draft release is missing native standalone asset $asset."
+            exit 1
+          fi
+          if [ "$RUNNER_OS" != "Windows" ]; then
+            chmod +x "$executable"
+          fi
+
+          expected_version="ohrisk ${GITHUB_REF_NAME#v}"
+          actual_version="$("$executable" version | tr -d '\r')"
+          if [ "$actual_version" != "$expected_version" ]; then
+            echo "::error::Standalone version mismatch: expected '$expected_version', received '$actual_version'."
+            exit 1
+          fi
+
+          explain_output="$("$executable" explain MIT --json)"
+          if ! printf '%s' "$explain_output" \
+            | grep -Eq '"status"[[:space:]]*:[[:space:]]*"license_explained"'; then
+            echo "::error::Standalone explain output did not report license_explained."
+            exit 1
+          fi
+          if ! printf '%s' "$explain_output" \
+            | grep -Eq '"expression"[[:space:]]*:[[:space:]]*"MIT"'; then
+            echo "::error::Standalone explain output did not preserve the MIT expression."
+            exit 1
+          fi
+
   publish:
     name: Publish to npm
     needs:
       - prepare_release
-      - standalone
+      - standalone-smoke
+    if: needs.prepare_release.outputs.release_is_draft == 'true'
     environment: npm
     runs-on: ubuntu-latest
     timeout-minutes: 15
