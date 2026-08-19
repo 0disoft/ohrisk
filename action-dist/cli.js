@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 5e6dc12009fb0064046ec4ebd674cf88c290fe02d368ff30217493f147c4779f
+// ohrisk-action-source-sha256: 8aa6656407591a6b211bead19dc500faf573fdd6934921c46d86493a5a872d32
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -40804,7 +40804,6 @@ function cacheOperationError(message, rootDir, cause) {
 
 // src/evidence/collect.ts
 import { createHash as createHash8, timingSafeEqual as timingSafeEqual5 } from "node:crypto";
-import { lookup } from "node:dns/promises";
 import {
   closeSync as closeSync4,
   existsSync as existsSync46,
@@ -40813,10 +40812,7 @@ import {
   readSync as readSync4,
   statSync as statSync34
 } from "node:fs";
-import { request as httpsRequest } from "node:https";
-import { isIP as isIP2 } from "node:net";
 import path81 from "node:path";
-import { Readable } from "node:stream";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 import { gunzipSync as gunzipSync4 } from "node:zlib";
 
@@ -40909,6 +40905,12 @@ function readContentLength(headers) {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
+// src/evidence/artifact-transport.ts
+import { lookup } from "node:dns/promises";
+import { request as httpsRequest } from "node:https";
+import { isIP as isIP2 } from "node:net";
+import { Readable } from "node:stream";
+
 // src/evidence/artifact-url.ts
 function parseHttpUrl(value) {
   try {
@@ -40963,6 +40965,410 @@ function safeUrlForErrorDetails(value) {
 }
 function redactUrlCredentialsInText(value) {
   return value.replace(/([a-z][a-z0-9+.-]*:\/\/)([^@/?#\s\\]*)(@)/gi, "$1redacted$3").replace(/([a-z][a-z0-9+.-]*:\/)([^@/?#\s\\]*)(@)/gi, "$1redacted$3").replace(/([a-z][a-z0-9+.-]{1,}:\\+)([^@/?#\s\\]*)(@)/gi, "$1redacted$3");
+}
+
+// src/evidence/artifact-transport.ts
+var ARTIFACT_HOST_RESOLUTION_CACHE_TTL_MS = 60000;
+var ARTIFACT_HOST_RESOLUTION_CACHE_MAX_ENTRIES = 256;
+
+class BlockedArtifactRemoteAddressError extends Error {
+  hostname;
+  remoteAddress;
+  reason;
+  constructor(input) {
+    super(`Blocked artifact socket remote address for ${input.hostname}: ${input.remoteAddress} (${input.reason}).`);
+    this.name = "BlockedArtifactRemoteAddressError";
+    this.hostname = input.hostname;
+    this.remoteAddress = input.remoteAddress;
+    this.reason = input.reason;
+  }
+}
+function normalizeAllowedArtifactHosts(hosts) {
+  const normalized = new Set;
+  for (const host of hosts ?? []) {
+    const value = normalizeUrlHostname(host.trim());
+    if (value) {
+      normalized.add(value);
+    }
+  }
+  return normalized;
+}
+function withRegistryAuthorization(fetchArtifact, tokens) {
+  if (!tokens || tokens.size === 0) {
+    return fetchArtifact;
+  }
+  const normalizedTokens = new Map;
+  for (const [host, token] of tokens) {
+    if (token) {
+      normalizedTokens.set(normalizeUrlHostname(host), token);
+    }
+  }
+  return (url, options) => {
+    const parsed = parseHttpUrl(url);
+    const token = parsed?.protocol === "https:" ? normalizedTokens.get(normalizeUrlHostname(parsed.hostname)) : undefined;
+    if (!token) {
+      return fetchArtifact(url, options);
+    }
+    return fetchArtifact(url, {
+      ...options,
+      headers: {
+        ...options?.headers ?? {},
+        authorization: `Bearer ${token}`
+      }
+    });
+  };
+}
+function createDefaultArtifactFetcher(resolveArtifactHost) {
+  const lookup2 = createSecureArtifactLookup(resolveArtifactHost);
+  return (url, options) => defaultArtifactFetcher(url, options, lookup2);
+}
+function defaultArtifactFetcher(url, options, lookup2 = secureArtifactLookup) {
+  const parsedUrl = parseHttpUrl(url);
+  if (!parsedUrl || parsedUrl.protocol !== "https:") {
+    return Promise.reject(new Error(`Unsupported artifact URL: ${safeUrlForErrorDetails(url)}`));
+  }
+  return new Promise((resolve2, reject) => {
+    const req = httpsRequest(parsedUrl, {
+      method: "GET",
+      signal: options?.signal,
+      headers: options?.headers,
+      lookup: lookup2
+    }, (response) => {
+      const socketAddress = validateArtifactSocketRemoteAddress(parsedUrl.hostname, response.socket.remoteAddress, { allowMissingWhenLookupGuarded: true });
+      if (!socketAddress.ok) {
+        response.destroy(socketAddress.error);
+        reject(socketAddress.error);
+        return;
+      }
+      resolve2({
+        ok: (response.statusCode ?? 0) >= 200 && (response.statusCode ?? 0) < 300,
+        status: response.statusCode ?? 0,
+        statusText: response.statusMessage ?? "",
+        url,
+        headers: headersForIncomingMessage(response.headers),
+        body: Readable.toWeb(response),
+        arrayBuffer: async () => {
+          const buffer = await readIncomingMessageToBuffer(response);
+          return Uint8Array.from(buffer).buffer;
+        }
+      });
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+function validateArtifactSocketRemoteAddress(hostname, remoteAddress, options) {
+  if (!remoteAddress) {
+    if (options?.allowMissingWhenLookupGuarded) {
+      return ok(undefined);
+    }
+    return err(new BlockedArtifactRemoteAddressError({
+      hostname: normalizeUrlHostname(hostname),
+      remoteAddress: "<missing>",
+      reason: "missing_remote_address"
+    }));
+  }
+  const normalizedRemoteAddress = normalizeUrlHostname(remoteAddress);
+  const blockedReason = blockedRemoteArtifactHostReason(normalizedRemoteAddress);
+  if (!blockedReason) {
+    return ok(undefined);
+  }
+  return err(new BlockedArtifactRemoteAddressError({
+    hostname: normalizeUrlHostname(hostname),
+    remoteAddress: normalizedRemoteAddress,
+    reason: blockedReason
+  }));
+}
+async function defaultArtifactHostResolver(hostname) {
+  return lookup(hostname, {
+    all: true,
+    verbatim: true
+  });
+}
+function secureArtifactLookup(hostname, options, callback) {
+  const lookupOptions = typeof options === "number" ? { family: options } : options;
+  createSecureArtifactLookup(defaultArtifactHostResolver)(hostname, lookupOptions, callback);
+}
+function createSecureArtifactLookup(resolveArtifactHost) {
+  return (hostname, options, callback) => {
+    resolveArtifactHost(hostname).then((resolutions) => {
+      const selection = selectSecureArtifactLookupResponse(hostname, options, resolutions);
+      if (!selection.ok) {
+        respondToSecureArtifactLookupError(callback, options, selection.error);
+        return;
+      }
+      if (selection.value.all) {
+        callback(null, selection.value.resolutions);
+        return;
+      }
+      callback(null, selection.value.address, selection.value.family);
+    }).catch((cause) => {
+      respondToSecureArtifactLookupError(callback, options, cause instanceof Error ? cause : new Error(String(cause)));
+    });
+  };
+}
+function createCachingArtifactHostResolver(resolveArtifactHost, now = Date.now) {
+  const cache = new Map;
+  return async (hostname) => {
+    const normalizedHostname = normalizeUrlHostname(hostname);
+    const current = cache.get(normalizedHostname);
+    const currentTime = now();
+    if (current && current.expiresAt > currentTime) {
+      return current.resolutions;
+    }
+    const resolutions = resolveArtifactHost(normalizedHostname);
+    cache.delete(normalizedHostname);
+    cache.set(normalizedHostname, {
+      expiresAt: currentTime + ARTIFACT_HOST_RESOLUTION_CACHE_TTL_MS,
+      resolutions
+    });
+    while (cache.size > ARTIFACT_HOST_RESOLUTION_CACHE_MAX_ENTRIES) {
+      const oldest = cache.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      cache.delete(oldest);
+    }
+    try {
+      return await resolutions;
+    } catch (cause) {
+      const cached = cache.get(normalizedHostname);
+      if (cached?.resolutions === resolutions) {
+        cache.delete(normalizedHostname);
+      }
+      throw cause;
+    }
+  };
+}
+function selectSecureArtifactLookupResponse(hostname, options, resolutions) {
+  const normalizedOptions = normalizeArtifactLookupOptions(options);
+  const normalizedHostname = normalizeUrlHostname(hostname);
+  if (resolutions.length === 0) {
+    return err(new Error(`Artifact host ${normalizedHostname} returned no DNS addresses.`));
+  }
+  const familyResolutions = normalizedOptions.family === undefined ? resolutions : resolutions.filter((resolution) => resolution.family === normalizedOptions.family);
+  if (familyResolutions.length === 0) {
+    return err(new Error(`Artifact host ${normalizedHostname} returned no matching DNS addresses.`));
+  }
+  for (const resolution of familyResolutions) {
+    const blockedReason = blockedRemoteArtifactHostReason(resolution.address);
+    if (blockedReason) {
+      return err(new Error(`Blocked artifact host resolution for ${normalizedHostname}: ${normalizeUrlHostname(resolution.address)} (${blockedReason}).`));
+    }
+  }
+  if (normalizedOptions.all) {
+    return ok({
+      all: true,
+      resolutions: familyResolutions
+    });
+  }
+  const selected = familyResolutions[0];
+  return ok({
+    all: false,
+    address: selected.address,
+    family: selected.family
+  });
+}
+function normalizeArtifactLookupOptions(options) {
+  const rawFamily = typeof options === "number" ? options : options?.family;
+  const family = rawFamily === "IPv4" ? 4 : rawFamily === "IPv6" ? 6 : rawFamily;
+  return {
+    all: typeof options === "object" && options?.all === true,
+    family: family === 4 || family === 6 ? family : undefined
+  };
+}
+function respondToSecureArtifactLookupError(callback, options, error) {
+  if (normalizeArtifactLookupOptions(options).all) {
+    callback(error, []);
+    return;
+  }
+  callback(error, "", 0);
+}
+function headersForIncomingMessage(headers) {
+  return {
+    get: (name) => {
+      const value = headers[name.toLowerCase()];
+      if (Array.isArray(value)) {
+        return value.join(", ");
+      }
+      return typeof value === "string" ? value : null;
+    }
+  };
+}
+async function readIncomingMessageToBuffer(message) {
+  const chunks = [];
+  for await (const chunk of message) {
+    if (Buffer.isBuffer(chunk)) {
+      chunks.push(chunk);
+    } else if (chunk instanceof Uint8Array) {
+      chunks.push(Buffer.from(chunk));
+    } else {
+      chunks.push(Buffer.from(String(chunk)));
+    }
+  }
+  return Buffer.concat(chunks);
+}
+function isExplicitlyAllowedArtifactHost(hostname, allowedHosts) {
+  const host = normalizeUrlHostname(hostname);
+  if (!allowedHosts?.has(host)) {
+    return false;
+  }
+  return isIP2(host) === 0 && host !== "localhost" && !host.endsWith(".localhost");
+}
+function blockedRemoteArtifactHostReason(hostname) {
+  const host = normalizeUrlHostname(hostname);
+  if (host === "localhost" || host.endsWith(".localhost")) {
+    return "localhost";
+  }
+  const ipVersion = isIP2(host);
+  if (ipVersion === 4) {
+    return blockedIpv4HostReason(host);
+  }
+  if (ipVersion === 6) {
+    return blockedIpv6HostReason(host);
+  }
+  return;
+}
+function shouldResolveRemoteArtifactHost(hostname) {
+  return isIP2(hostname) === 0 && blockedRemoteArtifactHostReason(hostname) === undefined;
+}
+function normalizeUrlHostname(hostname) {
+  return hostname.toLowerCase().replace(/^\[/, "").replace(/\]$/, "").replace(/\.$/, "");
+}
+function blockedIpv4HostReason(host) {
+  const octets = host.split(".").map((part) => Number(part));
+  if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
+    return "invalid_ipv4";
+  }
+  const [a, b, c] = octets;
+  if (a === 0)
+    return "unspecified_ipv4";
+  if (a === 10)
+    return "private_ipv4";
+  if (a === 100 && b >= 64 && b <= 127)
+    return "shared_address_ipv4";
+  if (a === 127)
+    return "loopback_ipv4";
+  if (a === 169 && b === 254)
+    return "link_local_ipv4";
+  if (a === 172 && b >= 16 && b <= 31)
+    return "private_ipv4";
+  if (a === 192 && b === 168)
+    return "private_ipv4";
+  if (a === 192 && b === 0 && c === 2)
+    return "documentation_ipv4";
+  if (a === 192 && b === 0)
+    return "non_public_ipv4";
+  if (a === 198 && (b === 18 || b === 19))
+    return "benchmarking_ipv4";
+  if (a === 198 && b === 51 && c === 100)
+    return "documentation_ipv4";
+  if (a === 203 && b === 0 && c === 113)
+    return "documentation_ipv4";
+  if (a >= 224)
+    return "multicast_or_reserved_ipv4";
+  return;
+}
+function blockedIpv6HostReason(host) {
+  if (host === "::")
+    return "unspecified_ipv6";
+  if (host === "::1")
+    return "loopback_ipv6";
+  const embeddedIpv4 = embeddedIpv4FromIpv6Host(host);
+  if (embeddedIpv4) {
+    return blockedIpv4HostReason(embeddedIpv4);
+  }
+  const hextets = expandIpv6Hextets(host);
+  if (!hextets) {
+    return "invalid_ipv6";
+  }
+  const [firstHextet, secondHextet, thirdHextet, fourthHextet] = hextets;
+  if (firstHextet === 100 && secondHextet === 65435 && thirdHextet === 1) {
+    return "local_nat64_ipv6";
+  }
+  if (firstHextet === 256 && secondHextet === 0 && thirdHextet === 0 && fourthHextet === 0) {
+    return "discard_ipv6";
+  }
+  if ((firstHextet & 65024) === 64512)
+    return "unique_local_ipv6";
+  if ((firstHextet & 65472) === 65152)
+    return "link_local_ipv6";
+  if ((firstHextet & 65280) === 65280)
+    return "multicast_ipv6";
+  if (firstHextet === 8193 && secondHextet === 0)
+    return "teredo_ipv6";
+  if (firstHextet === 8193 && secondHextet === 2 && thirdHextet === 0) {
+    return "benchmarking_ipv6";
+  }
+  if (firstHextet === 8193 && ((secondHextet & 65520) === 16 || (secondHextet & 65520) === 32)) {
+    return "orchid_ipv6";
+  }
+  if (firstHextet === 8193 && secondHextet === 3512)
+    return "documentation_ipv6";
+  return;
+}
+function embeddedIpv4FromIpv6Host(host) {
+  const dotted = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+  if (dotted?.[1]) {
+    return dotted[1];
+  }
+  const hextets = expandIpv6Hextets(host);
+  if (!hextets) {
+    return;
+  }
+  if (hextets.slice(0, 5).every((hextet) => hextet === 0) && hextets[5] === 65535) {
+    return ipv4FromHextets(hextets[6], hextets[7]);
+  }
+  if (hextets.slice(0, 6).every((hextet) => hextet === 0) && (hextets[6] !== 0 || hextets[7] > 1)) {
+    return ipv4FromHextets(hextets[6], hextets[7]);
+  }
+  if (hextets[0] === 100 && hextets[1] === 65435 && hextets.slice(2, 6).every((hextet) => hextet === 0)) {
+    return ipv4FromHextets(hextets[6], hextets[7]);
+  }
+  if (hextets[0] === 8194) {
+    return ipv4FromHextets(hextets[1], hextets[2]);
+  }
+  return;
+}
+function ipv4FromHextets(high, low) {
+  return [
+    high >> 8 & 255,
+    high & 255,
+    low >> 8 & 255,
+    low & 255
+  ].join(".");
+}
+function expandIpv6Hextets(host) {
+  if (host.includes(".")) {
+    return;
+  }
+  const [left = "", right = "", extra] = host.split("::");
+  if (extra !== undefined) {
+    return;
+  }
+  const leftParts = left === "" ? [] : left.split(":");
+  const rightParts = right === "" ? [] : right.split(":");
+  const hasCompression = host.includes("::");
+  const missingCount = hasCompression ? 8 - leftParts.length - rightParts.length : 0;
+  if (!hasCompression && leftParts.length !== 8 || missingCount < 0) {
+    return;
+  }
+  const parts = [
+    ...leftParts,
+    ...Array.from({ length: missingCount }, () => "0"),
+    ...rightParts
+  ];
+  if (parts.length !== 8) {
+    return;
+  }
+  const hextets = parts.map((part) => {
+    if (!/^[0-9a-f]{1,4}$/i.test(part)) {
+      return;
+    }
+    const value = Number.parseInt(part, 16);
+    return Number.isInteger(value) && value >= 0 && value <= 65535 ? value : undefined;
+  });
+  return hextets.every((hextet) => hextet !== undefined) ? hextets : undefined;
 }
 
 // src/evidence/cancellation.ts
@@ -49015,8 +49421,6 @@ var CARGO_CRATES_IO_SOURCES2 = new Set([
 ]);
 var CARGO_CRATE_BASE_URL = "https://static.crates.io/crates";
 var CARGO_CRATE_HOSTS = new Set(["static.crates.io"]);
-var ARTIFACT_HOST_RESOLUTION_CACHE_TTL_MS = 60000;
-var ARTIFACT_HOST_RESOLUTION_CACHE_MAX_ENTRIES = 256;
 async function collectGraphEvidence(input) {
   const evidence = new Array(input.graph.nodes.length);
   const total = input.graph.nodes.length;
@@ -51642,19 +52046,6 @@ async function resolveArtifactHostWithTimeout(input) {
     }
   }
 }
-
-class BlockedArtifactRemoteAddressError extends Error {
-  hostname;
-  remoteAddress;
-  reason;
-  constructor(input) {
-    super(`Blocked artifact socket remote address for ${input.hostname}: ${input.remoteAddress} (${input.reason}).`);
-    this.name = "BlockedArtifactRemoteAddressError";
-    this.hostname = input.hostname;
-    this.remoteAddress = input.remoteAddress;
-    this.reason = input.reason;
-  }
-}
 function createRemoteArtifactExceptionError(input) {
   if (input.cause instanceof BlockedArtifactRemoteAddressError) {
     return createError({
@@ -51684,168 +52075,6 @@ function createRemoteArtifactExceptionError(input) {
       cause: safeErrorCauseForDetails(input.cause)
     }
   });
-}
-function isExplicitlyAllowedArtifactHost(hostname, allowedHosts) {
-  const host = normalizeUrlHostname(hostname);
-  if (!allowedHosts?.has(host)) {
-    return false;
-  }
-  return isIP2(host) === 0 && host !== "localhost" && !host.endsWith(".localhost");
-}
-function blockedRemoteArtifactHostReason(hostname) {
-  const host = normalizeUrlHostname(hostname);
-  if (host === "localhost" || host.endsWith(".localhost")) {
-    return "localhost";
-  }
-  const ipVersion = isIP2(host);
-  if (ipVersion === 4) {
-    return blockedIpv4HostReason(host);
-  }
-  if (ipVersion === 6) {
-    return blockedIpv6HostReason(host);
-  }
-  return;
-}
-function shouldResolveRemoteArtifactHost(hostname) {
-  return isIP2(hostname) === 0 && blockedRemoteArtifactHostReason(hostname) === undefined;
-}
-function normalizeUrlHostname(hostname) {
-  return hostname.toLowerCase().replace(/^\[/, "").replace(/\]$/, "").replace(/\.$/, "");
-}
-function blockedIpv4HostReason(host) {
-  const octets = host.split(".").map((part) => Number(part));
-  if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
-    return "invalid_ipv4";
-  }
-  const [a, b, c] = octets;
-  if (a === 0)
-    return "unspecified_ipv4";
-  if (a === 10)
-    return "private_ipv4";
-  if (a === 100 && b >= 64 && b <= 127)
-    return "shared_address_ipv4";
-  if (a === 127)
-    return "loopback_ipv4";
-  if (a === 169 && b === 254)
-    return "link_local_ipv4";
-  if (a === 172 && b >= 16 && b <= 31)
-    return "private_ipv4";
-  if (a === 192 && b === 168)
-    return "private_ipv4";
-  if (a === 192 && b === 0 && c === 2)
-    return "documentation_ipv4";
-  if (a === 192 && b === 0)
-    return "non_public_ipv4";
-  if (a === 198 && (b === 18 || b === 19))
-    return "benchmarking_ipv4";
-  if (a === 198 && b === 51 && c === 100)
-    return "documentation_ipv4";
-  if (a === 203 && b === 0 && c === 113)
-    return "documentation_ipv4";
-  if (a >= 224)
-    return "multicast_or_reserved_ipv4";
-  return;
-}
-function blockedIpv6HostReason(host) {
-  if (host === "::")
-    return "unspecified_ipv6";
-  if (host === "::1")
-    return "loopback_ipv6";
-  const embeddedIpv4 = embeddedIpv4FromIpv6Host(host);
-  if (embeddedIpv4) {
-    return blockedIpv4HostReason(embeddedIpv4);
-  }
-  const hextets = expandIpv6Hextets(host);
-  if (!hextets) {
-    return "invalid_ipv6";
-  }
-  const [firstHextet, secondHextet, thirdHextet, fourthHextet] = hextets;
-  if (firstHextet === 100 && secondHextet === 65435 && thirdHextet === 1) {
-    return "local_nat64_ipv6";
-  }
-  if (firstHextet === 256 && secondHextet === 0 && thirdHextet === 0 && fourthHextet === 0) {
-    return "discard_ipv6";
-  }
-  if ((firstHextet & 65024) === 64512)
-    return "unique_local_ipv6";
-  if ((firstHextet & 65472) === 65152)
-    return "link_local_ipv6";
-  if ((firstHextet & 65280) === 65280)
-    return "multicast_ipv6";
-  if (firstHextet === 8193 && secondHextet === 0)
-    return "teredo_ipv6";
-  if (firstHextet === 8193 && secondHextet === 2 && thirdHextet === 0) {
-    return "benchmarking_ipv6";
-  }
-  if (firstHextet === 8193 && ((secondHextet & 65520) === 16 || (secondHextet & 65520) === 32)) {
-    return "orchid_ipv6";
-  }
-  if (firstHextet === 8193 && secondHextet === 3512)
-    return "documentation_ipv6";
-  return;
-}
-function embeddedIpv4FromIpv6Host(host) {
-  const dotted = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
-  if (dotted?.[1]) {
-    return dotted[1];
-  }
-  const hextets = expandIpv6Hextets(host);
-  if (!hextets) {
-    return;
-  }
-  if (hextets.slice(0, 5).every((hextet) => hextet === 0) && hextets[5] === 65535) {
-    return ipv4FromHextets(hextets[6], hextets[7]);
-  }
-  if (hextets.slice(0, 6).every((hextet) => hextet === 0) && (hextets[6] !== 0 || hextets[7] > 1)) {
-    return ipv4FromHextets(hextets[6], hextets[7]);
-  }
-  if (hextets[0] === 100 && hextets[1] === 65435 && hextets.slice(2, 6).every((hextet) => hextet === 0)) {
-    return ipv4FromHextets(hextets[6], hextets[7]);
-  }
-  if (hextets[0] === 8194) {
-    return ipv4FromHextets(hextets[1], hextets[2]);
-  }
-  return;
-}
-function ipv4FromHextets(high, low) {
-  return [
-    high >> 8 & 255,
-    high & 255,
-    low >> 8 & 255,
-    low & 255
-  ].join(".");
-}
-function expandIpv6Hextets(host) {
-  if (host.includes(".")) {
-    return;
-  }
-  const [left = "", right = "", extra] = host.split("::");
-  if (extra !== undefined) {
-    return;
-  }
-  const leftParts = left === "" ? [] : left.split(":");
-  const rightParts = right === "" ? [] : right.split(":");
-  const hasCompression = host.includes("::");
-  const missingCount = hasCompression ? 8 - leftParts.length - rightParts.length : 0;
-  if (!hasCompression && leftParts.length !== 8 || missingCount < 0) {
-    return;
-  }
-  const parts = [
-    ...leftParts,
-    ...Array.from({ length: missingCount }, () => "0"),
-    ...rightParts
-  ];
-  if (parts.length !== 8) {
-    return;
-  }
-  const hextets = parts.map((part) => {
-    if (!/^[0-9a-f]{1,4}$/i.test(part)) {
-      return;
-    }
-    const value = Number.parseInt(part, 16);
-    return Number.isInteger(value) && value >= 0 && value <= 65535 ? value : undefined;
-  });
-  return hextets.every((hextet) => hextet !== undefined) ? hextets : undefined;
 }
 function npmRegistryPackageVersionUrl(name, version, registryUrl) {
   return `${npmRegistryPackageUrl(name, registryUrl)}/${encodeURIComponent(version)}`;
@@ -51902,231 +52131,6 @@ function readRegistryVersionMetadata(metadata, version) {
 }
 function isRecord27(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function normalizeAllowedArtifactHosts(hosts) {
-  const normalized = new Set;
-  for (const host of hosts ?? []) {
-    const value = normalizeUrlHostname(host.trim());
-    if (value) {
-      normalized.add(value);
-    }
-  }
-  return normalized;
-}
-function withRegistryAuthorization(fetchArtifact, tokens) {
-  if (!tokens || tokens.size === 0) {
-    return fetchArtifact;
-  }
-  const normalizedTokens = new Map;
-  for (const [host, token] of tokens) {
-    if (token) {
-      normalizedTokens.set(normalizeUrlHostname(host), token);
-    }
-  }
-  return (url, options) => {
-    const parsed = parseHttpUrl(url);
-    const token = parsed?.protocol === "https:" ? normalizedTokens.get(normalizeUrlHostname(parsed.hostname)) : undefined;
-    if (!token) {
-      return fetchArtifact(url, options);
-    }
-    return fetchArtifact(url, {
-      ...options,
-      headers: {
-        ...options?.headers ?? {},
-        authorization: `Bearer ${token}`
-      }
-    });
-  };
-}
-function createDefaultArtifactFetcher(resolveArtifactHost) {
-  const lookup2 = createSecureArtifactLookup(resolveArtifactHost);
-  return (url, options) => defaultArtifactFetcher(url, options, lookup2);
-}
-function defaultArtifactFetcher(url, options, lookup2 = secureArtifactLookup) {
-  const parsedUrl = parseHttpUrl(url);
-  if (!parsedUrl || parsedUrl.protocol !== "https:") {
-    return Promise.reject(new Error(`Unsupported artifact URL: ${safeUrlForErrorDetails(url)}`));
-  }
-  return new Promise((resolve2, reject) => {
-    const req = httpsRequest(parsedUrl, {
-      method: "GET",
-      signal: options?.signal,
-      headers: options?.headers,
-      lookup: lookup2
-    }, (response) => {
-      const socketAddress = validateArtifactSocketRemoteAddress(parsedUrl.hostname, response.socket.remoteAddress, { allowMissingWhenLookupGuarded: true });
-      if (!socketAddress.ok) {
-        response.destroy(socketAddress.error);
-        reject(socketAddress.error);
-        return;
-      }
-      resolve2({
-        ok: (response.statusCode ?? 0) >= 200 && (response.statusCode ?? 0) < 300,
-        status: response.statusCode ?? 0,
-        statusText: response.statusMessage ?? "",
-        url,
-        headers: headersForIncomingMessage(response.headers),
-        body: Readable.toWeb(response),
-        arrayBuffer: async () => {
-          const buffer = await readIncomingMessageToBuffer(response);
-          return Uint8Array.from(buffer).buffer;
-        }
-      });
-    });
-    req.on("error", reject);
-    req.end();
-  });
-}
-function validateArtifactSocketRemoteAddress(hostname, remoteAddress, options) {
-  if (!remoteAddress) {
-    if (options?.allowMissingWhenLookupGuarded) {
-      return ok(undefined);
-    }
-    return err(new BlockedArtifactRemoteAddressError({
-      hostname: normalizeUrlHostname(hostname),
-      remoteAddress: "<missing>",
-      reason: "missing_remote_address"
-    }));
-  }
-  const normalizedRemoteAddress = normalizeUrlHostname(remoteAddress);
-  const blockedReason = blockedRemoteArtifactHostReason(normalizedRemoteAddress);
-  if (!blockedReason) {
-    return ok(undefined);
-  }
-  return err(new BlockedArtifactRemoteAddressError({
-    hostname: normalizeUrlHostname(hostname),
-    remoteAddress: normalizedRemoteAddress,
-    reason: blockedReason
-  }));
-}
-async function defaultArtifactHostResolver(hostname) {
-  return lookup(hostname, {
-    all: true,
-    verbatim: true
-  });
-}
-function secureArtifactLookup(hostname, options, callback) {
-  const lookupOptions = typeof options === "number" ? { family: options } : options;
-  createSecureArtifactLookup(defaultArtifactHostResolver)(hostname, lookupOptions, callback);
-}
-function createSecureArtifactLookup(resolveArtifactHost) {
-  return (hostname, options, callback) => {
-    resolveArtifactHost(hostname).then((resolutions) => {
-      const selection = selectSecureArtifactLookupResponse(hostname, options, resolutions);
-      if (!selection.ok) {
-        respondToSecureArtifactLookupError(callback, options, selection.error);
-        return;
-      }
-      if (selection.value.all) {
-        callback(null, selection.value.resolutions);
-        return;
-      }
-      callback(null, selection.value.address, selection.value.family);
-    }).catch((cause) => {
-      respondToSecureArtifactLookupError(callback, options, cause instanceof Error ? cause : new Error(String(cause)));
-    });
-  };
-}
-function createCachingArtifactHostResolver(resolveArtifactHost, now = Date.now) {
-  const cache = new Map;
-  return async (hostname) => {
-    const normalizedHostname = normalizeUrlHostname(hostname);
-    const current = cache.get(normalizedHostname);
-    const currentTime = now();
-    if (current && current.expiresAt > currentTime) {
-      return current.resolutions;
-    }
-    const resolutions = resolveArtifactHost(normalizedHostname);
-    cache.delete(normalizedHostname);
-    cache.set(normalizedHostname, {
-      expiresAt: currentTime + ARTIFACT_HOST_RESOLUTION_CACHE_TTL_MS,
-      resolutions
-    });
-    while (cache.size > ARTIFACT_HOST_RESOLUTION_CACHE_MAX_ENTRIES) {
-      const oldest = cache.keys().next().value;
-      if (oldest === undefined) {
-        break;
-      }
-      cache.delete(oldest);
-    }
-    try {
-      return await resolutions;
-    } catch (cause) {
-      const cached = cache.get(normalizedHostname);
-      if (cached?.resolutions === resolutions) {
-        cache.delete(normalizedHostname);
-      }
-      throw cause;
-    }
-  };
-}
-function selectSecureArtifactLookupResponse(hostname, options, resolutions) {
-  const normalizedOptions = normalizeArtifactLookupOptions(options);
-  const normalizedHostname = normalizeUrlHostname(hostname);
-  if (resolutions.length === 0) {
-    return err(new Error(`Artifact host ${normalizedHostname} returned no DNS addresses.`));
-  }
-  const familyResolutions = normalizedOptions.family === undefined ? resolutions : resolutions.filter((resolution) => resolution.family === normalizedOptions.family);
-  if (familyResolutions.length === 0) {
-    return err(new Error(`Artifact host ${normalizedHostname} returned no matching DNS addresses.`));
-  }
-  for (const resolution of familyResolutions) {
-    const blockedReason = blockedRemoteArtifactHostReason(resolution.address);
-    if (blockedReason) {
-      return err(new Error(`Blocked artifact host resolution for ${normalizedHostname}: ${normalizeUrlHostname(resolution.address)} (${blockedReason}).`));
-    }
-  }
-  if (normalizedOptions.all) {
-    return ok({
-      all: true,
-      resolutions: familyResolutions
-    });
-  }
-  const selected = familyResolutions[0];
-  return ok({
-    all: false,
-    address: selected.address,
-    family: selected.family
-  });
-}
-function normalizeArtifactLookupOptions(options) {
-  const rawFamily = typeof options === "number" ? options : options?.family;
-  const family = rawFamily === "IPv4" ? 4 : rawFamily === "IPv6" ? 6 : rawFamily;
-  return {
-    all: typeof options === "object" && options?.all === true,
-    family: family === 4 || family === 6 ? family : undefined
-  };
-}
-function respondToSecureArtifactLookupError(callback, options, error) {
-  if (normalizeArtifactLookupOptions(options).all) {
-    callback(error, []);
-    return;
-  }
-  callback(error, "", 0);
-}
-function headersForIncomingMessage(headers) {
-  return {
-    get: (name) => {
-      const value = headers[name.toLowerCase()];
-      if (Array.isArray(value)) {
-        return value.join(", ");
-      }
-      return typeof value === "string" ? value : null;
-    }
-  };
-}
-async function readIncomingMessageToBuffer(message) {
-  const chunks = [];
-  for await (const chunk of message) {
-    if (Buffer.isBuffer(chunk)) {
-      chunks.push(chunk);
-    } else if (chunk instanceof Uint8Array) {
-      chunks.push(Buffer.from(chunk));
-    } else {
-      chunks.push(Buffer.from(String(chunk)));
-    }
-  }
-  return Buffer.concat(chunks);
 }
 
 // src/git/ref-file.ts
