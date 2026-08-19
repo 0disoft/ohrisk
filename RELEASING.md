@@ -46,9 +46,15 @@ runs the packaged `ohrisk` bin through Node.js.
 
 `bun scripts/build-standalone.ts --native` compiles one executable for the
 current runner, checks its executable format and architecture header, verifies
-`ohrisk <version>`, and executes `ohrisk explain MIT --json`. The release-check
-workflow runs this native build on Linux, Windows, and macOS without duplicating
-the complete coverage suite.
+`ohrisk <version>`, and executes `ohrisk explain MIT --json`.
+
+The pull-request release gate uses Linux as the single cross-build environment
+for all six release targets. It validates every executable header and runs the
+Linux native smoke. Windows and macOS pull-request jobs retain filesystem, path,
+archive, cache, and installed-package smoke coverage without compiling a second
+copy of the standalone executable. The tag workflow performs target-operating-
+system execution against the exact assets downloaded back from the draft
+release.
 
 Use repeatable explicit targets when inspecting a cross-build locally:
 
@@ -79,22 +85,24 @@ The tag workflow performs the irreversible work in this order:
 2. Run `bun run verify:release` and extract a dated, non-empty
    `CHANGELOG.md` section.
 3. Create or refresh a draft GitHub Release.
-4. Build Linux, macOS, and Windows executables for x64 and arm64 with the pinned
-   Bun version.
-5. Validate each file's executable format and architecture. Each runner also
-   executes its native binary through the version and explain smoke checks.
+4. Cross-build Linux, macOS, and Windows executables for x64 and arm64 on the
+   pinned Linux Bun runner.
+5. Validate each file's executable format and architecture, then execute the
+   Linux native binary through the version and explain smoke checks.
 6. Upload all six executables to the draft release.
-7. Publish the npm package when that exact version is not already present, then
+7. Download the exact native Windows and macOS assets from that draft release
+   on their target runners and execute the version and explain smoke checks.
+8. Publish the npm package when that exact version is not already present, then
    verify the exact `package@version` registry metadata: version, tarball URL,
    and integrity.
-8. Download the six attached executables again, generate deterministic
+9. Download all six attached executables again, generate deterministic
    `SHA256SUMS` from the release bytes, upload it, and publish the GitHub Release.
 
 The postcheck does not depend on the mutable `latest` npm dist-tag. A build,
-smoke, npm, or checksum failure leaves the GitHub Release in draft state. A
-rerun replaces same-named assets and skips npm publication when the exact npm
-version already exists, so an interrupted release can be completed without
-creating another package version.
+header, target-runtime smoke, npm, or checksum failure leaves the GitHub Release
+in draft state. A rerun replaces same-named assets and skips npm publication
+when the exact npm version already exists, so an interrupted release can be
+completed without creating another package version.
 
 Public install and Action examples track the latest dated changelog release,
 while this file tracks the candidate package version. This keeps `main`
@@ -124,5 +132,6 @@ gh release upload v1.15.1 release/standalone/ohrisk-* --clobber
 
 Do not publish a release with missing targets, a locally generated checksum
 manifest that was not recomputed from the attached assets, or unsigned assets
-described as signed. If the release cannot meet those conditions, leave it in
-draft state and keep npm recovery separate.
+described as signed. A Windows or macOS asset must also pass an execution smoke
+on its target operating system. If the release cannot meet those conditions,
+leave it in draft state and keep npm recovery separate.
