@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: ade8c0d9b6e9d56c075dc1c88f0f42d088918ab05252ec0aeebe158942119ee7
+// ohrisk-action-source-sha256: 8e49c01c1d921086115b4028e6010273df30a3f7eca8113c8d6ed2399ee29211
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -33644,6 +33644,7 @@ function parseCargoLockText(input, lockfilePath = "Cargo.lock", options = {}) {
       rootName,
       lockfilePath,
       nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+      ...cargoWorkspaceEmbeddedEvidence(options.memberManifestTexts ?? [], records),
       ...pathLimitAffected.size > 0 ? {
         diagnostics: [{
           code: "dependency_paths_truncated",
@@ -34318,6 +34319,52 @@ function readCargoPackageName(text) {
     }
   }
   return;
+}
+function cargoWorkspaceEmbeddedEvidence(manifestTexts, records) {
+  const embeddedEvidence = manifestTexts.map((text) => {
+    const metadata = readCargoPackageLicenseMetadata(text);
+    if (!metadata.name || !metadata.version || !metadata.license) {
+      return;
+    }
+    const record = resolveCargoPackageRecord(records, {
+      name: metadata.name,
+      version: metadata.version
+    });
+    if (!record) {
+      return;
+    }
+    return {
+      packageId: record.id,
+      metadataLicense: metadata.license,
+      metadataSource: "workspace Cargo.toml",
+      files: [],
+      source: "local",
+      warnings: []
+    };
+  }).filter((evidence) => evidence !== undefined).sort((left, right) => left.packageId.localeCompare(right.packageId));
+  return embeddedEvidence.length > 0 ? { embeddedEvidence } : {};
+}
+function readCargoPackageLicenseMetadata(text) {
+  let section = "";
+  const metadata = {};
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = stripTomlComment9(rawLine).trim();
+    if (line.startsWith("[") && line.endsWith("]")) {
+      section = line.slice(1, -1);
+      continue;
+    }
+    if (section !== "package") {
+      continue;
+    }
+    for (const key of ["name", "version", "license"]) {
+      const value = readStringAssignment5(line, key);
+      if (value !== undefined) {
+        metadata[key] = value;
+        break;
+      }
+    }
+  }
+  return metadata;
 }
 function readStringAssignment5(line, key) {
   const match = new RegExp(`^${escapeRegExp5(key)}\\s*=\\s*"([^"]*)"`).exec(line);

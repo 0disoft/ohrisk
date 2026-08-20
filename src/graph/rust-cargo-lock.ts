@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, type Dirent } from "node:fs";
 import path from "node:path";
 
+import type { LicenseEvidence } from "../evidence/types";
 import { createError, type OhriskError } from "../shared/errors";
 import { omitUndefined } from "../shared/object";
 import { err, ok, type Result } from "../shared/result";
@@ -167,6 +168,7 @@ export function parseCargoLockText(
       rootName,
       lockfilePath,
       nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+      ...cargoWorkspaceEmbeddedEvidence(options.memberManifestTexts ?? [], records),
       ...(pathLimitAffected.size > 0
         ? {
             diagnostics: [{
@@ -1100,6 +1102,65 @@ function readCargoPackageName(text: string | undefined): string | undefined {
   }
 
   return undefined;
+}
+
+function cargoWorkspaceEmbeddedEvidence(
+  manifestTexts: string[],
+  records: CargoPackageRecord[]
+): Pick<DependencyGraph, "embeddedEvidence"> {
+  const embeddedEvidence = manifestTexts
+    .map((text): LicenseEvidence | undefined => {
+      const metadata = readCargoPackageLicenseMetadata(text);
+      if (!metadata.name || !metadata.version || !metadata.license) {
+        return undefined;
+      }
+      const record = resolveCargoPackageRecord(records, {
+        name: metadata.name,
+        version: metadata.version
+      });
+      if (!record) {
+        return undefined;
+      }
+      return {
+        packageId: record.id,
+        metadataLicense: metadata.license,
+        metadataSource: "workspace Cargo.toml",
+        files: [],
+        source: "local",
+        warnings: []
+      };
+    })
+    .filter((evidence): evidence is LicenseEvidence => evidence !== undefined)
+    .sort((left, right) => left.packageId.localeCompare(right.packageId));
+
+  return embeddedEvidence.length > 0 ? { embeddedEvidence } : {};
+}
+
+function readCargoPackageLicenseMetadata(text: string): {
+  name?: string;
+  version?: string;
+  license?: string;
+} {
+  let section = "";
+  const metadata: { name?: string; version?: string; license?: string } = {};
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = stripTomlComment(rawLine).trim();
+    if (line.startsWith("[") && line.endsWith("]")) {
+      section = line.slice(1, -1);
+      continue;
+    }
+    if (section !== "package") {
+      continue;
+    }
+    for (const key of ["name", "version", "license"] as const) {
+      const value = readStringAssignment(line, key);
+      if (value !== undefined) {
+        metadata[key] = value;
+        break;
+      }
+    }
+  }
+  return metadata;
 }
 
 function readStringAssignment(line: string, key: string): string | undefined {

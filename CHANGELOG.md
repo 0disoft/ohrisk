@@ -2,6 +2,9 @@
 
 ## 1.15.1 - Unreleased
 
+- Cargo workspace packages now preserve exact member `Cargo.toml` license
+  declarations as project-contained evidence during remote scans instead of
+  being grouped with unsupported external Git and registry sources.
 - Large all-dependency scans now disclose their development-only package count
   before remote evidence collection and suggest the existing `--prod` boundary
   only when excluding those packages matches the deployment scope. Ohrisk does
