@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 8e49c01c1d921086115b4028e6010273df30a3f7eca8113c8d6ed2399ee29211
+// ohrisk-action-source-sha256: 3d030d04d96e7ffd576c7e13268d6e256fffbb3c87cbce2b893ec3a2dfc0bc43
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -55125,6 +55125,7 @@ function redactRegistryUrl(value) {
 var PERMISSIVE_LICENSES = new Set([
   "0BSD",
   "MIT",
+  "MIT-0",
   "MIT-CMU",
   "ISC",
   "BSD-2-Clause",

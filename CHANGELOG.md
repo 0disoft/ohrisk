@@ -2,6 +2,9 @@
 
 ## 1.15.1 - Unreleased
 
+- The active SPDX `MIT-0` identifier is now classified as permissive low-risk
+  evidence while retaining its distributed license-text preservation
+  obligation.
 - Cargo workspace packages now preserve exact member `Cargo.toml` license
   declarations as project-contained evidence during remote scans instead of
   being grouped with unsupported external Git and registry sources.
