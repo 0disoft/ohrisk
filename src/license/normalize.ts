@@ -589,7 +589,7 @@ function recognizeStandardLicenseText(text: string): string | undefined {
     && /\bTHE SOFTWARE IS PROVIDED "AS IS"/i.test(text)
   ) {
     if (
-      /\bprovided that the above copyright notice and this permission notice appear in all copies\b/i.test(text)
+      /\bprovided\s+that\s+the\s+above\s+copyright\s+notice\s+and\s+this\s+permission\s+notice\s+appear\s+in\s+all\s+copies\b/i.test(text)
     ) {
       return "ISC";
     }

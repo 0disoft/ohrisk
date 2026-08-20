@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 3d030d04d96e7ffd576c7e13268d6e256fffbb3c87cbce2b893ec3a2dfc0bc43
+// ohrisk-action-source-sha256: 4d338e3582b956b66035b4cd9a2db6ea5b60b61c4914b673b8d1c651ec7fee9d
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -54269,7 +54269,7 @@ function recognizeStandardLicenseText(text) {
     return "MIT";
   }
   if (/\bPermission to use, copy, modify, and\/or distribute this software\b/i.test(text) && /\bTHE SOFTWARE IS PROVIDED "AS IS"/i.test(text)) {
-    if (/\bprovided that the above copyright notice and this permission notice appear in all copies\b/i.test(text)) {
+    if (/\bprovided\s+that\s+the\s+above\s+copyright\s+notice\s+and\s+this\s+permission\s+notice\s+appear\s+in\s+all\s+copies\b/i.test(text)) {
       return "ISC";
     }
     if (/\bfor any purpose with or without fee is hereby granted\b/i.test(text)) {

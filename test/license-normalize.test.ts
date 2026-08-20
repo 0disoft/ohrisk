@@ -929,6 +929,35 @@ describe("normalizeLicenseEvidence", () => {
     expect(normalized.evidenceSources).toContain("file: LICENSE-0BSD (license)");
   });
 
+  test("recognizes a line-wrapped ISC notice clause", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "@isaacs/cliui@8.0.2",
+      metadataLicense: "ISC",
+      metadataLicenseKind: "declared",
+      metadataSource: "package.json",
+      files: [{
+        path: "LICENSE.txt",
+        kind: "license",
+        text: [
+          "Permission to use, copy, modify, and/or distribute this software",
+          "for any purpose with or without fee is hereby granted, provided",
+          "that the above copyright notice and this permission notice",
+          "appear in all copies.",
+          "THE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES"
+        ].join("\n")
+      }],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      expression: "ISC",
+      choices: ["ISC"],
+      signals: [],
+      confidence: "high"
+    });
+  });
+
   test("recognizes public-domain-style license file text", () => {
     expect(
       normalizeLicenseEvidence({

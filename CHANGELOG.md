@@ -2,6 +2,8 @@
 
 ## 1.15.1 - Unreleased
 
+- Line-wrapped ISC notice clauses are now recognized across whitespace instead
+  of being mistaken for zero-clause BSD text and creating a false conflict.
 - The active SPDX `MIT-0` identifier is now classified as permissive low-risk
   evidence while retaining its distributed license-text preservation
   obligation.
