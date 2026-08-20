@@ -418,7 +418,7 @@ describe("PyPI release evidence", () => {
       files: [],
       source: "unavailable",
       warnings: [
-        "Package evidence could not be fetched (REGISTRY_METADATA_FETCH_FAILED): Failed to fetch PyPI release metadata."
+        "Package evidence could not be fetched (REGISTRY_METADATA_FETCH_FAILED): Failed to fetch PyPI release metadata. (timeout after 1ms)"
       ]
     }]);
   });
