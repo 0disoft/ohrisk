@@ -76,6 +76,7 @@ import {
 } from "./baseline-project";
 import { runCacheCommand } from "./cache-command";
 import type { CliCommand } from "./command";
+import { runInitCommand } from "./init-command";
 import { renderHelp } from "./help";
 import {
   emitReport,
@@ -159,6 +160,8 @@ export async function main(
       case "version":
         io.stdout(renderVersion());
         return 0;
+      case "init":
+        return runInitCommand(command, io);
       case "cache":
         return runCacheCommand(command, io);
       case "scan":

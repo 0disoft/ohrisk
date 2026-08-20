@@ -9,6 +9,7 @@ import {
 
 export function renderHelp(target?: HelpTarget): string {
   switch (target) {
+    case "init": return renderInitHelp();
     case "scan": return renderScanHelp();
     case "ci": return renderCiHelp();
     case "diff": return renderDiffHelp();
@@ -34,6 +35,18 @@ function renderTopLevelHelp(): string {
     "",
     "Options:",
     ...helpOptionLinesFor("top")
+  ].join("\n");
+}
+
+function renderInitHelp(): string {
+  return [
+    "Ohrisk init",
+    "",
+    "Usage:",
+    `  ${COMMAND_DETAIL_USAGE.init}`,
+    "",
+    "Options:",
+    ...helpOptionLinesFor("init")
   ].join("\n");
 }
 

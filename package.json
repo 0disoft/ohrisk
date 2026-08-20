@@ -134,7 +134,7 @@
     "prepack": "bun scripts/build.ts",
     "scan": "bun run src/cli/main.ts scan",
     "test": "bun test",
-    "test:platform": "bun test test/archive-interop.test.ts test/evidence-cache.test.ts test/git-ref-file.test.ts test/github-repository.test.ts test/materialized-checkout.test.ts test/write-output.test.ts",
+    "test:platform": "bun test test/archive-interop.test.ts test/evidence-cache.test.ts test/git-ref-file.test.ts test/github-repository.test.ts test/init-command.test.ts test/materialized-checkout.test.ts test/write-output.test.ts",
     "test:coverage": "bun scripts/check-coverage.ts",
     "test:fuzz": "bun test test/parser-fuzz.test.ts",
     "eval:heldout": "bun scripts/evaluate-license-heldout.ts",

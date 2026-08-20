@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 0ed3dd020d4ae0b36a4707a896053b874ccc200188489c78ec81bf301a8bb509
+// ohrisk-action-source-sha256: 4129b8a153183c46486d7bb4066afccb9534b825c8bca555586ab2f71101e5cb
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -14559,8 +14559,8 @@ ${indent}`);
 
 // src/cli/main.ts
 import { isIP as isIP4 } from "node:net";
-import { realpathSync as realpathSync9 } from "node:fs";
-import path94 from "node:path";
+import { realpathSync as realpathSync10 } from "node:fs";
+import path95 from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // src/shared/errors.ts
@@ -15403,6 +15403,7 @@ function sanitizeGitDiagnostic(value) {
 
 // src/cli/command.ts
 var SUPPORTED_COMMANDS = [
+  "init",
   "scan",
   "ci",
   "diff",
@@ -15556,6 +15557,7 @@ var COMMAND_OPTION_RULES = [
   }
 ];
 var OUTPUT_FORMAT_OPTIONS = {
+  init: [],
   scan: ["--json", "--sarif", "--markdown", "--html", "--cyclonedx"],
   ci: ["--json", "--sarif", "--markdown", "--html", "--cyclonedx"],
   diff: ["--json", "--markdown"],
@@ -15573,6 +15575,7 @@ function findViolatedCommandOptionRule(input) {
   });
 }
 var COMMAND_USAGE = {
+  init: "ohrisk init [--profile saas|distributed-app] [--fail-on high|unknown|review|low] [--no-workflow] [--waivers]",
   scan: "ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
   ci: "ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--allow-partial-evidence] [--output <file>] [--open]",
   diff: "ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
@@ -15582,6 +15585,7 @@ var COMMAND_USAGE = {
   version: "ohrisk version"
 };
 var COMMAND_DESCRIPTIONS = {
+  init: "Create a project policy and pull-request workflow.",
   scan: "Find the current project and prepare a license-risk scan.",
   ci: "Run a scan and exit non-zero when findings meet the fail threshold.",
   diff: "Compare current findings against a baseline git ref.",
@@ -15764,6 +15768,16 @@ var HELP_OPTION_SPECS = {
     syntax: "--max-age <duration>",
     description: "Remove entries unused for a duration such as 24h or 7d."
   },
+  noWorkflow: {
+    options: ["--no-workflow"],
+    syntax: "--no-workflow",
+    description: "Create local configuration without a GitHub Actions workflow."
+  },
+  waiverTemplate: {
+    options: ["--waivers"],
+    syntax: "--waivers",
+    description: "Create an empty .ohrisk-waivers.json decision-record template."
+  },
   help: {
     options: ["--help", "-h"],
     syntax: "--help, -h",
@@ -15805,9 +15819,12 @@ var HELP_OPTION_ORDER = {
     "failOn",
     "allowPartialEvidence",
     "strictWaivers",
+    "noWorkflow",
+    "waiverTemplate",
     "help",
     "version"
   ],
+  init: ["profile", "failOn", "noWorkflow", "waiverTemplate", "help"],
   scan: [
     "profile",
     "lockfile",
@@ -15930,6 +15947,7 @@ var SCAN_AND_CI_OPTION_KEYS = [
   "help"
 ];
 var COMMAND_OPTION_KEYS = {
+  init: ["profile", "failOn", "noWorkflow", "waiverTemplate", "help"],
   scan: [...SCAN_AND_CI_OPTION_KEYS, "repo", "submodules"],
   ci: [
     ...SCAN_AND_CI_OPTION_KEYS,
@@ -16137,7 +16155,7 @@ function parseArgs(argv) {
   }
   const command = argv[0];
   const rest = argv.slice(1);
-  if (command !== "scan" && command !== "ci" && command !== "diff" && command !== "explain" && command !== "cache") {
+  if (command !== "init" && command !== "scan" && command !== "ci" && command !== "diff" && command !== "explain" && command !== "cache") {
     return err(createError({
       code: "UNSUPPORTED_COMMAND",
       category: "invalid_input",
@@ -16146,6 +16164,9 @@ function parseArgs(argv) {
         supportedCommands: [...SUPPORTED_COMMANDS]
       }
     }));
+  }
+  if (command === "init") {
+    return parseInitArgs(rest);
   }
   if (command === "cache") {
     return parseCacheArgs(rest);
@@ -16183,6 +16204,87 @@ function parseTopLevelHelpArgs(argv) {
 }
 function isSupportedCommand(value) {
   return typeof value === "string" && SUPPORTED_COMMANDS.includes(value);
+}
+function parseInitArgs(argv) {
+  let profile = CLI_DEFAULTS.profile;
+  let failOn = CLI_DEFAULTS.failOn;
+  let workflow = true;
+  let waivers = false;
+  for (let index = 0;index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (!arg) {
+      continue;
+    }
+    switch (arg) {
+      case "--profile": {
+        const value = readRequiredOptionValue(argv, index, "--profile", {
+          supportedProfiles: [...USAGE_PROFILES]
+        });
+        if (isErr(value)) {
+          return value;
+        }
+        if (!isUsageProfile(value.value)) {
+          return err(createError({
+            code: "INVALID_ARGUMENT",
+            category: "invalid_input",
+            message: `Unsupported profile "${value.value}".`,
+            details: {
+              supportedProfiles: [...USAGE_PROFILES]
+            }
+          }));
+        }
+        profile = value.value;
+        index += 1;
+        break;
+      }
+      case "--fail-on": {
+        const value = readRequiredOptionValue(argv, index, "--fail-on", {
+          supportedSeverities: CLI_FAIL_ON_SEVERITIES
+        });
+        if (isErr(value)) {
+          return value;
+        }
+        if (!isFailOnSeverity(value.value)) {
+          return err(createError({
+            code: "INVALID_ARGUMENT",
+            category: "invalid_input",
+            message: `Unsupported fail-on severity "${value.value}".`,
+            details: {
+              supportedSeverities: CLI_FAIL_ON_SEVERITIES
+            }
+          }));
+        }
+        failOn = value.value;
+        index += 1;
+        break;
+      }
+      case "--no-workflow":
+        workflow = false;
+        break;
+      case "--waivers":
+        waivers = true;
+        break;
+      case "--help":
+      case "-h":
+        return ok({ kind: "help", target: "init" });
+      default:
+        return err(createError({
+          code: "INVALID_ARGUMENT",
+          category: "invalid_input",
+          message: `Unknown init option "${arg}".`,
+          details: {
+            supportedOptions: supportedOptionsFor("init")
+          }
+        }));
+    }
+  }
+  return ok({
+    kind: "init",
+    profile,
+    failOn,
+    workflow,
+    waivers
+  });
 }
 function parseCacheArgs(argv) {
   if (argv.length === 0 || isHelpFlag(argv[0])) {
@@ -17376,7 +17478,7 @@ var package_default = {
     prepack: "bun scripts/build.ts",
     scan: "bun run src/cli/main.ts scan",
     test: "bun test",
-    "test:platform": "bun test test/archive-interop.test.ts test/evidence-cache.test.ts test/git-ref-file.test.ts test/github-repository.test.ts test/materialized-checkout.test.ts test/write-output.test.ts",
+    "test:platform": "bun test test/archive-interop.test.ts test/evidence-cache.test.ts test/git-ref-file.test.ts test/github-repository.test.ts test/init-command.test.ts test/materialized-checkout.test.ts test/write-output.test.ts",
     "test:coverage": "bun scripts/check-coverage.ts",
     "test:fuzz": "bun test test/parser-fuzz.test.ts",
     "eval:heldout": "bun scripts/evaluate-license-heldout.ts",
@@ -61304,9 +61406,309 @@ function formatCacheTimestamp(value) {
   return value === undefined ? "none" : new Date(value).toISOString();
 }
 
+// src/cli/init-command.ts
+import {
+  existsSync as existsSync48,
+  lstatSync as lstatSync4,
+  mkdirSync as mkdirSync2,
+  readFileSync as readFileSync5,
+  realpathSync as realpathSync7,
+  writeFileSync as writeFileSync3
+} from "node:fs";
+import path91 from "node:path";
+function runInitCommand(command, io) {
+  const discovered = discoverProject({
+    cwd: io.cwd,
+    autoMergeSameRoot: true
+  });
+  if (isErr(discovered)) {
+    io.stderr(formatError(discovered.error));
+    return exitCodeForError(discovered.error);
+  }
+  const detectedProjectRoot = discovered.value.rootDir;
+  let projectRoot;
+  try {
+    projectRoot = realpathSync7(detectedProjectRoot);
+  } catch (cause) {
+    const failure = initWriteFailure(".", "Project root could not be resolved.", cause);
+    io.stderr(formatError(failure));
+    return exitCodeForError(failure);
+  }
+  const repositoryRoot = findNearestGitRoot2(projectRoot) ?? projectRoot;
+  const lockfiles = projectLockfiles(discovered.value);
+  const projectDirectory = displayRelativePath(repositoryRoot, projectRoot);
+  if (command.workflow && !isSafeWorkflowDirectory(projectDirectory)) {
+    const failure = initWriteFailure(".github/workflows/ohrisk.yml", "Detected project path cannot be embedded safely in a GitHub workflow.");
+    io.stderr(formatError(failure));
+    return exitCodeForError(failure);
+  }
+  const scanAll = lockfiles.length > 1;
+  const plans = [
+    {
+      rootDir: projectRoot,
+      relativePath: ".ohrisk.yml",
+      displayPath: displayRelativePath(repositoryRoot, path91.join(projectRoot, ".ohrisk.yml")),
+      content: renderPolicyTemplate()
+    },
+    ...command.workflow ? [{
+      rootDir: repositoryRoot,
+      relativePath: ".github/workflows/ohrisk.yml",
+      displayPath: ".github/workflows/ohrisk.yml",
+      content: renderWorkflowTemplate({
+        profile: command.profile,
+        failOn: command.failOn,
+        projectDirectory,
+        scanAll
+      })
+    }] : [],
+    ...command.waivers ? [{
+      rootDir: projectRoot,
+      relativePath: ".ohrisk-waivers.json",
+      displayPath: displayRelativePath(repositoryRoot, path91.join(projectRoot, ".ohrisk-waivers.json")),
+      content: renderWaiverTemplate()
+    }] : []
+  ];
+  const prepared = [];
+  for (const plan of plans) {
+    const result2 = prepareInitFile(plan);
+    if (isErr(result2)) {
+      io.stderr(formatError(result2.error));
+      return exitCodeForError(result2.error);
+    }
+    prepared.push(result2.value);
+  }
+  const files = [];
+  for (const file of prepared) {
+    if (file.status !== "create") {
+      files.push({
+        displayPath: file.displayPath,
+        status: file.status
+      });
+      continue;
+    }
+    const written = writePreparedInitFile(file);
+    if (isErr(written)) {
+      io.stderr(formatError(written.error));
+      return exitCodeForError(written.error);
+    }
+    files.push({
+      displayPath: file.displayPath,
+      status: "created"
+    });
+  }
+  const inputs = lockfiles.map((lockfile) => displayRelativePath(detectedProjectRoot, lockfile.path)).sort((left, right) => left.localeCompare(right));
+  const output = [
+    "Ohrisk initialized.",
+    `project: ${projectDirectory}`,
+    `inputs: ${inputs.join(", ")}`,
+    ...files.map((file) => `${file.status}: ${file.displayPath}`),
+    command.workflow ? "next: review and commit the generated policy and workflow." : "next: review the generated policy, then run ohrisk scan."
+  ];
+  io.stdout(output.join(`
+`));
+  return 0;
+}
+function prepareInitFile(plan) {
+  const relativeSegments = normalizedRelativeSegments(plan.relativePath);
+  if (!relativeSegments) {
+    return err(initWriteFailure(plan.displayPath, "Generated path was not a safe relative path."));
+  }
+  const absolutePath = path91.join(plan.rootDir, ...relativeSegments);
+  if (!isPathInsideOrEqual6(absolutePath, plan.rootDir)) {
+    return err(initWriteFailure(plan.displayPath, "Generated path escaped its initialization root."));
+  }
+  let currentPath = plan.rootDir;
+  try {
+    for (const segment of relativeSegments.slice(0, -1)) {
+      currentPath = path91.join(currentPath, segment);
+      if (!existsSync48(currentPath)) {
+        continue;
+      }
+      const stats2 = lstatSync4(currentPath);
+      if (stats2.isSymbolicLink()) {
+        return err(initWriteFailure(plan.displayPath, "Parent path contains a symbolic link."));
+      }
+      if (!stats2.isDirectory()) {
+        return err(initWriteFailure(plan.displayPath, "Parent path contains a non-directory entry."));
+      }
+    }
+    if (!existsSync48(absolutePath)) {
+      return ok({
+        ...plan,
+        absolutePath,
+        status: "create"
+      });
+    }
+    const stats = lstatSync4(absolutePath);
+    if (stats.isSymbolicLink()) {
+      return err(initWriteFailure(plan.displayPath, "Existing target is a symbolic link."));
+    }
+    if (!stats.isFile()) {
+      return err(initWriteFailure(plan.displayPath, "Existing target is not a regular file."));
+    }
+    const currentContent = readFileSync5(absolutePath, "utf8");
+    return ok({
+      ...plan,
+      absolutePath,
+      status: normalizedText(currentContent) === normalizedText(plan.content) ? "unchanged" : "preserved"
+    });
+  } catch (cause) {
+    return err(initWriteFailure(plan.displayPath, "Initialization target could not be inspected.", cause));
+  }
+}
+function writePreparedInitFile(file) {
+  const relativeSegments = normalizedRelativeSegments(file.relativePath);
+  if (!relativeSegments) {
+    return err(initWriteFailure(file.displayPath, "Generated path was not a safe relative path."));
+  }
+  let currentPath = file.rootDir;
+  try {
+    for (const segment of relativeSegments.slice(0, -1)) {
+      currentPath = path91.join(currentPath, segment);
+      if (!existsSync48(currentPath)) {
+        mkdirSync2(currentPath, { mode: 493 });
+      }
+      const stats = lstatSync4(currentPath);
+      if (stats.isSymbolicLink() || !stats.isDirectory()) {
+        return err(initWriteFailure(file.displayPath, "Parent path changed during initialization."));
+      }
+    }
+    writeFileSync3(file.absolutePath, file.content, {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 420
+    });
+    return ok(undefined);
+  } catch (cause) {
+    return err(initWriteFailure(file.displayPath, "Initialization file could not be created.", cause));
+  }
+}
+function renderPolicyTemplate() {
+  return [
+    "# Generated by ohrisk init.",
+    "# Add explicit rules only when project policy differs from Ohrisk defaults.",
+    "version: 1",
+    ""
+  ].join(`
+`);
+}
+function renderWaiverTemplate() {
+  return [
+    "{",
+    '  "waivers": []',
+    "}",
+    ""
+  ].join(`
+`);
+}
+function renderWorkflowTemplate(input) {
+  return [
+    "name: License risk",
+    "",
+    "on:",
+    "  pull_request:",
+    "",
+    "permissions:",
+    "  contents: read",
+    "",
+    "jobs:",
+    "  ohrisk:",
+    "    name: Ohrisk",
+    "    runs-on: ubuntu-latest",
+    "    timeout-minutes: 10",
+    "",
+    "    steps:",
+    "      - name: Checkout",
+    "        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0",
+    "        with:",
+    "          fetch-depth: 0",
+    "",
+    "      - name: Setup Node",
+    "        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0",
+    "        with:",
+    '          node-version: "24"',
+    "",
+    "      - name: Check dependency license risk",
+    `        working-directory: ${JSON.stringify(input.projectDirectory)}`,
+    "        run: >-",
+    `          npx --yes ohrisk@${OHRISK_VERSION}`,
+    '          diff "${{ github.event.pull_request.base.sha }}"',
+    `          --profile ${input.profile}`,
+    "          --prod",
+    `          --fail-on ${input.failOn}`,
+    ...input.scanAll ? ["          --all"] : [],
+    ""
+  ].join(`
+`);
+}
+function findNearestGitRoot2(startPath) {
+  let currentPath = startPath;
+  while (true) {
+    if (existsSync48(path91.join(currentPath, ".git"))) {
+      try {
+        return realpathSync7(currentPath);
+      } catch {
+        return currentPath;
+      }
+    }
+    const parentPath = path91.dirname(currentPath);
+    if (parentPath === currentPath) {
+      return;
+    }
+    currentPath = parentPath;
+  }
+}
+function normalizedRelativeSegments(value) {
+  const normalized = value.replace(/\\/g, "/");
+  if (normalized === "" || normalized.startsWith("/") || /^[A-Za-z]:/.test(normalized)) {
+    return;
+  }
+  const segments = normalized.split("/");
+  if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+    return;
+  }
+  return segments;
+}
+function displayRelativePath(rootDir, targetPath) {
+  const relativePath = path91.relative(rootDir, targetPath);
+  return relativePath === "" ? "." : relativePath.split(path91.sep).join("/");
+}
+function isSafeWorkflowDirectory(value) {
+  return !value.includes("${{") && !/[\u0000-\u001f\u007f]/u.test(value) && (value === "." || normalizedRelativeSegments(value) !== undefined);
+}
+function isPathInsideOrEqual6(childPath, parentPath) {
+  const relativePath = path91.relative(parentPath, childPath);
+  return relativePath === "" || !relativePath.startsWith("..") && !path91.isAbsolute(relativePath);
+}
+function normalizedText(value) {
+  return value.replace(/\r\n/g, `
+`);
+}
+function initWriteFailure(displayPath, reason, cause) {
+  const causeCode = filesystemErrorCode(cause);
+  return createError({
+    code: "INIT_WRITE_FAILED",
+    category: "filesystem",
+    message: "Project initialization could not create a safe scaffold.",
+    details: {
+      path: displayPath,
+      reason,
+      ...causeCode ? { causeCode } : {}
+    }
+  });
+}
+function filesystemErrorCode(cause) {
+  if (typeof cause !== "object" || cause === null || !("code" in cause)) {
+    return;
+  }
+  return typeof cause.code === "string" ? cause.code : undefined;
+}
+
 // src/cli/help.ts
 function renderHelp(target) {
   switch (target) {
+    case "init":
+      return renderInitHelp();
     case "scan":
       return renderScanHelp();
     case "ci":
@@ -61337,6 +61739,18 @@ function renderTopLevelHelp() {
     "",
     "Options:",
     ...helpOptionLinesFor("top")
+  ].join(`
+`);
+}
+function renderInitHelp() {
+  return [
+    "Ohrisk init",
+    "",
+    "Usage:",
+    `  ${COMMAND_DETAIL_USAGE.init}`,
+    "",
+    "Options:",
+    ...helpOptionLinesFor("init")
   ].join(`
 `);
 }
@@ -61436,20 +61850,20 @@ import {
   closeSync as closeSync5,
   constants,
   fsyncSync,
-  lstatSync as lstatSync4,
-  mkdirSync as mkdirSync2,
+  lstatSync as lstatSync5,
+  mkdirSync as mkdirSync3,
   openSync as openSync5,
-  realpathSync as realpathSync7,
+  realpathSync as realpathSync8,
   renameSync as renameSync2,
   rmSync as rmSync3,
-  writeFileSync as writeFileSync3
+  writeFileSync as writeFileSync4
 } from "node:fs";
 import { randomBytes as randomBytes2 } from "node:crypto";
-import path91 from "node:path";
+import path92 from "node:path";
 var writeReportFile = (input) => {
-  const resolvedCwd = path91.resolve(input.cwd);
-  const resolvedPath = path91.resolve(resolvedCwd, input.outputPath);
-  if (!isProjectRelativeOutputPath(input.outputPath) || !isPathInsideOrEqual6(resolvedPath, resolvedCwd)) {
+  const resolvedCwd = path92.resolve(input.cwd);
+  const resolvedPath = path92.resolve(resolvedCwd, input.outputPath);
+  if (!isProjectRelativeOutputPath(input.outputPath) || !isPathInsideOrEqual7(resolvedPath, resolvedCwd)) {
     return err(reportOutputPathOutsideError({
       outputPath: input.outputPath,
       projectRoot: resolvedCwd,
@@ -61489,9 +61903,9 @@ var writeReportFile = (input) => {
   }
 };
 function ensureSafeReportParent(input) {
-  const realProjectRoot = realpathSync7(input.projectRoot);
-  const parentPath = path91.dirname(input.resolvedPath);
-  const relativeParent = path91.relative(input.projectRoot, parentPath);
+  const realProjectRoot = realpathSync8(input.projectRoot);
+  const parentPath = path92.dirname(input.resolvedPath);
+  const relativeParent = path92.relative(input.projectRoot, parentPath);
   if (relativeParent === "") {
     return ok({
       resolvedPath: input.resolvedPath,
@@ -61499,7 +61913,7 @@ function ensureSafeReportParent(input) {
       realProjectRoot
     });
   }
-  if (relativeParent.startsWith("..") || path91.isAbsolute(relativeParent)) {
+  if (relativeParent.startsWith("..") || path92.isAbsolute(relativeParent)) {
     return err(reportOutputPathOutsideError({
       outputPath: input.outputPath,
       projectRoot: input.projectRoot,
@@ -61510,7 +61924,7 @@ function ensureSafeReportParent(input) {
     }));
   }
   let currentPath = input.projectRoot;
-  for (const segment of relativeParent.split(path91.sep)) {
+  for (const segment of relativeParent.split(path92.sep)) {
     if (segment === "" || segment === "." || segment === "..") {
       return err(reportOutputPathOutsideError({
         outputPath: input.outputPath,
@@ -61521,7 +61935,7 @@ function ensureSafeReportParent(input) {
         reason: "invalid_parent_segment"
       }));
     }
-    const candidatePath = path91.join(currentPath, segment);
+    const candidatePath = path92.join(currentPath, segment);
     const stepResult = resolveOrCreateReportComponent({
       candidatePath,
       outputPath: input.outputPath,
@@ -61543,7 +61957,7 @@ function ensureSafeReportParent(input) {
 function resolveOrCreateReportComponent(input) {
   let stats;
   try {
-    stats = lstatSync4(input.candidatePath);
+    stats = lstatSync5(input.candidatePath);
   } catch (cause) {
     if (!isNoSuchEntryError(cause)) {
       return err(reportWriteFailedError({
@@ -61553,7 +61967,7 @@ function resolveOrCreateReportComponent(input) {
       }));
     }
     try {
-      mkdirSync2(input.candidatePath);
+      mkdirSync3(input.candidatePath);
     } catch (mkdirCause) {
       if (!isAlreadyExistsError(mkdirCause)) {
         return err(reportWriteFailedError({
@@ -61564,7 +61978,7 @@ function resolveOrCreateReportComponent(input) {
       }
     }
     try {
-      stats = lstatSync4(input.candidatePath);
+      stats = lstatSync5(input.candidatePath);
     } catch (recheckCause) {
       return err(reportWriteFailedError({
         outputPath: input.outputPath,
@@ -61587,7 +62001,7 @@ function resolveOrCreateReportComponent(input) {
     }));
   }
   try {
-    return ok(realpathSync7(input.candidatePath));
+    return ok(realpathSync8(input.candidatePath));
   } catch (cause) {
     return err(reportWriteFailedError({
       outputPath: input.outputPath,
@@ -61599,7 +62013,7 @@ function resolveOrCreateReportComponent(input) {
 function resolveReportParentSymlink(input) {
   let realTarget;
   try {
-    realTarget = realpathSync7(input.symlinkPath);
+    realTarget = realpathSync8(input.symlinkPath);
   } catch (cause) {
     return err(reportWriteFailedError({
       outputPath: input.outputPath,
@@ -61607,7 +62021,7 @@ function resolveReportParentSymlink(input) {
       cause
     }));
   }
-  if (!isPathInsideOrEqual6(realTarget, input.realProjectRoot)) {
+  if (!isPathInsideOrEqual7(realTarget, input.realProjectRoot)) {
     return err(reportOutputPathOutsideError({
       outputPath: input.outputPath,
       projectRoot: input.projectRoot,
@@ -61618,7 +62032,7 @@ function resolveReportParentSymlink(input) {
     }));
   }
   try {
-    if (!lstatSync4(realTarget).isDirectory()) {
+    if (!lstatSync5(realTarget).isDirectory()) {
       return err(reportWriteFailedError({
         outputPath: input.outputPath,
         resolvedPath: input.resolvedPath,
@@ -61640,7 +62054,7 @@ function writeValidatedReportFile(input) {
   try {
     tempPath = createReportTempPath(input.validatedPath.realParent, input.resolvedPath);
     tempFileDescriptor = openSync5(tempPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 384);
-    writeFileSync3(tempFileDescriptor, `${input.contents}
+    writeFileSync4(tempFileDescriptor, `${input.contents}
 `, "utf8");
     fsyncSync(tempFileDescriptor);
     closeSync5(tempFileDescriptor);
@@ -61693,10 +62107,10 @@ function writeValidatedReportFile(input) {
   }
 }
 function validateResolvedReportPath(input) {
-  const realProjectRoot = realpathSync7(input.projectRoot);
-  const realParent = realpathSync7(path91.dirname(input.resolvedPath));
+  const realProjectRoot = realpathSync8(input.projectRoot);
+  const realParent = realpathSync8(path92.dirname(input.resolvedPath));
   const existingOutputIsSymlink = isSymbolicLinkPath(input.resolvedPath);
-  if (existingOutputIsSymlink || !isPathInsideOrEqual6(realParent, realProjectRoot)) {
+  if (existingOutputIsSymlink || !isPathInsideOrEqual7(realParent, realProjectRoot)) {
     return err(reportOutputPathOutsideError({
       outputPath: input.outputPath,
       projectRoot: input.projectRoot,
@@ -61713,9 +62127,9 @@ function validateResolvedReportPath(input) {
   });
 }
 function createReportTempPath(realParent, resolvedPath) {
-  const baseName = path91.basename(resolvedPath);
+  const baseName = path92.basename(resolvedPath);
   const suffix = randomBytes2(8).toString("hex");
-  return path91.join(realParent, `.ohrisk-report-${process.pid}-${Date.now()}-${suffix}-${baseName}.tmp`);
+  return path92.join(realParent, `.ohrisk-report-${process.pid}-${Date.now()}-${suffix}-${baseName}.tmp`);
 }
 function promoteTempReportFile(tempPath, resolvedPath) {
   try {
@@ -61726,7 +62140,7 @@ function promoteTempReportFile(tempPath, resolvedPath) {
       throw cause;
     }
   }
-  const existingTarget = lstatSync4(resolvedPath);
+  const existingTarget = lstatSync5(resolvedPath);
   if (existingTarget.isSymbolicLink()) {
     throw new Error("Report output path became a symbolic link before replace.");
   }
@@ -61782,26 +62196,26 @@ function closeReportTempFile(fileDescriptor) {
 }
 function isSymbolicLinkPath(filePath) {
   try {
-    return lstatSync4(filePath).isSymbolicLink();
+    return lstatSync5(filePath).isSymbolicLink();
   } catch {
     return false;
   }
 }
 function isProjectRelativeOutputPath(outputPath) {
-  if (outputPath.includes("\x00") || path91.isAbsolute(outputPath) || path91.win32.isAbsolute(outputPath) || path91.posix.isAbsolute(outputPath) || /^[A-Za-z]:/.test(outputPath)) {
+  if (outputPath.includes("\x00") || path92.isAbsolute(outputPath) || path92.win32.isAbsolute(outputPath) || path92.posix.isAbsolute(outputPath) || /^[A-Za-z]:/.test(outputPath)) {
     return false;
   }
   return outputPath.split(/[\\/]+/).every((segment) => segment !== "" && segment !== "." && segment !== "..");
 }
-function isPathInsideOrEqual6(childPath, parentPath) {
-  const relativePath = path91.relative(parentPath, childPath);
-  return relativePath === "" || !relativePath.startsWith("..") && !path91.isAbsolute(relativePath);
+function isPathInsideOrEqual7(childPath, parentPath) {
+  const relativePath = path92.relative(parentPath, childPath);
+  return relativePath === "" || !relativePath.startsWith("..") && !path92.isAbsolute(relativePath);
 }
 function isSameRealPath(leftPath, rightPath) {
   if (process.platform === "win32") {
-    return path91.normalize(leftPath).toLowerCase() === path91.normalize(rightPath).toLowerCase();
+    return path92.normalize(leftPath).toLowerCase() === path92.normalize(rightPath).toLowerCase();
   }
-  return path91.normalize(leftPath) === path91.normalize(rightPath);
+  return path92.normalize(leftPath) === path92.normalize(rightPath);
 }
 
 // src/cli/report-output.ts
@@ -64873,15 +65287,15 @@ function redactTemporaryPathText(value, temporaryRoot) {
 }
 
 // src/policy/waivers.ts
-import { existsSync as existsSync48 } from "node:fs";
-import path92 from "node:path";
+import { existsSync as existsSync49 } from "node:fs";
+import path93 from "node:path";
 var DEFAULT_WAIVER_FILE_NAME = ".ohrisk-waivers.json";
 var WAIVER_FILE_MAX_BYTES = 1024 * 1024;
 var WAIVER_ROOT_KEYS = new Set(["waivers"]);
 var WAIVER_KEYS = new Set(["id", "fingerprint", "reason", "expiresOn"]);
 function readRiskWaivers(projectRoot, options) {
-  const waiverPath = path92.join(projectRoot, DEFAULT_WAIVER_FILE_NAME);
-  if (!existsSync48(waiverPath)) {
+  const waiverPath = path93.join(projectRoot, DEFAULT_WAIVER_FILE_NAME);
+  if (!existsSync49(waiverPath)) {
     return ok([]);
   }
   const text3 = readTextFileWithLimit({
@@ -65184,15 +65598,15 @@ function isDirectDependencyPath(pathSegments, dependencyPathSegments) {
 }
 
 // src/cli/workspace-root.ts
-import { realpathSync as realpathSync8, statSync as statSync37 } from "node:fs";
-import path93 from "node:path";
+import { realpathSync as realpathSync9, statSync as statSync37 } from "node:fs";
+import path94 from "node:path";
 function resolveWorkspaceRootPath(input) {
   if (!input.workspaceRootPath) {
     return ok(undefined);
   }
-  const resolvedPath = path93.resolve(input.cwd, input.workspaceRootPath);
+  const resolvedPath = path94.resolve(input.cwd, input.workspaceRootPath);
   try {
-    const realPath = realpathSync8(resolvedPath);
+    const realPath = realpathSync9(resolvedPath);
     if (!statSync37(realPath).isDirectory()) {
       return err(workspaceRootInvalidError2(input.workspaceRootPath));
     }
@@ -65202,7 +65616,7 @@ function resolveWorkspaceRootPath(input) {
   }
 }
 function workspaceRootInvalidError2(workspaceRootPath) {
-  const absolute = path93.isAbsolute(workspaceRootPath);
+  const absolute = path94.isAbsolute(workspaceRootPath);
   return createError({
     code: "INVALID_ARGUMENT",
     category: "invalid_input",
@@ -65231,6 +65645,8 @@ async function main(argv = process.argv.slice(2), io = defaultIO()) {
       case "version":
         io.stdout(renderVersion());
         return 0;
+      case "init":
+        return runInitCommand(command, io);
       case "cache":
         return runCacheCommand(command, io);
       case "scan":
@@ -65765,7 +66181,7 @@ function discoverFilesystemProject(input) {
     return discovered;
   }
   const lockfileCount = discovered.value.lockfiles?.length ?? 1;
-  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, lockfileCount > 1 ? `Reading ${lockfileCount} lockfiles...` : `Reading ${path94.basename(discovered.value.lockfile.path)}...`);
+  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, lockfileCount > 1 ? `Reading ${lockfileCount} lockfiles...` : `Reading ${path95.basename(discovered.value.lockfile.path)}...`);
   return discovered;
 }
 async function evaluateProjectScan(input) {
@@ -65902,7 +66318,7 @@ function resolveEvidenceRuntimeOptions(input) {
     }
   }
   const configuredCacheDir = input.cacheDir ?? input.env.OHRISK_CACHE_DIR;
-  const cacheDir = configuredCacheDir ? path94.resolve(input.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(input.env);
+  const cacheDir = configuredCacheDir ? path95.resolve(input.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(input.env);
   return ok({
     offline: input.offline,
     cacheDir,
@@ -65961,9 +66377,9 @@ function isCliEntrypoint(metaUrl, argvPath) {
     return false;
   }
   try {
-    return realpathSync9(fileURLToPath4(metaUrl)) === realpathSync9(argvPath);
+    return realpathSync10(fileURLToPath4(metaUrl)) === realpathSync10(argvPath);
   } catch {
-    return path94.resolve(fileURLToPath4(metaUrl)) === path94.resolve(argvPath);
+    return path95.resolve(fileURLToPath4(metaUrl)) === path95.resolve(argvPath);
   }
 }
 function defaultIO() {

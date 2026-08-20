@@ -2,6 +2,7 @@
 
 ## 1.15.1 - Unreleased
 
+- Added `ohrisk init` to detect the nearest supported project and create a minimal policy, a version-pinned pull-request gate, and an optional empty waiver template without overwriting user-owned files.
 - The npm package now exposes `ScanReport`, `DiffReport`, `ExplainReport`,
   `Finding`, waiver, evidence, policy, provenance, and summary contracts through
   the type-only `ohrisk/report-types` entry point. Draft 2020-12 schemas also

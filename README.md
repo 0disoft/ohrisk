@@ -95,6 +95,16 @@ ohrisk scan --html --language de --output ohrisk-report-de.html --open
 
 Prefer not to install globally? Use `npx ohrisk scan` instead.
 
+Create a minimal policy and a version-pinned pull-request gate without hand-writing YAML:
+
+```bash
+ohrisk init
+```
+
+Existing configuration is never overwritten. Add `--waivers` when the project
+also needs an empty decision-record template, or `--no-workflow` for local-only
+setup.
+
 Ready to gate PRs? Run `ohrisk ci --fail-on high` locally, or see the [GitHub Actions guide](https://github.com/0disoft/ohrisk/blob/main/docs/github-actions.md) to wire it into CI.
 
 ## When to use it
@@ -115,6 +125,7 @@ evidence and a profile-aware severity so you can decide.
 
 | Command | What it answers |
 | --- | --- |
+| `ohrisk init` | How do I add a safe starter policy and PR gate to this project? |
 | `ohrisk scan` | What does my dependency tree look like right now? Non-failing local decision aid. |
 | `ohrisk ci` | Should this PR fail the build? Runs a scan and exits non-zero when findings meet `--fail-on`. |
 | `ohrisk diff <ref>` | What changed since the baseline git ref? Separates new, meaningfully changed, and resolved findings. |

@@ -73,7 +73,8 @@ export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
   const rest = argv.slice(1);
 
   if (
-    command !== "scan"
+    command !== "init"
+    && command !== "scan"
     && command !== "ci"
     && command !== "diff"
     && command !== "explain"
@@ -89,6 +90,10 @@ export function parseArgs(argv: string[]): Result<CliCommand, OhriskError> {
         }
       })
     );
+  }
+
+  if (command === "init") {
+    return parseInitArgs(rest);
   }
 
   if (command === "cache") {
@@ -138,6 +143,97 @@ function parseTopLevelHelpArgs(argv: string[]): Result<CliCommand, OhriskError> 
 
 function isSupportedCommand(value: string | undefined): value is typeof SUPPORTED_COMMANDS[number] {
   return typeof value === "string" && (SUPPORTED_COMMANDS as readonly string[]).includes(value);
+}
+
+function parseInitArgs(argv: string[]): Result<CliCommand, OhriskError> {
+  let profile: UsageProfile = CLI_DEFAULTS.profile;
+  let failOn: RiskSeverity = CLI_DEFAULTS.failOn;
+  let workflow = true;
+  let waivers = false;
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (!arg) {
+      continue;
+    }
+
+    switch (arg) {
+      case "--profile": {
+        const value = readRequiredOptionValue(argv, index, "--profile", {
+          supportedProfiles: [...USAGE_PROFILES]
+        });
+        if (isErr(value)) {
+          return value;
+        }
+        if (!isUsageProfile(value.value)) {
+          return err(
+            createError({
+              code: "INVALID_ARGUMENT",
+              category: "invalid_input",
+              message: `Unsupported profile "${value.value}".`,
+              details: {
+                supportedProfiles: [...USAGE_PROFILES]
+              }
+            })
+          );
+        }
+        profile = value.value;
+        index += 1;
+        break;
+      }
+      case "--fail-on": {
+        const value = readRequiredOptionValue(argv, index, "--fail-on", {
+          supportedSeverities: CLI_FAIL_ON_SEVERITIES
+        });
+        if (isErr(value)) {
+          return value;
+        }
+        if (!isFailOnSeverity(value.value)) {
+          return err(
+            createError({
+              code: "INVALID_ARGUMENT",
+              category: "invalid_input",
+              message: `Unsupported fail-on severity "${value.value}".`,
+              details: {
+                supportedSeverities: CLI_FAIL_ON_SEVERITIES
+              }
+            })
+          );
+        }
+        failOn = value.value;
+        index += 1;
+        break;
+      }
+      case "--no-workflow":
+        workflow = false;
+        break;
+      case "--waivers":
+        waivers = true;
+        break;
+      case "--help":
+      case "-h":
+        return ok({ kind: "help", target: "init" });
+      default:
+        return err(
+          createError({
+            code: "INVALID_ARGUMENT",
+            category: "invalid_input",
+            message: `Unknown init option "${arg}".`,
+            details: {
+              supportedOptions: supportedOptionsFor("init")
+            }
+          })
+        );
+    }
+  }
+
+  return ok({
+    kind: "init",
+    profile,
+    failOn,
+    workflow,
+    waivers
+  });
 }
 
 function parseCacheArgs(argv: string[]): Result<CliCommand, OhriskError> {

@@ -7,6 +7,7 @@ import type {
 } from "../repository/github-repository";
 
 export const SUPPORTED_COMMANDS = [
+  "init",
   "scan",
   "ci",
   "diff",
@@ -22,6 +23,13 @@ export type CacheAction = "status" | "prune" | "clear";
 export type CliCommand =
   | { kind: "help"; target?: HelpTarget }
   | { kind: "version" }
+  | {
+      kind: "init";
+      profile: UsageProfile;
+      failOn: RiskSeverity;
+      workflow: boolean;
+      waivers: boolean;
+    }
   | {
       kind: "cache";
       action: CacheAction;
