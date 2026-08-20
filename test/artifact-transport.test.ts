@@ -33,6 +33,22 @@ describe("artifact transport", () => {
     expect(resolutionCount).toBe(2);
   });
 
+  test("does not expose the cached DNS address array to consumer mutation", async () => {
+    let resolutionCount = 0;
+    const resolveArtifactHost = createCachingArtifactHostResolver(async () => {
+      resolutionCount += 1;
+      return [{ address: "93.184.216.34", family: 4 }];
+    });
+
+    const first = await resolveArtifactHost("registry.example.test");
+    first.splice(0, first.length);
+
+    expect(await resolveArtifactHost("registry.example.test")).toEqual([
+      { address: "93.184.216.34", family: 4 }
+    ]);
+    expect(resolutionCount).toBe(1);
+  });
+
   test("does not retain failed DNS resolutions", async () => {
     let resolutionCount = 0;
     let failResolution = true;

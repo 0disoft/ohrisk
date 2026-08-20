@@ -182,11 +182,13 @@ Callers cannot replace the fixed proxy or widen this adapter through
 
 Within one scan, successful public DNS answers are reused for at most 60 seconds
 and 256 exact hostnames. The cache is scan-local, does not retain failures, and
-pins HTTPS lookup to the same previously approved public addresses. Connected
-socket addresses are still checked on every response, and every redirect target
-passes the same hostname and address rules before reuse. This bounds repeated
-DNS work in large monorepos without allowing DNS rebinding to a newly returned
-private address.
+pins HTTPS lookup to the same previously approved public addresses. Each
+consumer receives an independent address snapshot so an HTTPS client's lookup
+selection cannot mutate the cached answer used by later packages. Connected
+socket addresses are still checked on every response, and every redirect
+target passes the same hostname and address rules before reuse. This bounds
+repeated DNS work in large monorepos without allowing DNS rebinding to a newly
+returned private address.
 
 Additional public artifact hosts must be declared through policy or repeatable
 `--allow-host` options. `--registry-url` automatically permits only its exact

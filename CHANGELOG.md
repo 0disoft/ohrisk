@@ -2,6 +2,10 @@
 
 ## 1.15.1 - Unreleased
 
+- Cached DNS address snapshots are no longer exposed by reference to Node's
+  HTTPS lookup consumer. Multi-package remote scans now retain the approved
+  public addresses after the first connection instead of degrading later
+  packages to unavailable evidence from an emptied cache entry.
 - Package smoke verification now accepts npm 12's package-name-keyed output from
   `npm pack --json` while retaining the older array and direct-object forms.
 - Added `ohrisk init` to detect the nearest supported project and create a minimal policy, a version-pinned pull-request gate, and an optional empty waiver template without overwriting user-owned files.

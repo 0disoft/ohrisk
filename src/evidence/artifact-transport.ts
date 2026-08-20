@@ -259,10 +259,11 @@ export function createCachingArtifactHostResolver(
     const current = cache.get(normalizedHostname);
     const currentTime = now();
     if (current && current.expiresAt > currentTime) {
-      return current.resolutions;
+      return cloneArtifactHostResolutions(await current.resolutions);
     }
 
-    const resolutions = resolveArtifactHost(normalizedHostname);
+    const resolutions = resolveArtifactHost(normalizedHostname)
+      .then(cloneArtifactHostResolutions);
     cache.delete(normalizedHostname);
     cache.set(normalizedHostname, {
       expiresAt: currentTime + ARTIFACT_HOST_RESOLUTION_CACHE_TTL_MS,
@@ -277,7 +278,7 @@ export function createCachingArtifactHostResolver(
     }
 
     try {
-      return await resolutions;
+      return cloneArtifactHostResolutions(await resolutions);
     } catch (cause) {
       const cached = cache.get(normalizedHostname);
       if (cached?.resolutions === resolutions) {
@@ -286,6 +287,12 @@ export function createCachingArtifactHostResolver(
       throw cause;
     }
   };
+}
+
+function cloneArtifactHostResolutions(
+  resolutions: ArtifactHostResolution[]
+): ArtifactHostResolution[] {
+  return resolutions.map((resolution) => ({ ...resolution }));
 }
 
 export function selectSecureArtifactLookupResponse(

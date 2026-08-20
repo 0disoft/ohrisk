@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 4129b8a153183c46486d7bb4066afccb9534b825c8bca555586ab2f71101e5cb
+// ohrisk-action-source-sha256: da8c72cb3b89a60c0c33d8ca2a3c626ebbad0906def95ea36af93b47c942c027
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -41239,9 +41239,9 @@ function createCachingArtifactHostResolver(resolveArtifactHost, now = Date.now) 
     const current = cache.get(normalizedHostname);
     const currentTime = now();
     if (current && current.expiresAt > currentTime) {
-      return current.resolutions;
+      return cloneArtifactHostResolutions(await current.resolutions);
     }
-    const resolutions = resolveArtifactHost(normalizedHostname);
+    const resolutions = resolveArtifactHost(normalizedHostname).then(cloneArtifactHostResolutions);
     cache.delete(normalizedHostname);
     cache.set(normalizedHostname, {
       expiresAt: currentTime + ARTIFACT_HOST_RESOLUTION_CACHE_TTL_MS,
@@ -41255,7 +41255,7 @@ function createCachingArtifactHostResolver(resolveArtifactHost, now = Date.now) 
       cache.delete(oldest);
     }
     try {
-      return await resolutions;
+      return cloneArtifactHostResolutions(await resolutions);
     } catch (cause) {
       const cached = cache.get(normalizedHostname);
       if (cached?.resolutions === resolutions) {
@@ -41264,6 +41264,9 @@ function createCachingArtifactHostResolver(resolveArtifactHost, now = Date.now) 
       throw cause;
     }
   };
+}
+function cloneArtifactHostResolutions(resolutions) {
+  return resolutions.map((resolution) => ({ ...resolution }));
 }
 function selectSecureArtifactLookupResponse(hostname, options, resolutions) {
   const normalizedOptions = normalizeArtifactLookupOptions(options);
