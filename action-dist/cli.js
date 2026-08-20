@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 60927e884f386127789c3d18b0fbab3d4741136a398c43a433a7f390b63be754
+// ohrisk-action-source-sha256: ade8c0d9b6e9d56c075dc1c88f0f42d088918ab05252ec0aeebe158942119ee7
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -55084,6 +55084,7 @@ var PERMISSIVE_LICENSES = new Set([
   "BSD-3-Clause",
   "Apache-2.0",
   "FTL",
+  "PSF-2.0",
   "Zlib",
   "Unicode-3.0",
   "CC0-1.0",

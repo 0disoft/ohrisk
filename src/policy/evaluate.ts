@@ -25,6 +25,7 @@ const PERMISSIVE_LICENSES = new Set([
   "BSD-3-Clause",
   "Apache-2.0",
   "FTL",
+  "PSF-2.0",
   "Zlib",
   "Unicode-3.0",
   "CC0-1.0",
