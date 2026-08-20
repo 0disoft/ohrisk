@@ -2,6 +2,9 @@
 
 ## 1.15.1 - Unreleased
 
+- The active SPDX `Unicode-3.0` identifier is now classified as permissive
+  low-risk evidence while retaining the distributed license-text preservation
+  obligation.
 - Zero-clause BSD license text is now distinguished from ISC by the ISC notice-
   preservation clause. Verified `LICENSE-0BSD` evidence no longer creates a
   false metadata/file conflict for correctly declared multi-license crates.

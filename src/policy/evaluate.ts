@@ -26,6 +26,7 @@ const PERMISSIVE_LICENSES = new Set([
   "Apache-2.0",
   "FTL",
   "Zlib",
+  "Unicode-3.0",
   "CC0-1.0",
   "Unlicense"
 ]);

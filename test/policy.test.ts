@@ -37,8 +37,8 @@ describe("evaluateLicenseRisk", () => {
     expect(finding.dependencyScope).toBe("direct");
   });
 
-  test("treats common public-domain-style permissive licenses as low risk", () => {
-    for (const expression of ["0BSD", "CC0-1.0", "Unlicense"]) {
+  test("treats additional recognized permissive licenses as low risk", () => {
+    for (const expression of ["0BSD", "CC0-1.0", "Unicode-3.0", "Unlicense"]) {
       const finding = evaluateLicenseRisk({
         license: {
           packageId: "package@1.0.0",
