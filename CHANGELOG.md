@@ -2,6 +2,9 @@
 
 ## 1.15.1 - Unreleased
 
+- Zero-clause BSD license text is now distinguished from ISC by the ISC notice-
+  preservation clause. Verified `LICENSE-0BSD` evidence no longer creates a
+  false metadata/file conflict for correctly declared multi-license crates.
 - Cached DNS address snapshots are no longer exposed by reference to Node's
   HTTPS lookup consumer. Multi-package remote scans now retain the approved
   public addresses after the first connection instead of degrading later

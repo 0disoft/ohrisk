@@ -892,6 +892,43 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
+  test("recognizes zero-clause BSD text without confusing it with ISC", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "adler2@2.0.1",
+      metadataLicense: "0BSD OR MIT OR Apache-2.0",
+      metadataLicenseKind: "declared",
+      metadataSource: "Cargo.toml",
+      files: [
+        {
+          path: "LICENSE-0BSD",
+          kind: "license",
+          text: [
+            "Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted.",
+            "THE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE."
+          ].join("\n")
+        },
+        {
+          path: "LICENSE-APACHE",
+          kind: "license",
+          text: "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION"
+        },
+        {
+          path: "LICENSE-MIT",
+          kind: "license",
+          text: [
+            "Permission is hereby granted, free of charge, to any person obtaining a copy",
+            "THE SOFTWARE IS PROVIDED \"AS IS\""
+          ].join("\n")
+        }
+      ],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized.signals).not.toContain("conflicting-evidence");
+    expect(normalized.evidenceSources).toContain("file: LICENSE-0BSD (license)");
+  });
+
   test("recognizes public-domain-style license file text", () => {
     expect(
       normalizeLicenseEvidence({

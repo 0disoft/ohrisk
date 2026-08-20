@@ -588,7 +588,14 @@ function recognizeStandardLicenseText(text: string): string | undefined {
     /\bPermission to use, copy, modify, and\/or distribute this software\b/i.test(text)
     && /\bTHE SOFTWARE IS PROVIDED "AS IS"/i.test(text)
   ) {
-    return "ISC";
+    if (
+      /\bprovided that the above copyright notice and this permission notice appear in all copies\b/i.test(text)
+    ) {
+      return "ISC";
+    }
+    if (/\bfor any purpose with or without fee is hereby granted\b/i.test(text)) {
+      return "0BSD";
+    }
   }
 
   if (

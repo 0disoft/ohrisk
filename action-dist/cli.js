@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: da8c72cb3b89a60c0c33d8ca2a3c626ebbad0906def95ea36af93b47c942c027
+// ohrisk-action-source-sha256: 0d3439de0ee15c27ce5865b8ad955fb72874744d0fd640e0cf3efcb0d21b531c
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -54201,7 +54201,12 @@ function recognizeStandardLicenseText(text) {
     return "MIT";
   }
   if (/\bPermission to use, copy, modify, and\/or distribute this software\b/i.test(text) && /\bTHE SOFTWARE IS PROVIDED "AS IS"/i.test(text)) {
-    return "ISC";
+    if (/\bprovided that the above copyright notice and this permission notice appear in all copies\b/i.test(text)) {
+      return "ISC";
+    }
+    if (/\bfor any purpose with or without fee is hereby granted\b/i.test(text)) {
+      return "0BSD";
+    }
   }
   if (/\bThis software is provided ['"]as-is['"], without any express or implied warranty\b/i.test(text) && /\bPermission is granted to anyone to use this software for any purpose\b/i.test(text) && /\bThe origin of this software must not be misrepresented\b/i.test(text)) {
     return "Zlib";
