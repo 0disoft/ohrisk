@@ -2,6 +2,8 @@
 
 ## 1.15.1 - Unreleased
 
+- Package smoke verification now accepts npm 12's package-name-keyed output from
+  `npm pack --json` while retaining the older array and direct-object forms.
 - Added `ohrisk init` to detect the nearest supported project and create a minimal policy, a version-pinned pull-request gate, and an optional empty waiver template without overwriting user-owned files.
 - The npm package now exposes `ScanReport`, `DiffReport`, `ExplainReport`,
   `Finding`, waiver, evidence, policy, provenance, and summary contracts through

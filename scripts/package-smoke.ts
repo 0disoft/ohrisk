@@ -2,9 +2,11 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { readNpmPackResult } from "./npm-pack-output";
 
 const repoRoot = path.join(import.meta.dir, "..");
-const expectedVersion = readPackageVersion(repoRoot);
+const packageMetadata = readPackageMetadata(repoRoot);
+const expectedVersion = packageMetadata.version;
 const workspace = mkdtempSync(path.join(tmpdir(), "ohrisk-package-smoke-"));
 
 try {
@@ -20,7 +22,7 @@ try {
     repoRoot
   );
 
-  const packOutput = readFirstJsonObject(packStdout);
+  const packOutput = readNpmPackResult(packStdout, packageMetadata.name);
   const filename = packOutput?.filename;
   if (typeof filename !== "string") {
     throw new Error("npm pack did not return a package filename.");
@@ -257,23 +259,14 @@ function pathEnvironmentKey(): string {
   return Object.keys(process.env).find((key) => key.toLowerCase() === "path") ?? "PATH";
 }
 
-function readPackageVersion(rootDir: string): string {
+function readPackageMetadata(rootDir: string): { name: string; version: string } {
   const packageJson = readJsonObject(readFileSync(path.join(rootDir, "package.json"), "utf8"));
 
-  if (typeof packageJson.version !== "string") {
-    throw new Error("package.json must contain a string version.");
+  if (typeof packageJson.name !== "string" || typeof packageJson.version !== "string") {
+    throw new Error("package.json must contain string name and version fields.");
   }
 
-  return packageJson.version;
-}
-
-function readFirstJsonObject(stdout: string): { filename?: unknown } | undefined {
-  const parsed = JSON.parse(stdout) as unknown;
-  if (Array.isArray(parsed)) {
-    return isJsonObject(parsed[0]) ? parsed[0] : undefined;
-  }
-
-  return isJsonObject(parsed) ? parsed : undefined;
+  return { name: packageJson.name, version: packageJson.version };
 }
 
 function readJsonObject(text: string): Record<string, unknown> {
