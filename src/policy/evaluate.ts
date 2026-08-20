@@ -130,15 +130,15 @@ export function evaluateLicenseRisk(input: {
     paths
   });
 
-return {
-  id,
-  fingerprint: buildSemanticFindingFingerprint({
+  return {
     id,
-    severity,
-    recommendation,
-    license: input.license
-  }),
-  packageId,
+    fingerprint: buildSemanticFindingFingerprint({
+      id,
+      severity,
+      recommendation,
+      license: input.license
+    }),
+    packageId,
     severity,
     reason,
     action,
