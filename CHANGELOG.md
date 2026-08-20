@@ -2,6 +2,12 @@
 
 ## 1.15.1 - Unreleased
 
+- The npm package now exposes `ScanReport`, `DiffReport`, `ExplainReport`,
+  `Finding`, waiver, evidence, policy, provenance, and summary contracts through
+  the type-only `ohrisk/report-types` entry point. Draft 2020-12 schemas also
+  have stable extension-free `ohrisk/schemas/<name>` exports while existing
+  explicit schema and dist paths remain accessible. Package smoke verification
+  resolves and type-checks both surfaces from the packed tarball.
 - Remote artifact DNS caching, guarded HTTPS socket lookup, and exact-host
   registry authorization now live in a focused transport module. Ecosystem
   evidence orchestration keeps the existing target, redirect, credential,

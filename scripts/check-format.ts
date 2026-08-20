@@ -17,7 +17,7 @@ const ROOT_FILES = [
   "tsconfig.lint.json",
   "tsconfig.release.json"
 ];
-const SOURCE_DIRECTORIES = [".github", "docs", "schemas", "scripts", "src", "test"];
+const SOURCE_DIRECTORIES = [".github", "docs", "schemas", "scripts", "src", "test", "types"];
 const TEXT_EXTENSIONS = new Set([".json", ".md", ".toml", ".ts", ".yaml", ".yml"]);
 const EXCLUDED_DIRECTORIES = new Set(["fixtures", "node_modules", "coverage", "dist", "action-dist"]);
 

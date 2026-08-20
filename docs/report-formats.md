@@ -29,6 +29,42 @@ lockfile changes. Required-field, enum, array-item, path, and dependent-field
 rules are validated against real scan, diff, and explain output during release
 verification.
 
+### TypeScript and schema imports
+
+The npm package exposes report instance types through the type-only
+`ohrisk/report-types` entry point:
+
+```ts
+import type { Finding, ScanReport } from "ohrisk/report-types";
+
+export function highRiskPackages(report: ScanReport): string[] {
+  return report.findings
+    .filter((finding: Finding) => finding.severity === "high")
+    .map((finding) => finding.packageId);
+}
+```
+
+JSON Schemas have stable extension-free package subpaths:
+
+```ts
+import scanReportSchema from "ohrisk/schemas/scan-report" with {
+  type: "json"
+};
+```
+
+The available schema subpaths are:
+
+- `ohrisk/schemas/common`
+- `ohrisk/schemas/scan-report`
+- `ohrisk/schemas/diff-report`
+- `ohrisk/schemas/explain-report`
+- `ohrisk/schemas/waiver-file`
+
+Use `moduleResolution: "NodeNext"` or `"Bundler"` and enable
+`resolveJsonModule` when importing the JSON files from TypeScript. Existing
+explicit paths such as `ohrisk/schemas/scan-report.schema.json` remain exported
+for consumers that already use them.
+
 Schema 3.5 adds the `conflicting-evidence` normalized-license signal. Python
 license classifiers are identified as classifiers in evidence text. A single
 distinct expression recognized from verified declared license files may replace

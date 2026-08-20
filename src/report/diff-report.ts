@@ -1,3 +1,4 @@
+import type { DiffReport } from "../../types/report-types";
 import type { RiskDiff } from "../diff/compare";
 import { NOTICE_ACTION } from "../policy/evaluate";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
@@ -47,8 +48,7 @@ export function renderDiffReport(input: DiffReportInput): string {
   const thresholdSummary = buildThresholdSummary(input.diff.introducedFindings, input.failOn);
 
   if (input.json) {
-    return JSON.stringify(
-      {
+    const report = {
         $schema: OHRISK_DIFF_REPORT_SCHEMA,
         schemaVersion: OHRISK_REPORT_SCHEMA_VERSION,
         status: "risk_diff_evaluated",
@@ -73,10 +73,8 @@ export function renderDiffReport(input: DiffReportInput): string {
         newFindings: input.diff.newFindings,
         changedFindings: input.diff.changedFindings,
         resolvedFindings: input.diff.resolvedFindings
-      },
-      null,
-      2
-    );
+    } satisfies DiffReport;
+    return JSON.stringify(report, null, 2);
   }
 
   if (input.markdown) {

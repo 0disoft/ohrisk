@@ -1,6 +1,7 @@
 import { omitUndefined } from "../shared/object";
 import path from "node:path";
 
+import type { ScanReport } from "../../types/report-types";
 import type {
   EvidenceDiagnostic,
   EvidenceDiagnosticCode,
@@ -139,8 +140,7 @@ export function renderScanReport(input: ScanReportInput): string {
   const waiverDriftSummary = buildWaiverDriftSummary(input);
 
   if (input.json) {
-    return JSON.stringify(
-      {
+    const report = {
         $schema: OHRISK_SCAN_REPORT_SCHEMA,
         schemaVersion: OHRISK_REPORT_SCHEMA_VERSION,
         status: "profile_risk_evaluated",
@@ -171,10 +171,8 @@ export function renderScanReport(input: ScanReportInput): string {
         waivedFindings: input.waivedFindings,
         expiredWaivers: input.expiredWaivers,
         unmatchedWaivers: input.unmatchedWaivers
-      },
-      null,
-      2
-    );
+    } satisfies ScanReport;
+    return JSON.stringify(report, null, 2);
   }
 
   if (input.markdown) {
