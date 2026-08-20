@@ -49,8 +49,8 @@ configured artifact cache and network policy.
 
 ## Stable Options
 
-- `--lockfile <path>` selects one supported input; `--all` discovers and merges all supported lockfiles at the selected project root. They are mutually exclusive for scan, CI, and diff. A remote repository scan automatically merges multiple supported inputs at its one selected project root; local, archive, CI, and diff inputs keep the explicit `--all` opt-in.
-- `scan|ci --archive <path>` scans a ZIP, TAR, TAR.GZ, or TGZ as a read-only in-memory virtual project. It is mutually exclusive with `--lockfile` and `--workspace-root`, may be combined with `--all`, and is not supported by `diff`.
+- `--lockfile <path>` selects one supported input; `--all` discovers and merges all supported lockfiles at the selected project root. They are mutually exclusive for scan, CI, and diff. Remote repository and archive scans automatically merge multiple supported inputs at one selected project root; local filesystem and diff inputs keep the explicit `--all` opt-in.
+- `scan|ci --archive <path>` scans a ZIP, TAR, TAR.GZ, or TGZ as a read-only in-memory virtual project. It is mutually exclusive with `--lockfile` and `--workspace-root`, may be combined with `--all`, automatically merges supported inputs at one archive project root, and is not supported by `diff`. Multiple independent project roots remain rejected.
 - `scan [repository-url]` and `scan --repo <url>` scan one public GitHub HTTPS repository through a bounded temporary shallow clone. Remote repository input may combine with a safe repository-relative `--lockfile`, is mutually exclusive with `--archive`, `--workspace-root`, and `--offline`, and is not supported by `ci`, `diff`, or the GitHub Action input contract.
 - `--policy <path>` selects a workspace-contained policy file; otherwise `.ohrisk.yml` is loaded when present.
 - `explain --policy <path>` accepts `--workspace-root <path>` for the inheritance boundary. It reports policy sources as relative paths and never applies package rules because explain has no package identity.
