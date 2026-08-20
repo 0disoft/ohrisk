@@ -46,6 +46,14 @@ project-specific cache.
 --allow-host <hostname>  Additional allowed artifact host; repeatable
 ```
 
+Large lockfiles can include hundreds of development-only compiler, test, and
+platform binary packages. Ohrisk reports that count before evidence collection
+when it is material. Use `--prod` only when those development dependencies are
+outside the actual deployment scope; the default scan deliberately keeps them
+instead of silently trading license coverage for speed. On a constrained
+connection, raising `--timeout` may improve evidence completeness for large
+verified artifacts but also increases worst-case scan time.
+
 For Maven projects, `--allow-host` permits only an exact matching HTTPS
 repository URL already declared in the scanned `pom.xml`; it does not construct
 or discover arbitrary repository URLs. Maven Central remains the default. A

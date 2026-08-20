@@ -13,6 +13,7 @@ import {
   isCommandCancelled,
   renderCommandCancelled
 } from "./cancellation";
+import { evidenceCollectionStartMessage } from "./evidence-progress-message";
 import { OHRISK_VERSION } from "./version";
 import { loadArchiveProject } from "../archive/archive-project";
 import { readArchiveFile } from "../archive/archive-reader";
@@ -897,7 +898,7 @@ async function evaluateProjectScan(input: {
 
   input.progress?.(
     SCAN_PROGRESS_EVIDENCE_START_PERCENT,
-    `Collecting license evidence for ${input.scanGraph.nodes.length} packages...`
+    evidenceCollectionStartMessage(input.scanGraph, input.prodOnly)
   );
   const evidence = await collectEvidenceForGraph({
     graph: input.scanGraph,

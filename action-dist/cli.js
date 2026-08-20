@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 3fcd447ffcfed42313826abbcea351dd8f793dc94e8c4d88e7db6823baccef6f
+// ohrisk-action-source-sha256: 60927e884f386127789c3d18b0fbab3d4741136a398c43a433a7f390b63be754
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -17340,6 +17340,21 @@ function isCommandCancelled(signal) {
 }
 function renderCommandCancelled(commandLabel) {
   return `${commandLabel} cancelled.`;
+}
+
+// src/cli/evidence-progress-message.ts
+var LARGE_EVIDENCE_GRAPH_SIZE = 256;
+var LARGE_DEVELOPMENT_NODE_COUNT = 128;
+function evidenceCollectionStartMessage(graph, prodOnly) {
+  const base = `Collecting license evidence for ${graph.nodes.length} packages...`;
+  if (prodOnly || graph.nodes.length < LARGE_EVIDENCE_GRAPH_SIZE) {
+    return base;
+  }
+  const developmentCount = graph.nodes.reduce((count, node) => count + (node.dependencyType === "development" ? 1 : 0), 0);
+  if (developmentCount < LARGE_DEVELOPMENT_NODE_COUNT) {
+    return base;
+  }
+  return `${base} ${developmentCount} are development-only; use --prod only when those packages are outside the deployment scope.`;
 }
 // package.json
 var package_default = {
@@ -66204,7 +66219,7 @@ async function evaluateProjectScan(input) {
     progress: input.progress,
     now: input.now
   }) : undefined;
-  input.progress?.(SCAN_PROGRESS_EVIDENCE_START_PERCENT, `Collecting license evidence for ${input.scanGraph.nodes.length} packages...`);
+  input.progress?.(SCAN_PROGRESS_EVIDENCE_START_PERCENT, evidenceCollectionStartMessage(input.scanGraph, input.prodOnly));
   const evidence = await collectEvidenceForGraph({
     graph: input.scanGraph,
     projectRoot: input.project.rootDir,

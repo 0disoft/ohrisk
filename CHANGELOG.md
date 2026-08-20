@@ -2,6 +2,10 @@
 
 ## 1.15.1 - Unreleased
 
+- Large all-dependency scans now disclose their development-only package count
+  before remote evidence collection and suggest the existing `--prod` boundary
+  only when excluding those packages matches the deployment scope. Ohrisk does
+  not silently discard cross-platform or development license evidence.
 - Unavailable remote evidence warnings now preserve the bounded timeout value
   for DNS, response, and body-read exhaustion without exposing arbitrary network
   exception text or local paths.
