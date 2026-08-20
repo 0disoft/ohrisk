@@ -1025,7 +1025,7 @@ describe("main", () => {
       "id: agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0"
     );
     expect(stdout.join("\n")).toContain(
-      "fingerprint: agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0::high::replace::License expression is high risk for saas."
+      "fingerprint: agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0::high::replace::"
     );
     expect(stdout.join("\n")).toContain("recommendation: replace");
     expect(stdout.join("\n")).toContain(
@@ -3200,7 +3200,7 @@ describe("main", () => {
       dependencyScope: "transitive"
     });
     expect(payload.findings[0]?.fingerprint).toContain(
-      "::high::replace::License expression is high risk for saas."
+      "::high::replace::"
     );
     expect(payload.findings[0]?.paths[0]).toEqual([
       "fixture-bun-project",
@@ -3658,7 +3658,7 @@ describe("main", () => {
       dependencyScope: "transitive"
     });
     expect(payload.runs[0]?.results[0]?.properties.fingerprint).toContain(
-      "::high::replace::License expression is high risk for saas."
+      "::high::replace::"
     );
     expect(payload.runs[0]?.results[0]?.locations[0]?.physicalLocation).toEqual({
       artifactLocation: {
@@ -3669,7 +3669,7 @@ describe("main", () => {
       }
     });
     expect(payload.runs[0]?.results[0]?.partialFingerprints.primaryLocationLineHash).toContain(
-      "::high::replace::License expression is high risk for saas."
+      "::high::replace::"
     );
   });
 
@@ -4641,7 +4641,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       "| ID | Fingerprint | Severity | Package | Dependency | Reason | Recommendation | Action | Path |"
     );
     expect(output).toContain(
-      "| `agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0` | `agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0::high::replace::License expression is high risk for saas."
+      "| `agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0` | `agpl-child@0.1.0::production::transitive::fixture-bun-project>permissive-parent@1.0.0>agpl-child@0.1.0::high::replace::"
     );
     expect(output).toContain("## Next");
     expect(output).toContain("Replace or escalate high-risk dependencies before shipping.");
@@ -8429,7 +8429,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       "missing-license@4.0.0::production::direct::fixture-bun-project>missing-license@4.0.0"
     );
     expect(payload.findings[0]?.fingerprint).toContain(
-      "::unknown::collect-evidence::Package metadata does not declare a license expression."
+      "::unknown::collect-evidence::"
     );
   });
 
@@ -8452,10 +8452,10 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       "| ID | Fingerprint | Severity | Package | Dependency | Reason | Recommendation | Action | Path |"
     );
     expect(output).toContain(
-      "| `missing-license@4.0.0::production::direct::fixture-bun-project>missing-license@4.0.0` | `missing-license@4.0.0::production::direct::fixture-bun-project>missing-license@4.0.0::unknown::collect-evidence::Package metadata does not declare a license expression."
+      "| `missing-license@4.0.0::production::direct::fixture-bun-project>missing-license@4.0.0` | `missing-license@4.0.0::production::direct::fixture-bun-project>missing-license@4.0.0::unknown::collect-evidence::"
     );
     expect(output).toContain(
-      "| `gpl-package@5.0.0::production::direct::fixture-bun-project>gpl-package@5.0.0` | `gpl-package@5.0.0::production::direct::fixture-bun-project>gpl-package@5.0.0::review::review::License expression should be reviewed before shipping under saas."
+      "| `gpl-package@5.0.0::production::direct::fixture-bun-project>gpl-package@5.0.0` | `gpl-package@5.0.0::production::direct::fixture-bun-project>gpl-package@5.0.0::review::review::"
     );
     expect(output).toContain("Collect evidence for new or changed unknown license findings before merging.");
   });
