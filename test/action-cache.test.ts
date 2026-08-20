@@ -13,6 +13,21 @@ const action = parseYaml(actionSource) as CompositeAction;
 const CACHE_ACTION_SHA = "55cc8345863c7cc4c66a329aec7e433d2d1c52a9";
 const CACHE_RESTORE_ACTION = `actions/cache/restore@${CACHE_ACTION_SHA}`;
 const CACHE_SAVE_ACTION = `actions/cache/save@${CACHE_ACTION_SHA}`;
+// The bash-execution probes need a working bash. Windows dev machines without
+// Git Bash or WSL cannot run them, so those tests are skipped there; the Linux
+// CI release gate still executes them on every pull request.
+function hasWorkingBash(): boolean {
+  try {
+    const result = spawnSync("bash", ["-c", "exit 0"], {
+      encoding: "utf8",
+      timeout: 4000
+    });
+    return !result.error && result.status === 0;
+  } catch {
+    return false;
+  }
+}
+const bashAvailable = hasWorkingBash();
 
 type ActionInput = {
   default?: string;
@@ -116,6 +131,7 @@ describe("Ohrisk Action persistent artifact cache", () => {
   });
 
   test("defaults persistent caching to a contained path without changing cache-dir-only use", () => {
+    if (!bashAvailable) return;
     withWorkspace((workspace) => {
       const persistent = invokeCacheSettings({
         cache: "true",
@@ -148,6 +164,7 @@ describe("Ohrisk Action persistent artifact cache", () => {
   });
 
   test("rejects invalid cache booleans and unsafe cache paths before restore", () => {
+    if (!bashAvailable) return;
     withWorkspace((workspace) => {
       const invalidBoolean = invokeCacheSettings({
         cache: "yes",
@@ -180,6 +197,7 @@ describe("Ohrisk Action persistent artifact cache", () => {
   });
 
   test("refuses to restore over non-cache data but accepts an owned cache", () => {
+    if (!bashAvailable) return;
     withWorkspace((workspace) => {
       const cacheDir = path.join(workspace, "existing-cache");
       mkdirSync(cacheDir);
@@ -210,6 +228,7 @@ describe("Ohrisk Action persistent artifact cache", () => {
   });
 
   test("includes an exact archive digest in the primary cache key", () => {
+    if (!bashAvailable) return;
     withWorkspace((workspace) => {
       const archiveDirectory = path.join(workspace, "artifacts");
       mkdirSync(archiveDirectory);
