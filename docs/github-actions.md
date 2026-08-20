@@ -52,6 +52,43 @@ memory without extracting files to disk, and it never auto-loads policy or
 waiver files from the untrusted archive. Policy and waivers from the Action's
 host working directory remain authoritative.
 
+### Persistent evidence cache
+
+Enable the existing Ohrisk artifact cache across workflow runs with one Action
+input:
+
+```yaml
+- uses: 0disoft/ohrisk@v1.14.1
+  id: ohrisk
+  with:
+    cache: "true"
+    prod: "true"
+
+- run: echo "Exact Ohrisk cache hit: ${{ steps.ohrisk.outputs.cache-hit }}"
+```
+
+An empty `cache-dir` resolves to `.ohrisk-cache`. Set a custom contained path
+only when the workflow needs one:
+
+```yaml
+- uses: 0disoft/ohrisk@v1.14.1
+  with:
+    cache: "true"
+    cache-dir: .cache/ohrisk
+    prod: "true"
+```
+
+The Action rejects a pre-existing non-empty target unless it contains Ohrisk's
+exact artifact-cache ownership marker. It then uses commit-SHA-pinned
+`actions/cache` restore and save steps. The
+primary key includes runner OS, runner architecture, supported dependency-input
+content, and the exact SHA-256 of an archive input. A same-platform restore
+prefix warms changed dependency graphs. Cache restore and save failures do not
+mask the Ohrisk result, and a failed risk gate still saves newly fetched
+evidence for the next run. `cache-hit` is `true` only for an exact primary-key
+hit. Private-registry package bytes can be cached, so enable persistence only
+when GitHub cache visibility is acceptable for those artifacts.
+
 ## PR Gate
 
 Fail a pull request when production dependency changes introduce findings at or

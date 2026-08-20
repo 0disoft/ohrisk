@@ -48,6 +48,26 @@ the generated bundle in the same pull request.
   behavior cannot be implemented safely within the existing package boundary.
 - Update the owning guide and `CHANGELOG.md` for user-visible behavior.
 
+## Updating the SPDX catalog
+
+Select a reviewed full commit from `spdx/license-list-data`, then regenerate the
+checked-in catalog with the exact commit SHA:
+
+```bash
+bun scripts/update-spdx-catalog.ts 5bf6d9610255540bfbee6890765a616042bf1e11
+```
+
+The updater accepts no branch, tag, or shortened SHA. It reads only the fixed
+official license and exception aggregate files, bounds every response, verifies
+the GitHub file metadata and computed Git blob identities, rejects duplicate or
+mismatched catalog metadata, sorts identifiers deterministically, and replaces
+`src/license/spdx-catalog.ts` atomically. Review the generated diff and run:
+
+```bash
+bun test test/spdx-catalog-update.test.ts test/spdx-catalog.test.ts
+bun run verify:release
+```
+
 ## Adding an ecosystem
 
 An ecosystem contribution should be one reviewable vertical slice:
