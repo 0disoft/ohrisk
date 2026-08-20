@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 5e6dc12009fb0064046ec4ebd674cf88c290fe02d368ff30217493f147c4779f
+// ohrisk-action-source-sha256: e04d542e8445437eb028062584eacc36a2c68c74396f652e4908a89515d4a293
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -65469,7 +65469,7 @@ async function runScanAt(input) {
     ...command.lockfilePath ? { lockfilePath: command.lockfilePath } : {},
     ...command.archivePath ? { archivePath: command.archivePath } : {},
     ...input.repository ? { projectSearchMode: "tree" } : {},
-    ...input.repository ? { autoMergeSameRoot: true } : {},
+    ...input.repository || command.archivePath ? { autoMergeSameRoot: true } : {},
     ...input.repository ? { autoMergeDescendantProjects: true } : {},
     allLockfiles: command.allLockfiles ?? false,
     ...command.policyPath ? { policyPath: command.policyPath } : {},
@@ -65582,6 +65582,7 @@ async function scanProject(input) {
       cwd: input.cwd,
       archivePath: input.archivePath,
       allLockfiles: input.allLockfiles,
+      autoMergeSameRoot: input.autoMergeSameRoot ?? false,
       prodOnly: input.prodOnly,
       now: input.now,
       ...input.progress ? { progress: input.progress } : {},
@@ -65681,7 +65682,7 @@ function loadArchiveProjectGraph(input) {
   input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, "Reading archived lockfiles...");
   const loaded = loadArchiveProject({
     source: archive.value,
-    allLockfiles: input.allLockfiles
+    allLockfiles: input.allLockfiles || input.autoMergeSameRoot
   });
   if (isErr(loaded)) {
     return loaded;

@@ -1,7 +1,7 @@
 import type { LicenseEvidence } from "../src/evidence/types";
 import type { DependencyNode } from "../src/graph/types";
 import { normalizeLicenseEvidence } from "../src/license/normalize";
-import { collectSpdxLicenseTerms, parseSpdxExpression } from "../src/license/spdx";
+import { parseSpdxExpression, type SpdxExpressionNode } from "../src/license/spdx";
 import type { NormalizedLicenseConfidence } from "../src/license/types";
 import { evaluateLicenseRisk } from "../src/policy/evaluate";
 import type { UsageProfile } from "../src/policy/profiles";
@@ -188,9 +188,9 @@ function evaluateHeldoutLicenseCase(item: HeldoutLicenseCase): HeldoutLicenseEva
     severity: finding.severity,
     confidence: normalized.confidence
   };
-  const ohriskTerms = normalized.expression
-    ? canonicalLicenseTerms([normalized.expression])
-    : new Set(normalized.choices);
+const ohriskExpressions = canonicalLicenseExpressions(
+  normalized.expression ? [normalized.expression] : normalized.choices
+);
   return {
     id: item.id,
     sourceUrl: item.sourceUrl,
@@ -202,14 +202,14 @@ function evaluateHeldoutLicenseCase(item: HeldoutLicenseCase): HeldoutLicenseEva
     ...(normalized.expression ? { ohriskExpression: normalized.expression } : {}),
     ohriskChoices: normalized.choices,
     external: {
-      scancode: compareExternalObservation(ohriskTerms, item.external.scancode),
-      licensee: compareExternalObservation(ohriskTerms, item.external.licensee)
+scancode: compareExternalObservation(ohriskExpressions, item.external.scancode),
+licensee: compareExternalObservation(ohriskExpressions, item.external.licensee)
     }
   };
 }
 
 function compareExternalObservation(
-  ohriskTerms: ReadonlySet<string>,
+  ohriskExpressions: ReadonlySet<string>,
   observation: ExternalLicenseToolObservation
 ): ExternalLicenseToolComparison {
   const expressions = observation.expressions ?? [];
@@ -223,27 +223,63 @@ function compareExternalObservation(
     return { status: "unavailable", ...common };
   }
 
-  const externalTerms = canonicalLicenseTerms(expressions);
+  const externalExpressions = canonicalLicenseExpressions(expressions);
   const agrees = observation.status === "no-detection"
-    ? ohriskTerms.size === 0
-    : setEquals(ohriskTerms, externalTerms);
+    ? ohriskExpressions.size === 0
+    : setEquals(ohriskExpressions, externalExpressions);
   return { status: agrees ? "agree" : "disagree", ...common };
 }
 
-function canonicalLicenseTerms(expressions: readonly string[]): Set<string> {
-  const terms = new Set<string>();
+function canonicalLicenseExpressions(expressions: readonly string[]): Set<string> {
+  const canonical = new Set<string>();
   for (const expression of expressions) {
     const parsed = parseSpdxExpression(expression);
     if (parsed.malformed || !parsed.ast) {
-      terms.add(expression.trim());
+      const raw = expression.trim();
+      if (raw) {
+        canonical.add(`raw:${raw}`);
+      }
       continue;
     }
-    for (const term of collectSpdxLicenseTerms(parsed.ast)) {
-      terms.add(term);
-    }
+    canonical.add(canonicalSpdxExpression(parsed.ast));
   }
-  terms.delete("");
-  return terms;
+  return canonical;
+}
+
+function canonicalSpdxExpression(ast: SpdxExpressionNode): string {
+  if (ast.type === "license") {
+    return ast.exception
+      ? `license:${ast.license} WITH ${ast.exception}`
+      : `license:${ast.license}`;
+  }
+
+  const operands = flattenSpdxOperator(ast, ast.type)
+    .map(canonicalSpdxExpression)
+    .sort(compareStrings);
+  return `${ast.type}:[${operands.join(",")}]`;
+}
+
+function flattenSpdxOperator(
+  ast: SpdxExpressionNode,
+  operator: "and" | "or"
+): SpdxExpressionNode[] {
+  if (ast.type !== operator) {
+    return [ast];
+  }
+  return [
+    ...flattenSpdxOperator(ast.left, operator),
+    ...flattenSpdxOperator(ast.right, operator)
+  ];
+}
+
+function compareStrings(left: string, right: string): number {
+  if (left < right) {
+    return -1;
+  }
+  if (left > right) {
+    return 1;
+  }
+  return 0;
 }
 
 function setEquals(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
