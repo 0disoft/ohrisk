@@ -3,6 +3,16 @@
 ## 1.15.1 - Unreleased
 
 - Added `ohrisk init` to detect the nearest supported project and create a minimal policy, a version-pinned pull-request gate, and an optional empty waiver template without overwriting user-owned files.
+- The npm package now exposes `ScanReport`, `DiffReport`, `ExplainReport`,
+  `Finding`, waiver, evidence, policy, provenance, and summary contracts through
+  the type-only `ohrisk/report-types` entry point. Draft 2020-12 schemas also
+  have stable extension-free `ohrisk/schemas/<name>` exports while existing
+  explicit schema and dist paths remain accessible. Package smoke verification
+  resolves and type-checks both surfaces from the packed tarball.
+- Remote artifact DNS caching, guarded HTTPS socket lookup, and exact-host
+  registry authorization now live in a focused transport module. Ecosystem
+  evidence orchestration keeps the existing target, redirect, credential,
+  cache, error, and report behavior while exposing a smaller trust boundary.
 - Updated the bundled `@0disoft/laqu` development dependency from 1.1.8 to
   1.1.9 while preserving compatible-major declaration ranges and exact Bun
   lockfile integrity.

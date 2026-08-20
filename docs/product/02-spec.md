@@ -86,6 +86,13 @@ JSON records new, changed, and resolved findings plus current, baseline, added,
 and removed lockfile sets.
 Format-specific behavior is owned by `docs/report-formats.md` and matching tests.
 
+The npm package exposes the report instance contracts through the type-only
+`ohrisk/report-types` subpath. Packaged Draft 2020-12 schemas are available
+through stable `ohrisk/schemas/<name>` subpaths while their existing explicit
+`.schema.json` paths remain accessible. Package smoke verification must resolve
+both surfaces from an installed tarball rather than from repository-relative
+source paths.
+
 ## Cache Contract
 
 Remote package evidence, including npm, PyPI, Maven, and Go artifacts, uses a

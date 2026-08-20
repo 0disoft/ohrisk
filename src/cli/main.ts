@@ -527,7 +527,7 @@ async function runScanAt(input: {
     ...(command.lockfilePath ? { lockfilePath: command.lockfilePath } : {}),
     ...(command.archivePath ? { archivePath: command.archivePath } : {}),
     ...(input.repository ? { projectSearchMode: "tree" as const } : {}),
-    ...(input.repository ? { autoMergeSameRoot: true } : {}),
+    ...(input.repository || command.archivePath ? { autoMergeSameRoot: true } : {}),
     ...(input.repository ? { autoMergeDescendantProjects: true } : {}),
     allLockfiles: command.allLockfiles ?? false,
     ...(command.policyPath ? { policyPath: command.policyPath } : {}),
@@ -692,6 +692,7 @@ async function scanProject(input: {
       cwd: input.cwd,
       archivePath: input.archivePath,
       allLockfiles: input.allLockfiles,
+      autoMergeSameRoot: input.autoMergeSameRoot ?? false,
       prodOnly: input.prodOnly,
       now: input.now,
       ...(input.progress ? { progress: input.progress } : {}),
@@ -802,6 +803,7 @@ function loadArchiveProjectGraph(input: {
   cwd: string;
   archivePath: string;
   allLockfiles: boolean;
+  autoMergeSameRoot: boolean;
   prodOnly: boolean;
   now: ScanClock;
   progress?: ScanProgressReporter;
@@ -824,7 +826,7 @@ function loadArchiveProjectGraph(input: {
   input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, "Reading archived lockfiles...");
   const loaded = loadArchiveProject({
     source: archive.value,
-    allLockfiles: input.allLockfiles
+    allLockfiles: input.allLockfiles || input.autoMergeSameRoot
   });
   if (isErr(loaded)) {
     return loaded;

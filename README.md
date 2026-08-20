@@ -379,14 +379,17 @@ Scan a source archive without extracting it to disk:
 
 ```bash
 ohrisk scan --archive artifacts/source.zip
-ohrisk ci --archive artifacts/source.tar.gz --all --fail-on high
+ohrisk ci --archive artifacts/source.tar.gz --fail-on high
 ```
 
 Archive mode is available for `scan` and `ci`, not `diff`. It accepts ZIP, TAR,
 TAR.GZ, and TGZ through a strict read-only in-memory reader; nested archives are
 not opened. `--archive` cannot be combined with `--lockfile` or
-`--workspace-root`, but it can be combined with `--all`. Policy and waiver files
-inside an archive are never auto-loaded: `.ohrisk.yml` and
+`--workspace-root`. Supported inputs at one archive project root are merged
+automatically; `--all` remains accepted but is not required. Archives containing
+multiple independent project roots still require explicit project selection and
+fail closed. Policy and waiver files inside an archive are never auto-loaded:
+`.ohrisk.yml` and
 `.ohrisk-waivers.json` from the host invocation directory remain authoritative.
 Encrypted or ZIP64 archives, unsupported compression and entry types, unsafe
 paths, integrity failures, and archives over the documented resource limits are

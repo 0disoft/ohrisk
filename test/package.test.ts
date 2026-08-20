@@ -22,6 +22,8 @@ describe("package metadata", () => {
       packageManager?: string;
       scripts?: Record<string, string>;
       repository?: { url?: string };
+      exports?: Record<string, string | { types?: string }>;
+      typesVersions?: Record<string, Record<string, string[]>>;
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
     };
@@ -48,6 +50,27 @@ describe("package metadata", () => {
     expect(packageJson.engines?.node).toBe(">=24.0.0");
     expect(packageJson.bin).toEqual({ ohrisk: "dist/cli.js" });
     expect(packageJson.files).toEqual(["CHANGELOG.md", "dist", "schemas"]);
+    expect(packageJson.exports).toEqual({
+      "./report-types": {
+        types: "./dist/report-types.d.ts"
+      },
+      "./schemas/common": "./schemas/common.schema.json",
+      "./schemas/scan-report": "./schemas/scan-report.schema.json",
+      "./schemas/diff-report": "./schemas/diff-report.schema.json",
+      "./schemas/explain-report": "./schemas/explain-report.schema.json",
+      "./schemas/waiver-file": "./schemas/waiver-file.schema.json",
+      "./schemas/*": "./schemas/*",
+      "./dist/*": "./dist/*",
+      "./CHANGELOG.md": "./CHANGELOG.md",
+      "./README.md": "./README.md",
+      "./LICENSE": "./LICENSE",
+      "./package.json": "./package.json"
+    });
+    expect(packageJson.typesVersions).toEqual({
+      "*": {
+        "report-types": ["dist/report-types.d.ts"]
+      }
+    });
     expect(packageJson.publishConfig?.access).toBe("public");
     expect(packageJson.repository?.url).toBe("git+https://github.com/0disoft/ohrisk.git");
     expect(packageJson.dependencies?.["@0disoft/laqu"]).toBeUndefined();
@@ -92,6 +115,7 @@ describe("package metadata", () => {
     expect(tsconfig.compilerOptions?.skipLibCheck).toBe(false);
     expect(existsSync(path.join(repoRoot, "tsconfig.release.json"))).toBe(true);
     expect(existsSync(path.join(repoRoot, "tsconfig.strict-source.json"))).toBe(false);
+    expect(existsSync(path.join(repoRoot, "types", "report-types.d.ts"))).toBe(true);
     expect(releaseTsconfig.extends).toBe("./tsconfig.json");
     expect(releaseTsconfig.files).toBeUndefined();
     expect(releaseTsconfig.include).toBeUndefined();
@@ -116,6 +140,9 @@ describe("package metadata", () => {
     expect(buildScript).toContain("assertVersionContract()");
     expect(buildScript).toContain('rmSync("dist"');
     expect(buildScript).toContain('rmSync("action-dist"');
+    expect(buildScript).toContain(
+      'copyFileSync("types/report-types.d.ts", "dist/report-types.d.ts")'
+    );
     expect(buildScript).toContain('copyFileSync(packageBundle, "action-dist/cli.js")');
     expect(bundleScript).toContain('packages: "bundle"');
     expect(bundleScript).toContain('target: "node"');
