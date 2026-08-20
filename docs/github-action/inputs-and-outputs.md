@@ -20,7 +20,8 @@
 | `all` | Boolean string that scans every supported lockfile in the detected project root. |
 | `policy` | Optional repository-relative `.ohrisk.yml`-compatible policy path. |
 | `offline` | Boolean string that disables network access. |
-| `cache-dir` | Optional repository-relative persistent artifact cache directory. |
+| `cache` | Action-only Boolean string that restores and saves the Ohrisk artifact cache with commit-SHA-pinned `actions/cache` steps. Defaults to `false`; the CLI surface remains `--cache-dir`. |
+| `cache-dir` | Optional repository-relative artifact cache directory. With `cache: "true"`, an empty value resolves to `.ohrisk-cache`; an explicit value overrides that default. Without persistence, the value is still forwarded to the CLI for job-local caching. |
 | `jobs` | Evidence collection concurrency from 1 through 64. |
 | `timeout` | Remote evidence timeout from 100 ms through 10 minutes, such as `30s`. |
 | `registry-url` | HTTPS npm registry base URL. |
@@ -37,13 +38,27 @@
 | Output | Contract |
 | --- | --- |
 | `report-path` | Set when `output` is provided and the CLI writes a report. |
+| `cache-hit` | Exact-match result from `actions/cache/restore`: `true` for an exact key hit, `false` for a restore-key match, and empty when persistence is disabled or no entry is restored. |
 
 ## Validation
 
-Boolean inputs, including `setup-node`, accept only `true` or `false`. Paths are validated before any
+Boolean inputs, including `setup-node` and `cache`, accept only `true` or `false`. Paths are validated before any
 directory is created, exact version syntax and bundle equality are checked before the scan runs, and the
 action rejects incompatible `lockfile` plus `all` and `archive` plus `lockfile`
 inputs. `archive` may be combined with `all`.
+
+When `cache` is enabled, the effective cache directory is validated before
+restore and again before the CLI runs. A pre-existing non-empty target must
+contain the exact Ohrisk artifact-cache ownership marker, so persistence cannot
+restore over arbitrary repository data. The primary key includes the runner OS,
+runner architecture, supported dependency-input digest, and an exact SHA-256
+digest for `archive` input. A same-platform restore prefix warms changed
+dependency graphs. The save step runs after successful scans and failed risk
+gates, skips exact hits, ignores cache-service write failures, and never changes
+the Ohrisk command result. Private-registry package bytes may be stored in
+GitHub's cache even though credentials and authorization headers are excluded.
+The workspace path remains visible to later steps and may need an ignore rule
+when a clean `git status` is required.
 
 `diff` passes the baseline ref as one argument without shell re-parsing. The
 calling workflow owns checkout history and ref availability; use an appropriate

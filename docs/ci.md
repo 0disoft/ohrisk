@@ -137,7 +137,45 @@ combined.
 
 ## Cache, offline mode, and private registries
 
-Reuse the persistent artifact cache and control evidence collection explicitly:
+The bundled Action can persist Ohrisk's existing artifact cache without a
+separate workflow cache step:
+
+```yaml
+- uses: 0disoft/ohrisk@v1.14.1
+  id: ohrisk
+  with:
+    cache: "true"
+    all: "true"
+    prod: "true"
+
+- run: echo "Exact Ohrisk cache hit: ${{ steps.ohrisk.outputs.cache-hit }}"
+```
+
+With `cache: "true"`, an empty `cache-dir` resolves to `.ohrisk-cache`. An
+explicit contained path overrides that default:
+
+```yaml
+- uses: 0disoft/ohrisk@v1.14.1
+  with:
+    cache: "true"
+    cache-dir: .cache/ohrisk
+    all: "true"
+    prod: "true"
+```
+
+The Action refuses to restore over a pre-existing non-empty directory unless it
+contains Ohrisk's exact artifact-cache ownership marker. It keys the cache by
+runner platform, supported dependency inputs, and
+the exact digest of an archive input. Restore and save errors are non-fatal, and
+a failed risk gate can still save newly fetched evidence. This preserves the
+Ohrisk exit status instead of turning a cache-service outage into the reported
+failure. Private-registry package bytes can be cached, so enable persistence
+only when GitHub cache visibility is acceptable for those artifacts. Add the
+chosen workspace path to the consuming repository's ignore rules when later
+steps require a clean `git status`.
+
+For direct CLI steps, reuse a job-local artifact cache and control evidence
+collection explicitly:
 
 ```yaml
 - run: >-
