@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 8e0fc5919542ff159a95417aa983a9e375609a3c83c1ec64bc42f1eb42a66408
+// ohrisk-action-source-sha256: 3fcd447ffcfed42313826abbcea351dd8f793dc94e8c4d88e7db6823baccef6f
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -49764,14 +49764,20 @@ function isRecoverableRemoteEvidenceError(error) {
   return error.category === "network" && (error.code === "REGISTRY_METADATA_FETCH_FAILED" || error.code === "TARBALL_FETCH_FAILED");
 }
 function unavailableRemoteEvidence(input) {
+  const diagnostic = remoteEvidenceFailureDiagnostic(input.error);
   return {
     packageId: input.packageId,
     files: [],
     source: "unavailable",
     warnings: [
-      `Package evidence could not be fetched (${input.error.code}): ${input.error.message}`
+      `Package evidence could not be fetched (${input.error.code}): ${input.error.message}${diagnostic ? ` (${diagnostic})` : ""}`
     ]
   };
+}
+function remoteEvidenceFailureDiagnostic(error) {
+  const cause = typeof error.details?.cause === "string" ? error.details.cause : undefined;
+  const timeout = cause?.match(/\btimed out after (\d+)ms\b/i);
+  return timeout?.[1] ? `timeout after ${timeout[1]}ms` : undefined;
 }
 function normalizeEvidenceConcurrency(value, total) {
   if (value === undefined) {

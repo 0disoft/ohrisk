@@ -4014,7 +4014,7 @@ describe("collectGraphEvidence", () => {
         files: [],
         source: "unavailable",
         warnings: [
-          "Package evidence could not be fetched (TARBALL_FETCH_FAILED): Failed to fetch package tarball."
+          "Package evidence could not be fetched (TARBALL_FETCH_FAILED): Failed to fetch package tarball. (timeout after 1ms)"
         ]
       }
     ]);
@@ -4068,7 +4068,7 @@ describe("collectGraphEvidence", () => {
         files: [],
         source: "unavailable",
         warnings: [
-          "Package evidence could not be fetched (TARBALL_FETCH_FAILED): Failed to resolve package tarball host."
+          "Package evidence could not be fetched (TARBALL_FETCH_FAILED): Failed to resolve package tarball host. (timeout after 1ms)"
         ]
       }
     ]);
@@ -4129,7 +4129,7 @@ describe("collectGraphEvidence", () => {
         files: [],
         source: "unavailable",
         warnings: [
-          "Package evidence could not be fetched (TARBALL_FETCH_FAILED): Failed to fetch package tarball."
+          "Package evidence could not be fetched (TARBALL_FETCH_FAILED): Failed to fetch package tarball. (timeout after 1ms)"
         ]
       }
     ]);

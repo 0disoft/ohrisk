@@ -385,7 +385,9 @@ identity mismatch fails closed. Maven source archives are not fetched.
 
 Transient online failures such as DNS resolver errors, timeouts, connection
 errors, and failed HTTP responses are recorded as unavailable evidence so the
-remaining graph can be evaluated. Security violations, integrity mismatches,
+remaining graph can be evaluated. Timeout warnings include the bounded elapsed
+limit that was exhausted, while arbitrary exception text and local paths remain
+excluded from shareable reports. Security violations, integrity mismatches,
 malformed registry metadata, unreadable bodies, and parser failures fail closed
 instead of pretending evidence coverage is complete.
 

@@ -2,6 +2,9 @@
 
 ## 1.15.1 - Unreleased
 
+- Unavailable remote evidence warnings now preserve the bounded timeout value
+  for DNS, response, and body-read exhaustion without exposing arbitrary network
+  exception text or local paths.
 - The active SPDX `Unicode-3.0` identifier is now classified as permissive
   low-risk evidence while retaining the distributed license-text preservation
   obligation.

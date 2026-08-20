@@ -494,14 +494,23 @@ function unavailableRemoteEvidence(input: {
   packageId: string;
   error: OhriskError;
 }): LicenseEvidence {
+  const diagnostic = remoteEvidenceFailureDiagnostic(input.error);
   return {
     packageId: input.packageId,
     files: [],
     source: "unavailable",
     warnings: [
-      `Package evidence could not be fetched (${input.error.code}): ${input.error.message}`
+      `Package evidence could not be fetched (${input.error.code}): ${input.error.message}${
+        diagnostic ? ` (${diagnostic})` : ""
+      }`
     ]
   };
+}
+
+function remoteEvidenceFailureDiagnostic(error: OhriskError): string | undefined {
+  const cause = typeof error.details?.cause === "string" ? error.details.cause : undefined;
+  const timeout = cause?.match(/\btimed out after (\d+)ms\b/i);
+  return timeout?.[1] ? `timeout after ${timeout[1]}ms` : undefined;
 }
 
 function normalizeEvidenceConcurrency(value: number | undefined, total: number): number {
