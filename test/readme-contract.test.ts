@@ -65,12 +65,12 @@ describe("README report contract", () => {
 
     expect(readme).toContain("ohrisk scan --archive artifacts/source.zip");
     expect(readme).toContain(
-      "ohrisk ci --archive artifacts/source.tar.gz --all --fail-on high"
+      "ohrisk ci --archive artifacts/source.tar.gz --fail-on high"
     );
     expect(readme).toContain("Archive mode is available for `scan` and `ci`, not `diff`");
     expect(normalized).toContain("nested archives are not opened");
     expect(normalized).toContain("`--archive` cannot be combined with `--lockfile` or `--workspace-root`");
-    expect(normalized).toContain("it can be combined with `--all`");
+    expect(normalized).toContain("`--all` remains accepted but is not required");
     expect(normalized).toContain("Policy and waiver files inside an archive are never auto-loaded");
     expect(readme).toContain("Encrypted or ZIP64 archives");
     expect(readme).toContain("exact limits");
