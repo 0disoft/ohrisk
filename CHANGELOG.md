@@ -2,6 +2,10 @@
 
 ## 1.15.1 - Unreleased
 
+- Remote artifact DNS caching, guarded HTTPS socket lookup, and exact-host
+  registry authorization now live in a focused transport module. Ecosystem
+  evidence orchestration keeps the existing target, redirect, credential,
+  cache, error, and report behavior while exposing a smaller trust boundary.
 - Updated the bundled `@0disoft/laqu` development dependency from 1.1.8 to
   1.1.9 while preserving compatible-major declaration ranges and exact Bun
   lockfile integrity.
