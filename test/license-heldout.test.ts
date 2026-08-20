@@ -74,6 +74,23 @@ describe("held-out license evaluation", () => {
     expect(report.endsWith("\n")).toBe(true);
   });
 
+test("distinguishes SPDX AND from OR when the license terms match", () => {
+  const result = evaluateHeldoutLicenseCases([
+    heldoutCase({
+      id: "operator-mismatch",
+      license: "MIT AND Apache-2.0",
+      expected: { severity: "low", confidence: "high" },
+      scancode: { status: "detected", expressions: ["MIT OR Apache-2.0"] },
+      licensee: { status: "detected", expressions: ["Apache-2.0 AND MIT"] }
+    })
+  ]);
+
+  expect(result.evaluations[0]?.external).toMatchObject({
+    scancode: { status: "disagree" },
+    licensee: { status: "agree" }
+  });
+});
+
   test("does not collapse SPDX exceptions into their base license", () => {
     const result = evaluateHeldoutLicenseCases([
       heldoutCase({

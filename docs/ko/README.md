@@ -77,13 +77,16 @@ checkout 전에 제외하고 별도 경로로 보고한다. 경로 탈출과 `.g
 
 ```bash
 ohrisk scan --archive artifacts/source.zip
-ohrisk ci --archive artifacts/source.tar.gz --all --fail-on high
+ohrisk ci --archive artifacts/source.tar.gz --fail-on high
 ```
 
 아카이브 모드는 `scan`과 `ci`에서만 지원하고 `diff`에서는 거부한다. ZIP, TAR,
 TAR.GZ, TGZ를 엄격한 읽기 전용 메모리 입력으로 다루며, 안에 든 또 다른
 아카이브는 열지 않는다. `--archive`는 `--lockfile`, `--workspace-root`와 함께
-쓸 수 없지만 `--all`과는 함께 쓸 수 있다. 아카이브 안의 `.ohrisk.yml`과
+쓸 수 없다. 하나의 아카이브 프로젝트 루트에 있는 지원 입력은 자동으로 병합하며,
+`--all`은 계속 허용하지만 필수는 아니다. 서로 독립된 프로젝트 루트가 여러 개면
+명시적으로 프로젝트를 선택해야 하므로 계속 실패 처리한다. 아카이브 안의
+`.ohrisk.yml`과
 `.ohrisk-waivers.json`은 자동으로 읽지 않으며, 실행한 호스트 디렉터리의 정책과
 waiver가 계속 기준이다. 암호화/ZIP64, 미지원 압축·entry type, 안전하지 않은
 경로, 무결성 오류, 자원 제한 초과는 실패 처리한다. 정확한 지원 범위와 제한은
