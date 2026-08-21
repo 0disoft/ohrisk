@@ -135,10 +135,12 @@ when every library alias resolves to an exact Maven version; catalogs containing
 BOM-managed, rich, or otherwise unresolved versions remain available through an
 explicit `--lockfile` selection, which reports the unsupported entry instead of
 silently guessing it.
-Dependency-free `.csproj` files and `yarn.lock` files without a same-directory
-root `package.json` are likewise ignored as non-concrete automatic-discovery
-candidates. Explicit `--lockfile` selection remains strict and reports the
-missing dependency input instead of silently treating it as an empty graph.
+Dependency-free `.csproj` files, `.csproj` files whose package versions depend
+on properties unavailable without SDK restore, and `yarn.lock` files without a
+same-directory root `package.json` are likewise ignored as non-concrete
+automatic-discovery candidates. Explicit `--lockfile` selection remains strict
+and reports the unresolved or missing dependency input instead of silently
+treating it as an empty graph.
 SBOM files containing unresolved uppercase `@BUILD_VARIABLE@` placeholders are
 treated as build templates rather than concrete automatic-discovery candidates.
 Absolute, empty-segment, dot-segment, and traversal paths are rejected before

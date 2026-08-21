@@ -127,16 +127,7 @@ export function isDotnetProjectAutoDiscoveryCandidate(
   projectFilePath: string,
   options: { maxBytes?: number } = {}
 ): boolean {
-  const projectFileText = readInputTextFile({
-    filePath: projectFilePath,
-    maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES
-  });
-
-  if (!projectFileText.ok) {
-    return true;
-  }
-
-  return /<Package(?:Reference|Download)\b/i.test(projectFileText.value);
+  return parseDotnetProjectFile(projectFilePath, options).ok;
 }
 
 export function parseNugetPackagesConfigFile(

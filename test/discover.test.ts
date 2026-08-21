@@ -2641,6 +2641,65 @@ describe("discoverProject", () => {
     }
   });
 
+  test("skips .NET projects whose package versions require unavailable SDK properties", () => {
+    const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-sdk-dotnet-"));
+    const appRoot = path.join(repositoryRoot, "app");
+    const toolingRoot = path.join(repositoryRoot, "eng", "common", "internal");
+    const toolingProjectPath = path.join(toolingRoot, "Tools.csproj");
+
+    try {
+      mkdirSync(appRoot, { recursive: true });
+      mkdirSync(toolingRoot, { recursive: true });
+      writeFileSync(
+        path.join(appRoot, "App.csproj"),
+        [
+          "<Project Sdk=\"Microsoft.NET.Sdk\">",
+          "  <ItemGroup>",
+          "    <PackageReference Include=\"Resolved.Package\" Version=\"1.2.3\" />",
+          "  </ItemGroup>",
+          "</Project>"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        toolingProjectPath,
+        [
+          "<Project Sdk=\"Microsoft.NET.Sdk\">",
+          "  <ItemGroup>",
+          "    <PackageReference Include=\"Sdk.Tool\" Version=\"$(SdkToolVersion)\" />",
+          "  </ItemGroup>",
+          "</Project>"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const automaticResult = discoverProject({
+        cwd: repositoryRoot,
+        searchMode: "tree",
+        autoMergeDescendantProjects: true
+      });
+
+      expect(automaticResult.ok).toBe(true);
+      if (!automaticResult.ok) throw new Error(automaticResult.error.message);
+      expect(automaticResult.value.lockfiles ?? [automaticResult.value.lockfile]).toEqual([
+        { kind: "dotnet-project", path: path.join(appRoot, "App.csproj") }
+      ]);
+
+      const explicitResult = discoverProject({
+        cwd: repositoryRoot,
+        lockfilePath: path.relative(repositoryRoot, toolingProjectPath)
+      });
+      expect(explicitResult.ok).toBe(true);
+      if (!explicitResult.ok) throw new Error(explicitResult.error.message);
+      expect(explicitResult.value.lockfile).toEqual({
+        kind: "dotnet-project",
+        path: toolingProjectPath
+      });
+    } finally {
+      rmSync(repositoryRoot, { recursive: true, force: true });
+    }
+  });
+
   test("skips orphaned Yarn locks during automatic repository discovery", () => {
     const repositoryRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-descendant-orphan-yarn-"));
     const generatedRoot = path.join(repositoryRoot, "kotlin-js-store");

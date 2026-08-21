@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: bd19b5c363517fd9b2b66168f8a1193c6f472389f6c3f8262be56590d6aa3fce
+// ohrisk-action-source-sha256: 918e9426dd486276ec6a0bc7188708e6246b24aa297be4478e722a44d4dff0f0
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -21545,14 +21545,7 @@ function parseDotnetProjectFile(projectFilePath, options = {}) {
   }));
 }
 function isDotnetProjectAutoDiscoveryCandidate(projectFilePath, options = {}) {
-  const projectFileText = readInputTextFile({
-    filePath: projectFilePath,
-    maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES
-  });
-  if (!projectFileText.ok) {
-    return true;
-  }
-  return /<Package(?:Reference|Download)\b/i.test(projectFileText.value);
+  return parseDotnetProjectFile(projectFilePath, options).ok;
 }
 function parseNugetPackagesConfigFile(packagesConfigPath, options = {}) {
   const packagesConfigText = readInputTextFile({
