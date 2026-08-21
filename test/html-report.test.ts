@@ -3,7 +3,11 @@ import { describe, expect, test } from "bun:test";
 import type { LicenseEvidence } from "../src/evidence/types";
 import type { DependencyGraph } from "../src/graph/types";
 import type { NormalizedLicense } from "../src/license/types";
-import { buildFindingFingerprint, buildFindingId } from "../src/policy/finding-id";
+import {
+  buildFindingFingerprint,
+  buildFindingId,
+  buildLegacyFindingId
+} from "../src/policy/finding-id";
 import type { RiskFinding } from "../src/policy/types";
 import type { RiskWaiver, WaivedRiskFinding } from "../src/policy/waivers";
 import type { ProjectInput } from "../src/project/discover";
@@ -552,11 +556,44 @@ describe("HTML scan report", () => {
     expect(parsed.s.length).toBeGreaterThan(0);
     expect(parsed.p.length).toBeLessThan(longIdentityFinding.paths.flat().length);
     expect(Array.isArray(parsed.f[0])).toBe(true);
+    expect((parsed.f[0] as unknown[]).length).toBe(5);
     expect(output).not.toContain("</script><script>alert(1)</script>");
     expect(output).not.toContain(longFingerprint);
     expect(fingerprintData?.length ?? 0).toBeLessThan(longFingerprint.length / 4);
     expect(output).toContain('data-fingerprint-index="0"');
     expect(output).toContain("deferredFingerprint.textContent = fingerprint");
+  });
+
+  test("stores legacy raw-order fingerprint identities as trie paths plus an exact suffix", () => {
+    const canonical = canonicalLongFinding();
+    const paths = [...canonical.paths].reverse();
+    const id = buildLegacyFindingId({
+      packageId: canonical.packageId,
+      dependencyType: canonical.dependencyType,
+      dependencyScope: canonical.dependencyScope,
+      paths
+    });
+    const legacyFinding: RiskFinding = {
+      ...canonical,
+      paths,
+      fingerprint: buildFindingFingerprint({
+        id,
+        severity: canonical.severity,
+        recommendation: canonical.recommendation,
+        reason: canonical.reason,
+        evidence: canonical.evidence
+      })
+    };
+    const output = renderScanReport(scanInput({ riskFindings: [legacyFinding] }));
+    const fingerprintData = output.match(
+      /<script type="application\/json" id="ohrisk-fingerprint-data">\n\s*([^\n]+)\n\s*<\/script>/
+    )?.[1];
+    const parsed = JSON.parse(fingerprintData ?? "{}") as { f: unknown[] };
+
+    expect(Array.isArray(parsed.f[0])).toBe(true);
+    expect((parsed.f[0] as unknown[]).length).toBe(5);
+    expect(output).not.toContain(legacyFinding.fingerprint);
+    expect(fingerprintData?.length ?? 0).toBeLessThan(legacyFinding.fingerprint.length / 4);
   });
 
   test("hydrates a deferred fingerprint only when its card value is expanded", () => {

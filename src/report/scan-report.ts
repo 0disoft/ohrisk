@@ -13,7 +13,11 @@ import { packageUrl } from "../graph/package-url";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
 import type { NormalizedLicense } from "../license/types";
 import { NOTICE_ACTION } from "../policy/evaluate";
-import { buildFindingFingerprint, buildFindingId } from "../policy/finding-id";
+import {
+  buildFindingFingerprint,
+  buildFindingId,
+  buildLegacyFindingId
+} from "../policy/finding-id";
 import type {
   RiskDependencyScope,
   RiskFinding,
@@ -676,6 +680,12 @@ type HtmlDeferredFingerprintRecord = null | string | [
   recommendation: string,
   reason: number,
   evidence: number[]
+] | [
+  packageId: number,
+  dependencyType: string,
+  dependencyScope: string,
+  paths: number[],
+  suffix: number
 ];
 
 type HtmlDeferredFingerprintPayload = {
@@ -736,6 +746,32 @@ function buildHtmlDeferredFingerprintData(findings: RiskFinding[]): {
       dependencyScope: finding.dependencyScope,
       paths: finding.paths
     });
+    const legacyId = buildLegacyFindingId({
+      packageId: finding.packageId,
+      dependencyType: finding.dependencyType,
+      dependencyScope: finding.dependencyScope,
+      paths: finding.paths
+    });
+    const canonicalPrefix = `${canonicalId}::`;
+    const legacyPrefix = `${legacyId}::`;
+    const structuredIdentity = finding.fingerprint.startsWith(canonicalPrefix)
+      ? {
+          id: canonicalId,
+          paths: canonicalHtmlFingerprintPaths(finding.paths)
+        }
+      : finding.fingerprint.startsWith(legacyPrefix)
+        ? { id: legacyId, paths: finding.paths }
+        : undefined;
+    if (structuredIdentity) {
+      records.push([
+        addString(finding.packageId),
+        finding.dependencyType,
+        finding.dependencyScope,
+        structuredIdentity.paths.map(addPath),
+        addString(finding.fingerprint.slice(structuredIdentity.id.length + 2))
+      ]);
+      continue;
+    }
     const canonicalFingerprint = buildFindingFingerprint({
       id: canonicalId,
       severity: finding.severity,
@@ -761,6 +797,18 @@ function buildHtmlDeferredFingerprintData(findings: RiskFinding[]): {
     indexes,
     payload: indexes.size === 0 ? undefined : { v: 1, s: strings, p: paths, f: records }
   };
+}
+
+function canonicalHtmlFingerprintPaths(paths: string[][]): string[][] {
+  const byKey = new Map<string, string[]>();
+  for (const dependencyPath of paths) {
+    byKey.set(JSON.stringify(dependencyPath), dependencyPath);
+  }
+  return [...byKey.values()].sort((left, right) => {
+    const leftKey = left.join("\u0000");
+    const rightKey = right.join("\u0000");
+    return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+  });
 }
 
 function renderHtmlDeferredFingerprintData(
@@ -873,25 +921,33 @@ function renderHtmlFilterScript(text: HtmlReportText): string[] {
     "    if (typeof record === 'string') {",
     "      return record;",
     "    }",
-    "    if (!Array.isArray(record) || record.length !== 8) {",
+    "    if (!Array.isArray(record) || (record.length !== 5 && record.length !== 8)) {",
     "      return null;",
     "    }",
     "    const packageId = fingerprintPayload.s[record[0]];",
-    "    const reason = fingerprintPayload.s[record[6]];",
-    "    if (typeof packageId !== 'string' || typeof reason !== 'string' || !Array.isArray(record[3]) || !Array.isArray(record[7])) {",
+    "    if (typeof packageId !== 'string' || !Array.isArray(record[3])) {",
     "      return null;",
     "    }",
-    "    const paths = canonicalizePaths(record[3].map((pathIndex) => decodePath(pathIndex)));",
-    "    const evidence = record[7].map((stringIndex) => fingerprintPayload.s[stringIndex]);",
-    "    if (paths.some((path) => !Array.isArray(path)) || evidence.some((item) => typeof item !== 'string')) {",
+    "    const decodedRecordPaths = record[3].map((pathIndex) => decodePath(pathIndex));",
+    "    if (decodedRecordPaths.some((path) => !Array.isArray(path))) {",
     "      return null;",
     "    }",
+    "    const paths = record.length === 8 ? canonicalizePaths(decodedRecordPaths) : decodedRecordPaths;",
     "    const findingId = [",
     "      encodeFindingComponent(packageId),",
     "      encodeFindingComponent(record[1]),",
     "      encodeFindingComponent(record[2]),",
     "      paths.map((path) => path.map(encodeFindingComponent).join('>')).join('|')",
     "    ].join('::');",
+    "    if (record.length === 5) {",
+    "      const suffix = fingerprintPayload.s[record[4]];",
+    "      return typeof suffix === 'string' ? `${findingId}::${suffix}` : null;",
+    "    }",
+    "    const reason = fingerprintPayload.s[record[6]];",
+    "    const evidence = record[7].map((stringIndex) => fingerprintPayload.s[stringIndex]);",
+    "    if (typeof reason !== 'string' || evidence.some((item) => typeof item !== 'string')) {",
+    "      return null;",
+    "    }",
     "    return [",
     "      findingId,",
     "      encodeFindingComponent(record[4]),",

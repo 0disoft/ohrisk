@@ -2,6 +2,10 @@
 
 ## 1.15.1 - Unreleased
 
+- Large HTML reports now store canonical and legacy-compatible finding
+  identities as shared path tries plus exact fingerprint suffixes, avoiding
+  multi-megabyte path repetition without changing expanded fingerprints or
+  waiver compatibility.
 - Automatic discovery failures now list supported root inputs that were
   excluded because they are not fully resolved, and point to `--lockfile` for
   the exact parse error instead of reporting only a generic missing-lockfile

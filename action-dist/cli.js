@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: b464de424cdfb9820df3429e9de7e3c17dd7149e2ddecd5b1d1d2cce4b565a02
+// ohrisk-action-source-sha256: 4f45b43143b55118a448740922d181736f431caa38b8bbb7afc447497ed07136
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -59874,6 +59874,28 @@ function buildHtmlDeferredFingerprintData(findings) {
       dependencyScope: finding.dependencyScope,
       paths: finding.paths
     });
+    const legacyId = buildLegacyFindingId({
+      packageId: finding.packageId,
+      dependencyType: finding.dependencyType,
+      dependencyScope: finding.dependencyScope,
+      paths: finding.paths
+    });
+    const canonicalPrefix = `${canonicalId}::`;
+    const legacyPrefix = `${legacyId}::`;
+    const structuredIdentity = finding.fingerprint.startsWith(canonicalPrefix) ? {
+      id: canonicalId,
+      paths: canonicalHtmlFingerprintPaths(finding.paths)
+    } : finding.fingerprint.startsWith(legacyPrefix) ? { id: legacyId, paths: finding.paths } : undefined;
+    if (structuredIdentity) {
+      records.push([
+        addString(finding.packageId),
+        finding.dependencyType,
+        finding.dependencyScope,
+        structuredIdentity.paths.map(addPath),
+        addString(finding.fingerprint.slice(structuredIdentity.id.length + 2))
+      ]);
+      continue;
+    }
     const canonicalFingerprint = buildFindingFingerprint({
       id: canonicalId,
       severity: finding.severity,
@@ -59896,6 +59918,17 @@ function buildHtmlDeferredFingerprintData(findings) {
     indexes,
     payload: indexes.size === 0 ? undefined : { v: 1, s: strings, p: paths, f: records }
   };
+}
+function canonicalHtmlFingerprintPaths(paths) {
+  const byKey = new Map;
+  for (const dependencyPath of paths) {
+    byKey.set(JSON.stringify(dependencyPath), dependencyPath);
+  }
+  return [...byKey.values()].sort((left, right) => {
+    const leftKey = left.join("\x00");
+    const rightKey = right.join("\x00");
+    return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+  });
 }
 function renderHtmlDeferredFingerprintData(payload) {
   if (!payload) {
@@ -59993,25 +60026,33 @@ function renderHtmlFilterScript(text) {
     "    if (typeof record === 'string') {",
     "      return record;",
     "    }",
-    "    if (!Array.isArray(record) || record.length !== 8) {",
+    "    if (!Array.isArray(record) || (record.length !== 5 && record.length !== 8)) {",
     "      return null;",
     "    }",
     "    const packageId = fingerprintPayload.s[record[0]];",
-    "    const reason = fingerprintPayload.s[record[6]];",
-    "    if (typeof packageId !== 'string' || typeof reason !== 'string' || !Array.isArray(record[3]) || !Array.isArray(record[7])) {",
+    "    if (typeof packageId !== 'string' || !Array.isArray(record[3])) {",
     "      return null;",
     "    }",
-    "    const paths = canonicalizePaths(record[3].map((pathIndex) => decodePath(pathIndex)));",
-    "    const evidence = record[7].map((stringIndex) => fingerprintPayload.s[stringIndex]);",
-    "    if (paths.some((path) => !Array.isArray(path)) || evidence.some((item) => typeof item !== 'string')) {",
+    "    const decodedRecordPaths = record[3].map((pathIndex) => decodePath(pathIndex));",
+    "    if (decodedRecordPaths.some((path) => !Array.isArray(path))) {",
     "      return null;",
     "    }",
+    "    const paths = record.length === 8 ? canonicalizePaths(decodedRecordPaths) : decodedRecordPaths;",
     "    const findingId = [",
     "      encodeFindingComponent(packageId),",
     "      encodeFindingComponent(record[1]),",
     "      encodeFindingComponent(record[2]),",
     "      paths.map((path) => path.map(encodeFindingComponent).join('>')).join('|')",
     "    ].join('::');",
+    "    if (record.length === 5) {",
+    "      const suffix = fingerprintPayload.s[record[4]];",
+    "      return typeof suffix === 'string' ? `${findingId}::${suffix}` : null;",
+    "    }",
+    "    const reason = fingerprintPayload.s[record[6]];",
+    "    const evidence = record[7].map((stringIndex) => fingerprintPayload.s[stringIndex]);",
+    "    if (typeof reason !== 'string' || evidence.some((item) => typeof item !== 'string')) {",
+    "      return null;",
+    "    }",
     "    return [",
     "      findingId,",
     "      encodeFindingComponent(record[4]),",
