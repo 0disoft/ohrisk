@@ -323,10 +323,24 @@ function collectDistributionEvidenceFiles(input: {
     files.push({
       path: relativeEvidencePath(candidate.path, packageRoot),
       kind: classifyEvidenceFile(candidate.path) ?? "license",
-      text: text.value
+      text: text.value,
+      ...(isBundledComponentLicensePath(candidate.path, metadataDir)
+        ? { scope: "component" as const }
+        : {})
     });
   }
   return files;
+}
+
+function isBundledComponentLicensePath(entryPath: string, metadataDir: string): boolean {
+  if (!metadataDir.toLowerCase().endsWith(".dist-info")) {
+    return false;
+  }
+  const licenseRoot = `${metadataDir}/licenses/`;
+  if (!entryPath.startsWith(licenseRoot)) {
+    return false;
+  }
+  return entryPath.slice(licenseRoot.length).includes("/");
 }
 
 function isDistributionEvidencePath(input: {

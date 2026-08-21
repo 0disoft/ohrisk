@@ -330,7 +330,7 @@ function uniqueOrigins(origins: DependencyOrigin[]): DependencyOrigin[] {
 function uniqueEvidenceFiles(files: LicenseEvidence["files"]): LicenseEvidence["files"] {
   const byKey = new Map<string, LicenseEvidence["files"][number]>();
   for (const file of files) {
-    byKey.set(`${file.kind}\0${file.path}\0${file.text}`, file);
+    byKey.set(`${file.scope ?? "package"}\0${file.kind}\0${file.path}\0${file.text}`, file);
   }
   return [...byKey.values()];
 }

@@ -366,6 +366,14 @@ metadata or license bytes from the rejected archive are trusted. Integrity
 mismatches, malformed archives, identity mismatches, and unsafe paths still fail
 the scan.
 
+Within a verified wheel, an immediate `.dist-info/licenses/<file>` remains
+package-license evidence. A file nested below
+`.dist-info/licenses/<component>/<file>` is retained as a bundled-component
+obligation instead: Ohrisk combines each distinct recognized component license
+with the package expression using SPDX `AND`. This prevents an embedded
+copyleft or otherwise restrictive component license from being discarded while
+avoiding a false metadata conflict between the package and its bundled parts.
+
 Maven POM evidence and dependency-model POMs are requested by exact-version path
 and bounded to 2 MiB per POM and eight inherited parent/BOM levels. Model
 resolution additionally caps the scan at 32 remote documents. Requests are

@@ -2,6 +2,10 @@
 
 ## 1.15.1 - Unreleased
 
+- Python wheel license files nested below `.dist-info/licenses/<component>/`
+  are now retained as bundled-component obligations and combined with the
+  package license using `AND`, instead of being reported as contradictory
+  package declarations or silently hiding a restrictive component license.
 - Oversized checksum-identified Go module ZIPs now produce unavailable package
   evidence while preserving any separately verified `.mod` dependency edges,
   instead of aborting the entire repository scan.

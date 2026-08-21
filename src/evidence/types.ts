@@ -8,6 +8,8 @@ export type LicenseEvidenceFile = {
   path: string;
   kind: LicenseEvidenceFileKind;
   text: string;
+  /** A bundled component license is cumulative evidence, not the package's own declaration. */
+  scope?: "component";
 };
 
 export type LicenseEvidenceSource =

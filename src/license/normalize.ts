@@ -7,6 +7,7 @@ type LicenseExpressionEvidence = {
   expression: string;
   source: "package-metadata" | "license-file";
   filePath?: string;
+  fileScope?: "component";
 };
 
 type NonPackageRestrictionScope = "documentation" | "data";
@@ -48,8 +49,14 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
   const signals: NormalizedLicenseSignal[] = [];
   const evidenceSources = describeEvidenceSources(evidence);
   const licenseFileExpressions = readLicenseFileExpressions(evidence);
+  const packageLicenseFileExpressions = licenseFileExpressions.filter(
+    (match) => match.fileScope !== "component"
+  );
+  const componentLicenseFileExpressions = licenseFileExpressions.filter(
+    (match) => match.fileScope === "component"
+  );
   const distinctLicenseFileExpressions = new Set(
-    licenseFileExpressions.map((match) => match.expression)
+    packageLicenseFileExpressions.map((match) => match.expression)
   );
   const packageLicenseExpression = readPackageLicenseExpression(evidence);
 
@@ -61,7 +68,7 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
       signals.push("conflicting-evidence");
     }
     evidenceSources.push(
-      `conflicting file license matches: ${licenseFileExpressions
+      `conflicting file license matches: ${packageLicenseFileExpressions
         .map((match) => `${match.expression} from ${match.filePath}`)
         .join("; ")}`
     );
@@ -144,7 +151,7 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
 
   if (licenseExpression.source === "package-metadata") {
     const declaredChoices = new Set(parsed.choices.map(comparableLicenseId));
-    const conflictingFileMatches = licenseFileExpressions.filter((match) => {
+    const conflictingFileMatches = packageLicenseFileExpressions.filter((match) => {
       const fileExpression = parseSpdxExpression(match.expression);
       return !fileExpression.malformed
         && fileExpression.choices.some((choice) => !declaredChoices.has(comparableLicenseId(choice)));
@@ -161,6 +168,12 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
       );
     }
   }
+
+  parsed = appendBundledComponentLicenses({
+    parsed,
+    matches: componentLicenseFileExpressions,
+    evidenceSources
+  });
 
   const deprecatedLicenseIds = parsed.choices.filter(
     (choice) => spdxLicenseIdStatus(choice) === "deprecated"
@@ -510,7 +523,9 @@ function isAbsentLicenseExpression(value: string): boolean {
 }
 
 function readLicenseFileExpression(evidence: LicenseEvidence): LicenseExpressionEvidence | undefined {
-  const matches = readLicenseFileExpressions(evidence);
+  const matches = readLicenseFileExpressions(evidence).filter(
+    (match) => match.fileScope !== "component"
+  );
   if (new Set(matches.map((match) => match.expression)).size !== 1) {
     return undefined;
   }
@@ -530,12 +545,54 @@ function readLicenseFileExpressions(evidence: LicenseEvidence): LicenseExpressio
       matches.push({
         expression,
         source: "license-file",
-        filePath: file.path
+        filePath: file.path,
+        ...(file.scope === "component" ? { fileScope: "component" } : {})
       });
     }
   }
 
   return matches;
+}
+
+function appendBundledComponentLicenses(input: {
+  parsed: ReturnType<typeof parseSpdxExpression>;
+  matches: LicenseExpressionEvidence[];
+  evidenceSources: string[];
+}): ReturnType<typeof parseSpdxExpression> {
+  const baseChoices = new Set(input.parsed.choices.map(comparableLicenseId));
+  const additions = new Map<string, LicenseExpressionEvidence[]>();
+
+  for (const match of input.matches) {
+    const component = parseSpdxExpression(match.expression);
+    if (
+      component.malformed
+      || component.choices.every((choice) => baseChoices.has(comparableLicenseId(choice)))
+    ) {
+      continue;
+    }
+    const matches = additions.get(component.expression ?? match.expression) ?? [];
+    matches.push(match);
+    additions.set(component.expression ?? match.expression, matches);
+  }
+
+  if (additions.size === 0 || !input.parsed.expression) {
+    return input.parsed;
+  }
+
+  for (const [expression, matches] of additions) {
+    input.evidenceSources.push(
+      `bundled component license match: ${expression} from ${matches
+        .map((match) => match.filePath)
+        .join(", ")}`
+    );
+  }
+
+  const expression = [
+    `(${input.parsed.expression})`,
+    ...[...additions.keys()].map((item) => `(${item})`)
+  ].join(" AND ");
+  const combined = parseSpdxExpression(expression);
+  return combined.malformed ? input.parsed : combined;
 }
 
 function recognizeStandardLicenseText(text: string): string | undefined {

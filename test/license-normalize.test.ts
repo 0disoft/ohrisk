@@ -892,6 +892,68 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
+  test("combines bundled component licenses without treating them as package conflicts", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "bundled-component@1.0.0",
+      metadataLicense: "MIT",
+      metadataLicenseKind: "declared",
+      metadataSource: "METADATA",
+      files: [
+        {
+          path: "licenses/LICENSE",
+          kind: "license",
+          text: [
+            "Permission is hereby granted, free of charge, to any person obtaining a copy",
+            "THE SOFTWARE IS PROVIDED \"AS IS\""
+          ].join("\n")
+        },
+        {
+          path: "licenses/vendor/LICENSE",
+          kind: "license",
+          scope: "component",
+          text: "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION"
+        }
+      ],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      expression: "MIT AND Apache-2.0",
+      choices: ["MIT", "Apache-2.0"],
+      joiner: "and",
+      signals: [],
+      confidence: "high"
+    });
+    expect(normalized.evidenceSources).toContain(
+      "bundled component license match: Apache-2.0 from licenses/vendor/LICENSE"
+    );
+  });
+
+  test("keeps restrictive bundled component licenses in the combined expression", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "bundled-copyleft@1.0.0",
+      metadataLicense: "MIT",
+      metadataLicenseKind: "declared",
+      metadataSource: "METADATA",
+      files: [{
+        path: "licenses/vendor/COPYING",
+        kind: "copying",
+        scope: "component",
+        text: "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\nTERMS AND CONDITIONS"
+      }],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      expression: "MIT AND GPL-3.0-only",
+      choices: ["MIT", "GPL-3.0-only"],
+      joiner: "and",
+      signals: []
+    });
+  });
+
   test("recognizes zero-clause BSD text without confusing it with ISC", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "adler2@2.0.1",

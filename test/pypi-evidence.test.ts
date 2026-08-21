@@ -397,6 +397,41 @@ describe("PyPI release evidence", () => {
     });
   });
 
+  test("marks nested wheel license files as bundled component evidence", async () => {
+    const wheel = createZip({
+      "example_pkg-1.2.3.dist-info/METADATA": [
+        pythonMetadata("MIT"),
+        "License-File: LICENSE.txt",
+        "License-File: vendor/LICENSE",
+        ""
+      ].join("\n"),
+      "example_pkg-1.2.3.dist-info/licenses/LICENSE.txt": "MIT License fixture text.",
+      "example_pkg-1.2.3.dist-info/licenses/vendor/LICENSE": "Apache License fixture text."
+    });
+    const result = await collectGraphEvidence({
+      graph: graphFor("pypi"),
+      projectRoot: process.cwd(),
+      allowLocalProjectEvidence: false,
+      fetchArtifact: async (url) => okResponse(url === PYPI_METADATA_URL ? pypiMetadata(wheel) : wheel)
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value[0]?.files).toEqual([
+      {
+        path: "example_pkg-1.2.3.dist-info/licenses/LICENSE.txt",
+        kind: "license",
+        text: "MIT License fixture text."
+      },
+      {
+        path: "example_pkg-1.2.3.dist-info/licenses/vendor/LICENSE",
+        kind: "license",
+        text: "Apache License fixture text.",
+        scope: "component"
+      }
+    ]);
+  });
+
   test("turns stalled PyPI metadata fetches into unavailable evidence", async () => {
     let fetchSignal: AbortSignal | undefined;
     const result = await collectGraphEvidence({
