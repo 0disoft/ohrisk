@@ -242,6 +242,8 @@ function koreanFindingReason(finding: RiskFinding, profile: string): string {
       return `${profile} 기준으로 배포하기 전에 라이선스 표현식을 검토해야 합니다.`;
     case "Package metadata explicitly marks the package as UNLICENSED.":
       return "패키지 메타데이터가 이 패키지를 UNLICENSED로 명시합니다.";
+    case "License evidence contains conflicting recognized expressions.":
+      return "라이선스 근거에서 서로 충돌하는 표현식이 인식되었습니다.";
     case `License expression includes a source-available or commercial-use restriction for ${profile}.`:
       return `라이선스 표현식에 ${profile} 기준의 소스 공개형 또는 상업적 사용 제한이 포함되어 있습니다.`;
     case `License evidence contains an explicit commercial-use restriction for ${profile}.`:

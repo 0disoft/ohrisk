@@ -689,6 +689,24 @@ describe("HTML scan report", () => {
     expect(output).not.toContain("<script>alert(1)</script>");
   });
 
+  test("localizes conflicting license evidence in Korean HTML reports", () => {
+    const output = renderScanReport(scanInput({
+      riskFindings: [
+        {
+          ...finding,
+          severity: "unknown",
+          reason: "License evidence contains conflicting recognized expressions.",
+          action: "Collect license evidence before approving this package.",
+          recommendation: "collect-evidence"
+        }
+      ],
+      reportLanguage: "ko"
+    }));
+
+    expect(output).toContain("라이선스 근거에서 서로 충돌하는 표현식이 인식되었습니다.");
+    expect(output).not.toContain("License evidence contains conflicting recognized expressions.");
+  });
+
   test("renders Spanish HTML report text without changing machine identifiers", () => {
     const output = renderScanReport(scanInput({
       riskFindings: [
