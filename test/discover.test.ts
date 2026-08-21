@@ -384,6 +384,34 @@ describe("discoverProject", () => {
     }
   });
 
+  test("reports unresolved automatic inputs when a manifest has no concrete lockfile", () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-unresolved-root-inputs-"));
+
+    try {
+      writeFileSync(
+        path.join(projectDir, "pyproject.toml"),
+        "[project]\nname = \"fixture\"\nversion = \"1.0.0\"\ndependencies = [\"requests>=2\"]\n",
+        "utf8"
+      );
+      writeFileSync(path.join(projectDir, "requirements.txt"), "requests>=2\n", "utf8");
+
+      const result = discoverProject({ cwd: projectDir });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected unresolved automatic inputs to fail closed.");
+      }
+      expect(result.error.code).toBe("NO_SUPPORTED_LOCKFILE");
+      expect(result.error.details).toMatchObject({
+        rootDir: projectDir,
+        unresolvedInputs: ["pyproject.toml", "requirements.txt"],
+        hint: "Select one unresolved input with --lockfile to see its exact parse error, or add a resolved lockfile."
+      });
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
   test("finds a Python pylock.toml project", () => {
     const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-pylock-discovery-"));
 

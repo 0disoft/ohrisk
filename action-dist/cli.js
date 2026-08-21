@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: cc5eeadb6794154ff9605d341fe1df22f798f75c5442f290254f0332a961c1d4
+// ohrisk-action-source-sha256: b464de424cdfb9820df3429e9de7e3c17dd7149e2ddecd5b1d1d2cce4b565a02
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -37912,6 +37912,7 @@ function discoverProject(options = {}) {
       });
     }
     let nearestManifestWithoutParentLockfile;
+    let nearestUnresolvedInputs;
     const searchDirectories = searchMode === "tree" ? [startDir] : ancestorsFrom(startDir);
     for (const dir of searchDirectories) {
       const entries = options.inventory ? listDirectoryEntries(dir, options.inventory) : undefined;
@@ -37919,6 +37920,7 @@ function discoverProject(options = {}) {
       const hasProjectManifest = hasKnownProjectManifest(dir, entries, options.inventory);
       const hasKnownLockfileDirectory = hasKnownLockfileDirectoryPath(dir, entries);
       if (lockfiles.length === 0) {
+        const unresolvedInputs = findNonConcreteDirectLockfiles(dir, entries);
         const packageJsonManifest = hasKnownLockfileDirectory ? undefined : findDependencyFreePackageJsonManifest(dir, entries);
         if (packageJsonManifest) {
           return ok({
@@ -37931,6 +37933,7 @@ function discoverProject(options = {}) {
         }
         if (!nearestManifestWithoutParentLockfile && hasProjectManifest) {
           nearestManifestWithoutParentLockfile = dir;
+          nearestUnresolvedInputs = unresolvedInputs;
         }
         continue;
       }
@@ -37980,7 +37983,12 @@ function discoverProject(options = {}) {
         message: "Project manifest found, but no supported lockfile exists. Add or select a supported lockfile before scanning dependencies.",
         details: {
           rootDir: nearestManifestWithoutParentLockfile,
-          hint: "Run 'ohrisk help scan' to review supported dependency inputs."
+          ...nearestUnresolvedInputs && nearestUnresolvedInputs.length > 0 ? {
+            unresolvedInputs: nearestUnresolvedInputs,
+            hint: "Select one unresolved input with --lockfile to see its exact parse error, or add a resolved lockfile."
+          } : {
+            hint: "Run 'ohrisk help scan' to review supported dependency inputs."
+          }
         }
       }));
     }
@@ -38151,6 +38159,15 @@ function isConcreteAutoDiscoveryInput(lockfile, entries) {
   }
   const prefix = readFilePrefix(lockfile.path);
   return prefix === undefined || !/@[A-Z_][A-Z0-9_]*@/.test(prefix);
+}
+function findNonConcreteDirectLockfiles(dir, entries) {
+  return KNOWN_LOCKFILES.filter((lockfileName) => entries ? entryIsFile(entries, lockfileName) : isFile3(path48.join(dir, lockfileName))).filter((lockfileName) => {
+    const kind = supportedKindForLockfilePath(lockfileName);
+    return kind !== undefined && !isConcreteAutoDiscoveryInput({
+      kind,
+      path: path48.join(dir, lockfileName)
+    }, entries);
+  }).sort();
 }
 function discoverExplicitLockfile(input) {
   const lockfilePath = path48.resolve(input.cwd, input.lockfilePath);

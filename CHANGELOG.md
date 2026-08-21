@@ -2,6 +2,10 @@
 
 ## 1.15.1 - Unreleased
 
+- Automatic discovery failures now list supported root inputs that were
+  excluded because they are not fully resolved, and point to `--lockfile` for
+  the exact parse error instead of reporting only a generic missing-lockfile
+  message.
 - Checksum-verified Ruby gems that exceed bounded archive inspection limits
   now produce unavailable package evidence instead of aborting the entire
   repository scan. The archive limits themselves remain unchanged.

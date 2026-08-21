@@ -331,6 +331,7 @@ export function discoverProject(
     }
 
     let nearestManifestWithoutParentLockfile: string | undefined;
+    let nearestUnresolvedInputs: string[] | undefined;
 
     const searchDirectories = searchMode === "tree" ? [startDir] : ancestorsFrom(startDir);
     for (const dir of searchDirectories) {
@@ -342,6 +343,7 @@ export function discoverProject(
       const hasKnownLockfileDirectory = hasKnownLockfileDirectoryPath(dir, entries);
 
       if (lockfiles.length === 0) {
+        const unresolvedInputs = findNonConcreteDirectLockfiles(dir, entries);
         const packageJsonManifest = hasKnownLockfileDirectory
           ? undefined
           : findDependencyFreePackageJsonManifest(dir, entries);
@@ -357,6 +359,7 @@ export function discoverProject(
 
         if (!nearestManifestWithoutParentLockfile && hasProjectManifest) {
           nearestManifestWithoutParentLockfile = dir;
+          nearestUnresolvedInputs = unresolvedInputs;
         }
 
         continue;
@@ -427,7 +430,14 @@ export function discoverProject(
           message: "Project manifest found, but no supported lockfile exists. Add or select a supported lockfile before scanning dependencies.",
           details: {
             rootDir: nearestManifestWithoutParentLockfile,
-            hint: "Run 'ohrisk help scan' to review supported dependency inputs."
+            ...(nearestUnresolvedInputs && nearestUnresolvedInputs.length > 0
+              ? {
+                  unresolvedInputs: nearestUnresolvedInputs,
+                  hint: "Select one unresolved input with --lockfile to see its exact parse error, or add a resolved lockfile."
+                }
+              : {
+                  hint: "Run 'ohrisk help scan' to review supported dependency inputs."
+                })
           }
         })
       );
@@ -694,6 +704,24 @@ function isConcreteAutoDiscoveryInput(
 
   const prefix = readFilePrefix(lockfile.path);
   return prefix === undefined || !/@[A-Z_][A-Z0-9_]*@/.test(prefix);
+}
+
+function findNonConcreteDirectLockfiles(
+  dir: string,
+  entries?: RepositoryTreeEntry[]
+): string[] {
+  return KNOWN_LOCKFILES
+    .filter((lockfileName) => entries
+      ? entryIsFile(entries, lockfileName)
+      : isFile(path.join(dir, lockfileName)))
+    .filter((lockfileName) => {
+      const kind = supportedKindForLockfilePath(lockfileName);
+      return kind !== undefined && !isConcreteAutoDiscoveryInput({
+        kind,
+        path: path.join(dir, lockfileName)
+      }, entries);
+    })
+    .sort();
 }
 
 function discoverExplicitLockfile(input: {
