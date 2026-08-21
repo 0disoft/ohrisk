@@ -50,6 +50,10 @@ import { hasFindingAtOrAbove } from "../policy/severity";
 import { renderCycloneDxReport } from "../report/cyclonedx-report";
 import { renderDiffReport } from "../report/diff-report";
 import { renderExplainReport } from "../report/explain-report";
+import {
+  detectSystemLocale,
+  resolveReportLanguage
+} from "../report/language";
 import { renderSarifReport } from "../report/sarif-report";
 import {
   buildScanCompleteness,
@@ -127,6 +131,7 @@ export type CliIO = {
   openReport?: ReportOpener;
   cloneRepository?: RepositoryCloner;
   signal?: AbortSignal;
+  systemLocale?: () => string | undefined;
 };
 
 type EvidenceRuntimeOptions = {
@@ -579,7 +584,14 @@ async function runScanAt(input: {
     json: command.json,
     markdown: command.markdown,
     html: command.html,
-    ...(command.reportLanguage ? { reportLanguage: command.reportLanguage } : {}),
+    ...(command.html
+      ? {
+          reportLanguage: resolveReportLanguage(
+            command.reportLanguage,
+            io.systemLocale?.()
+          )
+        }
+      : {}),
     waiverMode: command.noWaivers ? "ignored" : "local",
     ...(command.kind === "ci" && command.failOn ? { failOn: command.failOn } : {}),
     ...(command.kind === "ci" ? { strictWaivers: command.strictWaivers } : {}),
@@ -1195,7 +1207,8 @@ function defaultIO(): CliIO {
     stdout: (text) => process.stdout.write(`${text}\n`),
     stderr: (text) => process.stderr.write(`${text}\n`),
     stderrStream: process.stderr,
-    env: process.env
+    env: process.env,
+    systemLocale: detectSystemLocale
   };
 }
 

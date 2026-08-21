@@ -162,7 +162,7 @@ Formatted as a standalone browser-friendly HTML document for local review.
 - **Unmatched waivers**: table with columns Target, Reason
 - **Waiver mode**: shown in the summary cards
 - **Strict waiver drift**: shown in the summary cards when `--strict-waivers` is set
-- **Language**: `--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de` localizes the HTML report chrome and Ohrisk-generated review text. Machine-readable IDs, enum values, fingerprints, paths, and raw evidence remain stable.
+- **Language**: `--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de` localizes the HTML report chrome and Ohrisk-generated review text. Without the option, the CLI uses a supported primary language from the operating system locale and falls back to English when detection or mapping is unavailable. An explicit value always takes precedence, which is recommended for reproducible CI artifacts. Machine-readable IDs, enum values, fingerprints, paths, and raw evidence remain stable.
 - **Local paths**: the project summary uses the package/project name, not the absolute project root, so local browser artifacts are safer to share than terminal output
 - **Open after write**: `--open` can be combined with `--html --output <file>` to open a project-relative report path through a temporary `127.0.0.1` URL after scan completion
 - **Remote repository default**: `scan --html <github-url>` writes `<repository>-ohrisk.html` in the invocation directory when `--output` is omitted; local and archive HTML scans still print to stdout by default

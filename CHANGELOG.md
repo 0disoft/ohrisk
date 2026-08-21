@@ -2,6 +2,9 @@
 
 ## 1.15.1 - Unreleased
 
+- HTML reports now default to a supported operating-system language when
+  `--language` is omitted, with English as the fallback. Explicit language
+  selection, including `--language en`, always overrides the OS locale.
 - The active SPDX `BlueOak-1.0.0` and `Python-2.0` identifiers are now
   classified as permissive low-risk evidence while retaining distributed
   license-text preservation obligations.

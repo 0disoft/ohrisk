@@ -73,7 +73,7 @@ configured artifact cache and network policy.
   project remain supported.
 - A remote repository scan with `--html` and no explicit `--output` writes `<repository>-ohrisk.html` under the invocation directory. Local and archive HTML scans keep their existing stdout behavior.
 - `--submodules ignore|reject` controls remote Git submodule gitlinks. The default `ignore` mode reports incomplete coverage without fetching submodules; `reject` fails on the first submodule path.
-- `--language <locale>` localizes HTML report chrome and Ohrisk-generated review text.
+- `--language <locale>` localizes HTML report chrome and Ohrisk-generated review text. When omitted, Ohrisk maps the operating system locale's primary language to a supported report language and falls back to English when the locale is unavailable or unsupported. An explicit value always wins.
 - `--no-waivers` ignores local waiver files; `--strict-waivers` fails on expired or unmatched waivers.
 - `--offline` forbids network requests and permits only local or verified cached evidence.
 - `--cache-dir <path>`, `--jobs <1..64>`, and `--timeout <duration>` configure persistent cache location and bounded evidence collection.

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 40145cb30f1de6fbd211d2250522fb733de2a8d104947240e81befddf0c566cb
+// ohrisk-action-source-sha256: 40865e7b53712ffe950809ee1b4b6bac0945a8eb12714574ffb5aadbf6c74eaf
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -14621,11 +14621,34 @@ function isUsageProfile(value) {
 // src/report/language.ts
 var REPORT_LANGUAGES = ["en", "ko", "es", "fr", "zh", "hi", "ja", "id", "tr", "ru", "de"];
 var DEFAULT_REPORT_LANGUAGE = "en";
+var REPORT_LANGUAGE_ALIASES = {
+  in: "id"
+};
 function isReportLanguage(value) {
   return REPORT_LANGUAGES.includes(value);
 }
 function supportedReportLanguages() {
   return [...REPORT_LANGUAGES];
+}
+function reportLanguageFromLocale(locale) {
+  const primaryLanguage = locale?.trim().split(/[._@-]/, 1)[0]?.toLowerCase();
+  if (!primaryLanguage) {
+    return;
+  }
+  if (isReportLanguage(primaryLanguage)) {
+    return primaryLanguage;
+  }
+  return REPORT_LANGUAGE_ALIASES[primaryLanguage];
+}
+function resolveReportLanguage(explicitLanguage, systemLocale) {
+  return explicitLanguage ?? reportLanguageFromLocale(systemLocale) ?? DEFAULT_REPORT_LANGUAGE;
+}
+function detectSystemLocale() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().locale;
+  } catch {
+    return;
+  }
 }
 
 // src/repository/github-repository.ts
@@ -15724,7 +15747,7 @@ var HELP_OPTION_SPECS = {
   language: {
     options: ["--language"],
     syntax: "--language <en|ko|es|fr|zh|hi|ja|id|tr|ru|de>",
-    description: `Set the HTML report language. Defaults to ${CLI_DEFAULTS.reportLanguage}.`
+    description: "Set the HTML report language. Defaults to the OS language, then en."
   },
   cyclonedx: {
     options: ["--cyclonedx"],
@@ -16851,7 +16874,7 @@ function parseScanLikeArgs(argv, kind) {
       ...workspaceRootPath ? { workspaceRootPath } : {},
       ...outputPath ? { outputPath } : {},
       ...openReport ? { openReport } : {},
-      ...reportLanguage !== DEFAULT_REPORT_LANGUAGE ? { reportLanguage } : {},
+      ...reportLanguageSet ? { reportLanguage } : {},
       failOn,
       strictWaivers,
       allowPartialEvidence
@@ -16883,7 +16906,7 @@ function parseScanLikeArgs(argv, kind) {
     ...workspaceRootPath ? { workspaceRootPath } : {},
     ...outputPath ? { outputPath } : {},
     ...openReport ? { openReport } : {},
-    ...reportLanguage !== DEFAULT_REPORT_LANGUAGE ? { reportLanguage } : {}
+    ...reportLanguageSet ? { reportLanguage } : {}
   });
 }
 function isFailOnSeverity(value) {
@@ -66072,7 +66095,9 @@ async function runScanAt(input) {
     json: command.json,
     markdown: command.markdown,
     html: command.html,
-    ...command.reportLanguage ? { reportLanguage: command.reportLanguage } : {},
+    ...command.html ? {
+      reportLanguage: resolveReportLanguage(command.reportLanguage, io.systemLocale?.())
+    } : {},
     waiverMode: command.noWaivers ? "ignored" : "local",
     ...command.kind === "ci" && command.failOn ? { failOn: command.failOn } : {},
     ...command.kind === "ci" ? { strictWaivers: command.strictWaivers } : {},
@@ -66473,7 +66498,8 @@ function defaultIO() {
     stderr: (text3) => process.stderr.write(`${text3}
 `),
     stderrStream: process.stderr,
-    env: process.env
+    env: process.env,
+    systemLocale: detectSystemLocale
   };
 }
 if (isCliEntrypoint(import.meta.url, process.argv[1])) {

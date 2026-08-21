@@ -49,7 +49,8 @@ function createTestIO(cwd: string): { io: CliIO; stdout: string[]; stderr: strin
     io: {
       cwd,
       stdout: (text) => stdout.push(text),
-      stderr: (text) => stderr.push(text)
+      stderr: (text) => stderr.push(text),
+      systemLocale: () => "en-US"
     },
     stdout,
     stderr
@@ -8755,6 +8756,57 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       expect(report).toContain("<h1>Ohrisk 스캔</h1>");
       expect(report).toContain("총 0개, 직접 0개, 전이 0개");
       expect(report).toContain("활성 발견 항목이 없습니다.");
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("uses the supported OS language when HTML report language is omitted", async () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-empty-package-json-os-locale-"));
+    const reportPath = path.join(projectDir, "reports", "ohrisk.html");
+
+    try {
+      writeFileSync(
+        path.join(projectDir, "package.json"),
+        JSON.stringify({ name: "fixture-empty-package-json" }),
+        "utf8"
+      );
+
+      const { io } = createTestIO(projectDir);
+      io.systemLocale = () => "ko-KR";
+      const exitCode = await main(["scan", "--html", "--output", "reports/ohrisk.html"], io);
+      const report = readFileSync(reportPath, "utf8");
+
+      expect(exitCode).toBe(0);
+      expect(report).toContain('<html lang="ko">');
+      expect(report).toContain("<h1>Ohrisk 스캔</h1>");
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps an explicit HTML report language ahead of the OS language", async () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-empty-package-json-explicit-locale-"));
+    const reportPath = path.join(projectDir, "reports", "ohrisk.html");
+
+    try {
+      writeFileSync(
+        path.join(projectDir, "package.json"),
+        JSON.stringify({ name: "fixture-empty-package-json" }),
+        "utf8"
+      );
+
+      const { io } = createTestIO(projectDir);
+      io.systemLocale = () => "ko-KR";
+      const exitCode = await main(
+        ["scan", "--html", "--language", "en", "--output", "reports/ohrisk.html"],
+        io
+      );
+      const report = readFileSync(reportPath, "utf8");
+
+      expect(exitCode).toBe(0);
+      expect(report).toContain('<html lang="en">');
+      expect(report).toContain("<h1>Ohrisk scan</h1>");
     } finally {
       rmSync(projectDir, { recursive: true, force: true });
     }

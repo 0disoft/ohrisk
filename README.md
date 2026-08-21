@@ -78,7 +78,9 @@ response-size, checksum, or package-identity validation:
 ohrisk scan --allow-host repo.papermc.io https://github.com/PlayPro/CoreProtect
 ```
 
-Use Korean, Spanish, French, Chinese, Hindi, Japanese, Indonesian, Turkish, Russian, or German HTML report text when you want a local review artifact for those readers:
+When `--language` is omitted, HTML reports use the operating system's language
+when Ohrisk supports it and fall back to English otherwise. Pass `--language`
+to make the artifact language reproducible or override the OS setting:
 
 ```bash
 ohrisk scan --html --language ko --output ohrisk-report.html --open

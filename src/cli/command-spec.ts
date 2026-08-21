@@ -403,7 +403,7 @@ const HELP_OPTION_SPECS = {
   language: {
     options: ["--language"],
     syntax: "--language <en|ko|es|fr|zh|hi|ja|id|tr|ru|de>",
-    description: `Set the HTML report language. Defaults to ${CLI_DEFAULTS.reportLanguage}.`
+    description: "Set the HTML report language. Defaults to the OS language, then en."
   },
   cyclonedx: {
     options: ["--cyclonedx"],

@@ -2,7 +2,6 @@ import { createError, type OhriskError } from "../shared/errors";
 import { isUsageProfile, USAGE_PROFILES, type UsageProfile } from "../policy/profiles";
 import type { RiskSeverity } from "../policy/types";
 import {
-  DEFAULT_REPORT_LANGUAGE,
   isReportLanguage,
   supportedReportLanguages,
   type ReportLanguage
@@ -866,7 +865,7 @@ function parseScanLikeArgs(
       ...(workspaceRootPath ? { workspaceRootPath } : {}),
       ...(outputPath ? { outputPath } : {}),
       ...(openReport ? { openReport } : {}),
-      ...(reportLanguage !== DEFAULT_REPORT_LANGUAGE ? { reportLanguage } : {}),
+      ...(reportLanguageSet ? { reportLanguage } : {}),
       failOn,
       strictWaivers,
       allowPartialEvidence
@@ -899,7 +898,7 @@ function parseScanLikeArgs(
     ...(workspaceRootPath ? { workspaceRootPath } : {}),
     ...(outputPath ? { outputPath } : {}),
     ...(openReport ? { openReport } : {}),
-    ...(reportLanguage !== DEFAULT_REPORT_LANGUAGE ? { reportLanguage } : {})
+    ...(reportLanguageSet ? { reportLanguage } : {})
   });
 }
 

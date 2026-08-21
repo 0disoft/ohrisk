@@ -378,6 +378,21 @@ describe("parseArgs", () => {
     });
   });
 
+  test("preserves an explicit English HTML output language", () => {
+    const parsed = parseArgs(["scan", "--html", "--language", "en"]);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+
+    expect(parsed.value).toMatchObject({
+      kind: "scan",
+      html: true,
+      reportLanguage: "en"
+    });
+  });
+
   test("rejects unsupported report languages", () => {
     const parsed = parseArgs(["scan", "--html", "--language", "pt"]);
 

@@ -465,8 +465,12 @@ Findings:
 `--cyclonedx`를 쓴다. HTML 리포트를 파일로 쓴 뒤 바로 열려면
 `--html --output <file> --open`을 쓴다. 이때 브라우저는 임시 `127.0.0.1`
 URL로 열리므로 파일 URL 권한이 없어도 된다.
-한국어 HTML 리포트가 필요하면 `--html --language ko --output <file>`을 쓴다.
-스페인어 리포트는 `--language es`, 프랑스어 리포트는 `--language fr`, 중국어 리포트는 `--language zh`, 힌디어 리포트는 `--language hi`, 일본어 리포트는 `--language ja`, 인도네시아어 리포트는 `--language id`, 튀르키예어 리포트는 `--language tr`, 러시아어 리포트는 `--language ru`, 독일어 리포트는 `--language de`를 쓰고, 영어는 기본값이며 명시하려면 `--language en`을 사용할 수 있다.
+`--language`를 생략하면 HTML 리포트는 Ohrisk가 지원하는 OS 언어를 자동으로
+사용하고, 지원하지 않거나 감지할 수 없으면 영어로 생성한다. 결과물 언어를
+항상 같게 만들거나 OS 설정을 덮어쓰려면 `--language`를 명시한다.
+한국어는 `--language ko`, 스페인어는 `es`, 프랑스어는 `fr`, 중국어는 `zh`,
+힌디어는 `hi`, 일본어는 `ja`, 인도네시아어는 `id`, 튀르키예어는 `tr`,
+러시아어는 `ru`, 독일어는 `de`, 영어는 `en`을 사용한다.
 
 `--output`은 프로젝트 내부 상대 파일 경로만 받는다. 절대 경로, drive-relative
 경로, UNC 경로, `.` 또는 `..` 경로 segment는 거부된다.
