@@ -400,13 +400,17 @@ describe("PyPI release evidence", () => {
   test("marks nested wheel license files as bundled component evidence", async () => {
     const wheel = createZip({
       "example_pkg-1.2.3.dist-info/METADATA": [
-        pythonMetadata("MIT"),
+        "Metadata-Version: 2.4",
+        "Name: Example_Pkg",
+        "Version: 1.2.3",
+        "License-Expression: MIT",
         "License-File: LICENSE.txt",
         "License-File: vendor/LICENSE",
         ""
       ].join("\n"),
       "example_pkg-1.2.3.dist-info/licenses/LICENSE.txt": "MIT License fixture text.",
-      "example_pkg-1.2.3.dist-info/licenses/vendor/LICENSE": "Apache License fixture text."
+      "example_pkg-1.2.3.dist-info/licenses/vendor/LICENSE": "Apache License fixture text.",
+      "vendor/LICENSE": "Apache License fixture text."
     });
     const result = await collectGraphEvidence({
       graph: graphFor("pypi"),
@@ -417,7 +421,8 @@ describe("PyPI release evidence", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
-    expect(result.value[0]?.files).toEqual([
+    expect(result.value[0]?.files).toHaveLength(3);
+    expect(result.value[0]?.files).toEqual(expect.arrayContaining([
       {
         path: "example_pkg-1.2.3.dist-info/licenses/LICENSE.txt",
         kind: "license",
@@ -428,8 +433,14 @@ describe("PyPI release evidence", () => {
         kind: "license",
         text: "Apache License fixture text.",
         scope: "component"
+      },
+      {
+        path: "vendor/LICENSE",
+        kind: "license",
+        text: "Apache License fixture text.",
+        scope: "component"
       }
-    ]);
+    ]));
   });
 
   test("turns stalled PyPI metadata fetches into unavailable evidence", async () => {

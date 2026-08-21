@@ -9,6 +9,8 @@
   are now retained as bundled-component obligations and combined with the
   package license using `AND`, instead of being reported as contradictory
   package declarations or silently hiding a restrictive component license.
+  Duplicate component files at their installed package path receive the same
+  scope, preventing the installed copy from reintroducing a false conflict.
 - Oversized checksum-identified Go module ZIPs now produce unavailable package
   evidence while preserving any separately verified `.mod` dependency edges,
   instead of aborting the entire repository scan.

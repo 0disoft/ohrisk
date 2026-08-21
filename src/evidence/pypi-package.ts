@@ -306,6 +306,7 @@ function collectDistributionEvidenceFiles(input: {
     }))
     .sort((left, right) => left.path.localeCompare(right.path))
     .slice(0, PYTHON_DISTRIBUTION_LICENSE_FILE_LIMIT);
+  const candidatePaths = new Set(candidates.map((candidate) => candidate.path));
 
   const files: LicenseEvidenceFile[] = [];
   for (const candidate of candidates) {
@@ -324,7 +325,12 @@ function collectDistributionEvidenceFiles(input: {
       path: relativeEvidencePath(candidate.path, packageRoot),
       kind: classifyEvidenceFile(candidate.path) ?? "license",
       text: text.value,
-      ...(isBundledComponentLicensePath(candidate.path, metadataDir)
+      ...(isBundledComponentLicensePath({
+        entryPath: candidate.path,
+        packageRoot,
+        metadataDir,
+        candidatePaths
+      })
         ? { scope: "component" as const }
         : {})
     });
@@ -332,15 +338,21 @@ function collectDistributionEvidenceFiles(input: {
   return files;
 }
 
-function isBundledComponentLicensePath(entryPath: string, metadataDir: string): boolean {
-  if (!metadataDir.toLowerCase().endsWith(".dist-info")) {
+function isBundledComponentLicensePath(input: {
+  entryPath: string;
+  packageRoot: string;
+  metadataDir: string;
+  candidatePaths: ReadonlySet<string>;
+}): boolean {
+  if (!input.metadataDir.toLowerCase().endsWith(".dist-info")) {
     return false;
   }
-  const licenseRoot = `${metadataDir}/licenses/`;
-  if (!entryPath.startsWith(licenseRoot)) {
-    return false;
+  const licenseRoot = `${input.metadataDir}/licenses/`;
+  if (input.entryPath.startsWith(licenseRoot)) {
+    return input.entryPath.slice(licenseRoot.length).includes("/");
   }
-  return entryPath.slice(licenseRoot.length).includes("/");
+  const relative = relativeEvidencePath(input.entryPath, input.packageRoot);
+  return relative.includes("/") && input.candidatePaths.has(`${licenseRoot}${relative}`);
 }
 
 function isDistributionEvidencePath(input: {
