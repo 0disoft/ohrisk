@@ -44,13 +44,10 @@ export function collectCargoCrateEvidence(input: {
     }
   });
   if (!archive.ok) {
-    if (archive.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
-      return ok(unavailableCargoCrateEvidence(
-        input.packageId,
-        `Checksum-identified Cargo crate exceeded bounded archive limits (${archive.error.code}); its contents were not trusted.`
-      ));
-    }
-    return err(archive.error);
+    const warning = archive.error.code === "ARCHIVE_LIMIT_EXCEEDED"
+      ? `Checksum-identified Cargo crate exceeded bounded archive limits (${archive.error.code}); its contents were not trusted.`
+      : `Checksum-identified Cargo crate failed bounded archive inspection (${archive.error.code}); its contents were not trusted.`;
+    return ok(unavailableCargoCrateEvidence(input.packageId, warning));
   }
 
   const root = `${input.packageName}-${input.version}`;

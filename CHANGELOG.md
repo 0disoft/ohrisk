@@ -5,6 +5,12 @@
 - Checksum-verified Ruby gems that exceed bounded archive inspection limits
   now produce unavailable package evidence instead of aborting the entire
   repository scan. The archive limits themselves remain unchanged.
+- Checksum-verified Ruby gems with unsupported archive entry types, such as
+  symbolic links, now keep those entries rejected while isolating the package
+  as unavailable evidence instead of aborting the repository scan.
+- Checksum-verified Cargo crates that fail bounded archive inspection now keep
+  unsafe or colliding entries rejected while isolating the crate as unavailable
+  evidence instead of aborting the repository scan.
 - Explicit statements permitting commercial and non-commercial use are no
   longer misread as commercial-use bans, preventing false high findings for
   packages such as JSDoc while preserving genuine denial signals.

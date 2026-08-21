@@ -134,6 +134,35 @@ describe("remote RubyGems evidence", () => {
     });
     expect(evidence.value[0]?.warnings.join("\n")).toContain("bounded archive inspection limit");
   });
+
+  test("isolates a checksum-verified gem with unsupported archive entry types", async () => {
+    const dataArchive = gzipSync(createTarEntries([{
+      path: "lib/template",
+      type: "2",
+      linkPath: "lib/template.real"
+    }]));
+    const gem = rubyGemWithDataArchive("linked-gem", "1.0.0", ["MIT"], dataArchive);
+    const metadata = rubyGemsMetadata("linked-gem", "1.0.0", gem);
+    const evidence = await collectGraphEvidence({
+      graph: gemGraph("linked-gem", "1.0.0"),
+      projectRoot: ".",
+      allowLocalProjectEvidence: false,
+      resolveArtifactHost: async () => [{ address: "1.1.1.1", family: 4 }],
+      fetchArtifact: async (url) => artifactResponse(
+        url.includes("/api/v2/") ? Buffer.from(metadata) : gem,
+        url
+      )
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) throw new Error(evidence.error.message);
+    expect(evidence.value[0]).toMatchObject({
+      packageId: "linked-gem@1.0.0",
+      files: [],
+      source: "unavailable"
+    });
+    expect(evidence.value[0]?.warnings.join("\n")).toContain("unsupported archive entry type");
+  });
 });
 
 function rubyGem(

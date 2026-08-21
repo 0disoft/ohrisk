@@ -1337,7 +1337,13 @@ async function collectRemoteRubyGemEvidence(input: {
     gem: gem.value,
     artifactMaxBytes: input.artifactMaxBytes
   });
-  if (!collected.ok && collected.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
+  if (
+    !collected.ok
+    && (
+      collected.error.code === "ARCHIVE_LIMIT_EXCEEDED"
+      || collected.error.code === "ARCHIVE_ENTRY_TYPE_UNSUPPORTED"
+    )
+  ) {
     return ok(unavailableRemoteArchiveLimitEvidence(
       input.node.id,
       collected.error,
@@ -3296,13 +3302,14 @@ function unavailableRemoteArchiveLimitEvidence(
   const limit = typeof error.details?.limit === "string"
     ? ` (${error.details.limit})`
     : "";
+  const warning = error.code === "ARCHIVE_ENTRY_TYPE_UNSUPPORTED"
+    ? `Remote ${artifactLabel} contained an unsupported archive entry type; its contents were not used as license evidence.`
+    : `Remote ${artifactLabel} exceeded Ohrisk's bounded archive inspection limit${limit}; its contents were not used as license evidence.`;
   return {
     packageId,
     files: [],
     source: "unavailable",
-    warnings: [
-      `Remote ${artifactLabel} exceeded Ohrisk's bounded archive inspection limit${limit}; its contents were not used as license evidence.`
-    ]
+    warnings: [warning]
   };
 }
 

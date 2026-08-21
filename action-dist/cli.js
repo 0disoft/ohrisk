@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 55fcaff27976343ad4394e672d5e9eb60105e02b26c9fcc05c56002c1ba9bb05
+// ohrisk-action-source-sha256: cc5eeadb6794154ff9605d341fe1df22f798f75c5442f290254f0332a961c1d4
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -41985,10 +41985,8 @@ function collectCargoCrateEvidence(input) {
     }
   });
   if (!archive.ok) {
-    if (archive.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
-      return ok(unavailableCargoCrateEvidence(input.packageId, `Checksum-identified Cargo crate exceeded bounded archive limits (${archive.error.code}); its contents were not trusted.`));
-    }
-    return err(archive.error);
+    const warning = archive.error.code === "ARCHIVE_LIMIT_EXCEEDED" ? `Checksum-identified Cargo crate exceeded bounded archive limits (${archive.error.code}); its contents were not trusted.` : `Checksum-identified Cargo crate failed bounded archive inspection (${archive.error.code}); its contents were not trusted.`;
+    return ok(unavailableCargoCrateEvidence(input.packageId, warning));
   }
   const root = `${input.packageName}-${input.version}`;
   const rootPrefix = `${root}/`;
@@ -50739,7 +50737,7 @@ async function collectRemoteRubyGemEvidence(input) {
     gem: gem.value,
     artifactMaxBytes: input.artifactMaxBytes
   });
-  if (!collected.ok && collected.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
+  if (!collected.ok && (collected.error.code === "ARCHIVE_LIMIT_EXCEEDED" || collected.error.code === "ARCHIVE_ENTRY_TYPE_UNSUPPORTED")) {
     return ok(unavailableRemoteArchiveLimitEvidence(input.node.id, collected.error, "Ruby gem"));
   }
   return collected;
@@ -52220,13 +52218,12 @@ function unavailableOversizedTarballEvidence(packageId) {
 }
 function unavailableRemoteArchiveLimitEvidence(packageId, error, artifactLabel) {
   const limit = typeof error.details?.limit === "string" ? ` (${error.details.limit})` : "";
+  const warning = error.code === "ARCHIVE_ENTRY_TYPE_UNSUPPORTED" ? `Remote ${artifactLabel} contained an unsupported archive entry type; its contents were not used as license evidence.` : `Remote ${artifactLabel} exceeded Ohrisk's bounded archive inspection limit${limit}; its contents were not used as license evidence.`;
   return {
     packageId,
     files: [],
     source: "unavailable",
-    warnings: [
-      `Remote ${artifactLabel} exceeded Ohrisk's bounded archive inspection limit${limit}; its contents were not used as license evidence.`
-    ]
+    warnings: [warning]
   };
 }
 function addIntegrityWarningWhenUnverified(input) {

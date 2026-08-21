@@ -3,11 +3,12 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
 
 import { collectCargoCrateEvidence } from "../src/evidence/cargo-crate";
 import { collectCargoPackageEvidence } from "../src/evidence/cargo-package";
 import { normalizeLicenseEvidence } from "../src/license/normalize";
-import { createTarGz } from "./helpers/tar";
+import { createTarEntries, createTarGz } from "./helpers/tar";
 
 const CARGO_CRATES_IO_SOURCE = "registry+https://github.com/rust-lang/crates.io-index";
 const CARGO_CHECKSUM_HEX = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
@@ -210,6 +211,34 @@ describe("collectCargoPackageEvidence", () => {
       warnings: []
     });
     expect(evidence.value.files.map((file) => file.path)).toEqual(["LICENSE"]);
+  });
+
+  test("isolates a checksum-verified crate with duplicate archive entries", () => {
+    const crate = gzipSync(createTarEntries([
+      {
+        path: "risk-crate-1.0.0/Cargo.toml",
+        content: "[package]\nname = \"risk-crate\"\nversion = \"1.0.0\"\nlicense = \"MIT\"\n"
+      },
+      { path: "risk-crate-1.0.0/readme.md", content: "first" },
+      { path: "risk-crate-1.0.0/readme.md", content: "second" }
+    ]));
+    const evidence = collectCargoCrateEvidence({
+      packageId: "risk-crate@1.0.0",
+      packageName: "risk-crate",
+      version: "1.0.0",
+      integrity: `sha256-${createHash("sha256").update(crate).digest("base64")}`,
+      crate,
+      artifactMaxBytes: 1024 * 1024
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) throw new Error(evidence.error.message);
+    expect(evidence.value).toMatchObject({
+      packageId: "risk-crate@1.0.0",
+      files: [],
+      source: "unavailable"
+    });
+    expect(evidence.value.warnings.join("\n")).toContain("ARCHIVE_DUPLICATE_ENTRY");
   });
 
   test("rejects Cargo crate checksum and manifest identity mismatches", () => {
