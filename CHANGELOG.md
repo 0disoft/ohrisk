@@ -2,6 +2,9 @@
 
 ## 1.15.1 - Unreleased
 
+- Line-wrapped MIT grant text is now recognized across whitespace, preventing
+  a later bundled BSD notice from being mistaken for the package's primary
+  license in Python distributions such as mypy and librt.
 - Python wheel license files nested below `.dist-info/licenses/<component>/`
   are now retained as bundled-component obligations and combined with the
   package license using `AND`, instead of being reported as contradictory

@@ -1020,6 +1020,36 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
+  test("recognizes a line-wrapped MIT grant before later bundled license text", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "mypy@2.3.0",
+      metadataLicense: "MIT",
+      metadataLicenseKind: "declared",
+      metadataSource: "METADATA",
+      files: [{
+        path: "mypy-2.3.0.dist-info/licenses/LICENSE",
+        kind: "license",
+        text: [
+          "Mypy is licensed under the terms of the MIT license, reproduced below.",
+          "Permission is hereby granted, free of charge, to any person obtaining a",
+          "copy of this software and associated documentation files (the \"Software\"),",
+          "THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,",
+          "Portions of mypy are licensed under different licenses.",
+          "Redistribution and use in source and binary forms, with or without modification, are permitted."
+        ].join("\n")
+      }],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      expression: "MIT",
+      choices: ["MIT"],
+      signals: [],
+      confidence: "high"
+    });
+  });
+
   test("recognizes public-domain-style license file text", () => {
     expect(
       normalizeLicenseEvidence({

@@ -601,6 +601,8 @@ function recognizeStandardLicenseText(text: string): string | undefined {
     return spdxIdentifier;
   }
 
+  const prose = text.replace(/\s+/g, " ");
+
   if (/\bMozilla Public License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
     return "MPL-2.0";
   }
@@ -635,8 +637,8 @@ function recognizeStandardLicenseText(text: string): string | undefined {
   }
 
   if (
-    /\bPermission is hereby granted, free of charge, to any person obtaining a copy\b/i.test(text)
-    && /\bTHE SOFTWARE IS PROVIDED "AS IS"/i.test(text)
+    /\bPermission is hereby granted, free of charge, to any person obtaining a copy\b/i.test(prose)
+    && /\bTHE SOFTWARE IS PROVIDED "AS IS"/i.test(prose)
   ) {
     return "MIT";
   }
