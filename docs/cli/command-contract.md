@@ -166,7 +166,8 @@ counts toward the storage ceiling but is excluded from project entry and source-
 When no supported dependency manifest, lockfile, or SBOM exists, `NO_SUPPORTED_LOCKFILE` reports
 that no dependency project was detected and points to `ohrisk help scan`; it does not print the
 entire supported-input catalog. A detected project manifest without a lockfile receives a distinct
-message telling the user to add or select a supported lockfile. When a supported root input exists
+message that names the detected manifest files and tells the user to add or select a supported
+lockfile. When a supported root input exists
 but automatic discovery excludes it because its dependency entries are not fully resolved, the
 error lists that input and points to explicit `--lockfile` selection for the exact parse failure;
 Ohrisk does not infer versions from ranges.

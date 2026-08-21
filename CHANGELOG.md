@@ -2,6 +2,9 @@
 
 ## 1.15.1 - Unreleased
 
+- Missing-lockfile errors now name detected project manifests such as
+  `Cargo.toml` and `build.gradle.kts`, making the required resolved dependency
+  input explicit without guessing versions from library manifests.
 - Large HTML reports now store canonical and legacy-compatible finding
   identities as shared path tries plus exact fingerprint suffixes, avoiding
   multi-megabyte path repetition without changing expanded fingerprints or

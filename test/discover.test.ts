@@ -412,6 +412,29 @@ describe("discoverProject", () => {
     }
   });
 
+  test("reports detected project manifests when no resolved input exists", () => {
+    const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-manifests-without-lock-"));
+
+    try {
+      writeFileSync(path.join(projectDir, "Cargo.toml"), "[package]\nname = \"fixture\"\nversion = \"1.0.0\"\n", "utf8");
+      writeFileSync(path.join(projectDir, "build.gradle.kts"), "plugins { java }\n", "utf8");
+
+      const result = discoverProject({ cwd: projectDir });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        throw new Error("Expected manifests without a resolved input to fail closed.");
+      }
+      expect(result.error.code).toBe("NO_SUPPORTED_LOCKFILE");
+      expect(result.error.details).toMatchObject({
+        rootDir: projectDir,
+        projectManifests: ["Cargo.toml", "build.gradle.kts"]
+      });
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
   test("finds a Python pylock.toml project", () => {
     const projectDir = mkdtempSync(path.join(tmpdir(), "ohrisk-pylock-discovery-"));
 

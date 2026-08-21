@@ -332,6 +332,7 @@ export function discoverProject(
 
     let nearestManifestWithoutParentLockfile: string | undefined;
     let nearestUnresolvedInputs: string[] | undefined;
+    let nearestProjectManifests: string[] | undefined;
 
     const searchDirectories = searchMode === "tree" ? [startDir] : ancestorsFrom(startDir);
     for (const dir of searchDirectories) {
@@ -339,7 +340,8 @@ export function discoverProject(
         ? listDirectoryEntries(dir, options.inventory)
         : undefined;
       const lockfiles = findKnownLockfiles(dir, entries, options.inventory);
-      const hasProjectManifest = hasKnownProjectManifest(dir, entries, options.inventory);
+      const projectManifests = findKnownProjectManifests(dir, entries, options.inventory);
+      const hasProjectManifest = projectManifests.length > 0;
       const hasKnownLockfileDirectory = hasKnownLockfileDirectoryPath(dir, entries);
 
       if (lockfiles.length === 0) {
@@ -360,6 +362,7 @@ export function discoverProject(
         if (!nearestManifestWithoutParentLockfile && hasProjectManifest) {
           nearestManifestWithoutParentLockfile = dir;
           nearestUnresolvedInputs = unresolvedInputs;
+          nearestProjectManifests = projectManifests;
         }
 
         continue;
@@ -430,6 +433,7 @@ export function discoverProject(
           message: "Project manifest found, but no supported lockfile exists. Add or select a supported lockfile before scanning dependencies.",
           details: {
             rootDir: nearestManifestWithoutParentLockfile,
+            projectManifests: nearestProjectManifests ?? [],
             ...(nearestUnresolvedInputs && nearestUnresolvedInputs.length > 0
               ? {
                   unresolvedInputs: nearestUnresolvedInputs,
@@ -943,21 +947,23 @@ function findKnownLockfiles(
     .sort();
 }
 
-function hasKnownProjectManifest(
+function findKnownProjectManifests(
   dir: string,
   entries?: RepositoryTreeEntry[],
   inventory?: RepositoryTreeInventory
-): boolean {
+): string[] {
   if (entries) {
-    return KNOWN_PROJECT_MANIFESTS.some((manifest) =>
+    const manifests = KNOWN_PROJECT_MANIFESTS.filter((manifest) =>
       inventory
         ? fileExistsInInventory(inventory, path.join(dir, manifest))
         : entryExists(entries, manifest)
-    )
-      || findDotnetProjectFiles(dir, entries).length > 0;
+    );
+    return [...new Set([...manifests, ...findDotnetProjectFiles(dir, entries)])].sort();
   }
-  return KNOWN_PROJECT_MANIFESTS.some((manifest) => existsSync(path.join(dir, manifest)))
-    || findDotnetProjectFiles(dir).length > 0;
+  const manifests = KNOWN_PROJECT_MANIFESTS.filter((manifest) =>
+    existsSync(path.join(dir, manifest))
+  );
+  return [...new Set([...manifests, ...findDotnetProjectFiles(dir)])].sort();
 }
 
 function findDotnetProjectFiles(dir: string, entries?: RepositoryTreeEntry[]): string[] {

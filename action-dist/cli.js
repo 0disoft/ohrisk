@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 4f45b43143b55118a448740922d181736f431caa38b8bbb7afc447497ed07136
+// ohrisk-action-source-sha256: 6097bba8e8c7a419b5e1a28e025c006a1a46c1db0909bf296be393659add8a88
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -37913,11 +37913,13 @@ function discoverProject(options = {}) {
     }
     let nearestManifestWithoutParentLockfile;
     let nearestUnresolvedInputs;
+    let nearestProjectManifests;
     const searchDirectories = searchMode === "tree" ? [startDir] : ancestorsFrom(startDir);
     for (const dir of searchDirectories) {
       const entries = options.inventory ? listDirectoryEntries(dir, options.inventory) : undefined;
       const lockfiles = findKnownLockfiles(dir, entries, options.inventory);
-      const hasProjectManifest = hasKnownProjectManifest(dir, entries, options.inventory);
+      const projectManifests = findKnownProjectManifests(dir, entries, options.inventory);
+      const hasProjectManifest = projectManifests.length > 0;
       const hasKnownLockfileDirectory = hasKnownLockfileDirectoryPath(dir, entries);
       if (lockfiles.length === 0) {
         const unresolvedInputs = findNonConcreteDirectLockfiles(dir, entries);
@@ -37934,6 +37936,7 @@ function discoverProject(options = {}) {
         if (!nearestManifestWithoutParentLockfile && hasProjectManifest) {
           nearestManifestWithoutParentLockfile = dir;
           nearestUnresolvedInputs = unresolvedInputs;
+          nearestProjectManifests = projectManifests;
         }
         continue;
       }
@@ -37983,6 +37986,7 @@ function discoverProject(options = {}) {
         message: "Project manifest found, but no supported lockfile exists. Add or select a supported lockfile before scanning dependencies.",
         details: {
           rootDir: nearestManifestWithoutParentLockfile,
+          projectManifests: nearestProjectManifests ?? [],
           ...nearestUnresolvedInputs && nearestUnresolvedInputs.length > 0 ? {
             unresolvedInputs: nearestUnresolvedInputs,
             hint: "Select one unresolved input with --lockfile to see its exact parse error, or add a resolved lockfile."
@@ -38324,11 +38328,13 @@ function findKnownLockfiles(dir, entries, inventory) {
     });
   }).sort();
 }
-function hasKnownProjectManifest(dir, entries, inventory) {
+function findKnownProjectManifests(dir, entries, inventory) {
   if (entries) {
-    return KNOWN_PROJECT_MANIFESTS.some((manifest) => inventory ? fileExistsInInventory(inventory, path48.join(dir, manifest)) : entryExists(entries, manifest)) || findDotnetProjectFiles(dir, entries).length > 0;
+    const manifests2 = KNOWN_PROJECT_MANIFESTS.filter((manifest) => inventory ? fileExistsInInventory(inventory, path48.join(dir, manifest)) : entryExists(entries, manifest));
+    return [...new Set([...manifests2, ...findDotnetProjectFiles(dir, entries)])].sort();
   }
-  return KNOWN_PROJECT_MANIFESTS.some((manifest) => existsSync17(path48.join(dir, manifest))) || findDotnetProjectFiles(dir).length > 0;
+  const manifests = KNOWN_PROJECT_MANIFESTS.filter((manifest) => existsSync17(path48.join(dir, manifest)));
+  return [...new Set([...manifests, ...findDotnetProjectFiles(dir)])].sort();
 }
 function findDotnetProjectFiles(dir, entries) {
   if (entries) {
