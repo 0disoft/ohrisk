@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 3adb46776b873d2304014fc42a89a287747feb8379c5ff7903d25b055cb7532b
+// ohrisk-action-source-sha256: bd19b5c363517fd9b2b66168f8a1193c6f472389f6c3f8262be56590d6aa3fce
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -49235,6 +49235,7 @@ function collectDistributionEvidenceFiles(input) {
     metadataDir,
     declaredPaths
   })).sort((left, right) => left.path.localeCompare(right.path)).slice(0, PYTHON_DISTRIBUTION_LICENSE_FILE_LIMIT);
+  const candidatePaths = new Set(candidates.map((candidate) => candidate.path));
   const files = [];
   for (const candidate of candidates) {
     if (candidate.size > PYTHON_DISTRIBUTION_EVIDENCE_FILE_MAX_BYTES) {
@@ -49250,20 +49251,26 @@ function collectDistributionEvidenceFiles(input) {
       path: relativeEvidencePath(candidate.path, packageRoot),
       kind: classifyEvidenceFile(candidate.path) ?? "license",
       text: text.value,
-      ...isBundledComponentLicensePath(candidate.path, metadataDir) ? { scope: "component" } : {}
+      ...isBundledComponentLicensePath({
+        entryPath: candidate.path,
+        packageRoot,
+        metadataDir,
+        candidatePaths
+      }) ? { scope: "component" } : {}
     });
   }
   return files;
 }
-function isBundledComponentLicensePath(entryPath, metadataDir) {
-  if (!metadataDir.toLowerCase().endsWith(".dist-info")) {
+function isBundledComponentLicensePath(input) {
+  if (!input.metadataDir.toLowerCase().endsWith(".dist-info")) {
     return false;
   }
-  const licenseRoot = `${metadataDir}/licenses/`;
-  if (!entryPath.startsWith(licenseRoot)) {
-    return false;
+  const licenseRoot = `${input.metadataDir}/licenses/`;
+  if (input.entryPath.startsWith(licenseRoot)) {
+    return input.entryPath.slice(licenseRoot.length).includes("/");
   }
-  return entryPath.slice(licenseRoot.length).includes("/");
+  const relative2 = relativeEvidencePath(input.entryPath, input.packageRoot);
+  return relative2.includes("/") && input.candidatePaths.has(`${licenseRoot}${relative2}`);
 }
 function isDistributionEvidencePath(input) {
   if (input.declaredPaths.has(input.entryPath)) {
@@ -54345,8 +54352,12 @@ function recognizeStandardLicenseText(text) {
   if (/\bfree and unencumbered software released into the public domain\b/i.test(text)) {
     return "Unlicense";
   }
-  if (/\bPermission is hereby granted, free of charge, to any person obtaining a copy\b/i.test(prose) && /\bTHE SOFTWARE IS PROVIDED "AS IS"/i.test(prose)) {
-    return "MIT";
+  const hasMitGrant = /\bPermission is hereby granted, free of charge, to any person obtaining a copy\b/i.test(prose);
+  const hasMitWarranty = /\bTHE SOFTWARE IS PROVIDED "AS IS"/i.test(prose);
+  if (hasMitGrant && hasMitWarranty) {
+    const hasCompletePermissionGrant = /\bto deal in the Software without restriction\b/i.test(prose) && /\bright(?:s)? to use, copy, modify, merge, publish, distribute, sublicense, and\/or sell\b/i.test(prose) && /\bpermit persons to whom the Software is furnished to do so\b/i.test(prose);
+    const hasNoticeCondition = /\bThe above copyright notice and this permission notice shall be included\b/i.test(prose);
+    return hasCompletePermissionGrant && !hasNoticeCondition ? "MIT-0" : "MIT";
   }
   if (/\bPermission to use, copy, modify, and\/or distribute this software\b/i.test(text) && /\bTHE SOFTWARE IS PROVIDED "AS IS"/i.test(text)) {
     if (/\bprovided\s+that\s+the\s+above\s+copyright\s+notice\s+and\s+this\s+permission\s+notice\s+appear\s+in\s+all\s+copies\b/i.test(text)) {
