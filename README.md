@@ -249,7 +249,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - local Carthage `Carthage/Checkouts` package source evidence before unavailable fallback for `Cartfile.resolved` packages
 - local CocoaPods `Pods/<pod>` source and `Pods/Local Podspecs/<pod>.podspec.json` evidence before unavailable fallback for `Podfile.lock` packages
 - local Elixir/Erlang `deps/<package>` source and `mix.exs` or `rebar.config` license metadata before unavailable fallback for Hex packages
-- local Bundler/RubyGems install path gemspec evidence before unavailable fallback for `Gemfile.lock` gems
+- local Bundler/RubyGems install path gemspec evidence for `Gemfile.lock` gems, followed by fixed public RubyGems.org exact-version metadata and checksum-verified `.gem` contents for pure-Ruby packages; registry license claims alone are not evidence
 - local `vendor/<vendor>/<package>/composer.json` evidence for Composer packages; unverified `composer.lock` license declarations are not treated as evidence
 - remote HTTPS package tarball evidence when the lockfile points to a tarball with supported integrity metadata, with plaintext HTTP, credential-bearing URLs, obvious local, private, special-purpose, and DNS-resolved internal hosts blocked before fetch, connected socket addresses rechecked by the default fetcher, redirects followed only after each target is validated, and transient network failures recorded as unavailable package evidence so other packages can still be scanned
 - fixed `proxy.golang.org` module ZIP evidence for Go dependencies with an exact ZIP `go.sum` `h1` checksum, plus a separately checksum-verified `.mod` fallback for internal module edges, including official `storage.googleapis.com` redirects, one bounded transient-failure retry, full checksum verification, and root license-file inspection without npm credentials
@@ -319,7 +319,7 @@ vcpkg feature/platform selection reconstruction, remote vcpkg registry metadata 
 Carthage parent graph reconstruction, remote Swift package checkout fetching,
 Carthage remote checkout or binary framework license fetching, CocoaPods remote podspec or source
 fetching, Mix and Rebar3 dependency graph reconstruction, Rebar3 git/path deps, Rebar3 plugin locks, remote Hex.pm artifact fetching,
-Composer plugin/platform repository resolution, alternate Cargo registries and Cargo Git/path source fetching, arbitrary or private Go proxies, Maven source archives or JARs without a same-repository SHA-256 sidecar and embedded exact identity, private or alternate NuGet feeds, custom Dart Pub registries and Dart Git/path sources, RubyGems, or Packagist artifact
+Composer plugin/platform repository resolution, alternate Cargo registries and Cargo Git/path source fetching, arbitrary or private Go proxies, Maven source archives or JARs without a same-repository SHA-256 sidecar and embedded exact identity, private or alternate NuGet feeds, custom Dart Pub registries and Dart Git/path sources, platform-specific or private RubyGems sources, or Packagist artifact
 fetching are not part of this slice yet.
 
 ## Usage
@@ -491,7 +491,7 @@ Supported dependency input files:
 - Carthage `Cartfile.resolved` package pins, using local `Carthage/Checkouts` package source for evidence
 - CocoaPods `Podfile.lock` pod entries, using local `Pods/` source and `Pods/Local Podspecs` metadata for evidence
 - Elixir Mix `mix.lock` Hex package pins, using adjacent root `mix.exs` literal `only:` options for production/development classification and local `deps/` package source and `mix.exs` metadata for evidence; Erlang Rebar3 `rebar.lock` Hex package pins, using depth-0 production root classification and local `deps/` package source and `rebar.config` metadata for evidence
-- Ruby Bundler `Gemfile.lock` gem entries, using literal companion `Gemfile` group blocks and inline `group:` options for development classification and local Bundler/RubyGems gemspec metadata for evidence
+- Ruby Bundler `Gemfile.lock` gem entries, using literal companion `Gemfile` group blocks and inline `group:` options for development classification, local Bundler/RubyGems sources first, and checksum-verified public pure-Ruby `.gem` contents as the remote fallback
 - PHP Composer `composer.lock` package entries, using adjacent `composer.json` root dependencies when available and local `vendor/` package metadata for license evidence
 - CycloneDX JSON/XML SBOM package entries with Package URL identities, dependency relationships, and embedded license evidence; traversal is iterative, retains every reachable component, stores at most 64 paths per component, and summarizes paths deeper than 256 components with typed graph diagnostics
 - SPDX JSON/RDF and tag-value SBOM package entries with Package URL external refs, dependency relationships, and embedded license evidence, including separate declared and concluded assertions plus bounded extracted text for referenced local `LicenseRef-*` identifiers

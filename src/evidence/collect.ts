@@ -102,6 +102,11 @@ import {
 } from "./pypi-package";
 import { collectPubTarballEvidence, collectTarballEvidence } from "./tarball";
 import { collectRemoteZigTarballEvidence } from "./zig-package";
+import {
+  collectRubyGemArchiveEvidence,
+  parseRubyGemsVersionMetadata,
+  rubyGemsVersionMetadataUrl
+} from "./rubygems-package";
 import type { LicenseEvidence } from "./types";
 import { collectZipPackageEvidence } from "./zip-package";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
@@ -185,6 +190,7 @@ const MAX_ARTIFACT_REDIRECTS = 5;
 const DEFAULT_EVIDENCE_CONCURRENCY = 8;
 const PYPI_METADATA_HOSTS = new Set(["pypi.org"]);
 const PYPI_DISTRIBUTION_HOSTS = new Set(["files.pythonhosted.org"]);
+const RUBYGEMS_ORG_HOSTS = new Set(["rubygems.org"]);
 const PUB_DEV_ARCHIVE_HOSTS = new Set(["pub.dev"]);
 const NUGET_SERVICE_INDEX_URL = "https://api.nuget.org/v3/index.json";
 const NUGET_ORG_HOSTS = new Set(["api.nuget.org"]);
@@ -580,6 +586,7 @@ async function collectNodeEvidence(input: {
         && input.node.ecosystem !== "go"
         && input.node.ecosystem !== "cargo"
         && input.node.ecosystem !== "nuget"
+        && input.node.ecosystem !== "gem"
         && input.node.ecosystem !== "zig"
       )
       || !ecosystemEvidence.ok
@@ -688,6 +695,21 @@ async function collectNodeEvidence(input: {
 
   if (input.node.ecosystem === "maven") {
     return input.collectMavenEvidence(input.node);
+  }
+
+  if (input.node.ecosystem === "gem") {
+    return collectRemoteRubyGemEvidence({
+      node: input.node,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      registryMetadataMaxBytes: input.registryMetadataMaxBytes,
+      artifactMaxBytes: input.tarballMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      signal: input.signal,
+      allowedHosts: input.allowedHosts
+    });
   }
 
   if (input.node.ecosystem === "go") {
@@ -1218,6 +1240,101 @@ async function collectRemoteNugetPackageEvidence(input: {
     expectedSha512: catalog.value.packageHash,
     expectedSize: catalog.value.packageSize,
     nupkg: nupkg.value,
+    artifactMaxBytes: input.artifactMaxBytes
+  });
+}
+
+async function collectRemoteRubyGemEvidence(input: {
+  node: DependencyNode;
+  fetchArtifact: ArtifactFetcher;
+  resolveArtifactHost: ArtifactHostResolver | undefined;
+  fetchTimeoutMs: number;
+  registryMetadataMaxBytes: number;
+  artifactMaxBytes: number;
+  offline: boolean;
+  artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
+  allowedHosts: ReadonlySet<string>;
+}): Promise<Result<LicenseEvidence, OhriskError>> {
+  const metadataUrl = rubyGemsVersionMetadataUrl(input.node.name, input.node.version);
+  if (!metadataUrl) {
+    return ok(unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: "Ruby gem name or version could not be encoded safely for the fixed RubyGems.org API."
+    }));
+  }
+
+  const metadataBytes = await readRemoteArtifactBytes({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    packageId: input.node.id,
+    url: metadataUrl,
+    blockedMessage: "RubyGems version metadata URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve the RubyGems.org metadata host.",
+    fetchFailureMessage: "Failed to fetch RubyGems version metadata.",
+    tooLargeMessage: "RubyGems version metadata exceeded the maximum supported size.",
+    unreadableMessage: "RubyGems version metadata did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find RubyGems version metadata in the artifact cache.",
+    details: {
+      packageName: input.node.name,
+      version: input.node.version,
+      registryUrl: metadataUrl
+    },
+    maxBytes: input.registryMetadataMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: RUBYGEMS_ORG_HOSTS,
+    urlDetailKey: "registryUrl"
+  });
+  if (!metadataBytes.ok) return metadataBytes;
+
+  const metadata = parseRubyGemsVersionMetadata({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    version: input.node.version,
+    registryUrl: metadataUrl,
+    text: metadataBytes.value.toString("utf8")
+  });
+  if (!metadata.ok) return metadata;
+
+  const gem = await readRemoteArtifactBytes({
+    code: "TARBALL_FETCH_FAILED",
+    packageId: input.node.id,
+    url: metadata.value.gemUrl,
+    blockedMessage: "Ruby gem artifact URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve the RubyGems.org artifact host.",
+    fetchFailureMessage: "Failed to fetch Ruby gem archive.",
+    tooLargeMessage: "Ruby gem archive exceeded the maximum supported size.",
+    unreadableMessage: "Ruby gem archive did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find the Ruby gem archive in the artifact cache.",
+    details: {
+      packageName: input.node.name,
+      version: input.node.version,
+      resolved: metadata.value.gemUrl
+    },
+    maxBytes: input.artifactMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: RUBYGEMS_ORG_HOSTS,
+    urlDetailKey: "resolved"
+  });
+  if (!gem.ok) return gem;
+
+  return collectRubyGemArchiveEvidence({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    version: input.node.version,
+    sha256: metadata.value.sha256,
+    gem: gem.value,
     artifactMaxBytes: input.artifactMaxBytes
   });
 }

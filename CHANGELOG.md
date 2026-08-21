@@ -2,6 +2,10 @@
 
 ## 1.15.1 - Unreleased
 
+- Public pure-Ruby Bundler dependencies now use the exact-version RubyGems.org
+  API SHA-256 to verify the downloaded `.gem` before reading embedded gemspec
+  license metadata and root license files. Registry license claims alone are
+  never treated as evidence.
 - Complete MIT-0 license text is now distinguished from MIT by the absence of
   MIT's copyright-and-permission-notice retention condition, avoiding false
   metadata conflicts for packages such as cffi.

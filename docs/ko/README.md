@@ -337,6 +337,10 @@ profile-specific test dependency, Rebar dependency tree 복원, 원격 Hex.pm ar
 fetch는 아직 지원하지 않는다.
 Ruby는 Bundler `Gemfile.lock`의 gem dependency를 스캔하고, 로컬 Bundler/RubyGems
 install path의 gemspec license metadata와 license 파일을 evidence로 읽는다.
+로컬 source가 없으면 public pure-Ruby package에 한해 RubyGems.org exact-version API의
+SHA-256과 일치하는 `.gem` 내부 metadata와 최상위 license 파일을 읽는다. API의 license
+선언만으로는 판정하지 않으며, platform-specific gem과 private source는 아직 원격으로
+가져오지 않는다.
 옆의 `Gemfile`에 literal `group ... do` block이나 inline `group:` option이 있으면
 개발 의존성 구분에 사용한다.
 PHP는 Composer `composer.lock`의 production/development package dependency를

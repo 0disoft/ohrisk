@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 918e9426dd486276ec6a0bc7188708e6246b24aa297be4478e722a44d4dff0f0
+// ohrisk-action-source-sha256: 712fccbdbb107ed7a3850a7f3f148a71e601d3db0100d560e34ca665bec9f291
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -41019,7 +41019,7 @@ import {
 } from "node:fs";
 import path81 from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
-import { gunzipSync as gunzipSync4 } from "node:zlib";
+import { gunzipSync as gunzipSync5 } from "node:zlib";
 
 // src/evidence/artifact-response.ts
 function artifactBodyLimitDetails(limit) {
@@ -49331,6 +49331,202 @@ function isRecord26(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// src/evidence/rubygems-package.ts
+import { gunzipSync as gunzipSync4 } from "node:zlib";
+var GEM_METADATA_MAX_BYTES = 1024 * 1024;
+var GEM_EVIDENCE_FILE_MAX_BYTES2 = 2 * 1024 * 1024;
+var GEM_EVIDENCE_FILE_LIMIT = 50;
+function parseRubyGemsVersionMetadata(input) {
+  let document2;
+  try {
+    document2 = JSON.parse(input.text);
+  } catch (cause) {
+    return err(metadataError(input, "RubyGems version metadata was not valid JSON.", {
+      cause: cause instanceof Error ? cause.message : String(cause)
+    }));
+  }
+  if (!isRecord27(document2)) {
+    return err(metadataError(input, "RubyGems version metadata did not have the expected shape."));
+  }
+  const name = document2.name;
+  const version = document2.version;
+  const platform = document2.platform;
+  const sha2562 = document2.sha;
+  const gemUrl = document2.gem_uri;
+  const expectedGemUrl = rubyGemsArtifactUrl(input.packageName, input.version);
+  if (!expectedGemUrl || name !== input.packageName || version !== input.version || platform !== "ruby" || typeof sha2562 !== "string" || !/^[a-f0-9]{64}$/iu.test(sha2562) || gemUrl !== expectedGemUrl) {
+    return err(metadataError(input, "RubyGems version metadata did not match the requested package identity and artifact.", {
+      ...typeof name === "string" ? { metadataName: name } : {},
+      ...typeof version === "string" ? { metadataVersion: version } : {},
+      ...typeof platform === "string" ? { metadataPlatform: platform } : {}
+    }));
+  }
+  return ok({ gemUrl, sha256: sha2562.toLowerCase() });
+}
+function collectRubyGemArchiveEvidence(input) {
+  const gemBytes = Buffer.from(input.gem);
+  const integrity2 = verifyPackageIntegrity({
+    packageId: input.packageId,
+    resolvedDetail: rubyGemsArtifactUrl(input.packageName, input.version),
+    integrity: sha256HexIntegrity(input.sha256),
+    artifact: gemBytes
+  });
+  if (!integrity2.ok)
+    return integrity2;
+  const outer = readArchiveBytes({
+    displayName: `${input.packageName}-${input.version}.gem`,
+    bytes: gemBytes,
+    formatHint: "tar",
+    limits: { inputBytes: input.artifactMaxBytes }
+  });
+  if (!outer.ok)
+    return outer;
+  const metadataEntry = outer.value.readEntry("metadata.gz");
+  const dataEntry = outer.value.readEntry("data.tar.gz");
+  if (!metadataEntry.ok || !dataEntry.ok) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Ruby gem archive is missing metadata.gz or data.tar.gz.",
+      details: { packageId: input.packageId }
+    }));
+  }
+  const metadata = readGemMetadata({ packageId: input.packageId, bytes: metadataEntry.value });
+  if (!metadata.ok)
+    return metadata;
+  if (metadata.value.name !== input.packageName || metadata.value.version !== input.version) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Ruby gem archive metadata did not match the requested package identity.",
+      details: {
+        packageId: input.packageId,
+        expectedName: input.packageName,
+        expectedVersion: input.version,
+        metadataName: metadata.value.name,
+        metadataVersion: metadata.value.version
+      }
+    }));
+  }
+  const data = readArchiveBytes({
+    displayName: "data.tar.gz",
+    bytes: dataEntry.value,
+    formatHint: "tar.gz",
+    limits: { inputBytes: input.artifactMaxBytes }
+  });
+  if (!data.ok)
+    return data;
+  const warnings = [];
+  const files = collectGemEvidenceFiles(data.value, warnings);
+  if (files.length === 0) {
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in the checksum-verified Ruby gem archive.");
+  }
+  if (metadata.value.licenses.length === 0) {
+    warnings.push("Checksum-verified Ruby gem metadata did not declare license metadata.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...metadata.value.licenses.length === 1 ? { metadataLicense: metadata.value.licenses[0], metadataSource: "metadata.gz" } : {},
+    ...metadata.value.licenses.length > 1 ? { metadataLicenses: metadata.value.licenses, metadataSource: "metadata.gz" } : {},
+    files,
+    source: "tarball",
+    warnings
+  });
+}
+function rubyGemsVersionMetadataUrl(name, version) {
+  if (!isSafeGemCoordinate(name) || !isSafeGemCoordinate(version))
+    return;
+  return `https://rubygems.org/api/v2/rubygems/${encodeURIComponent(name)}/versions/${encodeURIComponent(version)}.json?platform=ruby`;
+}
+function rubyGemsArtifactUrl(name, version) {
+  if (!isSafeGemCoordinate(name) || !isSafeGemCoordinate(version))
+    return;
+  return `https://rubygems.org/gems/${name}-${version}.gem`;
+}
+function isSafeGemCoordinate(value) {
+  return value.length > 0 && value.length <= 255 && /^[A-Za-z0-9_.+-]+$/u.test(value);
+}
+function readGemMetadata(input) {
+  let text;
+  try {
+    text = gunzipSync4(input.bytes, { maxOutputLength: GEM_METADATA_MAX_BYTES }).toString("utf8");
+  } catch (cause) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Ruby gem metadata.gz was malformed or exceeded the maximum supported size.",
+      details: {
+        packageId: input.packageId,
+        maxBytes: GEM_METADATA_MAX_BYTES,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+  const name = readMetadataScalar(text, "name");
+  const rawVersion = text.match(/^version:\s*!ruby\/object:Gem::Version\s*\r?\n\s+version:\s*([^\r\n]+)$/mu)?.[1]?.trim();
+  const version = rawVersion ? unquoteYamlScalar(rawVersion) : undefined;
+  if (!name || !version || !isSafeGemCoordinate(name) || !isSafeGemCoordinate(version)) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Ruby gem metadata.gz did not contain a safe name and version.",
+      details: { packageId: input.packageId }
+    }));
+  }
+  const licenses = [];
+  const licenseBlock = text.match(/^licenses:\s*\r?\n((?:-\s*[^\r\n]*\r?\n?)*)/mu)?.[1] ?? "";
+  for (const match of licenseBlock.matchAll(/^-\s*([^\r\n]+)$/gmu)) {
+    const license = unquoteYamlScalar(match[1]?.trim() ?? "");
+    if (license)
+      licenses.push(license);
+  }
+  return ok({ name, version, licenses: [...new Set(licenses)] });
+}
+function readMetadataScalar(text, name) {
+  const value = text.match(new RegExp(`^${name}:\\s*([^\\r\\n]+)$`, "mu"))?.[1]?.trim();
+  return value ? unquoteYamlScalar(value) : undefined;
+}
+function unquoteYamlScalar(value) {
+  if (value === "" || value === "null" || value.startsWith("!"))
+    return;
+  if (value.startsWith("'") && value.endsWith("'") || value.startsWith('"') && value.endsWith('"')) {
+    return value.slice(1, -1).trim() || undefined;
+  }
+  return value.trim() || undefined;
+}
+function collectGemEvidenceFiles(archive, warnings) {
+  const files = [];
+  const candidates = archive.entries.filter((entry) => entry.type === "file" && !entry.path.includes("/") && classifyEvidenceFile(entry.path)).sort((left, right) => left.path.localeCompare(right.path)).slice(0, GEM_EVIDENCE_FILE_LIMIT);
+  for (const candidate of candidates) {
+    const text = archive.readText(candidate.path, GEM_EVIDENCE_FILE_MAX_BYTES2);
+    if (!text.ok) {
+      warnings.push(`Skipped ${candidate.path}: Ruby gem evidence file could not be read within the supported bounds.`);
+      continue;
+    }
+    const kind = classifyEvidenceFile(candidate.path);
+    if (kind)
+      files.push({ path: candidate.path, kind, text: text.value });
+  }
+  return files;
+}
+function metadataError(input, message, details = {}) {
+  return createError({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    category: "unsupported_input",
+    message,
+    details: {
+      packageId: input.packageId,
+      packageName: input.packageName,
+      version: input.version,
+      registryUrl: input.registryUrl,
+      ...details
+    }
+  });
+}
+function isRecord27(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 // src/evidence/zip-package.ts
 import { inflateRawSync as inflateRawSync2 } from "node:zlib";
 var ZIP_EOCD_SIGNATURE2 = 101010256;
@@ -49630,6 +49826,7 @@ var MAX_ARTIFACT_REDIRECTS = 5;
 var DEFAULT_EVIDENCE_CONCURRENCY = 8;
 var PYPI_METADATA_HOSTS = new Set(["pypi.org"]);
 var PYPI_DISTRIBUTION_HOSTS = new Set(["files.pythonhosted.org"]);
+var RUBYGEMS_ORG_HOSTS = new Set(["rubygems.org"]);
 var PUB_DEV_ARCHIVE_HOSTS = new Set(["pub.dev"]);
 var NUGET_SERVICE_INDEX_URL = "https://api.nuget.org/v3/index.json";
 var NUGET_ORG_HOSTS = new Set(["api.nuget.org"]);
@@ -49906,7 +50103,7 @@ async function collectNodeEvidence(input) {
         allowedHosts: input.allowedHosts
       });
     }
-    if (input.node.ecosystem !== "maven" && input.node.ecosystem !== "go" && input.node.ecosystem !== "cargo" && input.node.ecosystem !== "nuget" && input.node.ecosystem !== "zig" || !ecosystemEvidence.ok || ecosystemEvidence.value.source !== "unavailable") {
+    if (input.node.ecosystem !== "maven" && input.node.ecosystem !== "go" && input.node.ecosystem !== "cargo" && input.node.ecosystem !== "nuget" && input.node.ecosystem !== "gem" && input.node.ecosystem !== "zig" || !ecosystemEvidence.ok || ecosystemEvidence.value.source !== "unavailable") {
       return ecosystemEvidence;
     }
   }
@@ -49993,6 +50190,20 @@ async function collectNodeEvidence(input) {
   }
   if (input.node.ecosystem === "maven") {
     return input.collectMavenEvidence(input.node);
+  }
+  if (input.node.ecosystem === "gem") {
+    return collectRemoteRubyGemEvidence({
+      node: input.node,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      registryMetadataMaxBytes: input.registryMetadataMaxBytes,
+      artifactMaxBytes: input.tarballMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      signal: input.signal,
+      allowedHosts: input.allowedHosts
+    });
   }
   if (input.node.ecosystem === "go") {
     return collectRemoteGoModuleEvidence({
@@ -50447,6 +50658,88 @@ async function collectRemoteNugetPackageEvidence(input) {
     artifactMaxBytes: input.artifactMaxBytes
   });
 }
+async function collectRemoteRubyGemEvidence(input) {
+  const metadataUrl = rubyGemsVersionMetadataUrl(input.node.name, input.node.version);
+  if (!metadataUrl) {
+    return ok(unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: "Ruby gem name or version could not be encoded safely for the fixed RubyGems.org API."
+    }));
+  }
+  const metadataBytes = await readRemoteArtifactBytes({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    packageId: input.node.id,
+    url: metadataUrl,
+    blockedMessage: "RubyGems version metadata URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve the RubyGems.org metadata host.",
+    fetchFailureMessage: "Failed to fetch RubyGems version metadata.",
+    tooLargeMessage: "RubyGems version metadata exceeded the maximum supported size.",
+    unreadableMessage: "RubyGems version metadata did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find RubyGems version metadata in the artifact cache.",
+    details: {
+      packageName: input.node.name,
+      version: input.node.version,
+      registryUrl: metadataUrl
+    },
+    maxBytes: input.registryMetadataMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: RUBYGEMS_ORG_HOSTS,
+    urlDetailKey: "registryUrl"
+  });
+  if (!metadataBytes.ok)
+    return metadataBytes;
+  const metadata = parseRubyGemsVersionMetadata({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    version: input.node.version,
+    registryUrl: metadataUrl,
+    text: metadataBytes.value.toString("utf8")
+  });
+  if (!metadata.ok)
+    return metadata;
+  const gem = await readRemoteArtifactBytes({
+    code: "TARBALL_FETCH_FAILED",
+    packageId: input.node.id,
+    url: metadata.value.gemUrl,
+    blockedMessage: "Ruby gem artifact URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve the RubyGems.org artifact host.",
+    fetchFailureMessage: "Failed to fetch Ruby gem archive.",
+    tooLargeMessage: "Ruby gem archive exceeded the maximum supported size.",
+    unreadableMessage: "Ruby gem archive did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find the Ruby gem archive in the artifact cache.",
+    details: {
+      packageName: input.node.name,
+      version: input.node.version,
+      resolved: metadata.value.gemUrl
+    },
+    maxBytes: input.artifactMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: RUBYGEMS_ORG_HOSTS,
+    urlDetailKey: "resolved"
+  });
+  if (!gem.ok)
+    return gem;
+  return collectRubyGemArchiveEvidence({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    version: input.node.version,
+    sha256: metadata.value.sha256,
+    gem: gem.value,
+    artifactMaxBytes: input.artifactMaxBytes
+  });
+}
 function nugetMissingIntegrityWarning(allowLocalProjectEvidence) {
   if (allowLocalProjectEvidence) {
     return "NuGet package source was not fetched because the selected dependency input did not contain an exact SHA-512 package content hash. Restore the project, then rerun Ohrisk against the local checkout; use --lockfile obj/project.assets.json or a generated packages.lock.json when available.";
@@ -50480,7 +50773,7 @@ async function readNugetRegistryBytes(input) {
     return response;
   }
   try {
-    return ok(gunzipSync4(response.value, { maxOutputLength: input.maxBytes }));
+    return ok(gunzipSync5(response.value, { maxOutputLength: input.maxBytes }));
   } catch (cause) {
     return err(createError({
       code: "REGISTRY_METADATA_FETCH_FAILED",
@@ -51478,7 +51771,7 @@ function installedPackageMatchesNode(input) {
       return false;
     }
     const packageJson = JSON.parse(packageJsonText.value);
-    return isRecord27(packageJson) && packageJson.name === input.node.name && packageJson.version === input.node.version;
+    return isRecord28(packageJson) && packageJson.name === input.node.name && packageJson.version === input.node.version;
   } catch {
     return false;
   }
@@ -52355,23 +52648,23 @@ function readRegistryTarballUrl(metadata, version) {
     return;
   }
   const dist = versionMetadata.dist;
-  if (isRecord27(dist) && typeof dist.tarball === "string") {
+  if (isRecord28(dist) && typeof dist.tarball === "string") {
     return dist.tarball;
   }
   return;
 }
 function readRegistryVersionMetadata(metadata, version) {
-  if (!isRecord27(metadata)) {
+  if (!isRecord28(metadata)) {
     return;
   }
-  if (metadata.version === version || !isRecord27(metadata.versions)) {
+  if (metadata.version === version || !isRecord28(metadata.versions)) {
     return metadata;
   }
   const versions = metadata.versions;
   const versionMetadata = versions[version];
-  return isRecord27(versionMetadata) ? versionMetadata : undefined;
+  return isRecord28(versionMetadata) ? versionMetadata : undefined;
 }
-function isRecord27(value) {
+function isRecord28(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -54719,7 +55012,7 @@ function readPolicyFile(input) {
   return ok(merged);
 }
 function parsePolicyDocument(value, filePath) {
-  if (!isRecord28(value)) {
+  if (!isRecord29(value)) {
     return err(policyParseError({
       message: "Policy root must be a YAML object.",
       filePath
@@ -54736,7 +55029,7 @@ function parsePolicyDocument(value, filePath) {
   if (!extendsPaths.ok)
     return extendsPaths;
   const licenses = value.licenses === undefined ? {} : value.licenses;
-  if (!isRecord28(licenses)) {
+  if (!isRecord29(licenses)) {
     return err(policyParseError({ message: "licenses must be a YAML object.", filePath }));
   }
   const allow = readStringList(licenses.allow, "licenses.allow", filePath);
@@ -54755,7 +55048,7 @@ function parsePolicyDocument(value, filePath) {
   if (!profiles.ok)
     return profiles;
   const network = value.network === undefined ? {} : value.network;
-  if (!isRecord28(network)) {
+  if (!isRecord29(network)) {
     return err(policyParseError({ message: "network must be a YAML object.", filePath }));
   }
   const allowedHosts = readStringList(network.allowedHosts, "network.allowedHosts", filePath);
@@ -54919,13 +55212,13 @@ function readProfilePolicies(value, filePath) {
   if (value === undefined) {
     return ok(new Map);
   }
-  if (!isRecord28(value)) {
+  if (!isRecord29(value)) {
     return err(policyParseError({ message: "profiles must be a YAML object.", filePath }));
   }
   const supportedProfiles = new Set(USAGE_PROFILES);
   const result2 = new Map;
   for (const [profileName, rawProfile] of Object.entries(value)) {
-    if (!supportedProfiles.has(profileName) || !isRecord28(rawProfile)) {
+    if (!supportedProfiles.has(profileName) || !isRecord29(rawProfile)) {
       return err(policyParseError({
         message: "profiles keys must be supported usage profiles with object values.",
         filePath,
@@ -54933,7 +55226,7 @@ function readProfilePolicies(value, filePath) {
       }));
     }
     const licenses = rawProfile.licenses === undefined ? {} : rawProfile.licenses;
-    if (!isRecord28(licenses)) {
+    if (!isRecord29(licenses)) {
       return err(policyParseError({
         message: `profiles.${profileName}.licenses must be a YAML object.`,
         filePath
@@ -54963,7 +55256,7 @@ function readProfilePolicies(value, filePath) {
 function readSeverityOverrides(value, filePath, field = "licenses.severity") {
   if (value === undefined)
     return ok({});
-  if (!isRecord28(value)) {
+  if (!isRecord29(value)) {
     return err(policyParseError({
       message: `${field} must be a YAML object.`,
       filePath
@@ -54985,12 +55278,12 @@ function readSeverityOverrides(value, filePath, field = "licenses.severity") {
 function readPackageRules(value, filePath, field = "packages") {
   if (value === undefined)
     return ok({});
-  if (!isRecord28(value)) {
+  if (!isRecord29(value)) {
     return err(policyParseError({ message: `${field} must be a YAML object.`, filePath }));
   }
   const result2 = {};
   for (const [packagePattern, rawRule] of Object.entries(value)) {
-    if (packagePattern.trim() === "" || !isRecord28(rawRule)) {
+    if (packagePattern.trim() === "" || !isRecord29(rawRule)) {
       return err(policyParseError({
         message: "Each packages entry must be an object keyed by a package ID, Package URL, or glob.",
         filePath,
@@ -55049,12 +55342,12 @@ function readPackageRules(value, filePath, field = "packages") {
 function readRegistryAuth(value, filePath) {
   if (value === undefined)
     return ok({});
-  if (!isRecord28(value)) {
+  if (!isRecord29(value)) {
     return err(policyParseError({ message: "network.auth must be a YAML object.", filePath }));
   }
   const result2 = {};
   for (const [host, rawAuth] of Object.entries(value)) {
-    if (!isRecord28(rawAuth) || typeof rawAuth.tokenEnv !== "string" || !ENV_NAME_PATTERN.test(rawAuth.tokenEnv)) {
+    if (!isRecord29(rawAuth) || typeof rawAuth.tokenEnv !== "string" || !ENV_NAME_PATTERN.test(rawAuth.tokenEnv)) {
       return err(policyParseError({
         message: "Each network.auth entry requires a valid tokenEnv environment variable name.",
         filePath,
@@ -55187,7 +55480,7 @@ function escapeRegExp9(value) {
 function unique2(values) {
   return [...new Set(values)];
 }
-function isRecord28(value) {
+function isRecord29(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isRemoteReference(value) {
@@ -65545,7 +65838,7 @@ function applyRiskWaivers(input) {
   };
 }
 function parseWaivers(value) {
-  if (!isRecord29(value)) {
+  if (!isRecord30(value)) {
     return err("Ohrisk waiver file must be an object with a waivers array.");
   }
   const unknownRootKeys = unknownKeys(value, WAIVER_ROOT_KEYS);
@@ -65566,7 +65859,7 @@ function parseWaivers(value) {
   return ok(waivers);
 }
 function parseWaiver(value, index) {
-  if (!isRecord29(value)) {
+  if (!isRecord30(value)) {
     return err(`Waiver at index ${index} must be an object.`);
   }
   const unknownWaiverKeys = unknownKeys(value, WAIVER_KEYS);
@@ -65638,7 +65931,7 @@ function isIsoDate(value) {
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
-function isRecord29(value) {
+function isRecord30(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 

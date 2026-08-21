@@ -22,6 +22,11 @@ Remote fetching is limited to these explicit adapters:
 - the SHA-256-identified source distribution or wheel returned by that exact
   PyPI release response, including bounded identity-checked package metadata and
   license files.
+- exact-version metadata and `.gem` archives from the fixed public
+  `rubygems.org` host for pure-Ruby Bundler packages. The API supplies the
+  archive SHA-256; Ohrisk accepts embedded gemspec license metadata and root
+  license files only after the complete `.gem` checksum and embedded
+  name/version match. API license claims are not evidence.
 - Maven Central POM metadata for an exact Maven coordinate and version when
   local POM evidence is unavailable;
 - exact Maven Central parent and imported-BOM POMs needed to resolve
@@ -289,6 +294,11 @@ Checksum-identified pub.dev archives use the same content-addressed cache,
 conditional revalidation, offline stale-entry behavior, size ceiling, and LRU
 control as other remote artifacts. An offline cache miss remains unavailable
 and cannot trigger DNS or HTTP work.
+
+RubyGems.org exact-version metadata and checksum-identified `.gem` archives use
+the same cache and offline rules. Platform-specific gems and private or
+alternate gem sources remain unavailable rather than being substituted with a
+same-name public pure-Ruby artifact.
 
 NuGet service metadata, version indexes, registration pages, catalog leaves,
 and lock-and-catalog-SHA-512-verified NUPKG bytes use the same cache and offline rules. A complete
