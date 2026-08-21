@@ -2,6 +2,9 @@
 
 ## 1.15.1 - Unreleased
 
+- Complete MIT-0 license text is now distinguished from MIT by the absence of
+  MIT's copyright-and-permission-notice retention condition, avoiding false
+  metadata conflicts for packages such as cffi.
 - Line-wrapped MIT grant text is now recognized across whitespace, preventing
   a later bundled BSD notice from being mistaken for the package's primary
   license in Python distributions such as mypy and librt.

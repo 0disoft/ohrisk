@@ -1050,6 +1050,36 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
+  test("distinguishes complete MIT-0 text from MIT without conflicting with metadata", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "cffi@2.1.0",
+      metadataLicense: "MIT-0",
+      metadataLicenseKind: "declared",
+      metadataSource: "METADATA",
+      files: [{
+        path: "cffi-2.1.0.dist-info/licenses/LICENSE",
+        kind: "license",
+        text: [
+          "Permission is hereby granted, free of charge, to any person obtaining a copy",
+          "of this software and associated documentation files (the \"Software\"), to deal",
+          "in the Software without restriction, including without limitation the rights",
+          "to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies",
+          "of the Software, and to permit persons to whom the Software is furnished to do so.",
+          "THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND."
+        ].join("\n")
+      }],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      expression: "MIT-0",
+      choices: ["MIT-0"],
+      signals: [],
+      confidence: "high"
+    });
+  });
+
   test("recognizes public-domain-style license file text", () => {
     expect(
       normalizeLicenseEvidence({

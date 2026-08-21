@@ -636,11 +636,16 @@ function recognizeStandardLicenseText(text: string): string | undefined {
     return "Unlicense";
   }
 
-  if (
-    /\bPermission is hereby granted, free of charge, to any person obtaining a copy\b/i.test(prose)
-    && /\bTHE SOFTWARE IS PROVIDED "AS IS"/i.test(prose)
-  ) {
-    return "MIT";
+  const hasMitGrant =
+    /\bPermission is hereby granted, free of charge, to any person obtaining a copy\b/i.test(prose);
+  const hasMitWarranty = /\bTHE SOFTWARE IS PROVIDED "AS IS"/i.test(prose);
+  if (hasMitGrant && hasMitWarranty) {
+    const hasCompletePermissionGrant = /\bto deal in the Software without restriction\b/i.test(prose)
+      && /\bright(?:s)? to use, copy, modify, merge, publish, distribute, sublicense, and\/or sell\b/i.test(prose)
+      && /\bpermit persons to whom the Software is furnished to do so\b/i.test(prose);
+    const hasNoticeCondition =
+      /\bThe above copyright notice and this permission notice shall be included\b/i.test(prose);
+    return hasCompletePermissionGrant && !hasNoticeCondition ? "MIT-0" : "MIT";
   }
 
   if (
