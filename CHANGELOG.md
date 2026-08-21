@@ -2,6 +2,9 @@
 
 ## 1.15.1 - Unreleased
 
+- The active SPDX `BlueOak-1.0.0` and `Python-2.0` identifiers are now
+  classified as permissive low-risk evidence while retaining distributed
+  license-text preservation obligations.
 - Line-wrapped ISC notice clauses are now recognized across whitespace instead
   of being mistaken for zero-clause BSD text and creating a false conflict.
 - The active SPDX `MIT-0` identifier is now classified as permissive low-risk

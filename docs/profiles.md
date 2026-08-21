@@ -66,7 +66,7 @@ separate asset decision.
 
 | License family | Example SPDX IDs | saas | distributed-app |
 |---|---|---|---|
-| Permissive | MIT, MIT-0, Apache-2.0, BSD-3-Clause, ISC, 0BSD, FTL, PSF-2.0, Unicode-3.0, Zlib | low | low |
+| Permissive | MIT, MIT-0, Apache-2.0, BSD-3-Clause, ISC, 0BSD, BlueOak-1.0.0, FTL, PSF-2.0, Python-2.0, Unicode-3.0, Zlib | low | low |
 | Advertising-clause attribution | BSD-4-Clause | review | review |
 | File-level copyleft | MPL-2.0 | low | review |
 | Weak copyleft | LGPL-3.0, EPL-2.0 | review | review |
