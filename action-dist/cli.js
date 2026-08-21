@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 712fccbdbb107ed7a3850a7f3f148a71e601d3db0100d560e34ca665bec9f291
+// ohrisk-action-source-sha256: 55fcaff27976343ad4394e672d5e9eb60105e02b26c9fcc05c56002c1ba9bb05
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -50731,7 +50731,7 @@ async function collectRemoteRubyGemEvidence(input) {
   });
   if (!gem.ok)
     return gem;
-  return collectRubyGemArchiveEvidence({
+  const collected = collectRubyGemArchiveEvidence({
     packageId: input.node.id,
     packageName: input.node.name,
     version: input.node.version,
@@ -50739,6 +50739,10 @@ async function collectRemoteRubyGemEvidence(input) {
     gem: gem.value,
     artifactMaxBytes: input.artifactMaxBytes
   });
+  if (!collected.ok && collected.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
+    return ok(unavailableRemoteArchiveLimitEvidence(input.node.id, collected.error, "Ruby gem"));
+  }
+  return collected;
 }
 function nugetMissingIntegrityWarning(allowLocalProjectEvidence) {
   if (allowLocalProjectEvidence) {
@@ -51620,7 +51624,7 @@ async function collectRemotePythonDistributionEvidence(input) {
       ...input.yanked !== undefined ? { yanked: input.yanked } : {}
     });
     if (!collected.ok && collected.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
-      return ok(unavailableRemoteArchiveLimitEvidence(input.node.id, collected.error));
+      return ok(unavailableRemoteArchiveLimitEvidence(input.node.id, collected.error, "Python distribution"));
     }
     return collected;
   } catch (cause) {
@@ -52214,14 +52218,14 @@ function unavailableOversizedTarballEvidence(packageId) {
     ]
   };
 }
-function unavailableRemoteArchiveLimitEvidence(packageId, error) {
+function unavailableRemoteArchiveLimitEvidence(packageId, error, artifactLabel) {
   const limit = typeof error.details?.limit === "string" ? ` (${error.details.limit})` : "";
   return {
     packageId,
     files: [],
     source: "unavailable",
     warnings: [
-      `Remote Python distribution exceeded Ohrisk's bounded archive inspection limit${limit}; its contents were not used as license evidence.`
+      `Remote ${artifactLabel} exceeded Ohrisk's bounded archive inspection limit${limit}; its contents were not used as license evidence.`
     ]
   };
 }
@@ -54455,11 +54459,17 @@ var COMMERCIAL_USE_DENIAL_PATTERNS = [
   /\bshall not be used for commercial purposes\b/i,
   /\bcannot be used for commercial purposes\b/i
 ];
+var COMMERCIAL_USE_PERMISSION_PATTERNS = [
+  /\bcommercial\s+(?:and|or)\s+non-?commercial\s+use\s+(?:is|are)\s+permitted\b/i
+];
 var PACKAGE_RESTRICTION_SCOPE_PATTERN = /\b(?:software|source\s+code|codebase|package|library|program|application|module|toolkit)\b/i;
 var DOCUMENTATION_RESTRICTION_SCOPE_PATTERN = /\b(?:documentation|docs?|manuals?|tutorials?)\b/i;
 var DATA_RESTRICTION_SCOPE_PATTERN = /\b(?:corpora?|corpus|datasets?|data[ -]?sets?|training\s+data|test\s+data|model\s+weights?)\b/i;
 function hasCommercialRestrictionText(text) {
-  return COMMERCIAL_RESTRICTION_LICENSE_NAME_PATTERNS.some((pattern) => pattern.test(text)) || COMMERCIAL_USE_DENIAL_PATTERNS.some((pattern) => pattern.test(text));
+  if (COMMERCIAL_USE_DENIAL_PATTERNS.some((pattern) => pattern.test(text))) {
+    return true;
+  }
+  return COMMERCIAL_RESTRICTION_LICENSE_NAME_PATTERNS.some((pattern) => pattern.test(text)) && !COMMERCIAL_USE_PERMISSION_PATTERNS.some((pattern) => pattern.test(text));
 }
 function commercialRestrictionStatements(text) {
   return text.replace(/\r\n?/g, `

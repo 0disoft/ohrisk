@@ -2,6 +2,12 @@
 
 ## 1.15.1 - Unreleased
 
+- Checksum-verified Ruby gems that exceed bounded archive inspection limits
+  now produce unavailable package evidence instead of aborting the entire
+  repository scan. The archive limits themselves remain unchanged.
+- Explicit statements permitting commercial and non-commercial use are no
+  longer misread as commercial-use bans, preventing false high findings for
+  packages such as JSDoc while preserving genuine denial signals.
 - Public pure-Ruby Bundler dependencies now use the exact-version RubyGems.org
   API SHA-256 to verify the downloaded `.gem` before reading embedded gemspec
   license metadata and root license files. Registry license claims alone are

@@ -106,6 +106,34 @@ describe("remote RubyGems evidence", () => {
     if (!evidence.ok) throw new Error(evidence.error.message);
     expect(evidence.value[0]).toMatchObject({ source: "unavailable" });
   });
+
+  test("isolates a checksum-verified gem that exceeds archive inspection limits", async () => {
+    const dataArchive = gzipSync(createTarEntries([{
+      path: "LICENSE",
+      content: Buffer.alloc(50 * 1024 * 1024 + 1)
+    }]));
+    const gem = rubyGemWithDataArchive("large-gem", "1.0.0", ["MIT"], dataArchive);
+    const metadata = rubyGemsMetadata("large-gem", "1.0.0", gem);
+    const evidence = await collectGraphEvidence({
+      graph: gemGraph("large-gem", "1.0.0"),
+      projectRoot: ".",
+      allowLocalProjectEvidence: false,
+      resolveArtifactHost: async () => [{ address: "1.1.1.1", family: 4 }],
+      fetchArtifact: async (url) => artifactResponse(
+        url.includes("/api/v2/") ? Buffer.from(metadata) : gem,
+        url
+      )
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) throw new Error(evidence.error.message);
+    expect(evidence.value[0]).toMatchObject({
+      packageId: "large-gem@1.0.0",
+      files: [],
+      source: "unavailable"
+    });
+    expect(evidence.value[0]?.warnings.join("\n")).toContain("bounded archive inspection limit");
+  });
 });
 
 function rubyGem(
@@ -113,6 +141,15 @@ function rubyGem(
   version: string,
   licenses: string[],
   files: Record<string, string>
+): Buffer {
+  return rubyGemWithDataArchive(name, version, licenses, createTarGz(files));
+}
+
+function rubyGemWithDataArchive(
+  name: string,
+  version: string,
+  licenses: string[],
+  dataArchive: Buffer
 ): Buffer {
   const metadata = [
     "--- !ruby/object:Gem::Specification",
@@ -126,7 +163,7 @@ function rubyGem(
   ].join("\n");
   return createTarEntries([
     { path: "metadata.gz", content: gzipSync(Buffer.from(metadata)) },
-    { path: "data.tar.gz", content: createTarGz(files) }
+    { path: "data.tar.gz", content: dataArchive }
   ]);
 }
 

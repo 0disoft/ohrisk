@@ -1329,7 +1329,7 @@ async function collectRemoteRubyGemEvidence(input: {
   });
   if (!gem.ok) return gem;
 
-  return collectRubyGemArchiveEvidence({
+  const collected = collectRubyGemArchiveEvidence({
     packageId: input.node.id,
     packageName: input.node.name,
     version: input.node.version,
@@ -1337,6 +1337,14 @@ async function collectRemoteRubyGemEvidence(input: {
     gem: gem.value,
     artifactMaxBytes: input.artifactMaxBytes
   });
+  if (!collected.ok && collected.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
+    return ok(unavailableRemoteArchiveLimitEvidence(
+      input.node.id,
+      collected.error,
+      "Ruby gem"
+    ));
+  }
+  return collected;
 }
 
 function nugetMissingIntegrityWarning(allowLocalProjectEvidence: boolean): string {
@@ -2473,7 +2481,11 @@ async function collectRemotePythonDistributionEvidence(input: {
       ...(input.yanked !== undefined ? { yanked: input.yanked } : {})
     });
     if (!collected.ok && collected.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
-      return ok(unavailableRemoteArchiveLimitEvidence(input.node.id, collected.error));
+      return ok(unavailableRemoteArchiveLimitEvidence(
+        input.node.id,
+        collected.error,
+        "Python distribution"
+      ));
     }
     return collected;
   } catch (cause) {
@@ -3278,7 +3290,8 @@ function unavailableOversizedTarballEvidence(packageId: string): LicenseEvidence
 
 function unavailableRemoteArchiveLimitEvidence(
   packageId: string,
-  error: OhriskError
+  error: OhriskError,
+  artifactLabel: string
 ): LicenseEvidence {
   const limit = typeof error.details?.limit === "string"
     ? ` (${error.details.limit})`
@@ -3288,7 +3301,7 @@ function unavailableRemoteArchiveLimitEvidence(
     files: [],
     source: "unavailable",
     warnings: [
-      `Remote Python distribution exceeded Ohrisk's bounded archive inspection limit${limit}; its contents were not used as license evidence.`
+      `Remote ${artifactLabel} exceeded Ohrisk's bounded archive inspection limit${limit}; its contents were not used as license evidence.`
     ]
   };
 }

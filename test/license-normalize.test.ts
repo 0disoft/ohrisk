@@ -1305,6 +1305,29 @@ describe("normalizeLicenseEvidence", () => {
     expect(normalized.signals).not.toContain("commercial-restriction");
   });
 
+  test("does not treat JSDoc's explicit commercial and non-commercial permission as a ban", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "jsdoc@4.0.5",
+      packageJsonLicense: "Apache-2.0",
+      files: [
+        {
+          path: "LICENSE.md",
+          kind: "license",
+          text: [
+            "JSDoc is free software, licensed under the Apache License, Version 2.0.",
+            "Commercial and non-commercial use are permitted in compliance with the License.",
+            "Several bundled third-party packages are distributed under the MIT License."
+          ].join("\n")
+        }
+      ],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized.signals).not.toContain("commercial-restriction");
+    expect(normalized.expression).toBe("Apache-2.0");
+  });
+
   test("does not apply NLTK documentation and corpus restrictions to the Apache-licensed package code", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "nltk@3.9.4",

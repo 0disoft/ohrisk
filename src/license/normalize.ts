@@ -360,6 +360,10 @@ const COMMERCIAL_USE_DENIAL_PATTERNS = [
   /\bcannot be used for commercial purposes\b/i
 ];
 
+const COMMERCIAL_USE_PERMISSION_PATTERNS = [
+  /\bcommercial\s+(?:and|or)\s+non-?commercial\s+use\s+(?:is|are)\s+permitted\b/i
+];
+
 const PACKAGE_RESTRICTION_SCOPE_PATTERN =
   /\b(?:software|source\s+code|codebase|package|library|program|application|module|toolkit)\b/i;
 const DOCUMENTATION_RESTRICTION_SCOPE_PATTERN =
@@ -368,8 +372,12 @@ const DATA_RESTRICTION_SCOPE_PATTERN =
   /\b(?:corpora?|corpus|datasets?|data[ -]?sets?|training\s+data|test\s+data|model\s+weights?)\b/i;
 
 function hasCommercialRestrictionText(text: string): boolean {
+  if (COMMERCIAL_USE_DENIAL_PATTERNS.some((pattern) => pattern.test(text))) {
+    return true;
+  }
+
   return COMMERCIAL_RESTRICTION_LICENSE_NAME_PATTERNS.some((pattern) => pattern.test(text))
-    || COMMERCIAL_USE_DENIAL_PATTERNS.some((pattern) => pattern.test(text));
+    && !COMMERCIAL_USE_PERMISSION_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 function commercialRestrictionStatements(text: string): string[] {
