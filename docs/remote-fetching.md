@@ -280,7 +280,10 @@ tokens, preventing request-specific state from crossing host boundaries.
 Checksum-identified Go module ZIPs and `.mod` responses use the same content-addressed cache,
 conditional revalidation, offline stale-entry behavior, size ceiling, and LRU
 control as other remote artifacts. Offline cache misses remain unavailable and
-never trigger DNS or HTTP work.
+never trigger DNS or HTTP work. A module ZIP that exceeds the response ceiling
+becomes unavailable evidence for that package instead of aborting the graph;
+Ohrisk may still use separately checksummed `.mod` bytes for bounded dependency
+scope propagation.
 
 Checksum-identified pub.dev archives use the same content-addressed cache,
 conditional revalidation, offline stale-entry behavior, size ceiling, and LRU

@@ -1360,21 +1360,27 @@ async function collectRemoteGoModuleEvidence(input: {
       transientRetryDelayMs: GO_MODULE_TRANSIENT_RETRY_DELAY_MS
     });
     if (!zip.ok) {
-      return zip;
+      if (!isGoModuleZipSizeLimitError(zip.error)) {
+        return zip;
+      }
+      evidence = unavailableRemoteEvidence({
+        packageId: input.node.id,
+        error: zip.error
+      });
+    } else {
+      const collected = collectGoModuleZipEvidence({
+        packageId: input.node.id,
+        modulePath: coordinates.modulePath,
+        version: coordinates.version,
+        checksum: zipChecksum,
+        zip: zip.value,
+        artifactMaxBytes: input.artifactMaxBytes
+      });
+      if (!collected.ok) {
+        return collected;
+      }
+      evidence = collected.value;
     }
-
-    const collected = collectGoModuleZipEvidence({
-      packageId: input.node.id,
-      modulePath: coordinates.modulePath,
-      version: coordinates.version,
-      checksum: zipChecksum,
-      zip: zip.value,
-      artifactMaxBytes: input.artifactMaxBytes
-    });
-    if (!collected.ok) {
-      return collected;
-    }
-    evidence = collected.value;
   }
 
   return collectVerifiedRemoteGoModuleRequirements({
@@ -1388,6 +1394,13 @@ async function collectRemoteGoModuleEvidence(input: {
     signal: input.signal,
     allowedHosts: input.allowedHosts
   });
+}
+
+function isGoModuleZipSizeLimitError(error: OhriskError): boolean {
+  return error.code === "TARBALL_FETCH_FAILED"
+    && error.message === "Go module zip response exceeded the maximum supported size."
+    && typeof error.details?.maxBytes === "number"
+    && typeof error.details?.observedBytes === "number";
 }
 
 async function collectVerifiedRemoteGoModuleRequirements(input: {

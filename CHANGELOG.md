@@ -2,6 +2,9 @@
 
 ## 1.15.1 - Unreleased
 
+- Oversized checksum-identified Go module ZIPs now produce unavailable package
+  evidence while preserving any separately verified `.mod` dependency edges,
+  instead of aborting the entire repository scan.
 - HTML reports now default to a supported operating-system language when
   `--language` is omitted, with English as the fallback. Explicit language
   selection, including `--language en`, always overrides the OS locale.

@@ -392,6 +392,34 @@ describe("remote Go module evidence", () => {
     expect(evidence.value[0]).toMatchObject({ source: "unavailable" });
   });
 
+  test("degrades an oversized Go module zip without aborting the graph", async () => {
+    const modulePath = "example.com/oversized";
+    const version = "v1.0.0";
+    const files = goModuleFiles(modulePath, version, { LICENSE: "MIT License\n" });
+    const zip = createZip(files);
+    const evidence = await collectGraphEvidence({
+      graph: goModuleGraph(modulePath, version, goH1(files)),
+      projectRoot: ".",
+      allowLocalProjectEvidence: false,
+      tarballMaxBytes: 8,
+      resolveArtifactHost: async () => [{ address: "1.1.1.1", family: 4 }],
+      fetchArtifact: async (url) => artifactResponse(zip, url)
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+    expect(evidence.value[0]).toMatchObject({
+      packageId: `${modulePath}@${version}`,
+      source: "unavailable",
+      files: []
+    });
+    expect(evidence.value[0]?.warnings).toEqual([
+      "Package evidence could not be fetched (TARBALL_FETCH_FAILED): Go module zip response exceeded the maximum supported size."
+    ]);
+  });
+
   test("does not fetch Go modules without zip checksums or with local replacements", async () => {
     let fetchCount = 0;
     const evidence = await collectGraphEvidence({
