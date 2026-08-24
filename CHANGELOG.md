@@ -6,6 +6,9 @@
   component licenses when a primary `LICENSE` exists beside them. Their
   obligations are combined with SPDX `AND` instead of producing a false
   package-license conflict.
+- `THIRD_PARTY_LICENSES*` inventories beside a primary license are likewise
+  treated as cumulative bundled-component evidence, preventing their contents
+  from creating false package-license conflicts.
 - Cargo root path dependencies contained by the workspace are now treated as
   implicit workspace members even when omitted from the explicit `members`
   list, while `exclude` entries remain authoritative. This restores license

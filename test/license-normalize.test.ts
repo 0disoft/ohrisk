@@ -965,6 +965,51 @@ describe("normalizeLicenseEvidence", () => {
     );
   });
 
+  test("treats third-party license inventories as bundled component evidence", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "github.com/oracle/oci-go-sdk/v65@v65.121.1",
+      files: [
+        {
+          path: "LICENSE.txt",
+          kind: "license",
+          text: "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION"
+        },
+        {
+          path: "THIRD_PARTY_LICENSES.txt",
+          kind: "license",
+          text: "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION"
+        },
+        {
+          path: "THIRD_PARTY_LICENSES_DEV.txt",
+          kind: "license",
+          text: [
+            "Permission is hereby granted, free of charge, to any person obtaining a copy",
+            "THE SOFTWARE IS PROVIDED \"AS IS\""
+          ].join("\n")
+        },
+        {
+          path: "NOTICE.txt",
+          kind: "notice",
+          text: "Copyright notices"
+        }
+      ],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      expression: "Apache-2.0 AND MIT",
+      choices: ["Apache-2.0", "MIT"],
+      joiner: "and",
+      signals: ["notice-required"],
+      confidence: "medium"
+    });
+    expect(normalized.signals).not.toContain("conflicting-evidence");
+    expect(normalized.evidenceSources).toContain(
+      "bundled component license match: MIT from THIRD_PARTY_LICENSES_DEV.txt"
+    );
+  });
+
   test("keeps restrictive bundled component licenses in the combined expression", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "bundled-copyleft@1.0.0",

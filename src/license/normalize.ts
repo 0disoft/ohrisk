@@ -554,7 +554,7 @@ function readLicenseFileExpressions(evidence: LicenseEvidence): LicenseExpressio
         expression,
         source: "license-file",
         filePath: file.path,
-        ...(file.scope === "component" || isQualifiedComponentLicenseFile(evidence, file.path)
+        ...(file.scope === "component" || isInferredComponentLicenseFile(evidence, file.path)
           ? { fileScope: "component" }
           : {})
       });
@@ -564,20 +564,26 @@ function readLicenseFileExpressions(evidence: LicenseEvidence): LicenseExpressio
   return matches;
 }
 
-function isQualifiedComponentLicenseFile(evidence: LicenseEvidence, filePath: string): boolean {
+function isInferredComponentLicenseFile(evidence: LicenseEvidence, filePath: string): boolean {
   const normalizedPath = filePath.replaceAll("\\", "/");
   const slashIndex = normalizedPath.lastIndexOf("/");
   const directory = slashIndex >= 0 ? normalizedPath.slice(0, slashIndex + 1) : "";
   const fileName = normalizedPath.slice(slashIndex + 1);
-  const match = fileName.match(/^licen[cs]e\.([^.]+)$/i);
-  if (!match?.[1] || !/^(?:lib|third[-_]?party|vendor|component)/i.test(match[1])) {
+  const qualifiedLicense = fileName.match(/^licen[cs]e\.([^.]+)$/i);
+  const isQualifiedComponent = qualifiedLicense?.[1] !== undefined
+    && /^(?:lib|third[-_]?party|vendor|component)/i.test(qualifiedLicense[1]);
+  const isThirdPartyInventory = /^third[-_. ]party[-_. ]licenses?(?:[-_. ].*)?$/i.test(fileName);
+  if (!isQualifiedComponent && !isThirdPartyInventory) {
     return false;
   }
 
   return evidence.files.some((candidate) => {
-    const candidatePath = candidate.path.replaceAll("\\", "/").toLowerCase();
-    return candidatePath === `${directory}license`.toLowerCase()
-      || candidatePath === `${directory}licence`.toLowerCase();
+    const candidatePath = candidate.path.replaceAll("\\", "/");
+    const candidateSlashIndex = candidatePath.lastIndexOf("/");
+    const candidateDirectory = candidateSlashIndex >= 0 ? candidatePath.slice(0, candidateSlashIndex + 1) : "";
+    const candidateName = candidatePath.slice(candidateSlashIndex + 1);
+    return candidateDirectory.toLowerCase() === directory.toLowerCase()
+      && /^licen[cs]e(?:\.(?:md|markdown|txt|text|rst|html?))?$/i.test(candidateName);
   });
 }
 

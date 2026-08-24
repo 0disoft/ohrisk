@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 3f3cbf159d845af22334c282ce0093e13249732be266343f1ab894d08e099efc
+// ohrisk-action-source-sha256: f26607e9e2fdcd6a763081a11cab603d1be0fe5c8ae2e9a1aaccbd735da20dd1
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -54772,24 +54772,29 @@ function readLicenseFileExpressions(evidence) {
         expression,
         source: "license-file",
         filePath: file.path,
-        ...file.scope === "component" || isQualifiedComponentLicenseFile(evidence, file.path) ? { fileScope: "component" } : {}
+        ...file.scope === "component" || isInferredComponentLicenseFile(evidence, file.path) ? { fileScope: "component" } : {}
       });
     }
   }
   return matches;
 }
-function isQualifiedComponentLicenseFile(evidence, filePath) {
+function isInferredComponentLicenseFile(evidence, filePath) {
   const normalizedPath = filePath.replaceAll("\\", "/");
   const slashIndex = normalizedPath.lastIndexOf("/");
   const directory = slashIndex >= 0 ? normalizedPath.slice(0, slashIndex + 1) : "";
   const fileName = normalizedPath.slice(slashIndex + 1);
-  const match = fileName.match(/^licen[cs]e\.([^.]+)$/i);
-  if (!match?.[1] || !/^(?:lib|third[-_]?party|vendor|component)/i.test(match[1])) {
+  const qualifiedLicense = fileName.match(/^licen[cs]e\.([^.]+)$/i);
+  const isQualifiedComponent = qualifiedLicense?.[1] !== undefined && /^(?:lib|third[-_]?party|vendor|component)/i.test(qualifiedLicense[1]);
+  const isThirdPartyInventory = /^third[-_. ]party[-_. ]licenses?(?:[-_. ].*)?$/i.test(fileName);
+  if (!isQualifiedComponent && !isThirdPartyInventory) {
     return false;
   }
   return evidence.files.some((candidate) => {
-    const candidatePath = candidate.path.replaceAll("\\", "/").toLowerCase();
-    return candidatePath === `${directory}license`.toLowerCase() || candidatePath === `${directory}licence`.toLowerCase();
+    const candidatePath = candidate.path.replaceAll("\\", "/");
+    const candidateSlashIndex = candidatePath.lastIndexOf("/");
+    const candidateDirectory = candidateSlashIndex >= 0 ? candidatePath.slice(0, candidateSlashIndex + 1) : "";
+    const candidateName = candidatePath.slice(candidateSlashIndex + 1);
+    return candidateDirectory.toLowerCase() === directory.toLowerCase() && /^licen[cs]e(?:\.(?:md|markdown|txt|text|rst|html?))?$/i.test(candidateName);
   });
 }
 function appendBundledComponentLicenses(input) {

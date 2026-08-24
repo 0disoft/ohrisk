@@ -392,8 +392,9 @@ avoiding a false metadata conflict between the package and its bundled parts.
 The same cumulative treatment applies when a verified package archive contains
 a primary `LICENSE` or `LICENCE` file beside a qualified component file such as
 `LICENSE.libyaml`, `LICENSE.thirdparty`, `LICENSE.vendor`, or
-`LICENSE.component`. Ordinary document extensions and explicit license variants
-remain package-level evidence and continue to fail closed when they conflict.
+`LICENSE.component`, as well as a sibling `THIRD_PARTY_LICENSES*` inventory.
+Ordinary document extensions and explicit license variants remain package-level
+evidence and continue to fail closed when they conflict.
 
 Maven POM evidence and dependency-model POMs are requested by exact-version path
 and bounded to 2 MiB per POM and eight inherited parent/BOM levels. Model
