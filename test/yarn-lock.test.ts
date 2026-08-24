@@ -96,6 +96,43 @@ describe("parseYarnLockfile", () => {
       });
   });
 
+  test("bounds dependency path fan-out and reports truncation", () => {
+    const parentCount = 65;
+    const dependencies = Object.fromEntries(
+      Array.from({ length: parentCount }, (_value, index) => [`parent-${index}`, "1.0.0"])
+    );
+    const lockfileText = [
+      ...Array.from({ length: parentCount }, (_value, index) => [
+        `parent-${index}@1.0.0:`,
+        '  version "1.0.0"',
+        "  dependencies:",
+        '    shared "1.0.0"',
+        ""
+      ]).flat(),
+      "shared@1.0.0:",
+      '  version "1.0.0"'
+    ].join("\n");
+
+    const result = parseYarnLockText({
+      packageJsonText: JSON.stringify({ name: "wide-yarn", dependencies }),
+      lockfileText,
+      lockfilePath: "wide-yarn.lock"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    expect(result.value.nodes.find((node) => node.id === "shared@1.0.0")?.paths)
+      .toHaveLength(64);
+    expect(result.value.diagnostics).toContainEqual({
+      code: "dependency_paths_truncated",
+      affectedNodeCount: 1,
+      limit: 64,
+      message: "Yarn dependency paths were limited to 64 paths per package."
+    });
+  });
+
   test("reports malformed yarn lockfiles as typed errors", () => {
     const result = parseYarnLockText({
       lockfileText: "<<<<<<< HEAD\nleft-pad@^1.0.0:\n=======\nright-pad@^1.0.0:\n>>>>>>> branch\n",

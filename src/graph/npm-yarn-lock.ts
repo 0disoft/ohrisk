@@ -87,6 +87,8 @@ type YarnDependencyEdge = {
   type: DependencyType;
 };
 
+export const YARN_MAX_PATHS_PER_PACKAGE = 64;
+
 export function parseYarnLockfile(
   lockfilePath: string,
   packageJsonPath = path.join(path.dirname(lockfilePath), "package.json"),
@@ -200,6 +202,7 @@ export function parseYarnLockText(input: {
     ...parsedWorkspacePackageJsons.value
   ];
   const nodeMap = new Map<string, DependencyNode>();
+  const truncatedNodeIds = new Set<string>();
 
   for (const rootEntry of rootEntries) {
     for (const rootDependency of collectRootDependencies(rootEntry.packageJson)) {
@@ -222,6 +225,7 @@ export function parseYarnLockText(input: {
         descriptorIndex,
         nameIndex,
         nodeMap,
+        truncatedNodeIds,
         seen: new Set(),
         requestedName: rootDependency.name
       });
@@ -231,7 +235,17 @@ export function parseYarnLockText(input: {
   return ok({
     ...(rootName !== undefined ? { rootName } : {}),
     lockfilePath,
-    nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id))
+    nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    ...(truncatedNodeIds.size > 0
+      ? {
+          diagnostics: [{
+            code: "dependency_paths_truncated" as const,
+            affectedNodeCount: truncatedNodeIds.size,
+            limit: YARN_MAX_PATHS_PER_PACKAGE,
+            message: `Yarn dependency paths were limited to ${YARN_MAX_PATHS_PER_PACKAGE} paths per package.`
+          }]
+        }
+      : {})
   });
 }
 
@@ -991,6 +1005,7 @@ function walkDependency(input: {
   descriptorIndex: Map<string, YarnPackageRecord>;
   nameIndex: Map<string, YarnPackageRecord[]>;
   nodeMap: Map<string, DependencyNode>;
+  truncatedNodeIds: Set<string>;
   seen: Set<string>;
   requestedName?: string;
 }): void {
@@ -1026,7 +1041,13 @@ function walkDependency(input: {
     if (installNames !== undefined) {
       existing.installNames = installNames;
     }
-    existing.paths.push(nextPath);
+    if (!existing.paths.some((dependencyPath) => sameDependencyPath(dependencyPath, nextPath))) {
+      if (existing.paths.length < YARN_MAX_PATHS_PER_PACKAGE) {
+        existing.paths.push(nextPath);
+      } else {
+        input.truncatedNodeIds.add(input.record.id);
+      }
+    }
   } else {
     input.nodeMap.set(input.record.id, {
       id: input.record.id,
@@ -1062,10 +1083,16 @@ function walkDependency(input: {
       descriptorIndex: input.descriptorIndex,
       nameIndex: input.nameIndex,
       nodeMap: input.nodeMap,
+      truncatedNodeIds: input.truncatedNodeIds,
       seen: nextSeen,
       requestedName: child.name
     });
   }
+}
+
+function sameDependencyPath(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length
+    && left.every((segment, index) => segment === right[index]);
 }
 
 function mergeDependencyType(left: DependencyType, right: DependencyType): DependencyType {

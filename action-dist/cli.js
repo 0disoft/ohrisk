@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 63b981e4407dc79893147072f1dfdade71fe6630ffb3af56e2bc622f25fc9ad2
+// ohrisk-action-source-sha256: 7f1a77f3c6d18284039791fcf2846e270be290ffab57c6d22862db5e97720d4d
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -28164,6 +28164,7 @@ var yarnLockfileModule = __toESM(require_lockfile(), 1);
 import { existsSync as existsSync8, readdirSync as readdirSync5, statSync as statSync3 } from "node:fs";
 import path28 from "node:path";
 var yarnLockfile = yarnLockfileModule;
+var YARN_MAX_PATHS_PER_PACKAGE = 64;
 function parseYarnLockfile(lockfilePath, packageJsonPath = path28.join(path28.dirname(lockfilePath), "package.json"), options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -28244,6 +28245,7 @@ function parseYarnLockText(input) {
     ...parsedWorkspacePackageJsons.value
   ];
   const nodeMap = new Map;
+  const truncatedNodeIds = new Set;
   for (const rootEntry of rootEntries) {
     for (const rootDependency of collectRootDependencies5(rootEntry.packageJson)) {
       const record = resolvePackageRecord4({
@@ -28263,6 +28265,7 @@ function parseYarnLockText(input) {
         descriptorIndex,
         nameIndex,
         nodeMap,
+        truncatedNodeIds,
         seen: new Set,
         requestedName: rootDependency.name
       });
@@ -28271,7 +28274,15 @@ function parseYarnLockText(input) {
   return ok({
     ...rootName !== undefined ? { rootName } : {},
     lockfilePath,
-    nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id))
+    nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    ...truncatedNodeIds.size > 0 ? {
+      diagnostics: [{
+        code: "dependency_paths_truncated",
+        affectedNodeCount: truncatedNodeIds.size,
+        limit: YARN_MAX_PATHS_PER_PACKAGE,
+        message: `Yarn dependency paths were limited to ${YARN_MAX_PATHS_PER_PACKAGE} paths per package.`
+      }]
+    } : {}
   });
 }
 function parsePackageJson(input, packageJsonPath) {
@@ -28816,7 +28827,13 @@ function walkDependency4(input) {
     if (installNames !== undefined) {
       existing.installNames = installNames;
     }
-    existing.paths.push(nextPath);
+    if (!existing.paths.some((dependencyPath) => sameDependencyPath(dependencyPath, nextPath))) {
+      if (existing.paths.length < YARN_MAX_PATHS_PER_PACKAGE) {
+        existing.paths.push(nextPath);
+      } else {
+        input.truncatedNodeIds.add(input.record.id);
+      }
+    }
   } else {
     input.nodeMap.set(input.record.id, {
       id: input.record.id,
@@ -28849,10 +28866,14 @@ function walkDependency4(input) {
       descriptorIndex: input.descriptorIndex,
       nameIndex: input.nameIndex,
       nodeMap: input.nodeMap,
+      truncatedNodeIds: input.truncatedNodeIds,
       seen: nextSeen,
       requestedName: child.name
     });
   }
+}
+function sameDependencyPath(left, right) {
+  return left.length === right.length && left.every((segment, index) => segment === right[index]);
 }
 function mergeDependencyType15(left, right) {
   return dependencyTypeRank14(left) >= dependencyTypeRank14(right) ? left : right;
@@ -59840,8 +59861,6 @@ function buildHtmlDeferredFingerprintData(findings) {
   const indexes = new Set;
   const strings = [];
   const stringIndexes = new Map;
-  const paths = [];
-  const pathIndexes = new Map;
   const records = [];
   const addString = (value) => {
     const existing = stringIndexes.get(value);
@@ -59853,22 +59872,41 @@ function buildHtmlDeferredFingerprintData(findings) {
     stringIndexes.set(value, index);
     return index;
   };
-  const addPath = (segments) => {
-    let parent = -1;
-    for (const segment of segments) {
-      const segmentIndex = addString(segment);
-      const key = `${parent}:${segmentIndex}`;
-      const existing = pathIndexes.get(key);
-      if (existing !== undefined) {
-        parent = existing;
+  const addPaths = (dependencyPaths) => {
+    let previous = [];
+    return dependencyPaths.map((segments) => {
+      let shared = 0;
+      while (shared < previous.length && shared < segments.length && previous[shared] === segments[shared]) {
+        shared += 1;
+      }
+      previous = segments;
+      return [shared, ...segments.slice(shared).map(addString)];
+    });
+  };
+  const addCanonicalIdentityPaths = (id) => {
+    const encodedPaths = [];
+    const identitySeparator = id.lastIndexOf("::");
+    let segmentStart = identitySeparator < 0 ? 0 : identitySeparator + 2;
+    let segments = [];
+    let previous = [];
+    for (let index = segmentStart;index <= id.length; index += 1) {
+      const character = id[index];
+      if (character !== ">" && character !== "|" && index !== id.length) {
         continue;
       }
-      const pathIndex = paths.length;
-      paths.push([parent, segmentIndex]);
-      pathIndexes.set(key, pathIndex);
-      parent = pathIndex;
+      segments.push(decodeFindingComponent(id.slice(segmentStart, index)));
+      segmentStart = index + 1;
+      if (character === "|" || index === id.length) {
+        let shared = 0;
+        while (shared < previous.length && shared < segments.length && previous[shared] === segments[shared]) {
+          shared += 1;
+        }
+        encodedPaths.push([shared, ...segments.slice(shared).map(addString)]);
+        previous = segments;
+        segments = [];
+      }
     }
-    return parent;
+    return encodedPaths;
   };
   for (const [index, finding] of findings.entries()) {
     if (finding.fingerprint.length < HTML_DEFERRED_FINGERPRINT_MIN_CHARS) {
@@ -59876,30 +59914,16 @@ function buildHtmlDeferredFingerprintData(findings) {
       continue;
     }
     indexes.add(index);
-    const canonicalId = buildFindingId({
-      packageId: finding.packageId,
-      dependencyType: finding.dependencyType,
-      dependencyScope: finding.dependencyScope,
-      paths: finding.paths
-    });
-    const legacyId = buildLegacyFindingId({
-      packageId: finding.packageId,
-      dependencyType: finding.dependencyType,
-      dependencyScope: finding.dependencyScope,
-      paths: finding.paths
-    });
+    const canonicalId = finding.id;
     const canonicalPrefix = `${canonicalId}::`;
-    const legacyPrefix = `${legacyId}::`;
-    const structuredIdentity = finding.fingerprint.startsWith(canonicalPrefix) ? {
-      id: canonicalId,
-      paths: canonicalHtmlFingerprintPaths(finding.paths)
-    } : finding.fingerprint.startsWith(legacyPrefix) ? { id: legacyId, paths: finding.paths } : undefined;
+    const canonicalIdentity = finding.fingerprint.startsWith(canonicalPrefix);
+    const structuredIdentity = canonicalIdentity ? { id: canonicalId, encodedPaths: addCanonicalIdentityPaths(canonicalId) } : legacyHtmlFingerprintIdentity(finding);
     if (structuredIdentity) {
       records.push([
         addString(finding.packageId),
         finding.dependencyType,
         finding.dependencyScope,
-        structuredIdentity.paths.map(addPath),
+        "encodedPaths" in structuredIdentity ? structuredIdentity.encodedPaths : addPaths(structuredIdentity.paths),
         addString(finding.fingerprint.slice(structuredIdentity.id.length + 2))
       ]);
       continue;
@@ -59915,7 +59939,7 @@ function buildHtmlDeferredFingerprintData(findings) {
       addString(finding.packageId),
       finding.dependencyType,
       finding.dependencyScope,
-      finding.paths.map(addPath),
+      addCanonicalIdentityPaths(canonicalId),
       finding.severity,
       finding.recommendation,
       addString(finding.reason),
@@ -59924,19 +59948,20 @@ function buildHtmlDeferredFingerprintData(findings) {
   }
   return {
     indexes,
-    payload: indexes.size === 0 ? undefined : { v: 1, s: strings, p: paths, f: records }
+    payload: indexes.size === 0 ? undefined : { v: 2, s: strings, f: records }
   };
 }
-function canonicalHtmlFingerprintPaths(paths) {
-  const byKey = new Map;
-  for (const dependencyPath of paths) {
-    byKey.set(JSON.stringify(dependencyPath), dependencyPath);
-  }
-  return [...byKey.values()].sort((left, right) => {
-    const leftKey = left.join("\x00");
-    const rightKey = right.join("\x00");
-    return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+function legacyHtmlFingerprintIdentity(finding) {
+  const legacyId = buildLegacyFindingId({
+    packageId: finding.packageId,
+    dependencyType: finding.dependencyType,
+    dependencyScope: finding.dependencyScope,
+    paths: finding.paths
   });
+  return finding.fingerprint.startsWith(`${legacyId}::`) ? { id: legacyId, paths: finding.paths } : undefined;
+}
+function decodeFindingComponent(value) {
+  return value.replace(/%7C/gu, "|").replace(/%3E/gu, ">").replace(/%3A/gu, ":").replace(/%25/gu, "%");
 }
 function renderHtmlDeferredFingerprintData(payload) {
   if (!payload) {
@@ -59985,50 +60010,37 @@ function renderHtmlFilterScript(text) {
     "  const empty = document.querySelector('[data-finding-filter-empty]');",
     "  const searchTexts = new Map(cards.map((card) => [card, (card.textContent || '').replace(/\\s+/g, ' ').toLowerCase()]));",
     "  const fingerprintData = document.querySelector('#ohrisk-fingerprint-data');",
-    "  let fingerprintPayload = { s: [], p: [], f: [] };",
+    "  let fingerprintPayload = { s: [], f: [] };",
     "  if (fingerprintData) {",
     "    try {",
     "      const parsed = JSON.parse(fingerprintData.textContent || '[]');",
-    "      if (parsed && parsed.v === 1 && Array.isArray(parsed.s) && Array.isArray(parsed.p) && Array.isArray(parsed.f)) {",
+    "      if (parsed && parsed.v === 2 && Array.isArray(parsed.s) && Array.isArray(parsed.f)) {",
     "        fingerprintPayload = parsed;",
     "      }",
     "    } catch {",
-    "      fingerprintPayload = { s: [], p: [], f: [] };",
+    "      fingerprintPayload = { s: [], f: [] };",
     "    }",
     "  }",
-    "  const decodedPaths = new Map();",
-    "  const decodePath = (pathIndex) => {",
-    "    if (decodedPaths.has(pathIndex)) {",
-    "      return decodedPaths.get(pathIndex);",
-    "    }",
-    "    const segments = [];",
-    "    let current = pathIndex;",
-    "    while (Number.isInteger(current) && current >= 0) {",
-    "      const node = fingerprintPayload.p[current];",
-    "      if (!Array.isArray(node) || node.length !== 2) {",
-    "        return null;",
+    "  const decodePaths = (encodedPaths) => {",
+    "    if (!Array.isArray(encodedPaths)) return null;",
+    "    const paths = [];",
+    "    let previous = [];",
+    "    for (const encodedPath of encodedPaths) {",
+    "      if (!Array.isArray(encodedPath) || encodedPath.length === 0) return null;",
+    "      const shared = encodedPath[0];",
+    "      if (!Number.isInteger(shared) || shared < 0 || shared > previous.length) return null;",
+    "      const path = previous.slice(0, shared);",
+    "      for (const stringIndex of encodedPath.slice(1)) {",
+    "        const segment = fingerprintPayload.s[stringIndex];",
+    "        if (typeof segment !== 'string') return null;",
+    "        path.push(segment);",
     "      }",
-    "      const segment = fingerprintPayload.s[node[1]];",
-    "      if (typeof segment !== 'string') {",
-    "        return null;",
-    "      }",
-    "      segments.push(segment);",
-    "      current = node[0];",
+    "      paths.push(path);",
+    "      previous = path;",
     "    }",
-    "    segments.reverse();",
-    "    decodedPaths.set(pathIndex, segments);",
-    "    return segments;",
+    "    return paths;",
     "  };",
     "  const encodeFindingComponent = (value) => String(value).replace(/%/g, '%25').replace(/:/g, '%3A').replace(/>/g, '%3E').replace(/\\|/g, '%7C');",
-    "  const canonicalizePaths = (paths) => {",
-    "    const byKey = new Map();",
-    "    for (const dependencyPath of paths) byKey.set(JSON.stringify(dependencyPath), dependencyPath);",
-    "    return [...byKey.values()].sort((left, right) => {",
-    "      const leftKey = left.join('\\u0000');",
-    "      const rightKey = right.join('\\u0000');",
-    "      return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;",
-    "    });",
-    "  };",
     "  const decodeFingerprint = (fingerprintIndex) => {",
     "    const record = fingerprintPayload.f[fingerprintIndex];",
     "    if (typeof record === 'string') {",
@@ -60041,11 +60053,8 @@ function renderHtmlFilterScript(text) {
     "    if (typeof packageId !== 'string' || !Array.isArray(record[3])) {",
     "      return null;",
     "    }",
-    "    const decodedRecordPaths = record[3].map((pathIndex) => decodePath(pathIndex));",
-    "    if (decodedRecordPaths.some((path) => !Array.isArray(path))) {",
-    "      return null;",
-    "    }",
-    "    const paths = record.length === 8 ? canonicalizePaths(decodedRecordPaths) : decodedRecordPaths;",
+    "    const paths = decodePaths(record[3]);",
+    "    if (!paths) return null;",
     "    const findingId = [",
     "      encodeFindingComponent(packageId),",
     "      encodeFindingComponent(record[1]),",

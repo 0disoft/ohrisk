@@ -549,12 +549,10 @@ describe("HTML scan report", () => {
     const parsed = JSON.parse(fingerprintData ?? "{}") as {
       v: number;
       s: string[];
-      p: Array<[number, number]>;
       f: unknown[];
     };
-    expect(parsed.v).toBe(1);
+    expect(parsed.v).toBe(2);
     expect(parsed.s.length).toBeGreaterThan(0);
-    expect(parsed.p.length).toBeLessThan(longIdentityFinding.paths.flat().length);
     expect(Array.isArray(parsed.f[0])).toBe(true);
     expect((parsed.f[0] as unknown[]).length).toBe(5);
     expect(output).not.toContain("</script><script>alert(1)</script>");
@@ -562,6 +560,25 @@ describe("HTML scan report", () => {
     expect(fingerprintData?.length ?? 0).toBeLessThan(longFingerprint.length / 4);
     expect(output).toContain('data-fingerprint-index="0"');
     expect(output).toContain("deferredFingerprint.textContent = fingerprint");
+  });
+
+  test("does not rebuild an existing canonical finding identity while compacting HTML", () => {
+    const canonical = canonicalLongFinding();
+    let pathReads = 0;
+    const trackedPaths = new Proxy(canonical.paths, {
+      get(target, property, receiver) {
+        if (typeof property === "string" && /^\d+$/u.test(property)) {
+          pathReads += 1;
+        }
+        return Reflect.get(target, property, receiver);
+      }
+    });
+
+    renderScanReport(scanInput({
+      riskFindings: [{ ...canonical, paths: trackedPaths }]
+    }));
+
+    expect(pathReads).toBeLessThanOrEqual(canonical.paths.length + 2);
   });
 
   test("stores legacy raw-order fingerprint identities as trie paths plus an exact suffix", () => {

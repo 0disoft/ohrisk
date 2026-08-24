@@ -6,9 +6,14 @@
   `Cargo.toml` and `build.gradle.kts`, making the required resolved dependency
   input explicit without guessing versions from library manifests.
 - Large HTML reports now store canonical and legacy-compatible finding
-  identities as shared path tries plus exact fingerprint suffixes, avoiding
-  multi-megabyte path repetition without changing expanded fingerprints or
-  waiver compatibility.
+  identities as prefix-delta path records plus exact fingerprint suffixes,
+  avoiding global trie allocation and multi-megabyte path repetition without
+  changing expanded fingerprints or waiver compatibility.
+- Yarn classic and Berry graphs now keep at most 64 distinct dependency paths
+  per package and emit a `dependency_paths_truncated` diagnostic when the cap
+  is reached. This prevents wide workspace graphs such as Grafana from
+  exhausting the Node.js heap while preserving deterministic bounded paths;
+  waivers created from previously unbounded Yarn identities must be reviewed.
 - Automatic discovery failures now list supported root inputs that were
   excluded because they are not fully resolved, and point to `--lockfile` for
   the exact parse error instead of reporting only a generic missing-lockfile
