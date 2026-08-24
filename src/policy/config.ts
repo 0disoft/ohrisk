@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isIP } from "node:net";
 import path from "node:path";
@@ -56,6 +57,7 @@ export type ResolvedPolicyConfig = EvaluationPolicy & {
 };
 
 export type PolicyConfigSummary = {
+  digest: string;
   enabled: boolean;
   sourceFiles: string[];
   allowLicenseCount: number;
@@ -84,6 +86,7 @@ export function emptyPolicyConfig(): ResolvedPolicyConfig {
 
 export function summarizePolicyConfig(config: ResolvedPolicyConfig): PolicyConfigSummary {
   return {
+    digest: policyConfigDigest(config),
     enabled: config.sourceFiles.length > 0,
     sourceFiles: [...config.sourceFiles],
     allowLicenseCount: config.allowLicenses.size,
@@ -99,6 +102,48 @@ export function summarizePolicyConfig(config: ResolvedPolicyConfig): PolicyConfi
     registryAuthHostCount: config.registryAuth.size,
     ...(config.npmRegistryUrl ? { npmRegistryUrl: redactRegistryUrl(config.npmRegistryUrl) } : {})
   };
+}
+
+function policyConfigDigest(config: ResolvedPolicyConfig): string {
+  const value = JSON.stringify({
+    policy: normalizedEvaluationPolicy(config),
+    profiles: [...config.profileOverrides.entries()]
+      .sort(([left], [right]) => compareStrings(left, right))
+      .map(([profile, policy]) => [profile, normalizedEvaluationPolicy(policy)]),
+    allowedRegistryHosts: sortedStrings(config.allowedRegistryHosts),
+    registryAuth: [...config.registryAuth.entries()]
+      .sort(([left], [right]) => compareStrings(left, right))
+      .map(([host, auth]) => [host, auth.tokenEnv]),
+    npmRegistryUrl: config.npmRegistryUrl ?? null
+  });
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function normalizedEvaluationPolicy(policy: EvaluationPolicy): Record<string, unknown> {
+  return {
+    allowLicenses: sortedStrings(policy.allowLicenses),
+    denyLicenses: sortedStrings(policy.denyLicenses),
+    severityOverrides: [...policy.severityOverrides.entries()]
+      .sort(([left], [right]) => compareStrings(left, right)),
+    packageRules: [...policy.packageRules.entries()]
+      .sort(([left], [right]) => compareStrings(left, right))
+      .map(([pattern, rule]) => [pattern, {
+        severity: rule.severity ?? null,
+        reason: rule.reason ?? null,
+        action: rule.action ?? null,
+        recommendation: rule.recommendation ?? null
+      }])
+  };
+}
+
+function sortedStrings(values: Iterable<string>): string[] {
+  return [...values].sort(compareStrings);
+}
+
+function compareStrings(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
 }
 
 export function evaluationPolicyForProfile(

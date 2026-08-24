@@ -17,7 +17,7 @@ ohrisk-baseline create \
 
 Review and commit `.ohrisk-baseline.json`. The file is deterministic and omits timestamps, so repeating the command with an unchanged report does not create churn.
 
-The baseline records the scan-report schema, profile, production scope, policy summary digest, and each finding's semantic fingerprint and severity. It does not copy explanatory prose, evidence paths, or absolute local paths.
+The baseline records the scan-report schema, profile, production scope, effective policy-content digest, and each finding's stable identity, semantic fingerprint, and severity. It does not copy explanatory prose, evidence paths, policy contents, or absolute local paths.
 
 ## Gate a build without Git history
 
@@ -29,7 +29,7 @@ ohrisk-baseline check \
   --fail-on high
 ```
 
-The check exits with status `1` when a new finding or severity escalation meets the selected threshold. It exits with status `2` for malformed input or configuration drift. Configuration drift is rejected because comparing findings created under different profiles, production scopes, report schemas, or policy summaries would hide a change in the decision boundary.
+The check exits with status `1` when a new finding, changed semantic fingerprint, or severity escalation meets the selected threshold. Findings are correlated by stable finding ID, so an escalation remains detectable even though severity is part of the semantic fingerprint. It exits with status `2` for malformed input or configuration drift. Configuration drift is rejected because comparing findings created under different profiles, production scopes, report schemas, or effective policy contents would hide a change in the decision boundary.
 
 Use `--json` to obtain a machine-readable result containing counts plus the introduced and failing findings:
 

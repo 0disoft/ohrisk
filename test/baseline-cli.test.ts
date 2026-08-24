@@ -122,7 +122,7 @@ describe("ohrisk-baseline", () => {
   test("treats a severity increase as introduced risk", () => {
     const workspace = temporaryDirectory();
     writeReport(workspace, "baseline-report.json", [
-      finding("fingerprint-a", "A", "pkg:npm/a@1.0.0", "review")
+      finding("fingerprint-review", "A", "pkg:npm/a@1.0.0", "review")
     ]);
     expect(run(workspace, [
       "create",
@@ -133,7 +133,7 @@ describe("ohrisk-baseline", () => {
     ]).status).toBe(0);
 
     writeReport(workspace, "current-report.json", [
-      finding("fingerprint-a", "A", "pkg:npm/a@1.0.0", "high")
+      finding("fingerprint-high", "A", "pkg:npm/a@1.0.0", "high")
     ]);
     const checked = run(workspace, [
       "check",
@@ -141,6 +141,8 @@ describe("ohrisk-baseline", () => {
       "current-report.json",
       "--baseline",
       "baseline.json",
+      "--fail-on",
+      "review",
       "--json"
     ]);
 
@@ -150,12 +152,81 @@ describe("ohrisk-baseline", () => {
       escalatedFindingCount: 1,
       failingFindings: [
         {
-          fingerprint: "fingerprint-a",
+          fingerprint: "fingerprint-high",
           severity: "high",
           previousSeverity: "review"
         }
       ]
     });
+  });
+
+  test("treats changed semantics for the same finding id as introduced risk", () => {
+    const workspace = temporaryDirectory();
+    writeReport(workspace, "baseline-report.json", [
+      finding("fingerprint-before", "A", "pkg:npm/a@1.0.0", "review")
+    ]);
+    expect(run(workspace, [
+      "create",
+      "--report",
+      "baseline-report.json",
+      "--output",
+      "baseline.json"
+    ]).status).toBe(0);
+
+    writeReport(workspace, "current-report.json", [
+      finding("fingerprint-after", "A", "pkg:npm/a@1.0.0", "review")
+    ]);
+    const checked = run(workspace, [
+      "check",
+      "--report",
+      "current-report.json",
+      "--baseline",
+      "baseline.json",
+      "--fail-on",
+      "review",
+      "--json"
+    ]);
+
+    expect(checked.status).toBe(1);
+    expect(JSON.parse(checked.stdout)).toMatchObject({
+      newFindingCount: 0,
+      changedFindingCount: 1,
+      escalatedFindingCount: 0,
+      failingFindings: [
+        {
+          id: "A",
+          fingerprint: "fingerprint-after",
+          previousFingerprint: "fingerprint-before",
+          previousSeverity: "review"
+        }
+      ]
+    });
+  });
+
+  test("uses stable code-unit ordering for baseline findings", () => {
+    const workspace = temporaryDirectory();
+    writeReport(workspace, "report.json", [
+      finding("ä", "id-umlaut", "pkg:npm/umlaut@1.0.0", "low"),
+      finding("a", "id-lower", "pkg:npm/lower@1.0.0", "low"),
+      finding("Z", "id-upper", "pkg:npm/upper@1.0.0", "low")
+    ]);
+
+    expect(run(workspace, [
+      "create",
+      "--report",
+      "report.json",
+      "--output",
+      "baseline.json"
+    ]).status).toBe(0);
+
+    const baseline = JSON.parse(
+      readFileSync(path.join(workspace, "baseline.json"), "utf8")
+    ) as { findings: Array<{ fingerprint: string }> };
+    expect(baseline.findings.map((finding) => finding.fingerprint)).toEqual([
+      "Z",
+      "a",
+      "ä"
+    ]);
   });
 
   test("rejects configuration drift instead of silently accepting a new scope", () => {
@@ -181,6 +252,85 @@ describe("ohrisk-baseline", () => {
     expect(checked.status).toBe(2);
     expect(checked.stderr).toContain("baseline configuration does not match");
   });
+
+  test("rejects equal-sized policy content drift", () => {
+    const workspace = temporaryDirectory();
+    writeReport(workspace, "baseline-report.json", [], {
+      policyDigest: "a".repeat(64)
+    });
+    expect(run(workspace, [
+      "create",
+      "--report",
+      "baseline-report.json",
+      "--output",
+      "baseline.json"
+    ]).status).toBe(0);
+
+    writeReport(workspace, "current-report.json", [], {
+      policyDigest: "b".repeat(64)
+    });
+    const checked = run(workspace, [
+      "check",
+      "--report",
+      "current-report.json",
+      "--baseline",
+      "baseline.json"
+    ]);
+
+    expect(checked.status).toBe(2);
+    expect(checked.stderr).toContain("baseline configuration does not match");
+  });
+
+  test("rejects duplicate finding ids in a report", () => {
+    const workspace = temporaryDirectory();
+    writeReport(workspace, "report.json", [
+      finding("fingerprint-a", "A", "pkg:npm/a@1.0.0", "review"),
+      finding("fingerprint-b", "A", "pkg:npm/a@1.0.0", "high")
+    ]);
+
+    const created = run(workspace, [
+      "create",
+      "--report",
+      "report.json",
+      "--output",
+      "baseline.json"
+    ]);
+
+    expect(created.status).toBe(2);
+    expect(created.stderr).toContain("duplicate finding id");
+  });
+
+  test("rejects duplicate finding ids in a checked-in baseline", () => {
+    const workspace = temporaryDirectory();
+    writeReport(workspace, "report.json", [
+      finding("fingerprint-a", "A", "pkg:npm/a@1.0.0", "review")
+    ]);
+    expect(run(workspace, [
+      "create",
+      "--report",
+      "report.json",
+      "--output",
+      "baseline.json"
+    ]).status).toBe(0);
+
+    const baselinePath = path.join(workspace, "baseline.json");
+    const baseline = JSON.parse(readFileSync(baselinePath, "utf8")) as {
+      findings: unknown[];
+    };
+    baseline.findings.push(baseline.findings[0]);
+    writeFileSync(baselinePath, `${JSON.stringify(baseline, null, 2)}\n`, "utf8");
+
+    const checked = run(workspace, [
+      "check",
+      "--report",
+      "report.json",
+      "--baseline",
+      "baseline.json"
+    ]);
+
+    expect(checked.status).toBe(2);
+    expect(checked.stderr).toContain("baseline contains duplicate finding id");
+  });
 });
 
 function temporaryDirectory(): string {
@@ -193,7 +343,7 @@ function writeReport(
   directory: string,
   name: string,
   findings: unknown[],
-  overrides: { profile?: string; prodOnly?: boolean } = {}
+  overrides: { profile?: string; prodOnly?: boolean; policyDigest?: string } = {}
 ): void {
   writeFileSync(
     path.join(directory, name),
@@ -202,6 +352,7 @@ function writeReport(
       profile: overrides.profile ?? "saas",
       prodOnly: overrides.prodOnly ?? true,
       policy: {
+        digest: overrides.policyDigest ?? "0".repeat(64),
         enabled: false,
         sourceFiles: [],
         allowLicenseCount: 0,

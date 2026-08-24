@@ -48,8 +48,11 @@ describe("package metadata", () => {
     expect(packageJson.license).toBe("MIT");
     expect(packageJson.packageManager).toBe("bun@1.3.14");
     expect(packageJson.engines?.node).toBe(">=24.0.0");
-    expect(packageJson.bin).toEqual({ ohrisk: "dist/cli.js" });
-    expect(packageJson.files).toEqual(["CHANGELOG.md", "dist", "schemas"]);
+    expect(packageJson.bin).toEqual({
+      ohrisk: "dist/cli.js",
+      "ohrisk-baseline": "bin/ohrisk-baseline.mjs"
+    });
+    expect(packageJson.files).toEqual(["CHANGELOG.md", "bin", "dist", "schemas"]);
     expect(packageJson.exports).toEqual({
       "./report-types": {
         types: "./dist/report-types.d.ts"

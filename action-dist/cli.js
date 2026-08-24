@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 0a32f1adcf60ae849b046ff0374adb67b5aa3b56d18bccd0ac2342290f07d7a5
+// ohrisk-action-source-sha256: e324f1b19ac6564abf41b1f24ded6f9f8c8310391bc2047ff8817639b682eb96
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -17393,7 +17393,8 @@ var package_default = {
     node: ">=24.0.0"
   },
   bin: {
-    ohrisk: "dist/cli.js"
+    ohrisk: "dist/cli.js",
+    "ohrisk-baseline": "bin/ohrisk-baseline.mjs"
   },
   exports: {
     "./report-types": {
@@ -17537,6 +17538,7 @@ var package_default = {
   },
   files: [
     "CHANGELOG.md",
+    "bin",
     "dist",
     "schemas"
   ],
@@ -54892,6 +54894,7 @@ function encodeFindingComponent(value) {
 }
 
 // src/policy/config.ts
+import { createHash as createHash9 } from "node:crypto";
 import { existsSync as existsSync47, readFileSync as readFileSync3, realpathSync as realpathSync6, statSync as statSync35 } from "node:fs";
 import { isIP as isIP3 } from "node:net";
 import path83 from "node:path";
@@ -54922,6 +54925,7 @@ function emptyPolicyConfig() {
 }
 function summarizePolicyConfig(config) {
   return {
+    digest: policyConfigDigest(config),
     enabled: config.sourceFiles.length > 0,
     sourceFiles: [...config.sourceFiles],
     allowLicenseCount: config.allowLicenses.size,
@@ -54934,6 +54938,39 @@ function summarizePolicyConfig(config) {
     registryAuthHostCount: config.registryAuth.size,
     ...config.npmRegistryUrl ? { npmRegistryUrl: redactRegistryUrl(config.npmRegistryUrl) } : {}
   };
+}
+function policyConfigDigest(config) {
+  const value = JSON.stringify({
+    policy: normalizedEvaluationPolicy(config),
+    profiles: [...config.profileOverrides.entries()].sort(([left], [right]) => compareStrings2(left, right)).map(([profile, policy]) => [profile, normalizedEvaluationPolicy(policy)]),
+    allowedRegistryHosts: sortedStrings(config.allowedRegistryHosts),
+    registryAuth: [...config.registryAuth.entries()].sort(([left], [right]) => compareStrings2(left, right)).map(([host, auth]) => [host, auth.tokenEnv]),
+    npmRegistryUrl: config.npmRegistryUrl ?? null
+  });
+  return createHash9("sha256").update(value, "utf8").digest("hex");
+}
+function normalizedEvaluationPolicy(policy) {
+  return {
+    allowLicenses: sortedStrings(policy.allowLicenses),
+    denyLicenses: sortedStrings(policy.denyLicenses),
+    severityOverrides: [...policy.severityOverrides.entries()].sort(([left], [right]) => compareStrings2(left, right)),
+    packageRules: [...policy.packageRules.entries()].sort(([left], [right]) => compareStrings2(left, right)).map(([pattern, rule]) => [pattern, {
+      severity: rule.severity ?? null,
+      reason: rule.reason ?? null,
+      action: rule.action ?? null,
+      recommendation: rule.recommendation ?? null
+    }])
+  };
+}
+function sortedStrings(values) {
+  return [...values].sort(compareStrings2);
+}
+function compareStrings2(left, right) {
+  if (left < right)
+    return -1;
+  if (left > right)
+    return 1;
+  return 0;
 }
 function evaluationPolicyForProfile(policy, profile) {
   const override = policy.profileOverrides?.get(profile);
@@ -60598,18 +60635,7 @@ function displayLockfiles(project) {
   }));
 }
 function disabledPolicySummary() {
-  return {
-    enabled: false,
-    sourceFiles: [],
-    allowLicenseCount: 0,
-    denyLicenseCount: 0,
-    severityOverrideCount: 0,
-    packageRuleCount: 0,
-    profileCount: 0,
-    profileOverrideCount: 0,
-    allowedRegistryHostCount: 0,
-    registryAuthHostCount: 0
-  };
+  return summarizePolicyConfig(emptyPolicyConfig());
 }
 function displayProjectPath(project, targetPath) {
   const relativePath = path86.relative(project.rootDir, targetPath);

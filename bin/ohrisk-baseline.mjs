@@ -68,18 +68,19 @@ function checkBaseline(options) {
       "baseline configuration does not match the current report.",
       `baseline: ${baseline.configurationDigest}`,
       `current: ${current.configurationDigest}`,
-      "Review the profile, production scope, policy summary, and report schema before regenerating the baseline."
+      "Review the profile, production scope, effective policy contents, and report schema before regenerating the baseline."
     ].join(" "));
   }
 
-  const previousByFingerprint = new Map(
-    baseline.findings.map((finding) => [finding.fingerprint, finding])
+  const previousById = new Map(
+    baseline.findings.map((finding) => [finding.id, finding])
   );
   const newFindings = [];
+  const changedFindings = [];
   const escalatedFindings = [];
 
   for (const finding of current.findings) {
-    const previous = previousByFingerprint.get(finding.fingerprint);
+    const previous = previousById.get(finding.id);
     if (!previous) {
       newFindings.push(finding);
       continue;
@@ -89,10 +90,19 @@ function checkBaseline(options) {
         ...finding,
         previousSeverity: previous.severity
       });
+      continue;
+    }
+    if (finding.fingerprint !== previous.fingerprint) {
+      changedFindings.push({
+        ...finding,
+        previousFingerprint: previous.fingerprint,
+        previousSeverity: previous.severity
+      });
     }
   }
 
-  const introducedFindings = [...newFindings, ...escalatedFindings];
+  const introducedFindings = [...newFindings, ...changedFindings, ...escalatedFindings]
+    .sort(compareFindings);
   const failingFindings = introducedFindings.filter(
     (finding) => severityRank(finding.severity) >= severityRank(failOn)
   );
@@ -105,6 +115,7 @@ function checkBaseline(options) {
     baselineFindingCount: baseline.findings.length,
     currentFindingCount: current.findings.length,
     newFindingCount: newFindings.length,
+    changedFindingCount: changedFindings.length,
     escalatedFindingCount: escalatedFindings.length,
     introducedFindingCount: introducedFindings.length,
     failingFindingCount: failingFindings.length,
@@ -122,22 +133,22 @@ function checkBaseline(options) {
 }
 
 function baselineFromReport(report) {
-  const findingsByFingerprint = new Map();
+  const findingsById = new Map();
 
   for (const rawFinding of report.findings) {
     const finding = normalizeFinding(rawFinding);
-    const previous = findingsByFingerprint.get(finding.fingerprint);
-    if (!previous || severityRank(finding.severity) > severityRank(previous.severity)) {
-      findingsByFingerprint.set(finding.fingerprint, finding);
+    if (findingsById.has(finding.id)) {
+      throw new Error(`scan report contains duplicate finding id ${JSON.stringify(finding.id)}.`);
     }
+    findingsById.set(finding.id, finding);
   }
 
-  const findings = [...findingsByFingerprint.values()].sort(compareFindings);
+  const findings = [...findingsById.values()].sort(compareFindings);
   const configuration = {
     reportSchema: report.$schema,
     profile: report.profile,
     prodOnly: report.prodOnly,
-    policy: canonicalize(report.policy)
+    policyDigest: report.policy.digest
   };
 
   return {
@@ -165,7 +176,12 @@ function readScanReport(filePath) {
   if (typeof report.profile !== "string" || typeof report.prodOnly !== "boolean") {
     throw new Error(`${displayPath(filePath)} is missing profile or prodOnly metadata.`);
   }
-  if (!isObject(report.policy) || !Array.isArray(report.findings)) {
+  if (
+    !isObject(report.policy)
+    || typeof report.policy.digest !== "string"
+    || !/^[0-9a-f]{64}$/.test(report.policy.digest)
+    || !Array.isArray(report.findings)
+  ) {
     throw new Error(`${displayPath(filePath)} is missing policy or findings data.`);
   }
   return report;
@@ -179,14 +195,24 @@ function readBaseline(filePath) {
   if (
     baseline.schemaVersion !== "1.0.0"
     || typeof baseline.configurationDigest !== "string"
+    || !/^[0-9a-f]{64}$/.test(baseline.configurationDigest)
     || !Array.isArray(baseline.findings)
   ) {
     throw new Error(`${displayPath(filePath)} has an unsupported baseline shape.`);
   }
 
+  const findings = baseline.findings.map(normalizeFinding).sort(compareFindings);
+  const findingIds = new Set();
+  for (const finding of findings) {
+    if (findingIds.has(finding.id)) {
+      throw new Error(`baseline contains duplicate finding id ${JSON.stringify(finding.id)}.`);
+    }
+    findingIds.add(finding.id);
+  }
+
   return {
     ...baseline,
-    findings: baseline.findings.map(normalizeFinding).sort(compareFindings)
+    findings
   };
 }
 
@@ -324,6 +350,7 @@ function renderCheckResult(result) {
     `Baseline findings: ${result.baselineFindingCount}`,
     `Current findings: ${result.currentFindingCount}`,
     `New findings: ${result.newFindingCount}`,
+    `Changed findings: ${result.changedFindingCount}`,
     `Escalated findings: ${result.escalatedFindingCount}`,
     `Failing findings at or above ${result.failOn}: ${result.failingFindingCount}`
   ];
@@ -348,7 +375,7 @@ function renderHelp() {
     "  ohrisk-baseline check --report <scan.json> [--baseline <baseline.json>] [--fail-on high|unknown|review|low] [--json]",
     "",
     "Create stores semantic finding fingerprints from an Ohrisk scan JSON report.",
-    "Check fails only for new findings or severity escalations at the selected threshold.",
+    "Check fails for new findings, changed semantics, or severity escalations at the selected threshold.",
     `The default baseline path is ${DEFAULT_BASELINE_PATH}.`
   ].join("\n");
 }
@@ -360,7 +387,7 @@ function canonicalize(value) {
   if (isObject(value)) {
     return Object.fromEntries(
       Object.keys(value)
-        .sort((left, right) => left.localeCompare(right))
+        .sort(compareStrings)
         .map((key) => [key, canonicalize(value[key])])
     );
   }
@@ -376,9 +403,15 @@ function sha256(value) {
 }
 
 function compareFindings(left, right) {
-  return left.fingerprint.localeCompare(right.fingerprint)
-    || left.packageId.localeCompare(right.packageId)
-    || left.id.localeCompare(right.id);
+  return compareStrings(left.fingerprint, right.fingerprint)
+    || compareStrings(left.packageId, right.packageId)
+    || compareStrings(left.id, right.id);
+}
+
+function compareStrings(left, right) {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
 }
 
 function severityRank(severity) {

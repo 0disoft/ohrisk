@@ -87,6 +87,7 @@ export type NormalizedLicense = {
 };
 
 export type PolicyConfigSummary = {
+  digest: string;
   enabled: boolean;
   sourceFiles: string[];
   allowLicenseCount: number;
