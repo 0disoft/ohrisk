@@ -59,6 +59,7 @@ jobs:
       - name: Verify scalar outputs
         shell: bash
         env:
+          STATUS: ${{ steps.summary.outputs.status }}
           REPORT_TYPE: ${{ steps.summary.outputs.report-type }}
           FAILED: ${{ steps.summary.outputs.failed }}
           COMPLETENESS: ${{ steps.summary.outputs.completeness }}
@@ -66,6 +67,7 @@ jobs:
           HIGH_COUNT: ${{ steps.summary.outputs.high-count }}
         run: |
           set -euo pipefail
+          test "$STATUS" = "profile_risk_evaluated"
           test "$REPORT_TYPE" = "scan"
           test "$FAILED" = "false"
           test "$COMPLETENESS" = "complete"

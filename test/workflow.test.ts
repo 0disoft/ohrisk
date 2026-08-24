@@ -90,7 +90,9 @@ describe("summary action smoke workflow", () => {
     expect(workflow).toContain("node-version: 24");
     expect(workflow).toContain("node \"$GITHUB_WORKSPACE/action-dist/cli.js\" scan --json --output report.json");
     expect(workflow).toContain("uses: ./summary-action");
+    expect(workflow).toContain("STATUS: ${{ steps.summary.outputs.status }}");
     expect(workflow).toContain("REPORT_TYPE: ${{ steps.summary.outputs.report-type }}");
+    expect(workflow).toContain('test "$STATUS" = "profile_risk_evaluated"');
     expect(workflow).toContain('test "$COMPLETENESS" = "complete"');
     expect(parsed.permissions).toEqual({ contents: "read" });
     expect(Object.keys(parsed.jobs ?? {})).toEqual(["summary-action-smoke"]);
