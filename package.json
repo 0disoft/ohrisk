@@ -11,7 +11,8 @@
   "bin": {
     "ohrisk": "dist/cli.js",
     "ohrisk-baseline": "bin/ohrisk-baseline.mjs",
-    "ohrisk-summary": "bin/ohrisk-summary.mjs"
+    "ohrisk-summary": "bin/ohrisk-summary.mjs",
+    "ohrisk-notices": "bin/ohrisk-notices.mjs"
   },
   "exports": {
     "./report-types": {
@@ -25,6 +26,8 @@
     "./schemas/baseline": "./schemas/baseline.schema.json",
     "./schemas/baseline-check": "./schemas/baseline-check.schema.json",
     "./schemas/report-summary": "./schemas/report-summary.schema.json",
+    "./schemas/notices-evidence": "./schemas/notices-evidence.schema.json",
+    "./schemas/notices-result": "./schemas/notices-result.schema.json",
     "./schemas/*": "./schemas/*",
     "./dist/*": "./dist/*",
     "./CHANGELOG.md": "./CHANGELOG.md",

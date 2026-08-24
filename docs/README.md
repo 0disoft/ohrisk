@@ -7,6 +7,7 @@ Guides for using Ohrisk effectively.
 - [Project Initialization](init.md) — Create-only policy, workflow, and waiver scaffolding with `ohrisk init`.
 - [Checked-in Risk Baselines](baselines.md) — Gate new findings without Git history by reviewing and committing semantic fingerprints.
 - [GitHub Step Summary Action](report-summary-action.md) — Render one existing JSON report without duplicate scans or pull-request write permissions.
+- [Third-party Notices](third-party-notices.md) — Build a deterministic notices artifact from an Ohrisk CycloneDX report and reviewed legal files.
 - [System Boundary](architecture/00-system-boundary.md) — Owned components, external boundaries, and quality attributes.
 - [GitHub Actions Guide](github-actions.md) — PR gates, PR comments, SARIF upload, and waiver drift checks.
 - [GitHub Action Contract](github-action/action-contract.md) — Composite action versioning, path safety, permissions, and validation.

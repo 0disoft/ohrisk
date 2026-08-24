@@ -26,6 +26,11 @@ export type BaselineCheckSchemaId =
 export type ReportSummarySchemaVersion = "1.0.0";
 export type ReportSummarySchemaId =
   `urn:ohrisk:schema:report-summary:${ReportSummarySchemaVersion}`;
+export type NoticesSchemaVersion = "1.0.0";
+export type NoticesEvidenceSchemaId =
+  `urn:ohrisk:schema:notices-evidence:${NoticesSchemaVersion}`;
+export type NoticesResultSchemaId =
+  `urn:ohrisk:schema:notices-result:${NoticesSchemaVersion}`;
 
 export type UsageProfile = "saas" | "distributed-app";
 export type RiskSeverity = "low" | "review" | "high" | "unknown";
@@ -172,6 +177,44 @@ export type ReportSummary = {
   shownFindingCount: number;
   omittedFindingCount: number;
   findings: ReportSummaryFinding[];
+};
+
+export type NoticesEvidencePackage = {
+  purl: string;
+  copyright?: string[];
+  licenseFiles?: string[];
+  noticeFiles?: string[];
+};
+
+export type NoticesEvidence = {
+  $schema: NoticesEvidenceSchemaId;
+  schemaVersion: NoticesSchemaVersion;
+  packages: NoticesEvidencePackage[];
+};
+
+export type NoticesMissingEvidence =
+  | "license-declaration"
+  | "license-text"
+  | "notice-file";
+
+export type NoticesResult = {
+  $schema: NoticesResultSchemaId;
+  schemaVersion: NoticesSchemaVersion;
+  status: "third_party_notices_generated";
+  output: string;
+  componentCount: number;
+  completeComponentCount: number;
+  incompleteComponentCount: number;
+  evidenceDocumentCount: number;
+  evidenceFileCount: number;
+  evidenceBytes: number;
+  unusedEvidenceCount: number;
+  incomplete: boolean;
+  incompletePackages: Array<{
+    purl: string;
+    missing: NoticesMissingEvidence[];
+  }>;
+  unusedEvidence: string[];
 };
 
 export type DependencyGraphCounts = {

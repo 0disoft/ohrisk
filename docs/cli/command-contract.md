@@ -44,6 +44,17 @@ without producing a report.
 | `ohrisk explain <expr>` | Classify one license expression for the selected profile without scanning a project; `--policy` applies license-level organization rules only. |
 | `ohrisk cache status|prune|clear` | Inspect or clean the persistent artifact cache without scanning a project. |
 
+Published companion commands have separate bounded contracts:
+
+- `ohrisk-summary` renders a current Ohrisk scan or diff JSON report into a
+  GitHub Step Summary and scalar outputs without rescanning.
+- `ohrisk-baseline` creates and checks reviewed finding baselines without Git
+  history.
+- `ohrisk-notices` generates deterministic third-party notices from an
+  Ohrisk-produced CycloneDX report plus explicitly supplied legal files. It
+  writes an incomplete artifact and exits `1` when required evidence is
+  missing; malformed, oversized, or out-of-workspace input exits `2`.
+
 `scan`, `ci`, and both sides of `diff` use the same dependency graph parser,
 including bounded Maven parent and imported-BOM resolution through the
 configured artifact cache and network policy.
