@@ -146,6 +146,8 @@ Rust는 `Cargo.lock`에 기록된 crate를 스캔하고, 옆의 `Cargo.toml`이 
 직접/개발 의존성 구분에 사용하고, Cargo workspace `exclude` entry는 제외한다. member manifest의
 `crate.workspace = true` dependency key, workspace dependency package alias,
 table-form dependency section(`[dependencies.foo]`)도 root dependency로 처리한다.
+member가 `version.workspace = true`와 `license.workspace = true`를 명시하면
+`[workspace.package]`의 버전과 라이선스도 상속해 근거로 사용한다.
 Cargo graph 순회는 반복형으로 수행하며 도달 가능한 crate를 모두 유지한다. crate 하나에
 저장하는 dependency path는 최대 64개이고, 초과하면 typed truncation diagnostic을 남긴다.
 evidence는 로컬 Cargo registry source나 `vendor/<crate>`에서

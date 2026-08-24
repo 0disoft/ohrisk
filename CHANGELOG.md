@@ -2,6 +2,10 @@
 
 ## 1.15.2 - Unreleased
 
+- Cargo workspace packages now inherit `version` and `license` from
+  `[workspace.package]` when their member manifests opt in with
+  `version.workspace = true` and `license.workspace = true`, eliminating
+  false `unknown` findings for internal crates in repositories such as Ruff.
 - Localized HTML reports no longer leave the conflicting-license review action
   in English across Korean and the other supported report languages.
 - Public repository scans now read Go local replacement evidence only from

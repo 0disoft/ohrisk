@@ -47,8 +47,9 @@ Remote fetching is limited to these explicit adapters:
   endpoint when `Cargo.lock` supplies the crate SHA-256 checksum; Cargo.toml
   identity and package-root license files are trusted only after the complete
   archive checksum matches. Cargo workspace packages use their checked-out
-  member `Cargo.toml` license declaration directly and do not substitute a
-  same-name registry crate.
+  member `Cargo.toml` license declaration or an explicitly inherited
+  `[workspace.package]` license directly and do not substitute a same-name
+  registry crate.
 - exact pub.dev package archives from the fixed `pub.dev` endpoint when a
   modern hosted `pubspec.lock` record supplies the archive SHA-256; the complete
   archive digest and root `pubspec.yaml` name/version must match before bounded

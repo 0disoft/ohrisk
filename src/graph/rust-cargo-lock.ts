@@ -168,7 +168,11 @@ export function parseCargoLockText(
       rootName,
       lockfilePath,
       nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
-      ...cargoWorkspaceEmbeddedEvidence(options.memberManifestTexts ?? [], records),
+      ...cargoWorkspaceEmbeddedEvidence(
+        options.manifestText,
+        options.memberManifestTexts ?? [],
+        records
+      ),
       ...(pathLimitAffected.size > 0
         ? {
             diagnostics: [{
@@ -1105,12 +1109,14 @@ function readCargoPackageName(text: string | undefined): string | undefined {
 }
 
 function cargoWorkspaceEmbeddedEvidence(
+  rootManifestText: string | undefined,
   manifestTexts: string[],
   records: CargoPackageRecord[]
 ): Pick<DependencyGraph, "embeddedEvidence"> {
+  const workspaceMetadata = readCargoWorkspacePackageLicenseMetadata(rootManifestText);
   const embeddedEvidence = manifestTexts
     .map((text): LicenseEvidence | undefined => {
-      const metadata = readCargoPackageLicenseMetadata(text);
+      const metadata = readCargoPackageLicenseMetadata(text, workspaceMetadata);
       if (!metadata.name || !metadata.version || !metadata.license) {
         return undefined;
       }
@@ -1136,7 +1142,10 @@ function cargoWorkspaceEmbeddedEvidence(
   return embeddedEvidence.length > 0 ? { embeddedEvidence } : {};
 }
 
-function readCargoPackageLicenseMetadata(text: string): {
+function readCargoPackageLicenseMetadata(
+  text: string,
+  workspaceMetadata?: { version?: string; license?: string }
+): {
   name?: string;
   version?: string;
   license?: string;
@@ -1158,9 +1167,55 @@ function readCargoPackageLicenseMetadata(text: string): {
         metadata[key] = value;
         break;
       }
+      if (
+        key !== "name"
+        && workspaceMetadata?.[key] !== undefined
+        && readsWorkspaceInheritedValue(line, key)
+      ) {
+        metadata[key] = workspaceMetadata[key];
+        break;
+      }
     }
   }
   return metadata;
+}
+
+function readCargoWorkspacePackageLicenseMetadata(text: string | undefined): {
+  version?: string;
+  license?: string;
+} {
+  if (!text) {
+    return {};
+  }
+  let section = "";
+  const metadata: { version?: string; license?: string } = {};
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = stripTomlComment(rawLine).trim();
+    if (line.startsWith("[") && line.endsWith("]")) {
+      section = line.slice(1, -1);
+      continue;
+    }
+    if (section !== "workspace.package") {
+      continue;
+    }
+    for (const key of ["version", "license"] as const) {
+      const value = readStringAssignment(line, key);
+      if (value !== undefined) {
+        metadata[key] = value;
+        break;
+      }
+    }
+  }
+  return metadata;
+}
+
+function readsWorkspaceInheritedValue(line: string, key: "version" | "license"): boolean {
+  if (readBooleanAssignment(line, `${key}.workspace`) === true) {
+    return true;
+  }
+  const inlineTable = new RegExp(`^${escapeRegExp(key)}\\s*=\\s*\\{(.*)\\}\\s*$`).exec(line);
+  return inlineTable?.[1] !== undefined
+    && readInlineTableBoolean(inlineTable[1], "workspace") === true;
 }
 
 function readStringAssignment(line: string, key: string): string | undefined {

@@ -412,6 +412,55 @@ describe("parseCargoLockText", () => {
     }]);
   });
 
+  test("embeds inherited workspace package license metadata", () => {
+    const result = parseCargoLockText(
+      [
+        "[[package]]",
+        "name = \"workspace-app\"",
+        "version = \"1.0.0\"",
+        "dependencies = [\"workspace-lib 2.0.0\"]",
+        "",
+        "[[package]]",
+        "name = \"workspace-lib\"",
+        "version = \"2.0.0\""
+      ].join("\n"),
+      "workspace/Cargo.lock",
+      {
+        manifestText: [
+          "[package]",
+          "name = \"workspace-app\"",
+          "version = \"1.0.0\"",
+          "",
+          "[workspace.package]",
+          "version = \"2.0.0\"",
+          "license = \"MIT\"",
+          "",
+          "[dependencies]",
+          "workspace-lib = { path = \"crates/lib\" }"
+        ].join("\n"),
+        memberManifestTexts: [[
+          "[package]",
+          "name = \"workspace-lib\"",
+          "version.workspace = true",
+          "license.workspace = true"
+        ].join("\n")]
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    expect(result.value.embeddedEvidence).toEqual([{
+      packageId: "workspace-lib@2.0.0",
+      metadataLicense: "MIT",
+      metadataSource: "workspace Cargo.toml",
+      files: [],
+      source: "local",
+      warnings: []
+    }]);
+  });
+
   test("reads literal Cargo workspace member manifests from disk", () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cargo-workspace-"));
     const appRoot = path.join(projectRoot, "crates", "app");

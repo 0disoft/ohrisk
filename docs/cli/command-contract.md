@@ -249,7 +249,9 @@ depth, and excessive path fan-out cannot make graph reconstruction unbounded.
 For `Cargo.lock`, graph traversal is iterative and retains every reachable
 crate while storing at most 64 dependency paths per crate. Additional paths are
 reported through a `dependency_paths_truncated` graph diagnostic rather than
-expanding path combinations without a bound. For a crates.io registry record,
+expanding path combinations without a bound. Workspace member manifests may
+inherit exact version and license metadata from `[workspace.package]` through
+Cargo's explicit `.workspace = true` syntax. For a crates.io registry record,
 remote scans preserve the Cargo.lock SHA-256 and fetch the exact `.crate` only
 from `static.crates.io`; checksum, archive root, package name, package version,
 and Cargo.toml identity must all match before license evidence is trusted.
