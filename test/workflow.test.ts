@@ -72,6 +72,34 @@ describe("release check workflow", () => {
   });
 });
 
+describe("summary action smoke workflow", () => {
+  test("runs the local permissionless action against a generated Ohrisk report", () => {
+    const workflow = readFileSync(
+      path.join(repoRoot, ".github", "workflows", "summary-action-smoke.yml"),
+      "utf8"
+    );
+    const parsed = parseYaml(workflow) as {
+      permissions?: Record<string, string>;
+      jobs?: Record<string, unknown>;
+    };
+
+    expect(workflow).toContain("name: Summary Action Smoke");
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain(`uses: ${CHECKOUT_ACTION}`);
+    expect(workflow).toContain(`uses: ${SETUP_NODE_ACTION}`);
+    expect(workflow).toContain("node-version: 24");
+    expect(workflow).toContain("node \"$GITHUB_WORKSPACE/action-dist/cli.js\" scan --json --output report.json");
+    expect(workflow).toContain("uses: ./summary-action");
+    expect(workflow).toContain("REPORT_TYPE: ${{ steps.summary.outputs.report-type }}");
+    expect(workflow).toContain('test "$COMPLETENESS" = "complete"');
+    expect(parsed.permissions).toEqual({ contents: "read" });
+    expect(Object.keys(parsed.jobs ?? {})).toEqual(["summary-action-smoke"]);
+    expect(workflow).not.toContain("pull-requests: write");
+    expect(workflow).not.toContain("security-events: write");
+    expect(workflow).not.toMatch(/uses:\s+[^\s]+@v\d+/);
+  });
+});
+
 describe("npm publish workflow", () => {
   test("publishes version tags only after the same verification gates", () => {
     const workflow = readFileSync(

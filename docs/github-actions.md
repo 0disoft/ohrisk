@@ -42,6 +42,11 @@ scalar outputs. It performs no scan, network request, GitHub API call, or
 pull-request write. See the [step-summary guide](report-summary-action.md) for
 the workflow and output contract.
 
+Ohrisk's own `Summary Action Smoke` workflow generates a real JSON scan report,
+invokes the checked-out nested action, and checks its scalar outputs with only
+`contents: read`. Changes to the renderer, bundle, nested action, or smoke
+workflow must keep that end-to-end job green.
+
 To scan a source archive directly, pass a checked-in or downloaded
 repository-relative regular file to `archive`:
 
