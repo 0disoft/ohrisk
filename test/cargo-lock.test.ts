@@ -3,7 +3,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { parseCargoLockfile, parseCargoLockText } from "../src/graph/rust-cargo-lock";
+import {
+  findCargoWorkspaceMemberManifestPathsFromRelativePaths,
+  parseCargoLockfile,
+  parseCargoLockText
+} from "../src/graph/rust-cargo-lock";
 
 describe("parseCargoLockText", () => {
   test("parses direct, development, and transitive Cargo dependencies", () => {
@@ -515,6 +519,111 @@ describe("parseCargoLockText", () => {
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
+  });
+
+  test("reads implicit workspace members from root path dependencies", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cargo-implicit-workspace-"));
+    const implicitRoot = path.join(projectRoot, "crates", "implicit");
+    const excludedRoot = path.join(projectRoot, "crates", "excluded");
+
+    try {
+      mkdirSync(implicitRoot, { recursive: true });
+      mkdirSync(excludedRoot, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "Cargo.toml"),
+        [
+          "[workspace]",
+          "members = []",
+          "exclude = [\"crates/excluded\"]",
+          "",
+          "[workspace.package]",
+          "version = \"1.0.0\"",
+          "license = \"MIT\"",
+          "",
+          "[workspace.dependencies]",
+          "implicit = { path = \"crates/implicit\" }",
+          "excluded = { path = \"crates/excluded\" }",
+          "",
+          "[package]",
+          "name = \"workspace-root\"",
+          "version = \"1.0.0\"",
+          "",
+          "[dependencies]",
+          "implicit.workspace = true",
+          "excluded.workspace = true"
+        ].join("\n"),
+        "utf8"
+      );
+      for (const [root, name] of [[implicitRoot, "implicit"], [excludedRoot, "excluded"]] as const) {
+        writeFileSync(
+          path.join(root, "Cargo.toml"),
+          [
+            "[package]",
+            `name = "${name}"`,
+            "version.workspace = true",
+            "license.workspace = true"
+          ].join("\n"),
+          "utf8"
+        );
+      }
+      writeFileSync(
+        path.join(projectRoot, "Cargo.lock"),
+        [
+          "[[package]]",
+          "name = \"implicit\"",
+          "version = \"1.0.0\"",
+          "",
+          "[[package]]",
+          "name = \"excluded\"",
+          "version = \"1.0.0\""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = parseCargoLockfile(path.join(projectRoot, "Cargo.lock"));
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+      expect(result.value.embeddedEvidence).toEqual([{
+        packageId: "implicit@1.0.0",
+        metadataLicense: "MIT",
+        metadataSource: "workspace Cargo.toml",
+        files: [],
+        source: "local",
+        warnings: []
+      }]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("selects implicit path members from a repository inventory", () => {
+    const projectRoot = path.resolve("workspace");
+    const paths = findCargoWorkspaceMemberManifestPathsFromRelativePaths({
+      rootManifestText: [
+        "[workspace]",
+        "members = []",
+        "exclude = [\"crates/excluded\"]",
+        "",
+        "[workspace.dependencies]",
+        "implicit = { path = \"crates/implicit\" }",
+        "excluded = { path = \"crates/excluded\" }"
+      ].join("\n"),
+      lockfilePath: path.join(projectRoot, "Cargo.lock"),
+      projectRoot,
+      relativePaths: [
+        "Cargo.toml",
+        "crates/implicit/Cargo.toml",
+        "crates/excluded/Cargo.toml",
+        "crates/unrelated/Cargo.toml"
+      ]
+    });
+
+    expect(paths.map((item) => item.relativeManifestPath)).toEqual([
+      "crates/implicit/Cargo.toml"
+    ]);
   });
 
   test("reads one-segment wildcard Cargo workspace member manifests and honors excludes", () => {

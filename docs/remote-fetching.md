@@ -49,7 +49,8 @@ Remote fetching is limited to these explicit adapters:
   archive checksum matches. Cargo workspace packages use their checked-out
   member `Cargo.toml` license declaration or an explicitly inherited
   `[workspace.package]` license directly and do not substitute a same-name
-  registry crate.
+  registry crate. Root-declared path dependencies are included as implicit
+  members only when contained by the workspace and not matched by `exclude`.
 - exact pub.dev package archives from the fixed `pub.dev` endpoint when a
   modern hosted `pubspec.lock` record supplies the archive SHA-256; the complete
   archive digest and root `pubspec.yaml` name/version must match before bounded

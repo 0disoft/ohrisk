@@ -2,6 +2,10 @@
 
 ## 1.15.2 - Unreleased
 
+- Cargo root path dependencies contained by the workspace are now treated as
+  implicit workspace members even when omitted from the explicit `members`
+  list, while `exclude` entries remain authoritative. This restores license
+  metadata for internal crates such as Nushell's `nu-glob` and `nu-path`.
 - Cargo workspace packages now inherit `version` and `license` from
   `[workspace.package]` when their member manifests opt in with
   `version.workspace = true` and `license.workspace = true`, eliminating

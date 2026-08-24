@@ -251,7 +251,9 @@ crate while storing at most 64 dependency paths per crate. Additional paths are
 reported through a `dependency_paths_truncated` graph diagnostic rather than
 expanding path combinations without a bound. Workspace member manifests may
 inherit exact version and license metadata from `[workspace.package]` through
-Cargo's explicit `.workspace = true` syntax. For a crates.io registry record,
+Cargo's explicit `.workspace = true` syntax. Root dependency paths contained
+by the workspace are implicit members even when absent from `members`, but
+matching `exclude` entries still remove them. For a crates.io registry record,
 remote scans preserve the Cargo.lock SHA-256 and fetch the exact `.crate` only
 from `static.crates.io`; checksum, archive root, package name, package version,
 and Cargo.toml identity must all match before license evidence is trusted.

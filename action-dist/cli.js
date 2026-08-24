@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 5f918acfd4666f2e5eb7f7c4c48ea662447c1b34b618ae5c46309b4adea9de39
+// ohrisk-action-source-sha256: 5f6f0656af748ab72b4e94585bcb6823a1152b31591a4545ea5b0c5038f159a3
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -33770,6 +33770,7 @@ function findCargoWorkspaceMemberManifestPathsFromRelativePaths(input) {
   const projectRoot = path41.resolve(input.projectRoot);
   const lockfileRoot = path41.dirname(path41.resolve(input.lockfilePath));
   const members = readCargoWorkspaceMembers(input.rootManifestText);
+  const implicitMembers = new Set(readCargoRootPathDependencyMembers(input.rootManifestText).map(normalizeCargoWorkspaceMemberPath).filter((memberPath) => memberPath !== undefined));
   const excludes = readCargoWorkspaceExcludes(input.rootManifestText);
   const paths = new Map;
   for (const rawRelativeManifestPath of input.relativePaths) {
@@ -33785,7 +33786,10 @@ function findCargoWorkspaceMemberManifestPathsFromRelativePaths(input) {
     if (!memberPath) {
       continue;
     }
-    if (!members.some((pattern) => cargoWorkspaceMemberPatternMatches(memberPath, pattern)) || excludes.some((pattern) => cargoWorkspaceMemberPatternMatches(memberPath, pattern))) {
+    if (!implicitMembers.has(memberPath) && !members.some((pattern) => cargoWorkspaceMemberPatternMatches(memberPath, pattern))) {
+      continue;
+    }
+    if (excludes.some((pattern) => cargoWorkspaceMemberPatternMatches(memberPath, pattern))) {
       continue;
     }
     paths.set(relativeManifestPath, {
@@ -33815,7 +33819,11 @@ function findCargoWorkspaceMemberManifestPaths(input) {
       }
     }
   }
-  for (const memberPath of readCargoWorkspaceMembers(input.rootManifestText)) {
+  const memberPaths = [
+    ...readCargoWorkspaceMembers(input.rootManifestText),
+    ...readCargoRootPathDependencyMembers(input.rootManifestText)
+  ];
+  for (const memberPath of memberPaths) {
     if (path41.isAbsolute(memberPath)) {
       continue;
     }
@@ -33931,6 +33939,48 @@ function readCargoWorkspaceMembers(input) {
 }
 function readCargoWorkspaceExcludes(input) {
   return readCargoWorkspaceStringArray(input, "exclude");
+}
+function readCargoRootPathDependencyMembers(input) {
+  const memberPaths = [];
+  let section = "";
+  let dependencyTable = false;
+  for (const rawLine of input.split(/\r?\n/)) {
+    const line = stripTomlComment9(rawLine).trim();
+    if (line === "") {
+      continue;
+    }
+    if (line.startsWith("[") && line.endsWith("]")) {
+      section = line.slice(1, -1);
+      dependencyTable = isCargoPathDependencyTable(section);
+      continue;
+    }
+    if (dependencyTable) {
+      const memberPath2 = readStringAssignment5(line, "path");
+      if (memberPath2) {
+        memberPaths.push(memberPath2);
+      }
+      continue;
+    }
+    if (section !== "workspace.dependencies" && !dependencyTypeForCargoManifestSection(section)) {
+      continue;
+    }
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+    const memberPath = readInlineTableString(line.slice(separatorIndex + 1), "path");
+    if (memberPath) {
+      memberPaths.push(memberPath);
+    }
+  }
+  return [...new Set(memberPaths)];
+}
+function isCargoPathDependencyTable(section) {
+  if (readCargoManifestDependencyTable(section)) {
+    return true;
+  }
+  const parts = splitTomlDottedKey(section).map(unquoteTomlKey2);
+  return parts.length === 3 && parts[0] === "workspace" && parts[1] === "dependencies";
 }
 function readCargoWorkspaceStringArray(input, key) {
   const members = [];

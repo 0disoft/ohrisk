@@ -283,6 +283,11 @@ export function findCargoWorkspaceMemberManifestPathsFromRelativePaths(input: {
   const projectRoot = path.resolve(input.projectRoot);
   const lockfileRoot = path.dirname(path.resolve(input.lockfilePath));
   const members = readCargoWorkspaceMembers(input.rootManifestText);
+  const implicitMembers = new Set(
+    readCargoRootPathDependencyMembers(input.rootManifestText)
+      .map(normalizeCargoWorkspaceMemberPath)
+      .filter((memberPath): memberPath is string => memberPath !== undefined)
+  );
   const excludes = readCargoWorkspaceExcludes(input.rootManifestText);
   const paths = new Map<string, CargoWorkspaceMemberManifestPath>();
 
@@ -304,9 +309,12 @@ export function findCargoWorkspaceMemberManifestPathsFromRelativePaths(input: {
       continue;
     }
     if (
-      !members.some((pattern) => cargoWorkspaceMemberPatternMatches(memberPath, pattern))
-      || excludes.some((pattern) => cargoWorkspaceMemberPatternMatches(memberPath, pattern))
+      !implicitMembers.has(memberPath)
+      && !members.some((pattern) => cargoWorkspaceMemberPatternMatches(memberPath, pattern))
     ) {
+      continue;
+    }
+    if (excludes.some((pattern) => cargoWorkspaceMemberPatternMatches(memberPath, pattern))) {
       continue;
     }
 
@@ -348,7 +356,11 @@ export function findCargoWorkspaceMemberManifestPaths(input: {
     }
   }
 
-  for (const memberPath of readCargoWorkspaceMembers(input.rootManifestText)) {
+  const memberPaths = [
+    ...readCargoWorkspaceMembers(input.rootManifestText),
+    ...readCargoRootPathDependencyMembers(input.rootManifestText)
+  ];
+  for (const memberPath of memberPaths) {
     if (path.isAbsolute(memberPath)) {
       continue;
     }
@@ -515,6 +527,54 @@ function readCargoWorkspaceMembers(input: string): string[] {
 
 function readCargoWorkspaceExcludes(input: string): string[] {
   return readCargoWorkspaceStringArray(input, "exclude");
+}
+
+function readCargoRootPathDependencyMembers(input: string): string[] {
+  const memberPaths: string[] = [];
+  let section = "";
+  let dependencyTable = false;
+
+  for (const rawLine of input.split(/\r?\n/)) {
+    const line = stripTomlComment(rawLine).trim();
+    if (line === "") {
+      continue;
+    }
+    if (line.startsWith("[") && line.endsWith("]")) {
+      section = line.slice(1, -1);
+      dependencyTable = isCargoPathDependencyTable(section);
+      continue;
+    }
+
+    if (dependencyTable) {
+      const memberPath = readStringAssignment(line, "path");
+      if (memberPath) {
+        memberPaths.push(memberPath);
+      }
+      continue;
+    }
+
+    if (section !== "workspace.dependencies" && !dependencyTypeForCargoManifestSection(section)) {
+      continue;
+    }
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+    const memberPath = readInlineTableString(line.slice(separatorIndex + 1), "path");
+    if (memberPath) {
+      memberPaths.push(memberPath);
+    }
+  }
+
+  return [...new Set(memberPaths)];
+}
+
+function isCargoPathDependencyTable(section: string): boolean {
+  if (readCargoManifestDependencyTable(section)) {
+    return true;
+  }
+  const parts = splitTomlDottedKey(section).map(unquoteTomlKey);
+  return parts.length === 3 && parts[0] === "workspace" && parts[1] === "dependencies";
 }
 
 function readCargoWorkspaceStringArray(input: string, key: "exclude" | "members"): string[] {
