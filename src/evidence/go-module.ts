@@ -49,11 +49,24 @@ export function collectGoModuleEvidence(input: {
     });
   }
 
-  const files = readGoEvidenceFiles({
+  let files = readGoEvidenceFiles({
     moduleDir,
     maxBytes: input.evidenceFileMaxBytes ?? GO_EVIDENCE_FILE_MAX_BYTES,
     warnings
   });
+
+  if (files.length === 0 && replacement.localPath) {
+    const inheritedFiles = readInternalReplacementProjectRootEvidence({
+      projectRoot: input.projectRoot,
+      modulePath: input.modulePath,
+      maxBytes: input.evidenceFileMaxBytes ?? GO_EVIDENCE_FILE_MAX_BYTES,
+      warnings
+    });
+    if (inheritedFiles.length > 0) {
+      files = inheritedFiles;
+      warnings.push("Go internal replacement inherited license evidence from the project root.");
+    }
+  }
 
   if (files.length === 0) {
     warnings.push("No supported license, notice, attribution, or legal evidence file found in Go module source.");
@@ -67,6 +80,37 @@ export function collectGoModuleEvidence(input: {
     files,
     source: "local",
     warnings
+  });
+}
+
+function readInternalReplacementProjectRootEvidence(input: {
+  projectRoot: string;
+  modulePath: string;
+  maxBytes: number;
+  warnings: string[];
+}): LicenseEvidenceFile[] {
+  const rootGoModPath = path.join(input.projectRoot, "go.mod");
+  if (!existsSync(rootGoModPath)) {
+    return [];
+  }
+  const rootGoModText = readTextFileWithLimit({
+    filePath: rootGoModPath,
+    maxBytes: GO_MODULE_MOD_MAX_BYTES
+  });
+  if (!rootGoModText.ok) {
+    return [];
+  }
+  const parsed = parseGoModRecords(rootGoModText.value, rootGoModPath);
+  if (!parsed.ok || !parsed.value.modulePath) {
+    return [];
+  }
+  if (!input.modulePath.startsWith(`${parsed.value.modulePath}/`)) {
+    return [];
+  }
+  return readGoEvidenceFiles({
+    moduleDir: input.projectRoot,
+    maxBytes: input.maxBytes,
+    warnings: input.warnings
   });
 }
 

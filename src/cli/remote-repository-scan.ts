@@ -23,6 +23,7 @@ export type RemoteRepositoryScanContext = {
   configurationRoot: string;
   runtimeRoot: string;
   allowLocalProjectEvidence: false;
+  allowProjectContainedGoReplacementEvidence: true;
   temporaryRoot: string;
   repository: RemoteRepositoryReportSource;
   inventory?: RepositoryTreeInventory;
@@ -62,6 +63,7 @@ export async function runRemoteRepositoryScan(input: {
       configurationRoot: input.invocationCwd,
       runtimeRoot: input.invocationCwd,
       allowLocalProjectEvidence: false,
+      allowProjectContainedGoReplacementEvidence: true,
       temporaryRoot: cloned.value.rootDir,
       ...(cloned.value.inventory ? { inventory: cloned.value.inventory } : {}),
       repository: {

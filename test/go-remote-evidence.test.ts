@@ -464,6 +464,77 @@ describe("remote Go module evidence", () => {
     expect(evidence.value.map((item) => item.source)).toEqual(["unavailable", "unavailable"]);
   });
 
+  test("reads an internal local replacement from a validated remote checkout", async () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-go-remote-local-replace-"));
+    const replacementDir = path.join(projectRoot, "internal", "backend");
+    let fetchCount = 0;
+
+    try {
+      mkdirSync(replacementDir, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "go.mod"),
+        "module github.com/acme/root\n",
+        "utf8"
+      );
+      writeFileSync(
+        path.join(projectRoot, "LICENSE"),
+        "Business Source License 1.1\n",
+        "utf8"
+      );
+      writeFileSync(
+        path.join(replacementDir, "go.mod"),
+        "module github.com/acme/root/internal/backend\n",
+        "utf8"
+      );
+
+      const evidence = await collectGraphEvidence({
+        graph: {
+          lockfilePath: "go.mod",
+          nodes: [{
+            id: "github.com/acme/root/internal/backend@v0.0.0-00010101000000-000000000000",
+            name: "github.com/acme/root/internal/backend",
+            version: "v0.0.0-00010101000000-000000000000",
+            ecosystem: "go",
+            resolved: "./internal/backend",
+            dependencyType: "production",
+            direct: true,
+            paths: [[
+              "github.com/acme/root",
+              "github.com/acme/root/internal/backend@v0.0.0-00010101000000-000000000000"
+            ]]
+          }]
+        },
+        projectRoot,
+        allowLocalProjectEvidence: false,
+        allowProjectContainedGoReplacementEvidence: true,
+        fetchArtifact: async (url) => {
+          fetchCount += 1;
+          return artifactResponse(Buffer.alloc(0), url);
+        }
+      });
+
+      expect(evidence.ok).toBe(true);
+      expect(fetchCount).toBe(0);
+      if (!evidence.ok) {
+        throw new Error(evidence.error.message);
+      }
+      expect(evidence.value[0]).toMatchObject({
+        source: "local",
+        warnings: [
+          "Go module uses local replacement path: ./internal/backend.",
+          "Go internal replacement inherited license evidence from the project root."
+        ]
+      });
+      expect(evidence.value[0]?.files.map((file) => file.path)).toEqual(["LICENSE"]);
+      expect(normalizeLicenseEvidence(evidence.value[0]!)).toMatchObject({
+        signals: expect.arrayContaining(["commercial-restriction"]),
+        evidenceSources: expect.arrayContaining(["file: LICENSE (license)"])
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("rejects unsafe proxy coordinates before constructing a URL", () => {
     expect(goModuleProxyZipUrl("../private/module", "v1.0.0")).toBeUndefined();
     expect(goModuleProxyZipUrl("example.com/module", "../v1.0.0")).toBeUndefined();

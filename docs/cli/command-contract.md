@@ -188,6 +188,8 @@ directory where Ohrisk was invoked remains the configuration, waiver, cache, and
 root. General package-cache, install-tree, and vendored-source evidence from the temporary checkout
 is disabled. Project-contained source metadata and license files explicitly referenced by a selected
 Python lockfile local-source record are parser inputs and remain bounded by the validated checkout;
+Go local replacements may likewise read only real paths contained by that checkout, and an internal
+submodule may use bounded root-module license evidence when it has no legal files of its own;
 project-contained local-source evidence, standalone SBOM evidence, and the bounded npm/PyPI/Maven/Go/NuGet remote package-evidence pipeline also remain
 available. Shareable reports and errors redact the temporary checkout path.
 

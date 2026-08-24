@@ -506,6 +506,7 @@ async function runScanAt(input: {
   configurationRoot?: string;
   runtimeRoot?: string;
   allowLocalProjectEvidence?: boolean;
+  allowProjectContainedGoReplacementEvidence?: boolean;
   reportProgress?: ScanProgressReporter;
   temporaryRoot?: string;
   repository?: RemoteRepositoryReportSource;
@@ -529,6 +530,12 @@ async function runScanAt(input: {
     ...(input.runtimeRoot ? { runtimeRoot: input.runtimeRoot } : {}),
     ...(input.allowLocalProjectEvidence !== undefined
       ? { allowLocalProjectEvidence: input.allowLocalProjectEvidence }
+      : {}),
+    ...(input.allowProjectContainedGoReplacementEvidence !== undefined
+      ? {
+          allowProjectContainedGoReplacementEvidence:
+            input.allowProjectContainedGoReplacementEvidence
+        }
       : {}),
     ...(command.lockfilePath ? { lockfilePath: command.lockfilePath } : {}),
     ...(command.archivePath ? { archivePath: command.archivePath } : {}),
@@ -674,6 +681,7 @@ async function scanProject(input: {
   configurationRoot?: string;
   runtimeRoot?: string;
   allowLocalProjectEvidence?: boolean;
+  allowProjectContainedGoReplacementEvidence?: boolean;
   lockfilePath?: string;
   archivePath?: string;
   projectSearchMode?: "ancestors" | "tree";
@@ -806,6 +814,12 @@ async function scanProject(input: {
     ...(input.allowLocalProjectEvidence !== undefined
       ? { allowLocalProjectEvidence: input.allowLocalProjectEvidence }
       : {}),
+    ...(input.allowProjectContainedGoReplacementEvidence !== undefined
+      ? {
+          allowProjectContainedGoReplacementEvidence:
+            input.allowProjectContainedGoReplacementEvidence
+        }
+      : {}),
     ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
     ...(input.progress ? { progress: input.progress } : {}),
     ...(input.signal ? { signal: input.signal } : {})
@@ -891,6 +905,7 @@ async function evaluateProjectScan(input: {
   scanGraph: DependencyGraph;
   configurationRoot?: string;
   allowLocalProjectEvidence?: boolean;
+  allowProjectContainedGoReplacementEvidence?: boolean;
   profile: Extract<CliCommand, { kind: "scan" | "ci" | "diff" }>["profile"];
   policy: ResolvedPolicyConfig;
   evidenceRuntime: EvidenceRuntimeOptions;
@@ -920,6 +935,12 @@ async function evaluateProjectScan(input: {
       : input.project.source
         ? { allowLocalProjectEvidence: false }
         : {}),
+    ...(input.allowProjectContainedGoReplacementEvidence !== undefined
+      ? {
+          allowProjectContainedGoReplacementEvidence:
+            input.allowProjectContainedGoReplacementEvidence
+        }
+      : {}),
     evidenceRuntime: input.evidenceRuntime,
     ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
     ...(evidenceProgress ? { progress: evidenceProgress } : {}),
@@ -947,6 +968,7 @@ async function collectEvidenceForGraph(input: {
   graph: DependencyGraph;
   projectRoot: string;
   allowLocalProjectEvidence?: boolean;
+  allowProjectContainedGoReplacementEvidence?: boolean;
   workspaceRoot?: string;
   evidenceRuntime: EvidenceRuntimeOptions;
   progress?: (progress: EvidenceCollectionProgress) => void;
@@ -998,6 +1020,12 @@ async function collectEvidenceForGraph(input: {
     projectRoot: input.projectRoot,
     ...(input.allowLocalProjectEvidence !== undefined
       ? { allowLocalProjectEvidence: input.allowLocalProjectEvidence }
+      : {}),
+    ...(input.allowProjectContainedGoReplacementEvidence !== undefined
+      ? {
+          allowProjectContainedGoReplacementEvidence:
+            input.allowProjectContainedGoReplacementEvidence
+        }
       : {}),
     offline: input.evidenceRuntime.offline,
     cacheDir: input.evidenceRuntime.cacheDir,

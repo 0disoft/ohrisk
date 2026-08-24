@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.15.2 - Unreleased
+
+- Public repository scans now read Go local replacement evidence only from
+  real paths contained by the validated checkout. Internal submodules without
+  legal files of their own inherit bounded root-module license evidence,
+  avoiding misleading `unknown` results for repositories such as Terraform
+  without enabling general temporary-checkout package or vendor discovery.
+
 ## 1.15.1 - 2026-08-24
 
 - The packaged `ohrisk-notices` command now generates deterministic,

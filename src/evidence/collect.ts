@@ -215,6 +215,7 @@ export async function collectGraphEvidence(input: {
   projectRoot: string;
   workspaceRoot?: string;
   allowLocalProjectEvidence?: boolean;
+  allowProjectContainedGoReplacementEvidence?: boolean;
   fetchArtifact?: ArtifactFetcher;
   fetchTimeoutMs?: number;
   registryMetadataMaxBytes?: number;
@@ -266,6 +267,8 @@ export async function collectGraphEvidence(input: {
   const installedPackageJsonMaxBytes =
     input.installedPackageJsonMaxBytes ?? INSTALLED_PACKAGE_JSON_MAX_BYTES;
   const allowLocalProjectEvidence = input.allowLocalProjectEvidence ?? true;
+  const allowProjectContainedGoReplacementEvidence =
+    input.allowProjectContainedGoReplacementEvidence ?? false;
   const loadYarnCacheIndex = allowLocalProjectEvidence
     ? createYarnCacheIndexLoader(input.projectRoot)
     : () => ok(undefined);
@@ -310,6 +313,7 @@ export async function collectGraphEvidence(input: {
         node,
         projectRoot: input.projectRoot,
         allowLocalProjectEvidence,
+        allowProjectContainedGoReplacementEvidence,
         ...(workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {}),
         fetchArtifact,
         npmFetchArtifact,
@@ -535,6 +539,7 @@ async function collectNodeEvidence(input: {
   node: DependencyNode;
   projectRoot: string;
   allowLocalProjectEvidence: boolean;
+  allowProjectContainedGoReplacementEvidence: boolean;
   workspaceRoot?: string;
   fetchArtifact: ArtifactFetcher;
   npmFetchArtifact: ArtifactFetcher;
@@ -552,6 +557,21 @@ async function collectNodeEvidence(input: {
   collectMavenEvidence: MavenEvidenceCollector;
   loadNugetServiceIndex: NugetServiceIndexLoader;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
+  const projectContainedGoReplacementEvidence =
+    !input.allowLocalProjectEvidence
+    && input.allowProjectContainedGoReplacementEvidence
+    && input.node.ecosystem === "go"
+    && input.node.resolved !== undefined
+    && !input.node.resolved.startsWith("go-module:")
+      ? collectRegisteredEcosystemEvidence({
+          node: input.node,
+          projectRoot: input.projectRoot
+        })
+      : undefined;
+  if (projectContainedGoReplacementEvidence) {
+    return projectContainedGoReplacementEvidence;
+  }
+
   const hasVerifiedPubArchive = input.node.ecosystem === "pub"
     && input.node.resolved !== undefined
     && input.node.integrity !== undefined;

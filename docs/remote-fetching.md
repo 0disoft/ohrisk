@@ -145,7 +145,11 @@ may use the fixed public proxy only when the adjacent `go.sum` contains the exac
 module ZIP `h1` checksum for the evidence identity. When edge metadata is absent
 from that verified ZIP, Ohrisk may fetch the standalone `.mod` only when `go.sum`
 also contains its distinct `<version>/go.mod` checksum. Local path replacements
-are never sent to the proxy. Missing or malformed ZIP checksums produce
+are never sent to the proxy. During a public repository scan, a local replacement
+may be read only when its real path stays inside the validated checkout. If its
+module path is nested under the root Go module and it has no legal files of its
+own, Ohrisk uses the root module's bounded license evidence; unrelated local
+replacement module paths do not inherit the repository license. Missing or malformed ZIP checksums produce
 unavailable license evidence without a ZIP request, and a ZIP checksum mismatch
 fails the scan. For modules
 declaring Go 1.17 or later, `go.mod` is the complete requirement graph and
