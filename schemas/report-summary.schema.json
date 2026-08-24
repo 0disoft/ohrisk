@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ohrisk:schema:report-summary:1.0.0",
+  "title": "Ohrisk report summary",
+  "type": "object",
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "status",
+    "reportType",
+    "failed",
+    "thresholdFailed",
+    "waiverDriftFailed",
+    "failOn",
+    "completeness",
+    "findingCount",
+    "failingFindingCount",
+    "waivedFindingCount",
+    "counts",
+    "shownFindingCount",
+    "omittedFindingCount",
+    "findings"
+  ],
+  "properties": {
+    "$schema": { "const": "urn:ohrisk:schema:report-summary:1.0.0" },
+    "schemaVersion": { "const": "1.0.0" },
+    "status": { "enum": ["profile_risk_evaluated", "risk_diff_evaluated"] },
+    "reportType": { "enum": ["scan", "diff"] },
+    "failed": { "type": "boolean" },
+    "thresholdFailed": { "type": "boolean" },
+    "waiverDriftFailed": { "type": "boolean" },
+    "failOn": {
+      "anyOf": [
+        { "$ref": "#/$defs/severity" },
+        { "type": "null" }
+      ]
+    },
+    "completeness": { "enum": ["complete", "partial", "not-reported"] },
+    "findingCount": { "type": "integer", "minimum": 0 },
+    "failingFindingCount": { "type": "integer", "minimum": 0 },
+    "waivedFindingCount": { "type": "integer", "minimum": 0 },
+    "counts": {
+      "type": "object",
+      "required": ["low", "review", "unknown", "high"],
+      "properties": {
+        "low": { "type": "integer", "minimum": 0 },
+        "review": { "type": "integer", "minimum": 0 },
+        "unknown": { "type": "integer", "minimum": 0 },
+        "high": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "shownFindingCount": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "omittedFindingCount": { "type": "integer", "minimum": 0 },
+    "findings": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/finding" }
+    }
+  },
+  "$defs": {
+    "severity": { "enum": ["low", "review", "unknown", "high"] },
+    "finding": {
+      "type": "object",
+      "required": ["id", "packageId", "severity", "reason", "action"],
+      "properties": {
+        "id": { "type": "string", "pattern": "\\S" },
+        "packageId": { "type": "string", "pattern": "\\S" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "reason": { "type": "string" },
+        "action": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

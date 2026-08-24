@@ -24,6 +24,7 @@
     "./schemas/waiver-file": "./schemas/waiver-file.schema.json",
     "./schemas/baseline": "./schemas/baseline.schema.json",
     "./schemas/baseline-check": "./schemas/baseline-check.schema.json",
+    "./schemas/report-summary": "./schemas/report-summary.schema.json",
     "./schemas/*": "./schemas/*",
     "./dist/*": "./dist/*",
     "./CHANGELOG.md": "./CHANGELOG.md",

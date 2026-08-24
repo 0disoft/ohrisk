@@ -50,7 +50,8 @@ describe("package metadata", () => {
     expect(packageJson.engines?.node).toBe(">=24.0.0");
     expect(packageJson.bin).toEqual({
       ohrisk: "dist/cli.js",
-      "ohrisk-baseline": "bin/ohrisk-baseline.mjs"
+      "ohrisk-baseline": "bin/ohrisk-baseline.mjs",
+      "ohrisk-summary": "bin/ohrisk-summary.mjs"
     });
     expect(packageJson.files).toEqual(["CHANGELOG.md", "bin", "dist", "schemas"]);
     expect(packageJson.exports).toEqual({
@@ -64,6 +65,7 @@ describe("package metadata", () => {
       "./schemas/waiver-file": "./schemas/waiver-file.schema.json",
       "./schemas/baseline": "./schemas/baseline.schema.json",
       "./schemas/baseline-check": "./schemas/baseline-check.schema.json",
+      "./schemas/report-summary": "./schemas/report-summary.schema.json",
       "./schemas/*": "./schemas/*",
       "./dist/*": "./dist/*",
       "./CHANGELOG.md": "./CHANGELOG.md",

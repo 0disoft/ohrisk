@@ -56,4 +56,9 @@ The npm package also publishes the same renderer as `ohrisk-summary`:
 ohrisk-summary --report reports/ohrisk.json --max-findings 20
 ```
 
-Use `--json` for a machine-readable summary. `--step-summary` appends Markdown to `GITHUB_STEP_SUMMARY`, while `--github-output <path>` writes the scalar outputs using the GitHub Actions environment-file format.
+Use `--json` for a machine-readable summary. Its closed Draft 2020-12 contract
+is exported as `ohrisk/schemas/report-summary`, with the matching
+`ReportSummary` TypeScript type available from `ohrisk/report-types`.
+`--step-summary` appends Markdown to `GITHUB_STEP_SUMMARY`, while
+`--github-output <path>` writes the scalar outputs using the GitHub Actions
+environment-file format.

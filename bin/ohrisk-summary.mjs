@@ -3,12 +3,18 @@
 import {
   appendFileSync,
   readFileSync,
-  realpathSync
+  realpathSync,
+  statSync
 } from "node:fs";
 import path from "node:path";
 
 const SEVERITIES = ["low", "review", "unknown", "high"];
 const DEFAULT_MAX_FINDINGS = 20;
+const MAX_REPORT_BYTES = 64 * 1024 * 1024;
+const REPORT_SCHEMA_VERSION = "3.5.0";
+const SCAN_REPORT_SCHEMA = `urn:ohrisk:schema:scan-report:${REPORT_SCHEMA_VERSION}`;
+const DIFF_REPORT_SCHEMA = `urn:ohrisk:schema:diff-report:${REPORT_SCHEMA_VERSION}`;
+const SUMMARY_SCHEMA = "urn:ohrisk:schema:report-summary:1.0.0";
 
 try {
   const options = parseArguments(process.argv.slice(2));
@@ -76,6 +82,8 @@ function summarizeReport(report, maxFindings) {
     : 0;
 
   return {
+    $schema: SUMMARY_SCHEMA,
+    schemaVersion: "1.0.0",
     status: report.status,
     reportType,
     failed: thresholdFailed || waiverDriftFailed,
@@ -96,6 +104,10 @@ function summarizeReport(report, maxFindings) {
 function readReport(filePath) {
   let parsed;
   try {
+    const metadata = statSync(filePath);
+    if (!metadata.isFile() || metadata.size > MAX_REPORT_BYTES) {
+      throw new Error(`report must be a regular file no larger than ${MAX_REPORT_BYTES} bytes.`);
+    }
     parsed = JSON.parse(readFileSync(filePath, "utf8"));
   } catch (cause) {
     throw new Error(`cannot read an Ohrisk JSON report from ${displayPath(filePath)}: ${errorMessage(cause)}`);
@@ -110,6 +122,26 @@ function readReport(filePath) {
   ) {
     throw new Error(`${displayPath(filePath)} is not a supported Ohrisk scan or diff report.`);
   }
+  const expectedSchema = parsed.status === "profile_risk_evaluated"
+    ? SCAN_REPORT_SCHEMA
+    : DIFF_REPORT_SCHEMA;
+  if (parsed.$schema !== expectedSchema || parsed.schemaVersion !== REPORT_SCHEMA_VERSION) {
+    throw new Error(`${displayPath(filePath)} does not use the supported Ohrisk ${REPORT_SCHEMA_VERSION} report schema.`);
+  }
+  assertOptionalBoolean(parsed, "failed");
+  assertOptionalBoolean(parsed, "waiverDriftFailed");
+  assertOptionalSeverity(parsed, "failOn");
+  assertOptionalNonNegativeInteger(parsed, "failingFindingCount");
+  if (parsed.status === "profile_risk_evaluated") {
+    if (
+      !isObject(parsed.completeness)
+      || (parsed.completeness.status !== "complete" && parsed.completeness.status !== "partial")
+      || !isObject(parsed.waivers)
+      || nonNegativeInteger(parsed.waivers.applied) === undefined
+    ) {
+      throw new Error(`${displayPath(filePath)} is missing valid scan completeness or waiver counts.`);
+    }
+  }
   return parsed;
 }
 
@@ -120,7 +152,9 @@ function normalizeFinding(value) {
   const { id, packageId, severity, reason, action } = value;
   if (
     typeof id !== "string"
+    || id.length === 0
     || typeof packageId !== "string"
+    || packageId.length === 0
     || !SEVERITIES.includes(severity)
   ) {
     throw new Error("Every report finding must contain id, packageId, and a supported severity.");
@@ -154,8 +188,15 @@ function renderMarkdown(summary) {
     ""
   ];
 
-  if (summary.findings.length === 0) {
+  if (summary.findingCount === 0) {
     lines.push("No active findings are present in this report.");
+    return lines.join("\n");
+  }
+
+  if (summary.findings.length === 0) {
+    lines.push(
+      `${summary.omittedFindingCount} active finding${summary.omittedFindingCount === 1 ? " was" : "s were"} omitted because max-findings is 0. The report artifact remains authoritative.`
+    );
     return lines.join("\n");
   }
 
@@ -326,11 +367,30 @@ function nonNegativeInteger(value) {
   return Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 }
 
+function assertOptionalBoolean(value, property) {
+  if (property in value && typeof value[property] !== "boolean") {
+    throw new Error(`${property} must be a Boolean when present.`);
+  }
+}
+
+function assertOptionalSeverity(value, property) {
+  if (property in value && !SEVERITIES.includes(value[property])) {
+    throw new Error(`${property} must be a supported severity when present.`);
+  }
+}
+
+function assertOptionalNonNegativeInteger(value, property) {
+  if (property in value && nonNegativeInteger(value[property]) === undefined) {
+    throw new Error(`${property} must be a non-negative integer when present.`);
+  }
+}
+
 function escapeCell(value) {
   return String(value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
+    .replaceAll("\\", "\\\\")
     .replaceAll("|", "\\|")
     .replace(/[\r\n]+/g, " ")
     .trim();

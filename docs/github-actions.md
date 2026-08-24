@@ -34,6 +34,14 @@ history. Checkout depth and baseline availability are the caller's
 responsibility. For `scan`, leave `fail-on` empty (the default). For `ci`, an
 empty action input preserves the CLI's `high` default.
 
+### Permissionless report summary
+
+The nested `summary-action` consumes one completed scan or diff JSON report,
+appends escaped and bounded Markdown to `GITHUB_STEP_SUMMARY`, and exposes only
+scalar outputs. It performs no scan, network request, GitHub API call, or
+pull-request write. See the [step-summary guide](report-summary-action.md) for
+the workflow and output contract.
+
 To scan a source archive directly, pass a checked-in or downloaded
 repository-relative regular file to `archive`:
 

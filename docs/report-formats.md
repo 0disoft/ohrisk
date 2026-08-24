@@ -18,11 +18,12 @@ includes different levels of waiver detail.
 
 Every Ohrisk JSON report includes `$schema` and `schemaVersion`. The published
 Draft 2020-12 contracts live in `schemas/common.schema.json`,
-`schemas/scan-report.schema.json`, `schemas/diff-report.schema.json`, and
-`schemas/explain-report.schema.json`, `schemas/baseline.schema.json`, and
-`schemas/baseline-check.schema.json`. The baseline contracts use their own
+`schemas/scan-report.schema.json`, `schemas/diff-report.schema.json`,
+`schemas/explain-report.schema.json`, `schemas/baseline.schema.json`,
+`schemas/baseline-check.schema.json`, and
+`schemas/report-summary.schema.json`. The companion contracts use their own
 independent `1.0.0` version because they model the reduced checked-in decision
-record rather than the full report payload.
+record or bounded summary rather than the full report payload.
 
 Schema `3.5.0` is a closed contract. Report roots and structured nested objects
 reject unknown properties, while common `$defs` define findings, evidence,
@@ -64,6 +65,7 @@ The available schema subpaths are:
 - `ohrisk/schemas/waiver-file`
 - `ohrisk/schemas/baseline`
 - `ohrisk/schemas/baseline-check`
+- `ohrisk/schemas/report-summary`
 
 Use `moduleResolution: "NodeNext"` or `"Bundler"` and enable
 `resolveJsonModule` when importing the JSON files from TypeScript. Existing
