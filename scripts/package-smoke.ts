@@ -66,6 +66,21 @@ try {
     );
   }
 
+  writeFileSync(path.join(consumerDir, "scan-report.json"), scanOutput, "utf8");
+  const summaryOutput = runWithPath(
+    "ohrisk-summary",
+    ["--report", "scan-report.json", "--json"],
+    consumerDir,
+    consumerBinDir
+  );
+  const summaryReport = readJsonObject(summaryOutput);
+  if (
+    summaryReport.$schema !== "urn:ohrisk:schema:report-summary:1.0.0"
+    || summaryReport.status !== "profile_risk_evaluated"
+  ) {
+    throw new Error("Packaged report summary smoke test returned an invalid contract.");
+  }
+
   const archiveName = "source.tar";
   writeFileSync(
     path.join(consumerDir, archiveName),
@@ -118,6 +133,7 @@ function assertPublishedModuleSurface(consumerDir: string, repoRoot: string): vo
       'import waiverSchema from "ohrisk/schemas/waiver-file" with { type: "json" };',
       'import baselineSchema from "ohrisk/schemas/baseline" with { type: "json" };',
       'import baselineCheckSchema from "ohrisk/schemas/baseline-check" with { type: "json" };',
+      'import reportSummarySchema from "ohrisk/schemas/report-summary" with { type: "json" };',
       'import explicitScanSchema from "ohrisk/schemas/scan-report.schema.json" with { type: "json" };',
       "",
       "const expected = new Map([",
@@ -128,6 +144,7 @@ function assertPublishedModuleSurface(consumerDir: string, repoRoot: string): vo
       '  [waiverSchema.$id, "urn:ohrisk:schema:waiver-file:1.0.0"],',
       '  [baselineSchema.$id, "urn:ohrisk:schema:baseline:1.0.0"],',
       '  [baselineCheckSchema.$id, "urn:ohrisk:schema:baseline-check:1.0.0"],',
+      '  [reportSummarySchema.$id, "urn:ohrisk:schema:report-summary:1.0.0"],',
       '  [explicitScanSchema.$id, "urn:ohrisk:schema:scan-report:3.5.0"]',
       "]);",
       "",
@@ -150,6 +167,7 @@ function assertPublishedModuleSurface(consumerDir: string, repoRoot: string): vo
       "  DiffReport,",
       "  BaselineCheckReport,",
       "  OhriskBaseline,",
+      "  ReportSummary,",
       "  ExplainReport,",
       "  Finding,",
       "  ReportSchemaVersion,",
@@ -165,6 +183,7 @@ function assertPublishedModuleSurface(consumerDir: string, repoRoot: string): vo
       "declare const explainReport: ExplainReport;",
       "declare const baseline: OhriskBaseline;",
       "declare const baselineCheck: BaselineCheckReport;",
+      "declare const reportSummary: ReportSummary;",
       "const finding: Finding | undefined = scanReport.findings[0];",
       "const introduced: Finding[] = diffReport.findings;",
       "const explained: Finding = explainReport.finding;",
@@ -180,6 +199,7 @@ function assertPublishedModuleSurface(consumerDir: string, repoRoot: string): vo
       "  waiverFile,",
       "  baseline,",
       "  baselineCheck,",
+      "  reportSummary,",
       "  scanSchema,",
       "  diffSchema",
       "];",

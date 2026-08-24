@@ -129,6 +129,12 @@ The action itself does not upload SARIF or artifacts and does not request
 additional token permissions for persistent caching. Workflows that upload
 SARIF must grant `security-events: write` to the upload step.
 
+The nested `summary-action` is report-driven and permissionless. It reads one
+workspace-contained Ohrisk 3.5 scan or diff JSON report, writes escaped bounded
+Markdown only to the runner-provided step-summary file, and writes bounded
+scalar values only to the runner-provided output file. It performs no scan,
+network request, GitHub API call, or pull-request mutation.
+
 ## Validation
 
 Any input, version, path, network, shell, or cache behavior change must update

@@ -24,6 +24,7 @@ const SOURCE_DIRECTORIES = [
   "schemas",
   "scripts",
   "src",
+  "summary-action",
   "test",
   "types"
 ];

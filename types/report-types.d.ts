@@ -23,6 +23,9 @@ export type BaselineSchemaId =
   `urn:ohrisk:schema:baseline:${BaselineSchemaVersion}`;
 export type BaselineCheckSchemaId =
   `urn:ohrisk:schema:baseline-check:${BaselineSchemaVersion}`;
+export type ReportSummarySchemaVersion = "1.0.0";
+export type ReportSummarySchemaId =
+  `urn:ohrisk:schema:report-summary:${ReportSummarySchemaVersion}`;
 
 export type UsageProfile = "saas" | "distributed-app";
 export type RiskSeverity = "low" | "review" | "high" | "unknown";
@@ -145,6 +148,30 @@ export type BaselineCheckReport = {
   failingFindingCount: number;
   introducedFindings: BaselineIntroducedFinding[];
   failingFindings: BaselineIntroducedFinding[];
+};
+
+export type ReportSummaryFinding = Pick<
+  Finding,
+  "id" | "packageId" | "severity" | "reason" | "action"
+>;
+
+export type ReportSummary = {
+  $schema: ReportSummarySchemaId;
+  schemaVersion: ReportSummarySchemaVersion;
+  status: "profile_risk_evaluated" | "risk_diff_evaluated";
+  reportType: "scan" | "diff";
+  failed: boolean;
+  thresholdFailed: boolean;
+  waiverDriftFailed: boolean;
+  failOn: RiskSeverity | null;
+  completeness: "complete" | "partial" | "not-reported";
+  findingCount: number;
+  failingFindingCount: number;
+  waivedFindingCount: number;
+  counts: RiskCounts;
+  shownFindingCount: number;
+  omittedFindingCount: number;
+  findings: ReportSummaryFinding[];
 };
 
 export type DependencyGraphCounts = {

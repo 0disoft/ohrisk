@@ -2,6 +2,10 @@
 
 ## 1.15.1 - Unreleased
 
+- A permissionless nested `summary-action` and packaged `ohrisk-summary`
+  command now render an existing scan or diff JSON report into an escaped,
+  bounded GitHub Step Summary and expose scalar workflow outputs. Summary JSON
+  ships with a closed schema and matching public TypeScript type.
 - Checked-in baseline files and JSON check results now ship as closed Draft
   2020-12 schemas with matching public TypeScript types and stable npm package
   exports.
