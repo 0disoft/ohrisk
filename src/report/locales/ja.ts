@@ -281,6 +281,8 @@ function japaneseFindingAction(finding: RiskFinding): string {
       return "このパッケージを承認する前に、宣言されたライセンス expression を修正または手動レビューしてください。";
     case "Collect license evidence before approving this package.":
       return "このパッケージを承認する前に、ライセンス根拠を収集してください。";
+    case "Review the conflicting license evidence before approving this package.":
+      return "このパッケージを承認する前に、競合するライセンス根拠を確認してください。";
     default:
       return finding.action;
   }

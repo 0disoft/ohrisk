@@ -281,6 +281,8 @@ function germanFindingAction(finding: RiskFinding): string {
       return "Korrigieren oder prüfen Sie den deklarierten Lizenzausdruck manuell, bevor Sie dieses Paket freigeben.";
     case "Collect license evidence before approving this package.":
       return "Sammeln Sie Lizenznachweise, bevor Sie dieses Paket freigeben.";
+    case "Review the conflicting license evidence before approving this package.":
+      return "Prüfen Sie die widersprüchlichen Lizenznachweise, bevor Sie dieses Paket freigeben.";
     default:
       return finding.action;
   }

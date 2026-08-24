@@ -2,6 +2,8 @@
 
 ## 1.15.2 - Unreleased
 
+- Localized HTML reports no longer leave the conflicting-license review action
+  in English across Korean and the other supported report languages.
 - Public repository scans now read Go local replacement evidence only from
   real paths contained by the validated checkout. Internal submodules without
   legal files of their own inherit bounded root-module license evidence,

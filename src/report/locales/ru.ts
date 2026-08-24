@@ -281,6 +281,8 @@ function russianFindingAction(finding: RiskFinding): string {
       return "Исправьте или вручную проверьте объявленное лицензионное выражение перед одобрением пакета.";
     case "Collect license evidence before approving this package.":
       return "Соберите лицензионные доказательства перед одобрением пакета.";
+    case "Review the conflicting license evidence before approving this package.":
+      return "Проверьте противоречивые лицензионные доказательства перед одобрением пакета.";
     default:
       return finding.action;
   }

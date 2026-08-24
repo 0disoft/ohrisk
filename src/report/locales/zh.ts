@@ -281,6 +281,8 @@ function chineseFindingAction(finding: RiskFinding): string {
       return "批准此包之前，修复或人工审查声明的许可证表达式。";
     case "Collect license evidence before approving this package.":
       return "批准此包之前，收集许可证证据。";
+    case "Review the conflicting license evidence before approving this package.":
+      return "批准此包之前，审查相互冲突的许可证证据。";
     default:
       return finding.action;
   }

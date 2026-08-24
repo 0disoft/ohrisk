@@ -281,6 +281,8 @@ function frenchFindingAction(finding: RiskFinding): string {
       return "Corrigez ou revoyez manuellement l'expression de licence déclarée avant d'approuver ce paquet.";
     case "Collect license evidence before approving this package.":
       return "Collectez l'évidence de licence avant d'approuver ce paquet.";
+    case "Review the conflicting license evidence before approving this package.":
+      return "Examinez les éléments de licence contradictoires avant de valider ce paquet.";
     default:
       return finding.action;
   }

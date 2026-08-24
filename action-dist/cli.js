@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: ba7001ee5f24c7a4b4a881f60ad4185e54ea679db665017bce5eef57b856f9f4
+// ohrisk-action-source-sha256: 66dc2fa38c2828b7f9b3b8ffb211d71b50ff5f978b3bf8b3df6aa6c7d2ef6137
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -57204,6 +57204,8 @@ function koreanFindingAction(finding) {
       return "이 패키지를 승인하기 전에 선언된 라이선스 표현식을 수정하거나 수동 검토하세요.";
     case "Collect license evidence before approving this package.":
       return "이 패키지를 승인하기 전에 라이선스 근거를 수집하세요.";
+    case "Review the conflicting license evidence before approving this package.":
+      return "이 패키지를 승인하기 전에 충돌하는 라이선스 근거를 검토하세요.";
     default:
       return finding.action;
   }
@@ -57455,6 +57457,8 @@ function spanishFindingAction(finding) {
       return "Corrige o revisa manualmente la expresión de licencia declarada antes de aprobar este paquete.";
     case "Collect license evidence before approving this package.":
       return "Recopila evidencia de licencia antes de aprobar este paquete.";
+    case "Review the conflicting license evidence before approving this package.":
+      return "Revisa la evidencia de licencia contradictoria antes de aprobar este paquete.";
     default:
       return finding.action;
   }
@@ -57706,6 +57710,8 @@ function frenchFindingAction(finding) {
       return "Corrigez ou revoyez manuellement l'expression de licence déclarée avant d'approuver ce paquet.";
     case "Collect license evidence before approving this package.":
       return "Collectez l'évidence de licence avant d'approuver ce paquet.";
+    case "Review the conflicting license evidence before approving this package.":
+      return "Examinez les éléments de licence contradictoires avant de valider ce paquet.";
     default:
       return finding.action;
   }
@@ -57957,6 +57963,8 @@ function chineseFindingAction(finding) {
       return "批准此包之前，修复或人工审查声明的许可证表达式。";
     case "Collect license evidence before approving this package.":
       return "批准此包之前，收集许可证证据。";
+    case "Review the conflicting license evidence before approving this package.":
+      return "批准此包之前，审查相互冲突的许可证证据。";
     default:
       return finding.action;
   }
@@ -58208,6 +58216,8 @@ function hindiFindingAction(finding) {
       return "इस पैकेज को मंज़ूर करने से पहले घोषित लाइसेंस expression ठीक करें या मैनुअल समीक्षा करें।";
     case "Collect license evidence before approving this package.":
       return "इस पैकेज को मंज़ूर करने से पहले लाइसेंस साक्ष्य इकट्ठा करें।";
+    case "Review the conflicting license evidence before approving this package.":
+      return "इस पैकेज को मंज़ूर करने से पहले परस्पर विरोधी लाइसेंस साक्ष्य की समीक्षा करें।";
     default:
       return finding.action;
   }
@@ -58459,6 +58469,8 @@ function japaneseFindingAction(finding) {
       return "このパッケージを承認する前に、宣言されたライセンス expression を修正または手動レビューしてください。";
     case "Collect license evidence before approving this package.":
       return "このパッケージを承認する前に、ライセンス根拠を収集してください。";
+    case "Review the conflicting license evidence before approving this package.":
+      return "このパッケージを承認する前に、競合するライセンス根拠を確認してください。";
     default:
       return finding.action;
   }
@@ -58710,6 +58722,8 @@ function indonesianFindingAction(finding) {
       return "Perbaiki atau review manual license expression yang dideklarasikan sebelum menyetujui paket ini.";
     case "Collect license evidence before approving this package.":
       return "Kumpulkan bukti lisensi sebelum menyetujui paket ini.";
+    case "Review the conflicting license evidence before approving this package.":
+      return "Tinjau bukti lisensi yang bertentangan sebelum menyetujui paket ini.";
     default:
       return finding.action;
   }
@@ -58961,6 +58975,8 @@ function turkishFindingAction(finding) {
       return "Bu paketi onaylamadan önce bildirilen lisans ifadesini düzeltin veya elle inceleyin.";
     case "Collect license evidence before approving this package.":
       return "Bu paketi onaylamadan önce lisans kanıtı toplayın.";
+    case "Review the conflicting license evidence before approving this package.":
+      return "Bu paketi onaylamadan önce çelişkili lisans kanıtlarını inceleyin.";
     default:
       return finding.action;
   }
@@ -59212,6 +59228,8 @@ function russianFindingAction(finding) {
       return "Исправьте или вручную проверьте объявленное лицензионное выражение перед одобрением пакета.";
     case "Collect license evidence before approving this package.":
       return "Соберите лицензионные доказательства перед одобрением пакета.";
+    case "Review the conflicting license evidence before approving this package.":
+      return "Проверьте противоречивые лицензионные доказательства перед одобрением пакета.";
     default:
       return finding.action;
   }
@@ -59463,6 +59481,8 @@ function germanFindingAction(finding) {
       return "Korrigieren oder prüfen Sie den deklarierten Lizenzausdruck manuell, bevor Sie dieses Paket freigeben.";
     case "Collect license evidence before approving this package.":
       return "Sammeln Sie Lizenznachweise, bevor Sie dieses Paket freigeben.";
+    case "Review the conflicting license evidence before approving this package.":
+      return "Prüfen Sie die widersprüchlichen Lizenznachweise, bevor Sie dieses Paket freigeben.";
     default:
       return finding.action;
   }

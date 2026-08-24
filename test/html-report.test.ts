@@ -733,7 +733,7 @@ describe("HTML scan report", () => {
           ...finding,
           severity: "unknown",
           reason: "License evidence contains conflicting recognized expressions.",
-          action: "Collect license evidence before approving this package.",
+          action: "Review the conflicting license evidence before approving this package.",
           recommendation: "collect-evidence"
         }
       ],
@@ -741,7 +741,40 @@ describe("HTML scan report", () => {
     }));
 
     expect(output).toContain("라이선스 근거에서 서로 충돌하는 표현식이 인식되었습니다.");
+    expect(output).toContain("이 패키지를 승인하기 전에 충돌하는 라이선스 근거를 검토하세요.");
     expect(output).not.toContain("License evidence contains conflicting recognized expressions.");
+    expect(output).not.toContain("Review the conflicting license evidence before approving this package.");
+  });
+
+  test("localizes the conflicting-license action in every non-English HTML report", () => {
+    const translations = [
+      ["de", "Prüfen Sie die widersprüchlichen Lizenznachweise, bevor Sie dieses Paket freigeben."],
+      ["es", "Revisa la evidencia de licencia contradictoria antes de aprobar este paquete."],
+      ["fr", "Examinez les éléments de licence contradictoires avant de valider ce paquet."],
+      ["hi", "इस पैकेज को मंज़ूर करने से पहले परस्पर विरोधी लाइसेंस साक्ष्य की समीक्षा करें।"],
+      ["id", "Tinjau bukti lisensi yang bertentangan sebelum menyetujui paket ini."],
+      ["ja", "このパッケージを承認する前に、競合するライセンス根拠を確認してください。"],
+      ["ko", "이 패키지를 승인하기 전에 충돌하는 라이선스 근거를 검토하세요."],
+      ["ru", "Проверьте противоречивые лицензионные доказательства перед одобрением пакета."],
+      ["tr", "Bu paketi onaylamadan önce çelişkili lisans kanıtlarını inceleyin."],
+      ["zh", "批准此包之前，审查相互冲突的许可证证据。"]
+    ] as const;
+
+    for (const [reportLanguage, translatedAction] of translations) {
+      const output = renderScanReport(scanInput({
+        riskFindings: [{
+          ...finding,
+          severity: "unknown",
+          reason: "License evidence contains conflicting recognized expressions.",
+          action: "Review the conflicting license evidence before approving this package.",
+          recommendation: "collect-evidence"
+        }],
+        reportLanguage
+      }));
+
+      expect(output).toContain(translatedAction);
+      expect(output).not.toContain("Review the conflicting license evidence before approving this package.");
+    }
   });
 
   test("renders Spanish HTML report text without changing machine identifiers", () => {

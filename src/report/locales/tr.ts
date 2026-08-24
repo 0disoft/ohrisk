@@ -281,6 +281,8 @@ function turkishFindingAction(finding: RiskFinding): string {
       return "Bu paketi onaylamadan önce bildirilen lisans ifadesini düzeltin veya elle inceleyin.";
     case "Collect license evidence before approving this package.":
       return "Bu paketi onaylamadan önce lisans kanıtı toplayın.";
+    case "Review the conflicting license evidence before approving this package.":
+      return "Bu paketi onaylamadan önce çelişkili lisans kanıtlarını inceleyin.";
     default:
       return finding.action;
   }

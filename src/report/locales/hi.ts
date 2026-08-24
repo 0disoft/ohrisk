@@ -281,6 +281,8 @@ function hindiFindingAction(finding: RiskFinding): string {
       return "इस पैकेज को मंज़ूर करने से पहले घोषित लाइसेंस expression ठीक करें या मैनुअल समीक्षा करें।";
     case "Collect license evidence before approving this package.":
       return "इस पैकेज को मंज़ूर करने से पहले लाइसेंस साक्ष्य इकट्ठा करें।";
+    case "Review the conflicting license evidence before approving this package.":
+      return "इस पैकेज को मंज़ूर करने से पहले परस्पर विरोधी लाइसेंस साक्ष्य की समीक्षा करें।";
     default:
       return finding.action;
   }

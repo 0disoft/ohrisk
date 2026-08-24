@@ -281,6 +281,8 @@ function spanishFindingAction(finding: RiskFinding): string {
       return "Corrige o revisa manualmente la expresión de licencia declarada antes de aprobar este paquete.";
     case "Collect license evidence before approving this package.":
       return "Recopila evidencia de licencia antes de aprobar este paquete.";
+    case "Review the conflicting license evidence before approving this package.":
+      return "Revisa la evidencia de licencia contradictoria antes de aprobar este paquete.";
     default:
       return finding.action;
   }

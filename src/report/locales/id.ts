@@ -281,6 +281,8 @@ function indonesianFindingAction(finding: RiskFinding): string {
       return "Perbaiki atau review manual license expression yang dideklarasikan sebelum menyetujui paket ini.";
     case "Collect license evidence before approving this package.":
       return "Kumpulkan bukti lisensi sebelum menyetujui paket ini.";
+    case "Review the conflicting license evidence before approving this package.":
+      return "Tinjau bukti lisensi yang bertentangan sebelum menyetujui paket ini.";
     default:
       return finding.action;
   }

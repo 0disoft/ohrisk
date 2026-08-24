@@ -281,6 +281,8 @@ function koreanFindingAction(finding: RiskFinding): string {
       return "이 패키지를 승인하기 전에 선언된 라이선스 표현식을 수정하거나 수동 검토하세요.";
     case "Collect license evidence before approving this package.":
       return "이 패키지를 승인하기 전에 라이선스 근거를 수집하세요.";
+    case "Review the conflicting license evidence before approving this package.":
+      return "이 패키지를 승인하기 전에 충돌하는 라이선스 근거를 검토하세요.";
     default:
       return finding.action;
   }
