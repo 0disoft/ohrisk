@@ -554,12 +554,31 @@ function readLicenseFileExpressions(evidence: LicenseEvidence): LicenseExpressio
         expression,
         source: "license-file",
         filePath: file.path,
-        ...(file.scope === "component" ? { fileScope: "component" } : {})
+        ...(file.scope === "component" || isQualifiedComponentLicenseFile(evidence, file.path)
+          ? { fileScope: "component" }
+          : {})
       });
     }
   }
 
   return matches;
+}
+
+function isQualifiedComponentLicenseFile(evidence: LicenseEvidence, filePath: string): boolean {
+  const normalizedPath = filePath.replaceAll("\\", "/");
+  const slashIndex = normalizedPath.lastIndexOf("/");
+  const directory = slashIndex >= 0 ? normalizedPath.slice(0, slashIndex + 1) : "";
+  const fileName = normalizedPath.slice(slashIndex + 1);
+  const match = fileName.match(/^licen[cs]e\.([^.]+)$/i);
+  if (!match?.[1] || !/^(?:lib|third[-_]?party|vendor|component)/i.test(match[1])) {
+    return false;
+  }
+
+  return evidence.files.some((candidate) => {
+    const candidatePath = candidate.path.replaceAll("\\", "/").toLowerCase();
+    return candidatePath === `${directory}license`.toLowerCase()
+      || candidatePath === `${directory}licence`.toLowerCase();
+  });
 }
 
 function appendBundledComponentLicenses(input: {

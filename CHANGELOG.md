@@ -2,6 +2,10 @@
 
 ## 1.15.2 - Unreleased
 
+- Qualified sibling files such as `LICENSE.libyaml` are now treated as bundled
+  component licenses when a primary `LICENSE` exists beside them. Their
+  obligations are combined with SPDX `AND` instead of producing a false
+  package-license conflict.
 - Cargo root path dependencies contained by the workspace are now treated as
   implicit workspace members even when omitted from the explicit `members`
   list, while `exclude` entries remain authoritative. This restores license

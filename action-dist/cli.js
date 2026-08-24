@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 5f6f0656af748ab72b4e94585bcb6823a1152b31591a4545ea5b0c5038f159a3
+// ohrisk-action-source-sha256: 3f3cbf159d845af22334c282ce0093e13249732be266343f1ab894d08e099efc
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -54772,11 +54772,25 @@ function readLicenseFileExpressions(evidence) {
         expression,
         source: "license-file",
         filePath: file.path,
-        ...file.scope === "component" ? { fileScope: "component" } : {}
+        ...file.scope === "component" || isQualifiedComponentLicenseFile(evidence, file.path) ? { fileScope: "component" } : {}
       });
     }
   }
   return matches;
+}
+function isQualifiedComponentLicenseFile(evidence, filePath) {
+  const normalizedPath = filePath.replaceAll("\\", "/");
+  const slashIndex = normalizedPath.lastIndexOf("/");
+  const directory = slashIndex >= 0 ? normalizedPath.slice(0, slashIndex + 1) : "";
+  const fileName = normalizedPath.slice(slashIndex + 1);
+  const match = fileName.match(/^licen[cs]e\.([^.]+)$/i);
+  if (!match?.[1] || !/^(?:lib|third[-_]?party|vendor|component)/i.test(match[1])) {
+    return false;
+  }
+  return evidence.files.some((candidate) => {
+    const candidatePath = candidate.path.replaceAll("\\", "/").toLowerCase();
+    return candidatePath === `${directory}license`.toLowerCase() || candidatePath === `${directory}licence`.toLowerCase();
+  });
 }
 function appendBundledComponentLicenses(input) {
   const baseChoices = new Set(input.parsed.choices.map(comparableLicenseId));

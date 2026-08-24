@@ -930,6 +930,41 @@ describe("normalizeLicenseEvidence", () => {
     );
   });
 
+  test("treats qualified sibling license files as bundled component evidence", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "go.yaml.in/yaml/v2@v2.4.4",
+      files: [
+        {
+          path: "LICENSE",
+          kind: "license",
+          text: "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION"
+        },
+        {
+          path: "LICENSE.libyaml",
+          kind: "license",
+          text: [
+            "Permission is hereby granted, free of charge, to any person obtaining a copy",
+            "THE SOFTWARE IS PROVIDED \"AS IS\""
+          ].join("\n")
+        }
+      ],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      expression: "Apache-2.0 AND MIT",
+      choices: ["Apache-2.0", "MIT"],
+      joiner: "and",
+      signals: [],
+      confidence: "medium"
+    });
+    expect(normalized.signals).not.toContain("conflicting-evidence");
+    expect(normalized.evidenceSources).toContain(
+      "bundled component license match: MIT from LICENSE.libyaml"
+    );
+  });
+
   test("keeps restrictive bundled component licenses in the combined expression", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "bundled-copyleft@1.0.0",
