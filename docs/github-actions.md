@@ -21,7 +21,7 @@ requires a baseline ref:
   with:
     fetch-depth: 0
 
-- uses: 0disoft/ohrisk@v1.14.1
+- uses: 0disoft/ohrisk@v1.15.1
   with:
     command: diff
     baseline-ref: origin/main
@@ -51,7 +51,7 @@ To scan a source archive directly, pass a checked-in or downloaded
 repository-relative regular file to `archive`:
 
 ```yaml
-- uses: 0disoft/ohrisk@v1.14.1
+- uses: 0disoft/ohrisk@v1.15.1
   with:
     command: ci
     archive: artifacts/source.tar.gz
@@ -71,7 +71,7 @@ Enable the existing Ohrisk artifact cache across workflow runs with one Action
 input:
 
 ```yaml
-- uses: 0disoft/ohrisk@v1.14.1
+- uses: 0disoft/ohrisk@v1.15.1
   id: ohrisk
   with:
     cache: "true"
@@ -84,7 +84,7 @@ An empty `cache-dir` resolves to `.ohrisk-cache`. Set a custom contained path
 only when the workflow needs one:
 
 ```yaml
-- uses: 0disoft/ohrisk@v1.14.1
+- uses: 0disoft/ohrisk@v1.15.1
   with:
     cache: "true"
     cache-dir: .cache/ohrisk
@@ -130,7 +130,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install -g ohrisk@1.14.1
+      - run: npm install -g ohrisk@1.15.1
 
       - run: ohrisk diff origin/main --prod --fail-on high
 ```
@@ -168,7 +168,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install -g ohrisk@1.14.1
+      - run: npm install -g ohrisk@1.15.1
 
       - name: Generate Ohrisk report
         run: |
@@ -243,7 +243,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install -g ohrisk@1.14.1
+      - run: npm install -g ohrisk@1.15.1
 
       - run: |
           mkdir -p reports

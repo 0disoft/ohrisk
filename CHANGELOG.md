@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.15.1 - Unreleased
+## 1.15.1 - 2026-08-24
 
 - The packaged `ohrisk-notices` command now generates deterministic,
   evidence-backed `THIRD_PARTY_NOTICES.md` artifacts from Ohrisk CycloneDX
