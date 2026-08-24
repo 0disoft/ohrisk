@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: e324f1b19ac6564abf41b1f24ded6f9f8c8310391bc2047ff8817639b682eb96
+// ohrisk-action-source-sha256: 743675ba892a58c0b91abab0c50326fca38016f16493957745196d4baee017f2
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -17403,6 +17403,8 @@ var package_default = {
     "./schemas/diff-report": "./schemas/diff-report.schema.json",
     "./schemas/explain-report": "./schemas/explain-report.schema.json",
     "./schemas/waiver-file": "./schemas/waiver-file.schema.json",
+    "./schemas/baseline": "./schemas/baseline.schema.json",
+    "./schemas/baseline-check": "./schemas/baseline-check.schema.json",
     "./schemas/*": "./schemas/*",
     "./dist/*": "./dist/*",
     "./CHANGELOG.md": "./CHANGELOG.md",

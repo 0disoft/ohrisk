@@ -41,6 +41,11 @@ ohrisk-baseline check \
   --json
 ```
 
+The npm package publishes Draft 2020-12 contracts for both durable baseline
+files and machine-readable check results as `ohrisk/schemas/baseline` and
+`ohrisk/schemas/baseline-check`. Matching TypeScript types are available from
+`ohrisk/report-types` as `OhriskBaseline` and `BaselineCheckReport`.
+
 ## Review an intentional change
 
 When a dependency change is accepted, review the full current Ohrisk report first. Then regenerate the baseline from that exact report and commit both the dependency change and baseline update in the same pull request:

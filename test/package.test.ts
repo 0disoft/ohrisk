@@ -62,6 +62,8 @@ describe("package metadata", () => {
       "./schemas/diff-report": "./schemas/diff-report.schema.json",
       "./schemas/explain-report": "./schemas/explain-report.schema.json",
       "./schemas/waiver-file": "./schemas/waiver-file.schema.json",
+      "./schemas/baseline": "./schemas/baseline.schema.json",
+      "./schemas/baseline-check": "./schemas/baseline-check.schema.json",
       "./schemas/*": "./schemas/*",
       "./dist/*": "./dist/*",
       "./CHANGELOG.md": "./CHANGELOG.md",

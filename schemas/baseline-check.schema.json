@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ohrisk:schema:baseline-check:1.0.0",
+  "title": "Ohrisk baseline check report",
+  "type": "object",
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "status",
+    "failed",
+    "failOn",
+    "baselineFindingCount",
+    "currentFindingCount",
+    "newFindingCount",
+    "changedFindingCount",
+    "escalatedFindingCount",
+    "introducedFindingCount",
+    "failingFindingCount",
+    "introducedFindings",
+    "failingFindings"
+  ],
+  "properties": {
+    "$schema": { "const": "urn:ohrisk:schema:baseline-check:1.0.0" },
+    "schemaVersion": { "const": "1.0.0" },
+    "status": { "const": "baseline_checked" },
+    "failed": { "type": "boolean" },
+    "failOn": { "$ref": "#/$defs/severity" },
+    "baselineFindingCount": { "type": "integer", "minimum": 0 },
+    "currentFindingCount": { "type": "integer", "minimum": 0 },
+    "newFindingCount": { "type": "integer", "minimum": 0 },
+    "changedFindingCount": { "type": "integer", "minimum": 0 },
+    "escalatedFindingCount": { "type": "integer", "minimum": 0 },
+    "introducedFindingCount": { "type": "integer", "minimum": 0 },
+    "failingFindingCount": { "type": "integer", "minimum": 0 },
+    "introducedFindings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/introducedFinding" }
+    },
+    "failingFindings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/introducedFinding" }
+    }
+  },
+  "$defs": {
+    "severity": { "enum": ["low", "review", "unknown", "high"] },
+    "introducedFinding": {
+      "type": "object",
+      "required": ["fingerprint", "id", "packageId", "severity"],
+      "properties": {
+        "fingerprint": { "type": "string", "pattern": "\\S" },
+        "id": { "type": "string", "pattern": "\\S" },
+        "packageId": { "type": "string", "pattern": "\\S" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "previousFingerprint": { "type": "string", "pattern": "\\S" },
+        "previousSeverity": { "$ref": "#/$defs/severity" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -3,9 +3,19 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import {
+  JsonSchemaRegistry,
+  type JsonSchema
+} from "./support/json-schema-validator";
 
 const temporaryDirectories: string[] = [];
 const baselineCli = path.join(import.meta.dir, "..", "bin", "ohrisk-baseline.mjs");
+const baselineSchemaId = "urn:ohrisk:schema:baseline:1.0.0";
+const baselineCheckSchemaId = "urn:ohrisk:schema:baseline-check:1.0.0";
+const schemaRegistry = new JsonSchemaRegistry([
+  readSchema("baseline.schema.json"),
+  readSchema("baseline-check.schema.json")
+]);
 
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
@@ -41,6 +51,7 @@ describe("ohrisk-baseline", () => {
     const baseline = JSON.parse(baselineSource) as {
       findings: Array<{ fingerprint: string }>;
     };
+    expectValid(baselineSchemaId, baseline);
     expect(baseline.findings.map((entry) => entry.fingerprint)).toEqual([
       "fingerprint-a",
       "fingerprint-b"
@@ -66,7 +77,9 @@ describe("ohrisk-baseline", () => {
       "--json"
     ]);
     expect(checked.status).toBe(0);
-    expect(JSON.parse(checked.stdout)).toMatchObject({
+    const checkReport = JSON.parse(checked.stdout) as unknown;
+    expectValid(baselineCheckSchemaId, checkReport);
+    expect(checkReport).toMatchObject({
       status: "baseline_checked",
       failed: false,
       introducedFindingCount: 0,
@@ -331,7 +344,49 @@ describe("ohrisk-baseline", () => {
     expect(checked.status).toBe(2);
     expect(checked.stderr).toContain("baseline contains duplicate finding id");
   });
+
+  test("publishes closed schemas for baseline artifacts", () => {
+    schemaRegistry.assertSupportedKeywords();
+
+    expect(schemaRegistry.validate(baselineSchemaId, {
+      $schema: baselineSchemaId,
+      schemaVersion: "1.0.0",
+      sourceReportSchema: "urn:ohrisk:schema:scan-report:3.5.0",
+      profile: "saas",
+      prodOnly: true,
+      configurationDigest: "a".repeat(64),
+      findings: [],
+      unexpected: true
+    })).not.toEqual([]);
+
+    expect(schemaRegistry.validate(baselineCheckSchemaId, {
+      $schema: baselineCheckSchemaId,
+      schemaVersion: "1.0.0",
+      status: "baseline_checked",
+      failed: false,
+      failOn: "critical",
+      baselineFindingCount: 0,
+      currentFindingCount: 0,
+      newFindingCount: 0,
+      changedFindingCount: 0,
+      escalatedFindingCount: 0,
+      introducedFindingCount: 0,
+      failingFindingCount: 0,
+      introducedFindings: [],
+      failingFindings: []
+    })).not.toEqual([]);
+  });
 });
+
+function readSchema(filename: string): JsonSchema {
+  return JSON.parse(
+    readFileSync(path.join(import.meta.dir, "..", "schemas", filename), "utf8")
+  ) as JsonSchema;
+}
+
+function expectValid(schemaId: string, value: unknown): void {
+  expect(schemaRegistry.validate(schemaId, value)).toEqual([]);
+}
 
 function temporaryDirectory(): string {
   const directory = mkdtempSync(path.join(tmpdir(), "ohrisk-baseline-test-"));

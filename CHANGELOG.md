@@ -2,6 +2,9 @@
 
 ## 1.15.1 - Unreleased
 
+- Checked-in baseline files and JSON check results now ship as closed Draft
+  2020-12 schemas with matching public TypeScript types and stable npm package
+  exports.
 - Checked-in baselines now correlate findings by stable finding ID, detect
   semantic changes and severity escalations even when the fingerprint changes,
   reject duplicate IDs, use locale-independent ordering, and bind comparisons
