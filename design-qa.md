@@ -2,10 +2,10 @@
 
 ## Evidence
 
-- Source visual truth: `C:/Users/cherr/.codex/generated_images/019f6924-8a9c-7b20-983a-3c5f175577f9/exec-77075742-848e-47f6-9caf-03f62fb04da9.png`
-- Desktop implementation: `C:/Users/cherr/Documents/workspace/zerodi-wd1/projects/hobby/opensource/ohrisk/.tmp/design-qa/implementation-desktop-v4.png`
-- Focused findings implementation: `C:/Users/cherr/Documents/workspace/zerodi-wd1/projects/hobby/opensource/ohrisk/.tmp/design-qa/implementation-findings-v4.png`
-- Mobile implementation: `C:/Users/cherr/Documents/workspace/zerodi-wd1/projects/hobby/opensource/ohrisk/.tmp/design-qa/implementation-mobile-v4.png`
+- Source visual truth: `%CODEX_HOME%/generated_images/019f6924-8a9c-7b20-983a-3c5f175577f9/exec-77075742-848e-47f6-9caf-03f62fb04da9.png`
+- Desktop implementation: `.tmp/design-qa/implementation-desktop-v4.png`
+- Focused findings implementation: `.tmp/design-qa/implementation-findings-v4.png`
+- Mobile implementation: `.tmp/design-qa/implementation-mobile-v4.png`
 - Desktop viewport and pixels: 1536 x 1024 CSS px, 1536 x 1024 image px, device density 1.
 - Mobile viewport and pixels: 390 x 844 CSS px, 390 x 844 image px, device density 1.
 - State: Korean, SaaS profile, Bloxstrap scan with 9 unknown findings and partial repository coverage.
