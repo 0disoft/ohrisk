@@ -540,6 +540,8 @@ describe("HTML scan report", () => {
     expect(output).toContain('<div class="findings-workspace">');
     expect(output).toContain('type="button" class="finding-select" data-finding-select');
     expect(output).toContain('aria-pressed="true"');
+    expect(output).not.toContain('class="finding-card-main"');
+    expect(output).not.toContain('class="finding-context"');
     expect(output).toContain('<aside class="finding-inspector" data-finding-inspector');
     expect(output).toContain('.finding-details.finding-details-source { display: none; }');
     expect(output).toContain('const selectFinding = (card, focusInspector = false) => {');

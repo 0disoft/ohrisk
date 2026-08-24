@@ -606,11 +606,7 @@ function renderHtmlFindingCard(
   return [
     `        <article class="finding-card" data-finding-card data-severity="${escapeHtml(finding.severity)}" data-dependency-scope="${escapeHtml(finding.dependencyScope)}" data-recommendation="${escapeHtml(finding.recommendation)}" role="listitem" aria-labelledby="${titleId}">`,
     `          <button type="button" class="finding-select" data-finding-select aria-pressed="${index === 0 ? "true" : "false"}" aria-controls="finding-inspector">`,
-    '            <span class="finding-card-main">',
-    `              <span class="finding-title" id="${titleId}"><code>${escapeHtml(finding.packageId)}</code></span>`,
-    `              <span class="finding-context">${escapeHtml(text.messages.dependencyContext(finding))}</span>`,
-    "            </span>",
-    `            ${renderSeverity(finding.severity, text)}`,
+    `            <span class="finding-title" id="${titleId}"><code>${escapeHtml(finding.packageId)}</code></span>`,
     "          </button>",
     '          <dl class="finding-details finding-details-source" data-finding-details>',
     ...renderFindingDetail(text.labels.severity, renderSeverity(finding.severity, text), text),

@@ -128,13 +128,11 @@ section { margin-block: 18px; scroll-margin-block-start: 18px; }
 .finding-card { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
 .finding-card[hidden] { display: none; }
 .finding-card.is-selected { border-color: #84adff; box-shadow: 0 0 0 2px rgba(21, 94, 239, 0.1); }
-.finding-select { display: flex; align-items: start; justify-content: space-between; gap: 12px; width: 100%; min-height: 76px; padding: 13px 14px; border: 0; background: transparent; color: inherit; text-align: start; cursor: pointer; }
+.finding-select { display: flex; align-items: center; width: 100%; min-height: 52px; padding: 12px 14px; border: 0; background: transparent; color: inherit; text-align: start; cursor: pointer; }
 .finding-select:hover { background: var(--surface-subtle); }
 .finding-card.is-selected .finding-select { background: var(--accent-soft); }
-.finding-card-main { min-width: 0; }
 .finding-title { display: block; margin: 0; min-width: 0; font-size: 0.94rem; line-height: 1.35; }
 .finding-title code { font-weight: 750; }
-.finding-context { margin: 5px 0 0; color: var(--muted); font-size: 0.82rem; overflow-wrap: anywhere; }
 .finding-inspector { position: sticky; inset-block-start: 18px; min-width: 0; min-height: 280px; max-height: calc(100vh - 36px); overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04); }
 .finding-inspector > .finding-details { border-top: 0; }
 .finding-details { display: grid; grid-template-columns: minmax(116px, 164px) minmax(0, 1fr); margin: 0; }

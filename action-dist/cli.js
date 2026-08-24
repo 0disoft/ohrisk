@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 5df145cf60ee50944c2420287ae926ac619ecb61e5e18e697f4f0f1387165ae8
+// ohrisk-action-source-sha256: 0a32f1adcf60ae849b046ff0374adb67b5aa3b56d18bccd0ac2342290f07d7a5
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -59533,13 +59533,11 @@ section { margin-block: 18px; scroll-margin-block-start: 18px; }
 .finding-card { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
 .finding-card[hidden] { display: none; }
 .finding-card.is-selected { border-color: #84adff; box-shadow: 0 0 0 2px rgba(21, 94, 239, 0.1); }
-.finding-select { display: flex; align-items: start; justify-content: space-between; gap: 12px; width: 100%; min-height: 76px; padding: 13px 14px; border: 0; background: transparent; color: inherit; text-align: start; cursor: pointer; }
+.finding-select { display: flex; align-items: center; width: 100%; min-height: 52px; padding: 12px 14px; border: 0; background: transparent; color: inherit; text-align: start; cursor: pointer; }
 .finding-select:hover { background: var(--surface-subtle); }
 .finding-card.is-selected .finding-select { background: var(--accent-soft); }
-.finding-card-main { min-width: 0; }
 .finding-title { display: block; margin: 0; min-width: 0; font-size: 0.94rem; line-height: 1.35; }
 .finding-title code { font-weight: 750; }
-.finding-context { margin: 5px 0 0; color: var(--muted); font-size: 0.82rem; overflow-wrap: anywhere; }
 .finding-inspector { position: sticky; inset-block-start: 18px; min-width: 0; min-height: 280px; max-height: calc(100vh - 36px); overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04); }
 .finding-inspector > .finding-details { border-top: 0; }
 .finding-details { display: grid; grid-template-columns: minmax(116px, 164px) minmax(0, 1fr); margin: 0; }
@@ -59994,11 +59992,7 @@ function renderHtmlFindingCard(finding, index, profile, text, deferFingerprint) 
   return [
     `        <article class="finding-card" data-finding-card data-severity="${escapeHtml(finding.severity)}" data-dependency-scope="${escapeHtml(finding.dependencyScope)}" data-recommendation="${escapeHtml(finding.recommendation)}" role="listitem" aria-labelledby="${titleId}">`,
     `          <button type="button" class="finding-select" data-finding-select aria-pressed="${index === 0 ? "true" : "false"}" aria-controls="finding-inspector">`,
-    '            <span class="finding-card-main">',
-    `              <span class="finding-title" id="${titleId}"><code>${escapeHtml(finding.packageId)}</code></span>`,
-    `              <span class="finding-context">${escapeHtml(text.messages.dependencyContext(finding))}</span>`,
-    "            </span>",
-    `            ${renderSeverity(finding.severity, text)}`,
+    `            <span class="finding-title" id="${titleId}"><code>${escapeHtml(finding.packageId)}</code></span>`,
     "          </button>",
     '          <dl class="finding-details finding-details-source" data-finding-details>',
     ...renderFindingDetail(text.labels.severity, renderSeverity(finding.severity, text), text),
