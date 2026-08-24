@@ -531,6 +531,24 @@ describe("HTML scan report", () => {
     expect(output).not.toContain("'quotes'");
   });
 
+  test("renders the dashboard summary and keyboard-accessible finding inspector", () => {
+    const output = renderScanReport(scanInput());
+
+    expect(output).toContain('<div class="report-shell">');
+    expect(output).toContain('<aside class="report-sidebar"');
+    expect(output).toContain('<div class="decision-banner decision-banner-high">');
+    expect(output).toContain('<div class="findings-workspace">');
+    expect(output).toContain('type="button" class="finding-select" data-finding-select');
+    expect(output).toContain('aria-pressed="true"');
+    expect(output).toContain('<aside class="finding-inspector" data-finding-inspector');
+    expect(output).toContain('.finding-details.finding-details-source { display: none; }');
+    expect(output).toContain('const selectFinding = (card, focusInspector = false) => {');
+    expect(output).toContain("button.setAttribute('aria-pressed', String(selected));");
+    expect(output).toContain("inspector.replaceChildren(details.cloneNode(true));");
+    expect(output).toContain("element.removeAttribute('id')");
+    expect(output).toContain("element.removeAttribute('aria-controls')");
+  });
+
   test("stores long fingerprints once outside rendered cards and excludes them from search", () => {
     const longIdentityFinding = canonicalLongFinding();
     const longFingerprint = longIdentityFinding.fingerprint;

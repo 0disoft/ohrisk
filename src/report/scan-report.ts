@@ -38,6 +38,7 @@ import {
   type EvidenceRecoveryHint,
   type HtmlReportText
 } from "./html-report-text";
+import { renderHtmlStyles } from "./html-report-ui";
 import { HTML_REPORT_CONTENT_SECURITY_POLICY } from "./html-security";
 import type { ReportLanguage } from "./language";
 import { buildThresholdSummary, formatThresholdSummary } from "./threshold-summary";
@@ -228,6 +229,8 @@ function renderHtmlReport(
   const text = htmlReportText(input.reportLanguage);
   const title = text.title;
   const deferredFingerprintData = buildHtmlDeferredFingerprintData(input.riskFindings);
+  const decisionSeverity = highestRiskSeverity(summary.risks);
+  const reviewSummaryCards = buildReviewSummaryCards(input, summary, text, waiverDriftSummary);
 
   return [
     "<!doctype html>",
@@ -242,20 +245,50 @@ function renderHtmlReport(
     "  </style>",
     "</head>",
     "<body>",
-    '  <main class="page">',
-    "    <header>",
-    `      <p class="eyebrow">${escapeHtml(input.project.lockfile.kind)}</p>`,
-    `      <h1>${escapeHtml(title)}</h1>`,
-    `      <p class="lead">${escapeHtml(localizedNextAction(input, text))}</p>`,
-    "    </header>",
+    '  <div class="report-shell">',
+    `    <aside class="report-sidebar" aria-label="${escapeHtml(title)}">`,
+    '      <p class="report-brand">Ohrisk</p>',
+    '      <nav class="report-nav">',
+    `        <a href="#review-summary-heading">${escapeHtml(text.labels.reviewSummary)}</a>`,
+    `        <a href="#summary-heading">${escapeHtml(text.labels.summary)}</a>`,
+    `        <a href="#findings-heading">${escapeHtml(text.labels.findings)}</a>`,
+    `        <a href="#waived-findings-heading">${escapeHtml(text.labels.waivedFindings)}</a>`,
+    "      </nav>",
+    '      <p class="sidebar-meta">',
+    `        <strong>${escapeHtml(markdownProjectLabel(input))}</strong>`,
+    `        ${escapeHtml(input.project.lockfile.kind)} · ${escapeHtml(input.profile)}`,
+    "      </p>",
+    "    </aside>",
+    '    <main class="page">',
+    '      <header class="report-header">',
+    '        <div class="report-topline">',
+    `          <p class="eyebrow">${escapeHtml(input.project.lockfile.kind)}</p>`,
+    `          <p class="project-pill">${escapeHtml(markdownProjectLabel(input))} · ${escapeHtml(input.profile)}</p>`,
+    "        </div>",
+    `        <div class="decision-banner decision-banner-${decisionSeverity}">`,
+    "          <div>",
+    `            <h1>${escapeHtml(title)}</h1>`,
+    `            <p class="lead">${escapeHtml(localizedNextAction(input, text))}</p>`,
+    "          </div>",
+    `          <div class="decision-counts" aria-label="${escapeHtml(text.labels.risks)}">`,
+    ...renderDecisionCounts(summary.risks, text),
+    "          </div>",
+    "        </div>",
+    "      </header>",
     '    <section aria-labelledby="review-summary-heading">',
     `      <h2 id="review-summary-heading">${escapeHtml(text.labels.reviewSummary)}</h2>`,
     '      <dl class="summary-grid review-summary-grid">',
-    ...renderSummaryCards(buildReviewSummaryCards(input, summary, text, waiverDriftSummary)),
+    ...renderSummaryCards(reviewSummaryCards.slice(0, 4)),
     "      </dl>",
+    '      <details class="review-context">',
+    `        <summary>${escapeHtml(text.labels.reviewFocus)}</summary>`,
+    '        <dl class="summary-grid">',
+    ...renderSummaryCards(reviewSummaryCards.slice(4)),
+    "        </dl>",
+    "      </details>",
     "    </section>",
-    '    <section aria-labelledby="summary-heading">',
-    `      <h2 id="summary-heading">${escapeHtml(text.labels.summary)}</h2>`,
+    '    <details class="scan-summary">',
+    `      <summary id="summary-heading">${escapeHtml(text.labels.summary)}</summary>`,
     '      <dl class="summary-grid">',
     ...renderSummaryCards([
       [text.labels.project, markdownProjectLabel(input)],
@@ -302,7 +335,7 @@ function renderHtmlReport(
         : [])
     ]),
     "      </dl>",
-    "    </section>",
+    "    </details>",
     ...renderHtmlFindingsSection(
       input.riskFindings,
       input.profile,
@@ -316,7 +349,8 @@ function renderHtmlReport(
     `      <h2 id="next-heading">${escapeHtml(text.labels.next)}</h2>`,
     `      <p>${escapeHtml(localizedNextAction(input, text))}</p>`,
     "    </section>",
-    "  </main>",
+    "    </main>",
+    "  </div>",
     ...renderHtmlDeferredFingerprintData(deferredFingerprintData.payload),
     "  <script>",
     ...renderHtmlFilterScript(text).map((line) => `    ${line}`),
@@ -326,94 +360,23 @@ function renderHtmlReport(
   ].join("\n");
 }
 
-function renderHtmlStyles(): string[] {
-  return [
-    ":root {",
-    "  color-scheme: light;",
-    "  --bg: #f6f8fb;",
-    "  --surface: #ffffff;",
-    "  --text: #16202a;",
-    "  --muted: #5a6675;",
-    "  --border: #d8dee8;",
-    "  --accent: #2563eb;",
-    "  --high: #b42318;",
-    "  --review: #9a5b00;",
-    "  --unknown: #475467;",
-    "  --low: #067647;",
-    "}",
-    "* { box-sizing: border-box; }",
-    "body {",
-    "  margin: 0;",
-    "  background: var(--bg);",
-    "  color: var(--text);",
-    "  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif;",
-    "  line-height: 1.5;",
-    "}",
-    ".page { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 32px 0 48px; }",
-    "header { margin-block-end: 28px; }",
-    ".eyebrow { margin: 0 0 8px; color: var(--accent); font-weight: 700; text-transform: uppercase; }",
-    "h1 { margin: 0; font-size: 2rem; line-height: 1.2; }",
-    "h2 { margin: 0 0 14px; font-size: 1.15rem; }",
-    ".lead { max-width: 760px; margin: 12px 0 0; color: var(--muted); }",
-    "section { margin-block: 18px; }",
-    ".summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 0; }",
-    ".review-summary-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }",
-    ".summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; min-width: 0; }",
-    ".summary-card dt { color: var(--muted); font-size: 0.82rem; }",
-    ".summary-card dd { margin: 6px 0 0; font-weight: 700; overflow-wrap: anywhere; }",
-    ".section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-block-end: 14px; }",
-    ".section-head h2 { margin: 0; }",
-    ".filter-status { margin: 0; color: var(--muted); font-size: 0.9rem; }",
-    ".finding-filter-panel { display: grid; gap: 12px; margin-block-end: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }",
-    ".finding-filters { margin: 0; padding: 0; border: 0; min-width: 0; }",
-    ".finding-filters legend { padding: 0; color: var(--muted); font-weight: 700; }",
-    ".filter-options { display: flex; flex-wrap: wrap; gap: 8px; margin-block-start: 10px; }",
-    ".filter-option { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: #f9fafb; color: var(--text); }",
-    ".filter-option input { margin: 0; }",
-    ".filter-fields { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(160px, 220px)); gap: 10px; align-items: end; }",
-    ".filter-field { display: grid; gap: 6px; min-width: 0; color: var(--muted); font-weight: 700; font-size: 0.86rem; }",
-    ".filter-field input, .filter-field select { width: 100%; min-width: 0; min-height: 38px; border: 1px solid var(--border); border-radius: 8px; background: #ffffff; color: var(--text); font: inherit; font-weight: 500; padding: 7px 10px; }",
-    ".finding-list { display: grid; gap: 12px; }",
-    ".finding-card { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }",
-    ".finding-card[hidden] { display: none; }",
-    ".finding-card-header { display: flex; align-items: start; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px; }",
-    ".finding-title { margin: 0; min-width: 0; font-size: 1rem; line-height: 1.35; }",
-    ".finding-title code { font-weight: 700; }",
-    ".finding-context { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; }",
-    ".finding-details { display: grid; grid-template-columns: minmax(120px, 180px) minmax(0, 1fr); margin: 0; border-top: 1px solid var(--border); }",
-    ".finding-details dt, .finding-details dd { min-width: 0; padding: 10px 14px; border-top: 1px solid var(--border); }",
-    ".finding-details dt:first-of-type, .finding-details dd:first-of-type { border-top: 0; }",
-    ".finding-details dt { color: var(--muted); font-weight: 700; background: #f9fafb; }",
-    ".finding-details dd { margin: 0; overflow-wrap: anywhere; }",
-    ".wrap-value { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }",
-    ".finding-detail-value { display: grid; gap: 8px; }",
-    ".collapsible-content { min-width: 0; overflow-wrap: anywhere; line-height: 1.5; }",
-    ".collapsible-content.is-collapsed { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; max-height: calc(1.5em * 3); overflow: hidden; }",
-    ".collapsible-toggle { width: 100%; min-height: 28px; border: 1px solid var(--border); border-radius: 8px; background: #f9fafb; color: var(--muted); cursor: pointer; font: inherit; font-weight: 700; line-height: 1; }",
-    ".collapsible-toggle:hover { color: var(--text); border-color: #b8c2d2; }",
-    ".collapsible-toggle:focus-visible { outline: 3px solid rgba(37, 99, 235, 0.28); outline-offset: 2px; }",
-    ".collapsible-toggle[hidden] { display: none; }",
-    ".table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }",
-    "table { width: 100%; border-collapse: collapse; min-width: 860px; }",
-    "caption { text-align: left; padding: 12px 14px; color: var(--muted); font-weight: 700; }",
-    "th, td { padding: 10px 12px; border-top: 1px solid var(--border); text-align: left; vertical-align: top; }",
-    "th { color: var(--muted); font-size: 0.82rem; }",
-    "code { font-family: ui-monospace, SFMono-Regular, Consolas, \"Liberation Mono\", monospace; font-size: 0.92em; overflow-wrap: anywhere; }",
-    ".empty { margin: 0; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--muted); }",
-    ".severity { display: inline-block; font-weight: 700; }",
-    ".severity-high { color: var(--high); }",
-    ".severity-review { color: var(--review); }",
-    ".severity-unknown { color: var(--unknown); }",
-    ".severity-low { color: var(--low); }",
-    "@media (max-width: 640px) {",
-    "  .page { width: min(100% - 20px, 1180px); padding-block-start: 20px; }",
-    "  h1 { font-size: 1.6rem; }",
-    "  .filter-fields { grid-template-columns: 1fr; }",
-    "  .finding-details { grid-template-columns: 1fr; }",
-    "  .finding-details dt { padding-block-end: 4px; }",
-    "  .finding-details dd { padding-block-start: 0; }",
-    "}"
-  ];
+function highestRiskSeverity(risks: Record<RiskSeverity, number>): RiskSeverity {
+  for (const severity of ["high", "review", "unknown", "low"] as const) {
+    if (risks[severity] > 0) {
+      return severity;
+    }
+  }
+  return "low";
+}
+
+function renderDecisionCounts(
+  risks: Record<RiskSeverity, number>,
+  text: HtmlReportText
+): string[] {
+  return (["high", "review", "unknown", "low"] as const).map(
+    (severity) =>
+      `            <span class="risk-pill risk-pill-${severity}"><strong>${risks[severity]}</strong> ${escapeHtml(text.messages.severity(severity))}</span>`
+  );
 }
 
 function renderSummaryCards(items: ReadonlyArray<readonly [string, string]>): string[] {
@@ -563,7 +526,8 @@ function renderHtmlFindingsSection(
     "        </div>",
     "      </div>",
     `      <p class="empty" data-finding-filter-empty hidden>${escapeHtml(text.messages.noMatchingFindings)}</p>`,
-    '      <div class="finding-list">',
+    '      <div class="findings-workspace">',
+    '      <div class="finding-list" role="list">',
     ...findings.flatMap((finding, index) => renderHtmlFindingCard(
       finding,
       index,
@@ -571,6 +535,10 @@ function renderHtmlFindingsSection(
       text,
       deferredFingerprintIndexes.has(index)
     )),
+    "      </div>",
+    `      <aside class="finding-inspector" data-finding-inspector id="finding-inspector" tabindex="-1" aria-label="${escapeHtml(text.labels.findings)}">`,
+    `        <p class="empty">${escapeHtml(findings[0]?.packageId ?? text.messages.noActiveFindings)}</p>`,
+    "      </aside>",
     "      </div>",
     "    </section>"
   ];
@@ -636,15 +604,15 @@ function renderHtmlFindingCard(
   );
 
   return [
-    `        <article class="finding-card" data-finding-card data-severity="${escapeHtml(finding.severity)}" data-dependency-scope="${escapeHtml(finding.dependencyScope)}" data-recommendation="${escapeHtml(finding.recommendation)}" aria-labelledby="${titleId}">`,
-    '          <div class="finding-card-header">',
-    "            <div>",
-    `              <h3 class="finding-title" id="${titleId}"><code>${escapeHtml(finding.packageId)}</code></h3>`,
-    `              <p class="finding-context">${escapeHtml(text.messages.dependencyContext(finding))}</p>`,
-    "            </div>",
+    `        <article class="finding-card" data-finding-card data-severity="${escapeHtml(finding.severity)}" data-dependency-scope="${escapeHtml(finding.dependencyScope)}" data-recommendation="${escapeHtml(finding.recommendation)}" role="listitem" aria-labelledby="${titleId}">`,
+    `          <button type="button" class="finding-select" data-finding-select aria-pressed="${index === 0 ? "true" : "false"}" aria-controls="finding-inspector">`,
+    '            <span class="finding-card-main">',
+    `              <span class="finding-title" id="${titleId}"><code>${escapeHtml(finding.packageId)}</code></span>`,
+    `              <span class="finding-context">${escapeHtml(text.messages.dependencyContext(finding))}</span>`,
+    "            </span>",
     `            ${renderSeverity(finding.severity, text)}`,
-    "          </div>",
-    '          <dl class="finding-details">',
+    "          </button>",
+    '          <dl class="finding-details finding-details-source" data-finding-details>',
     ...renderFindingDetail(text.labels.severity, renderSeverity(finding.severity, text), text),
     ...renderFindingDetail(text.labels.package, `<code class="wrap-value">${escapeHtml(finding.packageId)}</code>`, text),
     ...renderFindingDetail(text.labels.dependency, escapeHtml(text.messages.dependencyContext(finding)), text),
@@ -889,6 +857,7 @@ function renderHtmlFilterScript(text: HtmlReportText): string[] {
     "  const actionFilter = document.querySelector('[data-finding-action-filter]');",
     "  const status = document.querySelector('[data-finding-filter-status]');",
     "  const empty = document.querySelector('[data-finding-filter-empty]');",
+    "  const inspector = document.querySelector('[data-finding-inspector]');",
     "  const searchTexts = new Map(cards.map((card) => [card, (card.textContent || '').replace(/\\s+/g, ' ').toLowerCase()]));",
     "  const fingerprintData = document.querySelector('#ohrisk-fingerprint-data');",
     "  let fingerprintPayload = { s: [], f: [] };",
@@ -960,6 +929,33 @@ function renderHtmlFilterScript(text: HtmlReportText): string[] {
     "    ].join('::');",
     "  };",
     "",
+    "  const selectFinding = (card, focusInspector = false) => {",
+    "    const details = card?.querySelector('[data-finding-details]');",
+    "    if (!card || !details || !inspector) return;",
+    "    for (const candidate of cards) {",
+    "      const selected = candidate === card;",
+    "      candidate.classList.toggle('is-selected', selected);",
+    "      const button = candidate.querySelector('[data-finding-select]');",
+    "      if (button) button.setAttribute('aria-pressed', String(selected));",
+    "    }",
+    "    inspector.replaceChildren(details.cloneNode(true));",
+    "    const inspectorDetails = inspector.querySelector('[data-finding-details]');",
+    "    inspectorDetails?.classList.remove('finding-details-source');",
+    "    for (const element of inspector.querySelectorAll('[id]')) element.removeAttribute('id');",
+    "    for (const element of inspector.querySelectorAll('[aria-controls]')) element.removeAttribute('aria-controls');",
+    "    for (const content of inspector.querySelectorAll('[data-collapsible-content]')) {",
+    "      content.classList.toggle('is-collapsed', false);",
+    "      const deferredFingerprint = content.querySelector('[data-fingerprint-index]');",
+    "      if (deferredFingerprint) {",
+    "        const fingerprintIndex = Number.parseInt(deferredFingerprint.dataset.fingerprintIndex || '', 10);",
+    "        const fingerprint = decodeFingerprint(fingerprintIndex);",
+    "        if (typeof fingerprint === 'string') deferredFingerprint.textContent = fingerprint;",
+    "      }",
+    "    }",
+    "    for (const toggle of inspector.querySelectorAll('[data-collapsible-toggle]')) toggle.hidden = true;",
+    "    if (focusInspector && window.matchMedia('(max-width: 900px)').matches) inspector.focus();",
+    "  };",
+    "",
     "  const updateFindings = () => {",
     "    const selectedSeverities = new Set(severityFilters.filter((filter) => filter.checked).map((filter) => filter.value));",
     "    const searchText = (searchInput?.value || '').trim().toLowerCase();",
@@ -986,6 +982,8 @@ function renderHtmlFilterScript(text: HtmlReportText): string[] {
     "    if (empty) {",
     "      empty.hidden = visibleCount !== 0;",
     "    }",
+    "    const selectedCard = cards.find((card) => card.classList.contains('is-selected') && !card.hidden);",
+    "    if (!selectedCard) selectFinding(cards.find((card) => !card.hidden));",
     "",
     "    refreshVisibleCollapsibles();",
     "  };",
@@ -996,6 +994,9 @@ function renderHtmlFilterScript(text: HtmlReportText): string[] {
     "  searchInput?.addEventListener('input', updateFindings);",
     "  dependencyFilter?.addEventListener('change', updateFindings);",
     "  actionFilter?.addEventListener('change', updateFindings);",
+    "  for (const card of cards) {",
+    "    card.querySelector('[data-finding-select]')?.addEventListener('click', () => selectFinding(card, true));",
+    "  }",
     "",
     "  const getCollapsedHeight = (content) => {",
     "    const styles = window.getComputedStyle(content);",
@@ -1099,6 +1100,7 @@ function renderHtmlFilterScript(text: HtmlReportText): string[] {
     "    refreshVisibleCollapsibles();",
     "  });",
     "",
+    "  selectFinding(cards[0]);",
     "  updateFindings();",
     "})();"
   ];

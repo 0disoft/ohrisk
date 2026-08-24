@@ -2,6 +2,11 @@
 
 ## 1.15.1 - Unreleased
 
+- Standalone HTML reports now use a compact review dashboard with persistent
+  navigation, decision counts, collapsible secondary summary context, and a
+  responsive two-pane findings console. Finding selection is keyboard
+  accessible, filtered results keep the inspector synchronized, and machine
+  report values and waiver identities remain unchanged.
 - Missing-lockfile errors now name detected project manifests such as
   `Cargo.toml` and `build.gradle.kts`, making the required resolved dependency
   input explicit without guessing versions from library manifests.
