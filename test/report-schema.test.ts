@@ -46,6 +46,7 @@ const finding: RiskFinding = {
 };
 
 const policy: PolicyConfigSummary = {
+  digest: "a".repeat(64),
   enabled: true,
   sourceFiles: [".ohrisk.yml"],
   allowLicenseCount: 1,

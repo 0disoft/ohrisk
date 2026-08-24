@@ -24,7 +24,11 @@ import type {
   RiskSeverity
 } from "../policy/types";
 import type { RiskWaiver, WaivedRiskFinding } from "../policy/waivers";
-import type { PolicyConfigSummary } from "../policy/config";
+import {
+  emptyPolicyConfig,
+  summarizePolicyConfig,
+  type PolicyConfigSummary
+} from "../policy/config";
 import type { UsageProfile } from "../policy/profiles";
 import { projectLockfiles, type ProjectInput } from "../project/discover";
 import {
@@ -1339,18 +1343,7 @@ function displayLockfiles(project: ScanReportInput["project"]): Array<{ kind: st
 }
 
 function disabledPolicySummary(): PolicyConfigSummary {
-  return {
-    enabled: false,
-    sourceFiles: [],
-    allowLicenseCount: 0,
-    denyLicenseCount: 0,
-    severityOverrideCount: 0,
-    packageRuleCount: 0,
-    profileCount: 0,
-    profileOverrideCount: 0,
-    allowedRegistryHostCount: 0,
-    registryAuthHostCount: 0
-  };
+  return summarizePolicyConfig(emptyPolicyConfig());
 }
 
 function displayProjectPath(project: ScanReportInput["project"], targetPath: string): string {

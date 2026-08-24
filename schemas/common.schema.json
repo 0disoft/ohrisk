@@ -398,6 +398,7 @@
     "policySummary": {
       "type": "object",
       "required": [
+        "digest",
         "enabled",
         "sourceFiles",
         "allowLicenseCount",
@@ -410,6 +411,10 @@
         "registryAuthHostCount"
       ],
       "properties": {
+        "digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
         "enabled": {
           "type": "boolean"
         },

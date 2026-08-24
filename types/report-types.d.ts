@@ -18,6 +18,11 @@ export type ExplainReportSchemaId =
 export type WaiverFileSchemaVersion = "1.0.0";
 export type WaiverFileSchemaId =
   `urn:ohrisk:schema:waiver-file:${WaiverFileSchemaVersion}`;
+export type BaselineSchemaVersion = "1.0.0";
+export type BaselineSchemaId =
+  `urn:ohrisk:schema:baseline:${BaselineSchemaVersion}`;
+export type BaselineCheckSchemaId =
+  `urn:ohrisk:schema:baseline-check:${BaselineSchemaVersion}`;
 
 export type UsageProfile = "saas" | "distributed-app";
 export type RiskSeverity = "low" | "review" | "high" | "unknown";
@@ -87,6 +92,7 @@ export type NormalizedLicense = {
 };
 
 export type PolicyConfigSummary = {
+  digest: string;
   enabled: boolean;
   sourceFiles: string[];
   allowLicenseCount: number;
@@ -101,6 +107,45 @@ export type PolicyConfigSummary = {
 };
 
 export type RiskCounts = Record<RiskSeverity, number>;
+
+export type BaselineFinding = {
+  fingerprint: string;
+  id: string;
+  packageId: string;
+  severity: RiskSeverity;
+};
+
+export type OhriskBaseline = {
+  $schema: BaselineSchemaId;
+  schemaVersion: BaselineSchemaVersion;
+  sourceReportSchema: ScanReportSchemaId;
+  profile: UsageProfile;
+  prodOnly: boolean;
+  configurationDigest: string;
+  findings: BaselineFinding[];
+};
+
+export type BaselineIntroducedFinding = BaselineFinding & {
+  previousFingerprint?: string;
+  previousSeverity?: RiskSeverity;
+};
+
+export type BaselineCheckReport = {
+  $schema: BaselineCheckSchemaId;
+  schemaVersion: BaselineSchemaVersion;
+  status: "baseline_checked";
+  failed: boolean;
+  failOn: RiskSeverity;
+  baselineFindingCount: number;
+  currentFindingCount: number;
+  newFindingCount: number;
+  changedFindingCount: number;
+  escalatedFindingCount: number;
+  introducedFindingCount: number;
+  failingFindingCount: number;
+  introducedFindings: BaselineIntroducedFinding[];
+  failingFindings: BaselineIntroducedFinding[];
+};
 
 export type DependencyGraphCounts = {
   total: number;

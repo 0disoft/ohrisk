@@ -48,8 +48,11 @@ describe("package metadata", () => {
     expect(packageJson.license).toBe("MIT");
     expect(packageJson.packageManager).toBe("bun@1.3.14");
     expect(packageJson.engines?.node).toBe(">=24.0.0");
-    expect(packageJson.bin).toEqual({ ohrisk: "dist/cli.js" });
-    expect(packageJson.files).toEqual(["CHANGELOG.md", "dist", "schemas"]);
+    expect(packageJson.bin).toEqual({
+      ohrisk: "dist/cli.js",
+      "ohrisk-baseline": "bin/ohrisk-baseline.mjs"
+    });
+    expect(packageJson.files).toEqual(["CHANGELOG.md", "bin", "dist", "schemas"]);
     expect(packageJson.exports).toEqual({
       "./report-types": {
         types: "./dist/report-types.d.ts"
@@ -59,6 +62,8 @@ describe("package metadata", () => {
       "./schemas/diff-report": "./schemas/diff-report.schema.json",
       "./schemas/explain-report": "./schemas/explain-report.schema.json",
       "./schemas/waiver-file": "./schemas/waiver-file.schema.json",
+      "./schemas/baseline": "./schemas/baseline.schema.json",
+      "./schemas/baseline-check": "./schemas/baseline-check.schema.json",
       "./schemas/*": "./schemas/*",
       "./dist/*": "./dist/*",
       "./CHANGELOG.md": "./CHANGELOG.md",

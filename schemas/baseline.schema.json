@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ohrisk:schema:baseline:1.0.0",
+  "title": "Ohrisk checked-in baseline",
+  "type": "object",
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "sourceReportSchema",
+    "profile",
+    "prodOnly",
+    "configurationDigest",
+    "findings"
+  ],
+  "properties": {
+    "$schema": { "const": "urn:ohrisk:schema:baseline:1.0.0" },
+    "schemaVersion": { "const": "1.0.0" },
+    "sourceReportSchema": {
+      "type": "string",
+      "pattern": "^urn:ohrisk:schema:scan-report:[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "profile": { "enum": ["saas", "distributed-app"] },
+    "prodOnly": { "type": "boolean" },
+    "configurationDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "required": ["fingerprint", "id", "packageId", "severity"],
+      "properties": {
+        "fingerprint": { "type": "string", "pattern": "\\S" },
+        "id": { "type": "string", "pattern": "\\S" },
+        "packageId": { "type": "string", "pattern": "\\S" },
+        "severity": { "enum": ["low", "review", "unknown", "high"] }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

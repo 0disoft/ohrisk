@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import {
+  emptyPolicyConfig,
   evaluationPolicyForProfile,
   matchPolicyPackageRule,
   readPolicyConfig,
@@ -20,6 +21,20 @@ function withWorkspace(run: (workspace: string) => void): void {
 }
 
 describe("organization policy configuration", () => {
+  test("changes the policy digest when equal-sized rules change meaning", () => {
+    const allowed = emptyPolicyConfig();
+    allowed.allowLicenses.add("MIT");
+    const denied = emptyPolicyConfig();
+    denied.allowLicenses.add("GPL-3.0-only");
+
+    const allowedDigest = summarizePolicyConfig(allowed).digest;
+    const deniedDigest = summarizePolicyConfig(denied).digest;
+
+    expect(allowedDigest).toMatch(/^[0-9a-f]{64}$/);
+    expect(deniedDigest).toMatch(/^[0-9a-f]{64}$/);
+    expect(allowedDigest).not.toBe(deniedDigest);
+  });
+
   test("loads inherited policy, profile overrides, package rules, and network settings", () => {
     withWorkspace((workspace) => {
       const project = path.join(workspace, "apps", "api");
