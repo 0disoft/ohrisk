@@ -2,6 +2,13 @@
 
 ## 1.15.2 - Unreleased
 
+- Haskell Stack locks now preserve the completed Hackage Cabal-file SHA-256
+  and use it to verify exact remote `.cabal` license metadata when no local
+  package database evidence is available. Host, response-size, UTF-8, package
+  identity, and checksum validation remain fail-closed; a newer public Cabal
+  revision is isolated as unavailable evidence instead of aborting siblings.
+- Cabal's legacy `BSD3` license value is normalized to SPDX `BSD-3-Clause`
+  instead of being reported as malformed.
 - Qualified sibling files such as `LICENSE.libyaml` are now treated as bundled
   component licenses when a primary `LICENSE` exists beside them. Their
   obligations are combined with SPDX `AND` instead of producing a false

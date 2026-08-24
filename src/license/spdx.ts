@@ -18,6 +18,7 @@ const LICENSE_ALIASES = new Map<string, string>([
   ["apache license, 2.0", "Apache-2.0"],
   ["the apache software license, version 2.0", "Apache-2.0"],
   ["bsd", "BSD-3-Clause"],
+  ["bsd3", "BSD-3-Clause"],
   ["bsd 2-clause", "BSD-2-Clause"],
   ["bsd 3-clause", "BSD-3-Clause"],
   ["bsd-2-clause license", "BSD-2-Clause"],

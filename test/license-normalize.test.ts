@@ -111,6 +111,7 @@ describe("parseSpdxExpression", () => {
       ["EPL 2.0", "EPL-2.0"],
       ["GPL2 w/ CPE", "GPL-2.0-with-classpath-exception"],
       ["Eclipse Distribution License - v 1.0", "BSD-3-Clause"],
+      ["BSD3", "BSD-3-Clause"],
       ["Modified BSD", "BSD-3-Clause"],
       ["MPL 1.1", "MPL-1.1"]
     ] as const) {

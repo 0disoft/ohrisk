@@ -3,10 +3,65 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { collectHackagePackageEvidence } from "../src/evidence/hackage-package";
+import {
+  collectHackageCabalEvidence,
+  collectHackagePackageEvidence
+} from "../src/evidence/hackage-package";
 import { normalizeLicenseEvidence } from "../src/license/normalize";
 
 describe("collectHackagePackageEvidence", () => {
+  test("reads identity and license metadata from a verified Cabal file", () => {
+    const result = collectHackageCabalEvidence({
+      packageId: "risk-haskell@1.2.3",
+      packageName: "risk-haskell",
+      version: "1.2.3",
+      text: [
+        "cabal-version: 2.4",
+        "name: risk-haskell",
+        "version: 1.2.3",
+        "license: BSD-3-Clause"
+      ].join("\n")
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value).toEqual({
+      packageId: "risk-haskell@1.2.3",
+      metadataLicense: "BSD-3-Clause",
+      metadataSource: "Hackage Cabal metadata",
+      files: [],
+      source: "registry",
+      warnings: []
+    });
+  });
+
+  test("rejects Cabal metadata for a different package identity", () => {
+    const result = collectHackageCabalEvidence({
+      packageId: "risk-haskell@1.2.3",
+      packageName: "risk-haskell",
+      version: "1.2.3",
+      text: [
+        "name: different-package",
+        "version: 1.2.3",
+        "license: MIT"
+      ].join("\n")
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected mismatched Hackage identity to fail.");
+    }
+
+    expect(result.error.code).toBe("PACKAGE_EVIDENCE_READ_FAILED");
+    expect(result.error.details).toMatchObject({
+      packageId: "risk-haskell@1.2.3",
+      reason: "hackage_cabal_identity_mismatch"
+    });
+  });
+
   test("reads license metadata from a local Stack package database", () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-hackage-evidence-"));
     const packageDbDir = path.join(

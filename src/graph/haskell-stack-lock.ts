@@ -15,6 +15,8 @@ type StackLockRecord = {
   id: string;
   name: string;
   version: string;
+  resolved: string;
+  integrity: string;
 };
 
 type UnsupportedStackDependency = {
@@ -86,6 +88,8 @@ export function parseStackLockText(
         name: record.name,
         version: record.version,
         ecosystem: "hackage",
+        resolved: record.resolved,
+        integrity: record.integrity,
         dependencyType: "unknown",
         direct: true,
         paths: [[rootName, record.id]]
@@ -155,17 +159,29 @@ function readUnsupportedStackDependency(
 }
 
 function parseHackagePackage(input: string): StackLockRecord | undefined {
-  const packageRef = input.split("@", 1)[0]?.trim() ?? "";
+  const completed = /^(.+)@sha256:([0-9a-fA-F]{64}),([1-9][0-9]*)$/.exec(input.trim());
+  const packageRef = completed?.[1]?.trim() ?? "";
+  const checksum = completed?.[2]?.toLowerCase();
   const match = /^([A-Za-z][A-Za-z0-9-]*)-([0-9]+(?:\.[0-9]+)*)$/.exec(packageRef);
-  if (!match?.[1] || !match[2]) {
+  if (!match?.[1] || !match[2] || !checksum) {
     return undefined;
   }
 
   return {
     id: `${match[1]}@${match[2]}`,
     name: match[1],
-    version: match[2]
+    version: match[2],
+    resolved: hackageCabalUrl(match[1], match[2]),
+    integrity: sha256HexIntegrity(checksum)
   };
+}
+
+function hackageCabalUrl(packageName: string, version: string): string {
+  return `https://hackage.haskell.org/package/${packageName}-${version}/${packageName}.cabal`;
+}
+
+function sha256HexIntegrity(sha256: string): string {
+  return `sha256-${Buffer.from(sha256, "hex").toString("base64")}`;
 }
 
 function stackLockShapeError(

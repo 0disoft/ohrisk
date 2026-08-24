@@ -213,7 +213,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - Unity Package Manager `Packages/packages-lock.json` projects are scanned for non-built-in package entries; Unity built-in modules, `Packages/manifest.json` without a lockfile, Asset Store `.unitypackage` archives, Addressables catalogs, and remote UPM registry metadata fetch are not scanned yet
 - R `renv.lock` projects are scanned for package records in the lockfile; adjacent root `DESCRIPTION` `Depends`, `Imports`, `LinkingTo`, `Suggests`, and `Enhances` fields are used for production/development root classification when available, while dependency parent graphs, remote CRAN/GitHub/Bioconductor artifact fetch, and Packrat lockfiles are not scanned yet
 - Julia `Manifest.toml` projects are scanned for versioned `[[deps.Name]]` records; unversioned standard libraries are skipped, adjacent `Project.toml` `[deps]` and test target `[extras]` entries are used for root/dev classification when available, and remote Julia registry or package server artifact fetch is not scanned yet
-- Haskell Stack `stack.yaml.lock` projects are scanned for completed Hackage package pins; local Stack package database license metadata is used when present, while snapshot package expansion, git/path extra-deps, direct/transitive graph reconstruction, and Hackage metadata fetch are not scanned yet
+- Haskell Stack `stack.yaml.lock` projects are scanned for completed Hackage package pins; local Stack package database license metadata is used when present, followed by checksum-verified public Hackage Cabal metadata, while snapshot package expansion, git/path extra-deps, and direct/transitive graph reconstruction are not scanned yet
 - Perl Carton `cpanfile.snapshot` projects are scanned for Carton snapshot v1 distribution pins and dependency paths inferred from `provides` and `requirements`; local Carton cache archive `META.json` or `META.yml` license metadata is used when present, while MetaCPAN artifact fetch is not scanned yet
 - LuaRocks `luarocks.lock` projects are scanned for literal `dependencies` table package pins; local `.rockspec` files in the project root or local rocks tree are used for literal string or string-table license metadata when present, while dependency graph reconstruction and LuaRocks metadata fetch are not scanned yet
 - Dart and Flutter `pubspec.lock` projects are scanned for concrete Pub package versions recorded in the lockfile; modern pub.dev hosted records use their archive SHA-256 for verified remote evidence before project-local cache contents, while custom registries and Git/path sources remain local-only
@@ -250,7 +250,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - local Unity `Packages/` and `Library/PackageCache` package source evidence before unavailable fallback for `Packages/packages-lock.json` packages
 - local R `renv/library` DESCRIPTION metadata and license file evidence before unavailable fallback for `renv.lock` packages
 - local Julia depot `Project.toml` metadata and license file evidence before unavailable fallback for `Manifest.toml` packages
-- local Stack `.stack-work/install` package database metadata before unavailable fallback for Hackage packages
+- local Stack `.stack-work/install` package database metadata before checksum-verified public Hackage Cabal metadata fallback; remote metadata is trusted only after the completed lock pin's SHA-256 and exact package identity match
 - local Carton cache archive `META.json` or `META.yml` metadata before unavailable fallback for CPAN distributions
 - hash-verified pub.dev archive evidence for modern hosted `pubspec.lock` records, preferred over untrusted project-local Pub cache contents; remote archives are trusted only after the lockfile SHA-256 and `pubspec.yaml` package identity match
 - local SwiftPM `.build/checkouts` and Xcode `SourcePackages/checkouts` package source evidence before unavailable fallback for `Package.resolved` packages
@@ -491,7 +491,7 @@ Supported dependency input files:
 - Unity Package Manager `Packages/packages-lock.json` package entries, using local `Packages/` and `Library/PackageCache` source for evidence
 - R `renv.lock` package records, using adjacent root `DESCRIPTION` dependency fields for production/development classification and local `renv/library` package source and DESCRIPTION metadata for evidence
 - Julia `Manifest.toml` versioned package records, using local Julia depot package source and `Project.toml` metadata for evidence
-- Haskell Stack `stack.yaml.lock` completed Hackage package pins, using local Stack package database metadata before unavailable evidence fallback
+- Haskell Stack `stack.yaml.lock` completed Hackage package pins, using local Stack package database metadata before checksum-verified public Hackage Cabal metadata fallback
 - Perl Carton `cpanfile.snapshot` distribution pins, using local Carton cache archive metadata before unavailable evidence fallback
 - LuaRocks `luarocks.lock` dependency pins, using local `.rockspec` license metadata before unavailable evidence fallback
 - Dart/Flutter `pubspec.lock` package entries, using SHA-256-verified pub.dev archives first for modern hosted records and local `.dart_tool/package_config.json` or Pub cache sources for non-verifiable records

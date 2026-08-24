@@ -786,7 +786,7 @@ describe("discoverProject", () => {
         [
           "packages:",
           "- completed:",
-          "    hackage: risk-haskell-1.2.3@sha256:abc,1234",
+          `    hackage: risk-haskell-1.2.3@sha256:${"a".repeat(64)},1234`,
           "  original:",
           "    hackage: risk-haskell-1.2.3"
         ].join("\n"),

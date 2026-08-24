@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: f26607e9e2fdcd6a763081a11cab603d1be0fe5c8ae2e9a1aaccbd735da20dd1
+// ohrisk-action-source-sha256: 005b150607b6884d1635cc3bd842f98d58edd8e1c27517e649fd998afe895ab2
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -24119,6 +24119,8 @@ function parseStackLockText(input, lockfilePath = "stack.yaml.lock") {
       name: record.name,
       version: record.version,
       ecosystem: "hackage",
+      resolved: record.resolved,
+      integrity: record.integrity,
       dependencyType: "unknown",
       direct: true,
       paths: [[rootName, record.id]]
@@ -24167,16 +24169,26 @@ function readUnsupportedStackDependency(completed, index) {
   return;
 }
 function parseHackagePackage(input) {
-  const packageRef = input.split("@", 1)[0]?.trim() ?? "";
+  const completed = /^(.+)@sha256:([0-9a-fA-F]{64}),([1-9][0-9]*)$/.exec(input.trim());
+  const packageRef = completed?.[1]?.trim() ?? "";
+  const checksum = completed?.[2]?.toLowerCase();
   const match = /^([A-Za-z][A-Za-z0-9-]*)-([0-9]+(?:\.[0-9]+)*)$/.exec(packageRef);
-  if (!match?.[1] || !match[2]) {
+  if (!match?.[1] || !match[2] || !checksum) {
     return;
   }
   return {
     id: `${match[1]}@${match[2]}`,
     name: match[1],
-    version: match[2]
+    version: match[2],
+    resolved: hackageCabalUrl(match[1], match[2]),
+    integrity: sha256HexIntegrity(checksum)
   };
+}
+function hackageCabalUrl(packageName, version) {
+  return `https://hackage.haskell.org/package/${packageName}-${version}/${packageName}.cabal`;
+}
+function sha256HexIntegrity(sha256) {
+  return `sha256-${Buffer.from(sha256, "hex").toString("base64")}`;
 }
 function stackLockShapeError(lockfilePath, reason, index, entry) {
   return err(createError({
@@ -43922,6 +43934,37 @@ function collectHackagePackageEvidence(input) {
     warnings: packageConf.value.license ? [] : ["Hackage package metadata did not declare license metadata."]
   });
 }
+function collectHackageCabalEvidence(input) {
+  const fields = parseCabalIdentityFields(input.text);
+  if (!fields.ok) {
+    return err(fields.error);
+  }
+  if (fields.value.name !== input.packageName || fields.value.version !== input.version) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "unsupported_input",
+      message: "Hackage Cabal metadata did not match the locked package identity.",
+      details: {
+        packageId: input.packageId,
+        reason: "hackage_cabal_identity_mismatch",
+        expectedName: input.packageName,
+        expectedVersion: input.version,
+        observedName: fields.value.name,
+        observedVersion: fields.value.version
+      }
+    }));
+  }
+  return ok({
+    packageId: input.packageId,
+    ...fields.value.license ? {
+      metadataLicense: fields.value.license,
+      metadataSource: "Hackage Cabal metadata"
+    } : {},
+    files: [],
+    source: "registry",
+    warnings: fields.value.license ? [] : ["Hackage Cabal metadata did not declare license metadata."]
+  });
+}
 function findHackagePackageConf(input) {
   const root = path61.join(input.projectRoot, ".stack-work", "install");
   if (!isReadableDirectory9(root)) {
@@ -44013,6 +44056,37 @@ function parsePackageConfFields(text) {
     fields.set(currentKey, line.slice(separatorIndex + 1).trim());
   }
   return fields;
+}
+function parseCabalIdentityFields(text) {
+  const fields = new Map;
+  for (const rawLine of text.split(/\r?\n/)) {
+    if (/^\s/.test(rawLine) || /^\s*--/.test(rawLine)) {
+      continue;
+    }
+    const match = /^([A-Za-z][A-Za-z0-9-]*)\s*:\s*(.*?)\s*$/.exec(rawLine);
+    const key = match?.[1]?.toLowerCase();
+    const value = match?.[2];
+    if (!key || value === undefined || !["name", "version", "license"].includes(key)) {
+      continue;
+    }
+    if (fields.has(key)) {
+      return err(createError({
+        code: "PACKAGE_EVIDENCE_READ_FAILED",
+        category: "unsupported_input",
+        message: "Hackage Cabal metadata repeated a package identity or license field.",
+        details: {
+          reason: "hackage_cabal_duplicate_field",
+          field: key
+        }
+      }));
+    }
+    fields.set(key, value.trim());
+  }
+  return ok(omitUndefined({
+    name: fields.get("name"),
+    version: fields.get("version"),
+    license: fields.get("license")
+  }));
 }
 function childDirectories2(dir) {
   return readDirectoryEntries3(dir).filter((entry) => entry.isDirectory()).map((entry) => path61.join(dir, entry.name));
@@ -48476,7 +48550,7 @@ function verifyPackageIntegrity(input) {
     }
   }));
 }
-function sha256HexIntegrity(sha2562) {
+function sha256HexIntegrity2(sha2562) {
   return `sha256-${Buffer.from(sha2562, "hex").toString("base64")}`;
 }
 function parseSupportedIntegrityEntries(integrity2) {
@@ -49543,7 +49617,7 @@ function collectRubyGemArchiveEvidence(input) {
   const integrity2 = verifyPackageIntegrity({
     packageId: input.packageId,
     resolvedDetail: rubyGemsArtifactUrl(input.packageName, input.version),
-    integrity: sha256HexIntegrity(input.sha256),
+    integrity: sha256HexIntegrity2(input.sha256),
     artifact: gemBytes
   });
   if (!integrity2.ok)
@@ -50019,6 +50093,8 @@ var CARGO_CRATES_IO_SOURCES2 = new Set([
 ]);
 var CARGO_CRATE_BASE_URL = "https://static.crates.io/crates";
 var CARGO_CRATE_HOSTS = new Set(["static.crates.io"]);
+var HACKAGE_CABAL_HOSTS = new Set(["hackage.haskell.org"]);
+var HACKAGE_CABAL_MAX_BYTES = 1024 * 1024;
 async function collectGraphEvidence(input) {
   const evidence = new Array(input.graph.nodes.length);
   const total = input.graph.nodes.length;
@@ -50287,7 +50363,7 @@ async function collectNodeEvidence(input) {
         allowedHosts: input.allowedHosts
       });
     }
-    if (input.node.ecosystem !== "maven" && input.node.ecosystem !== "go" && input.node.ecosystem !== "cargo" && input.node.ecosystem !== "nuget" && input.node.ecosystem !== "gem" && input.node.ecosystem !== "zig" || !ecosystemEvidence.ok || ecosystemEvidence.value.source !== "unavailable") {
+    if (input.node.ecosystem !== "maven" && input.node.ecosystem !== "go" && input.node.ecosystem !== "cargo" && input.node.ecosystem !== "nuget" && input.node.ecosystem !== "gem" && input.node.ecosystem !== "hackage" && input.node.ecosystem !== "zig" || !ecosystemEvidence.ok || ecosystemEvidence.value.source !== "unavailable") {
       return ecosystemEvidence;
     }
   }
@@ -50431,6 +50507,19 @@ async function collectNodeEvidence(input) {
       loadServiceIndex: input.loadNugetServiceIndex
     });
   }
+  if (input.node.ecosystem === "hackage" && input.node.resolved && input.node.integrity) {
+    return collectRemoteHackageCabalEvidence({
+      node: input.node,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      metadataMaxBytes: Math.min(input.registryMetadataMaxBytes, HACKAGE_CABAL_MAX_BYTES),
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      signal: input.signal,
+      allowedHosts: input.allowedHosts
+    });
+  }
   if (input.node.ecosystem === "pub" && input.node.resolved) {
     return collectRemoteTarballEvidence({
       packageId: input.node.id,
@@ -50528,6 +50617,79 @@ async function collectNodeEvidence(input) {
     });
   }
   return ok(unsupportedRemoteEcosystemEvidence({ node: input.node }));
+}
+async function collectRemoteHackageCabalEvidence(input) {
+  const resolved = input.node.resolved;
+  if (!resolved || !input.node.integrity) {
+    return ok(unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: "The Stack lockfile did not provide checksum-pinned Hackage Cabal metadata."
+    }));
+  }
+  const cabalBytes = await readRemoteArtifactBytes({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    packageId: input.node.id,
+    url: resolved,
+    blockedMessage: "Hackage Cabal metadata URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve the Hackage metadata host.",
+    fetchFailureMessage: "Failed to fetch Hackage Cabal metadata.",
+    tooLargeMessage: "Hackage Cabal metadata exceeded the maximum supported size.",
+    unreadableMessage: "Hackage Cabal metadata did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find Hackage Cabal metadata in the artifact cache.",
+    details: { registryUrl: resolved },
+    maxBytes: input.metadataMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: HACKAGE_CABAL_HOSTS,
+    urlDetailKey: "registryUrl"
+  });
+  if (!cabalBytes.ok) {
+    return err(cabalBytes.error);
+  }
+  const integrity2 = verifyPackageIntegrity({
+    packageId: input.node.id,
+    resolvedDetail: safeUrlForErrorDetails(resolved),
+    integrity: input.node.integrity,
+    artifact: cabalBytes.value
+  });
+  if (!integrity2.ok) {
+    if (Array.isArray(integrity2.error.details?.computed)) {
+      return ok({
+        packageId: input.node.id,
+        files: [],
+        source: "unavailable",
+        warnings: [
+          "Locked Hackage Cabal metadata is not the current public revision; mismatched bytes were not trusted."
+        ]
+      });
+    }
+    return err(integrity2.error);
+  }
+  let text;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(cabalBytes.value);
+  } catch {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "unsupported_input",
+      message: "Hackage Cabal metadata was not valid UTF-8.",
+      details: {
+        packageId: input.node.id,
+        registryUrl: safeUrlForErrorDetails(resolved)
+      }
+    }));
+  }
+  return collectHackageCabalEvidence({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    version: input.node.version,
+    text
+  });
 }
 function shouldCollectNpmRegistryEvidence(input) {
   if (!input.node.resolved) {
@@ -51698,7 +51860,7 @@ async function collectPyPiReleaseEvidence(input) {
     node: input.node,
     resolved: release.value.artifact.url,
     artifactFilename: release.value.artifact.filename,
-    integrity: sha256HexIntegrity(release.value.artifact.sha256),
+    integrity: sha256HexIntegrity2(release.value.artifact.sha256),
     yanked: release.value.artifact.yanked,
     fetchArtifact: input.fetchArtifact,
     resolveArtifactHost: input.resolveArtifactHost,
@@ -53991,6 +54153,7 @@ var LICENSE_ALIASES = new Map([
   ["apache license, 2.0", "Apache-2.0"],
   ["the apache software license, version 2.0", "Apache-2.0"],
   ["bsd", "BSD-3-Clause"],
+  ["bsd3", "BSD-3-Clause"],
   ["bsd 2-clause", "BSD-2-Clause"],
   ["bsd 3-clause", "BSD-3-Clause"],
   ["bsd-2-clause license", "BSD-2-Clause"],

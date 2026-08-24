@@ -236,6 +236,88 @@ describe("collectLocalPackageEvidence", () => {
   });
 });
 
+describe("Hackage remote evidence", () => {
+  test("trusts checksum-verified locked Cabal license metadata", async () => {
+    const cabal = Buffer.from([
+      "cabal-version: 2.4",
+      "name: risk-haskell",
+      "version: 1.2.3",
+      "license: MIT"
+    ].join("\n"));
+    const resolved = "https://hackage.haskell.org/package/risk-haskell-1.2.3/risk-haskell.cabal";
+    const fetchedUrls: string[] = [];
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "stack.yaml.lock",
+        nodes: [{
+          id: "risk-haskell@1.2.3",
+          name: "risk-haskell",
+          version: "1.2.3",
+          ecosystem: "hackage",
+          resolved,
+          integrity: `sha256-${createHash("sha256").update(cabal).digest("base64")}`,
+          dependencyType: "unknown",
+          direct: true,
+          paths: [["root", "risk-haskell@1.2.3"]]
+        }]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async (url) => {
+        fetchedUrls.push(url);
+        return okArtifactResponseFromBuffer(cabal);
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+
+    expect(fetchedUrls).toEqual([resolved]);
+    expect(evidence.value).toEqual([expect.objectContaining({
+      packageId: "risk-haskell@1.2.3",
+      metadataLicense: "MIT",
+      metadataSource: "Hackage Cabal metadata",
+      source: "registry"
+    })]);
+  });
+
+  test("withholds mismatched Hackage Cabal metadata without aborting sibling evidence", async () => {
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "stack.yaml.lock",
+        nodes: [{
+          id: "risk-haskell@1.2.3",
+          name: "risk-haskell",
+          version: "1.2.3",
+          ecosystem: "hackage",
+          resolved: "https://hackage.haskell.org/package/risk-haskell-1.2.3/risk-haskell.cabal",
+          integrity: `sha256-${Buffer.alloc(32).toString("base64")}`,
+          dependencyType: "unknown",
+          direct: true,
+          paths: [["root", "risk-haskell@1.2.3"]]
+        }]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async () => okArtifactResponseFromBuffer("name: risk-haskell\nversion: 1.2.3\nlicense: MIT\n")
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+    expect(evidence.value).toEqual([{
+      packageId: "risk-haskell@1.2.3",
+      files: [],
+      source: "unavailable",
+      warnings: [
+        "Locked Hackage Cabal metadata is not the current public revision; mismatched bytes were not trusted."
+      ]
+    }]);
+  });
+});
+
 describe("collectTarballEvidence", () => {
   test("reads package metadata and license files from a gzipped tarball", () => {
     const tarball = createTarGz({

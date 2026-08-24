@@ -74,6 +74,49 @@ export function collectHackagePackageEvidence(input: {
   });
 }
 
+export function collectHackageCabalEvidence(input: {
+  packageId: string;
+  packageName: string;
+  version: string;
+  text: string;
+}): Result<LicenseEvidence, OhriskError> {
+  const fields = parseCabalIdentityFields(input.text);
+  if (!fields.ok) {
+    return err(fields.error);
+  }
+
+  if (fields.value.name !== input.packageName || fields.value.version !== input.version) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "unsupported_input",
+      message: "Hackage Cabal metadata did not match the locked package identity.",
+      details: {
+        packageId: input.packageId,
+        reason: "hackage_cabal_identity_mismatch",
+        expectedName: input.packageName,
+        expectedVersion: input.version,
+        observedName: fields.value.name,
+        observedVersion: fields.value.version
+      }
+    }));
+  }
+
+  return ok({
+    packageId: input.packageId,
+    ...(fields.value.license
+      ? {
+          metadataLicense: fields.value.license,
+          metadataSource: "Hackage Cabal metadata"
+        }
+      : {}),
+    files: [],
+    source: "registry",
+    warnings: fields.value.license
+      ? []
+      : ["Hackage Cabal metadata did not declare license metadata."]
+  });
+}
+
 function findHackagePackageConf(input: {
   packageName: string;
   version: string;
@@ -197,6 +240,41 @@ function parsePackageConfFields(text: string): Map<string, string> {
   }
 
   return fields;
+}
+
+function parseCabalIdentityFields(text: string): Result<HackagePackageConf, OhriskError> {
+  const fields = new Map<string, string>();
+  for (const rawLine of text.split(/\r?\n/)) {
+    if (/^\s/.test(rawLine) || /^\s*--/.test(rawLine)) {
+      continue;
+    }
+
+    const match = /^([A-Za-z][A-Za-z0-9-]*)\s*:\s*(.*?)\s*$/.exec(rawLine);
+    const key = match?.[1]?.toLowerCase();
+    const value = match?.[2];
+    if (!key || value === undefined || !["name", "version", "license"].includes(key)) {
+      continue;
+    }
+
+    if (fields.has(key)) {
+      return err(createError({
+        code: "PACKAGE_EVIDENCE_READ_FAILED",
+        category: "unsupported_input",
+        message: "Hackage Cabal metadata repeated a package identity or license field.",
+        details: {
+          reason: "hackage_cabal_duplicate_field",
+          field: key
+        }
+      }));
+    }
+    fields.set(key, value.trim());
+  }
+
+  return ok(omitUndefined({
+    name: fields.get("name"),
+    version: fields.get("version"),
+    license: fields.get("license")
+  }));
 }
 
 function childDirectories(dir: string): string[] {
