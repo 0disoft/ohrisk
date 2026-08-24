@@ -10,7 +10,8 @@
   },
   "bin": {
     "ohrisk": "dist/cli.js",
-    "ohrisk-baseline": "bin/ohrisk-baseline.mjs"
+    "ohrisk-baseline": "bin/ohrisk-baseline.mjs",
+    "ohrisk-summary": "bin/ohrisk-summary.mjs"
   },
   "exports": {
     "./report-types": {
