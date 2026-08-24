@@ -133,6 +133,14 @@ evidence and a profile-aware severity so you can decide.
 | `ohrisk diff <ref>` | What changed since the baseline git ref? Separates new, meaningfully changed, and resolved findings. |
 | `ohrisk explain <expr>` | How would Ohrisk classify this license expression for a profile, optionally with license-level organization policy? |
 
+The npm package also includes focused companion commands:
+
+- `ohrisk-summary` renders an existing JSON report in a GitHub Step Summary.
+- `ohrisk-baseline` checks a reviewed finding baseline without Git history.
+- `ohrisk-notices` generates deterministic third-party notices from an Ohrisk
+  CycloneDX report and reviewed legal files. See the
+  [notices guide](docs/third-party-notices.md).
+
 ## Usage profiles
 
 Ohrisk evaluates the same dependency tree differently depending on how you ship

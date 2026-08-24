@@ -22,8 +22,11 @@ Draft 2020-12 contracts live in `schemas/common.schema.json`,
 `schemas/explain-report.schema.json`, `schemas/baseline.schema.json`,
 `schemas/baseline-check.schema.json`, and
 `schemas/report-summary.schema.json`. The companion contracts use their own
-independent `1.0.0` version because they model the reduced checked-in decision
-record or bounded summary rather than the full report payload.
+independent `1.0.0` version because they model reduced checked-in decisions,
+bounded summaries, or third-party-notice inputs and results rather than the
+full report payload. Notice generation uses
+`schemas/notices-evidence.schema.json` and
+`schemas/notices-result.schema.json`.
 
 Schema `3.5.0` is a closed contract. Report roots and structured nested objects
 reject unknown properties, while common `$defs` define findings, evidence,
@@ -66,6 +69,8 @@ The available schema subpaths are:
 - `ohrisk/schemas/baseline`
 - `ohrisk/schemas/baseline-check`
 - `ohrisk/schemas/report-summary`
+- `ohrisk/schemas/notices-evidence`
+- `ohrisk/schemas/notices-result`
 
 Use `moduleResolution: "NodeNext"` or `"Bundler"` and enable
 `resolveJsonModule` when importing the JSON files from TypeScript. Existing

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: b4bf35a15e24263d9e64c0dbf1b0cb6e0b23d8d631ba1017ed31d735014f43bc
+// ohrisk-action-source-sha256: 94d8a86a112bdfe7531a696dcd2ad605a225705b1c938eaa8035e81858f4f79b
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -17393,7 +17393,8 @@ var package_default = {
   bin: {
     ohrisk: "dist/cli.js",
     "ohrisk-baseline": "bin/ohrisk-baseline.mjs",
-    "ohrisk-summary": "bin/ohrisk-summary.mjs"
+    "ohrisk-summary": "bin/ohrisk-summary.mjs",
+    "ohrisk-notices": "bin/ohrisk-notices.mjs"
   },
   exports: {
     "./report-types": {
@@ -17407,6 +17408,8 @@ var package_default = {
     "./schemas/baseline": "./schemas/baseline.schema.json",
     "./schemas/baseline-check": "./schemas/baseline-check.schema.json",
     "./schemas/report-summary": "./schemas/report-summary.schema.json",
+    "./schemas/notices-evidence": "./schemas/notices-evidence.schema.json",
+    "./schemas/notices-result": "./schemas/notices-result.schema.json",
     "./schemas/*": "./schemas/*",
     "./dist/*": "./dist/*",
     "./CHANGELOG.md": "./CHANGELOG.md",

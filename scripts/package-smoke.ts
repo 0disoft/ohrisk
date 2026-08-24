@@ -109,6 +109,37 @@ try {
     consumerBinDir
   );
   assertCycloneDxReport(readJsonObject(cyclonedxOutput));
+  writeFileSync(path.join(consumerDir, "ohrisk.cdx.json"), cyclonedxOutput, "utf8");
+  writeFileSync(
+    path.join(consumerDir, "notices-evidence.json"),
+    `${JSON.stringify({
+      $schema: "urn:ohrisk:schema:notices-evidence:1.0.0",
+      schemaVersion: "1.0.0",
+      packages: [{
+        purl: `pkg:npm/ohrisk@${expectedVersion}`,
+        licenseFiles: ["node_modules/ohrisk/LICENSE"]
+      }]
+    }, null, 2)}\n`,
+    "utf8"
+  );
+  const noticesOutput = runWithPath(
+    "ohrisk-notices",
+    [
+      "--sbom", "ohrisk.cdx.json",
+      "--evidence", "notices-evidence.json",
+      "--output", "THIRD_PARTY_NOTICES.md",
+      "--json"
+    ],
+    consumerDir,
+    consumerBinDir
+  );
+  const noticesResult = readJsonObject(noticesOutput);
+  if (
+    noticesResult.$schema !== "urn:ohrisk:schema:notices-result:1.0.0"
+    || noticesResult.status !== "third_party_notices_generated"
+  ) {
+    throw new Error("Packaged notices smoke test returned an invalid contract.");
+  }
 
   const markdownOutput = runWithPath(
     "ohrisk",
@@ -134,6 +165,8 @@ function assertPublishedModuleSurface(consumerDir: string, repoRoot: string): vo
       'import baselineSchema from "ohrisk/schemas/baseline" with { type: "json" };',
       'import baselineCheckSchema from "ohrisk/schemas/baseline-check" with { type: "json" };',
       'import reportSummarySchema from "ohrisk/schemas/report-summary" with { type: "json" };',
+      'import noticesEvidenceSchema from "ohrisk/schemas/notices-evidence" with { type: "json" };',
+      'import noticesResultSchema from "ohrisk/schemas/notices-result" with { type: "json" };',
       'import explicitScanSchema from "ohrisk/schemas/scan-report.schema.json" with { type: "json" };',
       "",
       "const expected = new Map([",
@@ -145,6 +178,8 @@ function assertPublishedModuleSurface(consumerDir: string, repoRoot: string): vo
       '  [baselineSchema.$id, "urn:ohrisk:schema:baseline:1.0.0"],',
       '  [baselineCheckSchema.$id, "urn:ohrisk:schema:baseline-check:1.0.0"],',
       '  [reportSummarySchema.$id, "urn:ohrisk:schema:report-summary:1.0.0"],',
+      '  [noticesEvidenceSchema.$id, "urn:ohrisk:schema:notices-evidence:1.0.0"],',
+      '  [noticesResultSchema.$id, "urn:ohrisk:schema:notices-result:1.0.0"],',
       '  [explicitScanSchema.$id, "urn:ohrisk:schema:scan-report:3.5.0"]',
       "]);",
       "",
@@ -168,6 +203,8 @@ function assertPublishedModuleSurface(consumerDir: string, repoRoot: string): vo
       "  BaselineCheckReport,",
       "  OhriskBaseline,",
       "  ReportSummary,",
+      "  NoticesEvidence,",
+      "  NoticesResult,",
       "  ExplainReport,",
       "  Finding,",
       "  ReportSchemaVersion,",
@@ -184,6 +221,8 @@ function assertPublishedModuleSurface(consumerDir: string, repoRoot: string): vo
       "declare const baseline: OhriskBaseline;",
       "declare const baselineCheck: BaselineCheckReport;",
       "declare const reportSummary: ReportSummary;",
+      "declare const noticesEvidence: NoticesEvidence;",
+      "declare const noticesResult: NoticesResult;",
       "const finding: Finding | undefined = scanReport.findings[0];",
       "const introduced: Finding[] = diffReport.findings;",
       "const explained: Finding = explainReport.finding;",
@@ -200,6 +239,8 @@ function assertPublishedModuleSurface(consumerDir: string, repoRoot: string): vo
       "  baseline,",
       "  baselineCheck,",
       "  reportSummary,",
+      "  noticesEvidence,",
+      "  noticesResult,",
       "  scanSchema,",
       "  diffSchema",
       "];",

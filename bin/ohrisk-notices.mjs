@@ -19,6 +19,9 @@ const DEFAULT_OUTPUT = "THIRD_PARTY_NOTICES.md";
 const MAX_EVIDENCE_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_EVIDENCE_BYTES = 32 * 1024 * 1024;
 const MAX_EVIDENCE_FILES = 2048;
+const MAX_SBOM_BYTES = 64 * 1024 * 1024;
+const MAX_EVIDENCE_MANIFEST_BYTES = 2 * 1024 * 1024;
+const MAX_COMPONENTS = 50_000;
 
 try {
   const options = parseArguments(process.argv.slice(2));
@@ -173,16 +176,35 @@ function generateNotices(options) {
 }
 
 function readCycloneDx(filePath) {
-  const parsed = readJson(filePath, "CycloneDX report");
+  const parsed = readJson(filePath, "CycloneDX report", MAX_SBOM_BYTES);
   if (
     !isObject(parsed)
     || parsed.bomFormat !== "CycloneDX"
     || parsed.specVersion !== "1.5"
+    || parsed.version !== 1
     || !Array.isArray(parsed.components)
+    || parsed.components.length > MAX_COMPONENTS
+    || !isOhriskCycloneDxMetadata(parsed.metadata)
   ) {
-    throw new Error("input is not an Ohrisk CycloneDX 1.5 report.");
+    throw new Error("input is not a bounded Ohrisk CycloneDX 1.5 report.");
   }
   return parsed;
+}
+
+function isOhriskCycloneDxMetadata(value) {
+  if (
+    !isObject(value)
+    || !isObject(value.component)
+    || value.component.type !== "application"
+    || !Array.isArray(value.properties)
+  ) {
+    return false;
+  }
+  const properties = propertyMap(value.properties);
+  return properties.get("ohrisk:projectRoot") === "."
+    && nonEmptyString(properties.get("ohrisk:lockfileKind"))
+    && nonEmptyString(properties.get("ohrisk:lockfilePath"))
+    && ["local", "ignored"].includes(properties.get("ohrisk:waiverMode"));
 }
 
 function normalizeComponent(value) {
@@ -198,20 +220,28 @@ function normalizeComponent(value) {
     || version === ""
     || typeof purl !== "string"
     || purl === ""
+    || value["bom-ref"] !== purl
     || !["required", "optional", "excluded"].includes(scope)
+    || !Array.isArray(value.properties)
   ) {
-    throw new Error("Every component must contain type=library, name, version, purl, and a supported scope.");
+    throw new Error("Every component must contain type=library, matching purl/bom-ref, name, version, properties, and a supported scope.");
   }
   const properties = propertyMap(value.properties);
+  const ecosystem = properties.get("ohrisk:ecosystem");
+  const dependencyType = properties.get("ohrisk:dependencyType");
+  const direct = properties.get("ohrisk:direct");
+  if (!nonEmptyString(ecosystem) || !nonEmptyString(dependencyType) || !["true", "false"].includes(direct)) {
+    throw new Error(`component ${purl} is missing required Ohrisk properties.`);
+  }
   return {
     name,
     version,
     purl,
     scope,
     license: renderLicense(value.licenses),
-    ecosystem: properties.get("ohrisk:ecosystem") ?? "unknown",
-    dependencyType: properties.get("ohrisk:dependencyType") ?? "unknown",
-    direct: properties.get("ohrisk:direct") === "true",
+    ecosystem,
+    dependencyType,
+    direct: direct === "true",
     signals: splitSignals(properties.get("ohrisk:licenseSignals")),
     riskSeverity: properties.get("ohrisk:riskSeverity") ?? null,
     action: properties.get("ohrisk:action") ?? null
@@ -219,12 +249,20 @@ function normalizeComponent(value) {
 }
 
 function propertyMap(value) {
-  if (!Array.isArray(value)) return new Map();
+  if (!Array.isArray(value)) {
+    throw new Error("CycloneDX properties must be an array.");
+  }
   const entries = [];
+  const names = new Set();
   for (const property of value) {
-    if (isObject(property) && typeof property.name === "string" && typeof property.value === "string") {
-      entries.push([property.name, property.value]);
+    if (!isObject(property) || !nonEmptyString(property.name) || typeof property.value !== "string") {
+      throw new Error("Every CycloneDX property must contain a non-empty name and string value.");
     }
+    if (names.has(property.name)) {
+      throw new Error(`duplicate CycloneDX property ${property.name}.`);
+    }
+    names.add(property.name);
+    entries.push([property.name, property.value]);
   }
   return new Map(entries);
 }
@@ -234,7 +272,9 @@ function renderLicense(value) {
   const expressions = [];
   const choices = [];
   for (const entry of value) {
-    if (!isObject(entry)) continue;
+    if (!isObject(entry)) {
+      throw new Error("Every CycloneDX license entry must be an object.");
+    }
     if (typeof entry.expression === "string" && entry.expression !== "") {
       expressions.push(entry.expression);
       continue;
@@ -245,8 +285,12 @@ function renderLicense(value) {
         : typeof entry.license.name === "string"
           ? entry.license.name
           : undefined;
-      if (candidate) choices.push(candidate);
+      if (candidate) {
+        choices.push(candidate);
+        continue;
+      }
     }
+    throw new Error("Every CycloneDX license entry must contain an expression, id, or name.");
   }
   if (expressions.length > 0) return uniqueSorted(expressions).join(" AND ");
   if (choices.length > 0) return uniqueSorted(choices).join(" OR ");
@@ -254,11 +298,13 @@ function renderLicense(value) {
 }
 
 function readEvidenceManifest(filePath) {
-  const parsed = readJson(filePath, "notices evidence manifest");
+  const parsed = readJson(filePath, "notices evidence manifest", MAX_EVIDENCE_MANIFEST_BYTES);
   if (
     !isObject(parsed)
     || parsed.$schema !== EVIDENCE_SCHEMA
+    || parsed.schemaVersion !== "1.0.0"
     || !Array.isArray(parsed.packages)
+    || parsed.packages.length > MAX_COMPONENTS
   ) {
     throw new Error("input is not an Ohrisk notices evidence manifest.");
   }
@@ -389,9 +435,9 @@ function renderNotices(input) {
       "",
       `## ${escapeHeading(component.name)} ${escapeHeading(component.version)}`,
       "",
-      `Package URL: \`${escapeCode(component.purl)}\``,
+      `Package URL: ${inlineCode(component.purl)}`,
       "",
-      `Declared license: ${component.license ? `\`${escapeCode(component.license)}\`` : "MISSING"}`,
+      `Declared license: ${component.license ? inlineCode(component.license) : "MISSING"}`,
       "",
       `Dependency: ${escapeInline(component.dependencyType)}${component.direct ? ", direct" : ", transitive"}`
     );
@@ -429,9 +475,9 @@ function renderNotices(input) {
       "",
       `Kinds: ${[...document.kinds].sort().join(", ")}`,
       "",
-      `Packages: ${[...document.packages].sort().map((purl) => `\`${escapeCode(purl)}\``).join(", ")}`,
+      `Packages: ${[...document.packages].sort().map(inlineCode).join(", ")}`,
       "",
-      `Sources: ${[...document.sourcePaths].sort().map((source) => `\`${escapeCode(source)}\``).join(", ")}`,
+      `Sources: ${[...document.sourcePaths].sort().map(inlineCode).join(", ")}`,
       "",
       ...indentText(document.text)
     );
@@ -455,7 +501,7 @@ function renderNotices(input) {
   if (input.unusedEvidence.length === 0) {
     lines.push("", "None.");
   } else {
-    lines.push("", ...input.unusedEvidence.map((purl) => `* \`${escapeCode(purl)}\``));
+    lines.push("", ...input.unusedEvidence.map((purl) => `* ${inlineCode(purl)}`));
   }
 
   return lines.join("\n");
@@ -532,6 +578,14 @@ function resolveContainedOutput(workspace, value, label) {
   }
   const candidate = path.resolve(workspace, value);
   requireContained(workspace, candidate, label);
+  try {
+    const existing = lstatSync(candidate);
+    if (!existing.isFile() || existing.isSymbolicLink()) {
+      throw new Error(`${label} must be a regular file when it already exists.`);
+    }
+  } catch (cause) {
+    if (cause?.code !== "ENOENT") throw cause;
+  }
   let ancestor = path.dirname(candidate);
   while (true) {
     try {
@@ -554,8 +608,12 @@ function requireContained(workspace, candidate, label) {
   }
 }
 
-function readJson(filePath, label) {
+function readJson(filePath, label, maxBytes) {
   try {
+    const stats = statSync(filePath);
+    if (!stats.isFile() || stats.size > maxBytes) {
+      throw new Error(`input must be a regular file no larger than ${maxBytes} bytes.`);
+    }
     return JSON.parse(readFileSync(filePath, "utf8"));
   } catch (cause) {
     throw new Error(`cannot read ${label}: ${errorMessage(cause)}`);
@@ -614,7 +672,7 @@ function escapeInline(value) {
 }
 
 function escapeCell(value) {
-  return escapeInline(value).replaceAll("|", "\\|");
+  return escapeInline(value).replaceAll("\\", "\\\\").replaceAll("|", "\\|");
 }
 
 function escapeHeading(value) {
@@ -622,7 +680,15 @@ function escapeHeading(value) {
 }
 
 function escapeCode(value) {
-  return String(value).replaceAll("`", "\\`").replace(/[\r\n]+/g, " ");
+  return String(value).replace(/[\r\n]+/g, " ");
+}
+
+function inlineCode(value) {
+  const text = escapeCode(value);
+  const longestRun = Math.max(0, ...[...text.matchAll(/`+/g)].map((match) => match[0].length));
+  const delimiter = "`".repeat(longestRun + 1);
+  const padding = text.startsWith("`") || text.endsWith("`") ? " " : "";
+  return `${delimiter}${padding}${text}${padding}${delimiter}`;
 }
 
 function displayPath(workspace, filePath) {
@@ -661,4 +727,8 @@ function isObject(value) {
 
 function errorMessage(cause) {
   return cause instanceof Error ? cause.message : String(cause);
+}
+
+function nonEmptyString(value) {
+  return typeof value === "string" && value.length > 0;
 }

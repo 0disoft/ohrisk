@@ -2,6 +2,11 @@
 
 ## 1.15.1 - Unreleased
 
+- The packaged `ohrisk-notices` command now generates deterministic,
+  evidence-backed `THIRD_PARTY_NOTICES.md` artifacts from Ohrisk CycloneDX
+  reports and explicitly reviewed legal files. Versioned input/result schemas,
+  public TypeScript types, bounded reads, package smoke coverage, and
+  fail-closed incomplete-evidence reporting ship with the command.
 - A permissionless nested `summary-action` and packaged `ohrisk-summary`
   command now render an existing scan or diff JSON report into an escaped,
   bounded GitHub Step Summary and expose scalar workflow outputs. Summary JSON

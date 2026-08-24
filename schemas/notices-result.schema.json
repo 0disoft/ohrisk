@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ohrisk:schema:notices-result:1.0.0",
+  "title": "Ohrisk third-party notices generation result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "status",
+    "output",
+    "componentCount",
+    "completeComponentCount",
+    "incompleteComponentCount",
+    "evidenceDocumentCount",
+    "evidenceFileCount",
+    "evidenceBytes",
+    "unusedEvidenceCount",
+    "incomplete",
+    "incompletePackages",
+    "unusedEvidence"
+  ],
+  "properties": {
+    "$schema": { "const": "urn:ohrisk:schema:notices-result:1.0.0" },
+    "schemaVersion": { "const": "1.0.0" },
+    "status": { "const": "third_party_notices_generated" },
+    "output": { "type": "string", "minLength": 1 },
+    "componentCount": { "type": "integer", "minimum": 0, "maximum": 50000 },
+    "completeComponentCount": { "type": "integer", "minimum": 0, "maximum": 50000 },
+    "incompleteComponentCount": { "type": "integer", "minimum": 0, "maximum": 50000 },
+    "evidenceDocumentCount": { "type": "integer", "minimum": 0, "maximum": 2048 },
+    "evidenceFileCount": { "type": "integer", "minimum": 0, "maximum": 2048 },
+    "evidenceBytes": { "type": "integer", "minimum": 0, "maximum": 33554432 },
+    "unusedEvidenceCount": { "type": "integer", "minimum": 0, "maximum": 50000 },
+    "incomplete": { "type": "boolean" },
+    "incompletePackages": {
+      "type": "array",
+      "maxItems": 50000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["purl", "missing"],
+        "properties": {
+          "purl": { "type": "string", "minLength": 1 },
+          "missing": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "enum": ["license-declaration", "license-text", "notice-file"] }
+          }
+        }
+      }
+    },
+    "unusedEvidence": {
+      "type": "array",
+      "maxItems": 50000,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}
