@@ -1,0 +1,67 @@
+name: Ohrisk report summary
+description: Render an Ohrisk JSON report in the GitHub Actions step summary and expose bounded count outputs.
+
+inputs:
+  report:
+    description: Repository-relative path to an Ohrisk scan or diff JSON report.
+    required: true
+  max-findings:
+    description: Maximum active findings rendered in the step summary, from 0 to 100.
+    required: false
+    default: "20"
+
+outputs:
+  status:
+    description: Ohrisk report status.
+    value: ${{ steps.summary.outputs.status }}
+  report-type:
+    description: Report type, either scan or diff.
+    value: ${{ steps.summary.outputs.report-type }}
+  failed:
+    description: Whether the report records a failed threshold or waiver-drift gate.
+    value: ${{ steps.summary.outputs.failed }}
+  completeness:
+    description: complete, partial, or not-reported.
+    value: ${{ steps.summary.outputs.completeness }}
+  finding-count:
+    description: Number of active findings in the report.
+    value: ${{ steps.summary.outputs.finding-count }}
+  failing-finding-count:
+    description: Number of active findings at or above the report threshold.
+    value: ${{ steps.summary.outputs.failing-finding-count }}
+  high-count:
+    description: Number of high-severity active findings.
+    value: ${{ steps.summary.outputs.high-count }}
+  unknown-count:
+    description: Number of unknown-severity active findings.
+    value: ${{ steps.summary.outputs.unknown-count }}
+  review-count:
+    description: Number of review-severity active findings.
+    value: ${{ steps.summary.outputs.review-count }}
+  low-count:
+    description: Number of low-severity active findings.
+    value: ${{ steps.summary.outputs.low-count }}
+  waived-count:
+    description: Number of applied waivers reported by a scan.
+    value: ${{ steps.summary.outputs.waived-count }}
+  waiver-drift-failed:
+    description: Whether strict waiver drift failed the report gate.
+    value: ${{ steps.summary.outputs.waiver-drift-failed }}
+
+runs:
+  using: composite
+  steps:
+    - name: Render Ohrisk report summary
+      id: summary
+      shell: bash
+      env:
+        OHRISK_REPORT_PATH: ${{ inputs.report }}
+        OHRISK_MAX_FINDINGS: ${{ inputs.max-findings }}
+      run: |
+        set -euo pipefail
+        node "${{ github.action_path }}/../bin/ohrisk-summary.mjs" \
+          --workspace "$GITHUB_WORKSPACE" \
+          --report "$OHRISK_REPORT_PATH" \
+          --max-findings "$OHRISK_MAX_FINDINGS" \
+          --step-summary \
+          --github-output "$GITHUB_OUTPUT"
