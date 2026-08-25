@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 4d589924ac92cee1a2de3b8bc1d20d92a971bc29e9b79b3f4fed8694e044be35
+// ohrisk-action-source-sha256: 92a3caf44991cc50f881d0a928767100bd4eb501af7741b4ce8c56df8c8c172e
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -22367,6 +22367,8 @@ function parseMixLockText(input, lockfilePath = "mix.lock", options = {}) {
       name: record.name,
       version: record.version,
       ecosystem: "hex",
+      ...record.resolved ? { resolved: record.resolved } : {},
+      ...record.integrity ? { integrity: record.integrity } : {},
       dependencyType: rootTypes.get(record.name) ?? "unknown",
       direct: true,
       paths: [[rootName, record.id]]
@@ -22406,14 +22408,76 @@ function readHexRecords(input) {
     if (!name || !version) {
       continue;
     }
+    const remoteArtifact = readPublicHexArtifact(input, match.index, name, version);
     const record = {
       name,
       version,
-      id: `${name}@${version}`
+      id: `${name}@${version}`,
+      ...remoteArtifact ?? {}
     };
     records.set(record.id, record);
   }
   return [...records.values()];
+}
+function readPublicHexArtifact(input, entryStart, packageName, version) {
+  if (entryStart === undefined) {
+    return;
+  }
+  const tupleStart = input.indexOf("{:hex", entryStart);
+  const tupleEnd = tupleStart < 0 ? undefined : findTupleEnd(input, tupleStart);
+  if (tupleEnd === undefined) {
+    return;
+  }
+  const tuple = input.slice(tupleStart, tupleEnd + 1);
+  const tail = /,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\}$/su.exec(tuple);
+  const repository = tail?.[1];
+  const checksum = tail?.[2];
+  const resolved = hexTarballUrl(packageName, version);
+  if (repository !== "hexpm" || !checksum || !/^[0-9a-f]{64}$/iu.test(checksum) || !resolved) {
+    return;
+  }
+  return {
+    resolved,
+    integrity: `sha256-${Buffer.from(checksum, "hex").toString("base64")}`
+  };
+}
+function findTupleEnd(input, tupleStart) {
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let index = tupleStart;index < input.length; index += 1) {
+    const char = input[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (quoted && char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (quoted) {
+      continue;
+    }
+    if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return;
+}
+function hexTarballUrl(packageName, version) {
+  if (!/^[A-Za-z0-9_.-]+$/u.test(packageName) || !/^[A-Za-z0-9_.+-]+$/u.test(version)) {
+    return;
+  }
+  return `https://repo.hex.pm/tarballs/${packageName}-${version}.tar`;
 }
 function readMixRootTypes(input, records) {
   const recordNames = new Set(records.map((record) => record.name));
@@ -41160,7 +41224,7 @@ function cacheOperationError(message, rootDir, cause) {
 }
 
 // src/evidence/collect.ts
-import { createHash as createHash8, timingSafeEqual as timingSafeEqual5 } from "node:crypto";
+import { createHash as createHash9, timingSafeEqual as timingSafeEqual6 } from "node:crypto";
 import {
   closeSync as closeSync4,
   existsSync as existsSync46,
@@ -48499,12 +48563,203 @@ function escapeGoProxyText(value) {
   return escaped;
 }
 
+// src/evidence/hex-tarball.ts
+import { createHash as createHash6, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
+var HEX_OUTER_ENTRY_LIMIT = 8;
+var HEX_CONTENT_ENTRY_LIMIT = 50000;
+var HEX_CONTENT_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
+var HEX_CONTENT_MATERIALIZED_MAX_BYTES = 128 * 1024 * 1024;
+var HEX_METADATA_MAX_BYTES = 1024 * 1024;
+var HEX_LICENSE_MAX_BYTES = 2 * 1024 * 1024;
+var HEX_LICENSE_FILE_LIMIT2 = 50;
+var HEX_OUTER_FILES = new Set(["VERSION", "CHECKSUM", "metadata.config", "contents.tar.gz"]);
+function collectHexTarballEvidence(input) {
+  const outer = readArchiveBytes({
+    displayName: `${safeDisplayPart(input.packageName)}-${safeDisplayPart(input.version)}.tar`,
+    bytes: input.tarball,
+    formatHint: "tar",
+    limits: {
+      inputBytes: input.artifactMaxBytes,
+      entries: HEX_OUTER_ENTRY_LIMIT,
+      entryBytes: input.artifactMaxBytes,
+      expandedBytes: input.artifactMaxBytes,
+      materializedBytes: input.artifactMaxBytes
+    }
+  });
+  if (!outer.ok) {
+    return outer;
+  }
+  const unexpected = outer.value.entries.find((entry) => entry.type !== "file" || !HEX_OUTER_FILES.has(entry.path));
+  if (unexpected) {
+    return err(hexTarballError(input, "Hex package archive contained an unexpected outer entry.", {
+      reason: "hex_outer_entry_unexpected",
+      entryPath: unexpected.path,
+      entryType: unexpected.type
+    }));
+  }
+  const versionBytes = readRequiredEntry(input, outer.value, "VERSION");
+  const checksumBytes = readRequiredEntry(input, outer.value, "CHECKSUM");
+  const metadataBytes = readRequiredEntry(input, outer.value, "metadata.config");
+  const contentsBytes = readRequiredEntry(input, outer.value, "contents.tar.gz");
+  if (!versionBytes.ok)
+    return versionBytes;
+  if (!checksumBytes.ok)
+    return checksumBytes;
+  if (!metadataBytes.ok)
+    return metadataBytes;
+  if (!contentsBytes.ok)
+    return contentsBytes;
+  if (versionBytes.value.toString("ascii") !== "3") {
+    return err(hexTarballError(input, "Hex package archive used an unsupported format version.", {
+      reason: "hex_archive_version_unsupported"
+    }));
+  }
+  if (metadataBytes.value.byteLength > HEX_METADATA_MAX_BYTES) {
+    return err(hexTarballError(input, "Hex package metadata exceeded the maximum supported size.", {
+      reason: "hex_metadata_too_large",
+      maxBytes: HEX_METADATA_MAX_BYTES,
+      observedBytes: metadataBytes.value.byteLength
+    }));
+  }
+  const expectedInnerChecksum = parseInnerChecksum(checksumBytes.value);
+  const computedInnerChecksum = createHash6("sha256").update(versionBytes.value).update(metadataBytes.value).update(contentsBytes.value).digest();
+  if (!expectedInnerChecksum || !timingSafeEqual3(expectedInnerChecksum, computedInnerChecksum)) {
+    return err(hexTarballError(input, "Hex package inner checksum did not match its payload.", {
+      reason: "hex_inner_checksum_mismatch"
+    }));
+  }
+  const metadata = parseHexMetadata(input, metadataBytes.value);
+  if (!metadata.ok) {
+    return metadata;
+  }
+  if (metadata.value.name !== input.packageName || metadata.value.version !== input.version) {
+    return err(hexTarballError(input, "Hex package metadata did not match the locked package identity.", {
+      reason: "hex_package_identity_mismatch",
+      expectedName: input.packageName,
+      expectedVersion: input.version,
+      observedName: metadata.value.name,
+      observedVersion: metadata.value.version
+    }));
+  }
+  const contents = readArchiveBytes({
+    displayName: "contents.tar.gz",
+    bytes: contentsBytes.value,
+    formatHint: "tar.gz",
+    limits: {
+      inputBytes: input.artifactMaxBytes,
+      entries: HEX_CONTENT_ENTRY_LIMIT,
+      expandedBytes: HEX_CONTENT_EXPANDED_MAX_BYTES,
+      materializedBytes: HEX_CONTENT_MATERIALIZED_MAX_BYTES
+    }
+  });
+  if (!contents.ok) {
+    return contents;
+  }
+  const warnings = [];
+  const files = collectHexArchiveEvidenceFiles(contents.value, warnings);
+  if (files.length === 0) {
+    warnings.push("Checksum-verified Hex package did not contain a root license evidence file.");
+  }
+  if (metadata.value.licenses.length === 0) {
+    warnings.push("Checksum-verified Hex metadata did not declare license metadata.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...metadata.value.licenses.length === 1 ? { metadataLicense: metadata.value.licenses[0], metadataSource: "metadata.config" } : {},
+    ...metadata.value.licenses.length > 1 ? { metadataLicenses: metadata.value.licenses, metadataSource: "metadata.config" } : {},
+    files,
+    source: "tarball",
+    warnings
+  });
+}
+function readRequiredEntry(input, archive, entryPath) {
+  const entry = archive.entries.find((candidate) => candidate.type === "file" && candidate.path === entryPath);
+  if (!entry) {
+    return err(hexTarballError(input, "Hex package archive was missing a required outer entry.", {
+      reason: "hex_outer_entry_missing",
+      entryPath
+    }));
+  }
+  return archive.readEntry(entryPath);
+}
+function parseInnerChecksum(bytes) {
+  const text = bytes.toString("ascii");
+  if (!/^[0-9A-F]{64}$/u.test(text)) {
+    return;
+  }
+  const checksum = Buffer.from(text, "hex");
+  return checksum.byteLength === 32 ? checksum : undefined;
+}
+function parseHexMetadata(input, bytes) {
+  let text;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return err(hexTarballError(input, "Hex package metadata was not valid UTF-8.", {
+      reason: "hex_metadata_invalid_utf8"
+    }));
+  }
+  const name = readUniqueBinaryMetadataField(text, "name");
+  const version = readUniqueBinaryMetadataField(text, "version");
+  const licenses = readUniqueLicenseMetadataField(text);
+  if (!name || !version || !licenses) {
+    return err(hexTarballError(input, "Hex package metadata had an unsupported or ambiguous shape.", {
+      reason: "hex_metadata_shape_unsupported"
+    }));
+  }
+  return ok({ name, version, licenses });
+}
+function readUniqueBinaryMetadataField(text, field) {
+  const pattern = new RegExp(`\\{<<"${field}">>,\\s*<<"([^"\\\\]*)">>\\}\\.`, "gu");
+  const matches = [...text.matchAll(pattern)];
+  return matches.length === 1 && matches[0]?.[1] ? matches[0][1] : undefined;
+}
+function readUniqueLicenseMetadataField(text) {
+  const fields = [...text.matchAll(/\{<<"licenses">>,\s*\[((?:\s*<<"[^"\\]*">>\s*,?)*)\]\}\./gsu)];
+  if (fields.length !== 1 || fields[0]?.[1] === undefined) {
+    return;
+  }
+  return [...fields[0][1].matchAll(/<<"([^"\\]*)">>/gu)].map((match) => match[1]?.trim()).filter((license) => license !== undefined && license !== "");
+}
+function collectHexArchiveEvidenceFiles(archive, warnings) {
+  const files = [];
+  const candidates = archive.entries.filter((entry) => entry.type === "file" && !entry.path.includes("/") && classifyEvidenceFile(entry.path)).sort((left, right) => left.path.localeCompare(right.path)).slice(0, HEX_LICENSE_FILE_LIMIT2);
+  for (const candidate of candidates) {
+    const kind = classifyEvidenceFile(candidate.path);
+    if (!kind)
+      continue;
+    const text = archive.readText(candidate.path, HEX_LICENSE_MAX_BYTES);
+    if (!text.ok) {
+      warnings.push(`Skipped ${candidate.path}: Hex license evidence could not be read within the supported bounds.`);
+      continue;
+    }
+    files.push({ path: candidate.path, kind, text: text.value });
+  }
+  return files;
+}
+function safeDisplayPart(value) {
+  return value.replace(/[^A-Za-z0-9._+-]/gu, "_").slice(0, 120) || "package";
+}
+function hexTarballError(input, message, details) {
+  return createError({
+    code: "PACKAGE_EVIDENCE_READ_FAILED",
+    category: "unsupported_input",
+    message,
+    details: {
+      packageId: input.packageId,
+      packageName: input.packageName,
+      version: input.version,
+      ...details
+    }
+  });
+}
+
 // src/evidence/local-artifact-path.ts
 import { existsSync as existsSync45, realpathSync as realpathSync4, statSync as statSync33 } from "node:fs";
 import path78 from "node:path";
 
 // src/evidence/package-integrity.ts
-import { createHash as createHash6, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
+import { createHash as createHash7, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
 var SUPPORTED_INTEGRITY_DIGEST_BYTES = {
   sha1: 20,
   sha256: 32,
@@ -48531,10 +48786,10 @@ function verifyPackageIntegrity(input) {
   }
   const computed = [];
   for (const entry of supported) {
-    const actualDigest = createHash6(entry.algorithm).update(input.artifact).digest();
+    const actualDigest = createHash7(entry.algorithm).update(input.artifact).digest();
     const actual = `${entry.algorithm}-${actualDigest.toString("base64")}`;
     computed.push(actual);
-    if (actualDigest.byteLength === entry.digest.byteLength && timingSafeEqual3(actualDigest, entry.digest)) {
+    if (actualDigest.byteLength === entry.digest.byteLength && timingSafeEqual4(actualDigest, entry.digest)) {
       return ok(undefined);
     }
   }
@@ -48821,7 +49076,7 @@ function isPackageLicenseEvidencePath(filePath) {
 }
 
 // src/evidence/nuget-nupkg.ts
-import { createHash as createHash7, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
+import { createHash as createHash8, timingSafeEqual as timingSafeEqual5 } from "node:crypto";
 import path79 from "node:path";
 
 // src/evidence/nuget-registry.ts
@@ -49146,7 +49401,7 @@ function collectNugetNupkgEvidence(input) {
     return integrity2;
   }
   const archive = readArchiveBytes({
-    displayName: `${safeDisplayPart(input.packageName)}.${safeDisplayPart(input.normalizedVersion)}.nupkg`,
+    displayName: `${safeDisplayPart2(input.packageName)}.${safeDisplayPart2(input.normalizedVersion)}.nupkg`,
     bytes: input.nupkg,
     formatHint: "zip",
     limits: {
@@ -49239,8 +49494,8 @@ function collectNugetNupkgEvidence(input) {
 }
 function verifyNugetNupkgIntegrity(input) {
   const expected = decodeCanonicalSha512(input.expectedSha512);
-  const actual = createHash7("sha512").update(input.nupkg).digest();
-  if (input.nupkg.byteLength !== input.expectedSize || !expected || expected.length !== actual.length || !timingSafeEqual4(expected, actual)) {
+  const actual = createHash8("sha512").update(input.nupkg).digest();
+  if (input.nupkg.byteLength !== input.expectedSize || !expected || expected.length !== actual.length || !timingSafeEqual5(expected, actual)) {
     return err(createError({
       code: "PACKAGE_INTEGRITY_CHECK_FAILED",
       category: "unsupported_input",
@@ -49275,7 +49530,7 @@ function normalizeDeclaredArchivePath(value) {
 function unavailableNugetEvidence(packageId, warning) {
   return { packageId, files: [], source: "unavailable", warnings: [warning] };
 }
-function safeDisplayPart(value) {
+function safeDisplayPart2(value) {
   return value.replace(/[^A-Za-z0-9._+-]/gu, "_").slice(0, 120) || "package";
 }
 function nugetPackageError(input, message, details) {
@@ -50077,6 +50332,7 @@ var PYPI_METADATA_HOSTS = new Set(["pypi.org"]);
 var PYPI_DISTRIBUTION_HOSTS = new Set(["files.pythonhosted.org"]);
 var RUBYGEMS_ORG_HOSTS = new Set(["rubygems.org"]);
 var PUB_DEV_ARCHIVE_HOSTS = new Set(["pub.dev"]);
+var HEX_PM_TARBALL_HOSTS = new Set(["repo.hex.pm"]);
 var NUGET_SERVICE_INDEX_URL = "https://api.nuget.org/v3/index.json";
 var NUGET_ORG_HOSTS = new Set(["api.nuget.org"]);
 var MAVEN_CENTRAL_BASE_URL = "https://repo.maven.apache.org/maven2";
@@ -50364,7 +50620,7 @@ async function collectNodeEvidence(input) {
         allowedHosts: input.allowedHosts
       });
     }
-    if (input.node.ecosystem !== "maven" && input.node.ecosystem !== "go" && input.node.ecosystem !== "cargo" && input.node.ecosystem !== "nuget" && input.node.ecosystem !== "gem" && input.node.ecosystem !== "hackage" && input.node.ecosystem !== "zig" || !ecosystemEvidence.ok || ecosystemEvidence.value.source !== "unavailable") {
+    if (input.node.ecosystem !== "maven" && input.node.ecosystem !== "go" && input.node.ecosystem !== "cargo" && input.node.ecosystem !== "nuget" && input.node.ecosystem !== "gem" && input.node.ecosystem !== "hackage" && input.node.ecosystem !== "hex" && input.node.ecosystem !== "zig" || !ecosystemEvidence.ok || ecosystemEvidence.value.source !== "unavailable") {
       return ecosystemEvidence;
     }
   }
@@ -50549,6 +50805,38 @@ async function collectNodeEvidence(input) {
         packageName: input.node.name,
         version: input.node.version,
         tarball
+      })
+    });
+  }
+  if (input.node.ecosystem === "hex" && input.node.resolved && input.node.integrity) {
+    return collectRemoteTarballEvidence({
+      packageId: input.node.id,
+      resolved: input.node.resolved,
+      integrity: input.node.integrity,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      tarballMaxBytes: input.tarballMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      signal: input.signal,
+      allowedHosts: input.allowedHosts,
+      permittedHosts: HEX_PM_TARBALL_HOSTS,
+      urlError: {
+        code: "TARBALL_FETCH_FAILED",
+        message: "Hex package archive URL targets an unsupported or blocked host.",
+        resolveFailureMessage: "Failed to resolve the public Hex package host.",
+        details: {
+          packageId: input.node.id,
+          resolved: safeUrlForErrorDetails(input.node.resolved)
+        }
+      },
+      collectEvidence: (tarball) => collectHexTarballEvidence({
+        packageId: input.node.id,
+        packageName: input.node.name,
+        version: input.node.version,
+        tarball,
+        artifactMaxBytes: input.tarballMaxBytes
       })
     });
   }
@@ -51006,7 +51294,7 @@ async function collectRemoteNugetPackageEvidence(input) {
     return catalog;
   }
   const catalogDigest = Buffer.from(catalog.value.packageHash, "base64");
-  if (catalogDigest.length !== lockDigest.length || !timingSafeEqual5(catalogDigest, lockDigest)) {
+  if (catalogDigest.length !== lockDigest.length || !timingSafeEqual6(catalogDigest, lockDigest)) {
     return err(createError({
       code: "PACKAGE_INTEGRITY_CHECK_FAILED",
       category: "unsupported_input",
@@ -51790,8 +52078,8 @@ async function collectRemoteMavenJarEvidence(input) {
     return jarBytes.error.category === "network" ? ok(undefined) : jarBytes;
   }
   const expected = Buffer.from(checksum, "hex");
-  const observed = createHash8("sha256").update(jarBytes.value).digest();
-  if (expected.length !== observed.length || !timingSafeEqual5(expected, observed)) {
+  const observed = createHash9("sha256").update(jarBytes.value).digest();
+  if (expected.length !== observed.length || !timingSafeEqual6(expected, observed)) {
     return err(createError({
       code: "PACKAGE_INTEGRITY_CHECK_FAILED",
       category: "unsupported_input",
@@ -55280,7 +55568,7 @@ function encodeFindingComponent(value) {
 }
 
 // src/policy/config.ts
-import { createHash as createHash9 } from "node:crypto";
+import { createHash as createHash10 } from "node:crypto";
 import { existsSync as existsSync47, readFileSync as readFileSync3, realpathSync as realpathSync6, statSync as statSync35 } from "node:fs";
 import { isIP as isIP3 } from "node:net";
 import path83 from "node:path";
@@ -55333,7 +55621,7 @@ function policyConfigDigest(config) {
     registryAuth: [...config.registryAuth.entries()].sort(([left], [right]) => compareStrings2(left, right)).map(([host, auth]) => [host, auth.tokenEnv]),
     npmRegistryUrl: config.npmRegistryUrl ?? null
   });
-  return createHash9("sha256").update(value, "utf8").digest("hex");
+  return createHash10("sha256").update(value, "utf8").digest("hex");
 }
 function normalizedEvaluationPolicy(policy) {
   return {

@@ -39,6 +39,29 @@ describe("parseMixLockText", () => {
     ]);
   });
 
+  test("preserves the public Hex outer tarball checksum", () => {
+    const outerChecksum = "be266aee1b8536ef6409d58cf39a3121319f0ec47cfa1b24024485aa0e76ad76";
+    const result = parseMixLockText([
+      "%{",
+      `  "plug": {:hex, :plug, "1.20.3", "${"a".repeat(64)}", [:mix], [{:mime, "~> 2.0", [hex: :mime, repo: "hexpm", optional: false]}], "hexpm", "${outerChecksum}"}`,
+      "}"
+    ].join("\n"));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes).toEqual([expect.objectContaining({
+      id: "plug@1.20.3",
+      name: "plug",
+      version: "1.20.3",
+      ecosystem: "hex",
+      resolved: "https://repo.hex.pm/tarballs/plug-1.20.3.tar",
+      integrity: `sha256-${Buffer.from(outerChecksum, "hex").toString("base64")}`
+    })]);
+  });
+
   test("reports lockfiles without Hex package entries as typed errors", () => {
     const result = parseMixLockText("%{}");
 

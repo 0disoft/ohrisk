@@ -16,6 +16,8 @@ type HexRecord = {
   name: string;
   version: string;
   id: string;
+  resolved?: string;
+  integrity?: string;
 };
 
 export function parseMixLockfile(
@@ -88,6 +90,8 @@ export function parseMixLockText(
         name: record.name,
         version: record.version,
         ecosystem: "hex",
+        ...(record.resolved ? { resolved: record.resolved } : {}),
+        ...(record.integrity ? { integrity: record.integrity } : {}),
         dependencyType: rootTypes.get(record.name) ?? "unknown",
         direct: true,
         paths: [[rootName, record.id]]
@@ -141,15 +145,90 @@ function readHexRecords(input: string): HexRecord[] {
       continue;
     }
 
-    const record = {
+    const remoteArtifact = readPublicHexArtifact(input, match.index, name, version);
+    const record: HexRecord = {
       name,
       version,
-      id: `${name}@${version}`
+      id: `${name}@${version}`,
+      ...(remoteArtifact ?? {})
     };
     records.set(record.id, record);
   }
 
   return [...records.values()];
+}
+
+function readPublicHexArtifact(
+  input: string,
+  entryStart: number | undefined,
+  packageName: string,
+  version: string
+): { resolved: string; integrity: string } | undefined {
+  if (entryStart === undefined) {
+    return undefined;
+  }
+
+  const tupleStart = input.indexOf("{:hex", entryStart);
+  const tupleEnd = tupleStart < 0 ? undefined : findTupleEnd(input, tupleStart);
+  if (tupleEnd === undefined) {
+    return undefined;
+  }
+
+  const tuple = input.slice(tupleStart, tupleEnd + 1);
+  const tail = /,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\}$/su.exec(tuple);
+  const repository = tail?.[1];
+  const checksum = tail?.[2];
+  const resolved = hexTarballUrl(packageName, version);
+  if (repository !== "hexpm" || !checksum || !/^[0-9a-f]{64}$/iu.test(checksum) || !resolved) {
+    return undefined;
+  }
+
+  return {
+    resolved,
+    integrity: `sha256-${Buffer.from(checksum, "hex").toString("base64")}`
+  };
+}
+
+function findTupleEnd(input: string, tupleStart: number): number | undefined {
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+
+  for (let index = tupleStart; index < input.length; index += 1) {
+    const char = input[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (quoted && char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === "\"") {
+      quoted = !quoted;
+      continue;
+    }
+    if (quoted) {
+      continue;
+    }
+    if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function hexTarballUrl(packageName: string, version: string): string | undefined {
+  if (!/^[A-Za-z0-9_.-]+$/u.test(packageName) || !/^[A-Za-z0-9_.+-]+$/u.test(version)) {
+    return undefined;
+  }
+  return `https://repo.hex.pm/tarballs/${packageName}-${version}.tar`;
 }
 
 function readMixRootTypes(input: string, records: HexRecord[]): Map<string, DependencyType> {

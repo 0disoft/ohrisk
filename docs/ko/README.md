@@ -335,8 +335,9 @@ group을 알 수 없어서 unknown으로 표시한다. evidence는 로컬 `Pods/
 Elixir Mix는 `mix.lock`에 기록된 Hex package pin을 스캔하고, root `mix.exs`의
 literal `only:` dependency option을 production/development root classification에
 사용한다. 로컬 `deps/<package>` source와 `mix.exs`의 license metadata를 evidence로
-읽는다. `mix.lock` dependency graph 복원과 원격 Hex.pm artifact fetch는 아직
-지원하지 않는다.
+읽고, 없으면 outer SHA-256이 있는 공개 `hexpm` record에 한해 tarball 전체 checksum,
+Hex v3 내부 checksum, package identity를 검증한 원격 evidence를 사용한다. `mix.lock`
+dependency graph 복원과 custom Hex repository fetch는 아직 지원하지 않는다.
 Erlang Rebar3는 `rebar.lock`에 기록된 Hex `pkg` pin을 스캔하고, depth 0 Hex pin을
 production root dependency로 분류한다. 로컬 `deps/<package>` source와 `rebar.config`
 license metadata를 evidence로 읽는다. git/path dependency, plugin lock,

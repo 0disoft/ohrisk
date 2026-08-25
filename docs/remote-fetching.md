@@ -74,6 +74,12 @@ Remote fetching is limited to these explicit adapters:
   historical revisions in ascending order. A 404 stops the search. License
   metadata is trusted only after the complete bytes, package name, and version
   match the lock; missing or mismatched revisions remain unavailable evidence.
+- exact public Hex package tarballs from the fixed `repo.hex.pm` host when a
+  modern `mix.lock` `hexpm` record supplies its outer SHA-256. Ohrisk verifies
+  the complete outer tarball, the Hex v3 inner payload checksum, exact metadata
+  name and version, and bounded nested `contents.tar.gz` before accepting
+  `metadata.config` licenses or root license files. Custom repositories and
+  hashless legacy records remain local-only and receive no registry credentials.
 
 The repository adapter accepts only `github.com` owner/repository URLs, disables
 credential prompts, submodule fetching, and symlink checkout, rejects non-portable or

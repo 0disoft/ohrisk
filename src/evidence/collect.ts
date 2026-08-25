@@ -66,6 +66,7 @@ import {
   remoteGoModuleCoordinates
 } from "./go-proxy-url";
 import { collectHackageCabalEvidence } from "./hackage-package";
+import { collectHexTarballEvidence } from "./hex-tarball";
 import { collectLocalPackageEvidence } from "./local-package";
 import {
   resolveExistingLocalArtifactPath,
@@ -193,6 +194,7 @@ const PYPI_METADATA_HOSTS = new Set(["pypi.org"]);
 const PYPI_DISTRIBUTION_HOSTS = new Set(["files.pythonhosted.org"]);
 const RUBYGEMS_ORG_HOSTS = new Set(["rubygems.org"]);
 const PUB_DEV_ARCHIVE_HOSTS = new Set(["pub.dev"]);
+const HEX_PM_TARBALL_HOSTS = new Set(["repo.hex.pm"]);
 const NUGET_SERVICE_INDEX_URL = "https://api.nuget.org/v3/index.json";
 const NUGET_ORG_HOSTS = new Set(["api.nuget.org"]);
 const MAVEN_CENTRAL_BASE_URL = "https://repo.maven.apache.org/maven2";
@@ -612,6 +614,7 @@ async function collectNodeEvidence(input: {
         && input.node.ecosystem !== "nuget"
         && input.node.ecosystem !== "gem"
         && input.node.ecosystem !== "hackage"
+        && input.node.ecosystem !== "hex"
         && input.node.ecosystem !== "zig"
       )
       || !ecosystemEvidence.ok
@@ -828,6 +831,43 @@ async function collectNodeEvidence(input: {
         packageName: input.node.name,
         version: input.node.version,
         tarball
+      })
+    });
+  }
+
+  if (
+    input.node.ecosystem === "hex"
+    && input.node.resolved
+    && input.node.integrity
+  ) {
+    return collectRemoteTarballEvidence({
+      packageId: input.node.id,
+      resolved: input.node.resolved,
+      integrity: input.node.integrity,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      tarballMaxBytes: input.tarballMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      signal: input.signal,
+      allowedHosts: input.allowedHosts,
+      permittedHosts: HEX_PM_TARBALL_HOSTS,
+      urlError: {
+        code: "TARBALL_FETCH_FAILED",
+        message: "Hex package archive URL targets an unsupported or blocked host.",
+        resolveFailureMessage: "Failed to resolve the public Hex package host.",
+        details: {
+          packageId: input.node.id,
+          resolved: safeUrlForErrorDetails(input.node.resolved)
+        }
+      },
+      collectEvidence: (tarball) => collectHexTarballEvidence({
+        packageId: input.node.id,
+        packageName: input.node.name,
+        version: input.node.version,
+        tarball,
+        artifactMaxBytes: input.tarballMaxBytes
       })
     });
   }

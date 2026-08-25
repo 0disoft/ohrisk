@@ -2,6 +2,11 @@
 
 ## 1.15.2 - Unreleased
 
+- Modern Elixir `mix.lock` public `hexpm` records now preserve the outer
+  tarball SHA-256 and fetch the exact package from `repo.hex.pm` when local
+  `deps/` evidence is unavailable. The outer archive checksum, Hex v3 inner
+  checksum, metadata name/version, nested archive bounds, and license files are
+  verified before evidence is trusted; private and hashless records stay local-only.
 - Haskell Stack locks now preserve the completed Hackage Cabal-file SHA-256
   and use it to verify exact remote `.cabal` license metadata when no local
   package database evidence is available. Host, response-size, UTF-8, package
