@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 1ff2481b0a64e81f7b2846ea9b19ce91ff5f9a72cc58b92458d2b194a428f617
+// ohrisk-action-source-sha256: df90ab40c44fd64068d439cc88d17eedaae88f52b183b361dcb943585a8c7f77
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -26750,11 +26750,14 @@ function nixNodeIdentity(input) {
       }
     }));
   }
-  const githubArchive = type === "github" && owner !== undefined && repo !== undefined && rev !== undefined && /^[0-9a-f]{40}$/u.test(rev) && narHash !== undefined && /^sha256-[A-Za-z0-9+/]{43}=$/u.test(narHash) && /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u.test(owner) && /^[A-Za-z0-9._-]{1,100}$/u.test(repo) && repo !== "." && repo !== ".." ? `https://codeload.github.com/${owner}/${repo}/tar.gz/${rev}` : undefined;
+  const githubArchive = type === "github" && owner !== undefined && repo !== undefined && rev !== undefined && /^[0-9a-f]{40}$/u.test(rev) && narHash !== undefined && /^sha256-[A-Za-z0-9+/]{43}=$/u.test(narHash) && /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u.test(owner) && /^[A-Za-z0-9._-]{1,100}$/u.test(repo) && repo !== "." && repo !== ".." ? {
+    resolved: `https://codeload.github.com/${owner}/${repo}/tar.gz/${rev}`,
+    integrity: narHash
+  } : undefined;
   return ok({
     name,
     version,
-    ...githubArchive ? { resolved: githubArchive, integrity: narHash } : pathValue ? { resolved: pathValue } : url ? { resolved: url } : {}
+    ...githubArchive ? githubArchive : pathValue ? { resolved: pathValue } : url ? { resolved: url } : {}
   });
 }
 function nixNodeName(input) {
@@ -49121,7 +49124,7 @@ function collectNixGitHubArchiveEvidence(input) {
     if (!timingSafeEqual5(actualDigest, expectedDigest)) {
       return err(createError({
         code: "PACKAGE_INTEGRITY_CHECK_FAILED",
-        category: "security",
+        category: "unsupported_input",
         message: "Nix GitHub source tree did not match the locked narHash.",
         details: {
           packageId: input.packageId,
@@ -51211,10 +51214,12 @@ async function collectNodeEvidence(input) {
       })
     });
   }
-  if (input.node.ecosystem === "nix" && isVerifiedNixGitHubNode(input.node)) {
+  const nixResolved = input.node.resolved;
+  const nixIntegrity = input.node.integrity;
+  if (input.node.ecosystem === "nix" && nixResolved !== undefined && nixIntegrity !== undefined && isVerifiedNixGitHubNode(input.node)) {
     return collectRemoteTarballEvidence({
       packageId: input.node.id,
-      resolved: input.node.resolved,
+      resolved: nixResolved,
       fetchArtifact: input.fetchArtifact,
       resolveArtifactHost: input.resolveArtifactHost,
       fetchTimeoutMs: input.fetchTimeoutMs,
@@ -51224,7 +51229,7 @@ async function collectNodeEvidence(input) {
       signal: input.signal,
       allowedHosts: input.allowedHosts,
       permittedHosts: NIX_GITHUB_ARCHIVE_HOSTS,
-      integrity: input.node.integrity,
+      integrity: nixIntegrity,
       skipIntegrityCheck: true,
       urlError: {
         code: "TARBALL_FETCH_FAILED",
@@ -51232,13 +51237,13 @@ async function collectNodeEvidence(input) {
         resolveFailureMessage: "Failed to resolve the fixed GitHub source archive host.",
         details: {
           packageId: input.node.id,
-          resolved: safeUrlForErrorDetails(input.node.resolved)
+          resolved: safeUrlForErrorDetails(nixResolved)
         }
       },
       collectEvidence: (tarball) => collectNixGitHubArchiveEvidence({
         packageId: input.node.id,
         tarball,
-        expectedNarHash: input.node.integrity
+        expectedNarHash: nixIntegrity
       })
     });
   }

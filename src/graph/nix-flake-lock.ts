@@ -281,14 +281,17 @@ function nixNodeIdentity(input: {
     && /^[A-Za-z0-9._-]{1,100}$/u.test(repo)
     && repo !== "."
     && repo !== ".."
-      ? `https://codeload.github.com/${owner}/${repo}/tar.gz/${rev}`
+      ? {
+          resolved: `https://codeload.github.com/${owner}/${repo}/tar.gz/${rev}`,
+          integrity: narHash
+        }
       : undefined;
 
   return ok({
     name,
     version,
     ...(githubArchive
-      ? { resolved: githubArchive, integrity: narHash }
+      ? githubArchive
       : pathValue
         ? { resolved: pathValue }
         : url

@@ -76,7 +76,7 @@ export function collectNixGitHubArchiveEvidence(input: {
     if (!timingSafeEqual(actualDigest, expectedDigest)) {
       return err(createError({
         code: "PACKAGE_INTEGRITY_CHECK_FAILED",
-        category: "security",
+        category: "unsupported_input",
         message: "Nix GitHub source tree did not match the locked narHash.",
         details: {
           packageId: input.packageId,

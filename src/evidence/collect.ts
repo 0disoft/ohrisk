@@ -841,13 +841,17 @@ async function collectNodeEvidence(input: {
     });
   }
 
+  const nixResolved = input.node.resolved;
+  const nixIntegrity = input.node.integrity;
   if (
     input.node.ecosystem === "nix"
+    && nixResolved !== undefined
+    && nixIntegrity !== undefined
     && isVerifiedNixGitHubNode(input.node)
   ) {
     return collectRemoteTarballEvidence({
       packageId: input.node.id,
-      resolved: input.node.resolved!,
+      resolved: nixResolved,
       fetchArtifact: input.fetchArtifact,
       resolveArtifactHost: input.resolveArtifactHost,
       fetchTimeoutMs: input.fetchTimeoutMs,
@@ -857,7 +861,7 @@ async function collectNodeEvidence(input: {
       signal: input.signal,
       allowedHosts: input.allowedHosts,
       permittedHosts: NIX_GITHUB_ARCHIVE_HOSTS,
-      integrity: input.node.integrity,
+      integrity: nixIntegrity,
       skipIntegrityCheck: true,
       urlError: {
         code: "TARBALL_FETCH_FAILED",
@@ -865,13 +869,13 @@ async function collectNodeEvidence(input: {
         resolveFailureMessage: "Failed to resolve the fixed GitHub source archive host.",
         details: {
           packageId: input.node.id,
-          resolved: safeUrlForErrorDetails(input.node.resolved!)
+          resolved: safeUrlForErrorDetails(nixResolved)
         }
       },
       collectEvidence: (tarball) => collectNixGitHubArchiveEvidence({
         packageId: input.node.id,
         tarball,
-        expectedNarHash: input.node.integrity!
+        expectedNarHash: nixIntegrity
       })
     });
   }
