@@ -2,6 +2,12 @@
 
 ## 1.15.2 - Unreleased
 
+- Nix `flake.lock` public GitHub inputs now preserve a full locked commit and
+  SHA-256 `narHash`, fetch only the exact fixed-host codeload archive after local
+  evidence is unavailable, and trust root legal files only after a bounded
+  extracted source tree matches Nix Archive serialization. Short revisions,
+  malformed hashes, custom hosts, unsupported archive shapes, and hash
+  mismatches remain fail-closed.
 - Modern Elixir `mix.lock` public `hexpm` records now preserve the outer
   tarball SHA-256 and fetch the exact package from `repo.hex.pm` when local
   `deps/` evidence is unavailable. The outer archive checksum, Hex v3 inner

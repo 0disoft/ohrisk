@@ -268,6 +268,35 @@ describe("parseNixFlakeLockText", () => {
     ]);
   });
 
+  test("preserves verified public GitHub source coordinates from a full locked commit", () => {
+    const rev = "11707dc2f618dd54ca8739b309ec4fc024de578b";
+    const narHash = "sha256-l0KFg5HjrsfsO/JpG+r7fRrqm12kzFHyUHqHCVpMMbI=";
+    const result = parseNixFlakeLockText(JSON.stringify({
+      version: 7,
+      root: "root",
+      nodes: {
+        root: { inputs: { "flake-utils": "flake-utils" } },
+        "flake-utils": {
+          locked: {
+            type: "github",
+            owner: "numtide",
+            repo: "flake-utils",
+            rev,
+            narHash
+          }
+        }
+      }
+    }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.nodes[0]).toMatchObject({
+      id: `github:numtide/flake-utils@${rev}`,
+      resolved: `https://codeload.github.com/numtide/flake-utils/tar.gz/${rev}`,
+      integrity: narHash
+    });
+  });
+
   test("stops walking dependency cycles without dropping reachable paths", () => {
     const result = parseNixFlakeLockText(JSON.stringify({
       version: 7,

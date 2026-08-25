@@ -73,6 +73,11 @@ import {
   resolveTrustedWorkspaceRoot
 } from "./local-artifact-path";
 import { collectMavenJarEvidence } from "./maven-jar";
+import {
+  collectNixGitHubArchiveEvidence,
+  isVerifiedNixGitHubNode,
+  NIX_GITHUB_ARCHIVE_HOSTS
+} from "./nix-github";
 import { collectNugetNupkgEvidence } from "./nuget-nupkg";
 import {
   parseSupportedIntegrityEntries,
@@ -615,6 +620,7 @@ async function collectNodeEvidence(input: {
         && input.node.ecosystem !== "gem"
         && input.node.ecosystem !== "hackage"
         && input.node.ecosystem !== "hex"
+        && input.node.ecosystem !== "nix"
         && input.node.ecosystem !== "zig"
       )
       || !ecosystemEvidence.ok
@@ -831,6 +837,41 @@ async function collectNodeEvidence(input: {
         packageName: input.node.name,
         version: input.node.version,
         tarball
+      })
+    });
+  }
+
+  if (
+    input.node.ecosystem === "nix"
+    && isVerifiedNixGitHubNode(input.node)
+  ) {
+    return collectRemoteTarballEvidence({
+      packageId: input.node.id,
+      resolved: input.node.resolved!,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      tarballMaxBytes: input.tarballMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      signal: input.signal,
+      allowedHosts: input.allowedHosts,
+      permittedHosts: NIX_GITHUB_ARCHIVE_HOSTS,
+      integrity: input.node.integrity,
+      skipIntegrityCheck: true,
+      urlError: {
+        code: "TARBALL_FETCH_FAILED",
+        message: "Nix GitHub source archive URL targets an unsupported or blocked host.",
+        resolveFailureMessage: "Failed to resolve the fixed GitHub source archive host.",
+        details: {
+          packageId: input.node.id,
+          resolved: safeUrlForErrorDetails(input.node.resolved!)
+        }
+      },
+      collectEvidence: (tarball) => collectNixGitHubArchiveEvidence({
+        packageId: input.node.id,
+        tarball,
+        expectedNarHash: input.node.integrity!
       })
     });
   }

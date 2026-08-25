@@ -80,6 +80,14 @@ Remote fetching is limited to these explicit adapters:
   name and version, and bounded nested `contents.tar.gz` before accepting
   `metadata.config` licenses or root license files. Custom repositories and
   hashless legacy records remain local-only and receive no registry credentials.
+- exact public GitHub Nix flake inputs from the fixed `codeload.github.com` host
+  when `flake.lock` supplies an exact 40-hex commit and canonical SHA-256
+  `narHash`. Ohrisk downloads only that commit archive, applies bounded TAR,
+  path, entry, expansion, compression-ratio, symlink, and legal-file handling,
+  strips the single archive root, and hashes the resulting tree with Nix Archive
+  serialization. Root legal files are trusted only after that NAR digest matches.
+  Short revisions, branches, tags, malformed hashes, alternate GitHub hosts, and
+  non-GitHub flake input types remain local-only and receive no credentials.
 
 The repository adapter accepts only `github.com` owner/repository URLs, disables
 credential prompts, submodule fetching, and symlink checkout, rejects non-portable or

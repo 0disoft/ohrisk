@@ -20,6 +20,7 @@ type NixNodeRecord = {
   version: string;
   id: string;
   resolved?: string;
+  integrity?: string;
   direct: boolean;
   paths: string[][];
 };
@@ -154,6 +155,7 @@ export function parseNixFlakeLockText(
         version: record.version,
         ecosystem: "nix",
         ...(record.resolved ? { resolved: record.resolved } : {}),
+        ...(record.integrity ? { integrity: record.integrity } : {}),
         dependencyType: "unknown",
         direct: record.direct,
         paths: record.paths
@@ -231,6 +233,7 @@ function nixNodeIdentity(input: {
   name: string;
   version: string;
   resolved?: string;
+  integrity?: string;
 }, OhriskError> {
   const type = stringField(input.locked, "type");
   const owner = stringField(input.locked, "owner");
@@ -267,10 +270,30 @@ function nixNodeIdentity(input: {
     );
   }
 
+  const githubArchive = type === "github"
+    && owner !== undefined
+    && repo !== undefined
+    && rev !== undefined
+    && /^[0-9a-f]{40}$/u.test(rev)
+    && narHash !== undefined
+    && /^sha256-[A-Za-z0-9+/]{43}=$/u.test(narHash)
+    && /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u.test(owner)
+    && /^[A-Za-z0-9._-]{1,100}$/u.test(repo)
+    && repo !== "."
+    && repo !== ".."
+      ? `https://codeload.github.com/${owner}/${repo}/tar.gz/${rev}`
+      : undefined;
+
   return ok({
     name,
     version,
-    ...(pathValue ? { resolved: pathValue } : url ? { resolved: url } : {})
+    ...(githubArchive
+      ? { resolved: githubArchive, integrity: narHash }
+      : pathValue
+        ? { resolved: pathValue }
+        : url
+          ? { resolved: url }
+          : {})
   });
 }
 

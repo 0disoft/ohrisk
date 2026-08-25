@@ -209,7 +209,7 @@ The current implementation is the first local dependency-risk vertical slice:
 - vcpkg `vcpkg.json` projects are scanned from installed `vcpkg_installed/vcpkg/status` records when available, or from exact top-level `overrides` when installed status is absent; baseline and `version>=` constraints are not treated as resolved package versions, and unresolved manifests are skipped only during repository-wide automatic discovery while explicit `--lockfile` selection remains strict
 - Terraform `.terraform.lock.hcl` projects are scanned for locked provider versions; provider constraints and platform hashes are not modeled in Package URLs yet
 - Helm `Chart.lock` and `Chart.yaml` projects are scanned for chart dependency entries; `Chart.lock` is preferred when both files are present
-- Nix `flake.lock` projects are scanned for reachable flake inputs from the root input graph; Nix derivation package graphs are not reconstructed
+- Nix `flake.lock` projects are scanned for reachable flake inputs from the root input graph; local path inputs use local legal files, while public GitHub inputs with a full locked commit and SHA-256 `narHash` use a bounded fixed-host archive whose extracted NAR tree must match before root legal files are trusted; Nix derivation package graphs are not reconstructed
 - Unity Package Manager `Packages/packages-lock.json` projects are scanned for non-built-in package entries; Unity built-in modules, `Packages/manifest.json` without a lockfile, Asset Store `.unitypackage` archives, Addressables catalogs, and remote UPM registry metadata fetch are not scanned yet
 - R `renv.lock` projects are scanned for package records in the lockfile; adjacent root `DESCRIPTION` `Depends`, `Imports`, `LinkingTo`, `Suggests`, and `Enhances` fields are used for production/development root classification when available, while dependency parent graphs, remote CRAN/GitHub/Bioconductor artifact fetch, and Packrat lockfiles are not scanned yet
 - Julia `Manifest.toml` projects are scanned for versioned `[[deps.Name]]` records; unversioned standard libraries are skipped, adjacent `Project.toml` `[deps]` and test target `[extras]` entries are used for root/dev classification when available, and remote Julia registry or package server artifact fetch is not scanned yet
@@ -487,7 +487,7 @@ Supported dependency input files:
 - vcpkg `vcpkg.json` manifest dependencies resolved from installed `vcpkg_installed/vcpkg/status` records or exact top-level overrides, using installed `vcpkg_installed/<triplet>/share/<port>/copyright` files for evidence
 - Terraform `.terraform.lock.hcl` provider entries, using local `.terraform/providers` license files for evidence
 - Helm `Chart.lock` and `Chart.yaml` chart dependency entries, using local `charts/` `Chart.yaml` metadata and license files for evidence
-- Nix `flake.lock` reachable flake input entries, using local path input license files for evidence
+- Nix `flake.lock` reachable flake input entries, using local path license files or `narHash`-verified public GitHub source-tree root legal files for evidence
 - Unity Package Manager `Packages/packages-lock.json` package entries, using local `Packages/` and `Library/PackageCache` source for evidence
 - R `renv.lock` package records, using adjacent root `DESCRIPTION` dependency fields for production/development classification and local `renv/library` package source and DESCRIPTION metadata for evidence
 - Julia `Manifest.toml` versioned package records, using local Julia depot package source and `Project.toml` metadata for evidence
