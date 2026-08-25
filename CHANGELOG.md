@@ -5,8 +5,9 @@
 - Haskell Stack locks now preserve the completed Hackage Cabal-file SHA-256
   and use it to verify exact remote `.cabal` license metadata when no local
   package database evidence is available. Host, response-size, UTF-8, package
-  identity, and checksum validation remain fail-closed; a newer public Cabal
-  revision is isolated as unavailable evidence instead of aborting siblings.
+  identity, and checksum validation remain fail-closed. When the current public
+  Cabal file differs, Ohrisk checks at most 64 numbered historical revisions
+  and trusts only the revision matching the completed lock checksum.
 - Cabal's legacy `BSD3` license value is normalized to SPDX `BSD-3-Clause`
   instead of being reported as malformed.
 - Qualified sibling files such as `LICENSE.libyaml` are now treated as bundled

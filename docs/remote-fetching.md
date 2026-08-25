@@ -68,6 +68,12 @@ Remote fetching is limited to these explicit adapters:
   path, symlink, and `.paths` rules before any license file is trusted;
   manifestless archives additionally require Zig's exact `N-V` placeholder and
   reserved `0xffff` package ID.
+- exact public Hackage Cabal metadata from the fixed `hackage.haskell.org` host
+  when a completed `stack.yaml.lock` record supplies its SHA-256. Ohrisk checks
+  the current Cabal file first and, on a checksum mismatch, at most 64 numbered
+  historical revisions in ascending order. A 404 stops the search. License
+  metadata is trusted only after the complete bytes, package name, and version
+  match the lock; missing or mismatched revisions remain unavailable evidence.
 
 The repository adapter accepts only `github.com` owner/repository URLs, disables
 credential prompts, submodule fetching, and symlink checkout, rejects non-portable or

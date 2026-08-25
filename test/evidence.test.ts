@@ -284,6 +284,7 @@ describe("Hackage remote evidence", () => {
   });
 
   test("withholds mismatched Hackage Cabal metadata without aborting sibling evidence", async () => {
+    let fetchCount = 0;
     const evidence = await collectGraphEvidence({
       graph: {
         lockfilePath: "stack.yaml.lock",
@@ -300,7 +301,10 @@ describe("Hackage remote evidence", () => {
         }]
       },
       projectRoot: bunProjectDir,
-      fetchArtifact: async () => okArtifactResponseFromBuffer("name: risk-haskell\nversion: 1.2.3\nlicense: MIT\n")
+      fetchArtifact: async () => {
+        fetchCount += 1;
+        return okArtifactResponseFromBuffer("name: risk-haskell\nversion: 1.2.3\nlicense: MIT\n");
+      }
     });
 
     expect(evidence.ok).toBe(true);
@@ -315,6 +319,67 @@ describe("Hackage remote evidence", () => {
         "Locked Hackage Cabal metadata is not the current public revision; mismatched bytes were not trusted."
       ]
     }]);
+    expect(fetchCount).toBe(1 + 64);
+  });
+
+  test("resolves the checksum-pinned historical Hackage Cabal revision", async () => {
+    const currentCabal = Buffer.from(
+      "name: risk-haskell\nversion: 1.2.3\nlicense: BSD3\n"
+    );
+    const originalCabal = Buffer.from(
+      "name: risk-haskell\nversion: 1.2.3\nlicense: BSD2\n"
+    );
+    const lockedCabal = Buffer.from(
+      "name: risk-haskell\nversion: 1.2.3\nlicense: MIT\n"
+    );
+    const resolved = "https://hackage.haskell.org/package/risk-haskell-1.2.3/risk-haskell.cabal";
+    const revisionZero = "https://hackage.haskell.org/package/risk-haskell-1.2.3/revision/0.cabal";
+    const revisionOne = "https://hackage.haskell.org/package/risk-haskell-1.2.3/revision/1.cabal";
+    const fetchedUrls: string[] = [];
+
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "stack.yaml.lock",
+        nodes: [{
+          id: "risk-haskell@1.2.3",
+          name: "risk-haskell",
+          version: "1.2.3",
+          ecosystem: "hackage",
+          resolved,
+          integrity: `sha256-${createHash("sha256").update(lockedCabal).digest("base64")}`,
+          dependencyType: "unknown",
+          direct: true,
+          paths: [["root", "risk-haskell@1.2.3"]]
+        }]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async (url) => {
+        fetchedUrls.push(url);
+        if (url === resolved) {
+          return okArtifactResponseFromBuffer(currentCabal);
+        }
+        if (url === revisionZero) {
+          return okArtifactResponseFromBuffer(originalCabal);
+        }
+        if (url === revisionOne) {
+          return okArtifactResponseFromBuffer(lockedCabal);
+        }
+        throw new Error(`Unexpected Hackage URL: ${url}`);
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+
+    expect(fetchedUrls).toEqual([resolved, revisionZero, revisionOne]);
+    expect(evidence.value).toEqual([expect.objectContaining({
+      packageId: "risk-haskell@1.2.3",
+      metadataLicense: "MIT",
+      metadataSource: "Hackage Cabal metadata",
+      source: "registry"
+    })]);
   });
 });
 

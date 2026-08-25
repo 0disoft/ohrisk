@@ -303,7 +303,9 @@ Haskell Stack은 `stack.yaml.lock`의 completed Hackage package pin을 스캔한
 snapshot package expansion, git/path extra-deps, direct/transitive graph 복원은 아직
 지원하지 않는다. 로컬 Stack package database metadata가 있으면 먼저 license
 evidence로 읽고, 없으면 completed lock pin의 SHA-256과 package identity가 모두 일치하는
-공개 Hackage Cabal metadata만 원격 evidence로 신뢰한다.
+공개 Hackage Cabal metadata만 원격 evidence로 신뢰한다. 현재 Cabal file checksum이
+다르면 0번부터 최대 64개의 과거 revision을 제한적으로 확인하고, 잠금 checksum과
+정확히 일치하는 revision만 사용한다.
 Perl Carton은 `cpanfile.snapshot`의 distribution pin을 스캔하고 `provides`와
 `requirements` metadata로 dependency path를 일부 복원한다. 로컬 Carton cache archive의
 `META.json` 또는 `META.yml` license metadata가 있으면 evidence로 읽고, MetaCPAN

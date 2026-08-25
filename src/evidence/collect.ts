@@ -211,6 +211,7 @@ const CARGO_CRATES_IO_SOURCES = new Set([
 const CARGO_CRATE_BASE_URL = "https://static.crates.io/crates";
 const CARGO_CRATE_HOSTS = new Set(["static.crates.io"]);
 const HACKAGE_CABAL_HOSTS = new Set(["hackage.haskell.org"]);
+const HACKAGE_CABAL_MAX_HISTORICAL_REVISIONS = 64;
 const HACKAGE_CABAL_MAX_BYTES = 1024 * 1024;
 
 export async function collectGraphEvidence(input: {
@@ -926,17 +927,148 @@ async function collectRemoteHackageCabalEvidence(input: {
     }));
   }
 
-  const cabalBytes = await readRemoteArtifactBytes({
-    code: "REGISTRY_METADATA_FETCH_FAILED",
+  const currentCabalBytes = await readRemoteHackageCabalBytes({
+    ...input,
     packageId: input.node.id,
-    url: resolved,
+    url: resolved
+  });
+  if (!currentCabalBytes.ok) {
+    return err(currentCabalBytes.error);
+  }
+
+  const currentIntegrity = verifyPackageIntegrity({
+    packageId: input.node.id,
+    resolvedDetail: safeUrlForErrorDetails(resolved),
+    integrity: input.node.integrity,
+    artifact: currentCabalBytes.value
+  });
+
+  let cabalBytes = currentCabalBytes.value;
+  let cabalUrl = resolved;
+  if (!currentIntegrity.ok) {
+    if (!isPackageIntegrityMismatch(currentIntegrity.error)) {
+      return err(currentIntegrity.error);
+    }
+
+    const historicalCabal = await findChecksumPinnedHackageCabalRevision({
+      ...input,
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      integrity: input.node.integrity
+    });
+    if (!historicalCabal.ok) {
+      return err(historicalCabal.error);
+    }
+    if (!historicalCabal.value) {
+      return ok({
+        packageId: input.node.id,
+        files: [],
+        source: "unavailable",
+        warnings: [
+          "Locked Hackage Cabal metadata is not the current public revision; mismatched bytes were not trusted."
+        ]
+      });
+    }
+
+    cabalBytes = historicalCabal.value.bytes;
+    cabalUrl = historicalCabal.value.url;
+  }
+
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(cabalBytes);
+  } catch {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "unsupported_input",
+      message: "Hackage Cabal metadata was not valid UTF-8.",
+      details: {
+        packageId: input.node.id,
+        registryUrl: safeUrlForErrorDetails(cabalUrl)
+      }
+    }));
+  }
+
+  return collectHackageCabalEvidence({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    version: input.node.version,
+    text
+  });
+}
+
+async function findChecksumPinnedHackageCabalRevision(input: {
+  packageId: string;
+  packageName: string;
+  version: string;
+  integrity: string;
+  fetchArtifact: ArtifactFetcher;
+  resolveArtifactHost: ArtifactHostResolver | undefined;
+  fetchTimeoutMs: number;
+  metadataMaxBytes: number;
+  offline: boolean;
+  artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
+  allowedHosts: ReadonlySet<string>;
+}): Promise<Result<{ bytes: Buffer; url: string } | undefined, OhriskError>> {
+  for (let revision = 0; revision < HACKAGE_CABAL_MAX_HISTORICAL_REVISIONS; revision += 1) {
+    const url = hackageCabalRevisionUrl(input.packageName, input.version, revision);
+    if (!url) {
+      return ok(undefined);
+    }
+
+    const candidate = await readRemoteHackageCabalBytes({ ...input, url });
+    if (!candidate.ok) {
+      if (candidate.error.details?.status === 404) {
+        return ok(undefined);
+      }
+      if (input.offline && candidate.error.details?.reason === "offline_cache_miss") {
+        continue;
+      }
+      return err(candidate.error);
+    }
+
+    const integrity = verifyPackageIntegrity({
+      packageId: input.packageId,
+      resolvedDetail: safeUrlForErrorDetails(url),
+      integrity: input.integrity,
+      artifact: candidate.value
+    });
+    if (integrity.ok) {
+      return ok({ bytes: candidate.value, url });
+    }
+    if (!isPackageIntegrityMismatch(integrity.error)) {
+      return err(integrity.error);
+    }
+  }
+
+  return ok(undefined);
+}
+
+function readRemoteHackageCabalBytes(input: {
+  packageId: string;
+  url: string;
+  fetchArtifact: ArtifactFetcher;
+  resolveArtifactHost: ArtifactHostResolver | undefined;
+  fetchTimeoutMs: number;
+  metadataMaxBytes: number;
+  offline: boolean;
+  artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
+  allowedHosts: ReadonlySet<string>;
+}): Promise<Result<Buffer, OhriskError>> {
+  return readRemoteArtifactBytes({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    packageId: input.packageId,
+    url: input.url,
     blockedMessage: "Hackage Cabal metadata URL targets an unsupported or blocked host.",
     resolveFailureMessage: "Failed to resolve the Hackage metadata host.",
     fetchFailureMessage: "Failed to fetch Hackage Cabal metadata.",
     tooLargeMessage: "Hackage Cabal metadata exceeded the maximum supported size.",
     unreadableMessage: "Hackage Cabal metadata did not expose a readable body stream.",
     offlineMissMessage: "Offline mode could not find Hackage Cabal metadata in the artifact cache.",
-    details: { registryUrl: resolved },
+    details: { registryUrl: input.url },
     maxBytes: input.metadataMaxBytes,
     fetchArtifact: input.fetchArtifact,
     resolveArtifactHost: input.resolveArtifactHost,
@@ -948,51 +1080,24 @@ async function collectRemoteHackageCabalEvidence(input: {
     permittedHosts: HACKAGE_CABAL_HOSTS,
     urlDetailKey: "registryUrl"
   });
-  if (!cabalBytes.ok) {
-    return err(cabalBytes.error);
-  }
+}
 
-  const integrity = verifyPackageIntegrity({
-    packageId: input.node.id,
-    resolvedDetail: safeUrlForErrorDetails(resolved),
-    integrity: input.node.integrity,
-    artifact: cabalBytes.value
-  });
-  if (!integrity.ok) {
-    if (Array.isArray(integrity.error.details?.computed)) {
-      return ok({
-        packageId: input.node.id,
-        files: [],
-        source: "unavailable",
-        warnings: [
-          "Locked Hackage Cabal metadata is not the current public revision; mismatched bytes were not trusted."
-        ]
-      });
-    }
-    return err(integrity.error);
+function hackageCabalRevisionUrl(
+  packageName: string,
+  version: string,
+  revision: number
+): string | undefined {
+  if (!/^[A-Za-z][A-Za-z0-9-]*$/.test(packageName)
+      || !/^[0-9]+(?:\.[0-9]+)*$/.test(version)
+      || !Number.isSafeInteger(revision)
+      || revision < 0) {
+    return undefined;
   }
+  return `https://hackage.haskell.org/package/${packageName}-${version}/revision/${revision}.cabal`;
+}
 
-  let text: string;
-  try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(cabalBytes.value);
-  } catch {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: "unsupported_input",
-      message: "Hackage Cabal metadata was not valid UTF-8.",
-      details: {
-        packageId: input.node.id,
-        registryUrl: safeUrlForErrorDetails(resolved)
-      }
-    }));
-  }
-
-  return collectHackageCabalEvidence({
-    packageId: input.node.id,
-    packageName: input.node.name,
-    version: input.node.version,
-    text
-  });
+function isPackageIntegrityMismatch(error: OhriskError): boolean {
+  return Array.isArray(error.details?.computed);
 }
 
 function shouldCollectNpmRegistryEvidence(input: {
