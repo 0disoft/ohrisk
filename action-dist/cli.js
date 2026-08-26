@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: dd04db0b759293e578cc796d60b0df11898996bd66f49b0902b42348c87cfda0
+// ohrisk-action-source-sha256: 40877610d2cb7e615ad236410539466b8f0feb1d309ab8e5b5d29878014202d9
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -55403,7 +55403,8 @@ function normalizeLicenseEvidence(evidence) {
   const distinctLicenseFileExpressions = new Set(packageLicenseFileExpressions.map((match) => match.expression));
   const packageLicenseExpression = readPackageLicenseExpression(evidence);
   const packageLicenseCoversFileExpressions = packageLicenseExpression !== undefined && licenseExpressionCoversFileMatches(packageLicenseExpression, packageLicenseFileExpressions);
-  if (distinctLicenseFileExpressions.size > 1 && !packageLicenseCoversFileExpressions) {
+  const licenseFileCoversFileExpressions = packageLicenseFileExpressions.some((candidate) => licenseExpressionCoversFileMatches(candidate.expression, packageLicenseFileExpressions));
+  if (distinctLicenseFileExpressions.size > 1 && !packageLicenseCoversFileExpressions && !licenseFileCoversFileExpressions) {
     if (!signals.includes("conflicting-evidence")) {
       signals.push("conflicting-evidence");
     }
@@ -55759,10 +55760,18 @@ function isAbsentLicenseExpression(value) {
 }
 function readLicenseFileExpression(evidence) {
   const matches = readLicenseFileExpressions(evidence).filter((match) => match.fileScope !== "component");
-  if (new Set(matches.map((match) => match.expression)).size !== 1) {
-    return;
+  if (new Set(matches.map((match) => match.expression)).size === 1) {
+    return matches[0];
   }
-  return matches[0];
+  return [...matches].sort((left, right) => compareLicenseExpressionEvidence(left, right)).find((candidate) => licenseExpressionCoversFileMatches(candidate.expression, matches));
+}
+function compareLicenseExpressionEvidence(left, right) {
+  if (left.expression !== right.expression) {
+    return left.expression < right.expression ? -1 : 1;
+  }
+  const leftPath = left.filePath ?? "";
+  const rightPath = right.filePath ?? "";
+  return leftPath === rightPath ? 0 : leftPath < rightPath ? -1 : 1;
 }
 function readLicenseFileExpressions(evidence) {
   const matches = [];
@@ -55959,7 +55968,7 @@ function readSpdxLicenseIdentifier(text) {
   return;
 }
 function cleanSpdxIdentifierExpression(value) {
-  return value.replace(/\s*\*\/\s*$/, "").replace(/\s*-->\s*$/, "").trim();
+  return value.replace(/\s*\*\/\s*$/, "").replace(/\s*-->\s*$/, "").replace(/\s*`+\s*$/u, "").trim();
 }
 function addLicenseFileMatchSource(evidenceSources, licenseExpression) {
   evidenceSources.push(`file license match: ${licenseExpression.expression} from ${licenseExpression.filePath}`);

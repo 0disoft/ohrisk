@@ -79,10 +79,14 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
       packageLicenseExpression,
       packageLicenseFileExpressions
     );
+  const licenseFileCoversFileExpressions = packageLicenseFileExpressions.some((candidate) =>
+    licenseExpressionCoversFileMatches(candidate.expression, packageLicenseFileExpressions)
+  );
 
   if (
     distinctLicenseFileExpressions.size > 1
     && !packageLicenseCoversFileExpressions
+    && !licenseFileCoversFileExpressions
   ) {
     if (!signals.includes("conflicting-evidence")) {
       signals.push("conflicting-evidence");
@@ -590,11 +594,26 @@ function readLicenseFileExpression(evidence: LicenseEvidence): LicenseExpression
   const matches = readLicenseFileExpressions(evidence).filter(
     (match) => match.fileScope !== "component"
   );
-  if (new Set(matches.map((match) => match.expression)).size !== 1) {
-    return undefined;
+  if (new Set(matches.map((match) => match.expression)).size === 1) {
+    return matches[0];
   }
 
-  return matches[0];
+  return [...matches]
+    .sort((left, right) => compareLicenseExpressionEvidence(left, right))
+    .find((candidate) => licenseExpressionCoversFileMatches(candidate.expression, matches));
+}
+
+function compareLicenseExpressionEvidence(
+  left: LicenseExpressionEvidence,
+  right: LicenseExpressionEvidence
+): number {
+  if (left.expression !== right.expression) {
+    return left.expression < right.expression ? -1 : 1;
+  }
+
+  const leftPath = left.filePath ?? "";
+  const rightPath = right.filePath ?? "";
+  return leftPath === rightPath ? 0 : leftPath < rightPath ? -1 : 1;
 }
 
 function readLicenseFileExpressions(evidence: LicenseEvidence): LicenseExpressionEvidence[] {
@@ -886,6 +905,7 @@ function cleanSpdxIdentifierExpression(value: string): string {
   return value
     .replace(/\s*\*\/\s*$/, "")
     .replace(/\s*-->\s*$/, "")
+    .replace(/\s*`+\s*$/u, "")
     .trim();
 }
 

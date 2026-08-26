@@ -584,6 +584,40 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
+  test("removes closing Markdown code delimiters from SPDX license identifiers", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "github.com/DataDog/dd-trace-go/v2@v2.8.2",
+      files: [
+        {
+          path: "LICENSE",
+          kind: "license",
+          text: "`SPDX-License-Identifier: Apache-2.0 OR BSD-3-Clause`\n"
+        },
+        {
+          path: "LICENSE-APACHE",
+          kind: "license",
+          text: "SPDX-License-Identifier: Apache-2.0\n"
+        },
+        {
+          path: "LICENSE-BSD3",
+          kind: "license",
+          text: "SPDX-License-Identifier: BSD-3-Clause\n"
+        }
+      ],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      original: "Apache-2.0 OR BSD-3-Clause",
+      expression: "Apache-2.0 OR BSD-3-Clause",
+      choices: ["Apache-2.0", "BSD-3-Clause"],
+      joiner: "or",
+      signals: [],
+      confidence: "medium"
+    });
+  });
+
   test("does not collapse the BSD four-clause advertising obligation into BSD three-clause", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "bsd-4-clause@1.0.0",

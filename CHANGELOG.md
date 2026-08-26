@@ -2,6 +2,9 @@
 
 ## 1.15.2 - Unreleased
 
+- SPDX identifier lines wrapped in Markdown inline-code delimiters now discard
+  the closing delimiter before expression parsing, avoiding false conflicts for
+  dual-licensed modules such as `github.com/DataDog/dd-trace-go/v2`.
 - SPDX Creative Commons Attribution licenses such as `CC-BY-3.0` are now
   attribution review findings instead of unrecognized-license findings.
 - Multiple recognized license files no longer conflict when one metadata
