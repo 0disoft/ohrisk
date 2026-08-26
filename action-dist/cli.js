@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 9d0a611351ffc7055312231ac88c95619fd7438b043a5bcbce32a28db371724c
+// ohrisk-action-source-sha256: 27e10a61978e47b197819f236e035eca607d6044c392b2de5e82524af9737d98
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -55809,7 +55809,7 @@ function recognizeStandardLicenseText(text) {
     return "Unlicense";
   }
   const hasMitGrant = /\bPermission is hereby granted, free of charge, to any person obtaining a copy\b/i.test(prose);
-  const hasMitWarranty = /\bTHE SOFTWARE IS PROVIDED "AS IS"/i.test(prose);
+  const hasMitWarranty = /\bTHE SOFTWARE IS PROVIDED ["“”]AS IS["“”]/i.test(prose);
   if (hasMitGrant && hasMitWarranty) {
     const hasCompletePermissionGrant = /\bto deal in the Software without restriction\b/i.test(prose) && /\bright(?:s)? to use, copy, modify, merge, publish, distribute, sublicense, and\/or sell\b/i.test(prose) && /\bpermit persons to whom the Software is furnished to do so\b/i.test(prose);
     const hasNoticeCondition = /\bThe above copyright notice and this permission notice shall be included\b/i.test(prose);

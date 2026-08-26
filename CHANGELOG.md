@@ -2,6 +2,9 @@
 
 ## 1.15.2 - Unreleased
 
+- Canonical MIT license files that use typographic quotes around `“AS IS”`
+  are now recognized like their ASCII-quoted form, removing false missing
+  findings for modules such as `github.com/felixge/fgprof@v0.9.5`.
 - SPDX `BSL-1.0` and `Unicode-DFS-2016` are now classified as permissive
   low-risk licenses under both profiles instead of falling through to
   `unknown`. This fixes false unknown findings for crates such as
