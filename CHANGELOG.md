@@ -2,6 +2,11 @@
 
 ## 1.15.2 - Unreleased
 
+- Root legal files that explicitly declare the package as dual-licensed under
+  MIT and Apache-2.0 now keep that package-level choice when a later section
+  carries a BSD-3-Clause notice scoped to one source file. This removes false
+  conflicting-evidence findings for crates such as `minimal-lexical@0.2.1`
+  without relaxing ordinary metadata-versus-license-file conflicts.
 - Nix `flake.lock` public GitHub inputs now preserve a full locked commit and
   SHA-256 `narHash`, fetch only the exact fixed-host codeload archive after local
   evidence is unavailable, and trust root legal files only after a bounded

@@ -634,6 +634,11 @@ function recognizeStandardLicenseText(text: string): string | undefined {
     return spdxIdentifier;
   }
 
+  const packageDualLicense = recognizePackageDualLicenseDeclaration(text);
+  if (packageDualLicense) {
+    return packageDualLicense;
+  }
+
   const prose = text.replace(/\s+/g, " ");
 
   if (/\bMozilla Public License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
@@ -713,6 +718,17 @@ function recognizeStandardLicenseText(text: string): string | undefined {
   }
 
   return undefined;
+}
+
+function recognizePackageDualLicenseDeclaration(text: string): string | undefined {
+  const declaration = text.slice(0, 2_048).replace(/\s+/g, " ");
+  const apacheThenMit =
+    /\bdual[- ]licen[cs]ed under (?:the )?Apache(?: License)?(?:,? Version)?\s*2\.0(?: license)?\s+(?:as well as|and)\s+(?:the )?MIT(?: license)?\b/i;
+  const mitThenApache =
+    /\bdual[- ]licen[cs]ed under (?:the )?MIT(?: license)?\s+(?:as well as|and)\s+(?:the )?Apache(?: License)?(?:,? Version)?\s*2\.0(?: license)?\b/i;
+  return apacheThenMit.test(declaration) || mitThenApache.test(declaration)
+    ? "MIT OR Apache-2.0"
+    : undefined;
 }
 
 const GNU_LICENSE_SIGNATURES = [

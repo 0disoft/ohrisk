@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: df90ab40c44fd64068d439cc88d17eedaae88f52b183b361dcb943585a8c7f77
+// ohrisk-action-source-sha256: f4a7332a658742cf88817d1b40b68c361775116e1cd0d33c83020059c19ff602
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -55781,6 +55781,10 @@ function recognizeStandardLicenseText(text) {
   if (spdxIdentifier) {
     return spdxIdentifier;
   }
+  const packageDualLicense = recognizePackageDualLicenseDeclaration(text);
+  if (packageDualLicense) {
+    return packageDualLicense;
+  }
   const prose = text.replace(/\s+/g, " ");
   if (/\bMozilla Public License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
     return "MPL-2.0";
@@ -55829,6 +55833,12 @@ function recognizeStandardLicenseText(text) {
     return /\bNeither the name of\b/i.test(text) ? "BSD-3-Clause" : "BSD-2-Clause";
   }
   return;
+}
+function recognizePackageDualLicenseDeclaration(text) {
+  const declaration = text.slice(0, 2048).replace(/\s+/g, " ");
+  const apacheThenMit = /\bdual[- ]licen[cs]ed under (?:the )?Apache(?: License)?(?:,? Version)?\s*2\.0(?: license)?\s+(?:as well as|and)\s+(?:the )?MIT(?: license)?\b/i;
+  const mitThenApache = /\bdual[- ]licen[cs]ed under (?:the )?MIT(?: license)?\s+(?:as well as|and)\s+(?:the )?Apache(?: License)?(?:,? Version)?\s*2\.0(?: license)?\b/i;
+  return apacheThenMit.test(declaration) || mitThenApache.test(declaration) ? "MIT OR Apache-2.0" : undefined;
 }
 var GNU_LICENSE_SIGNATURES = [
   {

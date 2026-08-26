@@ -840,6 +840,44 @@ describe("normalizeLicenseEvidence", () => {
     );
   });
 
+  test("keeps a package dual-license declaration ahead of a scoped component notice", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "minimal-lexical@0.2.1",
+      metadataLicense: "MIT/Apache-2.0",
+      metadataLicenseKind: "declared",
+      metadataSource: "Cargo.toml",
+      files: [
+        {
+          path: "LICENSE.md",
+          kind: "license",
+          text: [
+            "Minimal-lexical is dual licensed under the Apache 2.0 license as well as the MIT license.",
+            "See the LICENSE-MIT and the LICENSE-APACHE files for the licenses.",
+            "",
+            "src/bellerophon.rs is loosely based off the Golang implementation.",
+            "That code is subject to a 3-clause BSD license:",
+            "Redistribution and use in source and binary forms, with or without modification, are permitted.",
+            "Neither the name of Google Inc. nor the names of its contributors may be used to endorse products.",
+            "THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS AS IS."
+          ].join("\n")
+        }
+      ],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      expression: "MIT OR Apache-2.0",
+      choices: ["MIT", "Apache-2.0"],
+      joiner: "or",
+      signals: [],
+      confidence: "medium"
+    });
+    expect(normalized.evidenceSources).not.toContainEqual(
+      expect.stringContaining("conflicting metadata and file license matches")
+    );
+  });
+
   test("does not conflict deprecated GNU identifiers with their current equivalents", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "deprecated-equivalent@1.0.0",
