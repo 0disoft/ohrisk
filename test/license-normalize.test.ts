@@ -607,6 +607,33 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
+  test("recognizes a BSD three-clause endorsement condition without 'of'", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "zstd-sys@2.0.16+zstd.1.5.7",
+      files: [{
+        path: "LICENSE.BSD-3-Clause",
+        kind: "license",
+        text: [
+          "Redistribution and use in source and binary forms, with or without modification,",
+          "are permitted provided that the following conditions are met:",
+          "Redistributions of source code must retain the above copyright notice.",
+          "Redistributions in binary form must reproduce the above copyright notice.",
+          "Neither the name Facebook nor the names of its contributors may be used to",
+          "endorse or promote products derived from this software without specific prior written permission."
+        ].join("\n")
+      }],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      original: "BSD-3-Clause",
+      expression: "BSD-3-Clause",
+      choices: ["BSD-3-Clause"],
+      confidence: "medium"
+    });
+  });
+
   test("reads deprecated package.json license objects", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "legacy-license-object@1.0.0",
@@ -1033,6 +1060,39 @@ describe("normalizeLicenseEvidence", () => {
     expect(normalized.signals).not.toContain("conflicting-evidence");
     expect(normalized.evidenceSources).toContain(
       "bundled component license match: MIT from LICENSE.libyaml"
+    );
+  });
+
+  test("scopes an explicitly licensed generated binding as bundled component evidence", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "zstd-sys@2.0.16+zstd.1.5.7",
+      metadataLicense: "MIT/Apache-2.0",
+      metadataLicenseKind: "declared",
+      metadataSource: "Cargo.toml",
+      files: [{
+        path: "LICENSE.BSD-3-Clause",
+        kind: "license",
+        text: [
+          "The auto-generated bindings are under the 3-clause BSD license:",
+          "Redistribution and use in source and binary forms, with or without modification,",
+          "are permitted provided that the following conditions are met:",
+          "Neither the name Facebook nor the names of its contributors may be used to",
+          "endorse or promote products derived from this software without specific prior written permission."
+        ].join("\n")
+      }],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      expression: "(MIT OR Apache-2.0) AND BSD-3-Clause",
+      choices: ["MIT", "Apache-2.0", "BSD-3-Clause"],
+      joiner: "mixed",
+      signals: [],
+      confidence: "high"
+    });
+    expect(normalized.evidenceSources).toContain(
+      "bundled component license match: BSD-3-Clause from LICENSE.BSD-3-Clause"
     );
   });
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 27e10a61978e47b197819f236e035eca607d6044c392b2de5e82524af9737d98
+// ohrisk-action-source-sha256: 1c70af6641fb41f17134491910ecfc84cbf0af4e3355a6839164eb7acc09f5b4
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -55726,7 +55726,7 @@ function readLicenseFileExpressions(evidence) {
         expression,
         source: "license-file",
         filePath: file.path,
-        ...file.scope === "component" || isInferredComponentLicenseFile(evidence, file.path) ? { fileScope: "component" } : {}
+        ...file.scope === "component" || isInferredComponentLicenseFile(evidence, file.path) || isExplicitlyScopedComponentLicenseText(file.text) ? { fileScope: "component" } : {}
       });
     }
   }
@@ -55750,6 +55750,10 @@ function isInferredComponentLicenseFile(evidence, filePath) {
     const candidateName = candidatePath.slice(candidateSlashIndex + 1);
     return candidateDirectory.toLowerCase() === directory.toLowerCase() && /^licen[cs]e(?:\.(?:md|markdown|txt|text|rst|html?))?$/i.test(candidateName);
   });
+}
+function isExplicitlyScopedComponentLicenseText(text) {
+  const scopeDeclaration = text.slice(0, 2048).replace(/\s+/g, " ");
+  return /\b(?:the )?auto-generated bindings are (?:licensed )?under the 3-clause BSD license\b/i.test(scopeDeclaration);
 }
 function appendBundledComponentLicenses(input) {
   const baseChoices = new Set(input.parsed.choices.map(comparableLicenseId));
@@ -55830,7 +55834,8 @@ function recognizeStandardLicenseText(text) {
     if (/\bAll advertising materials mentioning features or use of this software must display the following acknowledgement\b/i.test(text)) {
       return "BSD-4-Clause";
     }
-    return /\bNeither the name of\b/i.test(text) ? "BSD-3-Clause" : "BSD-2-Clause";
+    const hasEndorsementCondition = /\bNeither the (?:name(?: of)?|names of)\b[\s\S]{0,300}\bmay\s+be\s+used\s+to\s+endorse\s+or\s+promote\b/i.test(text);
+    return hasEndorsementCondition ? "BSD-3-Clause" : "BSD-2-Clause";
   }
   return;
 }

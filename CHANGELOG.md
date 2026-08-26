@@ -2,6 +2,12 @@
 
 ## 1.15.2 - Unreleased
 
+- BSD 3-clause license files whose endorsement condition says `Neither the
+  name Example` instead of `Neither the name of Example` are now recognized
+  correctly. A license file that explicitly scopes those terms to
+  auto-generated bindings is retained as bundled-component evidence instead
+  of conflicting with the package declaration, fixing
+  `zstd-sys@2.0.16+zstd.1.5.7`.
 - Canonical MIT license files that use typographic quotes around `“AS IS”`
   are now recognized like their ASCII-quoted form, removing false missing
   findings for modules such as `github.com/felixge/fgprof@v0.9.5`.

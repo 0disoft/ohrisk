@@ -554,7 +554,9 @@ function readLicenseFileExpressions(evidence: LicenseEvidence): LicenseExpressio
         expression,
         source: "license-file",
         filePath: file.path,
-        ...(file.scope === "component" || isInferredComponentLicenseFile(evidence, file.path)
+        ...(file.scope === "component"
+          || isInferredComponentLicenseFile(evidence, file.path)
+          || isExplicitlyScopedComponentLicenseText(file.text)
           ? { fileScope: "component" }
           : {})
       });
@@ -585,6 +587,13 @@ function isInferredComponentLicenseFile(evidence: LicenseEvidence, filePath: str
     return candidateDirectory.toLowerCase() === directory.toLowerCase()
       && /^licen[cs]e(?:\.(?:md|markdown|txt|text|rst|html?))?$/i.test(candidateName);
   });
+}
+
+function isExplicitlyScopedComponentLicenseText(text: string): boolean {
+  const scopeDeclaration = text.slice(0, 2_048).replace(/\s+/g, " ");
+  return /\b(?:the )?auto-generated bindings are (?:licensed )?under the 3-clause BSD license\b/i.test(
+    scopeDeclaration
+  );
 }
 
 function appendBundledComponentLicenses(input: {
@@ -714,7 +723,9 @@ function recognizeStandardLicenseText(text: string): string | undefined {
     ) {
       return "BSD-4-Clause";
     }
-    return /\bNeither the name of\b/i.test(text) ? "BSD-3-Clause" : "BSD-2-Clause";
+    const hasEndorsementCondition =
+      /\bNeither the (?:name(?: of)?|names of)\b[\s\S]{0,300}\bmay\s+be\s+used\s+to\s+endorse\s+or\s+promote\b/i.test(text);
+    return hasEndorsementCondition ? "BSD-3-Clause" : "BSD-2-Clause";
   }
 
   return undefined;
