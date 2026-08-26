@@ -87,7 +87,9 @@ because they match the SPDX identifier character shape.
 Recognized license files are reconciled with parseable package metadata. A file
 expression outside the declared license choices is reported as
 `conflicting-evidence` with unknown severity; deprecated GNU identifiers compare
-against their current `-only` or `-or-later` equivalents.
+against their current `-only` or `-or-later` equivalents. A canonical GNU
+version license text also remains compatible with matching metadata that grants
+the same version or later; the reverse comparison stays conflicting.
 
 For `distributed-app`, recognized license expressions and collected NOTICE
 files add conservative `license-text` and `notice-file` obligation evidence.

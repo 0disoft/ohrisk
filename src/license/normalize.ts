@@ -45,6 +45,20 @@ const DEPRECATED_GNU_LICENSE_EQUIVALENTS = new Map([
   ["LGPL-3.0+", "LGPL-3.0-or-later"]
 ]);
 
+const GNU_ONLY_TO_OR_LATER = new Map([
+  ["AGPL-1.0-only", "AGPL-1.0-or-later"],
+  ["AGPL-3.0-only", "AGPL-3.0-or-later"],
+  ["GFDL-1.1-only", "GFDL-1.1-or-later"],
+  ["GFDL-1.2-only", "GFDL-1.2-or-later"],
+  ["GFDL-1.3-only", "GFDL-1.3-or-later"],
+  ["GPL-1.0-only", "GPL-1.0-or-later"],
+  ["GPL-2.0-only", "GPL-2.0-or-later"],
+  ["GPL-3.0-only", "GPL-3.0-or-later"],
+  ["LGPL-2.0-only", "LGPL-2.0-or-later"],
+  ["LGPL-2.1-only", "LGPL-2.1-or-later"],
+  ["LGPL-3.0-only", "LGPL-3.0-or-later"]
+]);
+
 export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedLicense {
   const signals: NormalizedLicenseSignal[] = [];
   const evidenceSources = describeEvidenceSources(evidence);
@@ -154,7 +168,10 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     const conflictingFileMatches = packageLicenseFileExpressions.filter((match) => {
       const fileExpression = parseSpdxExpression(match.expression);
       return !fileExpression.malformed
-        && fileExpression.choices.some((choice) => !declaredChoices.has(comparableLicenseId(choice)));
+        && fileExpression.choices.some((choice) => !fileLicenseChoiceMatchesDeclared(
+          choice,
+          declaredChoices
+        ));
     });
 
     if (conflictingFileMatches.length > 0) {
@@ -215,6 +232,19 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
 
 function comparableLicenseId(licenseId: string): string {
   return DEPRECATED_GNU_LICENSE_EQUIVALENTS.get(licenseId) ?? licenseId;
+}
+
+function fileLicenseChoiceMatchesDeclared(
+  fileChoice: string,
+  declaredChoices: ReadonlySet<string>
+): boolean {
+  const comparable = comparableLicenseId(fileChoice);
+  if (declaredChoices.has(comparable)) {
+    return true;
+  }
+
+  const orLater = GNU_ONLY_TO_OR_LATER.get(comparable);
+  return orLater !== undefined && declaredChoices.has(orLater);
 }
 
 function withSpdxAst(

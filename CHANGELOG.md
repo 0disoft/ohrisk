@@ -2,6 +2,10 @@
 
 ## 1.15.2 - Unreleased
 
+- Common Python metadata aliases `PSFL` and `BSD 3-Clause License` now
+  normalize to `PSF-2.0` and `BSD-3-Clause`. Canonical GNU version text no
+  longer conflicts with matching `-or-later` package metadata, while the
+  narrower metadata / broader file direction remains fail-closed.
 - Modern `uv.lock` files may omit versions for editable workspace packages.
   Ohrisk now accepts those records only for project-contained local sources,
   validates their local package metadata, collects bounded license evidence,

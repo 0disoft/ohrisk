@@ -112,8 +112,10 @@ describe("parseSpdxExpression", () => {
       ["GPL2 w/ CPE", "GPL-2.0-with-classpath-exception"],
       ["Eclipse Distribution License - v 1.0", "BSD-3-Clause"],
       ["BSD3", "BSD-3-Clause"],
+      ["BSD 3-Clause License", "BSD-3-Clause"],
       ["Modified BSD", "BSD-3-Clause"],
-      ["MPL 1.1", "MPL-1.1"]
+      ["MPL 1.1", "MPL-1.1"],
+      ["PSFL", "PSF-2.0"]
     ] as const) {
       expect(parseSpdxExpression(input)).toMatchObject({
         expression,
@@ -954,6 +956,51 @@ describe("normalizeLicenseEvidence", () => {
 
     expect(normalized.signals).not.toContain("conflicting-evidence");
     expect(normalized.confidence).toBe("medium");
+  });
+
+  test("does not conflict an or-later declaration with its canonical version text", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "ansi-colours@1.2.3",
+      metadataLicense: "LGPL-3.0-or-later",
+      metadataLicenseKind: "declared",
+      metadataSource: "Cargo.toml",
+      files: [{
+        path: "LICENSE",
+        kind: "license",
+        text: [
+          "GNU LESSER GENERAL PUBLIC LICENSE",
+          "Version 3, 29 June 2007",
+          "TERMS AND CONDITIONS"
+        ].join("\n")
+      }],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      expression: "LGPL-3.0-or-later",
+      choices: ["LGPL-3.0-or-later"],
+      signals: [],
+      confidence: "high"
+    });
+  });
+
+  test("keeps an only declaration in conflict with an explicit or-later file", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "strict-lgpl@1.0.0",
+      metadataLicense: "LGPL-3.0-only",
+      metadataLicenseKind: "declared",
+      metadataSource: "Cargo.toml",
+      files: [{
+        path: "LICENSE",
+        kind: "license",
+        text: "SPDX-License-Identifier: LGPL-3.0-or-later"
+      }],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized.signals).toContain("conflicting-evidence");
   });
 
   test("keeps an explicit dual-license declaration with matching separate files", () => {

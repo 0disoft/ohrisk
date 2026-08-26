@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: f31224ce02fa5608255b76cbc38d5eb97268717ca815e5d597c472f83675f1f3
+// ohrisk-action-source-sha256: ca851440c901b428c400fc87d95f6556dfefa6a6bcf0405d75bd1d510026fe3b
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -54961,6 +54961,7 @@ var LICENSE_ALIASES = new Map([
   ["bsd3", "BSD-3-Clause"],
   ["bsd 2-clause", "BSD-2-Clause"],
   ["bsd 3-clause", "BSD-3-Clause"],
+  ["bsd 3-clause license", "BSD-3-Clause"],
   ["bsd-2-clause license", "BSD-2-Clause"],
   ["bsd-3-clause license", "BSD-3-Clause"],
   ["bsd license", "BSD-3-Clause"],
@@ -54991,6 +54992,7 @@ var LICENSE_ALIASES = new Map([
   ["mpl 1.1", "MPL-1.1"],
   ["polyform free trial 1.0.0", "PolyForm-Free-Trial-1.0.0"],
   ["polyform noncommercial 1.0.0", "PolyForm-Noncommercial-1.0.0"],
+  ["psfl", "PSF-2.0"],
   ["server side public license", "SSPL-1.0"],
   ["server side public license 1.0", "SSPL-1.0"],
   ["sspl", "SSPL-1.0"],
@@ -55378,6 +55380,19 @@ var DEPRECATED_GNU_LICENSE_EQUIVALENTS = new Map([
   ["LGPL-3.0", "LGPL-3.0-only"],
   ["LGPL-3.0+", "LGPL-3.0-or-later"]
 ]);
+var GNU_ONLY_TO_OR_LATER = new Map([
+  ["AGPL-1.0-only", "AGPL-1.0-or-later"],
+  ["AGPL-3.0-only", "AGPL-3.0-or-later"],
+  ["GFDL-1.1-only", "GFDL-1.1-or-later"],
+  ["GFDL-1.2-only", "GFDL-1.2-or-later"],
+  ["GFDL-1.3-only", "GFDL-1.3-or-later"],
+  ["GPL-1.0-only", "GPL-1.0-or-later"],
+  ["GPL-2.0-only", "GPL-2.0-or-later"],
+  ["GPL-3.0-only", "GPL-3.0-or-later"],
+  ["LGPL-2.0-only", "LGPL-2.0-or-later"],
+  ["LGPL-2.1-only", "LGPL-2.1-or-later"],
+  ["LGPL-3.0-only", "LGPL-3.0-or-later"]
+]);
 function normalizeLicenseEvidence(evidence) {
   const signals = [];
   const evidenceSources = describeEvidenceSources(evidence);
@@ -55455,7 +55470,7 @@ function normalizeLicenseEvidence(evidence) {
     const declaredChoices = new Set(parsed.choices.map(comparableLicenseId));
     const conflictingFileMatches = packageLicenseFileExpressions.filter((match) => {
       const fileExpression = parseSpdxExpression(match.expression);
-      return !fileExpression.malformed && fileExpression.choices.some((choice) => !declaredChoices.has(comparableLicenseId(choice)));
+      return !fileExpression.malformed && fileExpression.choices.some((choice) => !fileLicenseChoiceMatchesDeclared(choice, declaredChoices));
     });
     if (conflictingFileMatches.length > 0) {
       if (!signals.includes("conflicting-evidence")) {
@@ -55492,6 +55507,14 @@ function normalizeLicenseEvidence(evidence) {
 }
 function comparableLicenseId(licenseId) {
   return DEPRECATED_GNU_LICENSE_EQUIVALENTS.get(licenseId) ?? licenseId;
+}
+function fileLicenseChoiceMatchesDeclared(fileChoice, declaredChoices) {
+  const comparable = comparableLicenseId(fileChoice);
+  if (declaredChoices.has(comparable)) {
+    return true;
+  }
+  const orLater = GNU_ONLY_TO_OR_LATER.get(comparable);
+  return orLater !== undefined && declaredChoices.has(orLater);
 }
 function withSpdxAst(license, ast) {
   if (!ast) {
