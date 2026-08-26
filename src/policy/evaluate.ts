@@ -28,6 +28,8 @@ const PERMISSIVE_LICENSES = new Set([
   "BSD-3-Clause",
   "bzip2-1.0.6",
   "Apache-2.0",
+  "CDLA-Permissive-1.0",
+  "CDLA-Permissive-2.0",
   "FTL",
   "PSF-2.0",
   "Python-2.0",

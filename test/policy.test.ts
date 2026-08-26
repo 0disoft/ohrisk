@@ -44,6 +44,8 @@ describe("evaluateLicenseRisk", () => {
       "BlueOak-1.0.0",
       "bzip2-1.0.6",
       "CC0-1.0",
+      "CDLA-Permissive-1.0",
+      "CDLA-Permissive-2.0",
       "MIT-0",
       "PSF-2.0",
       "Python-2.0",
