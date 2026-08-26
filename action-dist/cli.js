@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 8c594542a813b7155af8a35f94bf850c67cf1528796f737c57e18adb858de922
+// ohrisk-action-source-sha256: 0d462d032cad307118aaacb95e3f00d47bc10d9d19a071d2985a9e21707ae4fd
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -55577,8 +55577,16 @@ function analyzeCommercialRestrictions(evidence) {
   const nonPackageScopes = new Map;
   let packageRestricted = collectPackageLicenseTexts(evidence).some(hasCommercialRestrictionText);
   for (const file of evidence.files) {
+    const aggregateComponentInventory = isAggregateComponentLicenseInventory(file.text);
     for (const statement of commercialRestrictionStatements(file.text)) {
       if (!hasCommercialRestrictionText(statement)) {
+        continue;
+      }
+      if (aggregateComponentInventory) {
+        nonPackageScopes.set(`component:${file.path}`, {
+          path: file.path,
+          scope: "component"
+        });
         continue;
       }
       const scopes = restrictionScopes(statement);
@@ -55842,8 +55850,14 @@ function isInferredComponentLicenseFile(evidence, filePath) {
   });
 }
 function isExplicitlyScopedComponentLicenseText(text) {
+  if (isAggregateComponentLicenseInventory(text)) {
+    return true;
+  }
   const scopeDeclaration = text.slice(0, 2048).replace(/\s+/g, " ");
   return /\b(?:the )?auto-generated bindings are (?:licensed )?under the 3-clause BSD license\b/i.test(scopeDeclaration);
+}
+function isAggregateComponentLicenseInventory(text) {
+  return /^\s*open_source_licenses\.txt\b/iu.test(text.slice(0, 2048));
 }
 function appendBundledComponentLicenses(input) {
   const baseChoices = new Set(input.parsed.choices.map(comparableLicenseId));

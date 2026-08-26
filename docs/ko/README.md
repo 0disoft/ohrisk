@@ -583,6 +583,10 @@ corpora/dataset 같은 data에만 적용되는 제한은 finding evidence에
 `restriction scope: documentation` 또는 `restriction scope: data`로 남기되, 별도로
 선언된 package code 라이선스를 덮어쓰지 않는다. 제품이 해당 문서나 데이터를 실제로
 포함하거나 사용한다면 그 자산의 라이선스는 따로 검토해야 한다.
+license 파일 안에 포함된 `open_source_licenses.txt` 형식의 복수 구성요소 인벤토리는
+`restriction scope: component` 근거로 분리한다. 인벤토리 내부의 제한을 package 자체에
+적용하지 않으며, 별도의 package license 근거가 없으면 해당 package는 `unknown`으로
+유지한다.
 
 라이선스 표현만 따로 확인하려면:
 

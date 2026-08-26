@@ -10,7 +10,7 @@ type LicenseExpressionEvidence = {
   fileScope?: "component";
 };
 
-type NonPackageRestrictionScope = "documentation" | "data";
+type NonPackageRestrictionScope = "component" | "documentation" | "data";
 
 type CommercialRestrictionAnalysis = {
   packageRestricted: boolean;
@@ -303,8 +303,17 @@ function analyzeCommercialRestrictions(evidence: LicenseEvidence): CommercialRes
   let packageRestricted = collectPackageLicenseTexts(evidence).some(hasCommercialRestrictionText);
 
   for (const file of evidence.files) {
+    const aggregateComponentInventory = isAggregateComponentLicenseInventory(file.text);
     for (const statement of commercialRestrictionStatements(file.text)) {
       if (!hasCommercialRestrictionText(statement)) {
+        continue;
+      }
+
+      if (aggregateComponentInventory) {
+        nonPackageScopes.set(`component:${file.path}`, {
+          path: file.path,
+          scope: "component"
+        });
         continue;
       }
 
@@ -672,10 +681,17 @@ function isInferredComponentLicenseFile(evidence: LicenseEvidence, filePath: str
 }
 
 function isExplicitlyScopedComponentLicenseText(text: string): boolean {
+  if (isAggregateComponentLicenseInventory(text)) {
+    return true;
+  }
   const scopeDeclaration = text.slice(0, 2_048).replace(/\s+/g, " ");
   return /\b(?:the )?auto-generated bindings are (?:licensed )?under the 3-clause BSD license\b/i.test(
     scopeDeclaration
   );
+}
+
+function isAggregateComponentLicenseInventory(text: string): boolean {
+  return /^\s*open_source_licenses\.txt\b/iu.test(text.slice(0, 2_048));
 }
 
 function appendBundledComponentLicenses(input: {

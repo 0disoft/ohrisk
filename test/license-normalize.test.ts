@@ -1825,6 +1825,36 @@ describe("normalizeLicenseEvidence", () => {
     expect(normalized.expression).toBe("Apache-2.0");
   });
 
+  test("does not apply restrictions from an aggregate component license inventory to the package", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "github.com/hashicorp/vic@v1.5.1-0.20190403131502-bbfe86ec9443",
+      files: [{
+        path: "LICENSE",
+        kind: "license",
+        text: [
+          "open_source_licenses.txt",
+          "vSphere Integrated Containers Engine 1.5.2 GA",
+          "",
+          "This product includes components with separate copyright notices and license terms.",
+          "",
+          "Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:",
+          "Redistributions of source code must retain the above copyright notice.",
+          "Redistributions in binary form must reproduce the above copyright notice.",
+          "",
+          "This third-party component may not be used for commercial purposes."
+        ].join("\n")
+      }],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized.signals).not.toContain("commercial-restriction");
+    expect(normalized.signals).toContain("missing");
+    expect(normalized.evidenceSources).toContain(
+      "restriction scope: component in LICENSE"
+    );
+  });
+
   test("does not apply NLTK documentation and corpus restrictions to the Apache-licensed package code", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "nltk@3.9.4",

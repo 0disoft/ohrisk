@@ -61,6 +61,11 @@ evidence as `restriction scope: documentation` or `restriction scope: data`,
 but they do not override a separate package-code license. If the application
 ships or uses those separately licensed materials, review their terms as a
 separate asset decision.
+An aggregate `open_source_licenses.txt` inventory embedded in a license file is
+scoped as bundled-component evidence. Restrictions found only inside that
+inventory are recorded as `restriction scope: component` instead of being
+attributed to the package itself; without separate package license evidence,
+the package remains `unknown`.
 
 ## License family reference
 
