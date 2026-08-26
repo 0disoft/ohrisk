@@ -1174,7 +1174,11 @@ function cargoWorkspaceEmbeddedEvidence(
   records: CargoPackageRecord[]
 ): Pick<DependencyGraph, "embeddedEvidence"> {
   const workspaceMetadata = readCargoWorkspacePackageLicenseMetadata(rootManifestText);
-  const embeddedEvidence = manifestTexts
+  const packageManifestTexts = [
+    ...(rootManifestText ? [rootManifestText] : []),
+    ...manifestTexts
+  ];
+  const embeddedEvidence = packageManifestTexts
     .map((text): LicenseEvidence | undefined => {
       const metadata = readCargoPackageLicenseMetadata(text, workspaceMetadata);
       if (!metadata.name || !metadata.version || !metadata.license) {

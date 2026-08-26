@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 07bee8ef05ac65bd8759ddd966f74c5f07ce5a3b1190c5a760ea71f79a44a1c9
+// ohrisk-action-source-sha256: 8c594542a813b7155af8a35f94bf850c67cf1528796f737c57e18adb858de922
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -34527,7 +34527,11 @@ function readCargoPackageName(text) {
 }
 function cargoWorkspaceEmbeddedEvidence(rootManifestText, manifestTexts, records) {
   const workspaceMetadata = readCargoWorkspacePackageLicenseMetadata(rootManifestText);
-  const embeddedEvidence = manifestTexts.map((text) => {
+  const packageManifestTexts = [
+    ...rootManifestText ? [rootManifestText] : [],
+    ...manifestTexts
+  ];
+  const embeddedEvidence = packageManifestTexts.map((text) => {
     const metadata = readCargoPackageLicenseMetadata(text, workspaceMetadata);
     if (!metadata.name || !metadata.version || !metadata.license) {
       return;
