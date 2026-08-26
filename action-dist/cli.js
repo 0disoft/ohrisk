@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 614605540402aa6b14580e80f5730a65380f244463eab18c15f6b99e40e8567e
+// ohrisk-action-source-sha256: f2c69ea03858861900f7d69b4d1afd8cefe587c9443134ab903837327e56ad3c
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -54956,6 +54956,10 @@ var LICENSE_EXPRESSION_ALIASES = new Map([
   ["gnu general public license, version 3.0", "GPL-3.0-only"],
   ["eclipse public license v2.0", "EPL-2.0"],
   [
+    "public domain, per creative commons cc0 or bsd-2-clause",
+    "CC0-1.0 OR BSD-2-Clause"
+  ],
+  [
     "the gnu general public license, v2 with universal foss exception, v1.0",
     "GPL-2.0-only WITH Universal-FOSS-exception-1.0"
   ]
@@ -54967,12 +54971,14 @@ var LICENSE_ALIASES = new Map([
   ["apache license version 2.0", "Apache-2.0"],
   ["apache license, version 2.0", "Apache-2.0"],
   ["apache license, 2.0", "Apache-2.0"],
+  ["the apache license, version 2.0", "Apache-2.0"],
   ["the apache software license, version 2.0", "Apache-2.0"],
   ["bsd", "BSD-3-Clause"],
   ["bsd3", "BSD-3-Clause"],
   ["bsd 2-clause", "BSD-2-Clause"],
   ["bsd 3-clause", "BSD-3-Clause"],
   ["bsd 3-clause license", "BSD-3-Clause"],
+  ["bsd licence 3", "BSD-3-Clause"],
   ["bsd-2-clause license", "BSD-2-Clause"],
   ["bsd-3-clause license", "BSD-3-Clause"],
   ["bsd license", "BSD-3-Clause"],
@@ -54986,6 +54992,8 @@ var LICENSE_ALIASES = new Map([
   ["eclipse distribution license - v 1.0", "BSD-3-Clause"],
   ["edl 1.0", "BSD-3-Clause"],
   ["eclipse public license 1.0", "EPL-1.0"],
+  ["eclipse public license, version 1.0", "EPL-1.0"],
+  ["eclipse publish license, version 1.0", "EPL-1.0"],
   ["eclipse public license - v 1.0", "EPL-1.0"],
   ["eclipse public license - v 2.0", "EPL-2.0"],
   ["epl 2.0", "EPL-2.0"],

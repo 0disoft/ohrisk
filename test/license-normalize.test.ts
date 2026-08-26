@@ -106,6 +106,7 @@ describe("parseSpdxExpression", () => {
     });
 
     for (const [input, expression] of [
+      ["The Apache License, Version 2.0", "Apache-2.0"],
       ["The Apache Software License, Version 2.0", "Apache-2.0"],
       ["The MIT License (MIT)", "MIT"],
       ["EPL 2.0", "EPL-2.0"],
@@ -138,6 +139,24 @@ describe("parseSpdxExpression", () => {
         "Eclipse Public License v2.0",
         "EPL-2.0",
         ["EPL-2.0"],
+        []
+      ],
+      [
+        "BSD Licence 3",
+        "BSD-3-Clause",
+        ["BSD-3-Clause"],
+        []
+      ],
+      [
+        "Public Domain, per Creative Commons CC0 OR BSD-2-Clause",
+        "CC0-1.0 OR BSD-2-Clause",
+        ["CC0-1.0", "BSD-2-Clause"],
+        []
+      ],
+      [
+        "Eclipse Publish License, Version 1.0 OR Eclipse Distribution License - v 1.0",
+        "EPL-1.0 OR BSD-3-Clause",
+        ["EPL-1.0", "BSD-3-Clause"],
         []
       ],
       [

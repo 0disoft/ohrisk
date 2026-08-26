@@ -2,6 +2,9 @@
 
 ## 1.15.2 - Unreleased
 
+- Standard Maven names used by Apache, Hamcrest, HdrHistogram, and JTS now
+  normalize to their SPDX expressions instead of producing malformed-license
+  findings.
 - Yarn Berry cache checksums are now preserved separately from npm tarball
   integrity, so unavailable evidence explains the verification boundary and
   recovery path instead of claiming the lockfile contains no checksum.

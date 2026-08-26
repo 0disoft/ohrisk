@@ -4,6 +4,10 @@ const LICENSE_EXPRESSION_ALIASES = new Map<string, string>([
   ["gnu general public license, version 3.0", "GPL-3.0-only"],
   ["eclipse public license v2.0", "EPL-2.0"],
   [
+    "public domain, per creative commons cc0 or bsd-2-clause",
+    "CC0-1.0 OR BSD-2-Clause"
+  ],
+  [
     "the gnu general public license, v2 with universal foss exception, v1.0",
     "GPL-2.0-only WITH Universal-FOSS-exception-1.0"
   ]
@@ -16,12 +20,14 @@ const LICENSE_ALIASES = new Map<string, string>([
   ["apache license version 2.0", "Apache-2.0"],
   ["apache license, version 2.0", "Apache-2.0"],
   ["apache license, 2.0", "Apache-2.0"],
+  ["the apache license, version 2.0", "Apache-2.0"],
   ["the apache software license, version 2.0", "Apache-2.0"],
   ["bsd", "BSD-3-Clause"],
   ["bsd3", "BSD-3-Clause"],
   ["bsd 2-clause", "BSD-2-Clause"],
   ["bsd 3-clause", "BSD-3-Clause"],
   ["bsd 3-clause license", "BSD-3-Clause"],
+  ["bsd licence 3", "BSD-3-Clause"],
   ["bsd-2-clause license", "BSD-2-Clause"],
   ["bsd-3-clause license", "BSD-3-Clause"],
   ["bsd license", "BSD-3-Clause"],
@@ -35,6 +41,8 @@ const LICENSE_ALIASES = new Map<string, string>([
   ["eclipse distribution license - v 1.0", "BSD-3-Clause"],
   ["edl 1.0", "BSD-3-Clause"],
   ["eclipse public license 1.0", "EPL-1.0"],
+  ["eclipse public license, version 1.0", "EPL-1.0"],
+  ["eclipse publish license, version 1.0", "EPL-1.0"],
   ["eclipse public license - v 1.0", "EPL-1.0"],
   ["eclipse public license - v 2.0", "EPL-2.0"],
   ["epl 2.0", "EPL-2.0"],
