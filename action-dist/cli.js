@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 0d462d032cad307118aaacb95e3f00d47bc10d9d19a071d2985a9e21707ae4fd
+// ohrisk-action-source-sha256: 71e43c7930054d275dbd7f59cc4f889fcc8b163b228a1eeae2f3abb9005336ad
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -54987,6 +54987,7 @@ var LICENSE_ALIASES = new Map([
   ["bsd 2-clause", "BSD-2-Clause"],
   ["bsd 3-clause", "BSD-3-Clause"],
   ["bsd 3-clause license", "BSD-3-Clause"],
+  ["3-clause bsd license", "BSD-3-Clause"],
   ["bsd licence 3", "BSD-3-Clause"],
   ["bsd-2-clause license", "BSD-2-Clause"],
   ["bsd-3-clause license", "BSD-3-Clause"],
@@ -55021,6 +55022,7 @@ var LICENSE_ALIASES = new Map([
   ["polyform free trial 1.0.0", "PolyForm-Free-Trial-1.0.0"],
   ["polyform noncommercial 1.0.0", "PolyForm-Noncommercial-1.0.0"],
   ["psfl", "PSF-2.0"],
+  ["psf", "PSF-2.0"],
   ["server side public license", "SSPL-1.0"],
   ["server side public license 1.0", "SSPL-1.0"],
   ["sspl", "SSPL-1.0"],
@@ -55917,7 +55919,7 @@ function recognizeStandardLicenseText(text) {
     return "Unlicense";
   }
   const hasMitGrant = /\bPermission is hereby granted, free of charge, to any person obtaining a copy\b/i.test(prose);
-  const hasMitWarranty = /\bTHE SOFTWARE IS PROVIDED ["“”]AS IS["“”]/i.test(prose);
+  const hasMitWarranty = /\bTHE SOFTWARE IS PROVIDED ['"“”]AS IS['"“”]/i.test(prose);
   if (hasMitGrant && hasMitWarranty) {
     const hasCompletePermissionGrant = /\bto deal in the Software without restriction\b/i.test(prose) && /\bright(?:s)? to use, copy, modify, merge, publish, distribute, sublicense, and\/or sell\b/i.test(prose) && /\bpermit persons to whom the Software is furnished to do so\b/i.test(prose);
     const hasNoticeCondition = /\bThe above copyright notice and this permission notice(?:\s*\([^)]{0,160}\))?\s+shall be included\b/i.test(prose);

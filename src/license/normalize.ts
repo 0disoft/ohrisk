@@ -783,7 +783,7 @@ function recognizeStandardLicenseText(text: string): string | undefined {
 
   const hasMitGrant =
     /\bPermission is hereby granted, free of charge, to any person obtaining a copy\b/i.test(prose);
-  const hasMitWarranty = /\bTHE SOFTWARE IS PROVIDED ["“”]AS IS["“”]/i.test(prose);
+  const hasMitWarranty = /\bTHE SOFTWARE IS PROVIDED ['"“”]AS IS['"“”]/i.test(prose);
   if (hasMitGrant && hasMitWarranty) {
     const hasCompletePermissionGrant = /\bto deal in the Software without restriction\b/i.test(prose)
       && /\bright(?:s)? to use, copy, modify, merge, publish, distribute, sublicense, and\/or sell\b/i.test(prose)

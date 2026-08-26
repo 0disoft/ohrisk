@@ -89,6 +89,9 @@ official `spdx/license-list-data` build recorded in
 existing metadata compatibility, appear explicitly in evidence provenance, and
 carry medium confidence; invented identifiers do not become recognized merely
 because they match the SPDX identifier character shape.
+Common registry spellings such as `3-Clause BSD License` and `PSF` normalize to
+`BSD-3-Clause` and `PSF-2.0` with medium confidence. Version-ambiguous names such
+as `Artistic License` remain `unknown` instead of guessing a specific license.
 
 Recognized license files are reconciled with parseable package metadata. A file
 expression outside the declared license choices is reported as

@@ -576,6 +576,9 @@ Ohrisk는 라이선스 텍스트를 법적으로 해석하지 않는다. 알려�
 
 `OR` 결합 표현은 가장 낮은 심각도를, `AND` 결합은 가장 높은 심각도를 취한다.
 예를 들어 `MIT OR Apache-2.0`은 `low`다.
+레지스트리 메타데이터의 흔한 표기인 `3-Clause BSD License`와 `PSF`는 각각
+`BSD-3-Clause`, `PSF-2.0`으로 정규화한다. 반면 버전을 특정하지 않은
+`Artistic License`는 임의로 추정하지 않고 `unknown`으로 유지한다.
 
 상업적 사용 제한은 그 문장이 명시적으로 적용되는 범위에 따라 판정한다. software,
 source code, package 자체에 적용되는 제한은 `high`로 올릴 수 있다. documentation이나
