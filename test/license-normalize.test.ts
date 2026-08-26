@@ -1126,6 +1126,38 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
+  test("keeps a package-wide MIT declaration ahead of contributor Apache terms", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "libm@0.2.16",
+      metadataLicense: "MIT",
+      metadataSource: "Cargo.toml",
+      files: [{
+        path: "LICENSE.txt",
+        kind: "license",
+        text: [
+          "rust-lang/libm as a whole is available for use under the MIT license:",
+          "Permission is hereby granted, free of charge, to any person obtaining a copy",
+          "The above copyright notice and this permission notice shall be included in all copies.",
+          "THE SOFTWARE IS PROVIDED \"AS IS\"",
+          "As a contributor, you agree that your code can be used under either the MIT",
+          "license or the Apache-2.0 license:",
+          "Apache License",
+          "Version 2.0, January 2004",
+          "TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION"
+        ].join("\n")
+      }],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      expression: "MIT",
+      choices: ["MIT"],
+      signals: [],
+      confidence: "high"
+    });
+  });
+
   test("combines bundled component licenses without treating them as package conflicts", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "bundled-component@1.0.0",

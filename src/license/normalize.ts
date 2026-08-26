@@ -766,6 +766,11 @@ function recognizeStandardLicenseText(text: string): string | undefined {
     return spdxIdentifier;
   }
 
+  const packageWideMit = recognizePackageWideMitDeclaration(text);
+  if (packageWideMit) {
+    return packageWideMit;
+  }
+
   const packageDualLicense = recognizePackageDualLicenseDeclaration(text);
   if (packageDualLicense) {
     return packageDualLicense;
@@ -864,6 +869,13 @@ function recognizeStandardLicenseText(text: string): string | undefined {
   }
 
   return undefined;
+}
+
+function recognizePackageWideMitDeclaration(text: string): string | undefined {
+  const declaration = text.slice(0, 512).replace(/\s+/g, " ");
+  return /\bas a whole is available for use under (?:the )?MIT licen[cs]e\b/i.test(declaration)
+    ? "MIT"
+    : undefined;
 }
 
 export function recognizePackageDualLicenseDeclaration(text: string): string | undefined {

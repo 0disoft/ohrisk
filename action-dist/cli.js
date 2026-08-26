@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: fc747dff4f882b1afb0694b3fa39a0280e3e4cc4656e3a9d73bfaf703a27090f
+// ohrisk-action-source-sha256: 861db8ab894f2fc4a6bdedefe63d00a496de3cdd41f314b51dbf1474d3717424
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -43685,6 +43685,10 @@ function recognizeStandardLicenseText(text) {
   if (spdxIdentifier) {
     return spdxIdentifier;
   }
+  const packageWideMit = recognizePackageWideMitDeclaration(text);
+  if (packageWideMit) {
+    return packageWideMit;
+  }
   const packageDualLicense = recognizePackageDualLicenseDeclaration(text);
   if (packageDualLicense) {
     return packageDualLicense;
@@ -43744,6 +43748,10 @@ function recognizeStandardLicenseText(text) {
     return hasEndorsementCondition ? "BSD-3-Clause" : "BSD-2-Clause";
   }
   return;
+}
+function recognizePackageWideMitDeclaration(text) {
+  const declaration = text.slice(0, 512).replace(/\s+/g, " ");
+  return /\bas a whole is available for use under (?:the )?MIT licen[cs]e\b/i.test(declaration) ? "MIT" : undefined;
 }
 function recognizePackageDualLicenseDeclaration(text) {
   const declaration = text.slice(0, 2048).replace(/\s+/g, " ");

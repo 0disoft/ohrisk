@@ -6,6 +6,9 @@
   offers MIT or Apache-2.0 at the user's option. Matching `LICENSE-MIT` and
   `LICENSE-APACHE` files no longer produce a false conflicting-evidence finding,
   while narrower `-only` metadata still conflicts with broader `-or-later` text.
+- A license file that explicitly declares the package as a whole under MIT now
+  keeps that package scope ahead of later contributor-only Apache terms, avoiding
+  false conflicts for crates such as `libm`.
 - Standard Maven names used by Apache, Hamcrest, HdrHistogram, and JTS now
   normalize to their SPDX expressions instead of producing malformed-license
   findings.
