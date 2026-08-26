@@ -66,7 +66,7 @@ separate asset decision.
 
 | License family | Example SPDX IDs | saas | distributed-app |
 |---|---|---|---|
-| Permissive | MIT, MIT-0, Apache-2.0, BSD-3-Clause, ISC, 0BSD, BSL-1.0, BlueOak-1.0.0, FTL, PSF-2.0, Python-2.0, TCL, Unicode-3.0, Unicode-DFS-2016, WTFPL, Zlib | low | low |
+| Permissive | MIT, MIT-0, Apache-2.0, BSD-3-Clause, bzip2-1.0.6, ISC, 0BSD, BSL-1.0, BlueOak-1.0.0, FTL, PSF-2.0, Python-2.0, TCL, Unicode-3.0, Unicode-DFS-2016, WTFPL, Zlib | low | low |
 | Advertising-clause attribution | BSD-4-Clause | review | review |
 | File-level copyleft | MPL-2.0 | low | review |
 | Weak copyleft | LGPL-3.0, EPL-2.0 | review | review |
@@ -89,7 +89,10 @@ expression outside the declared license choices is reported as
 `conflicting-evidence` with unknown severity; deprecated GNU identifiers compare
 against their current `-only` or `-or-later` equivalents. A canonical GNU
 version license text also remains compatible with matching metadata that grants
-the same version or later; the reverse comparison stays conflicting.
+the same version or later; the reverse comparison stays conflicting. Text
+recognition distinguishes the standard MIT notice condition, explicit BSD
+one-clause and three-clause variants, and the bzip2 grant before reconciling
+those files with package metadata.
 
 For `distributed-app`, recognized license expressions and collected NOTICE
 files add conservative `license-text` and `notice-file` obligation evidence.

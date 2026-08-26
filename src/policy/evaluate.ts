@@ -26,6 +26,7 @@ const PERMISSIVE_LICENSES = new Set([
   "BlueOak-1.0.0",
   "BSD-2-Clause",
   "BSD-3-Clause",
+  "bzip2-1.0.6",
   "Apache-2.0",
   "FTL",
   "PSF-2.0",

@@ -42,6 +42,7 @@ describe("evaluateLicenseRisk", () => {
       "0BSD",
       "BSL-1.0",
       "BlueOak-1.0.0",
+      "bzip2-1.0.6",
       "CC0-1.0",
       "MIT-0",
       "PSF-2.0",

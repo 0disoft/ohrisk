@@ -2,6 +2,11 @@
 
 ## 1.15.2 - Unreleased
 
+- License-file recognition now handles the parenthetical notice wording used
+  by common MIT packages, explicit BSD one-clause and alternate three-clause
+  wording, and the bzip2 grant without reporting false metadata conflicts.
+  Canonical MPL 2.0 text is also compatible with an `MPL-2.0+` declaration,
+  and `bzip2-1.0.6` is classified as permissive.
 - Common Python metadata aliases `PSFL` and `BSD 3-Clause License` now
   normalize to `PSF-2.0` and `BSD-3-Clause`. Canonical GNU version text no
   longer conflicts with matching `-or-later` package metadata, while the

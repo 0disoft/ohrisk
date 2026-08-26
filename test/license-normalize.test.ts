@@ -1338,6 +1338,118 @@ describe("normalizeLicenseEvidence", () => {
     });
   });
 
+  test("recognizes an MIT notice condition with a parenthetical clarification", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "bytemuck@1.24.0",
+      metadataLicense: "MIT",
+      metadataLicenseKind: "declared",
+      metadataSource: "Cargo.toml",
+      files: [{
+        path: "LICENSE-MIT",
+        kind: "license",
+        text: [
+          "Permission is hereby granted, free of charge, to any person obtaining a copy",
+          "of this software and associated documentation files (the \"Software\"), to deal",
+          "in the Software without restriction, including without limitation the rights",
+          "to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies",
+          "of the Software, and to permit persons to whom the Software is furnished to do so,",
+          "subject to the following conditions:",
+          "The above copyright notice and this permission notice (including the next paragraph)",
+          "shall be included in all copies or substantial portions of the Software.",
+          "THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND."
+        ].join("\n")
+      }],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      expression: "MIT",
+      choices: ["MIT"],
+      signals: [],
+      confidence: "high"
+    });
+  });
+
+  test.each([
+    {
+      packageId: "deunicode@1.4.3",
+      metadataLicense: "BSD-3-Clause",
+      text: [
+        "Redistribution and use in source and binary forms, with or without modification,",
+        "are permitted provided that the following conditions are met:",
+        "Redistributions of source code must retain the above copyright notice.",
+        "Redistributions in binary form must reproduce the above copyright notice.",
+        "The names of this software's contributors may not be used to endorse or",
+        "promote products derived from this software without specific prior written permission."
+      ].join("\n")
+    },
+    {
+      packageId: "fiat-crypto@0.2.7",
+      metadataLicense: "BSD-1-Clause",
+      text: [
+        "The BSD 1-Clause License (BSD-1-Clause)",
+        "Redistribution and use in source and binary forms, with or without modification,",
+        "are permitted provided that the following conditions are met:",
+        "Redistributions of source code must retain the above copyright notice."
+      ].join("\n")
+    },
+    {
+      packageId: "libbz2-rs-sys@0.2.5",
+      metadataLicense: "bzip2-1.0.6",
+      text: [
+        "Redistribution and use in source and binary forms, with or without modification, are permitted.",
+        "The origin of this software must not be misrepresented; you must not claim that you wrote the original software.",
+        "Altered source versions must be plainly marked as such, and must not be misrepresented as being the original software.",
+        "The name of the author may not be used to endorse or promote products derived from this software."
+      ].join("\n")
+    }
+  ])("recognizes $metadataLicense text without a false conflict", ({
+    packageId,
+    metadataLicense,
+    text
+  }) => {
+    const normalized = normalizeLicenseEvidence({
+      packageId,
+      metadataLicense,
+      metadataLicenseKind: "declared",
+      metadataSource: "Cargo.toml",
+      files: [{ path: "LICENSE", kind: "license", text }],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      expression: metadataLicense,
+      choices: [metadataLicense],
+      signals: [],
+      confidence: "high"
+    });
+  });
+
+  test("accepts canonical MPL 2.0 text for an MPL-2.0+ declaration", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "smartstring@1.0.1",
+      metadataLicense: "MPL-2.0+",
+      metadataLicenseKind: "declared",
+      metadataSource: "Cargo.toml",
+      files: [{
+        path: "LICENCE.md",
+        kind: "license",
+        text: "Mozilla Public License Version 2.0\n1. Definitions\n2. License Grants and Conditions"
+      }],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      expression: "MPL-2.0+",
+      choices: ["MPL-2.0+"],
+      signals: [],
+      confidence: "high"
+    });
+  });
+
   test("recognizes public-domain-style license file text", () => {
     expect(
       normalizeLicenseEvidence({

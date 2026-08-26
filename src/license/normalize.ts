@@ -45,7 +45,7 @@ const DEPRECATED_GNU_LICENSE_EQUIVALENTS = new Map([
   ["LGPL-3.0+", "LGPL-3.0-or-later"]
 ]);
 
-const GNU_ONLY_TO_OR_LATER = new Map([
+const FILE_LICENSE_TO_BROADER_DECLARATION = new Map([
   ["AGPL-1.0-only", "AGPL-1.0-or-later"],
   ["AGPL-3.0-only", "AGPL-3.0-or-later"],
   ["GFDL-1.1-only", "GFDL-1.1-or-later"],
@@ -56,7 +56,8 @@ const GNU_ONLY_TO_OR_LATER = new Map([
   ["GPL-3.0-only", "GPL-3.0-or-later"],
   ["LGPL-2.0-only", "LGPL-2.0-or-later"],
   ["LGPL-2.1-only", "LGPL-2.1-or-later"],
-  ["LGPL-3.0-only", "LGPL-3.0-or-later"]
+  ["LGPL-3.0-only", "LGPL-3.0-or-later"],
+  ["MPL-2.0", "MPL-2.0+"]
 ]);
 
 export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedLicense {
@@ -243,8 +244,8 @@ function fileLicenseChoiceMatchesDeclared(
     return true;
   }
 
-  const orLater = GNU_ONLY_TO_OR_LATER.get(comparable);
-  return orLater !== undefined && declaredChoices.has(orLater);
+  const broaderDeclaration = FILE_LICENSE_TO_BROADER_DECLARATION.get(comparable);
+  return broaderDeclaration !== undefined && declaredChoices.has(broaderDeclaration);
 }
 
 function withSpdxAst(
@@ -721,7 +722,7 @@ function recognizeStandardLicenseText(text: string): string | undefined {
       && /\bright(?:s)? to use, copy, modify, merge, publish, distribute, sublicense, and\/or sell\b/i.test(prose)
       && /\bpermit persons to whom the Software is furnished to do so\b/i.test(prose);
     const hasNoticeCondition =
-      /\bThe above copyright notice and this permission notice shall be included\b/i.test(prose);
+      /\bThe above copyright notice and this permission notice(?:\s*\([^)]{0,160}\))?\s+shall be included\b/i.test(prose);
     return hasCompletePermissionGrant && !hasNoticeCondition ? "MIT-0" : "MIT";
   }
 
@@ -749,12 +750,24 @@ function recognizeStandardLicenseText(text: string): string | undefined {
 
   if (/\bRedistribution and use in source and binary forms\b/i.test(text)) {
     if (
+      /\bThe BSD 1-Clause License\s*\(BSD-1-Clause\)/i.test(text)
+    ) {
+      return "BSD-1-Clause";
+    }
+    if (
+      /\bThe origin of this software must not be misrepresented\b/i.test(text)
+      && /\bAltered source versions must be plainly marked as such\b/i.test(text)
+      && /\bThe name of the author may not be used to endorse or promote\b/i.test(text)
+    ) {
+      return "bzip2-1.0.6";
+    }
+    if (
       /\bAll advertising materials mentioning features or use of this software must display the following acknowledgement\b/i.test(text)
     ) {
       return "BSD-4-Clause";
     }
     const hasEndorsementCondition =
-      /\bNeither the (?:name(?: of)?|names of)\b[\s\S]{0,300}\bmay\s+be\s+used\s+to\s+endorse\s+or\s+promote\b/i.test(text);
+      /\b(?:Neither|The names? of)\b[\s\S]{0,400}\bmay\s+(?:not\s+)?be\s+used\s+to\s+endorse\s+or\s+promote\b/i.test(text);
     return hasEndorsementCondition ? "BSD-3-Clause" : "BSD-2-Clause";
   }
 
