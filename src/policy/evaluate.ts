@@ -30,11 +30,13 @@ const PERMISSIVE_LICENSES = new Set([
   "FTL",
   "PSF-2.0",
   "Python-2.0",
+  "TCL",
   "Zlib",
   "Unicode-3.0",
   "Unicode-DFS-2016",
   "CC0-1.0",
-  "Unlicense"
+  "Unlicense",
+  "WTFPL"
 ]);
 
 const ATTRIBUTION_REVIEW_LICENSES = new Set([
@@ -87,6 +89,7 @@ const LICENSE_TEXT_PRESERVATION_EXEMPTIONS = new Set([
   "0BSD",
   "CC0-1.0",
   "Unlicense",
+  "WTFPL",
   "UNLICENSED"
 ]);
 

@@ -46,9 +46,11 @@ describe("evaluateLicenseRisk", () => {
       "MIT-0",
       "PSF-2.0",
       "Python-2.0",
+      "TCL",
       "Unicode-3.0",
       "Unicode-DFS-2016",
-      "Unlicense"
+      "Unlicense",
+      "WTFPL"
     ]) {
       const finding = evaluateLicenseRisk({
         license: {
@@ -69,6 +71,27 @@ describe("evaluateLicenseRisk", () => {
       expect(finding.recommendation).toBe("allow");
       expect(finding.action).toBe("No action needed for this profile.");
     }
+  });
+
+  test("does not invent a license-text preservation obligation for WTFPL", () => {
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "terminfo@0.9.0",
+        original: "WTFPL",
+        expression: "WTFPL",
+        choices: ["WTFPL"],
+        joiner: "single",
+        signals: [],
+        evidenceSources: ["source: tarball", "Cargo.toml license: WTFPL"],
+        confidence: "high"
+      },
+      dependency: baseDependency,
+      profile: "distributed-app"
+    });
+
+    expect(finding.severity).toBe("low");
+    expect(finding.recommendation).toBe("allow");
+    expect(finding.evidence.some((item) => item.startsWith("obligation:"))).toBe(false);
   });
 
   test("treats MIT-CMU as a permissive low-risk license", () => {

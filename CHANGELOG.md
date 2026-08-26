@@ -2,6 +2,9 @@
 
 ## 1.15.2 - Unreleased
 
+- SPDX `TCL` and `WTFPL` expressions are now classified as permissive
+  low-risk licenses under both profiles. Distributed `TCL` packages retain
+  the normal license-text obligation, while `WTFPL` does not invent one.
 - BSD 3-clause license files whose endorsement condition says `Neither the
   name Example` instead of `Neither the name of Example` are now recognized
   correctly. A license file that explicitly scopes those terms to

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 1c70af6641fb41f17134491910ecfc84cbf0af4e3355a6839164eb7acc09f5b4
+// ohrisk-action-source-sha256: 21d4f61559a7163d6c8dc25132b089473e3897f7cf8b52713e1faf19104ca3b2
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -56729,11 +56729,13 @@ var PERMISSIVE_LICENSES = new Set([
   "FTL",
   "PSF-2.0",
   "Python-2.0",
+  "TCL",
   "Zlib",
   "Unicode-3.0",
   "Unicode-DFS-2016",
   "CC0-1.0",
-  "Unlicense"
+  "Unlicense",
+  "WTFPL"
 ]);
 var ATTRIBUTION_REVIEW_LICENSES = new Set([
   "BSD-4-Clause"
@@ -56778,6 +56780,7 @@ var LICENSE_TEXT_PRESERVATION_EXEMPTIONS = new Set([
   "0BSD",
   "CC0-1.0",
   "Unlicense",
+  "WTFPL",
   "UNLICENSED"
 ]);
 var NO_ACTION_NEEDED = "No action needed for this profile.";
