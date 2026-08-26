@@ -249,6 +249,8 @@ attribute가 있는 flat package entry를 스캔하고, `.csproj` 파일에서�
 경우에는 부분 스캔하지 않고 실패한다. 로컬 NuGet package cache의 `.nuspec`
 license metadata와 license 파일을 evidence로 읽는다. 중앙 패키지 관리처럼 `.csproj`만으로
 resolved version을 알 수 없는 경우에는 `obj/project.assets.json`을 지정해야 한다.
+`.csproj`가 unconditional `IsTestProject=true`를 선언하거나 `Microsoft.NET.Test.Sdk`를
+직접 참조하면 그 프로젝트의 package input은 development dependency로 분류한다.
 Conan은 Conan 2 `conan.lock`의 `requires`, `build_requires`, `python_requires`에
 기록된 recipe reference를 스캔한다. evidence는 로컬 Conan cache의 `conanfile.py`
 license metadata와 license 파일에서 읽는다. Conan 1 graph lock, binary package ID,

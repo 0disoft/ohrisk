@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: f2c69ea03858861900f7d69b4d1afd8cefe587c9443134ab903837327e56ad3c
+// ohrisk-action-source-sha256: c804a67951786ef770d06bfd5b33fd9ffc95eaa5c066e5666ea994629a2f2427
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -21881,7 +21881,12 @@ function parseNugetProjectAssetsJson(input, assetsPath) {
 function parseDotnetProjectXml(input, projectFilePath, options = {}) {
   const records = new Map;
   const projectProperties = readUnconditionalDotnetProjectProperties(input);
-  const packageReferenceMatches = input.matchAll(/<PackageReference\b([^>]*?)(?:\/>|>([\s\S]*?)<\/PackageReference>)/gi);
+  const packageReferenceMatches = [...input.matchAll(/<PackageReference\b([^>]*?)(?:\/>|>([\s\S]*?)<\/PackageReference>)/gi)];
+  const isTestProject = projectProperties.get("istestproject")?.trim().toLowerCase() === "true" || packageReferenceMatches.some((match) => {
+    const attributes = readXmlAttributes(match[1] ?? "");
+    return readXmlAttribute(attributes, "Include")?.trim().toLowerCase() === "microsoft.net.test.sdk";
+  });
+  const projectDependencyType = isTestProject ? "development" : "production";
   for (const match of packageReferenceMatches) {
     const attributes = readXmlAttributes(match[1] ?? "");
     const name = readXmlAttribute(attributes, "Include");
@@ -21911,7 +21916,7 @@ function parseDotnetProjectXml(input, projectFilePath, options = {}) {
       name,
       version,
       id: `${name}@${version}`,
-      dependencyType: "production",
+      dependencyType: projectDependencyType,
       direct: true,
       dependencies: []
     });
@@ -21941,7 +21946,7 @@ function parseDotnetProjectXml(input, projectFilePath, options = {}) {
       name,
       version,
       id: `${name}@${version}`,
-      dependencyType: "production",
+      dependencyType: projectDependencyType,
       direct: true,
       dependencies: []
     });

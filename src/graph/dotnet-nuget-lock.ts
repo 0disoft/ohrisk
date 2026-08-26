@@ -554,9 +554,15 @@ function parseDotnetProjectXml(
 ): Result<NugetPackageRecord[], OhriskError> {
   const records = new Map<string, NugetPackageRecord>();
   const projectProperties = readUnconditionalDotnetProjectProperties(input);
-  const packageReferenceMatches = input.matchAll(
+  const packageReferenceMatches = [...input.matchAll(
     /<PackageReference\b([^>]*?)(?:\/>|>([\s\S]*?)<\/PackageReference>)/gi
-  );
+  )];
+  const isTestProject = projectProperties.get("istestproject")?.trim().toLowerCase() === "true"
+    || packageReferenceMatches.some((match) => {
+      const attributes = readXmlAttributes(match[1] ?? "");
+      return readXmlAttribute(attributes, "Include")?.trim().toLowerCase() === "microsoft.net.test.sdk";
+    });
+  const projectDependencyType: DependencyType = isTestProject ? "development" : "production";
 
   for (const match of packageReferenceMatches) {
     const attributes = readXmlAttributes(match[1] ?? "");
@@ -598,7 +604,7 @@ function parseDotnetProjectXml(
       name,
       version,
       id: `${name}@${version}`,
-      dependencyType: "production",
+      dependencyType: projectDependencyType,
       direct: true,
       dependencies: []
     });
@@ -637,7 +643,7 @@ function parseDotnetProjectXml(
       name,
       version,
       id: `${name}@${version}`,
-      dependencyType: "production",
+      dependencyType: projectDependencyType,
       direct: true,
       dependencies: []
     });

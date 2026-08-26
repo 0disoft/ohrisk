@@ -297,6 +297,38 @@ describe("parseDotnetProjectText", () => {
     expect(result.value.nodes.every((node) => node.dependencyType === "production")).toBe(true);
   });
 
+  test("classifies dependencies from test projects as development", () => {
+    for (const project of [
+      [
+        "<Project Sdk=\"Microsoft.NET.Sdk\">",
+        "  <PropertyGroup>",
+        "    <IsTestProject>true</IsTestProject>",
+        "  </PropertyGroup>",
+        "  <ItemGroup>",
+        "    <PackageReference Include=\"Test.Framework\" Version=\"1.0.0\" />",
+        "  </ItemGroup>",
+        "</Project>"
+      ],
+      [
+        "<Project Sdk=\"Microsoft.NET.Sdk\">",
+        "  <ItemGroup>",
+        "    <PackageReference Include=\"Microsoft.NET.Test.Sdk\" Version=\"18.9.0\" />",
+        "    <PackageReference Include=\"Test.Framework\" Version=\"1.0.0\" />",
+        "  </ItemGroup>",
+        "</Project>"
+      ]
+    ]) {
+      const result = parseDotnetProjectText(project.join("\n"), "Fixture.Tests.csproj");
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.value.nodes.every((node) => node.dependencyType === "development")).toBe(true);
+    }
+  });
+
   test("rejects PackageReference entries without literal resolved versions", () => {
     const result = parseDotnetProjectText(
       [
