@@ -68,6 +68,7 @@ separate asset decision.
 |---|---|---|---|
 | Permissive | MIT, MIT-0, Apache-2.0, BSD-3-Clause, bzip2-1.0.6, ISC, 0BSD, BSL-1.0, BlueOak-1.0.0, FTL, PSF-2.0, Python-2.0, TCL, Unicode-3.0, Unicode-DFS-2016, WTFPL, Zlib | low | low |
 | Advertising-clause attribution | BSD-4-Clause | review | review |
+| Creative Commons attribution | CC-BY-3.0, CC-BY-3.0-US, CC-BY-4.0 | review | review |
 | File-level copyleft | MPL-2.0 | low | review |
 | Weak copyleft | LGPL-3.0, EPL-2.0 | review | review |
 | Strong copyleft (GPL) | GPL-2.0, GPL-3.0 | review | high |

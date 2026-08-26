@@ -2,6 +2,8 @@
 
 ## 1.15.2 - Unreleased
 
+- SPDX Creative Commons Attribution licenses such as `CC-BY-3.0` are now
+  attribution review findings instead of unrecognized-license findings.
 - Multiple recognized license files no longer conflict when one metadata
   classifier covers every file choice. Named sibling files such as
   `LICENSE_zstd.txt` are now treated as bundled-component evidence while

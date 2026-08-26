@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: e1f4ef77af8fcc108be94e26f032503fc3367d05390668b704d5a7f5acada8dd
+// ohrisk-action-source-sha256: dd04db0b759293e578cc796d60b0df11898996bd66f49b0902b42348c87cfda0
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -56952,7 +56952,7 @@ function classifyLicenseChoice(choice, profile, policy) {
   if (PERMISSIVE_LICENSES.has(choice.license)) {
     return "low";
   }
-  if (ATTRIBUTION_REVIEW_LICENSES.has(choice.license)) {
+  if (ATTRIBUTION_REVIEW_LICENSES.has(choice.license) || /^CC-BY-[0-9]/u.test(choice.license)) {
     return "review";
   }
   if (COMMERCIAL_RESTRICTION_LICENSES.has(choice.license)) {

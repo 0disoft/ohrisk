@@ -285,7 +285,10 @@ function classifyLicenseChoice(
     return "low";
   }
 
-  if (ATTRIBUTION_REVIEW_LICENSES.has(choice.license)) {
+  if (
+    ATTRIBUTION_REVIEW_LICENSES.has(choice.license)
+    || /^CC-BY-[0-9]/u.test(choice.license)
+  ) {
     return "review";
   }
 

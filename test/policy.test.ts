@@ -561,6 +561,31 @@ describe("evaluateLicenseRisk", () => {
     expect(finding.recommendation).toBe("review");
   });
 
+  test("requires review for Creative Commons attribution licenses", () => {
+    for (const expression of ["CC-BY-3.0", "CC-BY-3.0-US", "CC-BY-4.0"]) {
+      const finding = evaluateLicenseRisk({
+        license: {
+          packageId: "spdx-exceptions@2.5.0",
+          original: expression,
+          expression,
+          choices: [expression],
+          joiner: "single",
+          signals: [],
+          evidenceSources: ["source: tarball", `package.json license: ${expression}`],
+          confidence: "high"
+        },
+        dependency: baseDependency,
+        profile: "saas"
+      });
+
+      expect(finding.severity).toBe("review");
+      expect(finding.recommendation).toBe("review");
+      expect(finding.reason).toBe(
+        "License expression should be reviewed before shipping under saas."
+      );
+    }
+  });
+
   test("explains malformed license metadata as a specific unknown risk", () => {
     const finding = evaluateLicenseRisk({
       license: {
