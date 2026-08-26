@@ -277,6 +277,20 @@ function licenseExpressionCoversFileMatches(
   });
 }
 
+function licenseExpressionContainsChoices(
+  broaderExpression: string,
+  narrowerExpression: string
+): boolean {
+  const broader = parseSpdxExpression(broaderExpression);
+  const narrower = parseSpdxExpression(narrowerExpression);
+  if (broader.malformed || narrower.malformed) {
+    return false;
+  }
+
+  const broaderChoices = new Set(broader.choices.map(comparableLicenseId));
+  return narrower.choices.every((choice) => broaderChoices.has(comparableLicenseId(choice)));
+}
+
 function withSpdxAst(
   license: NormalizedLicense,
   ast: NormalizedLicense["spdxAst"]
@@ -509,14 +523,23 @@ function addNonPackageRestrictionSources(
 function readLicenseExpressionEvidence(evidence: LicenseEvidence): LicenseExpressionEvidence | undefined {
   const packageExpression = readPackageLicenseExpression(evidence);
   if (packageExpression) {
-    const licenseFileExpression = evidence.metadataLicenseKind === "classifier"
-      && packageExpression === evidence.metadataLicense
-      ? readLicenseFileExpression(evidence)
-      : undefined;
+    const licenseFileExpression = readLicenseFileExpression(evidence);
+    const fileExpressionCoversPackageClaim = licenseFileExpression !== undefined
+      && licenseExpressionContainsChoices(
+        licenseFileExpression.expression,
+        packageExpression
+      );
     if (
       licenseFileExpression
       && parseSpdxExpression(licenseFileExpression.expression).expression
         !== parseSpdxExpression(packageExpression).expression
+      && (
+        fileExpressionCoversPackageClaim
+        || (
+          evidence.metadataLicenseKind === "classifier"
+          && packageExpression === evidence.metadataLicense
+        )
+      )
     ) {
       return licenseFileExpression;
     }
@@ -628,11 +651,13 @@ function compareLicenseExpressionEvidence(
 function readLicenseFileExpressions(evidence: LicenseEvidence): LicenseExpressionEvidence[] {
   const matches: LicenseExpressionEvidence[] = [];
   for (const file of evidence.files) {
-    if (file.kind !== "license" && file.kind !== "copying") {
+    if (file.kind !== "license" && file.kind !== "copying" && file.kind !== "other") {
       continue;
     }
 
-    const expression = recognizeStandardLicenseText(file.text);
+    const expression = file.kind === "other"
+      ? recognizePackageDualLicenseDeclaration(file.text)
+      : recognizeStandardLicenseText(file.text);
     if (expression && !isAbsentLicenseExpression(expression)) {
       matches.push({
         expression,
@@ -841,13 +866,17 @@ function recognizeStandardLicenseText(text: string): string | undefined {
   return undefined;
 }
 
-function recognizePackageDualLicenseDeclaration(text: string): string | undefined {
+export function recognizePackageDualLicenseDeclaration(text: string): string | undefined {
   const declaration = text.slice(0, 2_048).replace(/\s+/g, " ");
   const apacheThenMit =
     /\bdual[- ]licen[cs]ed under (?:the )?Apache(?: License)?(?:,? Version)?\s*2\.0(?: license)?\s+(?:as well as|and)\s+(?:the )?MIT(?: license)?\b/i;
   const mitThenApache =
     /\bdual[- ]licen[cs]ed under (?:the )?MIT(?: license)?\s+(?:as well as|and)\s+(?:the )?Apache(?: License)?(?:,? Version)?\s*2\.0(?: license)?\b/i;
-  return apacheThenMit.test(declaration) || mitThenApache.test(declaration)
+  const eitherAtYourOption =
+    /\blicen[cs]ed under either of\b[\s\S]*\bApache License,? Version 2\.0\b[\s\S]*\bMIT licen[cs]e\b[\s\S]*\bat your option\b/i;
+  return apacheThenMit.test(declaration)
+    || mitThenApache.test(declaration)
+    || eitherAtYourOption.test(declaration)
     ? "MIT OR Apache-2.0"
     : undefined;
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 71e43c7930054d275dbd7f59cc4f889fcc8b163b228a1eeae2f3abb9005336ad
+// ohrisk-action-source-sha256: fc747dff4f882b1afb0694b3fa39a0280e3e4cc4656e3a9d73bfaf703a27090f
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -41896,6 +41896,1963 @@ function abortableDelay(ms, signal) {
 import { createHash as createHash3, timingSafeEqual } from "node:crypto";
 import path52 from "node:path";
 
+// src/license/spdx-catalog.ts
+var ACTIVE_SPDX_LICENSE_IDS = new Set([
+  "0BSD",
+  "3D-Slicer-1.0",
+  "AAL",
+  "ADSL",
+  "AFL-1.1",
+  "AFL-1.2",
+  "AFL-2.0",
+  "AFL-2.1",
+  "AFL-3.0",
+  "AGPL-1.0-only",
+  "AGPL-1.0-or-later",
+  "AGPL-3.0-only",
+  "AGPL-3.0-or-later",
+  "ALGLIB-Documentation",
+  "AMD-newlib",
+  "AMDPLPA",
+  "AML",
+  "AML-glslang",
+  "AMPAS",
+  "ANTLR-PD",
+  "ANTLR-PD-fallback",
+  "APAFML",
+  "APL-1.0",
+  "APSL-1.0",
+  "APSL-1.1",
+  "APSL-1.2",
+  "APSL-2.0",
+  "ASWF-Digital-Assets-1.0",
+  "ASWF-Digital-Assets-1.1",
+  "Abstyles",
+  "AdaCore-doc",
+  "Adobe-2006",
+  "Adobe-Display-PostScript",
+  "Adobe-Glyph",
+  "Adobe-Utopia",
+  "Advanced-Cryptics-Dictionary",
+  "Afmparse",
+  "Aladdin",
+  "Apache-1.0",
+  "Apache-1.1",
+  "Apache-2.0",
+  "App-s2p",
+  "Arphic-1999",
+  "Artistic-1.0",
+  "Artistic-1.0-Perl",
+  "Artistic-1.0-cl8",
+  "Artistic-2.0",
+  "Artistic-dist",
+  "Aspell-RU",
+  "BOLA-1.1",
+  "BSD-1-Clause",
+  "BSD-2-Clause",
+  "BSD-2-Clause-Darwin",
+  "BSD-2-Clause-Patent",
+  "BSD-2-Clause-Views",
+  "BSD-2-Clause-first-lines",
+  "BSD-2-Clause-pkgconf-disclaimer",
+  "BSD-3-Clause",
+  "BSD-3-Clause-Attribution",
+  "BSD-3-Clause-Clear",
+  "BSD-3-Clause-HP",
+  "BSD-3-Clause-LBNL",
+  "BSD-3-Clause-Modification",
+  "BSD-3-Clause-No-Military-License",
+  "BSD-3-Clause-No-Nuclear-License",
+  "BSD-3-Clause-No-Nuclear-License-2014",
+  "BSD-3-Clause-No-Nuclear-Warranty",
+  "BSD-3-Clause-Open-MPI",
+  "BSD-3-Clause-Sun",
+  "BSD-3-Clause-Tso",
+  "BSD-3-Clause-acpica",
+  "BSD-3-Clause-flex",
+  "BSD-4-Clause",
+  "BSD-4-Clause-Shortened",
+  "BSD-4-Clause-UC",
+  "BSD-4.3RENO",
+  "BSD-4.3TAHOE",
+  "BSD-Advertising-Acknowledgement",
+  "BSD-Attribution-HPND-disclaimer",
+  "BSD-Inferno-Nettverk",
+  "BSD-Mark-Modifications",
+  "BSD-Protection",
+  "BSD-Source-Code",
+  "BSD-Source-beginning-file",
+  "BSD-Systemics",
+  "BSD-Systemics-W3Works",
+  "BSL-1.0",
+  "BUSL-1.1",
+  "Baekmuk",
+  "Bahyph",
+  "Barr",
+  "Beerware",
+  "BitTorrent-1.0",
+  "BitTorrent-1.1",
+  "Bitstream-Charter",
+  "Bitstream-Vera",
+  "BlueOak-1.0.0",
+  "Boehm-GC",
+  "Boehm-GC-without-fee",
+  "Borceux",
+  "Brian-Gladman-2-Clause",
+  "Brian-Gladman-3-Clause",
+  "Brian-Gladman-3-Clause-no-conversion",
+  "Buddy",
+  "Bugroff",
+  "C-UDA-1.0",
+  "CAL-1.0",
+  "CAL-1.0-Combined-Work-Exception",
+  "CAPEC-tou",
+  "CATOSL-1.1",
+  "CC-BY-1.0",
+  "CC-BY-2.0",
+  "CC-BY-2.5",
+  "CC-BY-2.5-AU",
+  "CC-BY-3.0",
+  "CC-BY-3.0-AT",
+  "CC-BY-3.0-AU",
+  "CC-BY-3.0-DE",
+  "CC-BY-3.0-IGO",
+  "CC-BY-3.0-NL",
+  "CC-BY-3.0-US",
+  "CC-BY-4.0",
+  "CC-BY-NC-1.0",
+  "CC-BY-NC-2.0",
+  "CC-BY-NC-2.5",
+  "CC-BY-NC-3.0",
+  "CC-BY-NC-3.0-DE",
+  "CC-BY-NC-3.0-IGO",
+  "CC-BY-NC-4.0",
+  "CC-BY-NC-ND-1.0",
+  "CC-BY-NC-ND-2.0",
+  "CC-BY-NC-ND-2.5",
+  "CC-BY-NC-ND-3.0",
+  "CC-BY-NC-ND-3.0-DE",
+  "CC-BY-NC-ND-3.0-IGO",
+  "CC-BY-NC-ND-4.0",
+  "CC-BY-NC-SA-1.0",
+  "CC-BY-NC-SA-2.0",
+  "CC-BY-NC-SA-2.0-DE",
+  "CC-BY-NC-SA-2.0-FR",
+  "CC-BY-NC-SA-2.0-UK",
+  "CC-BY-NC-SA-2.5",
+  "CC-BY-NC-SA-3.0",
+  "CC-BY-NC-SA-3.0-DE",
+  "CC-BY-NC-SA-3.0-IGO",
+  "CC-BY-NC-SA-4.0",
+  "CC-BY-ND-1.0",
+  "CC-BY-ND-2.0",
+  "CC-BY-ND-2.5",
+  "CC-BY-ND-3.0",
+  "CC-BY-ND-3.0-DE",
+  "CC-BY-ND-4.0",
+  "CC-BY-SA-1.0",
+  "CC-BY-SA-2.0",
+  "CC-BY-SA-2.0-UK",
+  "CC-BY-SA-2.1-JP",
+  "CC-BY-SA-2.5",
+  "CC-BY-SA-3.0",
+  "CC-BY-SA-3.0-AT",
+  "CC-BY-SA-3.0-DE",
+  "CC-BY-SA-3.0-IGO",
+  "CC-BY-SA-4.0",
+  "CC-PDDC",
+  "CC-PDM-1.0",
+  "CC-SA-1.0",
+  "CC0-1.0",
+  "CDDL-1.0",
+  "CDDL-1.1",
+  "CDL-1.0",
+  "CDLA-Permissive-1.0",
+  "CDLA-Permissive-2.0",
+  "CDLA-Sharing-1.0",
+  "CECILL-1.0",
+  "CECILL-1.1",
+  "CECILL-2.0",
+  "CECILL-2.1",
+  "CECILL-B",
+  "CECILL-C",
+  "CERN-OHL-1.1",
+  "CERN-OHL-1.2",
+  "CERN-OHL-P-2.0",
+  "CERN-OHL-S-2.0",
+  "CERN-OHL-W-2.0",
+  "CFITSIO",
+  "CMU-Mach",
+  "CMU-Mach-nodoc",
+  "CNRI-Jython",
+  "CNRI-Python",
+  "CNRI-Python-GPL-Compatible",
+  "COIL-1.0",
+  "CPAL-1.0",
+  "CPL-1.0",
+  "CPOL-1.02",
+  "CUA-OPL-1.0",
+  "Caldera",
+  "Caldera-no-preamble",
+  "Catharon",
+  "ClArtistic",
+  "Clips",
+  "Community-Spec-1.0",
+  "Condor-1.1",
+  "Cornell-Lossless-JPEG",
+  "Cronyx",
+  "Crossword",
+  "CryptoSwift",
+  "CrystalStacker",
+  "Cube",
+  "D-FSL-1.0",
+  "DEC-3-Clause",
+  "DL-DE-BY-2.0",
+  "DL-DE-ZERO-2.0",
+  "DOC",
+  "DRL-1.0",
+  "DRL-1.1",
+  "DSDP",
+  "DocBook-DTD",
+  "DocBook-Schema",
+  "DocBook-Stylesheet",
+  "DocBook-XML",
+  "Dotseqn",
+  "ECL-1.0",
+  "ECL-2.0",
+  "EFL-1.0",
+  "EFL-2.0",
+  "EPICS",
+  "EPL-1.0",
+  "EPL-2.0",
+  "ESA-PL-permissive-2.4",
+  "ESA-PL-strong-copyleft-2.4",
+  "ESA-PL-weak-copyleft-2.4",
+  "EUDatagrid",
+  "EUPL-1.0",
+  "EUPL-1.1",
+  "EUPL-1.2",
+  "Elastic-2.0",
+  "Entessa",
+  "ErlPL-1.1",
+  "Eurosym",
+  "FBM",
+  "FDK-AAC",
+  "FSFAP",
+  "FSFAP-no-warranty-disclaimer",
+  "FSFUL",
+  "FSFULLR",
+  "FSFULLRSD",
+  "FSFULLRWD",
+  "FSL-1.1-ALv2",
+  "FSL-1.1-MIT",
+  "FTL",
+  "Fair",
+  "Ferguson-Twofish",
+  "Frameworx-1.0",
+  "FreeBSD-DOC",
+  "FreeImage",
+  "Furuseth",
+  "GCR-docs",
+  "GD",
+  "GFDL-1.1-invariants-only",
+  "GFDL-1.1-invariants-or-later",
+  "GFDL-1.1-no-invariants-only",
+  "GFDL-1.1-no-invariants-or-later",
+  "GFDL-1.1-only",
+  "GFDL-1.1-or-later",
+  "GFDL-1.2-invariants-only",
+  "GFDL-1.2-invariants-or-later",
+  "GFDL-1.2-no-invariants-only",
+  "GFDL-1.2-no-invariants-or-later",
+  "GFDL-1.2-only",
+  "GFDL-1.2-or-later",
+  "GFDL-1.3-invariants-only",
+  "GFDL-1.3-invariants-or-later",
+  "GFDL-1.3-no-invariants-only",
+  "GFDL-1.3-no-invariants-or-later",
+  "GFDL-1.3-only",
+  "GFDL-1.3-or-later",
+  "GL2PS",
+  "GLWTPL",
+  "GPL-1.0-only",
+  "GPL-1.0-or-later",
+  "GPL-2.0-only",
+  "GPL-2.0-or-later",
+  "GPL-3.0-only",
+  "GPL-3.0-or-later",
+  "Game-Programming-Gems",
+  "Giftware",
+  "Glide",
+  "Glulxe",
+  "Graphics-Gems",
+  "Gutmann",
+  "HDF5",
+  "HIDAPI",
+  "HP-1986",
+  "HP-1989",
+  "HPND",
+  "HPND-DEC",
+  "HPND-Fenneberg-Livingston",
+  "HPND-INRIA-IMAG",
+  "HPND-Intel",
+  "HPND-Kevlin-Henney",
+  "HPND-MIT-disclaimer",
+  "HPND-Markus-Kuhn",
+  "HPND-Netrek",
+  "HPND-Pbmplus",
+  "HPND-SMC",
+  "HPND-UC",
+  "HPND-UC-export-US",
+  "HPND-doc",
+  "HPND-doc-sell",
+  "HPND-export-US",
+  "HPND-export-US-acknowledgement",
+  "HPND-export-US-modify",
+  "HPND-export2-US",
+  "HPND-merchantability-variant",
+  "HPND-sell-MIT-disclaimer-xserver",
+  "HPND-sell-regexpr",
+  "HPND-sell-variant",
+  "HPND-sell-variant-MIT-disclaimer",
+  "HPND-sell-variant-MIT-disclaimer-rev",
+  "HPND-sell-variant-critical-systems",
+  "HTMLTIDY",
+  "HaskellReport",
+  "Hippocratic-2.1",
+  "IBM-pibs",
+  "ICU",
+  "IEC-Code-Components-EULA",
+  "IJG",
+  "IJG-short",
+  "IPA",
+  "IPL-1.0",
+  "ISC",
+  "ISC-Veillard",
+  "ISO-permission",
+  "ImageMagick",
+  "Imlib2",
+  "Info-ZIP",
+  "Informatica",
+  "Inner-Net-2.0",
+  "InnoSetup",
+  "Intel",
+  "Intel-ACPI",
+  "Interbase-1.0",
+  "JPL-image",
+  "JPNIC",
+  "JSON",
+  "Jam",
+  "JasPer-2.0",
+  "Kastrup",
+  "Kazlib",
+  "Knuth-CTAN",
+  "LAL-1.2",
+  "LAL-1.3",
+  "LGPL-2.0-only",
+  "LGPL-2.0-or-later",
+  "LGPL-2.1-only",
+  "LGPL-2.1-or-later",
+  "LGPL-3.0-only",
+  "LGPL-3.0-or-later",
+  "LGPLLR",
+  "LOOP",
+  "LPD-document",
+  "LPL-1.0",
+  "LPL-1.02",
+  "LPPL-1.0",
+  "LPPL-1.1",
+  "LPPL-1.2",
+  "LPPL-1.3a",
+  "LPPL-1.3c",
+  "LZMA-SDK-9.11-to-9.20",
+  "LZMA-SDK-9.22",
+  "Latex2e",
+  "Latex2e-translated-notice",
+  "Leptonica",
+  "LiLiQ-P-1.1",
+  "LiLiQ-R-1.1",
+  "LiLiQ-Rplus-1.1",
+  "Libpng",
+  "Linux-OpenIB",
+  "Linux-man-pages-1-para",
+  "Linux-man-pages-copyleft",
+  "Linux-man-pages-copyleft-2-para",
+  "Linux-man-pages-copyleft-var",
+  "Lucida-Bitmap-Fonts",
+  "MIPS",
+  "MIT",
+  "MIT-0",
+  "MIT-CMU",
+  "MIT-Click",
+  "MIT-Festival",
+  "MIT-Khronos-old",
+  "MIT-Modern-Variant",
+  "MIT-STK",
+  "MIT-Wu",
+  "MIT-advertising",
+  "MIT-enna",
+  "MIT-feh",
+  "MIT-open-group",
+  "MIT-testregex",
+  "MITNFA",
+  "MMIXware",
+  "MMPL-1.0.1",
+  "MPEG-SSG",
+  "MPL-1.0",
+  "MPL-1.1",
+  "MPL-2.0",
+  "MPL-2.0-no-copyleft-exception",
+  "MS-LPL",
+  "MS-PL",
+  "MS-RL",
+  "MTLL",
+  "MVT-1.1",
+  "Mackerras-3-Clause",
+  "Mackerras-3-Clause-acknowledgment",
+  "MakeIndex",
+  "Martin-Birgmeier",
+  "McPhee-slideshow",
+  "Minpack",
+  "MirOS",
+  "Motosoto",
+  "MulanPSL-1.0",
+  "MulanPSL-2.0",
+  "Multics",
+  "Mup",
+  "NAIST-2003",
+  "NASA-1.3",
+  "NBPL-1.0",
+  "NCBI-PD",
+  "NCGL-UK-2.0",
+  "NCL",
+  "NCSA",
+  "NGPL",
+  "NICTA-1.0",
+  "NIST-PD",
+  "NIST-PD-TNT",
+  "NIST-PD-fallback",
+  "NIST-Software",
+  "NLOD-1.0",
+  "NLOD-2.0",
+  "NLPL",
+  "NOSL",
+  "NPL-1.0",
+  "NPL-1.1",
+  "NPOSL-3.0",
+  "NRL",
+  "NTIA-PD",
+  "NTP",
+  "NTP-0",
+  "Naumen",
+  "NetCDF",
+  "Newsletr",
+  "Nokia",
+  "Noweb",
+  "O-UDA-1.0",
+  "OAR",
+  "OCCT-PL",
+  "OCLC-2.0",
+  "ODC-By-1.0",
+  "ODbL-1.0",
+  "OFFIS",
+  "OFL-1.0",
+  "OFL-1.0-RFN",
+  "OFL-1.0-no-RFN",
+  "OFL-1.1",
+  "OFL-1.1-RFN",
+  "OFL-1.1-no-RFN",
+  "OGC-1.0",
+  "OGDL-Taiwan-1.0",
+  "OGL-Canada-2.0",
+  "OGL-UK-1.0",
+  "OGL-UK-2.0",
+  "OGL-UK-3.0",
+  "OGTSL",
+  "OLDAP-1.1",
+  "OLDAP-1.2",
+  "OLDAP-1.3",
+  "OLDAP-1.4",
+  "OLDAP-2.0",
+  "OLDAP-2.0.1",
+  "OLDAP-2.1",
+  "OLDAP-2.2",
+  "OLDAP-2.2.1",
+  "OLDAP-2.2.2",
+  "OLDAP-2.3",
+  "OLDAP-2.4",
+  "OLDAP-2.5",
+  "OLDAP-2.6",
+  "OLDAP-2.7",
+  "OLDAP-2.8",
+  "OLFL-1.3",
+  "OML",
+  "OPL-1.0",
+  "OPL-UK-3.0",
+  "OPUBL-1.0",
+  "OSC-1.0",
+  "OSET-PL-2.1",
+  "OSL-1.0",
+  "OSL-1.1",
+  "OSL-2.0",
+  "OSL-2.1",
+  "OSL-3.0",
+  "OSSP",
+  "OpenMDW-1.0",
+  "OpenPBS-2.3",
+  "OpenSSL",
+  "OpenSSL-standalone",
+  "OpenVision",
+  "PADL",
+  "PDDL-1.0",
+  "PHP-3.0",
+  "PHP-3.01",
+  "PPL",
+  "PSF-2.0",
+  "ParaType-Free-Font-1.3",
+  "Parity-6.0.0",
+  "Parity-7.0.0",
+  "Pixar",
+  "Plexus",
+  "PolyForm-Noncommercial-1.0.0",
+  "PolyForm-Small-Business-1.0.0",
+  "PostgreSQL",
+  "Python-2.0",
+  "Python-2.0.1",
+  "QPL-1.0",
+  "QPL-1.0-INRIA-2004",
+  "Qhull",
+  "RHeCos-1.1",
+  "RPL-1.1",
+  "RPL-1.5",
+  "RPSL-1.0",
+  "RSA-MD",
+  "RSCPL",
+  "Rdisc",
+  "Ruby",
+  "Ruby-pty",
+  "SAX-PD",
+  "SAX-PD-2.0",
+  "SCEA",
+  "SGI-B-1.0",
+  "SGI-B-1.1",
+  "SGI-B-2.0",
+  "SGI-OpenGL",
+  "SGMLUG-PM",
+  "SGP4",
+  "SHL-0.5",
+  "SHL-0.51",
+  "SISSL",
+  "SISSL-1.2",
+  "SL",
+  "SMAIL-GPL",
+  "SMLNJ",
+  "SMPPL",
+  "SNIA",
+  "SOFA",
+  "SPL-1.0",
+  "SSH-OpenSSH",
+  "SSH-short",
+  "SSLeay-standalone",
+  "SSPL-1.0",
+  "SUL-1.0",
+  "SWL",
+  "Saxpath",
+  "SchemeReport",
+  "Sendmail",
+  "Sendmail-8.23",
+  "Sendmail-Open-Source-1.1",
+  "SimPL-2.0",
+  "Sleepycat",
+  "Soundex",
+  "Spencer-86",
+  "Spencer-94",
+  "Spencer-99",
+  "SugarCRM-1.1.3",
+  "Sun-PPP",
+  "Sun-PPP-2000",
+  "SunPro",
+  "Symlinks",
+  "TAPR-OHL-1.0",
+  "TCL",
+  "TCP-wrappers",
+  "TGPPL-1.0",
+  "TMate",
+  "TORQUE-1.1",
+  "TOSL",
+  "TPDL",
+  "TPL-1.0",
+  "TTWL",
+  "TTYP0",
+  "TU-Berlin-1.0",
+  "TU-Berlin-2.0",
+  "TekHVC",
+  "TermReadKey",
+  "ThirdEye",
+  "TrustedQSL",
+  "UCAR",
+  "UCL-1.0",
+  "UMich-Merit",
+  "UPL-1.0",
+  "URT-RLE",
+  "Ubuntu-font-1.0",
+  "UnRAR",
+  "Unicode-3.0",
+  "Unicode-DFS-2015",
+  "Unicode-DFS-2016",
+  "Unicode-TOU",
+  "UnixCrypt",
+  "Unlicense",
+  "Unlicense-libtelnet",
+  "Unlicense-libwhirlpool",
+  "VOSTROM",
+  "VSL-1.0",
+  "Vim",
+  "Vixie-Cron",
+  "W3C",
+  "W3C-19980720",
+  "W3C-20150513",
+  "WTFNMFPL",
+  "WTFPL",
+  "Watcom-1.0",
+  "Widget-Workshop",
+  "WordNet",
+  "Wsuipa",
+  "X11",
+  "X11-distribute-modifications-variant",
+  "X11-no-permit-persons",
+  "X11-swapped",
+  "XFree86-1.1",
+  "XSkat",
+  "Xdebug-1.03",
+  "Xerox",
+  "Xfig",
+  "Xnet",
+  "YPL-1.0",
+  "YPL-1.1",
+  "ZPL-1.1",
+  "ZPL-2.0",
+  "ZPL-2.1",
+  "Zed",
+  "Zeeff",
+  "Zend-2.0",
+  "Zimbra-1.3",
+  "Zimbra-1.4",
+  "Zlib",
+  "any-OSI",
+  "any-OSI-perl-modules",
+  "atc-game",
+  "bcrypt-Solar-Designer",
+  "blessing",
+  "bzip2-1.0.6",
+  "check-cvs",
+  "checkmk",
+  "copyleft-next-0.3.0",
+  "copyleft-next-0.3.1",
+  "curl",
+  "cve-tou",
+  "diffmark",
+  "dtoa",
+  "dvipdfm",
+  "eGenix",
+  "etalab-2.0",
+  "fwlw",
+  "gSOAP-1.3b",
+  "generic-xts",
+  "gnuplot",
+  "gtkbook",
+  "hdparm",
+  "hyphen-bulgarian",
+  "iMatix",
+  "jove",
+  "libpng-1.6.35",
+  "libpng-2.0",
+  "libselinux-1.0",
+  "libtiff",
+  "libutil-David-Nugent",
+  "lsof",
+  "magaz",
+  "mailprio",
+  "man2html",
+  "metamail",
+  "mpi-permissive",
+  "mpich2",
+  "mplus",
+  "ngrep",
+  "pkgconf",
+  "pnmstitch",
+  "psfrag",
+  "psutils",
+  "python-ldap",
+  "radvd",
+  "snprintf",
+  "softSurfer",
+  "ssh-keyscan",
+  "swrule",
+  "threeparttable",
+  "ulem",
+  "w3m",
+  "wwl",
+  "xinetd",
+  "xkeyboard-config-Zinoviev",
+  "xlock",
+  "xpp",
+  "xzoom",
+  "zlib-acknowledgement"
+]);
+var DEPRECATED_SPDX_LICENSE_IDS = new Set([
+  "AGPL-1.0",
+  "AGPL-3.0",
+  "BSD-2-Clause-FreeBSD",
+  "BSD-2-Clause-NetBSD",
+  "GFDL-1.1",
+  "GFDL-1.2",
+  "GFDL-1.3",
+  "GPL-1.0",
+  "GPL-1.0+",
+  "GPL-2.0",
+  "GPL-2.0+",
+  "GPL-2.0-with-GCC-exception",
+  "GPL-2.0-with-autoconf-exception",
+  "GPL-2.0-with-bison-exception",
+  "GPL-2.0-with-classpath-exception",
+  "GPL-2.0-with-font-exception",
+  "GPL-3.0",
+  "GPL-3.0+",
+  "GPL-3.0-with-GCC-exception",
+  "GPL-3.0-with-autoconf-exception",
+  "LGPL-2.0",
+  "LGPL-2.0+",
+  "LGPL-2.1",
+  "LGPL-2.1+",
+  "LGPL-3.0",
+  "LGPL-3.0+",
+  "Net-SNMP",
+  "Nunit",
+  "StandardML-NJ",
+  "bzip2-1.0.5",
+  "eCos-2.0",
+  "wxWindows"
+]);
+var ACTIVE_SPDX_EXCEPTION_IDS = new Set([
+  "389-exception",
+  "Asterisk-exception",
+  "Asterisk-linking-protocols-exception",
+  "Autoconf-exception-2.0",
+  "Autoconf-exception-3.0",
+  "Autoconf-exception-generic",
+  "Autoconf-exception-generic-3.0",
+  "Autoconf-exception-macro",
+  "Bison-exception-1.24",
+  "Bison-exception-2.2",
+  "Bootloader-exception",
+  "CGAL-linking-exception",
+  "CLISP-exception-2.0",
+  "Classpath-exception-2.0",
+  "Classpath-exception-2.0-short",
+  "DigiRule-FOSS-exception",
+  "Digia-Qt-LGPL-exception-1.1",
+  "FLTK-exception",
+  "Fawkes-Runtime-exception",
+  "Font-exception-2.0",
+  "GCC-exception-2.0",
+  "GCC-exception-2.0-note",
+  "GCC-exception-3.1",
+  "GNAT-exception",
+  "GNOME-examples-exception",
+  "GNU-compiler-exception",
+  "GPL-3.0-389-ds-base-exception",
+  "GPL-3.0-interface-exception",
+  "GPL-3.0-linking-exception",
+  "GPL-3.0-linking-source-exception",
+  "GPL-CC-1.0",
+  "GStreamer-exception-2005",
+  "GStreamer-exception-2008",
+  "Gmsh-exception",
+  "Google-Patent-WebM",
+  "Independent-modules-exception",
+  "KiCad-libraries-exception",
+  "LGPL-3.0-linking-exception",
+  "LLGPL",
+  "LLVM-exception",
+  "LZMA-exception",
+  "Libtool-exception",
+  "Linux-syscall-note",
+  "OCCT-exception-1.0",
+  "OCaml-LGPL-linking-exception",
+  "OpenJDK-assembly-exception-1.0",
+  "PCRE2-exception",
+  "PS-or-PDF-font-exception-20170817",
+  "QPL-1.0-INRIA-2004-exception",
+  "Qt-GPL-exception-1.0",
+  "Qt-LGPL-exception-1.1",
+  "Qwt-exception-1.0",
+  "RRDtool-FLOSS-exception-2.0",
+  "SANE-exception",
+  "SHL-2.0",
+  "SHL-2.1",
+  "SWI-exception",
+  "Simple-Library-Usage-exception",
+  "Spelling-Provider-LGPL-exception",
+  "Swift-exception",
+  "Texinfo-exception",
+  "UBDL-exception",
+  "Universal-FOSS-exception-1.0",
+  "WxWindows-exception-3.1",
+  "cryptsetup-OpenSSL-exception",
+  "eCos-exception-2.0",
+  "erlang-otp-linking-exception",
+  "fmt-exception",
+  "freertos-exception-2.0",
+  "gnu-javamail-exception",
+  "harbour-exception",
+  "i2p-gpl-java-exception",
+  "kvirc-openssl-exception",
+  "libpri-OpenH323-exception",
+  "mif-exception",
+  "mxml-exception",
+  "openvpn-openssl-exception",
+  "polyparse-exception",
+  "romic-exception",
+  "rsync-linking-exception",
+  "sqlitestudio-OpenSSL-exception",
+  "stunnel-exception",
+  "u-boot-exception-2.0",
+  "vsftpd-openssl-exception",
+  "x11vnc-openssl-exception"
+]);
+var DEPRECATED_SPDX_EXCEPTION_IDS = new Set([
+  "Nokia-Qt-exception-1.1"
+]);
+function spdxLicenseIdStatus(value) {
+  const exact = catalogStatus(value, ACTIVE_SPDX_LICENSE_IDS, DEPRECATED_SPDX_LICENSE_IDS);
+  if (exact !== "unlisted" || !value.endsWith("+")) {
+    return exact;
+  }
+  return catalogStatus(value.slice(0, -1), ACTIVE_SPDX_LICENSE_IDS, DEPRECATED_SPDX_LICENSE_IDS);
+}
+function spdxExceptionIdStatus(value) {
+  return catalogStatus(value, ACTIVE_SPDX_EXCEPTION_IDS, DEPRECATED_SPDX_EXCEPTION_IDS);
+}
+function catalogStatus(value, active, deprecated) {
+  if (active.has(value)) {
+    return "active";
+  }
+  if (deprecated.has(value)) {
+    return "deprecated";
+  }
+  return "unlisted";
+}
+
+// src/license/spdx.ts
+var LICENSE_EXPRESSION_ALIASES = new Map([
+  ["gnu general public license, version 3.0", "GPL-3.0-only"],
+  ["eclipse public license v2.0", "EPL-2.0"],
+  [
+    "public domain, per creative commons cc0 or bsd-2-clause",
+    "CC0-1.0 OR BSD-2-Clause"
+  ],
+  [
+    "the gnu general public license, v2 with universal foss exception, v1.0",
+    "GPL-2.0-only WITH Universal-FOSS-exception-1.0"
+  ]
+]);
+var LICENSE_ALIASES = new Map([
+  ["apache 2", "Apache-2.0"],
+  ["apache 2.0", "Apache-2.0"],
+  ["apache license 2.0", "Apache-2.0"],
+  ["apache license version 2.0", "Apache-2.0"],
+  ["apache license, version 2.0", "Apache-2.0"],
+  ["apache license, 2.0", "Apache-2.0"],
+  ["the apache license, version 2.0", "Apache-2.0"],
+  ["the apache software license, version 2.0", "Apache-2.0"],
+  ["bsd", "BSD-3-Clause"],
+  ["bsd3", "BSD-3-Clause"],
+  ["bsd 2-clause", "BSD-2-Clause"],
+  ["bsd 3-clause", "BSD-3-Clause"],
+  ["bsd 3-clause license", "BSD-3-Clause"],
+  ["3-clause bsd license", "BSD-3-Clause"],
+  ["bsd licence 3", "BSD-3-Clause"],
+  ["bsd-2-clause license", "BSD-2-Clause"],
+  ["bsd-3-clause license", "BSD-3-Clause"],
+  ["bsd license", "BSD-3-Clause"],
+  ["business source license", "BUSL-1.1"],
+  ["business source license 1.1", "BUSL-1.1"],
+  ["busl", "BUSL-1.1"],
+  ["commons clause", "Commons-Clause"],
+  ["commons clause license condition", "Commons-Clause"],
+  ["elastic license", "Elastic-2.0"],
+  ["elastic license 2.0", "Elastic-2.0"],
+  ["eclipse distribution license - v 1.0", "BSD-3-Clause"],
+  ["edl 1.0", "BSD-3-Clause"],
+  ["eclipse public license 1.0", "EPL-1.0"],
+  ["eclipse public license, version 1.0", "EPL-1.0"],
+  ["eclipse publish license, version 1.0", "EPL-1.0"],
+  ["eclipse public license - v 1.0", "EPL-1.0"],
+  ["eclipse public license - v 2.0", "EPL-2.0"],
+  ["epl 2.0", "EPL-2.0"],
+  ["gpl2 w/ cpe", "GPL-2.0-with-classpath-exception"],
+  ["the gnu general public license (gpl), version 2, with classpath exception", "GPL-2.0-with-classpath-exception"],
+  ["gnu lesser general public license v2.1 only", "LGPL-2.1-only"],
+  ["2-clause bsd", "BSD-2-Clause"],
+  ["3-clause bsd", "BSD-3-Clause"],
+  ["simplified bsd license", "BSD-2-Clause"],
+  ["new bsd license", "BSD-3-Clause"],
+  ["isc license", "ISC"],
+  ["mit license", "MIT"],
+  ["the mit license (mit)", "MIT"],
+  ["modified bsd", "BSD-3-Clause"],
+  ["mpl 1.1", "MPL-1.1"],
+  ["polyform free trial 1.0.0", "PolyForm-Free-Trial-1.0.0"],
+  ["polyform noncommercial 1.0.0", "PolyForm-Noncommercial-1.0.0"],
+  ["psfl", "PSF-2.0"],
+  ["psf", "PSF-2.0"],
+  ["server side public license", "SSPL-1.0"],
+  ["server side public license 1.0", "SSPL-1.0"],
+  ["sspl", "SSPL-1.0"],
+  ["the mit license", "MIT"],
+  ["unlicensed", "UNLICENSED"]
+]);
+var VALID_SPDX_LICENSE_REFERENCE = /^(?:DocumentRef-[A-Za-z0-9.-]+:)?LicenseRef-[A-Za-z0-9.-]+$/;
+var OHRISK_NON_SPDX_LICENSE_IDS = new Set([
+  "Commons-Clause",
+  "PolyForm-Free-Trial-1.0.0",
+  "UNLICENSED"
+]);
+function parseSpdxExpression(input) {
+  const original = input.trim();
+  if (original.length === 0) {
+    return malformedResult(original, [], false);
+  }
+  const expressionAlias = LICENSE_EXPRESSION_ALIASES.get(original.toLowerCase());
+  if (expressionAlias) {
+    const parsedAlias = parseSpdxExpression(expressionAlias);
+    return {
+      ...parsedAlias,
+      original,
+      usedAlias: true
+    };
+  }
+  const alias = normalizeLicenseToken(original);
+  if (alias.normalized && !alias.malformed && alias.normalized !== original) {
+    const ast2 = {
+      type: "license",
+      license: alias.normalized
+    };
+    return parsedResult(original, ast2, true);
+  }
+  const shorthandOrExpression = parseShorthandOrExpression(original);
+  if (shorthandOrExpression) {
+    return shorthandOrExpression;
+  }
+  const tokens = lexExpression(original);
+  if (!tokens) {
+    return malformedResult(original, collectRecoverableChoices(original), false);
+  }
+  const state = {
+    tokens,
+    index: 0,
+    usedAlias: false
+  };
+  const ast = parseOrExpression(state);
+  if (!ast || state.index !== state.tokens.length) {
+    return malformedResult(original, collectChoicesFromTokens(tokens), state.usedAlias);
+  }
+  return parsedResult(original, ast, state.usedAlias);
+}
+function formatSpdxExpression(ast) {
+  return formatNode(ast, 0);
+}
+function isSpdxLicenseReference(value) {
+  return VALID_SPDX_LICENSE_REFERENCE.test(value);
+}
+function parsedResult(original, ast, usedAlias) {
+  const choices = [];
+  const exceptions = [];
+  let hasAnd = false;
+  let hasOr = false;
+  visitNode(ast, (node) => {
+    if (node.type === "license") {
+      choices.push(node.license);
+      if (node.exception) {
+        exceptions.push(node.exception);
+      }
+      return;
+    }
+    if (node.type === "and") {
+      hasAnd = true;
+    } else {
+      hasOr = true;
+    }
+  });
+  const result2 = {
+    original,
+    expression: formatSpdxExpression(ast),
+    choices: [...new Set(choices)],
+    joiner: joinerFor(hasAnd, hasOr),
+    malformed: false,
+    usedAlias,
+    exceptions: [...new Set(exceptions)]
+  };
+  Object.defineProperty(result2, "ast", {
+    value: ast,
+    enumerable: false,
+    configurable: false,
+    writable: false
+  });
+  return result2;
+}
+function malformedResult(original, choices, usedAlias) {
+  return {
+    original,
+    choices: [...new Set(choices.length > 0 ? choices : original ? [original] : [])],
+    joiner: detectJoiner(original),
+    malformed: true,
+    usedAlias,
+    exceptions: []
+  };
+}
+function parseShorthandOrExpression(original) {
+  if (detectJoiner(original) !== "single" || !/[\/,]/.test(original)) {
+    return;
+  }
+  const rawTokens = original.replace(/[()]/g, " ").split(/\s*(?:\/|,)\s*/).map((token) => token.trim());
+  if (rawTokens.length < 2 || rawTokens.some((token) => token.length === 0)) {
+    return;
+  }
+  const normalizedTokens = rawTokens.map((token) => normalizeLicenseToken(token));
+  if (normalizedTokens.some((token) => token.malformed || token.normalized === undefined)) {
+    return;
+  }
+  const licenses = normalizedTokens.map((token) => token.normalized);
+  const firstLicense = licenses[0];
+  if (!firstLicense) {
+    return;
+  }
+  const ast = licenses.slice(1).reduce((left, license) => ({
+    type: "or",
+    left,
+    right: { type: "license", license }
+  }), { type: "license", license: firstLicense });
+  return parsedResult(original, ast, true);
+}
+function lexExpression(expression) {
+  const tokens = [];
+  let chunk = "";
+  let index = 0;
+  const flushOperand = () => {
+    const value = chunk.trim();
+    chunk = "";
+    if (value.length === 0) {
+      return true;
+    }
+    tokens.push({ type: "operand", value });
+    return true;
+  };
+  while (index < expression.length) {
+    const character = expression[index];
+    if (character === "(" || character === ")") {
+      flushOperand();
+      tokens.push({ type: character === "(" ? "lparen" : "rparen" });
+      index += 1;
+      continue;
+    }
+    const operator = readOperatorAt(expression, index);
+    if (operator) {
+      flushOperand();
+      tokens.push({ type: operator.value });
+      index = operator.nextIndex;
+      continue;
+    }
+    chunk += character;
+    index += 1;
+  }
+  flushOperand();
+  return tokens.length > 0 ? tokens : undefined;
+}
+function readOperatorAt(expression, index) {
+  const candidates = ["WITH", "AND", "OR"];
+  for (const candidate of candidates) {
+    const value = expression.slice(index, index + candidate.length);
+    if (value.toUpperCase() !== candidate) {
+      continue;
+    }
+    const previous = index === 0 ? undefined : expression[index - 1];
+    const next = expression[index + candidate.length];
+    if (!isOperatorBoundary(previous) || !isOperatorBoundary(next)) {
+      continue;
+    }
+    return {
+      value: candidate.toLowerCase(),
+      nextIndex: index + candidate.length
+    };
+  }
+  return;
+}
+function isOperatorBoundary(character) {
+  return character === undefined || /\s|\(|\)/.test(character);
+}
+function parseOrExpression(state) {
+  let left = parseAndExpression(state);
+  if (!left) {
+    return;
+  }
+  while (peekToken(state, "or")) {
+    state.index += 1;
+    const right = parseAndExpression(state);
+    if (!right) {
+      return;
+    }
+    left = { type: "or", left, right };
+  }
+  return left;
+}
+function parseAndExpression(state) {
+  let left = parseWithExpression(state);
+  if (!left) {
+    return;
+  }
+  while (peekToken(state, "and")) {
+    state.index += 1;
+    const right = parseWithExpression(state);
+    if (!right) {
+      return;
+    }
+    left = { type: "and", left, right };
+  }
+  return left;
+}
+function parseWithExpression(state) {
+  const primary = parsePrimaryExpression(state);
+  if (!primary) {
+    return;
+  }
+  if (!peekToken(state, "with")) {
+    return primary;
+  }
+  if (primary.type !== "license") {
+    return;
+  }
+  state.index += 1;
+  const exceptionToken = state.tokens[state.index];
+  if (!exceptionToken || exceptionToken.type !== "operand") {
+    return;
+  }
+  const exception = normalizeExceptionToken(exceptionToken.value);
+  if (!exception) {
+    return;
+  }
+  state.index += 1;
+  return {
+    ...primary,
+    exception
+  };
+}
+function parsePrimaryExpression(state) {
+  const token = state.tokens[state.index];
+  if (!token) {
+    return;
+  }
+  if (token.type === "operand") {
+    const normalized = normalizeLicenseToken(token.value);
+    if (normalized.malformed || !normalized.normalized) {
+      return;
+    }
+    state.usedAlias ||= normalized.usedAlias;
+    state.index += 1;
+    return {
+      type: "license",
+      license: normalized.normalized
+    };
+  }
+  if (token.type !== "lparen") {
+    return;
+  }
+  state.index += 1;
+  const nested = parseOrExpression(state);
+  if (!nested || !peekToken(state, "rparen")) {
+    return;
+  }
+  state.index += 1;
+  return nested;
+}
+function peekToken(state, type) {
+  return state.tokens[state.index]?.type === type;
+}
+function normalizeLicenseToken(token) {
+  const trimmed = token.trim();
+  if (!trimmed) {
+    return {
+      malformed: true,
+      usedAlias: false
+    };
+  }
+  const alias = LICENSE_ALIASES.get(trimmed.toLowerCase());
+  if (alias) {
+    return {
+      normalized: alias,
+      malformed: false,
+      usedAlias: alias !== trimmed
+    };
+  }
+  if (isSpdxLicenseReference(trimmed)) {
+    return {
+      normalized: trimmed,
+      malformed: false,
+      usedAlias: false
+    };
+  }
+  if (!OHRISK_NON_SPDX_LICENSE_IDS.has(trimmed) && spdxLicenseIdStatus(trimmed) === "unlisted") {
+    return {
+      normalized: trimmed,
+      malformed: true,
+      usedAlias: false
+    };
+  }
+  return {
+    normalized: trimmed,
+    malformed: false,
+    usedAlias: false
+  };
+}
+function normalizeExceptionToken(token) {
+  const trimmed = token.trim();
+  return spdxExceptionIdStatus(trimmed) === "unlisted" ? undefined : trimmed;
+}
+function collectChoicesFromTokens(tokens) {
+  return tokens.flatMap((token) => {
+    if (token.type !== "operand") {
+      return [];
+    }
+    const normalized = normalizeLicenseToken(token.value);
+    return normalized.normalized && !normalized.malformed ? [normalized.normalized] : [];
+  });
+}
+function collectRecoverableChoices(original) {
+  return original.replace(/[()]/g, " ").split(/\s+(?:AND|OR|WITH)\s+/i).flatMap((token) => {
+    const normalized = normalizeLicenseToken(token);
+    return normalized.normalized && !normalized.malformed ? [normalized.normalized] : [];
+  });
+}
+function detectJoiner(expression) {
+  const hasAnd = /(?:^|\s|\()AND(?:$|\s|\))/i.test(expression);
+  const hasOr = /(?:^|\s|\()OR(?:$|\s|\))/i.test(expression);
+  return joinerFor(hasAnd, hasOr);
+}
+function joinerFor(hasAnd, hasOr) {
+  if (hasAnd && hasOr) {
+    return "mixed";
+  }
+  if (hasAnd) {
+    return "and";
+  }
+  if (hasOr) {
+    return "or";
+  }
+  return "single";
+}
+function formatNode(ast, parentPrecedence) {
+  if (ast.type === "license") {
+    return ast.exception ? `${ast.license} WITH ${ast.exception}` : ast.license;
+  }
+  const precedence = ast.type === "and" ? 2 : 1;
+  const operator = ast.type.toUpperCase();
+  const formatted = `${formatNode(ast.left, precedence)} ${operator} ${formatNode(ast.right, precedence)}`;
+  return precedence < parentPrecedence ? `(${formatted})` : formatted;
+}
+function visitNode(ast, visitor) {
+  visitor(ast);
+  if (ast.type === "license") {
+    return;
+  }
+  visitNode(ast.left, visitor);
+  visitNode(ast.right, visitor);
+}
+
+// src/license/normalize.ts
+var DEPRECATED_GNU_LICENSE_EQUIVALENTS = new Map([
+  ["AGPL-1.0", "AGPL-1.0-only"],
+  ["AGPL-1.0+", "AGPL-1.0-or-later"],
+  ["AGPL-3.0", "AGPL-3.0-only"],
+  ["AGPL-3.0+", "AGPL-3.0-or-later"],
+  ["GFDL-1.1", "GFDL-1.1-only"],
+  ["GFDL-1.1+", "GFDL-1.1-or-later"],
+  ["GFDL-1.2", "GFDL-1.2-only"],
+  ["GFDL-1.2+", "GFDL-1.2-or-later"],
+  ["GFDL-1.3", "GFDL-1.3-only"],
+  ["GFDL-1.3+", "GFDL-1.3-or-later"],
+  ["GPL-1.0", "GPL-1.0-only"],
+  ["GPL-1.0+", "GPL-1.0-or-later"],
+  ["GPL-2.0", "GPL-2.0-only"],
+  ["GPL-2.0+", "GPL-2.0-or-later"],
+  ["GPL-3.0", "GPL-3.0-only"],
+  ["GPL-3.0+", "GPL-3.0-or-later"],
+  ["LGPL-2.0", "LGPL-2.0-only"],
+  ["LGPL-2.0+", "LGPL-2.0-or-later"],
+  ["LGPL-2.1", "LGPL-2.1-only"],
+  ["LGPL-2.1+", "LGPL-2.1-or-later"],
+  ["LGPL-3.0", "LGPL-3.0-only"],
+  ["LGPL-3.0+", "LGPL-3.0-or-later"]
+]);
+var FILE_LICENSE_TO_BROADER_DECLARATION = new Map([
+  ["AGPL-1.0-only", "AGPL-1.0-or-later"],
+  ["AGPL-3.0-only", "AGPL-3.0-or-later"],
+  ["GFDL-1.1-only", "GFDL-1.1-or-later"],
+  ["GFDL-1.2-only", "GFDL-1.2-or-later"],
+  ["GFDL-1.3-only", "GFDL-1.3-or-later"],
+  ["GPL-1.0-only", "GPL-1.0-or-later"],
+  ["GPL-2.0-only", "GPL-2.0-or-later"],
+  ["GPL-3.0-only", "GPL-3.0-or-later"],
+  ["LGPL-2.0-only", "LGPL-2.0-or-later"],
+  ["LGPL-2.1-only", "LGPL-2.1-or-later"],
+  ["LGPL-3.0-only", "LGPL-3.0-or-later"],
+  ["MPL-2.0", "MPL-2.0+"]
+]);
+function normalizeLicenseEvidence(evidence) {
+  const signals = [];
+  const evidenceSources = describeEvidenceSources(evidence);
+  const licenseFileExpressions = readLicenseFileExpressions(evidence);
+  const packageLicenseFileExpressions = licenseFileExpressions.filter((match) => match.fileScope !== "component");
+  const componentLicenseFileExpressions = licenseFileExpressions.filter((match) => match.fileScope === "component");
+  const distinctLicenseFileExpressions = new Set(packageLicenseFileExpressions.map((match) => match.expression));
+  const packageLicenseExpression = readPackageLicenseExpression(evidence);
+  const packageLicenseCoversFileExpressions = packageLicenseExpression !== undefined && licenseExpressionCoversFileMatches(packageLicenseExpression, packageLicenseFileExpressions);
+  const licenseFileCoversFileExpressions = packageLicenseFileExpressions.some((candidate) => licenseExpressionCoversFileMatches(candidate.expression, packageLicenseFileExpressions));
+  if (distinctLicenseFileExpressions.size > 1 && !packageLicenseCoversFileExpressions && !licenseFileCoversFileExpressions) {
+    if (!signals.includes("conflicting-evidence")) {
+      signals.push("conflicting-evidence");
+    }
+    evidenceSources.push(`conflicting file license matches: ${packageLicenseFileExpressions.map((match) => `${match.expression} from ${match.filePath}`).join("; ")}`);
+  }
+  const conflictingLicenseClaims = evidence.conflictingLicenseClaims ?? [];
+  if (conflictingLicenseClaims.length > 0) {
+    if (!signals.includes("conflicting-evidence")) {
+      signals.push("conflicting-evidence");
+    }
+    evidenceSources.push(`conflicting license claims: ${conflictingLicenseClaims.join("; ")}`);
+  }
+  if (evidence.files.some((file) => file.kind === "notice")) {
+    signals.push("notice-required");
+  }
+  const commercialRestriction = analyzeCommercialRestrictions(evidence);
+  if (commercialRestriction.packageRestricted) {
+    signals.push("commercial-restriction");
+  }
+  addNonPackageRestrictionSources(evidenceSources, commercialRestriction);
+  let licenseExpression = readLicenseExpressionEvidence(evidence);
+  if (!licenseExpression) {
+    signals.push("missing");
+    if (evidence.files.length > 0) {
+      signals.push("custom-text");
+    }
+    return {
+      packageId: evidence.packageId,
+      choices: [],
+      joiner: "single",
+      signals,
+      evidenceSources,
+      confidence: "low"
+    };
+  }
+  let parsed = parseSpdxExpression(licenseExpression.expression);
+  const licenseFileExpression = licenseExpression.source === "package-metadata" ? readLicenseFileExpression(evidence) : undefined;
+  if (parsed.malformed && licenseFileExpression) {
+    licenseExpression = licenseFileExpression;
+    parsed = parseSpdxExpression(licenseExpression.expression);
+  }
+  if (licenseExpression.source === "license-file") {
+    addLicenseFileMatchSource(evidenceSources, licenseExpression);
+  }
+  if (parsed.malformed) {
+    signals.push("malformed");
+    if (evidence.files.length > 0) {
+      signals.push("custom-text");
+    }
+    return withSpdxAst({
+      packageId: evidence.packageId,
+      original: parsed.original,
+      ...parsed.expression ? { expression: parsed.expression } : {},
+      choices: parsed.choices,
+      joiner: parsed.joiner,
+      ...parsed.exceptions.length > 0 ? { exceptions: parsed.exceptions } : {},
+      signals,
+      evidenceSources,
+      confidence: "low"
+    }, parsed.ast);
+  }
+  if (parsed.choices.some(isSpdxLicenseReference) && !signals.includes("custom-text")) {
+    signals.push("custom-text");
+  }
+  if (licenseExpression.source === "package-metadata") {
+    const declaredChoices = new Set(parsed.choices.map(comparableLicenseId));
+    const conflictingFileMatches = packageLicenseFileExpressions.filter((match) => {
+      const fileExpression = parseSpdxExpression(match.expression);
+      return !fileExpression.malformed && fileExpression.choices.some((choice) => !fileLicenseChoiceMatchesDeclared(choice, declaredChoices));
+    });
+    if (conflictingFileMatches.length > 0) {
+      if (!signals.includes("conflicting-evidence")) {
+        signals.push("conflicting-evidence");
+      }
+      evidenceSources.push(`conflicting metadata and file license matches: metadata ${parsed.expression}; ${conflictingFileMatches.map((match) => `${match.expression} from ${match.filePath}`).join("; ")}`);
+    }
+  }
+  parsed = appendBundledComponentLicenses({
+    parsed,
+    matches: componentLicenseFileExpressions,
+    evidenceSources
+  });
+  const deprecatedLicenseIds = parsed.choices.filter((choice) => spdxLicenseIdStatus(choice) === "deprecated");
+  const deprecatedExceptionIds = parsed.exceptions.filter((exception) => spdxExceptionIdStatus(exception) === "deprecated");
+  for (const licenseId of deprecatedLicenseIds) {
+    evidenceSources.push(`deprecated SPDX license identifier: ${licenseId}`);
+  }
+  for (const exceptionId of deprecatedExceptionIds) {
+    evidenceSources.push(`deprecated SPDX exception identifier: ${exceptionId}`);
+  }
+  const usesDeprecatedSpdx = deprecatedLicenseIds.length > 0 || deprecatedExceptionIds.length > 0;
+  return withSpdxAst({
+    packageId: evidence.packageId,
+    original: parsed.original,
+    ...parsed.expression ? { expression: parsed.expression } : {},
+    choices: parsed.choices,
+    joiner: parsed.joiner,
+    ...parsed.exceptions.length > 0 ? { exceptions: parsed.exceptions } : {},
+    signals,
+    evidenceSources,
+    confidence: signals.includes("conflicting-evidence") || signals.includes("custom-text") ? "low" : usesDeprecatedSpdx || parsed.usedAlias || licenseExpression.source === "license-file" || evidence.metadataLicenseKind === "classifier" || evidence.packageJsonLicenses !== undefined ? "medium" : "high"
+  }, parsed.ast);
+}
+function comparableLicenseId(licenseId) {
+  return DEPRECATED_GNU_LICENSE_EQUIVALENTS.get(licenseId) ?? licenseId;
+}
+function fileLicenseChoiceMatchesDeclared(fileChoice, declaredChoices) {
+  const comparable = comparableLicenseId(fileChoice);
+  if (declaredChoices.has(comparable)) {
+    return true;
+  }
+  const broaderDeclaration = FILE_LICENSE_TO_BROADER_DECLARATION.get(comparable);
+  return broaderDeclaration !== undefined && declaredChoices.has(broaderDeclaration);
+}
+function licenseExpressionCoversFileMatches(expression, matches) {
+  const parsed = parseSpdxExpression(expression);
+  if (parsed.malformed) {
+    return false;
+  }
+  const declaredChoices = new Set(parsed.choices.map(comparableLicenseId));
+  return matches.every((match) => {
+    const fileExpression = parseSpdxExpression(match.expression);
+    return !fileExpression.malformed && fileExpression.choices.every((choice) => fileLicenseChoiceMatchesDeclared(choice, declaredChoices));
+  });
+}
+function licenseExpressionContainsChoices(broaderExpression, narrowerExpression) {
+  const broader = parseSpdxExpression(broaderExpression);
+  const narrower = parseSpdxExpression(narrowerExpression);
+  if (broader.malformed || narrower.malformed) {
+    return false;
+  }
+  const broaderChoices = new Set(broader.choices.map(comparableLicenseId));
+  return narrower.choices.every((choice) => broaderChoices.has(comparableLicenseId(choice)));
+}
+function withSpdxAst(license, ast) {
+  if (!ast) {
+    return license;
+  }
+  Object.defineProperty(license, "spdxAst", {
+    value: ast,
+    enumerable: false,
+    configurable: false,
+    writable: false
+  });
+  return license;
+}
+function normalizeAllLicenseEvidence(evidence) {
+  return evidence.map(normalizeLicenseEvidence);
+}
+function analyzeCommercialRestrictions(evidence) {
+  const nonPackageScopes = new Map;
+  let packageRestricted = collectPackageLicenseTexts(evidence).some(hasCommercialRestrictionText);
+  for (const file of evidence.files) {
+    const aggregateComponentInventory = isAggregateComponentLicenseInventory(file.text);
+    for (const statement of commercialRestrictionStatements(file.text)) {
+      if (!hasCommercialRestrictionText(statement)) {
+        continue;
+      }
+      if (aggregateComponentInventory) {
+        nonPackageScopes.set(`component:${file.path}`, {
+          path: file.path,
+          scope: "component"
+        });
+        continue;
+      }
+      const scopes = restrictionScopes(statement);
+      const explicitlyNonPackage = isExplicitlyNonPackageRestriction(statement, scopes);
+      if (!explicitlyNonPackage) {
+        packageRestricted = true;
+      }
+      if (scopes.documentation && explicitlyNonPackage) {
+        const key = `documentation:${file.path}`;
+        nonPackageScopes.set(key, { path: file.path, scope: "documentation" });
+      }
+      if (scopes.data && explicitlyNonPackage) {
+        const key = `data:${file.path}`;
+        nonPackageScopes.set(key, { path: file.path, scope: "data" });
+      }
+    }
+  }
+  return {
+    packageRestricted,
+    nonPackageScopes: [...nonPackageScopes.values()]
+  };
+}
+function collectPackageLicenseTexts(evidence) {
+  const texts = [];
+  if (evidence.packageJsonLicense) {
+    texts.push(evidence.packageJsonLicense);
+  }
+  const licenseObjectType = readLicenseObjectType(evidence.packageJsonLicenses);
+  if (licenseObjectType) {
+    texts.push(licenseObjectType);
+  }
+  if (Array.isArray(evidence.packageJsonLicenses)) {
+    for (const item of evidence.packageJsonLicenses) {
+      if (typeof item === "string") {
+        texts.push(item);
+        continue;
+      }
+      if (typeof item === "object" && item !== null && "type" in item) {
+        const type = item.type;
+        if (typeof type === "string") {
+          texts.push(type);
+        }
+      }
+    }
+  }
+  if (evidence.metadataLicense) {
+    texts.push(evidence.metadataLicense);
+  }
+  if (evidence.sbomDeclaredLicense) {
+    texts.push(evidence.sbomDeclaredLicense);
+  }
+  if (evidence.sbomConcludedLicense) {
+    texts.push(evidence.sbomConcludedLicense);
+  }
+  const metadataLicenseObjectType = readLicenseObjectType(evidence.metadataLicenses);
+  if (metadataLicenseObjectType) {
+    texts.push(metadataLicenseObjectType);
+  }
+  if (Array.isArray(evidence.metadataLicenses)) {
+    for (const item of evidence.metadataLicenses) {
+      if (typeof item === "string") {
+        texts.push(item);
+        continue;
+      }
+      if (typeof item === "object" && item !== null && "type" in item) {
+        const type = item.type;
+        if (typeof type === "string") {
+          texts.push(type);
+        }
+      }
+    }
+  }
+  return texts;
+}
+var COMMERCIAL_RESTRICTION_LICENSE_NAME_PATTERNS = [
+  /\bCommons Clause\b/i,
+  /\bBusiness Source License\b/i,
+  /\bBUSL\b/i,
+  /\bServer Side Public License\b/i,
+  /\bSSPL\b/i,
+  /\bElastic License\b/i,
+  /\bPolyForm\b/i,
+  /\bCreative Commons\b[^\r\n]*(?:NonCommercial|Non-Commercial|\bNC\b)/i,
+  /\bCC-BY-NC(?:-[0-9.]+)?\b/i,
+  /\bNon-Commercial\b(?=\s+(?:License|Software|Use|Only)\b)/i,
+  /\bnoncommercial\b(?=\s+(?:License|Software|Use|Only)\b)/i
+];
+var COMMERCIAL_USE_DENIAL_PATTERNS = [
+  /\bnot for commercial use\b/i,
+  /\bno commercial use\b/i,
+  /\bcommercial use\s+(?:is\s+)?(?:prohibited|restricted|not permitted|forbidden|disallowed)\b/i,
+  /\bmay not be used for commercial purposes\b/i,
+  /\bmust not be used for commercial purposes\b/i,
+  /\bshall not be used for commercial purposes\b/i,
+  /\bcannot be used for commercial purposes\b/i
+];
+var COMMERCIAL_USE_PERMISSION_PATTERNS = [
+  /\bcommercial\s+(?:and|or)\s+non-?commercial\s+use\s+(?:is|are)\s+permitted\b/i
+];
+var PACKAGE_RESTRICTION_SCOPE_PATTERN = /\b(?:software|source\s+code|codebase|package|library|program|application|module|toolkit)\b/i;
+var DOCUMENTATION_RESTRICTION_SCOPE_PATTERN = /\b(?:documentation|docs?|manuals?|tutorials?)\b/i;
+var DATA_RESTRICTION_SCOPE_PATTERN = /\b(?:corpora?|corpus|datasets?|data[ -]?sets?|training\s+data|test\s+data|model\s+weights?)\b/i;
+function hasCommercialRestrictionText(text) {
+  if (COMMERCIAL_USE_DENIAL_PATTERNS.some((pattern) => pattern.test(text))) {
+    return true;
+  }
+  return COMMERCIAL_RESTRICTION_LICENSE_NAME_PATTERNS.some((pattern) => pattern.test(text)) && !COMMERCIAL_USE_PERMISSION_PATTERNS.some((pattern) => pattern.test(text));
+}
+function commercialRestrictionStatements(text) {
+  return text.replace(/\r\n?/g, `
+`).split(/\n{2,}|\n(?=\s*(?:[-*+]\s+|\d+[.)]\s+|#{1,6}\s+))/u).map((statement) => statement.replace(/\s+/g, " ").trim()).filter((statement) => statement.length > 0);
+}
+function restrictionScopes(statement) {
+  return {
+    package: PACKAGE_RESTRICTION_SCOPE_PATTERN.test(statement),
+    documentation: DOCUMENTATION_RESTRICTION_SCOPE_PATTERN.test(statement),
+    data: DATA_RESTRICTION_SCOPE_PATTERN.test(statement)
+  };
+}
+function isExplicitlyNonPackageRestriction(statement, scopes) {
+  if (scopes.package || !scopes.documentation && !scopes.data) {
+    return false;
+  }
+  const scopedSubject = statement.match(NON_PACKAGE_RESTRICTION_SUBJECT_PATTERN);
+  if (scopedSubject) {
+    const remainder2 = statement.slice(scopedSubject[0].length);
+    return !/^\s*(?:,|(?:and|or)\b)/iu.test(remainder2);
+  }
+  const scopedObject = statement.match(NON_PACKAGE_RESTRICTION_OBJECT_PATTERN);
+  if (!scopedObject) {
+    return false;
+  }
+  const remainder = statement.slice((scopedObject.index ?? 0) + scopedObject[0].length);
+  return !/^\s*(?:,|(?:and|or)\b)/iu.test(remainder);
+}
+var NON_PACKAGE_RESTRICTION_SUBJECT_PATTERN = /^\s*(?:[-*+]\s+|\d+[.)]\s+)?(?:the\s+)?(?:(?!(?:and|or)\b)[\w@./-]+\s+){0,3}(?:documentation|docs?|manuals?|tutorials?|corpora?|corpus|datasets?|data[ -]?sets?|training\s+data|test\s+data|model\s+weights?)\b/iu;
+var NON_PACKAGE_RESTRICTION_OBJECT_PATTERN = /\bcommercial\s+use\s+(?:of|for)\s+(?:the\s+)?(?:documentation|docs?|manuals?|tutorials?|corpora?|corpus|datasets?|data[ -]?sets?|training\s+data|test\s+data|model\s+weights?)\b/iu;
+function addNonPackageRestrictionSources(evidenceSources, analysis) {
+  for (const item of analysis.nonPackageScopes) {
+    evidenceSources.push(`restriction scope: ${item.scope} in ${item.path}`);
+  }
+}
+function readLicenseExpressionEvidence(evidence) {
+  const packageExpression = readPackageLicenseExpression(evidence);
+  if (packageExpression) {
+    const licenseFileExpression = readLicenseFileExpression(evidence);
+    const fileExpressionCoversPackageClaim = licenseFileExpression !== undefined && licenseExpressionContainsChoices(licenseFileExpression.expression, packageExpression);
+    if (licenseFileExpression && parseSpdxExpression(licenseFileExpression.expression).expression !== parseSpdxExpression(packageExpression).expression && (fileExpressionCoversPackageClaim || evidence.metadataLicenseKind === "classifier" && packageExpression === evidence.metadataLicense)) {
+      return licenseFileExpression;
+    }
+    return {
+      expression: packageExpression,
+      source: "package-metadata"
+    };
+  }
+  return readLicenseFileExpression(evidence);
+}
+function readPackageLicenseExpression(evidence) {
+  if (evidence.packageJsonLicense && !isAbsentLicenseExpression(evidence.packageJsonLicense)) {
+    return evidence.packageJsonLicense;
+  }
+  const licenseObjectType = readLicenseObjectType(evidence.packageJsonLicenses);
+  if (licenseObjectType && !isAbsentLicenseExpression(licenseObjectType)) {
+    return licenseObjectType;
+  }
+  if (Array.isArray(evidence.packageJsonLicenses)) {
+    const choices = evidence.packageJsonLicenses.map((item) => {
+      if (typeof item === "string") {
+        return item;
+      }
+      if (typeof item === "object" && item !== null && "type" in item) {
+        const type = item.type;
+        return typeof type === "string" ? type : undefined;
+      }
+      return;
+    }).filter((item) => item !== undefined && !isAbsentLicenseExpression(item));
+    if (choices.length > 0) {
+      return choices.join(" OR ");
+    }
+  }
+  if (evidence.metadataLicense && !isAbsentLicenseExpression(evidence.metadataLicense)) {
+    return evidence.metadataLicense;
+  }
+  const metadataLicenseObjectType = readLicenseObjectType(evidence.metadataLicenses);
+  if (metadataLicenseObjectType && !isAbsentLicenseExpression(metadataLicenseObjectType)) {
+    return metadataLicenseObjectType;
+  }
+  if (Array.isArray(evidence.metadataLicenses)) {
+    const choices = evidence.metadataLicenses.map((item) => {
+      if (typeof item === "string") {
+        return item;
+      }
+      if (typeof item === "object" && item !== null && "type" in item) {
+        const type = item.type;
+        return typeof type === "string" ? type : undefined;
+      }
+      return;
+    }).filter((item) => item !== undefined && !isAbsentLicenseExpression(item));
+    if (choices.length > 0) {
+      return choices.join(" OR ");
+    }
+  }
+  return;
+}
+function isAbsentLicenseExpression(value) {
+  const normalized = value.trim().toUpperCase();
+  return normalized === "NOASSERTION" || normalized === "NONE";
+}
+function readLicenseFileExpression(evidence) {
+  const matches = readLicenseFileExpressions(evidence).filter((match) => match.fileScope !== "component");
+  if (new Set(matches.map((match) => match.expression)).size === 1) {
+    return matches[0];
+  }
+  return [...matches].sort((left, right) => compareLicenseExpressionEvidence(left, right)).find((candidate) => licenseExpressionCoversFileMatches(candidate.expression, matches));
+}
+function compareLicenseExpressionEvidence(left, right) {
+  if (left.expression !== right.expression) {
+    return left.expression < right.expression ? -1 : 1;
+  }
+  const leftPath = left.filePath ?? "";
+  const rightPath = right.filePath ?? "";
+  return leftPath === rightPath ? 0 : leftPath < rightPath ? -1 : 1;
+}
+function readLicenseFileExpressions(evidence) {
+  const matches = [];
+  for (const file of evidence.files) {
+    if (file.kind !== "license" && file.kind !== "copying" && file.kind !== "other") {
+      continue;
+    }
+    const expression = file.kind === "other" ? recognizePackageDualLicenseDeclaration(file.text) : recognizeStandardLicenseText(file.text);
+    if (expression && !isAbsentLicenseExpression(expression)) {
+      matches.push({
+        expression,
+        source: "license-file",
+        filePath: file.path,
+        ...file.scope === "component" || isInferredComponentLicenseFile(evidence, file.path) || isExplicitlyScopedComponentLicenseText(file.text) ? { fileScope: "component" } : {}
+      });
+    }
+  }
+  return matches;
+}
+function isInferredComponentLicenseFile(evidence, filePath) {
+  const normalizedPath = filePath.replaceAll("\\", "/");
+  const slashIndex = normalizedPath.lastIndexOf("/");
+  const directory = slashIndex >= 0 ? normalizedPath.slice(0, slashIndex + 1) : "";
+  const fileName = normalizedPath.slice(slashIndex + 1);
+  const isPrimaryLicense = /^licen[cs]e(?:\.(?:md|markdown|txt|text|rst|html?))?$/i.test(fileName);
+  const qualifiedLicense = isPrimaryLicense ? undefined : fileName.match(/^licen[cs]e[._-]([^.]+?)(?:\.(?:md|markdown|txt|text|rst|html?))?$/i);
+  const qualifier = qualifiedLicense?.[1];
+  const isPackageLicenseVariant = qualifier !== undefined && /^(?:0?bsd|agpl|apache|artistic|boost|cc0|cdla|epl|gpl|isc|lgpl|mit|mpl|ms[-_]?pl|ofl|psf|python|unlicense|wtfpl|zlib)(?:[-_.]?\d.*)?$/i.test(qualifier);
+  const isQualifiedComponent = qualifier !== undefined && (/^(?:lib|third[-_]?party|vendor|component)/i.test(qualifier) || !isPackageLicenseVariant);
+  const isThirdPartyInventory = /^third[-_. ]party[-_. ]licenses?(?:[-_. ].*)?$/i.test(fileName);
+  if (!isQualifiedComponent && !isThirdPartyInventory) {
+    return false;
+  }
+  return evidence.files.some((candidate) => {
+    const candidatePath = candidate.path.replaceAll("\\", "/");
+    const candidateSlashIndex = candidatePath.lastIndexOf("/");
+    const candidateDirectory = candidateSlashIndex >= 0 ? candidatePath.slice(0, candidateSlashIndex + 1) : "";
+    const candidateName = candidatePath.slice(candidateSlashIndex + 1);
+    return candidateDirectory.toLowerCase() === directory.toLowerCase() && /^licen[cs]e(?:\.(?:md|markdown|txt|text|rst|html?))?$/i.test(candidateName);
+  });
+}
+function isExplicitlyScopedComponentLicenseText(text) {
+  if (isAggregateComponentLicenseInventory(text)) {
+    return true;
+  }
+  const scopeDeclaration = text.slice(0, 2048).replace(/\s+/g, " ");
+  return /\b(?:the )?auto-generated bindings are (?:licensed )?under the 3-clause BSD license\b/i.test(scopeDeclaration);
+}
+function isAggregateComponentLicenseInventory(text) {
+  return /^\s*open_source_licenses\.txt\b/iu.test(text.slice(0, 2048));
+}
+function appendBundledComponentLicenses(input) {
+  const baseChoices = new Set(input.parsed.choices.map(comparableLicenseId));
+  const additions = new Map;
+  for (const match of input.matches) {
+    const component = parseSpdxExpression(match.expression);
+    if (component.malformed || component.choices.every((choice) => baseChoices.has(comparableLicenseId(choice)))) {
+      continue;
+    }
+    const matches = additions.get(component.expression ?? match.expression) ?? [];
+    matches.push(match);
+    additions.set(component.expression ?? match.expression, matches);
+  }
+  if (additions.size === 0 || !input.parsed.expression) {
+    return input.parsed;
+  }
+  for (const [expression2, matches] of additions) {
+    input.evidenceSources.push(`bundled component license match: ${expression2} from ${matches.map((match) => match.filePath).join(", ")}`);
+  }
+  const expression = [
+    `(${input.parsed.expression})`,
+    ...[...additions.keys()].map((item) => `(${item})`)
+  ].join(" AND ");
+  const combined = parseSpdxExpression(expression);
+  return combined.malformed ? input.parsed : combined;
+}
+function recognizeStandardLicenseText(text) {
+  const spdxIdentifier = readSpdxLicenseIdentifier(text);
+  if (spdxIdentifier) {
+    return spdxIdentifier;
+  }
+  const packageDualLicense = recognizePackageDualLicenseDeclaration(text);
+  if (packageDualLicense) {
+    return packageDualLicense;
+  }
+  const prose = text.replace(/\s+/g, " ");
+  if (/\bMozilla Public License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
+    return "MPL-2.0";
+  }
+  if (/\bEclipse Public License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
+    return "EPL-2.0";
+  }
+  if (isRecognizableApacheLicenseText(text)) {
+    return "Apache-2.0";
+  }
+  if (/\bCreative Commons Legal Code\b[\s\S]*\bCC0 1\.0 Universal\b/i.test(text)) {
+    return "CC0-1.0";
+  }
+  if (/\bsubject to your choice of exactly one of\b/i.test(text) && /\bThe FreeType License\b/i.test(text) && /\bGNU General Public License(?: \(GPL\))?, version 2 or later\b/i.test(text)) {
+    return "FTL OR GPL-2.0-or-later";
+  }
+  const gnuLicense = recognizeGnuLicenseText(text);
+  if (gnuLicense) {
+    return gnuLicense;
+  }
+  if (/\bfree and unencumbered software released into the public domain\b/i.test(text)) {
+    return "Unlicense";
+  }
+  const hasMitGrant = /\bPermission is hereby granted, free of charge, to any person obtaining a copy\b/i.test(prose);
+  const hasMitWarranty = /\bTHE SOFTWARE IS PROVIDED ['"“”]AS IS['"“”]/i.test(prose);
+  if (hasMitGrant && hasMitWarranty) {
+    const hasCompletePermissionGrant = /\bto deal in the Software without restriction\b/i.test(prose) && /\bright(?:s)? to use, copy, modify, merge, publish, distribute, sublicense, and\/or sell\b/i.test(prose) && /\bpermit persons to whom the Software is furnished to do so\b/i.test(prose);
+    const hasNoticeCondition = /\bThe above copyright notice and this permission notice(?:\s*\([^)]{0,160}\))?\s+shall be included\b/i.test(prose);
+    return hasCompletePermissionGrant && !hasNoticeCondition ? "MIT-0" : "MIT";
+  }
+  if (/\bPermission to use, copy, modify, and\/or distribute this software\b/i.test(text) && /\bTHE SOFTWARE IS PROVIDED "AS IS"/i.test(text)) {
+    if (/\bprovided\s+that\s+the\s+above\s+copyright\s+notice\s+and\s+this\s+permission\s+notice\s+appear\s+in\s+all\s+copies\b/i.test(text)) {
+      return "ISC";
+    }
+    if (/\bfor any purpose with or without fee is hereby granted\b/i.test(text)) {
+      return "0BSD";
+    }
+  }
+  if (/\bThis software is provided ['"]as-is['"], without any express or implied warranty\b/i.test(text) && /\bPermission is granted to anyone to use this software for any purpose\b/i.test(text) && /\bThe origin of this software must not be misrepresented\b/i.test(text)) {
+    return "Zlib";
+  }
+  if (/\bRedistribution and use in source and binary forms\b/i.test(text)) {
+    if (/\bThe BSD 1-Clause License\s*\(BSD-1-Clause\)/i.test(text)) {
+      return "BSD-1-Clause";
+    }
+    if (/\bThe origin of this software must not be misrepresented\b/i.test(text) && /\bAltered source versions must be plainly marked as such\b/i.test(text) && /\bThe name of the author may not be used to endorse or promote\b/i.test(text)) {
+      return "bzip2-1.0.6";
+    }
+    if (/\bAll advertising materials mentioning features or use of this software must display the following acknowledgement\b/i.test(text)) {
+      return "BSD-4-Clause";
+    }
+    const hasEndorsementCondition = /\b(?:Neither|The names? of)\b[\s\S]{0,400}\bmay\s+(?:not\s+)?be\s+used\s+to\s+endorse\s+or\s+promote\b/i.test(text);
+    return hasEndorsementCondition ? "BSD-3-Clause" : "BSD-2-Clause";
+  }
+  return;
+}
+function recognizePackageDualLicenseDeclaration(text) {
+  const declaration = text.slice(0, 2048).replace(/\s+/g, " ");
+  const apacheThenMit = /\bdual[- ]licen[cs]ed under (?:the )?Apache(?: License)?(?:,? Version)?\s*2\.0(?: license)?\s+(?:as well as|and)\s+(?:the )?MIT(?: license)?\b/i;
+  const mitThenApache = /\bdual[- ]licen[cs]ed under (?:the )?MIT(?: license)?\s+(?:as well as|and)\s+(?:the )?Apache(?: License)?(?:,? Version)?\s*2\.0(?: license)?\b/i;
+  const eitherAtYourOption = /\blicen[cs]ed under either of\b[\s\S]*\bApache License,? Version 2\.0\b[\s\S]*\bMIT licen[cs]e\b[\s\S]*\bat your option\b/i;
+  return apacheThenMit.test(declaration) || mitThenApache.test(declaration) || eitherAtYourOption.test(declaration) ? "MIT OR Apache-2.0" : undefined;
+}
+var GNU_LICENSE_SIGNATURES = [
+  {
+    expression: "AGPL-3.0-only",
+    pattern: /\bGNU AFFERO GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 3\b/i
+  },
+  {
+    expression: "LGPL-3.0-only",
+    pattern: /\bGNU LESSER GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 3\b/i
+  },
+  {
+    expression: "LGPL-2.1-only",
+    pattern: /\bGNU LESSER GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 2\.1\b/i
+  },
+  {
+    expression: "LGPL-2.0-only",
+    pattern: /\bGNU LIBRARY GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 2\b/i
+  },
+  {
+    expression: "GPL-3.0-only",
+    pattern: /\bGNU GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 3\b/i
+  },
+  {
+    expression: "GPL-2.0-only",
+    pattern: /\bGNU GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 2\b/i
+  }
+];
+function recognizeGnuLicenseText(text) {
+  if (!/\bTERMS AND CONDITIONS\b/i.test(text)) {
+    return;
+  }
+  let earliest;
+  for (const signature of GNU_LICENSE_SIGNATURES) {
+    const match = signature.pattern.exec(text);
+    if (match && (!earliest || match.index < earliest.index)) {
+      earliest = { expression: signature.expression, index: match.index };
+    }
+  }
+  return earliest?.expression;
+}
+function isRecognizableApacheLicenseText(text) {
+  const fullLicense = /\bApache License\b[\s\S]*\bVersion 2\.0\b/i.test(text) && /\bTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\b/i.test(text);
+  const standardHeader = /\bLicensed under the Apache License, Version 2\.0\b/i.test(text) && /\bAS IS["”]? BASIS\b/i.test(text) && /\blimitations under the License\b/i.test(text);
+  return fullLicense || standardHeader;
+}
+function readSpdxLicenseIdentifier(text) {
+  for (const line of text.split(/\r?\n/)) {
+    const match = line.match(/\bSPDX-License-Identifier:\s*(.+)$/i);
+    const expression = match?.[1] ? cleanSpdxIdentifierExpression(match[1]) : undefined;
+    if (expression) {
+      return expression;
+    }
+  }
+  return;
+}
+function cleanSpdxIdentifierExpression(value) {
+  return value.replace(/\s*\*\/\s*$/, "").replace(/\s*-->\s*$/, "").replace(/\s*`+\s*$/u, "").trim();
+}
+function addLicenseFileMatchSource(evidenceSources, licenseExpression) {
+  evidenceSources.push(`file license match: ${licenseExpression.expression} from ${licenseExpression.filePath}`);
+}
+function readLicenseObjectType(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value) || !("type" in value)) {
+    return;
+  }
+  const type = value.type;
+  return typeof type === "string" ? type : undefined;
+}
+function describeEvidenceSources(evidence) {
+  const sources = [`source: ${evidence.source}`];
+  if (evidence.packageJsonLicense) {
+    sources.push(`package.json license: ${evidence.packageJsonLicense}`);
+  }
+  if (evidence.packageJsonPrivate) {
+    sources.push("package.json private: true");
+  }
+  if (evidence.packageJsonLicenses !== undefined) {
+    sources.push("package.json licenses field");
+  }
+  const metadataSource = evidence.metadataSource ?? "package metadata";
+  if (evidence.metadataLicense) {
+    const metadataLabel = evidence.metadataLicenseKind === "classifier" ? "classifier" : "license";
+    sources.push(`${metadataSource} ${metadataLabel}: ${evidence.metadataLicense}`);
+  }
+  if (evidence.metadataLicenses !== undefined) {
+    sources.push(`${metadataSource} licenses field`);
+  }
+  if (evidence.sbomDeclaredLicense) {
+    sources.push(`SPDX licenseDeclared: ${evidence.sbomDeclaredLicense}`);
+  }
+  if (evidence.sbomConcludedLicense) {
+    sources.push(`SPDX licenseConcluded: ${evidence.sbomConcludedLicense}`);
+  }
+  for (const file of evidence.files) {
+    sources.push(`file: ${file.path} (${file.kind})`);
+  }
+  for (const warning of evidence.warnings) {
+    sources.push(`warning: ${warning}`);
+  }
+  return sources;
+}
+
 // src/evidence/cargo-package.ts
 import { existsSync as existsSync19, readdirSync as readdirSync10, statSync as statSync8 } from "node:fs";
 import path51 from "node:path";
@@ -42115,7 +44072,7 @@ function readCargoEvidenceFiles(input) {
     });
   }
   for (const candidate of evidenceFileCandidates(input.packageDir)) {
-    const kind = classifyEvidenceFile(candidate.relativePath);
+    const kind = classifyEvidenceFile(candidate.relativePath) ?? cargoReadmeEvidenceKind(candidate.absolutePath, candidate.relativePath, input.maxBytes);
     if (kind && !candidates.has(candidate.absolutePath)) {
       candidates.set(candidate.absolutePath, { ...candidate, kind });
     }
@@ -42146,6 +44103,13 @@ function readCargoEvidenceFiles(input) {
     });
   }
   return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+function cargoReadmeEvidenceKind(absolutePath, relativePath, maxBytes) {
+  if (!/^README(?:\.(?:md|markdown|txt|text|rst))?$/iu.test(relativePath)) {
+    return;
+  }
+  const text = readTextFileWithLimit({ filePath: absolutePath, maxBytes });
+  return text.ok && recognizePackageDualLicenseDeclaration(text.value) ? "other" : undefined;
 }
 function evidenceFileCandidates(dir) {
   if (!existsSync19(dir) || !isReadableDirectory(dir)) {
@@ -42281,6 +44245,13 @@ function collectCargoCrateEvidence(input) {
       evidencePaths.set(relativePath, kind);
     }
   }
+  const readmePath = archive.value.entries.filter((entry) => entry.type === "file" && entry.path.startsWith(rootPrefix)).map((entry) => entry.path.slice(rootPrefix.length)).filter((relativePath) => !relativePath.includes("/") && isCargoReadme(relativePath)).sort()[0];
+  if (readmePath) {
+    const readme = archive.value.readText(`${rootPrefix}${readmePath}`, CARGO_CRATE_LICENSE_MAX_BYTES);
+    if (readme.ok && recognizePackageDualLicenseDeclaration(readme.value)) {
+      evidencePaths.set(readmePath, "other");
+    }
+  }
   const warnings = [];
   const files = [];
   for (const [relativePath, kind] of [...evidencePaths.entries()].slice(0, CARGO_CRATE_LICENSE_FILE_LIMIT)) {
@@ -42352,6 +44323,9 @@ function normalizeDeclaredLicenseFile(value) {
     return;
   }
   return normalized;
+}
+function isCargoReadme(relativePath) {
+  return /^README(?:\.(?:md|markdown|txt|text|rst))?$/iu.test(relativePath);
 }
 function safeCargoDisplayPart(value) {
   return value.replace(/[^A-Za-z0-9._+-]/g, "_").slice(0, 120) || "package";
@@ -54110,1952 +56084,6 @@ function traverseGoModuleGraph(roots, adjacency) {
     }
   }
   return paths;
-}
-
-// src/license/spdx-catalog.ts
-var ACTIVE_SPDX_LICENSE_IDS = new Set([
-  "0BSD",
-  "3D-Slicer-1.0",
-  "AAL",
-  "ADSL",
-  "AFL-1.1",
-  "AFL-1.2",
-  "AFL-2.0",
-  "AFL-2.1",
-  "AFL-3.0",
-  "AGPL-1.0-only",
-  "AGPL-1.0-or-later",
-  "AGPL-3.0-only",
-  "AGPL-3.0-or-later",
-  "ALGLIB-Documentation",
-  "AMD-newlib",
-  "AMDPLPA",
-  "AML",
-  "AML-glslang",
-  "AMPAS",
-  "ANTLR-PD",
-  "ANTLR-PD-fallback",
-  "APAFML",
-  "APL-1.0",
-  "APSL-1.0",
-  "APSL-1.1",
-  "APSL-1.2",
-  "APSL-2.0",
-  "ASWF-Digital-Assets-1.0",
-  "ASWF-Digital-Assets-1.1",
-  "Abstyles",
-  "AdaCore-doc",
-  "Adobe-2006",
-  "Adobe-Display-PostScript",
-  "Adobe-Glyph",
-  "Adobe-Utopia",
-  "Advanced-Cryptics-Dictionary",
-  "Afmparse",
-  "Aladdin",
-  "Apache-1.0",
-  "Apache-1.1",
-  "Apache-2.0",
-  "App-s2p",
-  "Arphic-1999",
-  "Artistic-1.0",
-  "Artistic-1.0-Perl",
-  "Artistic-1.0-cl8",
-  "Artistic-2.0",
-  "Artistic-dist",
-  "Aspell-RU",
-  "BOLA-1.1",
-  "BSD-1-Clause",
-  "BSD-2-Clause",
-  "BSD-2-Clause-Darwin",
-  "BSD-2-Clause-Patent",
-  "BSD-2-Clause-Views",
-  "BSD-2-Clause-first-lines",
-  "BSD-2-Clause-pkgconf-disclaimer",
-  "BSD-3-Clause",
-  "BSD-3-Clause-Attribution",
-  "BSD-3-Clause-Clear",
-  "BSD-3-Clause-HP",
-  "BSD-3-Clause-LBNL",
-  "BSD-3-Clause-Modification",
-  "BSD-3-Clause-No-Military-License",
-  "BSD-3-Clause-No-Nuclear-License",
-  "BSD-3-Clause-No-Nuclear-License-2014",
-  "BSD-3-Clause-No-Nuclear-Warranty",
-  "BSD-3-Clause-Open-MPI",
-  "BSD-3-Clause-Sun",
-  "BSD-3-Clause-Tso",
-  "BSD-3-Clause-acpica",
-  "BSD-3-Clause-flex",
-  "BSD-4-Clause",
-  "BSD-4-Clause-Shortened",
-  "BSD-4-Clause-UC",
-  "BSD-4.3RENO",
-  "BSD-4.3TAHOE",
-  "BSD-Advertising-Acknowledgement",
-  "BSD-Attribution-HPND-disclaimer",
-  "BSD-Inferno-Nettverk",
-  "BSD-Mark-Modifications",
-  "BSD-Protection",
-  "BSD-Source-Code",
-  "BSD-Source-beginning-file",
-  "BSD-Systemics",
-  "BSD-Systemics-W3Works",
-  "BSL-1.0",
-  "BUSL-1.1",
-  "Baekmuk",
-  "Bahyph",
-  "Barr",
-  "Beerware",
-  "BitTorrent-1.0",
-  "BitTorrent-1.1",
-  "Bitstream-Charter",
-  "Bitstream-Vera",
-  "BlueOak-1.0.0",
-  "Boehm-GC",
-  "Boehm-GC-without-fee",
-  "Borceux",
-  "Brian-Gladman-2-Clause",
-  "Brian-Gladman-3-Clause",
-  "Brian-Gladman-3-Clause-no-conversion",
-  "Buddy",
-  "Bugroff",
-  "C-UDA-1.0",
-  "CAL-1.0",
-  "CAL-1.0-Combined-Work-Exception",
-  "CAPEC-tou",
-  "CATOSL-1.1",
-  "CC-BY-1.0",
-  "CC-BY-2.0",
-  "CC-BY-2.5",
-  "CC-BY-2.5-AU",
-  "CC-BY-3.0",
-  "CC-BY-3.0-AT",
-  "CC-BY-3.0-AU",
-  "CC-BY-3.0-DE",
-  "CC-BY-3.0-IGO",
-  "CC-BY-3.0-NL",
-  "CC-BY-3.0-US",
-  "CC-BY-4.0",
-  "CC-BY-NC-1.0",
-  "CC-BY-NC-2.0",
-  "CC-BY-NC-2.5",
-  "CC-BY-NC-3.0",
-  "CC-BY-NC-3.0-DE",
-  "CC-BY-NC-3.0-IGO",
-  "CC-BY-NC-4.0",
-  "CC-BY-NC-ND-1.0",
-  "CC-BY-NC-ND-2.0",
-  "CC-BY-NC-ND-2.5",
-  "CC-BY-NC-ND-3.0",
-  "CC-BY-NC-ND-3.0-DE",
-  "CC-BY-NC-ND-3.0-IGO",
-  "CC-BY-NC-ND-4.0",
-  "CC-BY-NC-SA-1.0",
-  "CC-BY-NC-SA-2.0",
-  "CC-BY-NC-SA-2.0-DE",
-  "CC-BY-NC-SA-2.0-FR",
-  "CC-BY-NC-SA-2.0-UK",
-  "CC-BY-NC-SA-2.5",
-  "CC-BY-NC-SA-3.0",
-  "CC-BY-NC-SA-3.0-DE",
-  "CC-BY-NC-SA-3.0-IGO",
-  "CC-BY-NC-SA-4.0",
-  "CC-BY-ND-1.0",
-  "CC-BY-ND-2.0",
-  "CC-BY-ND-2.5",
-  "CC-BY-ND-3.0",
-  "CC-BY-ND-3.0-DE",
-  "CC-BY-ND-4.0",
-  "CC-BY-SA-1.0",
-  "CC-BY-SA-2.0",
-  "CC-BY-SA-2.0-UK",
-  "CC-BY-SA-2.1-JP",
-  "CC-BY-SA-2.5",
-  "CC-BY-SA-3.0",
-  "CC-BY-SA-3.0-AT",
-  "CC-BY-SA-3.0-DE",
-  "CC-BY-SA-3.0-IGO",
-  "CC-BY-SA-4.0",
-  "CC-PDDC",
-  "CC-PDM-1.0",
-  "CC-SA-1.0",
-  "CC0-1.0",
-  "CDDL-1.0",
-  "CDDL-1.1",
-  "CDL-1.0",
-  "CDLA-Permissive-1.0",
-  "CDLA-Permissive-2.0",
-  "CDLA-Sharing-1.0",
-  "CECILL-1.0",
-  "CECILL-1.1",
-  "CECILL-2.0",
-  "CECILL-2.1",
-  "CECILL-B",
-  "CECILL-C",
-  "CERN-OHL-1.1",
-  "CERN-OHL-1.2",
-  "CERN-OHL-P-2.0",
-  "CERN-OHL-S-2.0",
-  "CERN-OHL-W-2.0",
-  "CFITSIO",
-  "CMU-Mach",
-  "CMU-Mach-nodoc",
-  "CNRI-Jython",
-  "CNRI-Python",
-  "CNRI-Python-GPL-Compatible",
-  "COIL-1.0",
-  "CPAL-1.0",
-  "CPL-1.0",
-  "CPOL-1.02",
-  "CUA-OPL-1.0",
-  "Caldera",
-  "Caldera-no-preamble",
-  "Catharon",
-  "ClArtistic",
-  "Clips",
-  "Community-Spec-1.0",
-  "Condor-1.1",
-  "Cornell-Lossless-JPEG",
-  "Cronyx",
-  "Crossword",
-  "CryptoSwift",
-  "CrystalStacker",
-  "Cube",
-  "D-FSL-1.0",
-  "DEC-3-Clause",
-  "DL-DE-BY-2.0",
-  "DL-DE-ZERO-2.0",
-  "DOC",
-  "DRL-1.0",
-  "DRL-1.1",
-  "DSDP",
-  "DocBook-DTD",
-  "DocBook-Schema",
-  "DocBook-Stylesheet",
-  "DocBook-XML",
-  "Dotseqn",
-  "ECL-1.0",
-  "ECL-2.0",
-  "EFL-1.0",
-  "EFL-2.0",
-  "EPICS",
-  "EPL-1.0",
-  "EPL-2.0",
-  "ESA-PL-permissive-2.4",
-  "ESA-PL-strong-copyleft-2.4",
-  "ESA-PL-weak-copyleft-2.4",
-  "EUDatagrid",
-  "EUPL-1.0",
-  "EUPL-1.1",
-  "EUPL-1.2",
-  "Elastic-2.0",
-  "Entessa",
-  "ErlPL-1.1",
-  "Eurosym",
-  "FBM",
-  "FDK-AAC",
-  "FSFAP",
-  "FSFAP-no-warranty-disclaimer",
-  "FSFUL",
-  "FSFULLR",
-  "FSFULLRSD",
-  "FSFULLRWD",
-  "FSL-1.1-ALv2",
-  "FSL-1.1-MIT",
-  "FTL",
-  "Fair",
-  "Ferguson-Twofish",
-  "Frameworx-1.0",
-  "FreeBSD-DOC",
-  "FreeImage",
-  "Furuseth",
-  "GCR-docs",
-  "GD",
-  "GFDL-1.1-invariants-only",
-  "GFDL-1.1-invariants-or-later",
-  "GFDL-1.1-no-invariants-only",
-  "GFDL-1.1-no-invariants-or-later",
-  "GFDL-1.1-only",
-  "GFDL-1.1-or-later",
-  "GFDL-1.2-invariants-only",
-  "GFDL-1.2-invariants-or-later",
-  "GFDL-1.2-no-invariants-only",
-  "GFDL-1.2-no-invariants-or-later",
-  "GFDL-1.2-only",
-  "GFDL-1.2-or-later",
-  "GFDL-1.3-invariants-only",
-  "GFDL-1.3-invariants-or-later",
-  "GFDL-1.3-no-invariants-only",
-  "GFDL-1.3-no-invariants-or-later",
-  "GFDL-1.3-only",
-  "GFDL-1.3-or-later",
-  "GL2PS",
-  "GLWTPL",
-  "GPL-1.0-only",
-  "GPL-1.0-or-later",
-  "GPL-2.0-only",
-  "GPL-2.0-or-later",
-  "GPL-3.0-only",
-  "GPL-3.0-or-later",
-  "Game-Programming-Gems",
-  "Giftware",
-  "Glide",
-  "Glulxe",
-  "Graphics-Gems",
-  "Gutmann",
-  "HDF5",
-  "HIDAPI",
-  "HP-1986",
-  "HP-1989",
-  "HPND",
-  "HPND-DEC",
-  "HPND-Fenneberg-Livingston",
-  "HPND-INRIA-IMAG",
-  "HPND-Intel",
-  "HPND-Kevlin-Henney",
-  "HPND-MIT-disclaimer",
-  "HPND-Markus-Kuhn",
-  "HPND-Netrek",
-  "HPND-Pbmplus",
-  "HPND-SMC",
-  "HPND-UC",
-  "HPND-UC-export-US",
-  "HPND-doc",
-  "HPND-doc-sell",
-  "HPND-export-US",
-  "HPND-export-US-acknowledgement",
-  "HPND-export-US-modify",
-  "HPND-export2-US",
-  "HPND-merchantability-variant",
-  "HPND-sell-MIT-disclaimer-xserver",
-  "HPND-sell-regexpr",
-  "HPND-sell-variant",
-  "HPND-sell-variant-MIT-disclaimer",
-  "HPND-sell-variant-MIT-disclaimer-rev",
-  "HPND-sell-variant-critical-systems",
-  "HTMLTIDY",
-  "HaskellReport",
-  "Hippocratic-2.1",
-  "IBM-pibs",
-  "ICU",
-  "IEC-Code-Components-EULA",
-  "IJG",
-  "IJG-short",
-  "IPA",
-  "IPL-1.0",
-  "ISC",
-  "ISC-Veillard",
-  "ISO-permission",
-  "ImageMagick",
-  "Imlib2",
-  "Info-ZIP",
-  "Informatica",
-  "Inner-Net-2.0",
-  "InnoSetup",
-  "Intel",
-  "Intel-ACPI",
-  "Interbase-1.0",
-  "JPL-image",
-  "JPNIC",
-  "JSON",
-  "Jam",
-  "JasPer-2.0",
-  "Kastrup",
-  "Kazlib",
-  "Knuth-CTAN",
-  "LAL-1.2",
-  "LAL-1.3",
-  "LGPL-2.0-only",
-  "LGPL-2.0-or-later",
-  "LGPL-2.1-only",
-  "LGPL-2.1-or-later",
-  "LGPL-3.0-only",
-  "LGPL-3.0-or-later",
-  "LGPLLR",
-  "LOOP",
-  "LPD-document",
-  "LPL-1.0",
-  "LPL-1.02",
-  "LPPL-1.0",
-  "LPPL-1.1",
-  "LPPL-1.2",
-  "LPPL-1.3a",
-  "LPPL-1.3c",
-  "LZMA-SDK-9.11-to-9.20",
-  "LZMA-SDK-9.22",
-  "Latex2e",
-  "Latex2e-translated-notice",
-  "Leptonica",
-  "LiLiQ-P-1.1",
-  "LiLiQ-R-1.1",
-  "LiLiQ-Rplus-1.1",
-  "Libpng",
-  "Linux-OpenIB",
-  "Linux-man-pages-1-para",
-  "Linux-man-pages-copyleft",
-  "Linux-man-pages-copyleft-2-para",
-  "Linux-man-pages-copyleft-var",
-  "Lucida-Bitmap-Fonts",
-  "MIPS",
-  "MIT",
-  "MIT-0",
-  "MIT-CMU",
-  "MIT-Click",
-  "MIT-Festival",
-  "MIT-Khronos-old",
-  "MIT-Modern-Variant",
-  "MIT-STK",
-  "MIT-Wu",
-  "MIT-advertising",
-  "MIT-enna",
-  "MIT-feh",
-  "MIT-open-group",
-  "MIT-testregex",
-  "MITNFA",
-  "MMIXware",
-  "MMPL-1.0.1",
-  "MPEG-SSG",
-  "MPL-1.0",
-  "MPL-1.1",
-  "MPL-2.0",
-  "MPL-2.0-no-copyleft-exception",
-  "MS-LPL",
-  "MS-PL",
-  "MS-RL",
-  "MTLL",
-  "MVT-1.1",
-  "Mackerras-3-Clause",
-  "Mackerras-3-Clause-acknowledgment",
-  "MakeIndex",
-  "Martin-Birgmeier",
-  "McPhee-slideshow",
-  "Minpack",
-  "MirOS",
-  "Motosoto",
-  "MulanPSL-1.0",
-  "MulanPSL-2.0",
-  "Multics",
-  "Mup",
-  "NAIST-2003",
-  "NASA-1.3",
-  "NBPL-1.0",
-  "NCBI-PD",
-  "NCGL-UK-2.0",
-  "NCL",
-  "NCSA",
-  "NGPL",
-  "NICTA-1.0",
-  "NIST-PD",
-  "NIST-PD-TNT",
-  "NIST-PD-fallback",
-  "NIST-Software",
-  "NLOD-1.0",
-  "NLOD-2.0",
-  "NLPL",
-  "NOSL",
-  "NPL-1.0",
-  "NPL-1.1",
-  "NPOSL-3.0",
-  "NRL",
-  "NTIA-PD",
-  "NTP",
-  "NTP-0",
-  "Naumen",
-  "NetCDF",
-  "Newsletr",
-  "Nokia",
-  "Noweb",
-  "O-UDA-1.0",
-  "OAR",
-  "OCCT-PL",
-  "OCLC-2.0",
-  "ODC-By-1.0",
-  "ODbL-1.0",
-  "OFFIS",
-  "OFL-1.0",
-  "OFL-1.0-RFN",
-  "OFL-1.0-no-RFN",
-  "OFL-1.1",
-  "OFL-1.1-RFN",
-  "OFL-1.1-no-RFN",
-  "OGC-1.0",
-  "OGDL-Taiwan-1.0",
-  "OGL-Canada-2.0",
-  "OGL-UK-1.0",
-  "OGL-UK-2.0",
-  "OGL-UK-3.0",
-  "OGTSL",
-  "OLDAP-1.1",
-  "OLDAP-1.2",
-  "OLDAP-1.3",
-  "OLDAP-1.4",
-  "OLDAP-2.0",
-  "OLDAP-2.0.1",
-  "OLDAP-2.1",
-  "OLDAP-2.2",
-  "OLDAP-2.2.1",
-  "OLDAP-2.2.2",
-  "OLDAP-2.3",
-  "OLDAP-2.4",
-  "OLDAP-2.5",
-  "OLDAP-2.6",
-  "OLDAP-2.7",
-  "OLDAP-2.8",
-  "OLFL-1.3",
-  "OML",
-  "OPL-1.0",
-  "OPL-UK-3.0",
-  "OPUBL-1.0",
-  "OSC-1.0",
-  "OSET-PL-2.1",
-  "OSL-1.0",
-  "OSL-1.1",
-  "OSL-2.0",
-  "OSL-2.1",
-  "OSL-3.0",
-  "OSSP",
-  "OpenMDW-1.0",
-  "OpenPBS-2.3",
-  "OpenSSL",
-  "OpenSSL-standalone",
-  "OpenVision",
-  "PADL",
-  "PDDL-1.0",
-  "PHP-3.0",
-  "PHP-3.01",
-  "PPL",
-  "PSF-2.0",
-  "ParaType-Free-Font-1.3",
-  "Parity-6.0.0",
-  "Parity-7.0.0",
-  "Pixar",
-  "Plexus",
-  "PolyForm-Noncommercial-1.0.0",
-  "PolyForm-Small-Business-1.0.0",
-  "PostgreSQL",
-  "Python-2.0",
-  "Python-2.0.1",
-  "QPL-1.0",
-  "QPL-1.0-INRIA-2004",
-  "Qhull",
-  "RHeCos-1.1",
-  "RPL-1.1",
-  "RPL-1.5",
-  "RPSL-1.0",
-  "RSA-MD",
-  "RSCPL",
-  "Rdisc",
-  "Ruby",
-  "Ruby-pty",
-  "SAX-PD",
-  "SAX-PD-2.0",
-  "SCEA",
-  "SGI-B-1.0",
-  "SGI-B-1.1",
-  "SGI-B-2.0",
-  "SGI-OpenGL",
-  "SGMLUG-PM",
-  "SGP4",
-  "SHL-0.5",
-  "SHL-0.51",
-  "SISSL",
-  "SISSL-1.2",
-  "SL",
-  "SMAIL-GPL",
-  "SMLNJ",
-  "SMPPL",
-  "SNIA",
-  "SOFA",
-  "SPL-1.0",
-  "SSH-OpenSSH",
-  "SSH-short",
-  "SSLeay-standalone",
-  "SSPL-1.0",
-  "SUL-1.0",
-  "SWL",
-  "Saxpath",
-  "SchemeReport",
-  "Sendmail",
-  "Sendmail-8.23",
-  "Sendmail-Open-Source-1.1",
-  "SimPL-2.0",
-  "Sleepycat",
-  "Soundex",
-  "Spencer-86",
-  "Spencer-94",
-  "Spencer-99",
-  "SugarCRM-1.1.3",
-  "Sun-PPP",
-  "Sun-PPP-2000",
-  "SunPro",
-  "Symlinks",
-  "TAPR-OHL-1.0",
-  "TCL",
-  "TCP-wrappers",
-  "TGPPL-1.0",
-  "TMate",
-  "TORQUE-1.1",
-  "TOSL",
-  "TPDL",
-  "TPL-1.0",
-  "TTWL",
-  "TTYP0",
-  "TU-Berlin-1.0",
-  "TU-Berlin-2.0",
-  "TekHVC",
-  "TermReadKey",
-  "ThirdEye",
-  "TrustedQSL",
-  "UCAR",
-  "UCL-1.0",
-  "UMich-Merit",
-  "UPL-1.0",
-  "URT-RLE",
-  "Ubuntu-font-1.0",
-  "UnRAR",
-  "Unicode-3.0",
-  "Unicode-DFS-2015",
-  "Unicode-DFS-2016",
-  "Unicode-TOU",
-  "UnixCrypt",
-  "Unlicense",
-  "Unlicense-libtelnet",
-  "Unlicense-libwhirlpool",
-  "VOSTROM",
-  "VSL-1.0",
-  "Vim",
-  "Vixie-Cron",
-  "W3C",
-  "W3C-19980720",
-  "W3C-20150513",
-  "WTFNMFPL",
-  "WTFPL",
-  "Watcom-1.0",
-  "Widget-Workshop",
-  "WordNet",
-  "Wsuipa",
-  "X11",
-  "X11-distribute-modifications-variant",
-  "X11-no-permit-persons",
-  "X11-swapped",
-  "XFree86-1.1",
-  "XSkat",
-  "Xdebug-1.03",
-  "Xerox",
-  "Xfig",
-  "Xnet",
-  "YPL-1.0",
-  "YPL-1.1",
-  "ZPL-1.1",
-  "ZPL-2.0",
-  "ZPL-2.1",
-  "Zed",
-  "Zeeff",
-  "Zend-2.0",
-  "Zimbra-1.3",
-  "Zimbra-1.4",
-  "Zlib",
-  "any-OSI",
-  "any-OSI-perl-modules",
-  "atc-game",
-  "bcrypt-Solar-Designer",
-  "blessing",
-  "bzip2-1.0.6",
-  "check-cvs",
-  "checkmk",
-  "copyleft-next-0.3.0",
-  "copyleft-next-0.3.1",
-  "curl",
-  "cve-tou",
-  "diffmark",
-  "dtoa",
-  "dvipdfm",
-  "eGenix",
-  "etalab-2.0",
-  "fwlw",
-  "gSOAP-1.3b",
-  "generic-xts",
-  "gnuplot",
-  "gtkbook",
-  "hdparm",
-  "hyphen-bulgarian",
-  "iMatix",
-  "jove",
-  "libpng-1.6.35",
-  "libpng-2.0",
-  "libselinux-1.0",
-  "libtiff",
-  "libutil-David-Nugent",
-  "lsof",
-  "magaz",
-  "mailprio",
-  "man2html",
-  "metamail",
-  "mpi-permissive",
-  "mpich2",
-  "mplus",
-  "ngrep",
-  "pkgconf",
-  "pnmstitch",
-  "psfrag",
-  "psutils",
-  "python-ldap",
-  "radvd",
-  "snprintf",
-  "softSurfer",
-  "ssh-keyscan",
-  "swrule",
-  "threeparttable",
-  "ulem",
-  "w3m",
-  "wwl",
-  "xinetd",
-  "xkeyboard-config-Zinoviev",
-  "xlock",
-  "xpp",
-  "xzoom",
-  "zlib-acknowledgement"
-]);
-var DEPRECATED_SPDX_LICENSE_IDS = new Set([
-  "AGPL-1.0",
-  "AGPL-3.0",
-  "BSD-2-Clause-FreeBSD",
-  "BSD-2-Clause-NetBSD",
-  "GFDL-1.1",
-  "GFDL-1.2",
-  "GFDL-1.3",
-  "GPL-1.0",
-  "GPL-1.0+",
-  "GPL-2.0",
-  "GPL-2.0+",
-  "GPL-2.0-with-GCC-exception",
-  "GPL-2.0-with-autoconf-exception",
-  "GPL-2.0-with-bison-exception",
-  "GPL-2.0-with-classpath-exception",
-  "GPL-2.0-with-font-exception",
-  "GPL-3.0",
-  "GPL-3.0+",
-  "GPL-3.0-with-GCC-exception",
-  "GPL-3.0-with-autoconf-exception",
-  "LGPL-2.0",
-  "LGPL-2.0+",
-  "LGPL-2.1",
-  "LGPL-2.1+",
-  "LGPL-3.0",
-  "LGPL-3.0+",
-  "Net-SNMP",
-  "Nunit",
-  "StandardML-NJ",
-  "bzip2-1.0.5",
-  "eCos-2.0",
-  "wxWindows"
-]);
-var ACTIVE_SPDX_EXCEPTION_IDS = new Set([
-  "389-exception",
-  "Asterisk-exception",
-  "Asterisk-linking-protocols-exception",
-  "Autoconf-exception-2.0",
-  "Autoconf-exception-3.0",
-  "Autoconf-exception-generic",
-  "Autoconf-exception-generic-3.0",
-  "Autoconf-exception-macro",
-  "Bison-exception-1.24",
-  "Bison-exception-2.2",
-  "Bootloader-exception",
-  "CGAL-linking-exception",
-  "CLISP-exception-2.0",
-  "Classpath-exception-2.0",
-  "Classpath-exception-2.0-short",
-  "DigiRule-FOSS-exception",
-  "Digia-Qt-LGPL-exception-1.1",
-  "FLTK-exception",
-  "Fawkes-Runtime-exception",
-  "Font-exception-2.0",
-  "GCC-exception-2.0",
-  "GCC-exception-2.0-note",
-  "GCC-exception-3.1",
-  "GNAT-exception",
-  "GNOME-examples-exception",
-  "GNU-compiler-exception",
-  "GPL-3.0-389-ds-base-exception",
-  "GPL-3.0-interface-exception",
-  "GPL-3.0-linking-exception",
-  "GPL-3.0-linking-source-exception",
-  "GPL-CC-1.0",
-  "GStreamer-exception-2005",
-  "GStreamer-exception-2008",
-  "Gmsh-exception",
-  "Google-Patent-WebM",
-  "Independent-modules-exception",
-  "KiCad-libraries-exception",
-  "LGPL-3.0-linking-exception",
-  "LLGPL",
-  "LLVM-exception",
-  "LZMA-exception",
-  "Libtool-exception",
-  "Linux-syscall-note",
-  "OCCT-exception-1.0",
-  "OCaml-LGPL-linking-exception",
-  "OpenJDK-assembly-exception-1.0",
-  "PCRE2-exception",
-  "PS-or-PDF-font-exception-20170817",
-  "QPL-1.0-INRIA-2004-exception",
-  "Qt-GPL-exception-1.0",
-  "Qt-LGPL-exception-1.1",
-  "Qwt-exception-1.0",
-  "RRDtool-FLOSS-exception-2.0",
-  "SANE-exception",
-  "SHL-2.0",
-  "SHL-2.1",
-  "SWI-exception",
-  "Simple-Library-Usage-exception",
-  "Spelling-Provider-LGPL-exception",
-  "Swift-exception",
-  "Texinfo-exception",
-  "UBDL-exception",
-  "Universal-FOSS-exception-1.0",
-  "WxWindows-exception-3.1",
-  "cryptsetup-OpenSSL-exception",
-  "eCos-exception-2.0",
-  "erlang-otp-linking-exception",
-  "fmt-exception",
-  "freertos-exception-2.0",
-  "gnu-javamail-exception",
-  "harbour-exception",
-  "i2p-gpl-java-exception",
-  "kvirc-openssl-exception",
-  "libpri-OpenH323-exception",
-  "mif-exception",
-  "mxml-exception",
-  "openvpn-openssl-exception",
-  "polyparse-exception",
-  "romic-exception",
-  "rsync-linking-exception",
-  "sqlitestudio-OpenSSL-exception",
-  "stunnel-exception",
-  "u-boot-exception-2.0",
-  "vsftpd-openssl-exception",
-  "x11vnc-openssl-exception"
-]);
-var DEPRECATED_SPDX_EXCEPTION_IDS = new Set([
-  "Nokia-Qt-exception-1.1"
-]);
-function spdxLicenseIdStatus(value) {
-  const exact = catalogStatus(value, ACTIVE_SPDX_LICENSE_IDS, DEPRECATED_SPDX_LICENSE_IDS);
-  if (exact !== "unlisted" || !value.endsWith("+")) {
-    return exact;
-  }
-  return catalogStatus(value.slice(0, -1), ACTIVE_SPDX_LICENSE_IDS, DEPRECATED_SPDX_LICENSE_IDS);
-}
-function spdxExceptionIdStatus(value) {
-  return catalogStatus(value, ACTIVE_SPDX_EXCEPTION_IDS, DEPRECATED_SPDX_EXCEPTION_IDS);
-}
-function catalogStatus(value, active, deprecated) {
-  if (active.has(value)) {
-    return "active";
-  }
-  if (deprecated.has(value)) {
-    return "deprecated";
-  }
-  return "unlisted";
-}
-
-// src/license/spdx.ts
-var LICENSE_EXPRESSION_ALIASES = new Map([
-  ["gnu general public license, version 3.0", "GPL-3.0-only"],
-  ["eclipse public license v2.0", "EPL-2.0"],
-  [
-    "public domain, per creative commons cc0 or bsd-2-clause",
-    "CC0-1.0 OR BSD-2-Clause"
-  ],
-  [
-    "the gnu general public license, v2 with universal foss exception, v1.0",
-    "GPL-2.0-only WITH Universal-FOSS-exception-1.0"
-  ]
-]);
-var LICENSE_ALIASES = new Map([
-  ["apache 2", "Apache-2.0"],
-  ["apache 2.0", "Apache-2.0"],
-  ["apache license 2.0", "Apache-2.0"],
-  ["apache license version 2.0", "Apache-2.0"],
-  ["apache license, version 2.0", "Apache-2.0"],
-  ["apache license, 2.0", "Apache-2.0"],
-  ["the apache license, version 2.0", "Apache-2.0"],
-  ["the apache software license, version 2.0", "Apache-2.0"],
-  ["bsd", "BSD-3-Clause"],
-  ["bsd3", "BSD-3-Clause"],
-  ["bsd 2-clause", "BSD-2-Clause"],
-  ["bsd 3-clause", "BSD-3-Clause"],
-  ["bsd 3-clause license", "BSD-3-Clause"],
-  ["3-clause bsd license", "BSD-3-Clause"],
-  ["bsd licence 3", "BSD-3-Clause"],
-  ["bsd-2-clause license", "BSD-2-Clause"],
-  ["bsd-3-clause license", "BSD-3-Clause"],
-  ["bsd license", "BSD-3-Clause"],
-  ["business source license", "BUSL-1.1"],
-  ["business source license 1.1", "BUSL-1.1"],
-  ["busl", "BUSL-1.1"],
-  ["commons clause", "Commons-Clause"],
-  ["commons clause license condition", "Commons-Clause"],
-  ["elastic license", "Elastic-2.0"],
-  ["elastic license 2.0", "Elastic-2.0"],
-  ["eclipse distribution license - v 1.0", "BSD-3-Clause"],
-  ["edl 1.0", "BSD-3-Clause"],
-  ["eclipse public license 1.0", "EPL-1.0"],
-  ["eclipse public license, version 1.0", "EPL-1.0"],
-  ["eclipse publish license, version 1.0", "EPL-1.0"],
-  ["eclipse public license - v 1.0", "EPL-1.0"],
-  ["eclipse public license - v 2.0", "EPL-2.0"],
-  ["epl 2.0", "EPL-2.0"],
-  ["gpl2 w/ cpe", "GPL-2.0-with-classpath-exception"],
-  ["the gnu general public license (gpl), version 2, with classpath exception", "GPL-2.0-with-classpath-exception"],
-  ["gnu lesser general public license v2.1 only", "LGPL-2.1-only"],
-  ["2-clause bsd", "BSD-2-Clause"],
-  ["3-clause bsd", "BSD-3-Clause"],
-  ["simplified bsd license", "BSD-2-Clause"],
-  ["new bsd license", "BSD-3-Clause"],
-  ["isc license", "ISC"],
-  ["mit license", "MIT"],
-  ["the mit license (mit)", "MIT"],
-  ["modified bsd", "BSD-3-Clause"],
-  ["mpl 1.1", "MPL-1.1"],
-  ["polyform free trial 1.0.0", "PolyForm-Free-Trial-1.0.0"],
-  ["polyform noncommercial 1.0.0", "PolyForm-Noncommercial-1.0.0"],
-  ["psfl", "PSF-2.0"],
-  ["psf", "PSF-2.0"],
-  ["server side public license", "SSPL-1.0"],
-  ["server side public license 1.0", "SSPL-1.0"],
-  ["sspl", "SSPL-1.0"],
-  ["the mit license", "MIT"],
-  ["unlicensed", "UNLICENSED"]
-]);
-var VALID_SPDX_LICENSE_REFERENCE = /^(?:DocumentRef-[A-Za-z0-9.-]+:)?LicenseRef-[A-Za-z0-9.-]+$/;
-var OHRISK_NON_SPDX_LICENSE_IDS = new Set([
-  "Commons-Clause",
-  "PolyForm-Free-Trial-1.0.0",
-  "UNLICENSED"
-]);
-function parseSpdxExpression(input) {
-  const original = input.trim();
-  if (original.length === 0) {
-    return malformedResult(original, [], false);
-  }
-  const expressionAlias = LICENSE_EXPRESSION_ALIASES.get(original.toLowerCase());
-  if (expressionAlias) {
-    const parsedAlias = parseSpdxExpression(expressionAlias);
-    return {
-      ...parsedAlias,
-      original,
-      usedAlias: true
-    };
-  }
-  const alias = normalizeLicenseToken(original);
-  if (alias.normalized && !alias.malformed && alias.normalized !== original) {
-    const ast2 = {
-      type: "license",
-      license: alias.normalized
-    };
-    return parsedResult(original, ast2, true);
-  }
-  const shorthandOrExpression = parseShorthandOrExpression(original);
-  if (shorthandOrExpression) {
-    return shorthandOrExpression;
-  }
-  const tokens = lexExpression(original);
-  if (!tokens) {
-    return malformedResult(original, collectRecoverableChoices(original), false);
-  }
-  const state = {
-    tokens,
-    index: 0,
-    usedAlias: false
-  };
-  const ast = parseOrExpression(state);
-  if (!ast || state.index !== state.tokens.length) {
-    return malformedResult(original, collectChoicesFromTokens(tokens), state.usedAlias);
-  }
-  return parsedResult(original, ast, state.usedAlias);
-}
-function formatSpdxExpression(ast) {
-  return formatNode(ast, 0);
-}
-function isSpdxLicenseReference(value) {
-  return VALID_SPDX_LICENSE_REFERENCE.test(value);
-}
-function parsedResult(original, ast, usedAlias) {
-  const choices = [];
-  const exceptions = [];
-  let hasAnd = false;
-  let hasOr = false;
-  visitNode(ast, (node) => {
-    if (node.type === "license") {
-      choices.push(node.license);
-      if (node.exception) {
-        exceptions.push(node.exception);
-      }
-      return;
-    }
-    if (node.type === "and") {
-      hasAnd = true;
-    } else {
-      hasOr = true;
-    }
-  });
-  const result2 = {
-    original,
-    expression: formatSpdxExpression(ast),
-    choices: [...new Set(choices)],
-    joiner: joinerFor(hasAnd, hasOr),
-    malformed: false,
-    usedAlias,
-    exceptions: [...new Set(exceptions)]
-  };
-  Object.defineProperty(result2, "ast", {
-    value: ast,
-    enumerable: false,
-    configurable: false,
-    writable: false
-  });
-  return result2;
-}
-function malformedResult(original, choices, usedAlias) {
-  return {
-    original,
-    choices: [...new Set(choices.length > 0 ? choices : original ? [original] : [])],
-    joiner: detectJoiner(original),
-    malformed: true,
-    usedAlias,
-    exceptions: []
-  };
-}
-function parseShorthandOrExpression(original) {
-  if (detectJoiner(original) !== "single" || !/[\/,]/.test(original)) {
-    return;
-  }
-  const rawTokens = original.replace(/[()]/g, " ").split(/\s*(?:\/|,)\s*/).map((token) => token.trim());
-  if (rawTokens.length < 2 || rawTokens.some((token) => token.length === 0)) {
-    return;
-  }
-  const normalizedTokens = rawTokens.map((token) => normalizeLicenseToken(token));
-  if (normalizedTokens.some((token) => token.malformed || token.normalized === undefined)) {
-    return;
-  }
-  const licenses = normalizedTokens.map((token) => token.normalized);
-  const firstLicense = licenses[0];
-  if (!firstLicense) {
-    return;
-  }
-  const ast = licenses.slice(1).reduce((left, license) => ({
-    type: "or",
-    left,
-    right: { type: "license", license }
-  }), { type: "license", license: firstLicense });
-  return parsedResult(original, ast, true);
-}
-function lexExpression(expression) {
-  const tokens = [];
-  let chunk = "";
-  let index = 0;
-  const flushOperand = () => {
-    const value = chunk.trim();
-    chunk = "";
-    if (value.length === 0) {
-      return true;
-    }
-    tokens.push({ type: "operand", value });
-    return true;
-  };
-  while (index < expression.length) {
-    const character = expression[index];
-    if (character === "(" || character === ")") {
-      flushOperand();
-      tokens.push({ type: character === "(" ? "lparen" : "rparen" });
-      index += 1;
-      continue;
-    }
-    const operator = readOperatorAt(expression, index);
-    if (operator) {
-      flushOperand();
-      tokens.push({ type: operator.value });
-      index = operator.nextIndex;
-      continue;
-    }
-    chunk += character;
-    index += 1;
-  }
-  flushOperand();
-  return tokens.length > 0 ? tokens : undefined;
-}
-function readOperatorAt(expression, index) {
-  const candidates = ["WITH", "AND", "OR"];
-  for (const candidate of candidates) {
-    const value = expression.slice(index, index + candidate.length);
-    if (value.toUpperCase() !== candidate) {
-      continue;
-    }
-    const previous = index === 0 ? undefined : expression[index - 1];
-    const next = expression[index + candidate.length];
-    if (!isOperatorBoundary(previous) || !isOperatorBoundary(next)) {
-      continue;
-    }
-    return {
-      value: candidate.toLowerCase(),
-      nextIndex: index + candidate.length
-    };
-  }
-  return;
-}
-function isOperatorBoundary(character) {
-  return character === undefined || /\s|\(|\)/.test(character);
-}
-function parseOrExpression(state) {
-  let left = parseAndExpression(state);
-  if (!left) {
-    return;
-  }
-  while (peekToken(state, "or")) {
-    state.index += 1;
-    const right = parseAndExpression(state);
-    if (!right) {
-      return;
-    }
-    left = { type: "or", left, right };
-  }
-  return left;
-}
-function parseAndExpression(state) {
-  let left = parseWithExpression(state);
-  if (!left) {
-    return;
-  }
-  while (peekToken(state, "and")) {
-    state.index += 1;
-    const right = parseWithExpression(state);
-    if (!right) {
-      return;
-    }
-    left = { type: "and", left, right };
-  }
-  return left;
-}
-function parseWithExpression(state) {
-  const primary = parsePrimaryExpression(state);
-  if (!primary) {
-    return;
-  }
-  if (!peekToken(state, "with")) {
-    return primary;
-  }
-  if (primary.type !== "license") {
-    return;
-  }
-  state.index += 1;
-  const exceptionToken = state.tokens[state.index];
-  if (!exceptionToken || exceptionToken.type !== "operand") {
-    return;
-  }
-  const exception = normalizeExceptionToken(exceptionToken.value);
-  if (!exception) {
-    return;
-  }
-  state.index += 1;
-  return {
-    ...primary,
-    exception
-  };
-}
-function parsePrimaryExpression(state) {
-  const token = state.tokens[state.index];
-  if (!token) {
-    return;
-  }
-  if (token.type === "operand") {
-    const normalized = normalizeLicenseToken(token.value);
-    if (normalized.malformed || !normalized.normalized) {
-      return;
-    }
-    state.usedAlias ||= normalized.usedAlias;
-    state.index += 1;
-    return {
-      type: "license",
-      license: normalized.normalized
-    };
-  }
-  if (token.type !== "lparen") {
-    return;
-  }
-  state.index += 1;
-  const nested = parseOrExpression(state);
-  if (!nested || !peekToken(state, "rparen")) {
-    return;
-  }
-  state.index += 1;
-  return nested;
-}
-function peekToken(state, type) {
-  return state.tokens[state.index]?.type === type;
-}
-function normalizeLicenseToken(token) {
-  const trimmed = token.trim();
-  if (!trimmed) {
-    return {
-      malformed: true,
-      usedAlias: false
-    };
-  }
-  const alias = LICENSE_ALIASES.get(trimmed.toLowerCase());
-  if (alias) {
-    return {
-      normalized: alias,
-      malformed: false,
-      usedAlias: alias !== trimmed
-    };
-  }
-  if (isSpdxLicenseReference(trimmed)) {
-    return {
-      normalized: trimmed,
-      malformed: false,
-      usedAlias: false
-    };
-  }
-  if (!OHRISK_NON_SPDX_LICENSE_IDS.has(trimmed) && spdxLicenseIdStatus(trimmed) === "unlisted") {
-    return {
-      normalized: trimmed,
-      malformed: true,
-      usedAlias: false
-    };
-  }
-  return {
-    normalized: trimmed,
-    malformed: false,
-    usedAlias: false
-  };
-}
-function normalizeExceptionToken(token) {
-  const trimmed = token.trim();
-  return spdxExceptionIdStatus(trimmed) === "unlisted" ? undefined : trimmed;
-}
-function collectChoicesFromTokens(tokens) {
-  return tokens.flatMap((token) => {
-    if (token.type !== "operand") {
-      return [];
-    }
-    const normalized = normalizeLicenseToken(token.value);
-    return normalized.normalized && !normalized.malformed ? [normalized.normalized] : [];
-  });
-}
-function collectRecoverableChoices(original) {
-  return original.replace(/[()]/g, " ").split(/\s+(?:AND|OR|WITH)\s+/i).flatMap((token) => {
-    const normalized = normalizeLicenseToken(token);
-    return normalized.normalized && !normalized.malformed ? [normalized.normalized] : [];
-  });
-}
-function detectJoiner(expression) {
-  const hasAnd = /(?:^|\s|\()AND(?:$|\s|\))/i.test(expression);
-  const hasOr = /(?:^|\s|\()OR(?:$|\s|\))/i.test(expression);
-  return joinerFor(hasAnd, hasOr);
-}
-function joinerFor(hasAnd, hasOr) {
-  if (hasAnd && hasOr) {
-    return "mixed";
-  }
-  if (hasAnd) {
-    return "and";
-  }
-  if (hasOr) {
-    return "or";
-  }
-  return "single";
-}
-function formatNode(ast, parentPrecedence) {
-  if (ast.type === "license") {
-    return ast.exception ? `${ast.license} WITH ${ast.exception}` : ast.license;
-  }
-  const precedence = ast.type === "and" ? 2 : 1;
-  const operator = ast.type.toUpperCase();
-  const formatted = `${formatNode(ast.left, precedence)} ${operator} ${formatNode(ast.right, precedence)}`;
-  return precedence < parentPrecedence ? `(${formatted})` : formatted;
-}
-function visitNode(ast, visitor) {
-  visitor(ast);
-  if (ast.type === "license") {
-    return;
-  }
-  visitNode(ast.left, visitor);
-  visitNode(ast.right, visitor);
-}
-
-// src/license/normalize.ts
-var DEPRECATED_GNU_LICENSE_EQUIVALENTS = new Map([
-  ["AGPL-1.0", "AGPL-1.0-only"],
-  ["AGPL-1.0+", "AGPL-1.0-or-later"],
-  ["AGPL-3.0", "AGPL-3.0-only"],
-  ["AGPL-3.0+", "AGPL-3.0-or-later"],
-  ["GFDL-1.1", "GFDL-1.1-only"],
-  ["GFDL-1.1+", "GFDL-1.1-or-later"],
-  ["GFDL-1.2", "GFDL-1.2-only"],
-  ["GFDL-1.2+", "GFDL-1.2-or-later"],
-  ["GFDL-1.3", "GFDL-1.3-only"],
-  ["GFDL-1.3+", "GFDL-1.3-or-later"],
-  ["GPL-1.0", "GPL-1.0-only"],
-  ["GPL-1.0+", "GPL-1.0-or-later"],
-  ["GPL-2.0", "GPL-2.0-only"],
-  ["GPL-2.0+", "GPL-2.0-or-later"],
-  ["GPL-3.0", "GPL-3.0-only"],
-  ["GPL-3.0+", "GPL-3.0-or-later"],
-  ["LGPL-2.0", "LGPL-2.0-only"],
-  ["LGPL-2.0+", "LGPL-2.0-or-later"],
-  ["LGPL-2.1", "LGPL-2.1-only"],
-  ["LGPL-2.1+", "LGPL-2.1-or-later"],
-  ["LGPL-3.0", "LGPL-3.0-only"],
-  ["LGPL-3.0+", "LGPL-3.0-or-later"]
-]);
-var FILE_LICENSE_TO_BROADER_DECLARATION = new Map([
-  ["AGPL-1.0-only", "AGPL-1.0-or-later"],
-  ["AGPL-3.0-only", "AGPL-3.0-or-later"],
-  ["GFDL-1.1-only", "GFDL-1.1-or-later"],
-  ["GFDL-1.2-only", "GFDL-1.2-or-later"],
-  ["GFDL-1.3-only", "GFDL-1.3-or-later"],
-  ["GPL-1.0-only", "GPL-1.0-or-later"],
-  ["GPL-2.0-only", "GPL-2.0-or-later"],
-  ["GPL-3.0-only", "GPL-3.0-or-later"],
-  ["LGPL-2.0-only", "LGPL-2.0-or-later"],
-  ["LGPL-2.1-only", "LGPL-2.1-or-later"],
-  ["LGPL-3.0-only", "LGPL-3.0-or-later"],
-  ["MPL-2.0", "MPL-2.0+"]
-]);
-function normalizeLicenseEvidence(evidence) {
-  const signals = [];
-  const evidenceSources = describeEvidenceSources(evidence);
-  const licenseFileExpressions = readLicenseFileExpressions(evidence);
-  const packageLicenseFileExpressions = licenseFileExpressions.filter((match) => match.fileScope !== "component");
-  const componentLicenseFileExpressions = licenseFileExpressions.filter((match) => match.fileScope === "component");
-  const distinctLicenseFileExpressions = new Set(packageLicenseFileExpressions.map((match) => match.expression));
-  const packageLicenseExpression = readPackageLicenseExpression(evidence);
-  const packageLicenseCoversFileExpressions = packageLicenseExpression !== undefined && licenseExpressionCoversFileMatches(packageLicenseExpression, packageLicenseFileExpressions);
-  const licenseFileCoversFileExpressions = packageLicenseFileExpressions.some((candidate) => licenseExpressionCoversFileMatches(candidate.expression, packageLicenseFileExpressions));
-  if (distinctLicenseFileExpressions.size > 1 && !packageLicenseCoversFileExpressions && !licenseFileCoversFileExpressions) {
-    if (!signals.includes("conflicting-evidence")) {
-      signals.push("conflicting-evidence");
-    }
-    evidenceSources.push(`conflicting file license matches: ${packageLicenseFileExpressions.map((match) => `${match.expression} from ${match.filePath}`).join("; ")}`);
-  }
-  const conflictingLicenseClaims = evidence.conflictingLicenseClaims ?? [];
-  if (conflictingLicenseClaims.length > 0) {
-    if (!signals.includes("conflicting-evidence")) {
-      signals.push("conflicting-evidence");
-    }
-    evidenceSources.push(`conflicting license claims: ${conflictingLicenseClaims.join("; ")}`);
-  }
-  if (evidence.files.some((file) => file.kind === "notice")) {
-    signals.push("notice-required");
-  }
-  const commercialRestriction = analyzeCommercialRestrictions(evidence);
-  if (commercialRestriction.packageRestricted) {
-    signals.push("commercial-restriction");
-  }
-  addNonPackageRestrictionSources(evidenceSources, commercialRestriction);
-  let licenseExpression = readLicenseExpressionEvidence(evidence);
-  if (!licenseExpression) {
-    signals.push("missing");
-    if (evidence.files.length > 0) {
-      signals.push("custom-text");
-    }
-    return {
-      packageId: evidence.packageId,
-      choices: [],
-      joiner: "single",
-      signals,
-      evidenceSources,
-      confidence: "low"
-    };
-  }
-  let parsed = parseSpdxExpression(licenseExpression.expression);
-  const licenseFileExpression = licenseExpression.source === "package-metadata" ? readLicenseFileExpression(evidence) : undefined;
-  if (parsed.malformed && licenseFileExpression) {
-    licenseExpression = licenseFileExpression;
-    parsed = parseSpdxExpression(licenseExpression.expression);
-  }
-  if (licenseExpression.source === "license-file") {
-    addLicenseFileMatchSource(evidenceSources, licenseExpression);
-  }
-  if (parsed.malformed) {
-    signals.push("malformed");
-    if (evidence.files.length > 0) {
-      signals.push("custom-text");
-    }
-    return withSpdxAst({
-      packageId: evidence.packageId,
-      original: parsed.original,
-      ...parsed.expression ? { expression: parsed.expression } : {},
-      choices: parsed.choices,
-      joiner: parsed.joiner,
-      ...parsed.exceptions.length > 0 ? { exceptions: parsed.exceptions } : {},
-      signals,
-      evidenceSources,
-      confidence: "low"
-    }, parsed.ast);
-  }
-  if (parsed.choices.some(isSpdxLicenseReference) && !signals.includes("custom-text")) {
-    signals.push("custom-text");
-  }
-  if (licenseExpression.source === "package-metadata") {
-    const declaredChoices = new Set(parsed.choices.map(comparableLicenseId));
-    const conflictingFileMatches = packageLicenseFileExpressions.filter((match) => {
-      const fileExpression = parseSpdxExpression(match.expression);
-      return !fileExpression.malformed && fileExpression.choices.some((choice) => !fileLicenseChoiceMatchesDeclared(choice, declaredChoices));
-    });
-    if (conflictingFileMatches.length > 0) {
-      if (!signals.includes("conflicting-evidence")) {
-        signals.push("conflicting-evidence");
-      }
-      evidenceSources.push(`conflicting metadata and file license matches: metadata ${parsed.expression}; ${conflictingFileMatches.map((match) => `${match.expression} from ${match.filePath}`).join("; ")}`);
-    }
-  }
-  parsed = appendBundledComponentLicenses({
-    parsed,
-    matches: componentLicenseFileExpressions,
-    evidenceSources
-  });
-  const deprecatedLicenseIds = parsed.choices.filter((choice) => spdxLicenseIdStatus(choice) === "deprecated");
-  const deprecatedExceptionIds = parsed.exceptions.filter((exception) => spdxExceptionIdStatus(exception) === "deprecated");
-  for (const licenseId of deprecatedLicenseIds) {
-    evidenceSources.push(`deprecated SPDX license identifier: ${licenseId}`);
-  }
-  for (const exceptionId of deprecatedExceptionIds) {
-    evidenceSources.push(`deprecated SPDX exception identifier: ${exceptionId}`);
-  }
-  const usesDeprecatedSpdx = deprecatedLicenseIds.length > 0 || deprecatedExceptionIds.length > 0;
-  return withSpdxAst({
-    packageId: evidence.packageId,
-    original: parsed.original,
-    ...parsed.expression ? { expression: parsed.expression } : {},
-    choices: parsed.choices,
-    joiner: parsed.joiner,
-    ...parsed.exceptions.length > 0 ? { exceptions: parsed.exceptions } : {},
-    signals,
-    evidenceSources,
-    confidence: signals.includes("conflicting-evidence") || signals.includes("custom-text") ? "low" : usesDeprecatedSpdx || parsed.usedAlias || licenseExpression.source === "license-file" || evidence.metadataLicenseKind === "classifier" || evidence.packageJsonLicenses !== undefined ? "medium" : "high"
-  }, parsed.ast);
-}
-function comparableLicenseId(licenseId) {
-  return DEPRECATED_GNU_LICENSE_EQUIVALENTS.get(licenseId) ?? licenseId;
-}
-function fileLicenseChoiceMatchesDeclared(fileChoice, declaredChoices) {
-  const comparable = comparableLicenseId(fileChoice);
-  if (declaredChoices.has(comparable)) {
-    return true;
-  }
-  const broaderDeclaration = FILE_LICENSE_TO_BROADER_DECLARATION.get(comparable);
-  return broaderDeclaration !== undefined && declaredChoices.has(broaderDeclaration);
-}
-function licenseExpressionCoversFileMatches(expression, matches) {
-  const parsed = parseSpdxExpression(expression);
-  if (parsed.malformed) {
-    return false;
-  }
-  const declaredChoices = new Set(parsed.choices.map(comparableLicenseId));
-  return matches.every((match) => {
-    const fileExpression = parseSpdxExpression(match.expression);
-    return !fileExpression.malformed && fileExpression.choices.every((choice) => fileLicenseChoiceMatchesDeclared(choice, declaredChoices));
-  });
-}
-function withSpdxAst(license, ast) {
-  if (!ast) {
-    return license;
-  }
-  Object.defineProperty(license, "spdxAst", {
-    value: ast,
-    enumerable: false,
-    configurable: false,
-    writable: false
-  });
-  return license;
-}
-function normalizeAllLicenseEvidence(evidence) {
-  return evidence.map(normalizeLicenseEvidence);
-}
-function analyzeCommercialRestrictions(evidence) {
-  const nonPackageScopes = new Map;
-  let packageRestricted = collectPackageLicenseTexts(evidence).some(hasCommercialRestrictionText);
-  for (const file of evidence.files) {
-    const aggregateComponentInventory = isAggregateComponentLicenseInventory(file.text);
-    for (const statement of commercialRestrictionStatements(file.text)) {
-      if (!hasCommercialRestrictionText(statement)) {
-        continue;
-      }
-      if (aggregateComponentInventory) {
-        nonPackageScopes.set(`component:${file.path}`, {
-          path: file.path,
-          scope: "component"
-        });
-        continue;
-      }
-      const scopes = restrictionScopes(statement);
-      const explicitlyNonPackage = isExplicitlyNonPackageRestriction(statement, scopes);
-      if (!explicitlyNonPackage) {
-        packageRestricted = true;
-      }
-      if (scopes.documentation && explicitlyNonPackage) {
-        const key = `documentation:${file.path}`;
-        nonPackageScopes.set(key, { path: file.path, scope: "documentation" });
-      }
-      if (scopes.data && explicitlyNonPackage) {
-        const key = `data:${file.path}`;
-        nonPackageScopes.set(key, { path: file.path, scope: "data" });
-      }
-    }
-  }
-  return {
-    packageRestricted,
-    nonPackageScopes: [...nonPackageScopes.values()]
-  };
-}
-function collectPackageLicenseTexts(evidence) {
-  const texts = [];
-  if (evidence.packageJsonLicense) {
-    texts.push(evidence.packageJsonLicense);
-  }
-  const licenseObjectType = readLicenseObjectType(evidence.packageJsonLicenses);
-  if (licenseObjectType) {
-    texts.push(licenseObjectType);
-  }
-  if (Array.isArray(evidence.packageJsonLicenses)) {
-    for (const item of evidence.packageJsonLicenses) {
-      if (typeof item === "string") {
-        texts.push(item);
-        continue;
-      }
-      if (typeof item === "object" && item !== null && "type" in item) {
-        const type = item.type;
-        if (typeof type === "string") {
-          texts.push(type);
-        }
-      }
-    }
-  }
-  if (evidence.metadataLicense) {
-    texts.push(evidence.metadataLicense);
-  }
-  if (evidence.sbomDeclaredLicense) {
-    texts.push(evidence.sbomDeclaredLicense);
-  }
-  if (evidence.sbomConcludedLicense) {
-    texts.push(evidence.sbomConcludedLicense);
-  }
-  const metadataLicenseObjectType = readLicenseObjectType(evidence.metadataLicenses);
-  if (metadataLicenseObjectType) {
-    texts.push(metadataLicenseObjectType);
-  }
-  if (Array.isArray(evidence.metadataLicenses)) {
-    for (const item of evidence.metadataLicenses) {
-      if (typeof item === "string") {
-        texts.push(item);
-        continue;
-      }
-      if (typeof item === "object" && item !== null && "type" in item) {
-        const type = item.type;
-        if (typeof type === "string") {
-          texts.push(type);
-        }
-      }
-    }
-  }
-  return texts;
-}
-var COMMERCIAL_RESTRICTION_LICENSE_NAME_PATTERNS = [
-  /\bCommons Clause\b/i,
-  /\bBusiness Source License\b/i,
-  /\bBUSL\b/i,
-  /\bServer Side Public License\b/i,
-  /\bSSPL\b/i,
-  /\bElastic License\b/i,
-  /\bPolyForm\b/i,
-  /\bCreative Commons\b[^\r\n]*(?:NonCommercial|Non-Commercial|\bNC\b)/i,
-  /\bCC-BY-NC(?:-[0-9.]+)?\b/i,
-  /\bNon-Commercial\b(?=\s+(?:License|Software|Use|Only)\b)/i,
-  /\bnoncommercial\b(?=\s+(?:License|Software|Use|Only)\b)/i
-];
-var COMMERCIAL_USE_DENIAL_PATTERNS = [
-  /\bnot for commercial use\b/i,
-  /\bno commercial use\b/i,
-  /\bcommercial use\s+(?:is\s+)?(?:prohibited|restricted|not permitted|forbidden|disallowed)\b/i,
-  /\bmay not be used for commercial purposes\b/i,
-  /\bmust not be used for commercial purposes\b/i,
-  /\bshall not be used for commercial purposes\b/i,
-  /\bcannot be used for commercial purposes\b/i
-];
-var COMMERCIAL_USE_PERMISSION_PATTERNS = [
-  /\bcommercial\s+(?:and|or)\s+non-?commercial\s+use\s+(?:is|are)\s+permitted\b/i
-];
-var PACKAGE_RESTRICTION_SCOPE_PATTERN = /\b(?:software|source\s+code|codebase|package|library|program|application|module|toolkit)\b/i;
-var DOCUMENTATION_RESTRICTION_SCOPE_PATTERN = /\b(?:documentation|docs?|manuals?|tutorials?)\b/i;
-var DATA_RESTRICTION_SCOPE_PATTERN = /\b(?:corpora?|corpus|datasets?|data[ -]?sets?|training\s+data|test\s+data|model\s+weights?)\b/i;
-function hasCommercialRestrictionText(text) {
-  if (COMMERCIAL_USE_DENIAL_PATTERNS.some((pattern) => pattern.test(text))) {
-    return true;
-  }
-  return COMMERCIAL_RESTRICTION_LICENSE_NAME_PATTERNS.some((pattern) => pattern.test(text)) && !COMMERCIAL_USE_PERMISSION_PATTERNS.some((pattern) => pattern.test(text));
-}
-function commercialRestrictionStatements(text) {
-  return text.replace(/\r\n?/g, `
-`).split(/\n{2,}|\n(?=\s*(?:[-*+]\s+|\d+[.)]\s+|#{1,6}\s+))/u).map((statement) => statement.replace(/\s+/g, " ").trim()).filter((statement) => statement.length > 0);
-}
-function restrictionScopes(statement) {
-  return {
-    package: PACKAGE_RESTRICTION_SCOPE_PATTERN.test(statement),
-    documentation: DOCUMENTATION_RESTRICTION_SCOPE_PATTERN.test(statement),
-    data: DATA_RESTRICTION_SCOPE_PATTERN.test(statement)
-  };
-}
-function isExplicitlyNonPackageRestriction(statement, scopes) {
-  if (scopes.package || !scopes.documentation && !scopes.data) {
-    return false;
-  }
-  const scopedSubject = statement.match(NON_PACKAGE_RESTRICTION_SUBJECT_PATTERN);
-  if (scopedSubject) {
-    const remainder2 = statement.slice(scopedSubject[0].length);
-    return !/^\s*(?:,|(?:and|or)\b)/iu.test(remainder2);
-  }
-  const scopedObject = statement.match(NON_PACKAGE_RESTRICTION_OBJECT_PATTERN);
-  if (!scopedObject) {
-    return false;
-  }
-  const remainder = statement.slice((scopedObject.index ?? 0) + scopedObject[0].length);
-  return !/^\s*(?:,|(?:and|or)\b)/iu.test(remainder);
-}
-var NON_PACKAGE_RESTRICTION_SUBJECT_PATTERN = /^\s*(?:[-*+]\s+|\d+[.)]\s+)?(?:the\s+)?(?:(?!(?:and|or)\b)[\w@./-]+\s+){0,3}(?:documentation|docs?|manuals?|tutorials?|corpora?|corpus|datasets?|data[ -]?sets?|training\s+data|test\s+data|model\s+weights?)\b/iu;
-var NON_PACKAGE_RESTRICTION_OBJECT_PATTERN = /\bcommercial\s+use\s+(?:of|for)\s+(?:the\s+)?(?:documentation|docs?|manuals?|tutorials?|corpora?|corpus|datasets?|data[ -]?sets?|training\s+data|test\s+data|model\s+weights?)\b/iu;
-function addNonPackageRestrictionSources(evidenceSources, analysis) {
-  for (const item of analysis.nonPackageScopes) {
-    evidenceSources.push(`restriction scope: ${item.scope} in ${item.path}`);
-  }
-}
-function readLicenseExpressionEvidence(evidence) {
-  const packageExpression = readPackageLicenseExpression(evidence);
-  if (packageExpression) {
-    const licenseFileExpression = evidence.metadataLicenseKind === "classifier" && packageExpression === evidence.metadataLicense ? readLicenseFileExpression(evidence) : undefined;
-    if (licenseFileExpression && parseSpdxExpression(licenseFileExpression.expression).expression !== parseSpdxExpression(packageExpression).expression) {
-      return licenseFileExpression;
-    }
-    return {
-      expression: packageExpression,
-      source: "package-metadata"
-    };
-  }
-  return readLicenseFileExpression(evidence);
-}
-function readPackageLicenseExpression(evidence) {
-  if (evidence.packageJsonLicense && !isAbsentLicenseExpression(evidence.packageJsonLicense)) {
-    return evidence.packageJsonLicense;
-  }
-  const licenseObjectType = readLicenseObjectType(evidence.packageJsonLicenses);
-  if (licenseObjectType && !isAbsentLicenseExpression(licenseObjectType)) {
-    return licenseObjectType;
-  }
-  if (Array.isArray(evidence.packageJsonLicenses)) {
-    const choices = evidence.packageJsonLicenses.map((item) => {
-      if (typeof item === "string") {
-        return item;
-      }
-      if (typeof item === "object" && item !== null && "type" in item) {
-        const type = item.type;
-        return typeof type === "string" ? type : undefined;
-      }
-      return;
-    }).filter((item) => item !== undefined && !isAbsentLicenseExpression(item));
-    if (choices.length > 0) {
-      return choices.join(" OR ");
-    }
-  }
-  if (evidence.metadataLicense && !isAbsentLicenseExpression(evidence.metadataLicense)) {
-    return evidence.metadataLicense;
-  }
-  const metadataLicenseObjectType = readLicenseObjectType(evidence.metadataLicenses);
-  if (metadataLicenseObjectType && !isAbsentLicenseExpression(metadataLicenseObjectType)) {
-    return metadataLicenseObjectType;
-  }
-  if (Array.isArray(evidence.metadataLicenses)) {
-    const choices = evidence.metadataLicenses.map((item) => {
-      if (typeof item === "string") {
-        return item;
-      }
-      if (typeof item === "object" && item !== null && "type" in item) {
-        const type = item.type;
-        return typeof type === "string" ? type : undefined;
-      }
-      return;
-    }).filter((item) => item !== undefined && !isAbsentLicenseExpression(item));
-    if (choices.length > 0) {
-      return choices.join(" OR ");
-    }
-  }
-  return;
-}
-function isAbsentLicenseExpression(value) {
-  const normalized = value.trim().toUpperCase();
-  return normalized === "NOASSERTION" || normalized === "NONE";
-}
-function readLicenseFileExpression(evidence) {
-  const matches = readLicenseFileExpressions(evidence).filter((match) => match.fileScope !== "component");
-  if (new Set(matches.map((match) => match.expression)).size === 1) {
-    return matches[0];
-  }
-  return [...matches].sort((left, right) => compareLicenseExpressionEvidence(left, right)).find((candidate) => licenseExpressionCoversFileMatches(candidate.expression, matches));
-}
-function compareLicenseExpressionEvidence(left, right) {
-  if (left.expression !== right.expression) {
-    return left.expression < right.expression ? -1 : 1;
-  }
-  const leftPath = left.filePath ?? "";
-  const rightPath = right.filePath ?? "";
-  return leftPath === rightPath ? 0 : leftPath < rightPath ? -1 : 1;
-}
-function readLicenseFileExpressions(evidence) {
-  const matches = [];
-  for (const file of evidence.files) {
-    if (file.kind !== "license" && file.kind !== "copying") {
-      continue;
-    }
-    const expression = recognizeStandardLicenseText(file.text);
-    if (expression && !isAbsentLicenseExpression(expression)) {
-      matches.push({
-        expression,
-        source: "license-file",
-        filePath: file.path,
-        ...file.scope === "component" || isInferredComponentLicenseFile(evidence, file.path) || isExplicitlyScopedComponentLicenseText(file.text) ? { fileScope: "component" } : {}
-      });
-    }
-  }
-  return matches;
-}
-function isInferredComponentLicenseFile(evidence, filePath) {
-  const normalizedPath = filePath.replaceAll("\\", "/");
-  const slashIndex = normalizedPath.lastIndexOf("/");
-  const directory = slashIndex >= 0 ? normalizedPath.slice(0, slashIndex + 1) : "";
-  const fileName = normalizedPath.slice(slashIndex + 1);
-  const isPrimaryLicense = /^licen[cs]e(?:\.(?:md|markdown|txt|text|rst|html?))?$/i.test(fileName);
-  const qualifiedLicense = isPrimaryLicense ? undefined : fileName.match(/^licen[cs]e[._-]([^.]+?)(?:\.(?:md|markdown|txt|text|rst|html?))?$/i);
-  const qualifier = qualifiedLicense?.[1];
-  const isPackageLicenseVariant = qualifier !== undefined && /^(?:0?bsd|agpl|apache|artistic|boost|cc0|cdla|epl|gpl|isc|lgpl|mit|mpl|ms[-_]?pl|ofl|psf|python|unlicense|wtfpl|zlib)(?:[-_.]?\d.*)?$/i.test(qualifier);
-  const isQualifiedComponent = qualifier !== undefined && (/^(?:lib|third[-_]?party|vendor|component)/i.test(qualifier) || !isPackageLicenseVariant);
-  const isThirdPartyInventory = /^third[-_. ]party[-_. ]licenses?(?:[-_. ].*)?$/i.test(fileName);
-  if (!isQualifiedComponent && !isThirdPartyInventory) {
-    return false;
-  }
-  return evidence.files.some((candidate) => {
-    const candidatePath = candidate.path.replaceAll("\\", "/");
-    const candidateSlashIndex = candidatePath.lastIndexOf("/");
-    const candidateDirectory = candidateSlashIndex >= 0 ? candidatePath.slice(0, candidateSlashIndex + 1) : "";
-    const candidateName = candidatePath.slice(candidateSlashIndex + 1);
-    return candidateDirectory.toLowerCase() === directory.toLowerCase() && /^licen[cs]e(?:\.(?:md|markdown|txt|text|rst|html?))?$/i.test(candidateName);
-  });
-}
-function isExplicitlyScopedComponentLicenseText(text) {
-  if (isAggregateComponentLicenseInventory(text)) {
-    return true;
-  }
-  const scopeDeclaration = text.slice(0, 2048).replace(/\s+/g, " ");
-  return /\b(?:the )?auto-generated bindings are (?:licensed )?under the 3-clause BSD license\b/i.test(scopeDeclaration);
-}
-function isAggregateComponentLicenseInventory(text) {
-  return /^\s*open_source_licenses\.txt\b/iu.test(text.slice(0, 2048));
-}
-function appendBundledComponentLicenses(input) {
-  const baseChoices = new Set(input.parsed.choices.map(comparableLicenseId));
-  const additions = new Map;
-  for (const match of input.matches) {
-    const component = parseSpdxExpression(match.expression);
-    if (component.malformed || component.choices.every((choice) => baseChoices.has(comparableLicenseId(choice)))) {
-      continue;
-    }
-    const matches = additions.get(component.expression ?? match.expression) ?? [];
-    matches.push(match);
-    additions.set(component.expression ?? match.expression, matches);
-  }
-  if (additions.size === 0 || !input.parsed.expression) {
-    return input.parsed;
-  }
-  for (const [expression2, matches] of additions) {
-    input.evidenceSources.push(`bundled component license match: ${expression2} from ${matches.map((match) => match.filePath).join(", ")}`);
-  }
-  const expression = [
-    `(${input.parsed.expression})`,
-    ...[...additions.keys()].map((item) => `(${item})`)
-  ].join(" AND ");
-  const combined = parseSpdxExpression(expression);
-  return combined.malformed ? input.parsed : combined;
-}
-function recognizeStandardLicenseText(text) {
-  const spdxIdentifier = readSpdxLicenseIdentifier(text);
-  if (spdxIdentifier) {
-    return spdxIdentifier;
-  }
-  const packageDualLicense = recognizePackageDualLicenseDeclaration(text);
-  if (packageDualLicense) {
-    return packageDualLicense;
-  }
-  const prose = text.replace(/\s+/g, " ");
-  if (/\bMozilla Public License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
-    return "MPL-2.0";
-  }
-  if (/\bEclipse Public License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
-    return "EPL-2.0";
-  }
-  if (isRecognizableApacheLicenseText(text)) {
-    return "Apache-2.0";
-  }
-  if (/\bCreative Commons Legal Code\b[\s\S]*\bCC0 1\.0 Universal\b/i.test(text)) {
-    return "CC0-1.0";
-  }
-  if (/\bsubject to your choice of exactly one of\b/i.test(text) && /\bThe FreeType License\b/i.test(text) && /\bGNU General Public License(?: \(GPL\))?, version 2 or later\b/i.test(text)) {
-    return "FTL OR GPL-2.0-or-later";
-  }
-  const gnuLicense = recognizeGnuLicenseText(text);
-  if (gnuLicense) {
-    return gnuLicense;
-  }
-  if (/\bfree and unencumbered software released into the public domain\b/i.test(text)) {
-    return "Unlicense";
-  }
-  const hasMitGrant = /\bPermission is hereby granted, free of charge, to any person obtaining a copy\b/i.test(prose);
-  const hasMitWarranty = /\bTHE SOFTWARE IS PROVIDED ['"“”]AS IS['"“”]/i.test(prose);
-  if (hasMitGrant && hasMitWarranty) {
-    const hasCompletePermissionGrant = /\bto deal in the Software without restriction\b/i.test(prose) && /\bright(?:s)? to use, copy, modify, merge, publish, distribute, sublicense, and\/or sell\b/i.test(prose) && /\bpermit persons to whom the Software is furnished to do so\b/i.test(prose);
-    const hasNoticeCondition = /\bThe above copyright notice and this permission notice(?:\s*\([^)]{0,160}\))?\s+shall be included\b/i.test(prose);
-    return hasCompletePermissionGrant && !hasNoticeCondition ? "MIT-0" : "MIT";
-  }
-  if (/\bPermission to use, copy, modify, and\/or distribute this software\b/i.test(text) && /\bTHE SOFTWARE IS PROVIDED "AS IS"/i.test(text)) {
-    if (/\bprovided\s+that\s+the\s+above\s+copyright\s+notice\s+and\s+this\s+permission\s+notice\s+appear\s+in\s+all\s+copies\b/i.test(text)) {
-      return "ISC";
-    }
-    if (/\bfor any purpose with or without fee is hereby granted\b/i.test(text)) {
-      return "0BSD";
-    }
-  }
-  if (/\bThis software is provided ['"]as-is['"], without any express or implied warranty\b/i.test(text) && /\bPermission is granted to anyone to use this software for any purpose\b/i.test(text) && /\bThe origin of this software must not be misrepresented\b/i.test(text)) {
-    return "Zlib";
-  }
-  if (/\bRedistribution and use in source and binary forms\b/i.test(text)) {
-    if (/\bThe BSD 1-Clause License\s*\(BSD-1-Clause\)/i.test(text)) {
-      return "BSD-1-Clause";
-    }
-    if (/\bThe origin of this software must not be misrepresented\b/i.test(text) && /\bAltered source versions must be plainly marked as such\b/i.test(text) && /\bThe name of the author may not be used to endorse or promote\b/i.test(text)) {
-      return "bzip2-1.0.6";
-    }
-    if (/\bAll advertising materials mentioning features or use of this software must display the following acknowledgement\b/i.test(text)) {
-      return "BSD-4-Clause";
-    }
-    const hasEndorsementCondition = /\b(?:Neither|The names? of)\b[\s\S]{0,400}\bmay\s+(?:not\s+)?be\s+used\s+to\s+endorse\s+or\s+promote\b/i.test(text);
-    return hasEndorsementCondition ? "BSD-3-Clause" : "BSD-2-Clause";
-  }
-  return;
-}
-function recognizePackageDualLicenseDeclaration(text) {
-  const declaration = text.slice(0, 2048).replace(/\s+/g, " ");
-  const apacheThenMit = /\bdual[- ]licen[cs]ed under (?:the )?Apache(?: License)?(?:,? Version)?\s*2\.0(?: license)?\s+(?:as well as|and)\s+(?:the )?MIT(?: license)?\b/i;
-  const mitThenApache = /\bdual[- ]licen[cs]ed under (?:the )?MIT(?: license)?\s+(?:as well as|and)\s+(?:the )?Apache(?: License)?(?:,? Version)?\s*2\.0(?: license)?\b/i;
-  return apacheThenMit.test(declaration) || mitThenApache.test(declaration) ? "MIT OR Apache-2.0" : undefined;
-}
-var GNU_LICENSE_SIGNATURES = [
-  {
-    expression: "AGPL-3.0-only",
-    pattern: /\bGNU AFFERO GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 3\b/i
-  },
-  {
-    expression: "LGPL-3.0-only",
-    pattern: /\bGNU LESSER GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 3\b/i
-  },
-  {
-    expression: "LGPL-2.1-only",
-    pattern: /\bGNU LESSER GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 2\.1\b/i
-  },
-  {
-    expression: "LGPL-2.0-only",
-    pattern: /\bGNU LIBRARY GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 2\b/i
-  },
-  {
-    expression: "GPL-3.0-only",
-    pattern: /\bGNU GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 3\b/i
-  },
-  {
-    expression: "GPL-2.0-only",
-    pattern: /\bGNU GENERAL PUBLIC LICENSE\b[\s\S]{0,80}?\bVersion 2\b/i
-  }
-];
-function recognizeGnuLicenseText(text) {
-  if (!/\bTERMS AND CONDITIONS\b/i.test(text)) {
-    return;
-  }
-  let earliest;
-  for (const signature of GNU_LICENSE_SIGNATURES) {
-    const match = signature.pattern.exec(text);
-    if (match && (!earliest || match.index < earliest.index)) {
-      earliest = { expression: signature.expression, index: match.index };
-    }
-  }
-  return earliest?.expression;
-}
-function isRecognizableApacheLicenseText(text) {
-  const fullLicense = /\bApache License\b[\s\S]*\bVersion 2\.0\b/i.test(text) && /\bTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\b/i.test(text);
-  const standardHeader = /\bLicensed under the Apache License, Version 2\.0\b/i.test(text) && /\bAS IS["”]? BASIS\b/i.test(text) && /\blimitations under the License\b/i.test(text);
-  return fullLicense || standardHeader;
-}
-function readSpdxLicenseIdentifier(text) {
-  for (const line of text.split(/\r?\n/)) {
-    const match = line.match(/\bSPDX-License-Identifier:\s*(.+)$/i);
-    const expression = match?.[1] ? cleanSpdxIdentifierExpression(match[1]) : undefined;
-    if (expression) {
-      return expression;
-    }
-  }
-  return;
-}
-function cleanSpdxIdentifierExpression(value) {
-  return value.replace(/\s*\*\/\s*$/, "").replace(/\s*-->\s*$/, "").replace(/\s*`+\s*$/u, "").trim();
-}
-function addLicenseFileMatchSource(evidenceSources, licenseExpression) {
-  evidenceSources.push(`file license match: ${licenseExpression.expression} from ${licenseExpression.filePath}`);
-}
-function readLicenseObjectType(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value) || !("type" in value)) {
-    return;
-  }
-  const type = value.type;
-  return typeof type === "string" ? type : undefined;
-}
-function describeEvidenceSources(evidence) {
-  const sources = [`source: ${evidence.source}`];
-  if (evidence.packageJsonLicense) {
-    sources.push(`package.json license: ${evidence.packageJsonLicense}`);
-  }
-  if (evidence.packageJsonPrivate) {
-    sources.push("package.json private: true");
-  }
-  if (evidence.packageJsonLicenses !== undefined) {
-    sources.push("package.json licenses field");
-  }
-  const metadataSource = evidence.metadataSource ?? "package metadata";
-  if (evidence.metadataLicense) {
-    const metadataLabel = evidence.metadataLicenseKind === "classifier" ? "classifier" : "license";
-    sources.push(`${metadataSource} ${metadataLabel}: ${evidence.metadataLicense}`);
-  }
-  if (evidence.metadataLicenses !== undefined) {
-    sources.push(`${metadataSource} licenses field`);
-  }
-  if (evidence.sbomDeclaredLicense) {
-    sources.push(`SPDX licenseDeclared: ${evidence.sbomDeclaredLicense}`);
-  }
-  if (evidence.sbomConcludedLicense) {
-    sources.push(`SPDX licenseConcluded: ${evidence.sbomConcludedLicense}`);
-  }
-  for (const file of evidence.files) {
-    sources.push(`file: ${file.path} (${file.kind})`);
-  }
-  for (const warning of evidence.warnings) {
-    sources.push(`warning: ${warning}`);
-  }
-  return sources;
 }
 
 // src/policy/finding-id.ts

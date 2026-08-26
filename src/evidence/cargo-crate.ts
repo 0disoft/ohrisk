@@ -4,6 +4,7 @@ import path from "node:path";
 import { readArchiveBytes } from "../archive/archive-reader";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
+import { recognizePackageDualLicenseDeclaration } from "../license/normalize";
 import { parseCargoManifestMetadata } from "./cargo-package";
 import { classifyEvidenceFile } from "./license-files";
 import type { LicenseEvidence, LicenseEvidenceFile } from "./types";
@@ -102,6 +103,17 @@ export function collectCargoCrateEvidence(input: {
       evidencePaths.set(relativePath, kind);
     }
   }
+  const readmePath = archive.value.entries
+    .filter((entry) => entry.type === "file" && entry.path.startsWith(rootPrefix))
+    .map((entry) => entry.path.slice(rootPrefix.length))
+    .filter((relativePath) => !relativePath.includes("/") && isCargoReadme(relativePath))
+    .sort()[0];
+  if (readmePath) {
+    const readme = archive.value.readText(`${rootPrefix}${readmePath}`, CARGO_CRATE_LICENSE_MAX_BYTES);
+    if (readme.ok && recognizePackageDualLicenseDeclaration(readme.value)) {
+      evidencePaths.set(readmePath, "other");
+    }
+  }
 
   const warnings: string[] = [];
   const files: LicenseEvidenceFile[] = [];
@@ -198,6 +210,10 @@ function normalizeDeclaredLicenseFile(value: string | undefined): string | undef
     return undefined;
   }
   return normalized;
+}
+
+function isCargoReadme(relativePath: string): boolean {
+  return /^README(?:\.(?:md|markdown|txt|text|rst))?$/iu.test(relativePath);
 }
 
 function safeCargoDisplayPart(value: string): string {

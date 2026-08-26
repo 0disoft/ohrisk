@@ -2,6 +2,10 @@
 
 ## 1.15.2 - Unreleased
 
+- Checksum-verified Cargo crates now honor an explicit README declaration that
+  offers MIT or Apache-2.0 at the user's option. Matching `LICENSE-MIT` and
+  `LICENSE-APACHE` files no longer produce a false conflicting-evidence finding,
+  while narrower `-only` metadata still conflicts with broader `-or-later` text.
 - Standard Maven names used by Apache, Hamcrest, HdrHistogram, and JTS now
   normalize to their SPDX expressions instead of producing malformed-license
   findings.

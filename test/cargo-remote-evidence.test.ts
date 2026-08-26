@@ -73,6 +73,49 @@ describe("remote Cargo crate evidence", () => {
     });
   });
 
+  test("honors an explicit MIT or Apache choice in a verified crate README", async () => {
+    const crate = cargoCrate("tracing-test", "0.2.6", {
+      "LICENSE-APACHE": "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION",
+      "LICENSE-MIT": [
+        "Permission is hereby granted, free of charge, to any person obtaining a copy",
+        "THE SOFTWARE IS PROVIDED \"AS IS\""
+      ].join("\n"),
+      "README.md": [
+        "Licensed under either of",
+        "* Apache License, Version 2.0 (LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0)",
+        "* MIT license (LICENSE-MIT or https://opensource.org/licenses/MIT)",
+        "at your option."
+      ].join("\n")
+    }, "MIT");
+    const evidence = await collectGraphEvidence({
+      graph: cargoGraph({
+        name: "tracing-test",
+        version: "0.2.6",
+        integrity: sha256Integrity(crate),
+        resolved: "registry+https://github.com/rust-lang/crates.io-index"
+      }),
+      projectRoot: ".",
+      allowLocalProjectEvidence: false,
+      resolveArtifactHost: async () => [{ address: "1.1.1.1", family: 4 }],
+      fetchArtifact: async (url) => artifactResponse(crate, url)
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) throw new Error(evidence.error.message);
+    expect(evidence.value[0]?.files.map((file) => file.path)).toEqual([
+      "LICENSE-APACHE",
+      "LICENSE-MIT",
+      "README.md"
+    ]);
+    expect(normalizeLicenseEvidence(evidence.value[0]!)).toMatchObject({
+      expression: "MIT OR Apache-2.0",
+      choices: ["MIT", "Apache-2.0"],
+      joiner: "or",
+      signals: [],
+      confidence: "medium"
+    });
+  });
+
   test("does not fetch crates without checksums or from non-crates.io sources", async () => {
     let fetchCount = 0;
     const evidence = await collectGraphEvidence({

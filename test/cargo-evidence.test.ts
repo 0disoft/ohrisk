@@ -79,6 +79,68 @@ describe("collectCargoPackageEvidence", () => {
     }
   });
 
+  test("honors an explicit MIT or Apache choice in a local Cargo README", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cargo-dual-license-"));
+    const crateDir = path.join(
+      projectRoot,
+      ".cargo",
+      "registry",
+      "src",
+      "index.crates.io-abcdef",
+      "tracing-test-0.2.6"
+    );
+
+    try {
+      mkdirSync(crateDir, { recursive: true });
+      writeFileSync(path.join(crateDir, "Cargo.toml"), [
+        "[package]",
+        "name = \"tracing-test\"",
+        "version = \"0.2.6\"",
+        "license = \"MIT\""
+      ].join("\n"), "utf8");
+      writeFileSync(
+        path.join(crateDir, "LICENSE-APACHE"),
+        "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION",
+        "utf8"
+      );
+      writeFileSync(path.join(crateDir, "LICENSE-MIT"), [
+        "Permission is hereby granted, free of charge, to any person obtaining a copy",
+        "THE SOFTWARE IS PROVIDED \"AS IS\""
+      ].join("\n"), "utf8");
+      writeFileSync(path.join(crateDir, "README.md"), [
+        "Licensed under either of",
+        "* Apache License, Version 2.0 (LICENSE-APACHE)",
+        "* MIT license (LICENSE-MIT)",
+        "at your option."
+      ].join("\n"), "utf8");
+      writeCargoChecksum(crateDir, CARGO_CHECKSUM_HEX);
+
+      const evidence = collectCargoPackageEvidence({
+        packageId: "tracing-test@0.2.6",
+        packageName: "tracing-test",
+        version: "0.2.6",
+        projectRoot,
+        resolved: CARGO_CRATES_IO_SOURCE,
+        integrity: CARGO_CHECKSUM_INTEGRITY
+      });
+
+      expect(evidence.ok).toBe(true);
+      if (!evidence.ok) throw new Error(evidence.error.message);
+      expect(evidence.value.files.map((file) => file.path)).toEqual([
+        "LICENSE-APACHE",
+        "LICENSE-MIT",
+        "README.md"
+      ]);
+      expect(normalizeLicenseEvidence(evidence.value)).toMatchObject({
+        expression: "MIT OR Apache-2.0",
+        signals: [],
+        confidence: "medium"
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("ignores Cargo license-file paths outside the package directory", () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cargo-evidence-"));
     const registryRoot = path.join(

@@ -9,6 +9,7 @@ import {
   type TextFileReadError
 } from "../shared/read-text-file";
 import { err, ok, type Result } from "../shared/result";
+import { recognizePackageDualLicenseDeclaration } from "../license/normalize";
 import { classifyEvidenceFile } from "./license-files";
 import type { LicenseEvidence, LicenseEvidenceFile } from "./types";
 
@@ -316,7 +317,8 @@ function readCargoEvidenceFiles(input: {
     });
   }
   for (const candidate of evidenceFileCandidates(input.packageDir)) {
-    const kind = classifyEvidenceFile(candidate.relativePath);
+    const kind = classifyEvidenceFile(candidate.relativePath)
+      ?? cargoReadmeEvidenceKind(candidate.absolutePath, candidate.relativePath, input.maxBytes);
     if (kind && !candidates.has(candidate.absolutePath)) {
       candidates.set(candidate.absolutePath, { ...candidate, kind });
     }
@@ -354,6 +356,18 @@ function readCargoEvidenceFiles(input: {
   }
 
   return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function cargoReadmeEvidenceKind(
+  absolutePath: string,
+  relativePath: string,
+  maxBytes: number
+): LicenseEvidenceFile["kind"] | undefined {
+  if (!/^README(?:\.(?:md|markdown|txt|text|rst))?$/iu.test(relativePath)) {
+    return undefined;
+  }
+  const text = readTextFileWithLimit({ filePath: absolutePath, maxBytes });
+  return text.ok && recognizePackageDualLicenseDeclaration(text.value) ? "other" : undefined;
 }
 
 function evidenceFileCandidates(dir: string): Array<{
