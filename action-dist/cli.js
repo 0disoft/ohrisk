@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: f4a7332a658742cf88817d1b40b68c361775116e1cd0d33c83020059c19ff602
+// ohrisk-action-source-sha256: 9d0a611351ffc7055312231ac88c95619fd7438b043a5bcbce32a28db371724c
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -56716,6 +56716,7 @@ var PERMISSIVE_LICENSES = new Set([
   "MIT-0",
   "MIT-CMU",
   "ISC",
+  "BSL-1.0",
   "BlueOak-1.0.0",
   "BSD-2-Clause",
   "BSD-3-Clause",
@@ -56725,6 +56726,7 @@ var PERMISSIVE_LICENSES = new Set([
   "Python-2.0",
   "Zlib",
   "Unicode-3.0",
+  "Unicode-DFS-2016",
   "CC0-1.0",
   "Unlicense"
 ]);

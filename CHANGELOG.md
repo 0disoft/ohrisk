@@ -2,6 +2,10 @@
 
 ## 1.15.2 - Unreleased
 
+- SPDX `BSL-1.0` and `Unicode-DFS-2016` are now classified as permissive
+  low-risk licenses under both profiles instead of falling through to
+  `unknown`. This fixes false unknown findings for crates such as
+  `clipboard-win`, `error-code`, and `unicode-ident`.
 - Root legal files that explicitly declare the package as dual-licensed under
   MIT and Apache-2.0 now keep that package-level choice when a later section
   carries a BSD-3-Clause notice scoped to one source file. This removes false

@@ -40,12 +40,14 @@ describe("evaluateLicenseRisk", () => {
   test("treats additional recognized permissive licenses as low risk", () => {
     for (const expression of [
       "0BSD",
+      "BSL-1.0",
       "BlueOak-1.0.0",
       "CC0-1.0",
       "MIT-0",
       "PSF-2.0",
       "Python-2.0",
       "Unicode-3.0",
+      "Unicode-DFS-2016",
       "Unlicense"
     ]) {
       const finding = evaluateLicenseRisk({

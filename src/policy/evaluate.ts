@@ -22,6 +22,7 @@ const PERMISSIVE_LICENSES = new Set([
   "MIT-0",
   "MIT-CMU",
   "ISC",
+  "BSL-1.0",
   "BlueOak-1.0.0",
   "BSD-2-Clause",
   "BSD-3-Clause",
@@ -31,6 +32,7 @@ const PERMISSIVE_LICENSES = new Set([
   "Python-2.0",
   "Zlib",
   "Unicode-3.0",
+  "Unicode-DFS-2016",
   "CC0-1.0",
   "Unlicense"
 ]);
