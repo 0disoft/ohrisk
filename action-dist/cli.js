@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 860bff513b8ad835d718fb7923723a39a484ba5e058a03b6da5d522b11f15692
+// ohrisk-action-source-sha256: 07bee8ef05ac65bd8759ddd966f74c5f07ce5a3b1190c5a760ea71f79a44a1c9
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -56812,6 +56812,7 @@ var PERMISSIVE_LICENSES = new Set([
   "MIT",
   "MIT-0",
   "MIT-CMU",
+  "NCSA",
   "ISC",
   "BSL-1.0",
   "BlueOak-1.0.0",

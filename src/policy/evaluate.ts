@@ -21,6 +21,7 @@ const PERMISSIVE_LICENSES = new Set([
   "MIT",
   "MIT-0",
   "MIT-CMU",
+  "NCSA",
   "ISC",
   "BSL-1.0",
   "BlueOak-1.0.0",

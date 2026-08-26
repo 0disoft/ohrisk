@@ -565,7 +565,7 @@ Ohrisk는 라이선스 텍스트를 법적으로 해석하지 않는다. 알려�
 
 | 라이선스 계열 | saas | distributed-app | 설명 |
 | --- | --- | --- | --- |
-| permissive (MIT, ISC, BSD, Apache-2.0, Zlib, CC0, Unlicense) | low | low | 재배포 제약이 없어 프로필과 무관하게 low. |
+| permissive (MIT, ISC, BSD, NCSA, Apache-2.0, Zlib, CC0, Unlicense) | low | low | 재배포 제약이 없어 프로필과 무관하게 low. |
 | AGPL | high | high | 네트워크 카피레프트. SaaS여도 high. |
 | GPL | review | high | SaaS는 재배포가 아니라 review, 배포형 앱은 재배포 의무로 high. |
 | MPL | low | review | SaaS 서버 사용은 복제본을 전달하지 않으므로 low, 패키지를 배포하면 파일 단위 의무 검토. |

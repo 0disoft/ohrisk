@@ -76,6 +76,35 @@ describe("evaluateLicenseRisk", () => {
     }
   });
 
+  test("treats NCSA as permissive inside a compound SPDX expression", () => {
+    const expression = "(MIT OR Apache-2.0) AND NCSA";
+    const finding = evaluateLicenseRisk({
+      license: {
+        packageId: "libfuzzer-sys@0.4.10",
+        original: expression,
+        expression,
+        choices: ["MIT", "Apache-2.0", "NCSA"],
+        joiner: "mixed",
+        signals: [],
+        evidenceSources: ["source: tarball", `Cargo.toml license: ${expression}`],
+        confidence: "high"
+      },
+      dependency: {
+        ...baseDependency,
+        id: "libfuzzer-sys@0.4.10",
+        name: "libfuzzer-sys",
+        version: "0.4.10",
+        ecosystem: "cargo",
+        direct: false,
+        paths: [["zed", "libfuzzer-sys@0.4.10"]]
+      },
+      profile: "distributed-app"
+    });
+
+    expect(finding.severity).toBe("low");
+    expect(finding.recommendation).toBe("allow");
+  });
+
   test("does not invent a license-text preservation obligation for WTFPL", () => {
     const finding = evaluateLicenseRisk({
       license: {
