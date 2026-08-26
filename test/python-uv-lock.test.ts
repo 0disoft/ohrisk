@@ -290,6 +290,81 @@ describe("parseUvLockText", () => {
     ]);
   });
 
+  test("parses versionless editable workspace packages with bounded local evidence", () => {
+    const files = new Map([
+      [
+        "./pyproject.toml",
+        [
+          "[project]",
+          "name = \"pydantic\"",
+          "dynamic = [\"version\"]",
+          "license = \"MIT\""
+        ].join("\n")
+      ],
+      [
+        "pydantic-core/pyproject.toml",
+        [
+          "[project]",
+          "name = \"pydantic-core\"",
+          "dynamic = [\"version\"]",
+          "license = \"MIT\""
+        ].join("\n")
+      ]
+    ]);
+
+    const result = parseUvLockText(
+      [
+        "version = 1",
+        "revision = 3",
+        "",
+        "[[package]]",
+        "name = \"pydantic\"",
+        "source = { editable = \".\" }",
+        "dependencies = [{ name = \"pydantic-core\" }]",
+        "",
+        "[[package]]",
+        "name = \"pydantic-core\"",
+        "source = { editable = \"pydantic-core\" }"
+      ].join("\n"),
+      "uv.lock",
+      {
+        readLocalSourceFile: ({ sourcePath, relativeFilePath }) => ({
+          ok: true as const,
+          value: files.has(`${sourcePath}/${relativeFilePath}`)
+            ? {
+                path: `${sourcePath}/${relativeFilePath}`,
+                text: files.get(`${sourcePath}/${relativeFilePath}`) ?? ""
+              }
+            : undefined
+        })
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.rootName).toBe("pydantic");
+    expect(result.value.nodes).toEqual([
+      expect.objectContaining({
+        id: "pydantic-core@0.0.0+local",
+        name: "pydantic-core",
+        version: "0.0.0+local",
+        dependencyType: "production",
+        direct: true,
+        paths: [["pydantic", "pydantic-core@0.0.0+local"]]
+      })
+    ]);
+    expect(result.value.embeddedEvidence).toEqual([
+      expect.objectContaining({
+        packageId: "pydantic-core@0.0.0+local",
+        metadataLicense: "MIT",
+        source: "local"
+      })
+    ]);
+  });
+
   test("keeps immutable remote VCS package records without fetching unrelated PyPI evidence", () => {
     const commit = "4e3996d9f69b10e8f91b6b9fa4712f627c539c02";
     const result = parseUvLockText(

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 21d4f61559a7163d6c8dc25132b089473e3897f7cf8b52713e1faf19104ca3b2
+// ohrisk-action-source-sha256: f31224ce02fa5608255b76cbc38d5eb97268717ca815e5d597c472f83675f1f3
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -29590,12 +29590,13 @@ function readPythonLocalSourcePackage(input) {
   const metadata = readLocalSourceMetadata({
     sourcePath: input.source.sourcePath,
     fromFilePath: input.fromFilePath,
-    readLocalSourceFile: input.readLocalSourceFile
+    readLocalSourceFile: input.readLocalSourceFile,
+    acceptMissingVersion: input.fallbackVersion !== undefined
   });
   if (!metadata.ok) {
     return metadata;
   }
-  if (!metadata.value.name || !metadata.value.version) {
+  if (!metadata.value.name || !metadata.value.version && !input.fallbackVersion) {
     return pythonLocalSourceError(omitUndefined({
       errors: input.errors,
       fromFilePath: input.fromFilePath,
@@ -29604,6 +29605,15 @@ function readPythonLocalSourcePackage(input) {
       entry: input.entry,
       message: `Failed to parse ${input.errors.displayName}. Local source package entries must declare package name and version metadata.`
     }));
+  }
+  const version = metadata.value.version ?? input.fallbackVersion;
+  if (!version) {
+    return pythonLocalSourceError({
+      errors: input.errors,
+      fromFilePath: input.fromFilePath,
+      sourcePath: input.source.sourcePath,
+      message: `Failed to parse ${input.errors.displayName}. Local source package version metadata is unavailable.`
+    });
   }
   if (input.source.expectedName && normalizePythonPackageName(input.source.expectedName) !== normalizePythonPackageName(metadata.value.name)) {
     return err(createError({
@@ -29620,7 +29630,7 @@ function readPythonLocalSourcePackage(input) {
       }
     }));
   }
-  const id = `${metadata.value.name}@${metadata.value.version}`;
+  const id = `${metadata.value.name}@${version}`;
   const evidence = readLocalSourceEvidence({
     packageId: id,
     metadata: metadata.value,
@@ -29633,7 +29643,7 @@ function readPythonLocalSourcePackage(input) {
   }
   return ok({
     name: metadata.value.name,
-    version: metadata.value.version,
+    version,
     id,
     evidence: evidence.value
   });
@@ -29707,7 +29717,7 @@ function readLocalSourceMetadata(input) {
       fileName: relativeFilePath,
       text: sourceFile.value.text
     });
-    if (metadata.name && metadata.version) {
+    if (metadata.name && (metadata.version || input.acceptMissingVersion)) {
       return ok(metadata);
     }
   }
@@ -29756,7 +29766,7 @@ function parseLocalSourcePyproject(input) {
       }
     }
   }
-  const selected = project.name && project.version ? project : poetry;
+  const selected = project.name ? project : poetry;
   return omitUndefined({
     name: selected.name,
     version: selected.version,
@@ -32713,8 +32723,8 @@ function parseUvPackageRecords(input, options) {
     if (!current) {
       return ok(undefined);
     }
-    if (!current.name || !current.version) {
-      throw new Error("Encountered a [[package]] record without a string name and version.");
+    if (!current.name) {
+      throw new Error("Encountered a [[package]] record without a string name.");
     }
     if (current.unsupportedSource) {
       return err(createError({
@@ -32734,7 +32744,7 @@ function parseUvPackageRecords(input, options) {
         }
       }));
     }
-    if (current.sourcePath && !current.virtual) {
+    if (current.sourcePath) {
       const localSource = readPythonLocalSourcePackage({
         source: {
           sourcePath: current.sourcePath,
@@ -32742,6 +32752,7 @@ function parseUvPackageRecords(input, options) {
         },
         fromFilePath: options.lockfilePath,
         readLocalSourceFile: options.readLocalSourceFile,
+        ...current.version ? {} : { fallbackVersion: "0.0.0+local" },
         errors: UV_LOCK_LOCAL_SOURCE_ERRORS
       });
       if (!localSource.ok) {
@@ -32753,9 +32764,12 @@ function parseUvPackageRecords(input, options) {
         id: localSource.value.id,
         virtual: current.virtual,
         dependencies: current.dependencies,
-        evidence: localSource.value.evidence
+        ...current.virtual ? {} : { evidence: localSource.value.evidence }
       });
       return ok(undefined);
+    }
+    if (!current.version) {
+      throw new Error("Encountered a non-local [[package]] record without a string version.");
     }
     records.push({
       name: current.name,

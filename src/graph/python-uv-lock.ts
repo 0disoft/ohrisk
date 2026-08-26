@@ -232,8 +232,8 @@ function parseUvPackageRecords(input: string, options: {
       return ok(undefined);
     }
 
-    if (!current.name || !current.version) {
-      throw new Error("Encountered a [[package]] record without a string name and version.");
+    if (!current.name) {
+      throw new Error("Encountered a [[package]] record without a string name.");
     }
 
     if (current.unsupportedSource) {
@@ -260,7 +260,7 @@ function parseUvPackageRecords(input: string, options: {
       );
     }
 
-    if (current.sourcePath && !current.virtual) {
+    if (current.sourcePath) {
       const localSource = readPythonLocalSourcePackage({
         source: {
           sourcePath: current.sourcePath,
@@ -268,6 +268,7 @@ function parseUvPackageRecords(input: string, options: {
         },
         fromFilePath: options.lockfilePath,
         readLocalSourceFile: options.readLocalSourceFile,
+        ...(current.version ? {} : { fallbackVersion: "0.0.0+local" }),
         errors: UV_LOCK_LOCAL_SOURCE_ERRORS
       });
       if (!localSource.ok) {
@@ -280,9 +281,13 @@ function parseUvPackageRecords(input: string, options: {
         id: localSource.value.id,
         virtual: current.virtual,
         dependencies: current.dependencies,
-        evidence: localSource.value.evidence
+        ...(current.virtual ? {} : { evidence: localSource.value.evidence })
       });
       return ok(undefined);
+    }
+
+    if (!current.version) {
+      throw new Error("Encountered a non-local [[package]] record without a string version.");
     }
 
     records.push({

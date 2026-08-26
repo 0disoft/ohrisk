@@ -2,6 +2,11 @@
 
 ## 1.15.2 - Unreleased
 
+- Modern `uv.lock` files may omit versions for editable workspace packages.
+  Ohrisk now accepts those records only for project-contained local sources,
+  validates their local package metadata, collects bounded license evidence,
+  and uses `0.0.0+local` as a stable report identity when the project version
+  is dynamic. Versionless remote records still fail closed.
 - SPDX `TCL` and `WTFPL` expressions are now classified as permissive
   low-risk licenses under both profiles. Distributed `TCL` packages retain
   the normal license-text obligation, while `WTFPL` does not invent one.

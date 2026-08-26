@@ -286,6 +286,12 @@ reviewed. Branches, tags, short revisions, unresolved URLs, and malformed remote
 sources fail closed, and rejected-source diagnostics redact credentials and URL
 parameters.
 
+Versionless editable workspace records are accepted only when their source is a
+project-contained local path. Ohrisk validates the local package name and reads
+bounded local license evidence, assigning the stable report version
+`0.0.0+local` when both the lock and project metadata intentionally use a
+dynamic version. Versionless registry, URL, and VCS records remain invalid.
+
 For SPDX JSON and RDF SBOMs, dependency graph traversal is iterative and retains
 every reachable package while storing at most 64 dependency paths per package,
 with path depth bounded at 256 packages and explicit budgets for total stored

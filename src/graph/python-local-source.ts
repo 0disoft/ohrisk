@@ -99,6 +99,7 @@ export function readPythonLocalSourcePackage(input: {
   source: PythonLocalSource;
   fromFilePath: string;
   readLocalSourceFile: PythonLocalSourceFileReader | undefined;
+  fallbackVersion?: string;
   line?: number;
   entry?: string;
   errors: PythonLocalSourceErrorOptions;
@@ -117,13 +118,14 @@ export function readPythonLocalSourcePackage(input: {
   const metadata = readLocalSourceMetadata({
     sourcePath: input.source.sourcePath,
     fromFilePath: input.fromFilePath,
-    readLocalSourceFile: input.readLocalSourceFile
+    readLocalSourceFile: input.readLocalSourceFile,
+    acceptMissingVersion: input.fallbackVersion !== undefined
   });
   if (!metadata.ok) {
     return metadata;
   }
 
-  if (!metadata.value.name || !metadata.value.version) {
+  if (!metadata.value.name || (!metadata.value.version && !input.fallbackVersion)) {
     return pythonLocalSourceError(omitUndefined({
       errors: input.errors,
       fromFilePath: input.fromFilePath,
@@ -132,6 +134,16 @@ export function readPythonLocalSourcePackage(input: {
       entry: input.entry,
       message: `Failed to parse ${input.errors.displayName}. Local source package entries must declare package name and version metadata.`
     }));
+  }
+
+  const version = metadata.value.version ?? input.fallbackVersion;
+  if (!version) {
+    return pythonLocalSourceError({
+      errors: input.errors,
+      fromFilePath: input.fromFilePath,
+      sourcePath: input.source.sourcePath,
+      message: `Failed to parse ${input.errors.displayName}. Local source package version metadata is unavailable.`
+    });
   }
 
   if (
@@ -155,7 +167,7 @@ export function readPythonLocalSourcePackage(input: {
     );
   }
 
-  const id = `${metadata.value.name}@${metadata.value.version}`;
+  const id = `${metadata.value.name}@${version}`;
   const evidence = readLocalSourceEvidence({
     packageId: id,
     metadata: metadata.value,
@@ -169,7 +181,7 @@ export function readPythonLocalSourcePackage(input: {
 
   return ok({
     name: metadata.value.name,
-    version: metadata.value.version,
+    version,
     id,
     evidence: evidence.value
   });
@@ -247,6 +259,7 @@ function readLocalSourceMetadata(input: {
   sourcePath: string;
   fromFilePath: string;
   readLocalSourceFile: PythonLocalSourceFileReader;
+  acceptMissingVersion: boolean;
 }): Result<LocalSourceMetadata, OhriskError> {
   for (const relativeFilePath of LOCAL_SOURCE_METADATA_FILES) {
     const sourceFile = input.readLocalSourceFile({
@@ -266,7 +279,7 @@ function readLocalSourceMetadata(input: {
       fileName: relativeFilePath,
       text: sourceFile.value.text
     });
-    if (metadata.name && metadata.version) {
+    if (metadata.name && (metadata.version || input.acceptMissingVersion)) {
       return ok(metadata);
     }
   }
@@ -334,7 +347,7 @@ function parseLocalSourcePyproject(input: string): LocalSourceMetadata {
     }
   }
 
-  const selected = project.name && project.version ? project : poetry;
+  const selected = project.name ? project : poetry;
   return omitUndefined({
     name: selected.name,
     version: selected.version,
