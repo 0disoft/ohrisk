@@ -33,6 +33,7 @@ type YarnLockEntry = {
   resolution?: unknown;
   resolved?: unknown;
   integrity?: unknown;
+  checksum?: unknown;
   dependencies?: unknown;
   optionalDependencies?: unknown;
 };
@@ -52,6 +53,7 @@ type YarnPackageRecord = {
   id: string;
   resolved?: string;
   integrity?: string;
+  yarnCacheChecksum?: string;
   dependencies: YarnDependencyEdge[];
 };
 
@@ -701,6 +703,11 @@ function parsePackageRecords(lockfile: ParsedYarnLockfile): YarnPackageRecord[] 
     const integrity = typeof entry.integrity === "string" && entry.integrity !== ""
       ? entry.integrity
       : undefined;
+    const yarnCacheChecksum = lockfile.format === "berry"
+      && typeof entry.checksum === "string"
+      && /^[0-9a-z]+\/[a-f0-9]{128}$/iu.test(entry.checksum)
+      ? entry.checksum
+      : undefined;
 
     records.push({
       key,
@@ -713,6 +720,7 @@ function parsePackageRecords(lockfile: ParsedYarnLockfile): YarnPackageRecord[] 
       id: `${identity.name}@${entry.version}`,
       ...(resolved ? { resolved } : {}),
       ...(integrity ? { integrity } : {}),
+      ...(yarnCacheChecksum ? { yarnCacheChecksum } : {}),
       dependencies: collectEntryDependencies(entry)
     });
   }
@@ -1057,6 +1065,9 @@ function walkDependency(input: {
       ...(installName ? { installNames: [installName] } : {}),
       ...(input.record.resolved ? { resolved: input.record.resolved } : {}),
       ...(input.record.integrity ? { integrity: input.record.integrity } : {}),
+      ...(input.record.yarnCacheChecksum
+        ? { yarnCacheChecksum: input.record.yarnCacheChecksum }
+        : {}),
       dependencyType: input.dependencyType,
       direct: input.direct,
       paths: [nextPath]

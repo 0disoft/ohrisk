@@ -144,6 +144,13 @@ function artifactConflictWarnings(
     warnings.push(`Multiple lockfiles declare different integrity values for ${purl}.`);
   }
   if (
+    left.yarnCacheChecksum
+    && right.yarnCacheChecksum
+    && left.yarnCacheChecksum !== right.yarnCacheChecksum
+  ) {
+    warnings.push(`Multiple lockfiles declare different Yarn cache checksums for ${purl}.`);
+  }
+  if (
     left.goModIntegrity
     && right.goModIntegrity
     && left.goModIntegrity !== right.goModIntegrity
@@ -158,6 +165,11 @@ function mergeDependencyNode(left: DependencyNode, right: DependencyNode): Depen
     ...left,
     ...(left.resolved ? {} : right.resolved ? { resolved: right.resolved } : {}),
     ...(left.integrity ? {} : right.integrity ? { integrity: right.integrity } : {}),
+    ...(left.yarnCacheChecksum
+      ? {}
+      : right.yarnCacheChecksum
+        ? { yarnCacheChecksum: right.yarnCacheChecksum }
+        : {}),
     ...(left.goModIntegrity
       ? {}
       : right.goModIntegrity

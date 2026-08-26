@@ -16,6 +16,11 @@ Remote fetching is limited to these explicit adapters:
 - the tarball URL returned by that exact-version registry metadata response,
   with lockfile integrity verification and package-content inspection required
   before its license evidence is trusted.
+- Yarn Berry `checksum` values identify Yarn's normalized cache ZIP rather than
+  the npm registry tarball. Ohrisk preserves that distinction and never applies
+  the cache checksum to registry bytes. Without a committed `.yarn/cache`, those
+  packages remain `unknown` with guidance to scan an installed checkout or
+  commit the cache.
 - PyPI release metadata lookup for an exact locked Python package version, used
   only to select a digest-identified distribution; registry-supplied license
   fields are not package license evidence;

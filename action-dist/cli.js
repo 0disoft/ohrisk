@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 40877610d2cb7e615ad236410539466b8f0feb1d309ab8e5b5d29878014202d9
+// ohrisk-action-source-sha256: 614605540402aa6b14580e80f5730a65380f244463eab18c15f6b99e40e8567e
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -17958,6 +17958,9 @@ function artifactConflictWarnings(left, right, purl) {
   if (left.integrity && right.integrity && left.integrity !== right.integrity) {
     warnings.push(`Multiple lockfiles declare different integrity values for ${purl}.`);
   }
+  if (left.yarnCacheChecksum && right.yarnCacheChecksum && left.yarnCacheChecksum !== right.yarnCacheChecksum) {
+    warnings.push(`Multiple lockfiles declare different Yarn cache checksums for ${purl}.`);
+  }
   if (left.goModIntegrity && right.goModIntegrity && left.goModIntegrity !== right.goModIntegrity) {
     warnings.push(`Multiple lockfiles declare different go.mod integrity values for ${purl}.`);
   }
@@ -17968,6 +17971,7 @@ function mergeDependencyNode(left, right) {
     ...left,
     ...left.resolved ? {} : right.resolved ? { resolved: right.resolved } : {},
     ...left.integrity ? {} : right.integrity ? { integrity: right.integrity } : {},
+    ...left.yarnCacheChecksum ? {} : right.yarnCacheChecksum ? { yarnCacheChecksum: right.yarnCacheChecksum } : {},
     ...left.goModIntegrity ? {} : right.goModIntegrity ? { goModIntegrity: right.goModIntegrity } : {},
     ...(left.installNames?.length ?? 0) > 0 || (right.installNames?.length ?? 0) > 0 ? { installNames: unique([...left.installNames ?? [], ...right.installNames ?? []]) } : {},
     dependencyType: mergeDependencyType(left.dependencyType, right.dependencyType),
@@ -28675,6 +28679,7 @@ function parsePackageRecords4(lockfile) {
     }
     const resolved = typeof entry.resolved === "string" && entry.resolved !== "" ? entry.resolved : undefined;
     const integrity = typeof entry.integrity === "string" && entry.integrity !== "" ? entry.integrity : undefined;
+    const yarnCacheChecksum = lockfile.format === "berry" && typeof entry.checksum === "string" && /^[0-9a-z]+\/[a-f0-9]{128}$/iu.test(entry.checksum) ? entry.checksum : undefined;
     records.push({
       key,
       descriptors: descriptorIndexKeys({
@@ -28686,6 +28691,7 @@ function parsePackageRecords4(lockfile) {
       id: `${identity2.name}@${entry.version}`,
       ...resolved ? { resolved } : {},
       ...integrity ? { integrity } : {},
+      ...yarnCacheChecksum ? { yarnCacheChecksum } : {},
       dependencies: collectEntryDependencies(entry)
     });
   }
@@ -28933,6 +28939,7 @@ function walkDependency4(input) {
       ...installName ? { installNames: [installName] } : {},
       ...input.record.resolved ? { resolved: input.record.resolved } : {},
       ...input.record.integrity ? { integrity: input.record.integrity } : {},
+      ...input.record.yarnCacheChecksum ? { yarnCacheChecksum: input.record.yarnCacheChecksum } : {},
       dependencyType: input.dependencyType,
       direct: input.direct,
       paths: [nextPath]
@@ -52601,6 +52608,7 @@ async function collectNpmRegistryTarballEvidence(input) {
     packageId: input.node.id,
     resolved: tarballUrl,
     ...input.node.integrity ? { integrity: input.node.integrity } : {},
+    ...input.node.yarnCacheChecksum ? { unverifiedIntegrityWarning: yarnCacheOnlyIntegrityWarning() } : {},
     fetchArtifact: input.fetchArtifact,
     resolveArtifactHost: input.resolveArtifactHost,
     fetchTimeoutMs: input.fetchTimeoutMs,
@@ -53066,7 +53074,7 @@ async function collectRemoteTarballEvidence(input) {
         return err(preflight.error);
       }
     }
-    return ok(unavailableUnverifiedRemoteTarballEvidence(input.packageId));
+    return ok(unavailableUnverifiedRemoteTarballEvidence(input.packageId, input.unverifiedIntegrityWarning));
   }
   try {
     const tarball = await readRemoteArtifactBytes({
@@ -53391,15 +53399,18 @@ function addIntegrityWarningWhenUnverified(input) {
     ]
   };
 }
-function unavailableUnverifiedRemoteTarballEvidence(packageId) {
+function unavailableUnverifiedRemoteTarballEvidence(packageId, warning = "Remote package artifact integrity was not available in the lockfile; tarball contents were not trusted.") {
   return {
     packageId,
     files: [],
     source: "unavailable",
     warnings: [
-      "Remote package artifact integrity was not available in the lockfile; tarball contents were not trusted."
+      warning
     ]
   };
+}
+function yarnCacheOnlyIntegrityWarning() {
+  return "Yarn Berry checksum covers its cache ZIP, not the npm tarball; remote bytes were not trusted. Commit .yarn/cache or scan an installed checkout.";
 }
 async function readArtifactWithTimeout(input) {
   const controller = new AbortController;

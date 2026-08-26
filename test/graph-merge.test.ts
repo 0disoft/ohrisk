@@ -64,6 +64,41 @@ function sharedFindingIds(graph: DependencyGraph): string[] {
 }
 
 describe("mergeDependencyGraphs", () => {
+  test("preserves Yarn cache checksums across merged dependency graphs", () => {
+    const node = {
+      id: "example@1.0.0",
+      name: "example",
+      version: "1.0.0",
+      ecosystem: "npm" as const,
+      dependencyType: "production" as const,
+      direct: true,
+      paths: [["workspace", "example@1.0.0"]]
+    };
+    const merged = mergeDependencyGraphs([
+      {
+        source: { lockfileKind: "package-lock", lockfilePath: "/repo/package-lock.json" },
+        graph: {
+          rootName: "workspace",
+          lockfilePath: "/repo/package-lock.json",
+          nodes: [node]
+        }
+      },
+      {
+        source: { lockfileKind: "yarn-lock", lockfilePath: "/repo/yarn.lock" },
+        graph: {
+          rootName: "workspace",
+          lockfilePath: "/repo/yarn.lock",
+          nodes: [{
+            ...node,
+            yarnCacheChecksum: `10c0/${"a".repeat(128)}`
+          }]
+        }
+      }
+    ]);
+
+    expect(merged.nodes[0]?.yarnCacheChecksum).toBe(`10c0/${"a".repeat(128)}`);
+  });
+
   test("preserves standalone Go module integrity across merged graphs", () => {
     const node = {
       id: "example.com/module@v1.0.0",

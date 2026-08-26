@@ -2589,6 +2589,9 @@ async function collectNpmRegistryTarballEvidence(input: {
     packageId: input.node.id,
     resolved: tarballUrl,
     ...(input.node.integrity ? { integrity: input.node.integrity } : {}),
+    ...(input.node.yarnCacheChecksum
+      ? { unverifiedIntegrityWarning: yarnCacheOnlyIntegrityWarning() }
+      : {}),
     fetchArtifact: input.fetchArtifact,
     resolveArtifactHost: input.resolveArtifactHost,
     fetchTimeoutMs: input.fetchTimeoutMs,
@@ -3191,6 +3194,7 @@ async function collectRemoteTarballEvidence(input: {
     details: Record<string, unknown>;
   };
   skipIntegrityCheck?: boolean;
+  unverifiedIntegrityWarning?: string;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   const urlError = input.urlError ?? {
     code: "TARBALL_FETCH_FAILED" as const,
@@ -3232,7 +3236,10 @@ async function collectRemoteTarballEvidence(input: {
         return err(preflight.error);
       }
     }
-    return ok(unavailableUnverifiedRemoteTarballEvidence(input.packageId));
+    return ok(unavailableUnverifiedRemoteTarballEvidence(
+      input.packageId,
+      input.unverifiedIntegrityWarning
+    ));
   }
 
   try {
@@ -3650,15 +3657,22 @@ function addIntegrityWarningWhenUnverified(input: {
   };
 }
 
-function unavailableUnverifiedRemoteTarballEvidence(packageId: string): LicenseEvidence {
+function unavailableUnverifiedRemoteTarballEvidence(
+  packageId: string,
+  warning = "Remote package artifact integrity was not available in the lockfile; tarball contents were not trusted."
+): LicenseEvidence {
   return {
     packageId,
     files: [],
     source: "unavailable",
     warnings: [
-      "Remote package artifact integrity was not available in the lockfile; tarball contents were not trusted."
+      warning
     ]
   };
+}
+
+function yarnCacheOnlyIntegrityWarning(): string {
+  return "Yarn Berry checksum covers its cache ZIP, not the npm tarball; remote bytes were not trusted. Commit .yarn/cache or scan an installed checkout.";
 }
 
 async function readArtifactWithTimeout<T>(input: {

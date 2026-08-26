@@ -1892,6 +1892,51 @@ describe("collectGraphEvidence", () => {
     ]);
   });
 
+  test("explains why a Yarn Berry cache checksum cannot verify an npm tarball", async () => {
+    const fetchedUrls: string[] = [];
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "yarn.lock",
+        nodes: [{
+          id: "yarn-checksum-only@1.0.0",
+          name: "yarn-checksum-only",
+          version: "1.0.0",
+          ecosystem: "npm",
+          yarnCacheChecksum: `10c0/${"a".repeat(128)}`,
+          dependencyType: "production",
+          direct: true,
+          paths: [["root", "yarn-checksum-only@1.0.0"]]
+        }]
+      },
+      projectRoot: bunProjectDir,
+      fetchArtifact: async (url) => {
+        fetchedUrls.push(url);
+        return okArtifactResponseFromBuffer(JSON.stringify({
+          versions: {
+            "1.0.0": {
+              dist: {
+                tarball: "https://registry.npmjs.org/yarn-checksum-only/-/yarn-checksum-only-1.0.0.tgz"
+              }
+            }
+          }
+        }));
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) throw new Error(evidence.error.message);
+    expect(fetchedUrls).toEqual([
+      "https://registry.npmjs.org/yarn-checksum-only/1.0.0"
+    ]);
+    expect(evidence.value[0]).toMatchObject({
+      packageId: "yarn-checksum-only@1.0.0",
+      source: "unavailable",
+      warnings: [
+        "Yarn Berry checksum covers its cache ZIP, not the npm tarball; remote bytes were not trusted. Commit .yarn/cache or scan an installed checkout."
+      ]
+    });
+  });
+
   test("inspects integrity-verified tarballs instead of trusting transitive registry licenses", async () => {
     const fetchedUrls: string[] = [];
     const tarball = createTarGz({

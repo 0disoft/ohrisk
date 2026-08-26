@@ -2,6 +2,9 @@
 
 ## 1.15.2 - Unreleased
 
+- Yarn Berry cache checksums are now preserved separately from npm tarball
+  integrity, so unavailable evidence explains the verification boundary and
+  recovery path instead of claiming the lockfile contains no checksum.
 - SPDX identifier lines wrapped in Markdown inline-code delimiters now discard
   the closing delimiter before expression parsing, avoiding false conflicts for
   dual-licensed modules such as `github.com/DataDog/dd-trace-go/v2`.

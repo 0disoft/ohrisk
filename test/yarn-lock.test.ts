@@ -448,6 +448,7 @@ describe("parseYarnLockfile", () => {
         "\"prod-parent@npm:^1.0.0\":",
         "  version: 1.0.1",
         "  resolution: \"prod-parent@npm:1.0.1\"",
+        `  checksum: 10c0/${"a".repeat(128)}`,
         "  dependencies:",
         "    regular-child: \"npm:^0.5.0\"",
         "",
@@ -502,6 +503,10 @@ describe("parseYarnLockfile", () => {
           "prod-parent@1.0.1",
           "regular-child@0.5.1"
         ]]
+      });
+    expect(result.value.nodes.find((node) => node.id === "prod-parent@1.0.1"))
+      .toMatchObject({
+        yarnCacheChecksum: `10c0/${"a".repeat(128)}`
       });
     expect(result.value.nodes.find((node) => node.id === "dev-tool@4.2.0"))
       .toMatchObject({
