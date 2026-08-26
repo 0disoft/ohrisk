@@ -74,10 +74,15 @@ export function normalizeLicenseEvidence(evidence: LicenseEvidence): NormalizedL
     packageLicenseFileExpressions.map((match) => match.expression)
   );
   const packageLicenseExpression = readPackageLicenseExpression(evidence);
+  const packageLicenseCoversFileExpressions = packageLicenseExpression !== undefined
+    && licenseExpressionCoversFileMatches(
+      packageLicenseExpression,
+      packageLicenseFileExpressions
+    );
 
   if (
     distinctLicenseFileExpressions.size > 1
-    && (!packageLicenseExpression || evidence.metadataLicenseKind === "classifier")
+    && !packageLicenseCoversFileExpressions
   ) {
     if (!signals.includes("conflicting-evidence")) {
       signals.push("conflicting-evidence");
@@ -246,6 +251,26 @@ function fileLicenseChoiceMatchesDeclared(
 
   const broaderDeclaration = FILE_LICENSE_TO_BROADER_DECLARATION.get(comparable);
   return broaderDeclaration !== undefined && declaredChoices.has(broaderDeclaration);
+}
+
+function licenseExpressionCoversFileMatches(
+  expression: string,
+  matches: LicenseExpressionEvidence[]
+): boolean {
+  const parsed = parseSpdxExpression(expression);
+  if (parsed.malformed) {
+    return false;
+  }
+
+  const declaredChoices = new Set(parsed.choices.map(comparableLicenseId));
+  return matches.every((match) => {
+    const fileExpression = parseSpdxExpression(match.expression);
+    return !fileExpression.malformed
+      && fileExpression.choices.every((choice) => fileLicenseChoiceMatchesDeclared(
+        choice,
+        declaredChoices
+      ));
+  });
 }
 
 function withSpdxAst(
@@ -602,9 +627,16 @@ function isInferredComponentLicenseFile(evidence: LicenseEvidence, filePath: str
   const slashIndex = normalizedPath.lastIndexOf("/");
   const directory = slashIndex >= 0 ? normalizedPath.slice(0, slashIndex + 1) : "";
   const fileName = normalizedPath.slice(slashIndex + 1);
-  const qualifiedLicense = fileName.match(/^licen[cs]e\.([^.]+)$/i);
-  const isQualifiedComponent = qualifiedLicense?.[1] !== undefined
-    && /^(?:lib|third[-_]?party|vendor|component)/i.test(qualifiedLicense[1]);
+  const isPrimaryLicense = /^licen[cs]e(?:\.(?:md|markdown|txt|text|rst|html?))?$/i.test(fileName);
+  const qualifiedLicense = isPrimaryLicense
+    ? undefined
+    : fileName.match(/^licen[cs]e[._-]([^.]+?)(?:\.(?:md|markdown|txt|text|rst|html?))?$/i);
+  const qualifier = qualifiedLicense?.[1];
+  const isPackageLicenseVariant = qualifier !== undefined
+    && /^(?:0?bsd|agpl|apache|artistic|boost|cc0|cdla|epl|gpl|isc|lgpl|mit|mpl|ms[-_]?pl|ofl|psf|python|unlicense|wtfpl|zlib)(?:[-_.]?\d.*)?$/i.test(qualifier);
+  const isQualifiedComponent = qualifier !== undefined
+    && (/^(?:lib|third[-_]?party|vendor|component)/i.test(qualifier)
+      || !isPackageLicenseVariant);
   const isThirdPartyInventory = /^third[-_. ]party[-_. ]licenses?(?:[-_. ].*)?$/i.test(fileName);
   if (!isQualifiedComponent && !isThirdPartyInventory) {
     return false;

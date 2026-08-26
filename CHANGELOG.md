@@ -2,6 +2,11 @@
 
 ## 1.15.2 - Unreleased
 
+- Multiple recognized license files no longer conflict when one metadata
+  classifier covers every file choice. Named sibling files such as
+  `LICENSE_zstd.txt` are now treated as bundled-component evidence while
+  standard `LICENSE-MIT`, `LICENSE-APACHE`, and BSD alternatives remain
+  package-license choices.
 - License-file recognition now handles the parenthetical notice wording used
   by common MIT packages, explicit BSD one-clause and alternate three-clause
   wording, and the bzip2 grant without reporting false metadata conflicts.

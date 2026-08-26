@@ -870,6 +870,40 @@ describe("normalizeLicenseEvidence", () => {
     );
   });
 
+  test("accepts multiple license files covered by one classifier expression", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "uv@0.9.28",
+      metadataLicense: "MIT OR Apache-2.0",
+      metadataLicenseKind: "classifier",
+      metadataSource: "METADATA",
+      files: [
+        {
+          path: "licenses/LICENSE-APACHE",
+          kind: "license",
+          text: "Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION"
+        },
+        {
+          path: "licenses/LICENSE-MIT",
+          kind: "license",
+          text: [
+            "Permission is hereby granted, free of charge, to any person obtaining a copy",
+            "THE SOFTWARE IS PROVIDED \"AS IS\""
+          ].join("\n")
+        }
+      ],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      expression: "MIT OR Apache-2.0",
+      choices: ["MIT", "Apache-2.0"],
+      joiner: "or",
+      signals: [],
+      confidence: "medium"
+    });
+  });
+
   test("fails closed when declared metadata conflicts with a recognized license file", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "metadata-file-conflict@1.0.0",
@@ -1107,6 +1141,46 @@ describe("normalizeLicenseEvidence", () => {
     expect(normalized.signals).not.toContain("conflicting-evidence");
     expect(normalized.evidenceSources).toContain(
       "bundled component license match: MIT from LICENSE.libyaml"
+    );
+  });
+
+  test("treats a named sibling license as bundled component evidence", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "backports-zstd@1.7.0",
+      metadataLicense: "PSF-2.0",
+      metadataLicenseKind: "declared",
+      metadataSource: "METADATA",
+      files: [
+        {
+          path: "licenses/LICENSE.txt",
+          kind: "license",
+          text: "PYTHON SOFTWARE FOUNDATION LICENSE VERSION 2"
+        },
+        {
+          path: "licenses/LICENSE_zstd.txt",
+          kind: "license",
+          text: [
+            "Redistribution and use in source and binary forms, with or without modification,",
+            "are permitted provided that the following conditions are met:",
+            "Redistributions of source code must retain the above copyright notice.",
+            "Redistributions in binary form must reproduce the above copyright notice.",
+            "The names of the contributors may not be used to endorse or promote products."
+          ].join("\n")
+        }
+      ],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      expression: "PSF-2.0 AND BSD-3-Clause",
+      choices: ["PSF-2.0", "BSD-3-Clause"],
+      joiner: "and",
+      signals: [],
+      confidence: "high"
+    });
+    expect(normalized.evidenceSources).toContain(
+      "bundled component license match: BSD-3-Clause from licenses/LICENSE_zstd.txt"
     );
   });
 
