@@ -227,6 +227,7 @@ describe("archive reader", () => {
     expect(archive.ok).toBe(true);
     if (!archive.ok) return;
     expect(errorCode(archive.value.readEntry("data.txt"))).toBe("ARCHIVE_INTEGRITY_FAILED");
+    expect(errorCode(archive.value.hashEntrySha256("data.txt"))).toBe("ARCHIVE_INTEGRITY_FAILED");
   });
 
   test("stops archive indexing and lazy materialization after cancellation", () => {
@@ -421,6 +422,24 @@ describe("archive reader", () => {
     expect(errorCode(archive.value.readText("large.txt", 5))).toBe("ARCHIVE_LIMIT_EXCEEDED");
     expect(archive.value.readEntry("large.txt").ok).toBe(true);
     expect(errorCode(archive.value.readEntry("large.txt"))).toBe("ARCHIVE_LIMIT_EXCEEDED");
+
+    const hashOnly = readArchiveBytes({
+      displayName: "hash-only.zip",
+      bytes,
+      limits: { expandedBytes: 6, materializedBytes: 1 }
+    });
+    expect(hashOnly.ok).toBe(true);
+    if (!hashOnly.ok) return;
+    expect(errorCode(hashOnly.value.readEntry("large.txt"))).toBe("ARCHIVE_LIMIT_EXCEEDED");
+    expect(hashOnly.value.hashEntrySha256("large.txt")).toEqual({
+      ok: true,
+      value: "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92"
+    });
+    const repeatedHash = hashOnly.value.hashEntrySha256("large.txt");
+    expect(errorCode(repeatedHash)).toBe("ARCHIVE_LIMIT_EXCEEDED");
+    if (!repeatedHash.ok) {
+      expect(repeatedHash.error.details?.limit).toBe("hashBytes");
+    }
   });
 
   test("converts hostile inputs and invalid lazy reads into Result errors", () => {

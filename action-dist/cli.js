@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 861db8ab894f2fc4a6bdedefe63d00a496de3cdd41f314b51dbf1474d3717424
+// ohrisk-action-source-sha256: 4791bb76a8c16f5758d181c735e67218a5b00c5906e0ebe45afca8efb90f96f9
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -39335,6 +39335,26 @@ function createArchiveSource(input) {
       return err(toOhriskError(cause, "ARCHIVE_READ_FAILED", "invalid_input", input.basename));
     }
   };
+  const hashEntrySha256 = (entryPath) => {
+    try {
+      const startedAt = input.budget.now();
+      checkDeadlineSince(input.budget, startedAt, input.basename);
+      const normalized = validateEntryPath(entryPath, input.budget.limits, false, input.basename);
+      const entry = byPath.get(normalized);
+      if (!entry || entry.type !== "file") {
+        fail("ARCHIVE_READ_FAILED", "invalid_input", "Archive file entry was not found.", {
+          basename: input.basename,
+          entryPath: normalized
+        });
+      }
+      chargeHashing(input.budget, entry.size, input.basename, entry.path);
+      const data = entry.materialize(startedAt);
+      checkDeadlineSince(input.budget, startedAt, input.basename, entry.path);
+      return ok(createHash("sha256").update(data).digest("hex"));
+    } catch (cause) {
+      return err(toOhriskError(cause, "ARCHIVE_READ_FAILED", "invalid_input", input.basename));
+    }
+  };
   return Object.freeze({
     format: input.format,
     displayPath: input.displayPath,
@@ -39343,6 +39363,7 @@ function createArchiveSource(input) {
     listPaths: () => paths,
     beginWork,
     readEntry,
+    hashEntrySha256,
     readText: (entryPath, maxBytes) => {
       if (maxBytes !== undefined) {
         if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
@@ -39985,7 +40006,8 @@ function createBudget(limits, now, signal) {
     now: clock,
     ...signal ? { signal } : {},
     startedAt: clock(),
-    materializedBytes: 0
+    materializedBytes: 0,
+    hashedBytes: 0
   };
 }
 function checkDeadline(budget, archiveName, entryPath) {
@@ -40011,6 +40033,11 @@ function chargeMaterialization(budget, amount, archiveName, entryPath) {
   const observed = safeAdd(budget.materializedBytes, amount, archiveName);
   enforceLimit("materializedBytes", budget.limits.materializedBytes, observed, archiveName, entryPath);
   budget.materializedBytes = observed;
+}
+function chargeHashing(budget, amount, archiveName, entryPath) {
+  const observed = safeAdd(budget.hashedBytes, amount, archiveName);
+  enforceLimit("hashBytes", budget.limits.expandedBytes, observed, archiveName, entryPath);
+  budget.hashedBytes = observed;
 }
 function enforceEntryLimits(input) {
   enforceLimit("entryBytes", input.budget.limits.entryBytes, input.size, input.archiveName, input.entryPath);
@@ -50326,10 +50353,10 @@ function adapter(id, lockfileKinds, packageEcosystems) {
 // src/evidence/go-module-zip.ts
 import { createHash as createHash5, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
 import { TextDecoder as TextDecoder4 } from "node:util";
-var GO_MODULE_ZIP_MAX_ENTRIES = 50000;
+var GO_MODULE_ZIP_MAX_ENTRIES = 65535;
 var GO_MODULE_ZIP_ENTRY_MAX_BYTES = 50 * 1024 * 1024;
-var GO_MODULE_ZIP_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
-var GO_MODULE_ZIP_MATERIALIZED_MAX_BYTES = 256 * 1024 * 1024;
+var GO_MODULE_ZIP_EXPANDED_MAX_BYTES = 512 * 1024 * 1024;
+var GO_MODULE_ZIP_MATERIALIZED_MAX_BYTES = 34 * 1024 * 1024;
 var GO_MODULE_LICENSE_MAX_BYTES = 2 * 1024 * 1024;
 var GO_MODULE_LICENSE_FILE_LIMIT = 16;
 var GO_MODULE_MOD_MAX_BYTES2 = 2 * 1024 * 1024;
@@ -50371,7 +50398,7 @@ function collectGoModuleZipEvidence(input) {
   const computedChecksum = hashGoModuleArchive({
     packageId: input.packageId,
     entries: archive.value.entries,
-    readEntry: archive.value.readEntry
+    hashEntrySha256: archive.value.hashEntrySha256
   });
   if (!computedChecksum.ok) {
     return computedChecksum;
@@ -50465,11 +50492,16 @@ function hashGoModuleArchive(input) {
         details: { reason: "go_module_zip_newline_path" }
       }));
     }
-    const data = entry.type === "directory" ? ok(Buffer.alloc(0)) : input.readEntry(entry.path);
-    if (!data.ok) {
-      return data;
+    let fileDigest;
+    if (entry.type === "directory") {
+      fileDigest = createHash5("sha256").digest("hex");
+    } else {
+      const hashed = input.hashEntrySha256(entry.path);
+      if (!hashed.ok) {
+        return hashed;
+      }
+      fileDigest = hashed.value;
     }
-    const fileDigest = createHash5("sha256").update(data.value).digest("hex");
     summary.update(`${fileDigest}  ${fileName}
 `, "utf8");
   }

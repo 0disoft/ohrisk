@@ -2,6 +2,10 @@
 
 ## 1.15.2 - Unreleased
 
+- Checksum-identified Go module ZIPs may verify up to 65,535 entries and 512 MiB of expanded
+  content without retaining unrelated source files. Per-entry, compression-ratio,
+  CRC, work, and cancellation limits remain fail-closed, while retained license
+  and `go.mod` evidence stays capped at 34 MiB.
 - Checksum-verified Cargo crates now honor an explicit README declaration that
   offers MIT or Apache-2.0 at the user's option. Matching `LICENSE-MIT` and
   `LICENSE-APACHE` files no longer produce a false conflicting-evidence finding,

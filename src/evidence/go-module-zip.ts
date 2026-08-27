@@ -8,10 +8,10 @@ import { err, ok, type Result } from "../shared/result";
 import { classifyEvidenceFile } from "./license-files";
 import type { LicenseEvidence, LicenseEvidenceFile } from "./types";
 
-const GO_MODULE_ZIP_MAX_ENTRIES = 50_000;
+const GO_MODULE_ZIP_MAX_ENTRIES = 65_535;
 const GO_MODULE_ZIP_ENTRY_MAX_BYTES = 50 * 1024 * 1024;
-const GO_MODULE_ZIP_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
-const GO_MODULE_ZIP_MATERIALIZED_MAX_BYTES = 256 * 1024 * 1024;
+const GO_MODULE_ZIP_EXPANDED_MAX_BYTES = 512 * 1024 * 1024;
+const GO_MODULE_ZIP_MATERIALIZED_MAX_BYTES = 34 * 1024 * 1024;
 const GO_MODULE_LICENSE_MAX_BYTES = 2 * 1024 * 1024;
 const GO_MODULE_LICENSE_FILE_LIMIT = 16;
 const GO_MODULE_MOD_MAX_BYTES = 2 * 1024 * 1024;
@@ -68,7 +68,7 @@ export function collectGoModuleZipEvidence(input: {
   const computedChecksum = hashGoModuleArchive({
     packageId: input.packageId,
     entries: archive.value.entries,
-    readEntry: archive.value.readEntry
+    hashEntrySha256: archive.value.hashEntrySha256
   });
   if (!computedChecksum.ok) {
     return computedChecksum;
@@ -172,7 +172,7 @@ function readVerifiedGoModuleRequirements(input: {
 function hashGoModuleArchive(input: {
   packageId: string;
   entries: ReadonlyArray<{ path: string; type: "file" | "directory" }>;
-  readEntry: (entryPath: string) => Result<Buffer, OhriskError>;
+  hashEntrySha256: (entryPath: string) => Result<string, OhriskError>;
 }): Result<string, OhriskError> {
   const summary = createHash("sha256");
   const entries = [...input.entries].sort((left, right) => {
@@ -190,11 +190,16 @@ function hashGoModuleArchive(input: {
         details: { reason: "go_module_zip_newline_path" }
       }));
     }
-    const data = entry.type === "directory" ? ok(Buffer.alloc(0)) : input.readEntry(entry.path);
-    if (!data.ok) {
-      return data;
+    let fileDigest: string;
+    if (entry.type === "directory") {
+      fileDigest = createHash("sha256").digest("hex");
+    } else {
+      const hashed = input.hashEntrySha256(entry.path);
+      if (!hashed.ok) {
+        return hashed;
+      }
+      fileDigest = hashed.value;
     }
-    const fileDigest = createHash("sha256").update(data.value).digest("hex");
     summary.update(`${fileDigest}  ${fileName}\n`, "utf8");
   }
 

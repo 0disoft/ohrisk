@@ -187,6 +187,13 @@ module ZIP `go.mod` requirements may propagate development scope only when every
 selected Go node has verified edge metadata. Any missing edge keeps transitive
 scope conservative, and production reachability always overrides development.
 
+Checksum verification may inspect Go module ZIPs with at most 65,535 entries
+and 512 MiB of total expanded content while retaining at most 34 MiB of license and `go.mod` text.
+Each entry remains limited to 50 MiB and the standard compression-ratio, path,
+entry-count, CRC, cancellation, and work-deadline checks still apply. Non-evidence
+entries are decompressed one at a time only to compute the Go `h1` digest; their
+contents are not retained as package evidence.
+
 `uv.lock` Git source records are identity-only inputs, not another remote
 adapter. Ohrisk accepts one only when uv's resolved source ends in a full 40- or
 64-hex Git commit, retains the package and dependency paths, and emits

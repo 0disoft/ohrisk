@@ -36,6 +36,7 @@ export type ArchiveSource = Readonly<{
   listPaths: () => readonly string[];
   beginWork: () => ArchiveWorkBudget;
   readEntry: (entryPath: string) => Result<Buffer, OhriskError>;
+  hashEntrySha256: (entryPath: string) => Result<string, OhriskError>;
   readText: (entryPath: string, maxBytes?: number) => Result<string, OhriskError>;
 }>;
 

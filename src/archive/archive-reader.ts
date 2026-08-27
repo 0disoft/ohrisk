@@ -89,6 +89,7 @@ type Budget = {
   signal?: AbortSignal;
   startedAt: number;
   materializedBytes: number;
+  hashedBytes: number;
 };
 
 type IndexedEntry = ArchiveEntry & {
@@ -260,6 +261,27 @@ function createArchiveSource(input: {
     }
   };
 
+  const hashEntrySha256 = (entryPath: string): Result<string, OhriskError> => {
+    try {
+      const startedAt = input.budget.now();
+      checkDeadlineSince(input.budget, startedAt, input.basename);
+      const normalized = validateEntryPath(entryPath, input.budget.limits, false, input.basename);
+      const entry = byPath.get(normalized);
+      if (!entry || entry.type !== "file") {
+        fail("ARCHIVE_READ_FAILED", "invalid_input", "Archive file entry was not found.", {
+          basename: input.basename,
+          entryPath: normalized
+        });
+      }
+      chargeHashing(input.budget, entry.size, input.basename, entry.path);
+      const data = entry.materialize(startedAt);
+      checkDeadlineSince(input.budget, startedAt, input.basename, entry.path);
+      return ok(createHash("sha256").update(data).digest("hex"));
+    } catch (cause) {
+      return err(toOhriskError(cause, "ARCHIVE_READ_FAILED", "invalid_input", input.basename));
+    }
+  };
+
   return Object.freeze({
     format: input.format,
     displayPath: input.displayPath,
@@ -268,6 +290,7 @@ function createArchiveSource(input: {
     listPaths: () => paths,
     beginWork,
     readEntry,
+    hashEntrySha256,
     readText: (entryPath: string, maxBytes?: number): Result<string, OhriskError> => {
       if (maxBytes !== undefined) {
         if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
@@ -1089,7 +1112,8 @@ function createBudget(
     now: clock,
     ...(signal ? { signal } : {}),
     startedAt: clock(),
-    materializedBytes: 0
+    materializedBytes: 0,
+    hashedBytes: 0
   };
 }
 
@@ -1132,6 +1156,17 @@ function chargeMaterialization(
   const observed = safeAdd(budget.materializedBytes, amount, archiveName);
   enforceLimit("materializedBytes", budget.limits.materializedBytes, observed, archiveName, entryPath);
   budget.materializedBytes = observed;
+}
+
+function chargeHashing(
+  budget: Budget,
+  amount: number,
+  archiveName: string,
+  entryPath?: string
+): void {
+  const observed = safeAdd(budget.hashedBytes, amount, archiveName);
+  enforceLimit("hashBytes", budget.limits.expandedBytes, observed, archiveName, entryPath);
+  budget.hashedBytes = observed;
 }
 
 function enforceEntryLimits(input: {
