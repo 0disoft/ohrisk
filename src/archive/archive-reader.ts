@@ -187,7 +187,14 @@ function readOwnedArchiveBuffer(
     const format = detectFormat(input.bytes, input.formatHint, safeName);
     const indexed = format === "zip"
       ? parseZip(input.bytes, budget, safeName)
-      : parseTarContainer(input.bytes, format, budget, safeName);
+      : parseTarContainer(
+          input.bytes,
+          format,
+          budget,
+          safeName,
+          input.tarLinkPolicy ?? "reject",
+          input.onTarSymlink
+        );
     const sha256 = createHash("sha256").update(input.bytes).digest("hex");
     checkDeadline(budget, safeName);
     const source = createArchiveSource({
@@ -643,7 +650,9 @@ function parseTarContainer(
   inputBytes: Buffer,
   format: "tar" | "tar.gz",
   budget: Budget,
-  archiveName: string
+  archiveName: string,
+  linkPolicy: "reject" | "skip",
+  onSymlink: ((entryPath: string, linkTarget: string) => void) | undefined
 ): IndexedEntry[] {
   let tar = inputBytes;
   if (format === "tar.gz") {
@@ -671,14 +680,16 @@ function parseTarContainer(
     chargeMaterialization(budget, tar.length, archiveName);
   }
   checkDeadline(budget, archiveName);
-  return parseTar(tar, format, budget, archiveName);
+  return parseTar(tar, format, budget, archiveName, linkPolicy, onSymlink);
 }
 
 function parseTar(
   tar: Buffer,
   format: "tar" | "tar.gz",
   budget: Budget,
-  archiveName: string
+  archiveName: string,
+  linkPolicy: "reject" | "skip",
+  onSymlink: ((entryPath: string, linkTarget: string) => void) | undefined
 ): IndexedEntry[] {
   if (tar.length < BLOCK_BYTES * 2 || tar.length % BLOCK_BYTES !== 0) {
     malformed(archiveName, "TAR length or end padding is invalid.", format);
@@ -762,6 +773,18 @@ function parseTar(
     pendingLongName = undefined;
     const directory = type === "5";
     const regular = type === "0" || type === "\0";
+    const symlink = type === "2";
+    if (symlink && linkPolicy === "skip") {
+      const entryPath = validateEntryPath(rawPath, budget.limits, false, archiveName);
+      if (effectiveSize !== 0) {
+        malformed(archiveName, "TAR link entry has non-zero data size.", format, entryPath);
+      }
+      if (onSymlink) {
+        onSymlink(entryPath, decodeTarField(header.subarray(157, 257), archiveName, format));
+      }
+      offset = paddedEnd;
+      continue;
+    }
     if (!directory && !regular) {
       unsupportedType(archiveName, safeEntryPathForError(rawPath), format);
     }

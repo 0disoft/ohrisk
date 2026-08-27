@@ -54,6 +54,11 @@ import {
   isCollectionAbortedError
 } from "./cancellation";
 import { collectCargoCrateEvidence } from "./cargo-crate";
+import {
+  CARGO_GITHUB_ARCHIVE_HOSTS,
+  collectCargoGitHubArchiveEvidence,
+  parseCargoGitHubSource
+} from "./cargo-git";
 import { collectRegisteredEcosystemEvidence } from "../ecosystems/registry";
 import {
   collectGoModuleZipEvidence,
@@ -1977,10 +1982,53 @@ async function collectRemoteCargoCrateEvidence(input: {
   signal: AbortSignal;
   allowedHosts: ReadonlySet<string>;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
+  const gitHubSource = parseCargoGitHubSource(input.node.resolved);
+  if (gitHubSource) {
+    const archive = await readRemoteArtifactBytes({
+      code: "TARBALL_FETCH_FAILED",
+      packageId: input.node.id,
+      url: gitHubSource.archiveUrl,
+      blockedMessage: "Cargo GitHub archive URL targets an unsupported or blocked host.",
+      resolveFailureMessage: "Failed to resolve the Cargo GitHub archive host.",
+      fetchFailureMessage: "Failed to fetch the commit-pinned Cargo GitHub archive.",
+      tooLargeMessage: "Cargo GitHub archive response exceeded the maximum supported size.",
+      unreadableMessage: "Cargo GitHub archive response did not expose a readable body stream.",
+      offlineMissMessage: "Offline mode could not find the Cargo GitHub archive in the artifact cache.",
+      details: {
+        packageName: input.node.name,
+        version: input.node.version,
+        owner: gitHubSource.owner,
+        repository: gitHubSource.repository,
+        commit: gitHubSource.commit
+      },
+      maxBytes: input.artifactMaxBytes,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      signal: input.signal,
+      allowedHosts: input.allowedHosts,
+      permittedHosts: CARGO_GITHUB_ARCHIVE_HOSTS,
+      urlDetailKey: "resolved"
+    });
+    if (!archive.ok) {
+      return archive;
+    }
+    return collectCargoGitHubArchiveEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      source: gitHubSource,
+      archive: archive.value,
+      artifactMaxBytes: input.artifactMaxBytes
+    });
+  }
+
   if (!input.node.resolved || !CARGO_CRATES_IO_SOURCES.has(input.node.resolved)) {
     return ok(unsupportedRemoteEcosystemEvidence({
       node: input.node,
-      reason: "Cargo Git, path, and non-crates.io registry sources are not fetched during a remote repository scan."
+      reason: "Cargo path, non-GitHub Git, non-commit-pinned Git, and non-crates.io registry sources are not fetched during a remote repository scan."
     }));
   }
   if (!input.node.integrity || !/^sha256-[A-Za-z0-9+/]{43}=$/u.test(input.node.integrity)) {

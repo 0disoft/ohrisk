@@ -159,7 +159,10 @@ evidence는 로컬 Cargo registry source나 `vendor/<crate>`에서
 먼저 읽되, Cargo.toml identity와 Cargo.lock checksum이 일치해야 신뢰한다. 로컬
 evidence가 없으면 checksum이 있는 crates.io registry crate만 고정된
 `static.crates.io`에서 내려받고, 전체 `.crate` SHA-256과 package root,
-Cargo.toml name/version을 검증한 뒤 license metadata와 파일을 읽는다. Git/path crate와
+Cargo.toml name/version을 검증한 뒤 license metadata와 파일을 읽는다. GitHub Git crate는
+Cargo.lock source가 HTTPS GitHub URL과 40자리 commit을 모두 고정한 경우에만 고정된
+`codeload.github.com` archive를 읽고, 단일 repository root와 유일한 Cargo.toml
+name/version을 검증한다. path crate, commit이 완전하지 않은 Git source, GitHub 이외 Git,
 대체 registry는 원격으로 가져오지 않는다.
 Go는 `go.work` workspace module, workspace `replace` directive, 각 module의
 `go.mod` require, module-level `replace` directive, 옆의 `go.sum` module ZIP 및

@@ -600,7 +600,7 @@ describe("PyPI release evidence", () => {
       files: [],
       source: "unavailable",
       warnings: [
-        "Cargo Git, path, and non-crates.io registry sources are not fetched during a remote repository scan."
+        "Cargo path, non-GitHub Git, non-commit-pinned Git, and non-crates.io registry sources are not fetched during a remote repository scan."
       ]
     }]);
   });

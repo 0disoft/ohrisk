@@ -59,6 +59,16 @@ Remote fetching is limited to these explicit adapters:
   substitute a same-name registry crate. Root-declared path dependencies are
   included as implicit members only when contained by the workspace and not
   matched by `exclude`.
+- public Cargo Git sources whose `Cargo.lock` source uses credential-free HTTPS
+  GitHub coordinates and a full 40-hex commit fragment. Ohrisk requests only the
+  corresponding fixed `codeload.github.com` commit archive, applies the standard
+  archive resource bounds, requires exactly one repository root, and trusts
+  evidence only when exactly one Cargo manifest resolves to the locked package
+  name and version. Git symlinks are never materialized or followed generally;
+  a package-root legal-file symlink contributes evidence only when its normalized
+  target remains inside that repository root and resolves to a regular archived
+  file. Mutable refs, short commits, non-GitHub hosts, credentials, path
+  dependencies, and ambiguous package identities remain unavailable.
 - exact pub.dev package archives from the fixed `pub.dev` endpoint when a
   modern hosted `pubspec.lock` record supplies the archive SHA-256; the complete
   archive digest and root `pubspec.yaml` name/version must match before bounded

@@ -59,6 +59,23 @@ export type CargoWorkspaceEvidenceInput = {
   warnings: string[];
 };
 
+export type CargoWorkspacePackageMetadata = {
+  name?: string;
+  version?: string;
+  license?: string;
+  licenseFile?: string;
+};
+
+export function parseCargoWorkspacePackageMetadata(input: {
+  manifestText: string;
+  workspaceManifestText?: string;
+}): CargoWorkspacePackageMetadata {
+  return readCargoPackageLicenseMetadata(
+    input.manifestText,
+    readCargoWorkspacePackageLicenseMetadata(input.workspaceManifestText)
+  );
+}
+
 export function readCargoWorkspaceEvidenceFromSnapshot(input: {
   directoryRelativePath: string;
   relativePaths: ReadonlySet<string>;
@@ -1371,14 +1388,10 @@ function cargoWorkspaceEmbeddedEvidence(
 
 function readCargoPackageLicenseMetadata(
   text: string,
-  workspaceMetadata?: { version?: string; license?: string }
-): {
-  name?: string;
-  version?: string;
-  license?: string;
-} {
+  workspaceMetadata?: Omit<CargoWorkspacePackageMetadata, "name">
+): CargoWorkspacePackageMetadata {
   let section = "";
-  const metadata: { name?: string; version?: string; license?: string } = {};
+  const metadata: CargoWorkspacePackageMetadata = {};
   for (const rawLine of text.split(/\r?\n/)) {
     const line = stripTomlComment(rawLine).trim();
     if (line.startsWith("[") && line.endsWith("]")) {
@@ -1388,19 +1401,19 @@ function readCargoPackageLicenseMetadata(
     if (section !== "package") {
       continue;
     }
-    for (const key of ["name", "version", "license"] as const) {
+    for (const key of ["name", "version", "license", "license-file"] as const) {
       const value = readStringAssignment(line, key);
       if (value !== undefined) {
-        metadata[key] = value;
+        metadata[key === "license-file" ? "licenseFile" : key] = value;
         break;
       }
-      if (
-        key !== "name"
-        && workspaceMetadata?.[key] !== undefined
-        && readsWorkspaceInheritedValue(line, key)
-      ) {
-        metadata[key] = workspaceMetadata[key];
-        break;
+      if (key !== "name") {
+        const metadataKey = key === "license-file" ? "licenseFile" : key;
+        const inheritedValue = workspaceMetadata?.[metadataKey];
+        if (inheritedValue !== undefined && readsWorkspaceInheritedValue(line, key)) {
+          metadata[metadataKey] = inheritedValue;
+          break;
+        }
       }
     }
   }
@@ -1410,12 +1423,13 @@ function readCargoPackageLicenseMetadata(
 function readCargoWorkspacePackageLicenseMetadata(text: string | undefined): {
   version?: string;
   license?: string;
+  licenseFile?: string;
 } {
   if (!text) {
     return {};
   }
   let section = "";
-  const metadata: { version?: string; license?: string } = {};
+  const metadata: Omit<CargoWorkspacePackageMetadata, "name"> = {};
   for (const rawLine of text.split(/\r?\n/)) {
     const line = stripTomlComment(rawLine).trim();
     if (line.startsWith("[") && line.endsWith("]")) {
@@ -1425,10 +1439,10 @@ function readCargoWorkspacePackageLicenseMetadata(text: string | undefined): {
     if (section !== "workspace.package") {
       continue;
     }
-    for (const key of ["version", "license"] as const) {
+    for (const key of ["version", "license", "license-file"] as const) {
       const value = readStringAssignment(line, key);
       if (value !== undefined) {
-        metadata[key] = value;
+        metadata[key === "license-file" ? "licenseFile" : key] = value;
         break;
       }
     }
@@ -1436,7 +1450,10 @@ function readCargoWorkspacePackageLicenseMetadata(text: string | undefined): {
   return metadata;
 }
 
-function readsWorkspaceInheritedValue(line: string, key: "version" | "license"): boolean {
+function readsWorkspaceInheritedValue(
+  line: string,
+  key: "version" | "license" | "license-file"
+): boolean {
   if (readBooleanAssignment(line, `${key}.workspace`) === true) {
     return true;
   }

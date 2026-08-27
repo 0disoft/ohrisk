@@ -112,6 +112,12 @@
   baselines use the same bounded snapshot evidence, eliminating false
   `unknown` findings such as `watt@1.4.0` without trusting same-name registry
   artifacts.
+- Cargo Git dependencies pinned to a full GitHub commit now collect bounded
+  codeload archive evidence after single-root and unique Cargo.toml
+  name/version validation. Mutable, credentialed, non-GitHub, path, and
+  ambiguous sources remain unavailable. Git legal-file symlinks are resolved
+  only to regular entries contained by the same immutable archive root; other
+  links are never materialized.
 - Localized HTML reports no longer leave the conflicting-license review action
   in English across Korean and the other supported report languages.
 - Public repository scans now read Go local replacement evidence only from

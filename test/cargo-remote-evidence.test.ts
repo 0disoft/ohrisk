@@ -3,12 +3,101 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
 
 import { collectGraphEvidence } from "../src/evidence/collect";
+import { parseCargoGitHubSource } from "../src/evidence/cargo-git";
 import { normalizeLicenseEvidence } from "../src/license/normalize";
-import { createTarGz } from "./helpers/tar";
+import { createTarEntries, createTarGz } from "./helpers/tar";
 
 describe("remote Cargo crate evidence", () => {
+  test("fetches a full-commit GitHub source and resolves a nested workspace package", async () => {
+    const commit = "0123456789abcdef0123456789abcdef01234567";
+    const root = `git-repo-${commit}`;
+    const archive = gzipSync(createTarEntries([
+      {
+        path: `${root}/Cargo.toml`,
+        content: [
+        "[workspace]",
+        "members = [\"crates/git-crate\"]",
+        "",
+        "[workspace.package]",
+        "version = \"2.0.0\"",
+        "license = \"Apache-2.0\""
+        ].join("\n")
+      },
+      {
+        path: `${root}/crates/git-crate/Cargo.toml`,
+        content: [
+        "[package]",
+        "name = \"git-crate\"",
+        "version.workspace = true",
+        "license.workspace = true"
+        ].join("\n")
+      },
+      {
+        path: `${root}/LICENSE-APACHE`,
+        content: "Apache License\nVersion 2.0, January 2004\n"
+      },
+      {
+        path: `${root}/LICENSE-MIT`,
+        content: "MIT License\n"
+      },
+      {
+        path: `${root}/crates/git-crate/LICENSE-APACHE`,
+        type: "2",
+        linkPath: "../../LICENSE-APACHE"
+      }
+    ]));
+    const fetchedUrls: string[] = [];
+    const evidence = await collectGraphEvidence({
+      graph: cargoGraph({
+        name: "git-crate",
+        version: "2.0.0",
+        resolved: `git+https://github.com/acme/git-repo?branch=main#${commit}`
+      }),
+      projectRoot: ".",
+      allowLocalProjectEvidence: false,
+      resolveArtifactHost: async () => [{ address: "1.1.1.1", family: 4 }],
+      fetchArtifact: async (url) => {
+        fetchedUrls.push(url);
+        return artifactResponse(archive, url);
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) {
+      throw new Error(evidence.error.message);
+    }
+    expect(fetchedUrls).toEqual([
+      `https://codeload.github.com/acme/git-repo/tar.gz/${commit}`
+    ]);
+    expect(evidence.value[0]).toMatchObject({
+      packageId: "git-crate@2.0.0",
+      metadataLicense: "Apache-2.0",
+      metadataSource: "Cargo.toml at pinned Git commit",
+      source: "tarball",
+      warnings: []
+    });
+    expect(evidence.value[0]?.files).toEqual([expect.objectContaining({
+      path: "LICENSE-APACHE",
+      kind: "license"
+    })]);
+  });
+
+  test("rejects mutable, credentialed, and non-GitHub Cargo Git sources", () => {
+    const commit = "0123456789abcdef0123456789abcdef01234567";
+
+    expect(parseCargoGitHubSource("git+https://github.com/acme/repo#01234567"))
+      .toBeUndefined();
+    expect(parseCargoGitHubSource(`git+https://token@github.com/acme/repo#${commit}`))
+      .toBeUndefined();
+    expect(parseCargoGitHubSource(`git+https://gitlab.com/acme/repo#${commit}`))
+      .toBeUndefined();
+    expect(parseCargoGitHubSource(`git+https://github.com/acme/repo?branch=main&tag=v1#${commit}`))
+      .toBeUndefined();
+  });
+
   test("fetches an exact checksum-identified crate from the fixed crates.io host", async () => {
     const crate = cargoCrate("risk-crate", "1.2.3", {
       LICENSE: "Apache License\nVersion 2.0, January 2004\n"

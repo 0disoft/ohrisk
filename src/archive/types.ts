@@ -55,4 +55,8 @@ export type ReadArchiveBytesInput = {
   limits?: Partial<ArchiveLimits>;
   now?: () => number;
   signal?: AbortSignal;
+  /** Trusted source archives may contain Git links that callers never materialize. */
+  tarLinkPolicy?: "reject" | "skip";
+  /** Receives validated TAR symlink paths without following or materializing them. */
+  onTarSymlink?: (entryPath: string, linkTarget: string) => void;
 };
