@@ -222,6 +222,7 @@ describe("standalone release wiring", () => {
     expect(publish).toContain("--draft");
     expect(publish).toContain("gh release upload \"$GITHUB_REF_NAME\"");
     expect(publish).toContain(STANDALONE_CHECKSUM_FILENAME);
+    expect(publish.match(/GH_REPO: \$\{\{ github\.repository \}\}/g)).toHaveLength(2);
     expect(publish).toContain("--draft=false");
     expect(publish.indexOf("name: Cross-build standalone executables"))
       .toBeLessThan(publish.indexOf("name: Smoke standalone release"));
