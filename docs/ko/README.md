@@ -148,6 +148,9 @@ Rust는 `Cargo.lock`에 기록된 crate를 스캔하고, 옆의 `Cargo.toml`이 
 table-form dependency section(`[dependencies.foo]`)도 root dependency로 처리한다.
 member가 `version.workspace = true`와 `license.workspace = true`를 명시하면
 `[workspace.package]`의 버전과 라이선스도 상속해 근거로 사용한다.
+checkout 안에서 확인된 workspace/path package는 member 디렉터리의 LICENSE·NOTICE 같은
+법적 파일을 우선 사용하고, member에 그런 파일이 없으면 lockfile과 같은 workspace root의
+직계 법적 파일을 사용한다. 이 fallback은 Cargo.toml로 확인된 project-contained package에만 적용한다.
 workspace 안쪽을 가리키는 root path dependency는 `members`에 없어도 암시적
 member로 읽되, `exclude`와 일치하는 경로는 계속 제외한다.
 Cargo graph 순회는 반복형으로 수행하며 도달 가능한 crate를 모두 유지한다. crate 하나에

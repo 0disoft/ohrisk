@@ -78,7 +78,11 @@ import {
 import { parseUvLockfile, parseUvLockText } from "./python-uv-lock";
 import { parseRenvLockfile, parseRenvLockText } from "./r-renv-lock";
 import { parseGemfileLockfile, parseGemfileLockText } from "./ruby-gemfile-lock";
-import { parseCargoLockfile, parseCargoLockText } from "./rust-cargo-lock";
+import {
+  parseCargoLockfile,
+  parseCargoLockText,
+  type CargoWorkspaceEvidenceInput
+} from "./rust-cargo-lock";
 import { parseSpdxJsonFile, parseSpdxJsonText } from "./spdx-json";
 import { parseSpdxRdfFile, parseSpdxRdfText } from "./spdx-rdf";
 import { parseSpdxTagValueFile, parseSpdxTagValueText } from "./spdx-tag-value";
@@ -109,6 +113,8 @@ export type LockfileTextParseInput = {
   pyprojectText?: string;
   cargoManifestText?: string;
   cargoMemberManifestTexts?: string[];
+  cargoManifestEvidence?: CargoWorkspaceEvidenceInput;
+  cargoMemberManifestEvidence?: CargoWorkspaceEvidenceInput[];
   cargoRootName?: string;
   goSumText?: string;
   goSourceFiles?: GoSourceFile[];
@@ -268,6 +274,8 @@ export function parseLockfileTextForKind(
       return parseCargoLockText(input.text, input.lockfilePath, omitUndefined({
         manifestText: input.cargoManifestText,
         memberManifestTexts: input.cargoMemberManifestTexts,
+        manifestEvidence: input.cargoManifestEvidence,
+        memberManifestEvidence: input.cargoMemberManifestEvidence,
         rootName: input.cargoRootName
       }));
     case "go-work":

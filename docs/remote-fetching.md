@@ -53,9 +53,12 @@ Remote fetching is limited to these explicit adapters:
   identity and package-root license files are trusted only after the complete
   archive checksum matches. Cargo workspace packages use their checked-out
   member `Cargo.toml` license declaration or an explicitly inherited
-  `[workspace.package]` license directly and do not substitute a same-name
-  registry crate. Root-declared path dependencies are included as implicit
-  members only when contained by the workspace and not matched by `exclude`.
+  `[workspace.package]` license directly. They also use member-root legal files,
+  falling back to direct legal files beside the workspace lockfile only when the
+  package is proven project-contained by the workspace manifest. They do not
+  substitute a same-name registry crate. Root-declared path dependencies are
+  included as implicit members only when contained by the workspace and not
+  matched by `exclude`.
 - exact pub.dev package archives from the fixed `pub.dev` endpoint when a
   modern hosted `pubspec.lock` record supplies the archive SHA-256; the complete
   archive digest and root `pubspec.yaml` name/version must match before bounded

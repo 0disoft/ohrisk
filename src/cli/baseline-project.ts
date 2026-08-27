@@ -27,7 +27,8 @@ import type { RequirementsIncludedFileReader } from "../graph/python-requirement
 import type { PythonLocalSourceFileReader } from "../graph/python-local-source";
 import {
   findCargoWorkspaceMemberManifestPaths,
-  findCargoWorkspaceMemberManifestPathsFromRelativePaths
+  findCargoWorkspaceMemberManifestPathsFromRelativePaths,
+  readCargoWorkspaceEvidenceFromSnapshot
 } from "../graph/rust-cargo-lock";
 import {
   mergeDependencyGraphs,
@@ -210,7 +211,11 @@ export function loadBaselineProjectGraph(input: {
     }
   } else {
     baselineLockfiles = [input.currentProject.project.lockfile];
-    if (baselineLockfiles.some((lockfile) => lockfile.kind === "go-mod" || lockfile.kind === "go-work")) {
+    if (baselineLockfiles.some((lockfile) =>
+      lockfile.kind === "go-mod"
+      || lockfile.kind === "go-work"
+      || lockfile.kind === "cargo-lock"
+    )) {
       const listed = input.listRefFiles({
         projectRoot,
         ref: input.baselineRef
@@ -416,6 +421,33 @@ function parseBaselineLockfileGraph(input: {
     return baselineCargoMemberManifests;
   }
 
+  const baselineCargoManifestEvidence = input.lockfile.kind === "cargo-lock"
+    && input.baselineFiles
+    ? readCargoWorkspaceEvidenceFromSnapshot({
+        directoryRelativePath: lockfileDirectory,
+        relativePaths: input.baselineFiles,
+        readFile: (relativePath) => input.readRefFile({
+          projectRoot: input.projectRoot,
+          ref: input.baselineRef,
+          relativePath
+        })
+      })
+    : undefined;
+  const baselineCargoMemberManifestEvidence = input.lockfile.kind === "cargo-lock"
+    && input.baselineFiles
+    ? (baselineCargoMemberManifests.value ?? []).map((manifest) =>
+        readCargoWorkspaceEvidenceFromSnapshot({
+          directoryRelativePath: path.posix.dirname(manifest.relativeManifestPath),
+          relativePaths: input.baselineFiles!,
+          readFile: (relativePath) => input.readRefFile({
+            projectRoot: input.projectRoot,
+            ref: input.baselineRef,
+            relativePath
+          })
+        })
+      )
+    : undefined;
+
   const goSumRelativePath = relativeCompanionPath("go.sum");
   const baselineGoSum = input.lockfile.kind === "go-mod"
     ? readOptionalBaselineFile({
@@ -518,7 +550,13 @@ function parseBaselineLockfileGraph(input: {
     ...(baselinePyproject.value ? { pyprojectText: baselinePyproject.value } : {}),
     ...(baselineCargoManifest.value ? { cargoManifestText: baselineCargoManifest.value } : {}),
     ...(baselineCargoMemberManifests.value?.length
-      ? { cargoMemberManifestTexts: baselineCargoMemberManifests.value }
+      ? { cargoMemberManifestTexts: baselineCargoMemberManifests.value.map((item) => item.text) }
+      : {}),
+    ...(baselineCargoManifestEvidence
+      ? { cargoManifestEvidence: baselineCargoManifestEvidence }
+      : {}),
+    ...(baselineCargoMemberManifestEvidence?.length
+      ? { cargoMemberManifestEvidence: baselineCargoMemberManifestEvidence }
       : {}),
     ...(input.lockfile.kind === "cargo-lock"
       ? { cargoRootName: input.rootNameHint }
@@ -706,7 +744,10 @@ function readBaselineCargoMemberManifests(input: {
   rootManifestText: string;
   readRefFile: GitRefFileReader;
   baselineFiles?: ReadonlySet<string>;
-}): Result<string[] | undefined, OhriskError> {
+}): Result<Array<{
+  text: string;
+  relativeManifestPath: string;
+}> | undefined, OhriskError> {
   const memberManifestPaths = input.baselineFiles
     ? findCargoWorkspaceMemberManifestPathsFromRelativePaths({
         rootManifestText: input.rootManifestText,
@@ -719,7 +760,10 @@ function readBaselineCargoMemberManifests(input: {
         lockfilePath: input.project.lockfile.path,
         projectRoot: input.project.rootDir
       });
-  const manifestTexts: string[] = [];
+  const manifests: Array<{
+    text: string;
+    relativeManifestPath: string;
+  }> = [];
 
   for (const memberManifestPath of memberManifestPaths) {
     const manifestText = readOptionalBaselineFile({
@@ -733,11 +777,14 @@ function readBaselineCargoMemberManifests(input: {
     }
 
     if (manifestText.value !== undefined) {
-      manifestTexts.push(manifestText.value);
+      manifests.push({
+        text: manifestText.value,
+        relativeManifestPath: memberManifestPath.relativeManifestPath
+      });
     }
   }
 
-  return ok(manifestTexts);
+  return ok(manifests);
 }
 
 function readBaselineYarnWorkspacePackageJsons(input: {

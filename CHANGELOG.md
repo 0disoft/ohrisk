@@ -107,6 +107,11 @@
   `[workspace.package]` when their member manifests opt in with
   `version.workspace = true` and `license.workspace = true`, eliminating
   false `unknown` findings for internal crates in repositories such as Ruff.
+- Cargo workspace and contained path packages now collect member-root legal
+  files, with a workspace-root fallback when the member has none. Git-ref
+  baselines use the same bounded snapshot evidence, eliminating false
+  `unknown` findings such as `watt@1.4.0` without trusting same-name registry
+  artifacts.
 - Localized HTML reports no longer leave the conflicting-license review action
   in English across Korean and the other supported report languages.
 - Public repository scans now read Go local replacement evidence only from

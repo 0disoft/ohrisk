@@ -1,7 +1,9 @@
+import { Buffer } from "node:buffer";
 import { existsSync, readdirSync, type Dirent } from "node:fs";
 import path from "node:path";
 
-import type { LicenseEvidence } from "../evidence/types";
+import { classifyEvidenceFile } from "../evidence/license-files";
+import type { LicenseEvidence, LicenseEvidenceFile } from "../evidence/types";
 import { createError, type OhriskError } from "../shared/errors";
 import { omitUndefined } from "../shared/object";
 import { err, ok, type Result } from "../shared/result";
@@ -49,6 +51,63 @@ type CargoTraversalState = {
 };
 
 const CARGO_MAX_PATHS_PER_PACKAGE = 64;
+const CARGO_WORKSPACE_EVIDENCE_FILE_LIMIT = 50;
+const CARGO_WORKSPACE_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+
+export type CargoWorkspaceEvidenceInput = {
+  files: LicenseEvidenceFile[];
+  warnings: string[];
+};
+
+export function readCargoWorkspaceEvidenceFromSnapshot(input: {
+  directoryRelativePath: string;
+  relativePaths: ReadonlySet<string>;
+  readFile: (relativePath: string) => Result<string, OhriskError>;
+  maxBytes?: number;
+}): CargoWorkspaceEvidenceInput {
+  const directory = normalizeProjectRelativeDirectory(input.directoryRelativePath);
+  if (directory === undefined) {
+    return { files: [], warnings: [] };
+  }
+  const prefix = directory === "" ? "" : `${directory}/`;
+  const candidates = [...input.relativePaths]
+    .map((relativePath) => relativePath.replace(/\\/g, "/"))
+    .filter((relativePath) => relativePath.startsWith(prefix))
+    .map((relativePath) => ({
+      relativePath,
+      fileName: relativePath.slice(prefix.length)
+    }))
+    .filter((candidate) =>
+      candidate.fileName !== ""
+      && !candidate.fileName.includes("/")
+      && classifyEvidenceFile(candidate.fileName) !== undefined
+    )
+    .sort((left, right) => left.fileName.localeCompare(right.fileName))
+    .slice(0, CARGO_WORKSPACE_EVIDENCE_FILE_LIMIT);
+  const files: LicenseEvidenceFile[] = [];
+  const warnings: string[] = [];
+  const maxBytes = input.maxBytes ?? CARGO_WORKSPACE_EVIDENCE_FILE_MAX_BYTES;
+
+  for (const candidate of candidates) {
+    const kind = classifyEvidenceFile(candidate.fileName);
+    if (!kind) {
+      continue;
+    }
+    const text = input.readFile(candidate.relativePath);
+    if (!text.ok) {
+      warnings.push(`Failed to read ${candidate.fileName}.`);
+      continue;
+    }
+    const observedBytes = Buffer.byteLength(text.value, "utf8");
+    if (observedBytes > maxBytes) {
+      warnings.push(`Skipped ${candidate.fileName}: evidence file exceeded the maximum supported size.`);
+      continue;
+    }
+    files.push({ path: candidate.fileName, kind, text: text.value });
+  }
+
+  return { files, warnings };
+}
 
 export type CargoWorkspaceMemberManifestPath = {
   memberPath: string;
@@ -58,7 +117,11 @@ export type CargoWorkspaceMemberManifestPath = {
 
 export function parseCargoLockfile(
   lockfilePath: string,
-  options: { maxBytes?: number; manifestMaxBytes?: number } = {}
+  options: {
+    maxBytes?: number;
+    manifestMaxBytes?: number;
+    evidenceFileMaxBytes?: number;
+  } = {}
 ): Result<DependencyGraph, OhriskError> {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -89,11 +152,20 @@ export function parseCargoLockfile(
     return manifest;
   }
 
+  const evidenceFileMaxBytes = options.evidenceFileMaxBytes
+    ?? CARGO_WORKSPACE_EVIDENCE_FILE_MAX_BYTES;
+  const rootManifestEvidence = manifest.value
+    ? readCargoWorkspaceEvidenceDirectory({
+        directory: path.dirname(lockfilePath),
+        maxBytes: evidenceFileMaxBytes
+      })
+    : undefined;
   const memberManifests = manifest.value
     ? readCargoWorkspaceMemberManifests({
         lockfilePath,
         rootManifestText: manifest.value,
-        maxBytes: options.manifestMaxBytes ?? LOCKFILE_MAX_BYTES
+        maxBytes: options.manifestMaxBytes ?? LOCKFILE_MAX_BYTES,
+        evidenceFileMaxBytes
       })
     : ok([]);
   if (!memberManifests.ok) {
@@ -102,14 +174,22 @@ export function parseCargoLockfile(
 
   return parseCargoLockText(lockfileText.value, lockfilePath, omitUndefined({
     manifestText: manifest.value,
-    memberManifestTexts: memberManifests.value
+    memberManifestTexts: memberManifests.value.map((item) => item.manifestText),
+    manifestEvidence: rootManifestEvidence,
+    memberManifestEvidence: memberManifests.value.map((item) => item.evidence)
   }));
 }
 
 export function parseCargoLockText(
   input: string,
   lockfilePath = "Cargo.lock",
-  options: { manifestText?: string; memberManifestTexts?: string[]; rootName?: string } = {}
+  options: {
+    manifestText?: string;
+    memberManifestTexts?: string[];
+    manifestEvidence?: CargoWorkspaceEvidenceInput;
+    memberManifestEvidence?: CargoWorkspaceEvidenceInput[];
+    rootName?: string;
+  } = {}
 ): Result<DependencyGraph, OhriskError> {
   try {
     const records = parseCargoPackageRecords(input);
@@ -171,7 +251,9 @@ export function parseCargoLockText(
       ...cargoWorkspaceEmbeddedEvidence(
         options.manifestText,
         options.memberManifestTexts ?? [],
-        records
+        records,
+        options.manifestEvidence,
+        options.memberManifestEvidence ?? []
       ),
       ...(pathLimitAffected.size > 0
         ? {
@@ -235,9 +317,16 @@ function readCargoWorkspaceMemberManifests(input: {
   lockfilePath: string;
   rootManifestText: string;
   maxBytes: number;
-}): Result<string[], OhriskError> {
+  evidenceFileMaxBytes: number;
+}): Result<Array<{
+  manifestText: string;
+  evidence: CargoWorkspaceEvidenceInput;
+}>, OhriskError> {
   const rootDir = path.dirname(input.lockfilePath);
-  const manifestTexts: string[] = [];
+  const manifests: Array<{
+    manifestText: string;
+    evidence: CargoWorkspaceEvidenceInput;
+  }> = [];
 
   for (const memberManifest of findCargoWorkspaceMemberManifestPaths({
     rootManifestText: input.rootManifestText,
@@ -268,10 +357,66 @@ function readCargoWorkspaceMemberManifests(input: {
       );
     }
 
-    manifestTexts.push(manifestText.value);
+    manifests.push({
+      manifestText: manifestText.value,
+      evidence: readCargoWorkspaceEvidenceDirectory({
+        directory: path.dirname(memberManifest.manifestPath),
+        maxBytes: input.evidenceFileMaxBytes
+      })
+    });
   }
 
-  return ok(manifestTexts);
+  return ok(manifests);
+}
+
+function readCargoWorkspaceEvidenceDirectory(input: {
+  directory: string;
+  maxBytes: number;
+}): CargoWorkspaceEvidenceInput {
+  const files: LicenseEvidenceFile[] = [];
+  const warnings: string[] = [];
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(input.directory, { withFileTypes: true });
+  } catch {
+    return { files, warnings };
+  }
+
+  for (const entry of entries
+    .filter((candidate) => candidate.isFile() && classifyEvidenceFile(candidate.name) !== undefined)
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .slice(0, CARGO_WORKSPACE_EVIDENCE_FILE_LIMIT)) {
+    const kind = classifyEvidenceFile(entry.name);
+    if (!kind) {
+      continue;
+    }
+    const text = readInputTextFile({
+      filePath: path.join(input.directory, entry.name),
+      maxBytes: input.maxBytes
+    });
+    if (!text.ok) {
+      warnings.push(text.error.kind === "too_large"
+        ? `Skipped ${entry.name}: evidence file exceeded the maximum supported size.`
+        : `Failed to read ${entry.name}.`);
+      continue;
+    }
+    files.push({ path: entry.name, kind, text: text.value });
+  }
+
+  return { files, warnings };
+}
+
+function normalizeProjectRelativeDirectory(value: string): string | undefined {
+  const normalized = path.posix.normalize(value.replace(/\\/g, "/"));
+  if (
+    normalized === ".."
+    || normalized.startsWith("../")
+    || normalized.startsWith("/")
+    || path.win32.isAbsolute(value)
+  ) {
+    return undefined;
+  }
+  return normalized === "." ? "" : normalized.replace(/\/$/u, "");
 }
 
 export function findCargoWorkspaceMemberManifestPathsFromRelativePaths(input: {
@@ -1171,17 +1316,31 @@ function readCargoPackageName(text: string | undefined): string | undefined {
 function cargoWorkspaceEmbeddedEvidence(
   rootManifestText: string | undefined,
   manifestTexts: string[],
-  records: CargoPackageRecord[]
+  records: CargoPackageRecord[],
+  rootEvidence: CargoWorkspaceEvidenceInput | undefined,
+  memberEvidence: CargoWorkspaceEvidenceInput[]
 ): Pick<DependencyGraph, "embeddedEvidence"> {
   const workspaceMetadata = readCargoWorkspacePackageLicenseMetadata(rootManifestText);
-  const packageManifestTexts = [
-    ...(rootManifestText ? [rootManifestText] : []),
-    ...manifestTexts
+  const packageManifests = [
+    ...(rootManifestText
+      ? [{ text: rootManifestText, evidence: rootEvidence }]
+      : []),
+    ...manifestTexts.map((text, index) => ({
+      text,
+      evidence: memberEvidence[index]
+    }))
   ];
-  const embeddedEvidence = packageManifestTexts
-    .map((text): LicenseEvidence | undefined => {
-      const metadata = readCargoPackageLicenseMetadata(text, workspaceMetadata);
-      if (!metadata.name || !metadata.version || !metadata.license) {
+  const embeddedEvidence = packageManifests
+    .map((manifest): LicenseEvidence | undefined => {
+      const metadata = readCargoPackageLicenseMetadata(manifest.text, workspaceMetadata);
+      const evidence = manifest.evidence?.files.length
+        ? manifest.evidence
+        : rootEvidence;
+      if (
+        !metadata.name
+        || !metadata.version
+        || (!metadata.license && !evidence?.files.length)
+      ) {
         return undefined;
       }
       const record = resolveCargoPackageRecord(records, {
@@ -1193,11 +1352,15 @@ function cargoWorkspaceEmbeddedEvidence(
       }
       return {
         packageId: record.id,
-        metadataLicense: metadata.license,
-        metadataSource: "workspace Cargo.toml",
-        files: [],
+        ...(metadata.license
+          ? {
+              metadataLicense: metadata.license,
+              metadataSource: "workspace Cargo.toml"
+            }
+          : {}),
+        files: evidence?.files ?? [],
         source: "local",
-        warnings: []
+        warnings: evidence?.warnings ?? []
       };
     })
     .filter((evidence): evidence is LicenseEvidence => evidence !== undefined)

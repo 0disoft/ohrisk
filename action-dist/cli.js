@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: f3f960614d4c1a0d5c41116a3759a4849e70e7f0c0c454b082e2bbc95cd2cd71
+// ohrisk-action-source-sha256: 693c7c3f73eb1f1ec6598c77a77180bcd40ee25d91e5e30cc904ccb37414e4a7
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -33955,9 +33955,44 @@ function mergeDependencyType21(left, right) {
 }
 
 // src/graph/rust-cargo-lock.ts
+import { Buffer as Buffer2 } from "node:buffer";
 import { existsSync as existsSync15, readdirSync as readdirSync6 } from "node:fs";
 import path41 from "node:path";
 var CARGO_MAX_PATHS_PER_PACKAGE = 64;
+var CARGO_WORKSPACE_EVIDENCE_FILE_LIMIT = 50;
+var CARGO_WORKSPACE_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+function readCargoWorkspaceEvidenceFromSnapshot(input) {
+  const directory = normalizeProjectRelativeDirectory(input.directoryRelativePath);
+  if (directory === undefined) {
+    return { files: [], warnings: [] };
+  }
+  const prefix = directory === "" ? "" : `${directory}/`;
+  const candidates = [...input.relativePaths].map((relativePath) => relativePath.replace(/\\/g, "/")).filter((relativePath) => relativePath.startsWith(prefix)).map((relativePath) => ({
+    relativePath,
+    fileName: relativePath.slice(prefix.length)
+  })).filter((candidate) => candidate.fileName !== "" && !candidate.fileName.includes("/") && classifyEvidenceFile(candidate.fileName) !== undefined).sort((left, right) => left.fileName.localeCompare(right.fileName)).slice(0, CARGO_WORKSPACE_EVIDENCE_FILE_LIMIT);
+  const files = [];
+  const warnings = [];
+  const maxBytes = input.maxBytes ?? CARGO_WORKSPACE_EVIDENCE_FILE_MAX_BYTES;
+  for (const candidate of candidates) {
+    const kind = classifyEvidenceFile(candidate.fileName);
+    if (!kind) {
+      continue;
+    }
+    const text = input.readFile(candidate.relativePath);
+    if (!text.ok) {
+      warnings.push(`Failed to read ${candidate.fileName}.`);
+      continue;
+    }
+    const observedBytes = Buffer2.byteLength(text.value, "utf8");
+    if (observedBytes > maxBytes) {
+      warnings.push(`Skipped ${candidate.fileName}: evidence file exceeded the maximum supported size.`);
+      continue;
+    }
+    files.push({ path: candidate.fileName, kind, text: text.value });
+  }
+  return { files, warnings };
+}
 function parseCargoLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -33981,17 +34016,25 @@ function parseCargoLockfile(lockfilePath, options = {}) {
   if (!manifest.ok) {
     return manifest;
   }
+  const evidenceFileMaxBytes = options.evidenceFileMaxBytes ?? CARGO_WORKSPACE_EVIDENCE_FILE_MAX_BYTES;
+  const rootManifestEvidence = manifest.value ? readCargoWorkspaceEvidenceDirectory({
+    directory: path41.dirname(lockfilePath),
+    maxBytes: evidenceFileMaxBytes
+  }) : undefined;
   const memberManifests = manifest.value ? readCargoWorkspaceMemberManifests({
     lockfilePath,
     rootManifestText: manifest.value,
-    maxBytes: options.manifestMaxBytes ?? LOCKFILE_MAX_BYTES
+    maxBytes: options.manifestMaxBytes ?? LOCKFILE_MAX_BYTES,
+    evidenceFileMaxBytes
   }) : ok([]);
   if (!memberManifests.ok) {
     return memberManifests;
   }
   return parseCargoLockText(lockfileText.value, lockfilePath, omitUndefined({
     manifestText: manifest.value,
-    memberManifestTexts: memberManifests.value
+    memberManifestTexts: memberManifests.value.map((item) => item.manifestText),
+    manifestEvidence: rootManifestEvidence,
+    memberManifestEvidence: memberManifests.value.map((item) => item.evidence)
   }));
 }
 function parseCargoLockText(input, lockfilePath = "Cargo.lock", options = {}) {
@@ -34042,7 +34085,7 @@ function parseCargoLockText(input, lockfilePath = "Cargo.lock", options = {}) {
       rootName,
       lockfilePath,
       nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
-      ...cargoWorkspaceEmbeddedEvidence(options.manifestText, options.memberManifestTexts ?? [], records),
+      ...cargoWorkspaceEmbeddedEvidence(options.manifestText, options.memberManifestTexts ?? [], records, options.manifestEvidence, options.memberManifestEvidence ?? []),
       ...pathLimitAffected.size > 0 ? {
         diagnostics: [{
           code: "dependency_paths_truncated",
@@ -34088,7 +34131,7 @@ function readOptionalCargoManifest(input) {
 }
 function readCargoWorkspaceMemberManifests(input) {
   const rootDir = path41.dirname(input.lockfilePath);
-  const manifestTexts = [];
+  const manifests = [];
   for (const memberManifest of findCargoWorkspaceMemberManifestPaths({
     rootManifestText: input.rootManifestText,
     lockfilePath: input.lockfilePath,
@@ -34112,9 +34155,48 @@ function readCargoWorkspaceMemberManifests(input) {
         }
       }));
     }
-    manifestTexts.push(manifestText.value);
+    manifests.push({
+      manifestText: manifestText.value,
+      evidence: readCargoWorkspaceEvidenceDirectory({
+        directory: path41.dirname(memberManifest.manifestPath),
+        maxBytes: input.evidenceFileMaxBytes
+      })
+    });
   }
-  return ok(manifestTexts);
+  return ok(manifests);
+}
+function readCargoWorkspaceEvidenceDirectory(input) {
+  const files = [];
+  const warnings = [];
+  let entries;
+  try {
+    entries = readdirSync6(input.directory, { withFileTypes: true });
+  } catch {
+    return { files, warnings };
+  }
+  for (const entry of entries.filter((candidate) => candidate.isFile() && classifyEvidenceFile(candidate.name) !== undefined).sort((left, right) => left.name.localeCompare(right.name)).slice(0, CARGO_WORKSPACE_EVIDENCE_FILE_LIMIT)) {
+    const kind = classifyEvidenceFile(entry.name);
+    if (!kind) {
+      continue;
+    }
+    const text = readInputTextFile({
+      filePath: path41.join(input.directory, entry.name),
+      maxBytes: input.maxBytes
+    });
+    if (!text.ok) {
+      warnings.push(text.error.kind === "too_large" ? `Skipped ${entry.name}: evidence file exceeded the maximum supported size.` : `Failed to read ${entry.name}.`);
+      continue;
+    }
+    files.push({ path: entry.name, kind, text: text.value });
+  }
+  return { files, warnings };
+}
+function normalizeProjectRelativeDirectory(value) {
+  const normalized = path41.posix.normalize(value.replace(/\\/g, "/"));
+  if (normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/") || path41.win32.isAbsolute(value)) {
+    return;
+  }
+  return normalized === "." ? "" : normalized.replace(/\/$/u, "");
 }
 function findCargoWorkspaceMemberManifestPathsFromRelativePaths(input) {
   const projectRoot = path41.resolve(input.projectRoot);
@@ -34707,7 +34789,7 @@ function cargoChecksumIntegrity(checksum) {
   if (!checksum || !/^[0-9a-f]{64}$/u.test(checksum)) {
     return;
   }
-  return `sha256-${Buffer.from(checksum, "hex").toString("base64")}`;
+  return `sha256-${Buffer2.from(checksum, "hex").toString("base64")}`;
 }
 function indexCargoPackageRecords(records) {
   const byName = new Map;
@@ -34768,15 +34850,19 @@ function readCargoPackageName(text) {
   }
   return;
 }
-function cargoWorkspaceEmbeddedEvidence(rootManifestText, manifestTexts, records) {
+function cargoWorkspaceEmbeddedEvidence(rootManifestText, manifestTexts, records, rootEvidence, memberEvidence) {
   const workspaceMetadata = readCargoWorkspacePackageLicenseMetadata(rootManifestText);
-  const packageManifestTexts = [
-    ...rootManifestText ? [rootManifestText] : [],
-    ...manifestTexts
+  const packageManifests = [
+    ...rootManifestText ? [{ text: rootManifestText, evidence: rootEvidence }] : [],
+    ...manifestTexts.map((text, index) => ({
+      text,
+      evidence: memberEvidence[index]
+    }))
   ];
-  const embeddedEvidence = packageManifestTexts.map((text) => {
-    const metadata = readCargoPackageLicenseMetadata(text, workspaceMetadata);
-    if (!metadata.name || !metadata.version || !metadata.license) {
+  const embeddedEvidence = packageManifests.map((manifest) => {
+    const metadata = readCargoPackageLicenseMetadata(manifest.text, workspaceMetadata);
+    const evidence = manifest.evidence?.files.length ? manifest.evidence : rootEvidence;
+    if (!metadata.name || !metadata.version || !metadata.license && !evidence?.files.length) {
       return;
     }
     const record = resolveCargoPackageRecord(records, {
@@ -34788,11 +34874,13 @@ function cargoWorkspaceEmbeddedEvidence(rootManifestText, manifestTexts, records
     }
     return {
       packageId: record.id,
-      metadataLicense: metadata.license,
-      metadataSource: "workspace Cargo.toml",
-      files: [],
+      ...metadata.license ? {
+        metadataLicense: metadata.license,
+        metadataSource: "workspace Cargo.toml"
+      } : {},
+      files: evidence?.files ?? [],
       source: "local",
-      warnings: []
+      warnings: evidence?.warnings ?? []
     };
   }).filter((evidence) => evidence !== undefined).sort((left, right) => left.packageId.localeCompare(right.packageId));
   return embeddedEvidence.length > 0 ? { embeddedEvidence } : {};
@@ -37940,6 +38028,8 @@ function parseLockfileTextForKind(input) {
       return parseCargoLockText(input.text, input.lockfilePath, omitUndefined({
         manifestText: input.cargoManifestText,
         memberManifestTexts: input.cargoMemberManifestTexts,
+        manifestEvidence: input.cargoManifestEvidence,
+        memberManifestEvidence: input.cargoMemberManifestEvidence,
         rootName: input.cargoRootName
       }));
     case "go-work":
@@ -48991,7 +49081,7 @@ import { existsSync as existsSync42, readdirSync as readdirSync31, statSync as s
 import path75 from "node:path";
 
 // src/evidence/local-package.ts
-import { Buffer as Buffer2 } from "node:buffer";
+import { Buffer as Buffer3 } from "node:buffer";
 import { existsSync as existsSync41, readdirSync as readdirSync30, statSync as statSync29 } from "node:fs";
 import path74 from "node:path";
 var LOCAL_PACKAGE_JSON_MAX_BYTES = 1024 * 1024;
@@ -49010,7 +49100,7 @@ function collectLocalPackageEvidenceFromSnapshot(input) {
     return packageJsonText;
   }
   const packageJsonMaxBytes = input.packageJsonMaxBytes ?? LOCAL_PACKAGE_JSON_MAX_BYTES;
-  const packageJsonBytes = Buffer2.byteLength(packageJsonText.value, "utf8");
+  const packageJsonBytes = Buffer3.byteLength(packageJsonText.value, "utf8");
   if (packageJsonBytes > packageJsonMaxBytes) {
     return err(createError({
       code: "PACKAGE_EVIDENCE_READ_FAILED",
@@ -49066,7 +49156,7 @@ function collectLocalPackageEvidenceFromSnapshot(input) {
       warnings.push(`Failed to read ${fileName}: ${text.error.message}`);
       continue;
     }
-    const observedBytes = Buffer2.byteLength(text.value, "utf8");
+    const observedBytes = Buffer3.byteLength(text.value, "utf8");
     if (observedBytes > evidenceFileMaxBytes) {
       warnings.push(`Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${evidenceFileMaxBytes}, observedBytes: ${observedBytes}).`);
       continue;
@@ -56366,7 +56456,7 @@ function isRecord28(value) {
 }
 
 // src/git/ref-file.ts
-import { Buffer as Buffer3 } from "node:buffer";
+import { Buffer as Buffer4 } from "node:buffer";
 import { execFileSync } from "node:child_process";
 import { realpathSync as realpathSync5 } from "node:fs";
 import path83 from "node:path";
@@ -56526,7 +56616,7 @@ function readProcessErrorText(cause) {
     if (typeof stderr === "string" && stderr.trim() !== "") {
       return stderr.trim();
     }
-    if (stderr instanceof Buffer3 && stderr.toString("utf8").trim() !== "") {
+    if (stderr instanceof Buffer4 && stderr.toString("utf8").trim() !== "") {
       return stderr.toString("utf8").trim();
     }
   }
@@ -63103,7 +63193,7 @@ function windowsDirectory() {
 }
 
 // src/cli/baseline-project.ts
-import { Buffer as Buffer4 } from "node:buffer";
+import { Buffer as Buffer5 } from "node:buffer";
 import { readdirSync as readdirSync35, statSync as statSync36 } from "node:fs";
 import path90 from "node:path";
 
@@ -63266,7 +63356,7 @@ function readBaselineGoSourceFiles(input) {
     if (isErr(text)) {
       return text;
     }
-    totalBytes += Buffer4.byteLength(text.value, "utf8");
+    totalBytes += Buffer5.byteLength(text.value, "utf8");
     if (totalBytes > BASELINE_GO_SOURCE_MAX_BYTES) {
       return ok([]);
     }
@@ -63300,7 +63390,7 @@ function loadBaselineProjectGraph(input) {
     }
   } else {
     baselineLockfiles = [input.currentProject.project.lockfile];
-    if (baselineLockfiles.some((lockfile) => lockfile.kind === "go-mod" || lockfile.kind === "go-work")) {
+    if (baselineLockfiles.some((lockfile) => lockfile.kind === "go-mod" || lockfile.kind === "go-work" || lockfile.kind === "cargo-lock")) {
       const listed = input.listRefFiles({
         projectRoot,
         ref: input.baselineRef
@@ -63455,6 +63545,24 @@ function parseBaselineLockfileGraph(input) {
   if (isErr(baselineCargoMemberManifests)) {
     return baselineCargoMemberManifests;
   }
+  const baselineCargoManifestEvidence = input.lockfile.kind === "cargo-lock" && input.baselineFiles ? readCargoWorkspaceEvidenceFromSnapshot({
+    directoryRelativePath: lockfileDirectory,
+    relativePaths: input.baselineFiles,
+    readFile: (relativePath) => input.readRefFile({
+      projectRoot: input.projectRoot,
+      ref: input.baselineRef,
+      relativePath
+    })
+  }) : undefined;
+  const baselineCargoMemberManifestEvidence = input.lockfile.kind === "cargo-lock" && input.baselineFiles ? (baselineCargoMemberManifests.value ?? []).map((manifest) => readCargoWorkspaceEvidenceFromSnapshot({
+    directoryRelativePath: path90.posix.dirname(manifest.relativeManifestPath),
+    relativePaths: input.baselineFiles,
+    readFile: (relativePath) => input.readRefFile({
+      projectRoot: input.projectRoot,
+      ref: input.baselineRef,
+      relativePath
+    })
+  })) : undefined;
   const goSumRelativePath = relativeCompanionPath("go.sum");
   const baselineGoSum = input.lockfile.kind === "go-mod" ? readOptionalBaselineFile({
     projectRoot: input.projectRoot,
@@ -63532,7 +63640,9 @@ function parseBaselineLockfileGraph(input) {
     pnpmWorkspacePath: `${input.baselineRef}:${pnpmWorkspaceRelativePath}`,
     ...baselinePyproject.value ? { pyprojectText: baselinePyproject.value } : {},
     ...baselineCargoManifest.value ? { cargoManifestText: baselineCargoManifest.value } : {},
-    ...baselineCargoMemberManifests.value?.length ? { cargoMemberManifestTexts: baselineCargoMemberManifests.value } : {},
+    ...baselineCargoMemberManifests.value?.length ? { cargoMemberManifestTexts: baselineCargoMemberManifests.value.map((item) => item.text) } : {},
+    ...baselineCargoManifestEvidence ? { cargoManifestEvidence: baselineCargoManifestEvidence } : {},
+    ...baselineCargoMemberManifestEvidence?.length ? { cargoMemberManifestEvidence: baselineCargoMemberManifestEvidence } : {},
     ...input.lockfile.kind === "cargo-lock" ? { cargoRootName: input.rootNameHint } : {},
     ...baselineGoSum.value ? { goSumText: baselineGoSum.value } : {},
     ...baselineGoSourceFiles.value ? { goSourceFiles: baselineGoSourceFiles.value } : {},
@@ -63655,7 +63765,7 @@ function readBaselineCargoMemberManifests(input) {
     lockfilePath: input.project.lockfile.path,
     projectRoot: input.project.rootDir
   });
-  const manifestTexts = [];
+  const manifests = [];
   for (const memberManifestPath of memberManifestPaths) {
     const manifestText = readOptionalBaselineFile({
       projectRoot: input.project.rootDir,
@@ -63667,10 +63777,13 @@ function readBaselineCargoMemberManifests(input) {
       return manifestText;
     }
     if (manifestText.value !== undefined) {
-      manifestTexts.push(manifestText.value);
+      manifests.push({
+        text: manifestText.value,
+        relativeManifestPath: memberManifestPath.relativeManifestPath
+      });
     }
   }
-  return ok(manifestTexts);
+  return ok(manifests);
 }
 function readBaselineYarnWorkspacePackageJsons(input) {
   const rootPackageJson = tryParseObject(input.rootPackageJsonText);

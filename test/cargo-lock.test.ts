@@ -559,6 +559,116 @@ describe("parseCargoLockText", () => {
     }
   });
 
+  test("uses workspace-root legal files for a contained member without a package license field", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cargo-root-license-"));
+    const memberRoot = path.join(projectRoot, "watt");
+
+    try {
+      mkdirSync(memberRoot, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "Cargo.toml"),
+        [
+          "[workspace]",
+          "members = [\"watt\"]",
+          "",
+          "[workspace.package]",
+          "version = \"1.4.0\"",
+          "license = \"MPL-2.0\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(memberRoot, "Cargo.toml"),
+        [
+          "[package]",
+          "name = \"watt\"",
+          "version.workspace = true"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(path.join(projectRoot, "LICENSE"), "Mozilla Public License Version 2.0", "utf8");
+      writeFileSync(
+        path.join(projectRoot, "Cargo.lock"),
+        [
+          "[[package]]",
+          "name = \"watt\"",
+          "version = \"1.4.0\""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = parseCargoLockfile(path.join(projectRoot, "Cargo.lock"));
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+      expect(result.value.embeddedEvidence).toEqual([{
+        packageId: "watt@1.4.0",
+        files: [{
+          path: "LICENSE",
+          kind: "license",
+          text: "Mozilla Public License Version 2.0"
+        }],
+        source: "local",
+        warnings: []
+      }]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("prefers a contained member legal file over the workspace-root fallback", () => {
+    const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cargo-member-license-"));
+    const memberRoot = path.join(projectRoot, "crates", "member");
+
+    try {
+      mkdirSync(memberRoot, { recursive: true });
+      writeFileSync(
+        path.join(projectRoot, "Cargo.toml"),
+        [
+          "[workspace]",
+          "members = [\"crates/member\"]"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        path.join(memberRoot, "Cargo.toml"),
+        [
+          "[package]",
+          "name = \"member\"",
+          "version = \"1.0.0\""
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(path.join(projectRoot, "LICENSE"), "workspace license", "utf8");
+      writeFileSync(path.join(memberRoot, "LICENSE"), "member license", "utf8");
+      writeFileSync(
+        path.join(projectRoot, "Cargo.lock"),
+        [
+          "[[package]]",
+          "name = \"member\"",
+          "version = \"1.0.0\""
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = parseCargoLockfile(path.join(projectRoot, "Cargo.lock"));
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+      expect(result.value.embeddedEvidence?.[0]?.files).toEqual([{
+        path: "LICENSE",
+        kind: "license",
+        text: "member license"
+      }]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   test("reads implicit workspace members from root path dependencies", () => {
     const projectRoot = mkdtempSync(path.join(tmpdir(), "ohrisk-cargo-implicit-workspace-"));
     const implicitRoot = path.join(projectRoot, "crates", "implicit");

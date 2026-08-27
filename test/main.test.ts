@@ -6269,6 +6269,14 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
 
       const requestedBaselinePaths: string[] = [];
       const { io, stdout, stderr } = createTestIO(projectRoot);
+      io.listRefFiles = () => ({
+        ok: true as const,
+        value: [
+          "Cargo.lock",
+          "Cargo.toml",
+          "crates/group-a/plugins/app/Cargo.toml"
+        ]
+      });
       io.readRefFile = ({ relativePath }) => {
         requestedBaselinePaths.push(relativePath);
         if (relativePath === "Cargo.lock") {
