@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 5a38ecedee9ae8dbc47873fdaffa1d8927f8d7c576757694bffaf9dc5ca9040c
+// ohrisk-action-source-sha256: 9a8609421a4b27929a2aa8e6195ddb01a5299ec9adf8983d7b092b9b89183c6b
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -27960,7 +27960,9 @@ function isObjectRecord3(value) {
 // src/graph/npm-pnpm-lock.ts
 import { existsSync as existsSync7 } from "node:fs";
 import path27 from "node:path";
+import { isDeepStrictEqual } from "node:util";
 var PNPM_MAX_PATHS_PER_PACKAGE = 64;
+var PNPM_MAX_YAML_DOCUMENTS = 16;
 function parsePnpmLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -28065,11 +28067,25 @@ function parsePnpmLockText(input, lockfilePath = "pnpm-lock.yaml", options = {})
 }
 function parseLockfileYaml(input, lockfilePath) {
   try {
-    const parsed = $parse(input);
-    if (!isObjectRecord4(parsed)) {
-      throw new Error("Expected a YAML mapping at the document root.");
+    const documents = $parseAllDocuments(input);
+    if (documents.length === 0) {
+      throw new Error("Expected at least one YAML document.");
     }
-    return ok(parsed);
+    if (documents.length > PNPM_MAX_YAML_DOCUMENTS) {
+      throw new Error(`Expected at most ${PNPM_MAX_YAML_DOCUMENTS} YAML documents, received ${documents.length}.`);
+    }
+    const parsedDocuments = documents.map((document2, index) => {
+      const parseError = document2.errors[0];
+      if (parseError) {
+        throw parseError;
+      }
+      const parsed = document2.toJS();
+      if (!isObjectRecord4(parsed)) {
+        throw new Error(`Expected a YAML mapping at document ${index + 1}.`);
+      }
+      return parsed;
+    });
+    return ok(mergePnpmLockDocuments(parsedDocuments));
   } catch (cause) {
     return err(createError({
       code: "PNPM_LOCK_PARSE_FAILED",
@@ -28081,6 +28097,86 @@ function parseLockfileYaml(input, lockfilePath) {
       }
     }));
   }
+}
+function mergePnpmLockDocuments(documents) {
+  const merged = {};
+  for (const document2 of documents) {
+    if (document2.lockfileVersion !== undefined) {
+      if (merged.lockfileVersion === undefined) {
+        merged.lockfileVersion = document2.lockfileVersion;
+      } else if (!isDeepStrictEqual(merged.lockfileVersion, document2.lockfileVersion)) {
+        throw new Error("Conflicting lockfileVersion values across YAML documents.");
+      }
+    }
+    merged.importers = mergePnpmLockSection({
+      current: merged.importers,
+      incoming: document2.importers,
+      path: ["importers"],
+      recursive: true
+    });
+    merged.packages = mergePnpmLockSection({
+      current: merged.packages,
+      incoming: document2.packages,
+      path: ["packages"],
+      recursive: false
+    });
+    merged.snapshots = mergePnpmLockSection({
+      current: merged.snapshots,
+      incoming: document2.snapshots,
+      path: ["snapshots"],
+      recursive: false
+    });
+  }
+  return merged;
+}
+function mergePnpmLockSection(input) {
+  if (input.incoming === undefined) {
+    return input.current;
+  }
+  const incoming = readRecord(input.incoming);
+  if (!incoming) {
+    throw new Error(`Expected ${input.path.join(" > ")} to be a YAML mapping.`);
+  }
+  const current = input.current === undefined ? undefined : readRecord(input.current);
+  if (input.current !== undefined && !current) {
+    throw new Error(`Expected ${input.path.join(" > ")} to be a YAML mapping.`);
+  }
+  const merged = copySafeRecord(current ?? {});
+  for (const [key, value] of Object.entries(incoming)) {
+    if (!Object.hasOwn(merged, key)) {
+      defineSafeRecordValue(merged, key, value);
+      continue;
+    }
+    const existing = merged[key];
+    if (input.recursive && isObjectRecord4(existing) && isObjectRecord4(value)) {
+      defineSafeRecordValue(merged, key, mergePnpmLockSection({
+        current: existing,
+        incoming: value,
+        path: [...input.path, key],
+        recursive: true
+      }));
+      continue;
+    }
+    if (!isDeepStrictEqual(existing, value)) {
+      throw new Error(`Conflicting values at ${[...input.path, key].join(" > ")}.`);
+    }
+  }
+  return merged;
+}
+function copySafeRecord(record) {
+  const copy = Object.create(null);
+  for (const [key, value] of Object.entries(record)) {
+    defineSafeRecordValue(copy, key, value);
+  }
+  return copy;
+}
+function defineSafeRecordValue(record, key, value) {
+  Object.defineProperty(record, key, {
+    configurable: true,
+    enumerable: true,
+    value,
+    writable: true
+  });
 }
 function readPnpmWorkspaceCatalogs(input) {
   const workspacePath = path27.join(path27.dirname(input.lockfilePath), "pnpm-workspace.yaml");

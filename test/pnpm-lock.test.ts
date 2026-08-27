@@ -60,6 +60,93 @@ describe("parsePnpmLockfile", () => {
     expect(result.error.code).toBe("PNPM_LOCK_PARSE_FAILED");
   });
 
+  test("merges compatible pnpm lockfile documents without dropping importer dependencies", () => {
+    const result = parsePnpmLockText(
+      [
+        "---",
+        "lockfileVersion: '9.0'",
+        "importers:",
+        "  .:",
+        "    dependencies:",
+        "      runtime-package:",
+        "        specifier: 1.0.0",
+        "        version: 1.0.0",
+        "packages:",
+        "  runtime-package@1.0.0: {}",
+        "snapshots:",
+        "  runtime-package@1.0.0: {}",
+        "---",
+        "lockfileVersion: '9.0'",
+        "importers:",
+        "  .:",
+        "    devDependencies:",
+        "      build-package:",
+        "        specifier: 2.0.0",
+        "        version: 2.0.0",
+        "packages:",
+        "  build-package@2.0.0: {}",
+        "snapshots:",
+        "  build-package@2.0.0: {}"
+      ].join("\n"),
+      "multi-document-pnpm-lock.yaml"
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+
+    expect(result.value.nodes).toEqual([
+      expect.objectContaining({
+        id: "build-package@2.0.0",
+        dependencyType: "development",
+        direct: true,
+        paths: [["<root>", "build-package@2.0.0"]]
+      }),
+      expect.objectContaining({
+        id: "runtime-package@1.0.0",
+        dependencyType: "production",
+        direct: true,
+        paths: [["<root>", "runtime-package@1.0.0"]]
+      })
+    ]);
+  });
+
+  test("rejects conflicting pnpm lockfile documents", () => {
+    const result = parsePnpmLockText(
+      [
+        "---",
+        "lockfileVersion: '9.0'",
+        "importers:",
+        "  .:",
+        "    dependencies:",
+        "      shared: 1.0.0",
+        "packages: {}",
+        "snapshots: {}",
+        "---",
+        "lockfileVersion: '9.0'",
+        "importers:",
+        "  .:",
+        "    dependencies:",
+        "      shared: 2.0.0",
+        "packages: {}",
+        "snapshots: {}"
+      ].join("\n"),
+      "conflicting-multi-document-pnpm-lock.yaml"
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected conflicting lockfile documents to fail.");
+    }
+
+    expect(result.error.code).toBe("PNPM_LOCK_PARSE_FAILED");
+    expect(result.error.details).toMatchObject({
+      lockfilePath: "conflicting-multi-document-pnpm-lock.yaml"
+    });
+    expect(result.error.details.cause).toContain("importers > . > dependencies > shared");
+  });
+
   test("stops walking dependency cycles without dropping reachable paths", () => {
     const result = parsePnpmLockText(
       [
