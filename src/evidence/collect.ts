@@ -56,8 +56,10 @@ import {
 import { collectCargoCrateEvidence } from "./cargo-crate";
 import {
   CARGO_GITHUB_ARCHIVE_HOSTS,
-  collectCargoGitHubArchiveEvidence,
-  parseCargoGitHubSource
+  collectCargoGitHubArchiveEvidenceBatch,
+  parseCargoGitHubSource,
+  type CargoGitHubPackageRequest,
+  type CargoGitHubSource
 } from "./cargo-git";
 import { collectRegisteredEcosystemEvidence } from "../ecosystems/registry";
 import {
@@ -229,6 +231,14 @@ const HACKAGE_CABAL_HOSTS = new Set(["hackage.haskell.org"]);
 const HACKAGE_CABAL_MAX_HISTORICAL_REVISIONS = 64;
 const HACKAGE_CABAL_MAX_BYTES = 1024 * 1024;
 
+type CargoGitHubArchiveEvidenceCacheEntry = {
+  source: CargoGitHubSource;
+  packages: CargoGitHubPackageRequest[];
+  result?: Promise<Result<ReadonlyMap<string, LicenseEvidence>, OhriskError>>;
+};
+
+type CargoGitHubArchiveEvidenceCache = ReadonlyMap<string, CargoGitHubArchiveEvidenceCacheEntry>;
+
 export async function collectGraphEvidence(input: {
   graph: DependencyGraph;
   projectRoot: string;
@@ -283,6 +293,7 @@ export async function collectGraphEvidence(input: {
   const fetchTimeoutMs = input.fetchTimeoutMs ?? ARTIFACT_FETCH_TIMEOUT_MS;
   const registryMetadataMaxBytes = input.registryMetadataMaxBytes ?? REGISTRY_METADATA_MAX_BYTES;
   const tarballMaxBytes = input.tarballMaxBytes ?? PACKAGE_TARBALL_MAX_BYTES;
+  const cargoGitHubArchiveEvidenceCache = createCargoGitHubArchiveEvidenceCache(input.graph.nodes);
   const installedPackageJsonMaxBytes =
     input.installedPackageJsonMaxBytes ?? INSTALLED_PACKAGE_JSON_MAX_BYTES;
   const allowLocalProjectEvidence = input.allowLocalProjectEvidence ?? true;
@@ -348,7 +359,8 @@ export async function collectGraphEvidence(input: {
         allowedHosts,
         loadYarnCacheIndex,
         collectMavenEvidence,
-        loadNugetServiceIndex
+        loadNugetServiceIndex,
+        cargoGitHubArchiveEvidenceCache
       });
 
       if (!collected.ok) {
@@ -554,6 +566,36 @@ function normalizeEvidenceConcurrency(value: number | undefined, total: number):
   return Math.min(Math.max(1, Math.trunc(value)), total);
 }
 
+function createCargoGitHubArchiveEvidenceCache(
+  nodes: readonly DependencyNode[]
+): CargoGitHubArchiveEvidenceCache {
+  const cache = new Map<string, CargoGitHubArchiveEvidenceCacheEntry>();
+  for (const node of nodes) {
+    if (node.ecosystem !== "cargo") {
+      continue;
+    }
+    const source = parseCargoGitHubSource(node.resolved);
+    if (!source) {
+      continue;
+    }
+    const existing = cache.get(source.archiveUrl);
+    const requestedPackage = {
+      packageId: node.id,
+      packageName: node.name,
+      version: node.version
+    };
+    if (existing) {
+      existing.packages.push(requestedPackage);
+    } else {
+      cache.set(source.archiveUrl, {
+        source,
+        packages: [requestedPackage]
+      });
+    }
+  }
+  return cache;
+}
+
 async function collectNodeEvidence(input: {
   node: DependencyNode;
   projectRoot: string;
@@ -575,6 +617,7 @@ async function collectNodeEvidence(input: {
   loadYarnCacheIndex: YarnCacheIndexLoader;
   collectMavenEvidence: MavenEvidenceCollector;
   loadNugetServiceIndex: NugetServiceIndexLoader;
+  cargoGitHubArchiveEvidenceCache: CargoGitHubArchiveEvidenceCache;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   const projectContainedGoReplacementEvidence =
     !input.allowLocalProjectEvidence
@@ -778,7 +821,8 @@ async function collectNodeEvidence(input: {
       offline: input.offline,
       artifactCache: input.artifactCache,
       signal: input.signal,
-      allowedHosts: input.allowedHosts
+      allowedHosts: input.allowedHosts,
+      cargoGitHubArchiveEvidenceCache: input.cargoGitHubArchiveEvidenceCache
     });
   }
 
@@ -1981,48 +2025,37 @@ async function collectRemoteCargoCrateEvidence(input: {
   artifactCache: ArtifactCache | undefined;
   signal: AbortSignal;
   allowedHosts: ReadonlySet<string>;
+  cargoGitHubArchiveEvidenceCache: CargoGitHubArchiveEvidenceCache;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
   const gitHubSource = parseCargoGitHubSource(input.node.resolved);
   if (gitHubSource) {
-    const archive = await readRemoteArtifactBytes({
-      code: "TARBALL_FETCH_FAILED",
-      packageId: input.node.id,
-      url: gitHubSource.archiveUrl,
-      blockedMessage: "Cargo GitHub archive URL targets an unsupported or blocked host.",
-      resolveFailureMessage: "Failed to resolve the Cargo GitHub archive host.",
-      fetchFailureMessage: "Failed to fetch the commit-pinned Cargo GitHub archive.",
-      tooLargeMessage: "Cargo GitHub archive response exceeded the maximum supported size.",
-      unreadableMessage: "Cargo GitHub archive response did not expose a readable body stream.",
-      offlineMissMessage: "Offline mode could not find the Cargo GitHub archive in the artifact cache.",
-      details: {
-        packageName: input.node.name,
-        version: input.node.version,
-        owner: gitHubSource.owner,
-        repository: gitHubSource.repository,
-        commit: gitHubSource.commit
-      },
-      maxBytes: input.artifactMaxBytes,
+    const cacheEntry = input.cargoGitHubArchiveEvidenceCache.get(gitHubSource.archiveUrl);
+    if (!cacheEntry) {
+      return ok(unsupportedRemoteEcosystemEvidence({
+        node: input.node,
+        reason: "Commit-pinned Cargo Git source was not registered in the current evidence batch."
+      }));
+    }
+    cacheEntry.result ??= collectCargoGitHubArchiveEvidenceIndex({
+      cacheEntry,
+      representativeNode: input.node,
       fetchArtifact: input.fetchArtifact,
       resolveArtifactHost: input.resolveArtifactHost,
       fetchTimeoutMs: input.fetchTimeoutMs,
+      artifactMaxBytes: input.artifactMaxBytes,
       offline: input.offline,
       artifactCache: input.artifactCache,
       signal: input.signal,
-      allowedHosts: input.allowedHosts,
-      permittedHosts: CARGO_GITHUB_ARCHIVE_HOSTS,
-      urlDetailKey: "resolved"
+      allowedHosts: input.allowedHosts
     });
-    if (!archive.ok) {
-      return archive;
+    const collected = await cacheEntry.result;
+    if (!collected.ok) {
+      return collected;
     }
-    return collectCargoGitHubArchiveEvidence({
-      packageId: input.node.id,
-      packageName: input.node.name,
-      version: input.node.version,
-      source: gitHubSource,
-      archive: archive.value,
-      artifactMaxBytes: input.artifactMaxBytes
-    });
+    return ok(collected.value.get(input.node.id) ?? unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: "Commit-pinned Cargo Git archive did not produce evidence for the locked package."
+    }));
   }
 
   if (!input.node.resolved || !CARGO_CRATES_IO_SOURCES.has(input.node.resolved)) {
@@ -2092,6 +2125,55 @@ async function collectRemoteCargoCrateEvidence(input: {
     crate: crate.value,
     artifactMaxBytes: input.artifactMaxBytes
   });
+}
+
+async function collectCargoGitHubArchiveEvidenceIndex(input: {
+  cacheEntry: CargoGitHubArchiveEvidenceCacheEntry;
+  representativeNode: DependencyNode;
+  fetchArtifact: ArtifactFetcher;
+  resolveArtifactHost: ArtifactHostResolver | undefined;
+  fetchTimeoutMs: number;
+  artifactMaxBytes: number;
+  offline: boolean;
+  artifactCache: ArtifactCache | undefined;
+  signal: AbortSignal;
+  allowedHosts: ReadonlySet<string>;
+}): Promise<Result<ReadonlyMap<string, LicenseEvidence>, OhriskError>> {
+    const archive = await readRemoteArtifactBytes({
+      code: "TARBALL_FETCH_FAILED",
+      packageId: input.representativeNode.id,
+      url: input.cacheEntry.source.archiveUrl,
+      blockedMessage: "Cargo GitHub archive URL targets an unsupported or blocked host.",
+      resolveFailureMessage: "Failed to resolve the Cargo GitHub archive host.",
+      fetchFailureMessage: "Failed to fetch the commit-pinned Cargo GitHub archive.",
+      tooLargeMessage: "Cargo GitHub archive response exceeded the maximum supported size.",
+      unreadableMessage: "Cargo GitHub archive response did not expose a readable body stream.",
+      offlineMissMessage: "Offline mode could not find the Cargo GitHub archive in the artifact cache.",
+      details: {
+        owner: input.cacheEntry.source.owner,
+        repository: input.cacheEntry.source.repository,
+        commit: input.cacheEntry.source.commit
+      },
+      maxBytes: input.artifactMaxBytes,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      signal: input.signal,
+      allowedHosts: input.allowedHosts,
+      permittedHosts: CARGO_GITHUB_ARCHIVE_HOSTS,
+      urlDetailKey: "resolved"
+    });
+    if (!archive.ok) {
+      return archive;
+    }
+    return collectCargoGitHubArchiveEvidenceBatch({
+      packages: input.cacheEntry.packages,
+      source: input.cacheEntry.source,
+      archive: archive.value,
+      artifactMaxBytes: input.artifactMaxBytes
+    });
 }
 
 function readLocalArtifactStats(input: {

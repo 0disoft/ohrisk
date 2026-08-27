@@ -28,6 +28,12 @@ export type CargoGitHubSource = {
   archiveUrl: string;
 };
 
+export type CargoGitHubPackageRequest = {
+  packageId: string;
+  packageName: string;
+  version: string;
+};
+
 export function parseCargoGitHubSource(resolved: string | undefined): CargoGitHubSource | undefined {
   if (!resolved?.startsWith("git+")) {
     return undefined;
@@ -100,6 +106,31 @@ export function collectCargoGitHubArchiveEvidence(input: {
   archive: Buffer | Uint8Array;
   artifactMaxBytes: number;
 }): Result<LicenseEvidence, OhriskError> {
+  const collected = collectCargoGitHubArchiveEvidenceBatch({
+    packages: [{
+      packageId: input.packageId,
+      packageName: input.packageName,
+      version: input.version
+    }],
+    source: input.source,
+    archive: input.archive,
+    artifactMaxBytes: input.artifactMaxBytes
+  });
+  if (!collected.ok) {
+    return collected;
+  }
+  return ok(collected.value.get(input.packageId) ?? unavailableEvidence(
+    input.packageId,
+    "Commit-pinned Cargo Git archive evidence was not indexed for the locked package."
+  ));
+}
+
+export function collectCargoGitHubArchiveEvidenceBatch(input: {
+  packages: readonly CargoGitHubPackageRequest[];
+  source: CargoGitHubSource;
+  archive: Buffer | Uint8Array;
+  artifactMaxBytes: number;
+}): Result<ReadonlyMap<string, LicenseEvidence>, OhriskError> {
   const symlinks = new Map<string, string>();
   const archive = readArchiveBytes({
     displayName: `${safeDisplayPart(input.source.repository)}-${input.source.commit.slice(0, 12)}.tar.gz`,
@@ -118,16 +149,16 @@ export function collectCargoGitHubArchiveEvidence(input: {
     }
   });
   if (!archive.ok) {
-    return ok(unavailableEvidence(
-      input.packageId,
+    return ok(unavailableEvidenceBatch(
+      input.packages,
       `Commit-pinned Cargo Git archive failed bounded inspection (${archive.error.code}); its contents were not trusted.`
     ));
   }
 
   const root = singleArchiveRoot(archive.value);
   if (!root) {
-    return ok(unavailableEvidence(
-      input.packageId,
+    return ok(unavailableEvidenceBatch(
+      input.packages,
       "Commit-pinned Cargo Git archive did not contain exactly one repository root."
     ));
   }
@@ -140,8 +171,8 @@ export function collectCargoGitHubArchiveEvidence(input: {
     )
     .sort((left, right) => left.path.localeCompare(right.path));
   if (manifestEntries.length > CARGO_GIT_MANIFEST_LIMIT) {
-    return ok(unavailableEvidence(
-      input.packageId,
+    return ok(unavailableEvidenceBatch(
+      input.packages,
       "Commit-pinned Cargo Git archive exceeded the Cargo.toml inspection limit."
     ));
   }
@@ -153,7 +184,7 @@ export function collectCargoGitHubArchiveEvidence(input: {
       manifests.set(entry.path, text.value);
     }
   }
-  const matches = [...manifests.entries()]
+  const parsedManifests = [...manifests.entries()]
     .map(([manifestPath, manifestText]) => {
       const workspaceManifest = nearestWorkspaceManifest({
         root,
@@ -162,44 +193,67 @@ export function collectCargoGitHubArchiveEvidence(input: {
       });
       return {
         manifestPath,
-        manifestText,
         workspaceManifestPath: workspaceManifest?.path,
         metadata: parseCargoWorkspacePackageMetadata({
           manifestText,
           ...(workspaceManifest ? { workspaceManifestText: workspaceManifest.text } : {})
         })
       };
+    });
+
+  return ok(new Map(input.packages.map((requestedPackage) => [
+    requestedPackage.packageId,
+    collectPreparedCargoGitHubEvidence({
+      requestedPackage,
+      archive: archive.value,
+      root,
+      symlinks,
+      parsedManifests
     })
-    .filter((candidate) =>
-      candidate.metadata.name === input.packageName
-      && candidate.metadata.version === input.version
-    );
+  ])));
+}
+
+function collectPreparedCargoGitHubEvidence(input: {
+  requestedPackage: CargoGitHubPackageRequest;
+  archive: ArchiveSource;
+  root: string;
+  symlinks: ReadonlyMap<string, string>;
+  parsedManifests: readonly {
+    manifestPath: string;
+    workspaceManifestPath: string | undefined;
+    metadata: ReturnType<typeof parseCargoWorkspacePackageMetadata>;
+  }[];
+}): LicenseEvidence {
+  const matches = input.parsedManifests.filter((candidate) =>
+    candidate.metadata.name === input.requestedPackage.packageName
+    && candidate.metadata.version === input.requestedPackage.version
+  );
   if (matches.length !== 1) {
-    return ok(unavailableEvidence(
-      input.packageId,
+    return unavailableEvidence(
+      input.requestedPackage.packageId,
       matches.length === 0
         ? "Commit-pinned Cargo Git archive did not contain the locked package identity."
         : "Commit-pinned Cargo Git archive contained multiple matching package manifests."
-    ));
+    );
   }
 
   const match = matches[0]!;
   const packageDirectory = path.posix.dirname(match.manifestPath);
   const workspaceDirectory = match.workspaceManifestPath
     ? path.posix.dirname(match.workspaceManifestPath)
-    : root;
+    : input.root;
   const evidencePaths = new Map<string, LicenseEvidenceFile["kind"]>();
   addDirectEvidencePaths({
-    archive: archive.value,
+    archive: input.archive,
     directory: packageDirectory,
-    root,
-    symlinks,
+    root: input.root,
+    symlinks: input.symlinks,
     evidencePaths
   });
 
   if (match.metadata.licenseFile) {
     const declaredPath = resolveContainedArchivePath({
-      root,
+      root: input.root,
       directory: packageDirectory,
       relativePath: match.metadata.licenseFile
     });
@@ -209,19 +263,19 @@ export function collectCargoGitHubArchiveEvidence(input: {
   }
   if (!hasLicenseLikeEvidence(evidencePaths)) {
     addDirectEvidencePaths({
-      archive: archive.value,
+      archive: input.archive,
       directory: workspaceDirectory,
-      root,
-      symlinks,
+      root: input.root,
+      symlinks: input.symlinks,
       evidencePaths
     });
   }
-  if (!hasLicenseLikeEvidence(evidencePaths) && workspaceDirectory !== root) {
+  if (!hasLicenseLikeEvidence(evidencePaths) && workspaceDirectory !== input.root) {
     addDirectEvidencePaths({
-      archive: archive.value,
-      directory: root,
-      root,
-      symlinks,
+      archive: input.archive,
+      directory: input.root,
+      root: input.root,
+      symlinks: input.symlinks,
       evidencePaths
     });
   }
@@ -231,20 +285,20 @@ export function collectCargoGitHubArchiveEvidence(input: {
   for (const [entryPath, kind] of [...evidencePaths.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .slice(0, CARGO_GIT_LICENSE_FILE_LIMIT)) {
-    const entry = archive.value.entries.find((candidate) =>
+    const entry = input.archive.entries.find((candidate) =>
       candidate.type === "file" && candidate.path === entryPath
     );
     if (!entry) {
-      warnings.push(`Cargo.toml declared missing license-file ${archiveRelativePath(root, entryPath)}.`);
+      warnings.push(`Cargo.toml declared missing license-file ${archiveRelativePath(input.root, entryPath)}.`);
       continue;
     }
-    const text = archive.value.readText(entryPath, CARGO_GIT_LICENSE_MAX_BYTES);
+    const text = input.archive.readText(entryPath, CARGO_GIT_LICENSE_MAX_BYTES);
     if (!text.ok) {
-      warnings.push(`Skipped ${archiveRelativePath(root, entryPath)}: Cargo license evidence exceeded bounded text limits.`);
+      warnings.push(`Skipped ${archiveRelativePath(input.root, entryPath)}: Cargo license evidence exceeded bounded text limits.`);
       continue;
     }
     files.push({
-      path: archiveRelativePath(root, entryPath),
+      path: archiveRelativePath(input.root, entryPath),
       kind,
       text: text.value
     });
@@ -257,8 +311,8 @@ export function collectCargoGitHubArchiveEvidence(input: {
     warnings.push("Cargo.toml did not declare a package license.");
   }
 
-  return ok({
-    packageId: input.packageId,
+  return {
+    packageId: input.requestedPackage.packageId,
     ...(match.metadata.license
       ? {
           metadataLicense: match.metadata.license,
@@ -268,7 +322,7 @@ export function collectCargoGitHubArchiveEvidence(input: {
     files,
     source: "tarball",
     warnings
-  });
+  };
 }
 
 function singleArchiveRoot(archive: ArchiveSource): string | undefined {
@@ -383,6 +437,16 @@ function unavailableEvidence(packageId: string, warning: string): LicenseEvidenc
     source: "unavailable",
     warnings: [warning]
   };
+}
+
+function unavailableEvidenceBatch(
+  packages: readonly CargoGitHubPackageRequest[],
+  warning: string
+): ReadonlyMap<string, LicenseEvidence> {
+  return new Map(packages.map((requestedPackage) => [
+    requestedPackage.packageId,
+    unavailableEvidence(requestedPackage.packageId, warning)
+  ]));
 }
 
 function safeDisplayPart(value: string): string {

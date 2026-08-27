@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 39dd20b201ff497153178ef533daa5382f509dbbe6f35f299497c68987486576
+// ohrisk-action-source-sha256: 8ec07fd48ef486027aa282dbee6fb6e5da5f06e4a509ff0ae703b5cb638a55ee
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -44782,7 +44782,7 @@ function parseCargoGitHubSource(resolved) {
     archiveUrl: `https://codeload.github.com/${owner}/${repository}/tar.gz/${commit}`
   };
 }
-function collectCargoGitHubArchiveEvidence(input) {
+function collectCargoGitHubArchiveEvidenceBatch(input) {
   const symlinks = new Map;
   const archive = readArchiveBytes({
     displayName: `${safeDisplayPart(input.source.repository)}-${input.source.commit.slice(0, 12)}.tar.gz`,
@@ -44801,15 +44801,15 @@ function collectCargoGitHubArchiveEvidence(input) {
     }
   });
   if (!archive.ok) {
-    return ok(unavailableEvidence(input.packageId, `Commit-pinned Cargo Git archive failed bounded inspection (${archive.error.code}); its contents were not trusted.`));
+    return ok(unavailableEvidenceBatch(input.packages, `Commit-pinned Cargo Git archive failed bounded inspection (${archive.error.code}); its contents were not trusted.`));
   }
   const root = singleArchiveRoot(archive.value);
   if (!root) {
-    return ok(unavailableEvidence(input.packageId, "Commit-pinned Cargo Git archive did not contain exactly one repository root."));
+    return ok(unavailableEvidenceBatch(input.packages, "Commit-pinned Cargo Git archive did not contain exactly one repository root."));
   }
   const manifestEntries = archive.value.entries.filter((entry) => entry.type === "file" && entry.path.startsWith(`${root}/`) && path53.posix.basename(entry.path) === "Cargo.toml").sort((left, right) => left.path.localeCompare(right.path));
   if (manifestEntries.length > CARGO_GIT_MANIFEST_LIMIT) {
-    return ok(unavailableEvidence(input.packageId, "Commit-pinned Cargo Git archive exceeded the Cargo.toml inspection limit."));
+    return ok(unavailableEvidenceBatch(input.packages, "Commit-pinned Cargo Git archive exceeded the Cargo.toml inspection limit."));
   }
   const manifests = new Map;
   for (const entry of manifestEntries) {
@@ -44818,7 +44818,7 @@ function collectCargoGitHubArchiveEvidence(input) {
       manifests.set(entry.path, text.value);
     }
   }
-  const matches = [...manifests.entries()].map(([manifestPath, manifestText]) => {
+  const parsedManifests = [...manifests.entries()].map(([manifestPath, manifestText]) => {
     const workspaceManifest = nearestWorkspaceManifest({
       root,
       manifestPath,
@@ -44826,31 +44826,43 @@ function collectCargoGitHubArchiveEvidence(input) {
     });
     return {
       manifestPath,
-      manifestText,
       workspaceManifestPath: workspaceManifest?.path,
       metadata: parseCargoWorkspacePackageMetadata({
         manifestText,
         ...workspaceManifest ? { workspaceManifestText: workspaceManifest.text } : {}
       })
     };
-  }).filter((candidate) => candidate.metadata.name === input.packageName && candidate.metadata.version === input.version);
+  });
+  return ok(new Map(input.packages.map((requestedPackage) => [
+    requestedPackage.packageId,
+    collectPreparedCargoGitHubEvidence({
+      requestedPackage,
+      archive: archive.value,
+      root,
+      symlinks,
+      parsedManifests
+    })
+  ])));
+}
+function collectPreparedCargoGitHubEvidence(input) {
+  const matches = input.parsedManifests.filter((candidate) => candidate.metadata.name === input.requestedPackage.packageName && candidate.metadata.version === input.requestedPackage.version);
   if (matches.length !== 1) {
-    return ok(unavailableEvidence(input.packageId, matches.length === 0 ? "Commit-pinned Cargo Git archive did not contain the locked package identity." : "Commit-pinned Cargo Git archive contained multiple matching package manifests."));
+    return unavailableEvidence(input.requestedPackage.packageId, matches.length === 0 ? "Commit-pinned Cargo Git archive did not contain the locked package identity." : "Commit-pinned Cargo Git archive contained multiple matching package manifests.");
   }
   const match = matches[0];
   const packageDirectory = path53.posix.dirname(match.manifestPath);
-  const workspaceDirectory = match.workspaceManifestPath ? path53.posix.dirname(match.workspaceManifestPath) : root;
+  const workspaceDirectory = match.workspaceManifestPath ? path53.posix.dirname(match.workspaceManifestPath) : input.root;
   const evidencePaths = new Map;
   addDirectEvidencePaths({
-    archive: archive.value,
+    archive: input.archive,
     directory: packageDirectory,
-    root,
-    symlinks,
+    root: input.root,
+    symlinks: input.symlinks,
     evidencePaths
   });
   if (match.metadata.licenseFile) {
     const declaredPath = resolveContainedArchivePath({
-      root,
+      root: input.root,
       directory: packageDirectory,
       relativePath: match.metadata.licenseFile
     });
@@ -44860,37 +44872,37 @@ function collectCargoGitHubArchiveEvidence(input) {
   }
   if (!hasLicenseLikeEvidence(evidencePaths)) {
     addDirectEvidencePaths({
-      archive: archive.value,
+      archive: input.archive,
       directory: workspaceDirectory,
-      root,
-      symlinks,
+      root: input.root,
+      symlinks: input.symlinks,
       evidencePaths
     });
   }
-  if (!hasLicenseLikeEvidence(evidencePaths) && workspaceDirectory !== root) {
+  if (!hasLicenseLikeEvidence(evidencePaths) && workspaceDirectory !== input.root) {
     addDirectEvidencePaths({
-      archive: archive.value,
-      directory: root,
-      root,
-      symlinks,
+      archive: input.archive,
+      directory: input.root,
+      root: input.root,
+      symlinks: input.symlinks,
       evidencePaths
     });
   }
   const warnings = [];
   const files = [];
   for (const [entryPath, kind] of [...evidencePaths.entries()].sort(([left], [right]) => left.localeCompare(right)).slice(0, CARGO_GIT_LICENSE_FILE_LIMIT)) {
-    const entry = archive.value.entries.find((candidate) => candidate.type === "file" && candidate.path === entryPath);
+    const entry = input.archive.entries.find((candidate) => candidate.type === "file" && candidate.path === entryPath);
     if (!entry) {
-      warnings.push(`Cargo.toml declared missing license-file ${archiveRelativePath(root, entryPath)}.`);
+      warnings.push(`Cargo.toml declared missing license-file ${archiveRelativePath(input.root, entryPath)}.`);
       continue;
     }
-    const text = archive.value.readText(entryPath, CARGO_GIT_LICENSE_MAX_BYTES);
+    const text = input.archive.readText(entryPath, CARGO_GIT_LICENSE_MAX_BYTES);
     if (!text.ok) {
-      warnings.push(`Skipped ${archiveRelativePath(root, entryPath)}: Cargo license evidence exceeded bounded text limits.`);
+      warnings.push(`Skipped ${archiveRelativePath(input.root, entryPath)}: Cargo license evidence exceeded bounded text limits.`);
       continue;
     }
     files.push({
-      path: archiveRelativePath(root, entryPath),
+      path: archiveRelativePath(input.root, entryPath),
       kind,
       text: text.value
     });
@@ -44901,8 +44913,8 @@ function collectCargoGitHubArchiveEvidence(input) {
   if (!match.metadata.license) {
     warnings.push("Cargo.toml did not declare a package license.");
   }
-  return ok({
-    packageId: input.packageId,
+  return {
+    packageId: input.requestedPackage.packageId,
     ...match.metadata.license ? {
       metadataLicense: match.metadata.license,
       metadataSource: "Cargo.toml at pinned Git commit"
@@ -44910,7 +44922,7 @@ function collectCargoGitHubArchiveEvidence(input) {
     files,
     source: "tarball",
     warnings
-  });
+  };
 }
 function singleArchiveRoot(archive) {
   const roots = new Set(archive.entries.map((entry) => entry.path.split("/")[0]).filter((value) => value !== undefined && value !== ""));
@@ -44985,6 +44997,12 @@ function unavailableEvidence(packageId, warning) {
     source: "unavailable",
     warnings: [warning]
   };
+}
+function unavailableEvidenceBatch(packages, warning) {
+  return new Map(packages.map((requestedPackage) => [
+    requestedPackage.packageId,
+    unavailableEvidence(requestedPackage.packageId, warning)
+  ]));
 }
 function safeDisplayPart(value) {
   return value.replace(/[^A-Za-z0-9._+-]/g, "_").slice(0, 120) || "repository";
@@ -53672,6 +53690,7 @@ async function collectGraphEvidence(input) {
   const fetchTimeoutMs = input.fetchTimeoutMs ?? ARTIFACT_FETCH_TIMEOUT_MS;
   const registryMetadataMaxBytes = input.registryMetadataMaxBytes ?? REGISTRY_METADATA_MAX_BYTES;
   const tarballMaxBytes = input.tarballMaxBytes ?? PACKAGE_TARBALL_MAX_BYTES;
+  const cargoGitHubArchiveEvidenceCache = createCargoGitHubArchiveEvidenceCache(input.graph.nodes);
   const installedPackageJsonMaxBytes = input.installedPackageJsonMaxBytes ?? INSTALLED_PACKAGE_JSON_MAX_BYTES;
   const allowLocalProjectEvidence = input.allowLocalProjectEvidence ?? true;
   const allowProjectContainedGoReplacementEvidence = input.allowProjectContainedGoReplacementEvidence ?? false;
@@ -53729,7 +53748,8 @@ async function collectGraphEvidence(input) {
         allowedHosts,
         loadYarnCacheIndex,
         collectMavenEvidence,
-        loadNugetServiceIndex
+        loadNugetServiceIndex,
+        cargoGitHubArchiveEvidenceCache
       });
       if (!collected.ok) {
         if (isRecoverableRemoteEvidenceError(collected.error)) {
@@ -53888,6 +53908,33 @@ function normalizeEvidenceConcurrency(value, total) {
   }
   return Math.min(Math.max(1, Math.trunc(value)), total);
 }
+function createCargoGitHubArchiveEvidenceCache(nodes) {
+  const cache = new Map;
+  for (const node of nodes) {
+    if (node.ecosystem !== "cargo") {
+      continue;
+    }
+    const source = parseCargoGitHubSource(node.resolved);
+    if (!source) {
+      continue;
+    }
+    const existing = cache.get(source.archiveUrl);
+    const requestedPackage = {
+      packageId: node.id,
+      packageName: node.name,
+      version: node.version
+    };
+    if (existing) {
+      existing.packages.push(requestedPackage);
+    } else {
+      cache.set(source.archiveUrl, {
+        source,
+        packages: [requestedPackage]
+      });
+    }
+  }
+  return cache;
+}
 async function collectNodeEvidence(input) {
   const projectContainedGoReplacementEvidence = !input.allowLocalProjectEvidence && input.allowProjectContainedGoReplacementEvidence && input.node.ecosystem === "go" && input.node.resolved !== undefined && !input.node.resolved.startsWith("go-module:") ? collectRegisteredEcosystemEvidence({
     node: input.node,
@@ -54040,7 +54087,8 @@ async function collectNodeEvidence(input) {
       offline: input.offline,
       artifactCache: input.artifactCache,
       signal: input.signal,
-      allowedHosts: input.allowedHosts
+      allowedHosts: input.allowedHosts,
+      cargoGitHubArchiveEvidenceCache: input.cargoGitHubArchiveEvidenceCache
     });
   }
   if (input.node.ecosystem === "nuget") {
@@ -55002,45 +55050,33 @@ async function collectVerifiedRemoteGoModuleRequirements(input) {
 async function collectRemoteCargoCrateEvidence(input) {
   const gitHubSource = parseCargoGitHubSource(input.node.resolved);
   if (gitHubSource) {
-    const archive = await readRemoteArtifactBytes({
-      code: "TARBALL_FETCH_FAILED",
-      packageId: input.node.id,
-      url: gitHubSource.archiveUrl,
-      blockedMessage: "Cargo GitHub archive URL targets an unsupported or blocked host.",
-      resolveFailureMessage: "Failed to resolve the Cargo GitHub archive host.",
-      fetchFailureMessage: "Failed to fetch the commit-pinned Cargo GitHub archive.",
-      tooLargeMessage: "Cargo GitHub archive response exceeded the maximum supported size.",
-      unreadableMessage: "Cargo GitHub archive response did not expose a readable body stream.",
-      offlineMissMessage: "Offline mode could not find the Cargo GitHub archive in the artifact cache.",
-      details: {
-        packageName: input.node.name,
-        version: input.node.version,
-        owner: gitHubSource.owner,
-        repository: gitHubSource.repository,
-        commit: gitHubSource.commit
-      },
-      maxBytes: input.artifactMaxBytes,
+    const cacheEntry = input.cargoGitHubArchiveEvidenceCache.get(gitHubSource.archiveUrl);
+    if (!cacheEntry) {
+      return ok(unsupportedRemoteEcosystemEvidence({
+        node: input.node,
+        reason: "Commit-pinned Cargo Git source was not registered in the current evidence batch."
+      }));
+    }
+    cacheEntry.result ??= collectCargoGitHubArchiveEvidenceIndex({
+      cacheEntry,
+      representativeNode: input.node,
       fetchArtifact: input.fetchArtifact,
       resolveArtifactHost: input.resolveArtifactHost,
       fetchTimeoutMs: input.fetchTimeoutMs,
+      artifactMaxBytes: input.artifactMaxBytes,
       offline: input.offline,
       artifactCache: input.artifactCache,
       signal: input.signal,
-      allowedHosts: input.allowedHosts,
-      permittedHosts: CARGO_GITHUB_ARCHIVE_HOSTS,
-      urlDetailKey: "resolved"
+      allowedHosts: input.allowedHosts
     });
-    if (!archive.ok) {
-      return archive;
+    const collected = await cacheEntry.result;
+    if (!collected.ok) {
+      return collected;
     }
-    return collectCargoGitHubArchiveEvidence({
-      packageId: input.node.id,
-      packageName: input.node.name,
-      version: input.node.version,
-      source: gitHubSource,
-      archive: archive.value,
-      artifactMaxBytes: input.artifactMaxBytes
-    });
+    return ok(collected.value.get(input.node.id) ?? unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: "Commit-pinned Cargo Git archive did not produce evidence for the locked package."
+    }));
   }
   if (!input.node.resolved || !CARGO_CRATES_IO_SOURCES2.has(input.node.resolved)) {
     return ok(unsupportedRemoteEcosystemEvidence({
@@ -55102,6 +55138,43 @@ async function collectRemoteCargoCrateEvidence(input) {
     version: input.node.version,
     integrity: input.node.integrity,
     crate: crate.value,
+    artifactMaxBytes: input.artifactMaxBytes
+  });
+}
+async function collectCargoGitHubArchiveEvidenceIndex(input) {
+  const archive = await readRemoteArtifactBytes({
+    code: "TARBALL_FETCH_FAILED",
+    packageId: input.representativeNode.id,
+    url: input.cacheEntry.source.archiveUrl,
+    blockedMessage: "Cargo GitHub archive URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve the Cargo GitHub archive host.",
+    fetchFailureMessage: "Failed to fetch the commit-pinned Cargo GitHub archive.",
+    tooLargeMessage: "Cargo GitHub archive response exceeded the maximum supported size.",
+    unreadableMessage: "Cargo GitHub archive response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find the Cargo GitHub archive in the artifact cache.",
+    details: {
+      owner: input.cacheEntry.source.owner,
+      repository: input.cacheEntry.source.repository,
+      commit: input.cacheEntry.source.commit
+    },
+    maxBytes: input.artifactMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: CARGO_GITHUB_ARCHIVE_HOSTS,
+    urlDetailKey: "resolved"
+  });
+  if (!archive.ok) {
+    return archive;
+  }
+  return collectCargoGitHubArchiveEvidenceBatch({
+    packages: input.cacheEntry.packages,
+    source: input.cacheEntry.source,
+    archive: archive.value,
     artifactMaxBytes: input.artifactMaxBytes
   });
 }

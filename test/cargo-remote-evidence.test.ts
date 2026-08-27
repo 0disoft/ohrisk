@@ -85,6 +85,65 @@ describe("remote Cargo crate evidence", () => {
     })]);
   });
 
+  test("fetches and indexes one pinned GitHub archive for every package at that commit", async () => {
+    const commit = "89abcdef0123456789abcdef0123456789abcdef";
+    const root = `shared-repo-${commit}`;
+    const archive = createTarGz({
+      [`${root}/Cargo.toml`]: [
+        "[workspace]",
+        "members = [\"alpha\", \"beta\"]",
+        "",
+        "[workspace.package]",
+        "license = \"MIT\""
+      ].join("\n"),
+      [`${root}/alpha/Cargo.toml`]: [
+        "[package]",
+        "name = \"alpha\"",
+        "version = \"1.0.0\"",
+        "license.workspace = true"
+      ].join("\n"),
+      [`${root}/beta/Cargo.toml`]: [
+        "[package]",
+        "name = \"beta\"",
+        "version = \"2.0.0\"",
+        "license.workspace = true"
+      ].join("\n"),
+      [`${root}/LICENSE`]: "MIT License\n"
+    });
+    const resolved = `git+https://github.com/acme/shared-repo#${commit}`;
+    let fetchCount = 0;
+    const evidence = await collectGraphEvidence({
+      graph: {
+        lockfilePath: "Cargo.lock",
+        nodes: [
+          cargoNode({ name: "alpha", version: "1.0.0", resolved }),
+          cargoNode({ name: "beta", version: "2.0.0", resolved })
+        ]
+      },
+      projectRoot: ".",
+      allowLocalProjectEvidence: false,
+      evidenceConcurrency: 1,
+      resolveArtifactHost: async () => [{ address: "1.1.1.1", family: 4 }],
+      fetchArtifact: async (url) => {
+        fetchCount += 1;
+        return artifactResponse(archive, url);
+      }
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) throw new Error(evidence.error.message);
+    expect(fetchCount).toBe(1);
+    expect(evidence.value).toHaveLength(2);
+    expect(evidence.value.map((item) => ({
+      packageId: item.packageId,
+      metadataLicense: item.metadataLicense,
+      files: item.files.map((file) => file.path)
+    }))).toEqual([
+      { packageId: "alpha@1.0.0", metadataLicense: "MIT", files: ["LICENSE"] },
+      { packageId: "beta@2.0.0", metadataLicense: "MIT", files: ["LICENSE"] }
+    ]);
+  });
+
   test("rejects mutable, credentialed, and non-GitHub Cargo Git sources", () => {
     const commit = "0123456789abcdef0123456789abcdef01234567";
 
