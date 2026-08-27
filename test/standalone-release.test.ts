@@ -203,7 +203,11 @@ describe("standalone release wiring", () => {
     expect(publish).toContain("run: bun scripts/build-standalone.ts");
     expect(publish).toContain("name: Smoke standalone release");
     expect(publish).toContain("RUNNER_OS/$RUNNER_ARCH");
-    expect(publish).toContain("gh release download \"$GITHUB_REF_NAME\"");
+    expect(publish).toContain("release_id: ${{ steps.draft_release.outputs.release_id }}");
+    expect(publish).toContain("RELEASE_ID: ${{ needs.prepare_release.outputs.release_id }}");
+    expect(publish).toContain("releases/$RELEASE_ID/assets?per_page=100");
+    expect(publish).toContain("Accept: application/octet-stream");
+    expect(publish).not.toContain("gh release download \"$GITHUB_REF_NAME\"");
     expect(publish).toContain("- standalone-smoke");
     for (const candidate of STANDALONE_TARGETS) {
       expect(publish).toContain(candidate.assetName);

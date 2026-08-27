@@ -20,6 +20,7 @@ jobs:
       contents: write
     outputs:
       release_is_draft: ${{ steps.draft_release.outputs.release_is_draft }}
+      release_id: ${{ steps.draft_release.outputs.release_id }}
 
     steps:
       - name: Checkout
@@ -83,6 +84,14 @@ jobs:
               --notes-file release-notes.md
             echo "release_is_draft=true" >> "$GITHUB_OUTPUT"
           fi
+          release_id="$(
+            gh release view "$GITHUB_REF_NAME" --json databaseId --jq '.databaseId'
+          )"
+          if ! [[ "$release_id" =~ ^[0-9]+$ ]]; then
+            echo "::error::Draft release did not expose a numeric database ID."
+            exit 1
+          fi
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
 
   standalone:
     name: Cross-build standalone executables
@@ -145,6 +154,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.prepare_release.outputs.release_id }}
         run: |
           set -euo pipefail
 
@@ -160,12 +170,20 @@ jobs:
           esac
 
           mkdir -p release-smoke
-          gh release download "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern "$asset" \
-            --dir release-smoke
-
           executable="./release-smoke/$asset"
+          asset_id="$(
+            gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" \
+              --jq "map(select(.name == \"$asset\")) | if length == 1 then .[0].id else empty end"
+          )"
+          if ! [[ "$asset_id" =~ ^[0-9]+$ ]]; then
+            echo "::error::Draft release does not contain exactly one asset named $asset."
+            exit 1
+          fi
+          gh api \
+            -H "Accept: application/octet-stream" \
+            "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
+            > "$executable"
+
           if [ ! -f "$executable" ]; then
             echo "::error::Draft release is missing native standalone asset $asset."
             exit 1
@@ -288,6 +306,7 @@ jobs:
       - name: Download and verify standalone release assets
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.prepare_release.outputs.release_id }}
         run: |
           set -euo pipefail
           mkdir -p release-assets
@@ -301,14 +320,18 @@ jobs:
           )
 
           for asset in "${assets[@]}"; do
-            gh release download "$GITHUB_REF_NAME" \
-              --repo "$GITHUB_REPOSITORY" \
-              --pattern "$asset" \
-              --dir release-assets
-            if [ ! -f "release-assets/$asset" ]; then
-              echo "::error::Draft release is missing standalone asset $asset."
+            asset_id="$(
+              gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" \
+                --jq "map(select(.name == \"$asset\")) | if length == 1 then .[0].id else empty end"
+            )"
+            if ! [[ "$asset_id" =~ ^[0-9]+$ ]]; then
+              echo "::error::Draft release does not contain exactly one asset named $asset."
               exit 1
             fi
+            gh api \
+              -H "Accept: application/octet-stream" \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
+              > "release-assets/$asset"
           done
 
           (
