@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 3d24f7a29be52bc1c4e61fa1b6d42ea7937f28c2a5b16edf1e3516be4c7d23cd
+// ohrisk-action-source-sha256: ecfcb2da200beb2f2dad77e887640e61e6a8fe9accaadc8995d8d33a1197f8b7
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -26515,6 +26515,24 @@ function uniqueSorted3(values) {
 // src/graph/nix-flake-lock.ts
 import path24 from "node:path";
 
+// src/shared/nixos-release-archive.ts
+var NIXOS_RELEASE_ARCHIVE_HOST = "releases.nixos.org";
+var RELEASE_ARCHIVE_PATHS = [
+  /^\/nixpkgs\/nixpkgs-[A-Za-z0-9._+-]+\.([0-9a-f]{12})\/nixexprs\.tar\.xz$/u,
+  /^\/nixos\/[A-Za-z0-9._+-]+\/nixos-[A-Za-z0-9._+-]+\.([0-9a-f]{12})\/nixexprs\.tar\.xz$/u
+];
+function isLockedNixosReleaseArchive(url, rev) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" || parsed.hostname !== NIXOS_RELEASE_ARCHIVE_HOST || parsed.port !== "" || parsed.username !== "" || parsed.password !== "" || parsed.search !== "" || parsed.hash !== "") {
+      return false;
+    }
+    return RELEASE_ARCHIVE_PATHS.some((pattern) => pattern.exec(parsed.pathname)?.[1] === rev.slice(0, 12));
+  } catch {
+    return false;
+  }
+}
+
 // src/graph/bounded-dependency-paths.ts
 var BOUNDED_PATHS_MAX_PATHS_PER_NODE = 64;
 var BOUNDED_PATHS_MAX_PATH_DEPTH = 256;
@@ -26993,18 +27011,6 @@ function nixNodeIdentity(input) {
     version,
     ...resolvedCoordinates
   });
-}
-function isLockedNixosReleaseArchive(url, rev) {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:" || parsed.hostname !== "releases.nixos.org" || parsed.port !== "" || parsed.username !== "" || parsed.password !== "" || parsed.search !== "" || parsed.hash !== "") {
-      return false;
-    }
-    const match = /^\/nixpkgs\/nixpkgs-[A-Za-z0-9._+-]+\.([0-9a-f]{12})\/nixexprs\.tar\.xz$/u.exec(parsed.pathname);
-    return match?.[1] === rev.slice(0, 12);
-  } catch {
-    return false;
-  }
 }
 function nixNodeName(input) {
   if (input.owner && input.repo) {
@@ -51529,16 +51535,7 @@ function isVerifiedNixReleaseTarballNode(input) {
   if (input.resolved === undefined || input.name !== `tarball:${input.resolved}`) {
     return false;
   }
-  try {
-    const parsed = new URL(input.resolved);
-    if (parsed.protocol !== "https:" || parsed.hostname !== "releases.nixos.org" || parsed.port !== "" || parsed.username !== "" || parsed.password !== "" || parsed.search !== "" || parsed.hash !== "") {
-      return false;
-    }
-    const match = /^\/nixpkgs\/nixpkgs-[A-Za-z0-9._+-]+\.([0-9a-f]{12})\/nixexprs\.tar\.xz$/u.exec(parsed.pathname);
-    return match?.[1] === input.version.slice(0, 12);
-  } catch {
-    return false;
-  }
+  return isLockedNixosReleaseArchive(input.resolved, input.version);
 }
 function parseGitHubTar(input) {
   if (input.tar.byteLength < 1024 || input.tar.byteLength % 512 !== 0) {

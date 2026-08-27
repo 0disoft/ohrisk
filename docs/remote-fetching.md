@@ -92,8 +92,9 @@ Remote fetching is limited to these explicit adapters:
   strips the single archive root, and hashes the resulting tree with Nix Archive
   serialization. Root legal files are trusted only after that NAR digest matches.
   Exact NixOS nixpkgs release `nixexprs.tar.xz` inputs are also accepted from
-  `releases.nixos.org` when their directory embeds the first 12 characters of a
-  full locked commit and the lock supplies a canonical `narHash`. XZ output is
+  `releases.nixos.org` under either `/nixpkgs/...` or the channel-specific
+  `/nixos/<channel>/...` layout when their directory embeds the first 12
+  characters of a full locked commit and the lock supplies a canonical `narHash`. XZ output is
   capped at 256 MiB and 100,000 TAR entries before the same path and NAR checks
   run. Short revisions, branches, tags, malformed hashes, alternate hosts, and
   other non-GitHub flake

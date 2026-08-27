@@ -319,6 +319,51 @@ describe("parseNixFlakeLockText", () => {
     });
   });
 
+  test("preserves verified NixOS channel release tarball coordinates", () => {
+    const rev = "e576e3c9cf9bad747afcddd9e34f51d18c855b4e";
+    const narHash = "sha256-UCoARf86JKuGdvpVl6ZIWYcpwH2gU70+fBEAfmluD0M=";
+    const url = "https://releases.nixos.org/nixos/25.11/nixos-25.11.5198.e576e3c9cf9b/nixexprs.tar.xz";
+    const result = parseNixFlakeLockText(JSON.stringify({
+      version: 7,
+      root: "root",
+      nodes: {
+        root: { inputs: { nixpkgs: "nixpkgs" } },
+        nixpkgs: { locked: { type: "tarball", url, rev, narHash } }
+      }
+    }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.nodes[0]).toMatchObject({
+      id: `tarball:${url}@${rev}`,
+      resolved: url,
+      integrity: narHash
+    });
+  });
+
+  test("does not preserve integrity when a NixOS channel archive revision differs", () => {
+    const url = "https://releases.nixos.org/nixos/unstable/nixos-26.11pre1048607.b7c2ada94fe9/nixexprs.tar.xz";
+    const result = parseNixFlakeLockText(JSON.stringify({
+      version: 7,
+      root: "root",
+      nodes: {
+        root: { inputs: { nixpkgs: "nixpkgs" } },
+        nixpkgs: {
+          locked: {
+            type: "tarball",
+            url,
+            rev: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            narHash: "sha256-929m7iW8q2uv3mZHNwY8Um6XKj99rbIcZsWS9cT1vaI="
+          }
+        }
+      }
+    }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.nodes[0]).not.toHaveProperty("integrity");
+  });
+
   test("does not preserve integrity for deceptive NixOS release tarball hosts", () => {
     const rev = "ed67bc86e84e51d4a88e73c7fd36006dc876476f";
     const url = "https://releases.nixos.org.evil.example/nixpkgs/nixpkgs-26.05pre993032.ed67bc86e84e/nixexprs.tar.xz";

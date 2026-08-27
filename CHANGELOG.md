@@ -3,7 +3,8 @@
 ## 1.15.2 - Unreleased
 
 - Nix `flake.lock` inputs may collect root legal files from exact NixOS nixpkgs
-  release `nixexprs.tar.xz` archives. Ohrisk requires a full commit, matching
+  release `nixexprs.tar.xz` archives under both `/nixpkgs/...` and
+  `/nixos/<channel>/...` layouts. Ohrisk requires a full commit, matching
   12-character release path, canonical `narHash`, fixed NixOS host, XZ output
   capped at 256 MiB and 100,000 entries, and a matching extracted NAR tree
   before trusting the evidence.

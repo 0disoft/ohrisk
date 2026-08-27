@@ -99,6 +99,29 @@ describe("remote Nix evidence", () => {
     })]);
   });
 
+  test("collects verified NixOS channel release tar.xz evidence", async () => {
+    const resolved = "https://releases.nixos.org/nixos/25.11/nixos-25.11.5198.e576e3c9cf9b/nixexprs.tar.xz";
+    const graph = nixTarXzGraph(NAR_HASH, {
+      rev: "e576e3c9cf9bad747afcddd9e34f51d18c855b4e",
+      resolved
+    });
+    const evidence = await collectGraphEvidence({
+      graph,
+      projectRoot: ".",
+      allowLocalProjectEvidence: false,
+      resolveArtifactHost: async () => [{ address: "1.1.1.1", family: 4 }],
+      fetchArtifact: async (url) => artifactResponse(XZ_TAR, url)
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) throw new Error(evidence.error.message);
+    expect(evidence.value).toEqual([expect.objectContaining({
+      packageId: graph.nodes[0]!.id,
+      source: "tarball",
+      warnings: []
+    })]);
+  });
+
   test("fails closed when NixOS release tar.xz exceeds the expanded size limit", async () => {
     const evidence = await collectNixTarXzArchiveEvidence({
       packageId: "nixpkgs@fixture",
@@ -134,9 +157,14 @@ function nixGraph(integrity: string) {
   };
 }
 
-function nixTarXzGraph(integrity: string) {
-  const rev = "ed67bc86e84e51d4a88e73c7fd36006dc876476f";
-  const resolved = "https://releases.nixos.org/nixpkgs/nixpkgs-26.05pre993032.ed67bc86e84e/nixexprs.tar.xz";
+function nixTarXzGraph(
+  integrity: string,
+  overrides: { rev: string; resolved: string } = {
+    rev: "ed67bc86e84e51d4a88e73c7fd36006dc876476f",
+    resolved: "https://releases.nixos.org/nixpkgs/nixpkgs-26.05pre993032.ed67bc86e84e/nixexprs.tar.xz"
+  }
+) {
+  const { rev, resolved } = overrides;
   return {
     lockfilePath: "flake.lock",
     nodes: [{

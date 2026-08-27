@@ -3,6 +3,7 @@ import { gunzipSync } from "node:zlib";
 import { XzReadableStream } from "xz-decompress";
 
 import { createError, type OhriskError } from "../shared/errors";
+import { isLockedNixosReleaseArchive } from "../shared/nixos-release-archive";
 import { err, ok, type Result } from "../shared/result";
 import { classifyEvidenceFile } from "./license-files";
 import type { LicenseEvidence, LicenseEvidenceFile } from "./types";
@@ -240,25 +241,7 @@ export function isVerifiedNixReleaseTarballNode(input: {
   if (input.resolved === undefined || input.name !== `tarball:${input.resolved}`) {
     return false;
   }
-  try {
-    const parsed = new URL(input.resolved);
-    if (
-      parsed.protocol !== "https:"
-      || parsed.hostname !== "releases.nixos.org"
-      || parsed.port !== ""
-      || parsed.username !== ""
-      || parsed.password !== ""
-      || parsed.search !== ""
-      || parsed.hash !== ""
-    ) {
-      return false;
-    }
-    const match = /^\/nixpkgs\/nixpkgs-[A-Za-z0-9._+-]+\.([0-9a-f]{12})\/nixexprs\.tar\.xz$/u
-      .exec(parsed.pathname);
-    return match?.[1] === input.version.slice(0, 12);
-  } catch {
-    return false;
-  }
+  return isLockedNixosReleaseArchive(input.resolved, input.version);
 }
 
 function parseGitHubTar(input: { tar: Buffer; maxEntries: number }): ParsedTarEntry[] {

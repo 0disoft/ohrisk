@@ -1,6 +1,7 @@
 import path from "node:path";
 
 import { createError, type OhriskError } from "../shared/errors";
+import { isLockedNixosReleaseArchive } from "../shared/nixos-release-archive";
 import { err, ok, type Result } from "../shared/result";
 import {
   inputFileReadErrorCategory,
@@ -308,28 +309,6 @@ function nixNodeIdentity(input: {
     version,
     ...resolvedCoordinates
   });
-}
-
-function isLockedNixosReleaseArchive(url: string, rev: string): boolean {
-  try {
-    const parsed = new URL(url);
-    if (
-      parsed.protocol !== "https:"
-      || parsed.hostname !== "releases.nixos.org"
-      || parsed.port !== ""
-      || parsed.username !== ""
-      || parsed.password !== ""
-      || parsed.search !== ""
-      || parsed.hash !== ""
-    ) {
-      return false;
-    }
-    const match = /^\/nixpkgs\/nixpkgs-[A-Za-z0-9._+-]+\.([0-9a-f]{12})\/nixexprs\.tar\.xz$/u
-      .exec(parsed.pathname);
-    return match?.[1] === rev.slice(0, 12);
-  } catch {
-    return false;
-  }
 }
 
 function nixNodeName(input: {
