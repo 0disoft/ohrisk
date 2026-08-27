@@ -7,8 +7,10 @@
   `/nixos/<channel>/...` layouts. Ohrisk requires a full commit, matching
   12-character release path, canonical `narHash`, fixed NixOS host, XZ output
   capped at 320 MiB and 100,000 entries, and a matching extracted NAR tree
-  before trusting the evidence. Bounded XZ output accumulation avoids duplicate
-  compressed-input, chunk-list, and final-concatenation buffers.
+  before trusting the evidence. XZ output streams through a uniquely named
+  temporary TAR file opened with exclusive creation and restricted mode where
+  supported; it is removed on success and failure, avoiding complete decompressed
+  archive retention in memory.
 - Checksum-identified Go module ZIPs may verify up to 65,535 entries and 512 MiB of expanded
   content without retaining unrelated source files. Per-entry, compression-ratio,
   CRC, work, and cancellation limits remain fail-closed, while retained license

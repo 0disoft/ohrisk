@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readdirSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 import { collectGraphEvidence } from "../src/evidence/collect";
 import { collectNixTarXzArchiveEvidence } from "../src/evidence/nix-github";
@@ -123,6 +125,7 @@ describe("remote Nix evidence", () => {
   });
 
   test("fails closed when NixOS release tar.xz exceeds the expanded size limit", async () => {
+    const temporaryDirectoriesBefore = nixTemporaryDirectories();
     const evidence = await collectNixTarXzArchiveEvidence({
       packageId: "nixpkgs@fixture",
       tarball: XZ_TAR,
@@ -136,8 +139,15 @@ describe("remote Nix evidence", () => {
       code: "TARBALL_PARSE_FAILED",
       details: { maxUnpackedBytes: 1 }
     });
+    expect(nixTemporaryDirectories()).toEqual(temporaryDirectoriesBefore);
   });
 });
+
+function nixTemporaryDirectories(): string[] {
+  return readdirSync(tmpdir())
+    .filter((entry) => entry.startsWith("ohrisk-nix-xz-"))
+    .sort();
+}
 
 function nixGraph(integrity: string) {
   const id = `github:acme/risk-flake@${COMMIT}`;

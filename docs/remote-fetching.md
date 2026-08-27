@@ -94,10 +94,12 @@ Remote fetching is limited to these explicit adapters:
   Exact NixOS nixpkgs release `nixexprs.tar.xz` inputs are also accepted from
   `releases.nixos.org` under either `/nixpkgs/...` or the channel-specific
   `/nixos/<channel>/...` layout when their directory embeds the first 12
-  characters of a full locked commit and the lock supplies a canonical `narHash`. XZ output is
-  accumulated without retaining duplicate chunk buffers and capped at 320 MiB
-  and 100,000 TAR entries before the same path and NAR checks
-  run. Short revisions, branches, tags, malformed hashes, alternate hosts, and
+  characters of a full locked commit and the lock supplies a canonical `narHash`. XZ output streams
+  through a uniquely named TAR file opened with exclusive creation and restricted mode where
+  supported, is capped at 320 MiB and 100,000
+  TAR entries before the same path and NAR checks, and is removed after both
+  successful and failed inspection. The temporary path is never report evidence.
+  Short revisions, branches, tags, malformed hashes, alternate hosts, and
   other non-GitHub flake
   input types remain local-only and receive no credentials.
 

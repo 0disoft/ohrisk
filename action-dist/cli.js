@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 78f41216f6fd8c44536a70cc930d52f8ceba1992b1a0eb764911c308c773a736
+// ohrisk-action-source-sha256: f3f960614d4c1a0d5c41116a3759a4849e70e7f0c0c454b082e2bbc95cd2cd71
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -14780,7 +14780,7 @@ var require_xz_decompress = __commonJS(function(exports, module) {
 // src/cli/main.ts
 import { isIP as isIP4 } from "node:net";
 import { realpathSync as realpathSync10 } from "node:fs";
-import path95 from "node:path";
+import path96 from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // src/shared/errors.ts
@@ -41531,14 +41531,14 @@ function cacheOperationError(message, rootDir, cause) {
 // src/evidence/collect.ts
 import { createHash as createHash10, timingSafeEqual as timingSafeEqual7 } from "node:crypto";
 import {
-  closeSync as closeSync4,
+  closeSync as closeSync5,
   existsSync as existsSync46,
-  openSync as openSync4,
+  openSync as openSync5,
   readdirSync as readdirSync34,
-  readSync as readSync4,
+  readSync as readSync5,
   statSync as statSync34
 } from "node:fs";
-import path81 from "node:path";
+import path82 from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 import { gunzipSync as gunzipSync6 } from "node:zlib";
 
@@ -51370,6 +51370,9 @@ function isPackageLicenseEvidencePath(filePath) {
 // src/evidence/nix-github.ts
 var import_xz_decompress = __toESM(require_xz_decompress(), 1);
 import { createHash as createHash8, timingSafeEqual as timingSafeEqual5 } from "node:crypto";
+import { closeSync as closeSync4, mkdtempSync as mkdtempSync2, openSync as openSync4, readSync as readSync4, rmSync as rmSync3, writeSync } from "node:fs";
+import { tmpdir as tmpdir2 } from "node:os";
+import path79 from "node:path";
 import { gunzipSync as gunzipSync4 } from "node:zlib";
 var NIX_GITHUB_ARCHIVE_MAX_BYTES = 100 * 1024 * 1024;
 var NIX_RELEASE_ARCHIVE_MAX_BYTES = 320 * 1024 * 1024;
@@ -51378,8 +51381,9 @@ var NIX_RELEASE_ARCHIVE_MAX_ENTRIES = 1e5;
 var NIX_GITHUB_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var NIX_GITHUB_EVIDENCE_FILE_LIMIT = 50;
 var NIX_GITHUB_MAX_COMPRESSION_RATIO = 200;
-var NIX_XZ_INITIAL_CAPACITY_RATIO = 7;
 var NIX_XZ_EVENT_LOOP_YIELD_BYTES = 16 * 1024 * 1024;
+var NIX_TAR_STREAM_CHUNK_BYTES = 1024 * 1024;
+var NIX_TAR_EXTENSION_MAX_BYTES = 2 * 1024 * 1024;
 var NIX_GITHUB_ARCHIVE_HOSTS = new Set(["codeload.github.com"]);
 var NIX_RELEASE_ARCHIVE_HOSTS = new Set(["releases.nixos.org"]);
 function collectNixGitHubArchiveEvidence(input) {
@@ -51406,7 +51410,7 @@ function collectNixGitHubArchiveEvidence(input) {
   }
   return collectVerifiedNixTarEvidence({
     packageId: input.packageId,
-    tar,
+    source: bufferTarSource(tar),
     compressedBytes: compressed.byteLength,
     expectedDigest,
     expectedNarHash: input.expectedNarHash,
@@ -51421,40 +51425,24 @@ async function collectNixTarXzArchiveEvidence(input) {
   }
   const compressed = Buffer.from(input.tarball);
   const unpackedMaxBytes = input.unpackedMaxBytes ?? NIX_RELEASE_ARCHIVE_MAX_BYTES;
-  const decompressed = await decompressXz({
+  return collectTemporaryNixTarXzEvidence({
+    packageId: input.packageId,
     compressed,
     maxBytes: unpackedMaxBytes,
-    ...input.signal ? { signal: input.signal } : {}
-  });
-  if (!decompressed.ok) {
-    return err(createError({
-      code: "TARBALL_PARSE_FAILED",
-      category: "unsupported_input",
-      message: "Failed to decompress package tarball evidence.",
-      details: {
-        packageId: input.packageId,
-        maxUnpackedBytes: unpackedMaxBytes,
-        cause: decompressed.cause
-      }
-    }));
-  }
-  return collectVerifiedNixTarEvidence({
-    packageId: input.packageId,
-    tar: decompressed.tar,
     compressedBytes: compressed.byteLength,
     expectedDigest,
     expectedNarHash: input.expectedNarHash,
     maxEntries: input.maxEntries ?? NIX_RELEASE_ARCHIVE_MAX_ENTRIES,
-    sourceLabel: "NixOS release"
+    ...input.signal ? { signal: input.signal } : {}
   });
 }
 function collectVerifiedNixTarEvidence(input) {
   try {
-    if (input.tar.byteLength >= 1024 * 1024 && input.tar.byteLength > input.compressedBytes * NIX_GITHUB_MAX_COMPRESSION_RATIO) {
+    if (input.source.byteLength >= 1024 * 1024 && input.source.byteLength > input.compressedBytes * NIX_GITHUB_MAX_COMPRESSION_RATIO) {
       throw new Error(`${input.sourceLabel} archive exceeded the supported compression ratio.`);
     }
-    const entries = parseGitHubTar({ tar: input.tar, maxEntries: input.maxEntries });
-    const actualDigest = hashNixArchive(entries);
+    const entries = parseGitHubTar({ source: input.source, maxEntries: input.maxEntries });
+    const actualDigest = hashNixArchive(input.source, entries);
     if (!timingSafeEqual5(actualDigest, input.expectedDigest)) {
       return err(createError({
         code: "PACKAGE_INTEGRITY_CHECK_FAILED",
@@ -51468,7 +51456,7 @@ function collectVerifiedNixTarEvidence(input) {
         }
       }));
     }
-    const files = collectRootEvidenceFiles(entries);
+    const files = collectRootEvidenceFiles(input.source, entries);
     return ok({
       packageId: input.packageId,
       files,
@@ -51487,7 +51475,60 @@ function collectVerifiedNixTarEvidence(input) {
     }));
   }
 }
-async function decompressXz(input) {
+async function collectTemporaryNixTarXzEvidence(input) {
+  let directory;
+  try {
+    directory = mkdtempSync2(path79.join(tmpdir2(), "ohrisk-nix-xz-"));
+  } catch {
+    return err(temporaryNixArchiveError(input.packageId, "create"));
+  }
+  let descriptor;
+  let result2 = err(temporaryNixArchiveError(input.packageId, "process"));
+  try {
+    descriptor = openSync4(path79.join(directory, "archive.tar"), "wx+", 384);
+    const decompressed = await decompressXzToFile({
+      compressed: input.compressed,
+      descriptor,
+      maxBytes: input.maxBytes,
+      ...input.signal ? { signal: input.signal } : {}
+    });
+    result2 = decompressed.ok ? collectVerifiedNixTarEvidence({
+      packageId: input.packageId,
+      source: fileTarSource(descriptor, decompressed.bytesWritten),
+      compressedBytes: input.compressedBytes,
+      expectedDigest: input.expectedDigest,
+      expectedNarHash: input.expectedNarHash,
+      maxEntries: input.maxEntries,
+      sourceLabel: "NixOS release"
+    }) : err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to decompress package tarball evidence.",
+      details: {
+        packageId: input.packageId,
+        maxUnpackedBytes: input.maxBytes,
+        cause: decompressed.cause
+      }
+    }));
+  } catch {
+    result2 = err(temporaryNixArchiveError(input.packageId, "process"));
+  }
+  let cleanupFailed = false;
+  if (descriptor !== undefined) {
+    try {
+      closeSync4(descriptor);
+    } catch {
+      cleanupFailed = true;
+    }
+  }
+  try {
+    rmSync3(directory, { recursive: true, force: true, maxRetries: 2 });
+  } catch {
+    cleanupFailed = true;
+  }
+  return cleanupFailed ? err(temporaryNixArchiveError(input.packageId, "cleanup")) : result2;
+}
+async function decompressXzToFile(input) {
   const compressedStream = new ReadableStream({
     start(controller) {
       controller.enqueue(input.compressed);
@@ -51496,8 +51537,6 @@ async function decompressXz(input) {
   });
   const stream = new import_xz_decompress.XzReadableStream(compressedStream);
   const reader = stream.getReader();
-  const estimatedCapacity = input.compressed.byteLength * NIX_XZ_INITIAL_CAPACITY_RATIO;
-  let output = Buffer.allocUnsafe(Math.min(input.maxBytes, Math.max(64 * 1024, estimatedCapacity)));
   let total = 0;
   let nextYieldAt = NIX_XZ_EVENT_LOOP_YIELD_BYTES;
   try {
@@ -51515,23 +51554,35 @@ async function decompressXz(input) {
         await reader.cancel("expanded archive limit exceeded");
         return { ok: false, cause: "Nix archive exceeded the expanded size limit." };
       }
-      if (total > output.byteLength) {
-        const grown = Buffer.allocUnsafe(Math.min(input.maxBytes, Math.max(total, output.byteLength * 2)));
-        output.copy(grown, 0, 0, previousTotal);
-        output = grown;
-      }
-      output.set(next.value, previousTotal);
+      writeAllSync(input.descriptor, next.value, previousTotal);
       if (total >= nextYieldAt) {
         await yieldToEventLoop();
         nextYieldAt = total + NIX_XZ_EVENT_LOOP_YIELD_BYTES;
       }
     }
-    return { ok: true, tar: output.subarray(0, total) };
+    return { ok: true, bytesWritten: total };
   } catch (cause) {
     return { ok: false, cause: cause instanceof Error ? cause.message : String(cause) };
   } finally {
     reader.releaseLock();
   }
+}
+function writeAllSync(descriptor, bytes, fileOffset) {
+  let offset = 0;
+  while (offset < bytes.byteLength) {
+    const written = writeSync(descriptor, bytes, offset, bytes.byteLength - offset, fileOffset + offset);
+    if (written <= 0)
+      throw new Error("Nix archive temporary write made no progress.");
+    offset += written;
+  }
+}
+function temporaryNixArchiveError(packageId, operation) {
+  return createError({
+    code: "TARBALL_PARSE_FAILED",
+    category: "filesystem",
+    message: "Failed to process the NixOS release archive in bounded temporary storage.",
+    details: { packageId, operation }
+  });
 }
 async function yieldToEventLoop() {
   await new Promise((resolve2) => setTimeout(resolve2, 0));
@@ -51558,8 +51609,40 @@ function isVerifiedNixReleaseTarballNode(input) {
   }
   return isLockedNixosReleaseArchive(input.resolved, input.version);
 }
+function bufferTarSource(tar) {
+  return {
+    byteLength: tar.byteLength,
+    read(offset, length) {
+      assertTarReadBounds(tar.byteLength, offset, length);
+      return tar.subarray(offset, offset + length);
+    }
+  };
+}
+function fileTarSource(descriptor, byteLength) {
+  return {
+    byteLength,
+    read(offset, length) {
+      assertTarReadBounds(byteLength, offset, length);
+      const bytes = Buffer.allocUnsafe(length);
+      let completed = 0;
+      while (completed < length) {
+        const count = readSync4(descriptor, bytes, completed, length - completed, offset + completed);
+        if (count <= 0)
+          throw new Error("Nix TAR temporary file ended unexpectedly.");
+        completed += count;
+      }
+      return bytes;
+    }
+  };
+}
+function assertTarReadBounds(byteLength, offset, length) {
+  const end = offset + length;
+  if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || !Number.isSafeInteger(end) || offset < 0 || length < 0 || end > byteLength) {
+    throw new Error("Nix TAR read exceeded the bounded archive source.");
+  }
+}
 function parseGitHubTar(input) {
-  if (input.tar.byteLength < 1024 || input.tar.byteLength % 512 !== 0) {
+  if (input.source.byteLength < 1024 || input.source.byteLength % 512 !== 0) {
     throw new Error("Nix GitHub TAR length or end padding is invalid.");
   }
   const entries = [];
@@ -51572,10 +51655,10 @@ function parseGitHubTar(input) {
   let rootPrefix;
   let sawEnd = false;
   const observedPaths = new Set;
-  while (offset + 512 <= input.tar.byteLength) {
-    const header = input.tar.subarray(offset, offset + 512);
+  while (offset + 512 <= input.source.byteLength) {
+    const header = input.source.read(offset, 512);
     if (isZeroBlock4(header)) {
-      if (!isZeroBlock4(input.tar.subarray(offset + 512, offset + 1024))) {
+      if (!isZeroBlock4(input.source.read(offset + 512, 512))) {
         throw new Error("Nix GitHub TAR end marker is incomplete.");
       }
       sawEnd = true;
@@ -51597,12 +51680,14 @@ function parseGitHubTar(input) {
     const dataStart = offset + 512;
     const dataEnd = dataStart + size;
     const paddedEnd = dataStart + Math.ceil(size / 512) * 512;
-    if (!Number.isSafeInteger(paddedEnd) || dataEnd > input.tar.byteLength || paddedEnd > input.tar.byteLength) {
+    if (!Number.isSafeInteger(paddedEnd) || dataEnd > input.source.byteLength || paddedEnd > input.source.byteLength) {
       throw new Error("Nix GitHub TAR entry extends beyond archive data.");
     }
-    const data = input.tar.subarray(dataStart, dataEnd);
     if (type === "x" || type === "g") {
-      const pax = parsePax2(data);
+      if (size > NIX_TAR_EXTENSION_MAX_BYTES) {
+        throw new Error("Nix GitHub TAR extension exceeded the supported size.");
+      }
+      const pax = parsePax2(input.source.read(dataStart, size));
       if (type === "x") {
         if (pendingLocalHeader)
           throw new Error("Nix GitHub PAX header has no target entry.");
@@ -51615,7 +51700,10 @@ function parseGitHubTar(input) {
       continue;
     }
     if (type === "L" || type === "K") {
-      const value = decodeUtf82(stripTrailingNul(data), "GNU TAR extension");
+      if (size > NIX_TAR_EXTENSION_MAX_BYTES) {
+        throw new Error("Nix GitHub TAR extension exceeded the supported size.");
+      }
+      const value = decodeUtf82(stripTrailingNul(input.source.read(dataStart, size)), "GNU TAR extension");
       if (type === "L")
         pendingPath = value;
       else
@@ -51640,32 +51728,33 @@ function parseGitHubTar(input) {
     if (candidateRoot !== rootPrefix) {
       throw new Error("Nix GitHub archive contains multiple top-level roots.");
     }
-    const path79 = separator === -1 ? "" : normalizedRawPath.slice(separator + 1);
-    if (path79 !== "")
-      validateTreePath(path79);
-    if (path79 !== "" && observedPaths.has(path79)) {
+    const path80 = separator === -1 ? "" : normalizedRawPath.slice(separator + 1);
+    if (path80 !== "")
+      validateTreePath(path80);
+    if (path80 !== "" && observedPaths.has(path80)) {
       throw new Error("Nix GitHub archive contains a duplicate entry path.");
     }
-    if (path79 !== "")
-      observedPaths.add(path79);
+    if (path80 !== "")
+      observedPaths.add(path80);
     const mode = readTarOctal(header.subarray(100, 108), "mode");
     if (type === "5") {
       if (size !== 0)
         throw new Error("Nix GitHub TAR directory contains data.");
-      if (path79 !== "")
-        entries.push({ path: path79, type: "directory", data: Buffer.alloc(0), executable: false });
+      if (path80 !== "")
+        entries.push({ path: path80, type: "directory", dataOffset: dataStart, size: 0, executable: false });
     } else if (type === "0") {
-      if (path79 === "")
+      if (path80 === "")
         throw new Error("Nix GitHub archive root must be a directory.");
-      entries.push({ path: path79, type: "regular", data, executable: (mode & 73) !== 0 });
+      entries.push({ path: path80, type: "regular", dataOffset: dataStart, size, executable: (mode & 73) !== 0 });
     } else if (type === "2") {
-      if (path79 === "" || size !== 0 || rawLinkTarget === "") {
+      if (path80 === "" || size !== 0 || rawLinkTarget === "") {
         throw new Error("Nix GitHub TAR symlink is malformed.");
       }
       entries.push({
-        path: path79,
+        path: path80,
         type: "symlink",
-        data: Buffer.alloc(0),
+        dataOffset: dataStart,
+        size: 0,
         executable: false,
         linkTarget: rawLinkTarget
       });
@@ -51682,8 +51771,7 @@ function parseGitHubTar(input) {
   }
   return entries;
 }
-function hashNixArchive(entries) {
-  const emptyData = Buffer.alloc(0);
+function hashNixArchive(source, entries) {
   const nodesByPath = new Map(entries.map((entry) => [entry.path, entry]));
   for (const entry of entries) {
     let parentPath = parentTreePath(entry.path);
@@ -51696,7 +51784,8 @@ function hashNixArchive(entries) {
         nodesByPath.set(parentPath, {
           path: parentPath,
           type: "directory",
-          data: emptyData,
+          dataOffset: 0,
+          size: 0,
           executable: false
         });
       }
@@ -51706,7 +51795,8 @@ function hashNixArchive(entries) {
   const root = {
     path: "",
     type: "directory",
-    data: emptyData,
+    dataOffset: 0,
+    size: 0,
     executable: false
   };
   nodesByPath.set("", root);
@@ -51724,6 +51814,15 @@ function hashNixArchive(entries) {
   const encodedStrings = new Map;
   const lengthBytes = Buffer.allocUnsafe(8);
   const paddingBytes = Buffer.alloc(7);
+  const writeLength = (length) => {
+    lengthBytes.writeBigUInt64LE(BigInt(length));
+    hash.update(lengthBytes);
+  };
+  const writePadding = (length) => {
+    const padding = (8 - length % 8) % 8;
+    if (padding > 0)
+      hash.update(paddingBytes.subarray(0, padding));
+  };
   const writeString = (value) => {
     let bytes;
     if (typeof value === "string") {
@@ -51732,12 +51831,19 @@ function hashNixArchive(entries) {
     } else {
       bytes = value;
     }
-    lengthBytes.writeBigUInt64LE(BigInt(bytes.byteLength));
-    hash.update(lengthBytes);
+    writeLength(bytes.byteLength);
     hash.update(bytes);
-    const padding = (8 - bytes.byteLength % 8) % 8;
-    if (padding > 0)
-      hash.update(paddingBytes.subarray(0, padding));
+    writePadding(bytes.byteLength);
+  };
+  const writeFileContents = (node) => {
+    writeLength(node.size);
+    let completed = 0;
+    while (completed < node.size) {
+      const length = Math.min(NIX_TAR_STREAM_CHUNK_BYTES, node.size - completed);
+      hash.update(source.read(node.dataOffset + completed, length));
+      completed += length;
+    }
+    writePadding(node.size);
   };
   const writeNode = (node) => {
     writeString("(");
@@ -51749,7 +51855,7 @@ function hashNixArchive(entries) {
         writeString("");
       }
       writeString("contents");
-      writeString(node.data);
+      writeFileContents(node);
     } else if (node.type === "symlink") {
       writeString("target");
       writeString(node.linkTarget);
@@ -51779,7 +51885,7 @@ function treeBaseName(value) {
   const separator = value.lastIndexOf("/");
   return separator === -1 ? value : value.slice(separator + 1);
 }
-function collectRootEvidenceFiles(entries) {
+function collectRootEvidenceFiles(source, entries) {
   const files = [];
   for (const entry of entries) {
     if (entry.type !== "regular" || entry.path.includes("/"))
@@ -51789,12 +51895,12 @@ function collectRootEvidenceFiles(entries) {
       continue;
     if (files.length >= NIX_GITHUB_EVIDENCE_FILE_LIMIT)
       break;
-    if (entry.data.byteLength > NIX_GITHUB_EVIDENCE_FILE_MAX_BYTES)
+    if (entry.size > NIX_GITHUB_EVIDENCE_FILE_MAX_BYTES)
       continue;
     files.push({
       path: entry.path,
       kind,
-      text: decodeUtf82(entry.data, entry.path)
+      text: decodeUtf82(source.read(entry.dataOffset, entry.size), entry.path)
     });
   }
   return files.sort((left, right) => left.path.localeCompare(right.path));
@@ -51898,7 +52004,7 @@ function unavailableEvidence(packageId, warning) {
 
 // src/evidence/nuget-nupkg.ts
 import { createHash as createHash9, timingSafeEqual as timingSafeEqual6 } from "node:crypto";
-import path79 from "node:path";
+import path80 from "node:path";
 
 // src/evidence/nuget-registry.ts
 var NUGET_ORG_HOST = "api.nuget.org";
@@ -52342,7 +52448,7 @@ function normalizeDeclaredArchivePath(value) {
   if (!value || value.includes("\\")) {
     return;
   }
-  const normalized = path79.posix.normalize(value);
+  const normalized = path80.posix.normalize(value);
   if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/") || normalized !== value || /[\u0000-\u001f\u007f-\u009f:]/u.test(normalized)) {
     return;
   }
@@ -52369,7 +52475,7 @@ function nugetPackageError(input, message, details) {
 }
 
 // src/evidence/pypi-package.ts
-import path80 from "node:path";
+import path81 from "node:path";
 var PYTHON_DISTRIBUTION_METADATA_MAX_BYTES = 1024 * 1024;
 var PYTHON_DISTRIBUTION_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var PYTHON_DISTRIBUTION_LICENSE_FILE_LIMIT = 50;
@@ -52627,7 +52733,7 @@ function relativeEvidencePath(entryPath, packageRoot) {
   return packageRoot && entryPath.startsWith(`${packageRoot}/`) ? entryPath.slice(packageRoot.length + 1) : entryPath;
 }
 function archiveDirname2(entryPath) {
-  const dirname = path80.posix.dirname(entryPath);
+  const dirname = path81.posix.dirname(entryPath);
   return dirname === "." ? "" : dirname;
 }
 function joinArchivePath2(left, right) {
@@ -54611,11 +54717,11 @@ function readLocalArtifactFileWithLimit(input) {
   let observedBytes = 0;
   let fileDescriptor;
   try {
-    fileDescriptor = openSync4(input.filePath, "r");
+    fileDescriptor = openSync5(input.filePath, "r");
     while (true) {
       const readSize = Math.min(LOCAL_ARTIFACT_READ_CHUNK_BYTES, Math.max(1, input.maxBytes + 1 - observedBytes));
       const chunk = Buffer.alloc(readSize);
-      const bytesRead = readSync4(fileDescriptor, chunk, 0, chunk.length, null);
+      const bytesRead = readSync5(fileDescriptor, chunk, 0, chunk.length, null);
       if (bytesRead === 0) {
         return ok(Buffer.concat(chunks, observedBytes));
       }
@@ -54646,7 +54752,7 @@ function readLocalArtifactFileWithLimit(input) {
   } finally {
     if (fileDescriptor !== undefined) {
       try {
-        closeSync4(fileDescriptor);
+        closeSync5(fileDescriptor);
       } catch {}
     }
   }
@@ -55252,21 +55358,21 @@ function resolveLocalArtifact(input) {
   }
   if (!localPath && input.resolved.startsWith("file:")) {
     const specifier = decodeFilePathSpecifier(input.resolved.slice("file:".length));
-    localPath = path81.resolve(input.projectRoot, specifier);
+    localPath = path82.resolve(input.projectRoot, specifier);
   }
   if (!localPath && input.resolved.startsWith("workspace:")) {
     const specifier = decodeFilePathSpecifier(input.resolved.slice("workspace:".length));
     if (isWorkspaceLocalPathSpecifier(specifier)) {
-      localPath = path81.resolve(input.projectRoot, specifier);
+      localPath = path82.resolve(input.projectRoot, specifier);
     }
   }
-  if (!localPath && (input.resolved.startsWith(".") || path81.isAbsolute(input.resolved))) {
-    localPath = path81.resolve(input.projectRoot, input.resolved);
+  if (!localPath && (input.resolved.startsWith(".") || path82.isAbsolute(input.resolved))) {
+    localPath = path82.resolve(input.projectRoot, input.resolved);
   }
   if (!localPath) {
     return ok(undefined);
   }
-  const artifactPath = path81.resolve(localPath);
+  const artifactPath = path82.resolve(localPath);
   return ok(artifactPath);
 }
 function resolveFileUrl(value) {
@@ -55310,10 +55416,10 @@ function resolveNodeModulesPackageCandidates(input) {
   if (!segments) {
     return [];
   }
-  const candidates = [path81.join(input.projectRoot, "node_modules", ...segments)];
+  const candidates = [path82.join(input.projectRoot, "node_modules", ...segments)];
   const bunStoreSegment = bunIsolatedStoreSegment(input.packageName, input.version);
   if (bunStoreSegment) {
-    candidates.push(path81.join(input.projectRoot, "node_modules", ".bun", bunStoreSegment, "node_modules", ...segments));
+    candidates.push(path82.join(input.projectRoot, "node_modules", ".bun", bunStoreSegment, "node_modules", ...segments));
   }
   return candidates;
 }
@@ -55353,7 +55459,7 @@ function isReadableDirectory24(filePath) {
 function installedPackageMatchesNode(input) {
   try {
     const packageJsonText = readTextFileWithLimit({
-      filePath: path81.join(input.packagePath, "package.json"),
+      filePath: path82.join(input.packagePath, "package.json"),
       maxBytes: input.maxBytes
     });
     if (!packageJsonText.ok) {
@@ -55381,7 +55487,7 @@ function collectYarnCachePackageEvidence(input) {
     if (!filename.startsWith(filenamePrefix)) {
       continue;
     }
-    const cachePath = path81.join(loadedIndex.value.cacheDir, filename);
+    const cachePath = path82.join(loadedIndex.value.cacheDir, filename);
     const stats = readLocalArtifactStats({
       filePath: cachePath,
       packageId: input.node.id,
@@ -55429,7 +55535,7 @@ function createYarnCacheIndexLoader(projectRoot) {
     if (loaded) {
       return loaded;
     }
-    const cacheDir = path81.join(projectRoot, ".yarn", "cache");
+    const cacheDir = path82.join(projectRoot, ".yarn", "cache");
     if (!existsSync46(cacheDir) || !isReadableDirectory24(cacheDir)) {
       loaded = ok(undefined);
       return loaded;
@@ -56263,7 +56369,7 @@ function isRecord28(value) {
 import { Buffer as Buffer3 } from "node:buffer";
 import { execFileSync } from "node:child_process";
 import { realpathSync as realpathSync5 } from "node:fs";
-import path82 from "node:path";
+import path83 from "node:path";
 var GIT_FILE_LIST_MAX_BYTES = 16 * 1024 * 1024;
 var GIT_FILE_LIST_MAX_ENTRIES = 1e5;
 var readGitRefFile = (input) => {
@@ -56300,7 +56406,7 @@ var listGitRefFiles = (input) => {
   if (!context.ok) {
     return context;
   }
-  const projectRelativePath2 = path82.relative(context.value.gitRoot, context.value.projectRoot);
+  const projectRelativePath2 = path83.relative(context.value.gitRoot, context.value.projectRoot);
   if (isOutsideRelativePath(projectRelativePath2)) {
     return err(projectRootOutsideGitError(input.projectRoot));
   }
@@ -56352,7 +56458,7 @@ var listGitRefFiles = (input) => {
   }
 };
 function resolveGitProjectContext(projectRoot, ref) {
-  const resolvedProjectRoot = realpathSync5(path82.resolve(projectRoot));
+  const resolvedProjectRoot = realpathSync5(path83.resolve(projectRoot));
   let gitRoot;
   try {
     const gitRootRelativePath = execFileSync("git", [
@@ -56364,14 +56470,14 @@ function resolveGitProjectContext(projectRoot, ref) {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"]
     }).trim();
-    gitRoot = realpathSync5(path82.resolve(resolvedProjectRoot, gitRootRelativePath || "."));
+    gitRoot = realpathSync5(path83.resolve(resolvedProjectRoot, gitRootRelativePath || "."));
   } catch (cause) {
     return err(readFailedError({
       input: { ref, relativePath: "." },
       cause
     }));
   }
-  if (isOutsideRelativePath(path82.relative(gitRoot, resolvedProjectRoot))) {
+  if (isOutsideRelativePath(path83.relative(gitRoot, resolvedProjectRoot))) {
     return err(projectRootOutsideGitError(resolvedProjectRoot));
   }
   return ok({ gitRoot, projectRoot: resolvedProjectRoot });
@@ -56427,9 +56533,9 @@ function readProcessErrorText(cause) {
   return cause instanceof Error ? cause.message : String(cause);
 }
 function toGitObjectPath(input) {
-  const projectRelativePath2 = path82.relative(input.gitRoot, input.projectRoot);
-  const lockfileRelativePath = path82.normalize(input.relativePath);
-  if (isOutsideRelativePath(projectRelativePath2) || isOutsideRelativePath(lockfileRelativePath) || path82.isAbsolute(input.relativePath)) {
+  const projectRelativePath2 = path83.relative(input.gitRoot, input.projectRoot);
+  const lockfileRelativePath = path83.normalize(input.relativePath);
+  if (isOutsideRelativePath(projectRelativePath2) || isOutsideRelativePath(lockfileRelativePath) || path83.isAbsolute(input.relativePath)) {
     return err(createError({
       code: "GIT_REF_PATH_OUTSIDE_PROJECT",
       category: "invalid_input",
@@ -56439,10 +56545,10 @@ function toGitObjectPath(input) {
       }
     }));
   }
-  return ok(normalizeGitPath(path82.join(projectRelativePath2, lockfileRelativePath)));
+  return ok(normalizeGitPath(path83.join(projectRelativePath2, lockfileRelativePath)));
 }
 function normalizeGitRelativePath(value) {
-  const normalized = path82.posix.normalize(value.replace(/\\/g, "/"));
+  const normalized = path83.posix.normalize(value.replace(/\\/g, "/"));
   if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/")) {
     return;
   }
@@ -56453,7 +56559,7 @@ function normalizeGitPath(value) {
   return normalized === "." ? "" : normalized;
 }
 function isOutsideRelativePath(relativePath) {
-  return relativePath === ".." || relativePath.startsWith(`..${path82.sep}`) || path82.isAbsolute(relativePath);
+  return relativePath === ".." || relativePath.startsWith(`..${path83.sep}`) || path83.isAbsolute(relativePath);
 }
 function isObjectRecord9(value) {
   return typeof value === "object" && value !== null;
@@ -56608,7 +56714,7 @@ function encodeFindingComponent(value) {
 import { createHash as createHash11 } from "node:crypto";
 import { existsSync as existsSync47, readFileSync as readFileSync3, realpathSync as realpathSync6, statSync as statSync35 } from "node:fs";
 import { isIP as isIP3 } from "node:net";
-import path83 from "node:path";
+import path84 from "node:path";
 var POLICY_FILENAME = ".ohrisk.yml";
 var POLICY_VERSION = 1;
 var POLICY_MAX_BYTES = 1024 * 1024;
@@ -56695,7 +56801,7 @@ function readPolicyConfig(input) {
   if (!boundaryRoot.ok) {
     return boundaryRoot;
   }
-  const requestedPath = input.policyPath ? path83.resolve(input.projectRoot, input.policyPath) : path83.join(input.projectRoot, POLICY_FILENAME);
+  const requestedPath = input.policyPath ? path84.resolve(input.projectRoot, input.policyPath) : path84.join(input.projectRoot, POLICY_FILENAME);
   if (!existsSync47(requestedPath)) {
     if (input.policyPath) {
       return err(policyReadError({
@@ -56782,7 +56888,7 @@ function readPolicyFile(input) {
       }));
     }
     const inherited = readPolicyFile({
-      filePath: path83.resolve(path83.dirname(trustedPath.value), inheritedPath),
+      filePath: path84.resolve(path84.dirname(trustedPath.value), inheritedPath),
       boundaryRoot: input.boundaryRoot,
       visited: nextVisited,
       depth: input.depth + 1
@@ -57196,8 +57302,8 @@ function readStringList(value, field, filePath, allowSingle = false) {
 function trustedPolicyPath(filePath, boundaryRoot) {
   try {
     const realPath = realpathSync6(filePath);
-    const relative2 = path83.relative(boundaryRoot, realPath);
-    if (relative2.startsWith("..") || path83.isAbsolute(relative2)) {
+    const relative2 = path84.relative(boundaryRoot, realPath);
+    if (relative2.startsWith("..") || path84.isAbsolute(relative2)) {
       return err(policyReadError({
         message: "Policy files and inherited policy files must stay inside the workspace root.",
         filePath: realPath,
@@ -57251,8 +57357,8 @@ function policyParseError(input) {
   });
 }
 function safeRelativePath(root, filePath) {
-  const relative2 = path83.relative(root, filePath);
-  return relative2 === "" ? path83.basename(filePath) : relative2.split(path83.sep).join("/");
+  const relative2 = path84.relative(root, filePath);
+  return relative2 === "" ? path84.basename(filePath) : relative2.split(path84.sep).join("/");
 }
 function normalizeHostname(host) {
   const trimmed = host.trim().toLowerCase().replace(/\.$/, "");
@@ -57679,7 +57785,7 @@ function severityRank2(severity) {
 }
 
 // src/report/cyclonedx-report.ts
-import path84 from "node:path";
+import path85 from "node:path";
 function renderCycloneDxReport(input) {
   const licensesByPackageId = new Map(input.normalizedLicenses.map((license) => [license.packageId, license]));
   const findingsByPackageId = new Map(input.riskFindings.map((finding) => [finding.packageId, finding]));
@@ -57799,11 +57905,11 @@ function archiveProperties(project) {
   ];
 }
 function projectRelativePath2(projectRoot, targetPath) {
-  const relativePath = path84.relative(projectRoot, targetPath);
-  if (relativePath && !relativePath.startsWith("..") && !path84.isAbsolute(relativePath)) {
+  const relativePath = path85.relative(projectRoot, targetPath);
+  if (relativePath && !relativePath.startsWith("..") && !path85.isAbsolute(relativePath)) {
     return relativePath.replace(/\\/g, "/");
   }
-  return path84.basename(targetPath);
+  return path85.basename(targetPath);
 }
 function renderComponent(input) {
   const licenses = input.license ? renderLicenses(input.license) : [];
@@ -57906,8 +58012,8 @@ function directChildRefsByNodeId(nodes) {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const childIdsByNodeId = new Map;
   for (const candidate of nodes) {
-    for (const path85 of candidate.paths) {
-      const packagePath = path85.map(packageIdFromPathSegment);
+    for (const path86 of candidate.paths) {
+      const packagePath = path86.map(packageIdFromPathSegment);
       for (let index = 0;index < packagePath.length - 1; index += 1) {
         const parentId = packagePath[index];
         const childId = packagePath[index + 1];
@@ -58241,7 +58347,7 @@ function formatNormalizedExpression(license) {
 }
 
 // src/report/sarif-report.ts
-import path85 from "node:path";
+import path86 from "node:path";
 var SARIF_SCHEMA_URL = "https://json.schemastore.org/sarif-2.1.0.json";
 var RULES = [
   ruleFor("high", "High license risk", "A dependency has license evidence that is high risk for the selected profile."),
@@ -58313,7 +58419,7 @@ function renderSarifReport(input) {
   }, null, 2);
 }
 function sarifLockfileUri(input) {
-  const relativePath = path85.relative(input.project.rootDir, input.project.lockfile.path).replace(/\\/g, "/") || path85.basename(input.project.lockfile.path);
+  const relativePath = path86.relative(input.project.rootDir, input.project.lockfile.path).replace(/\\/g, "/") || path86.basename(input.project.lockfile.path);
   if (!input.project.source) {
     return relativePath;
   }
@@ -58458,7 +58564,7 @@ function securitySeverityFor(severity) {
 }
 
 // src/report/scan-report.ts
-import path86 from "node:path";
+import path87 from "node:path";
 
 // src/report/locales/en.ts
 var ENGLISH_TEXT = {
@@ -62378,18 +62484,18 @@ function disabledPolicySummary() {
   return summarizePolicyConfig(emptyPolicyConfig());
 }
 function displayProjectPath(project, targetPath) {
-  const relativePath = path86.relative(project.rootDir, targetPath);
-  if (relativePath && !relativePath.startsWith("..") && !path86.isAbsolute(relativePath)) {
+  const relativePath = path87.relative(project.rootDir, targetPath);
+  if (relativePath && !relativePath.startsWith("..") && !path87.isAbsolute(relativePath)) {
     const normalizedPath = relativePath.replace(/\\/g, "/");
     return project.source ? `${project.source.displayPath}!/${archiveEntryPath(project, normalizedPath)}` : normalizedPath;
   }
-  return path86.basename(targetPath);
+  return path87.basename(targetPath);
 }
 function displayLockfilePath(project) {
   return displayProjectPath(project, project.lockfile.path);
 }
 function displayLockfileDirectoryPath(project) {
-  const directoryPath = path86.dirname(displayLockfilePath(project));
+  const directoryPath = path87.dirname(displayLockfilePath(project));
   return directoryPath === "" ? "." : directoryPath;
 }
 function markdownProjectLabel(input) {
@@ -62813,7 +62919,7 @@ import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readFileSync as readFileSync4 } from "node:fs";
 import { createServer } from "node:http";
-import path87 from "node:path";
+import path88 from "node:path";
 var LOOPBACK_HOST = "127.0.0.1";
 var REPORT_SERVER_TIMEOUT_MS = 1e4;
 var REPORT_SERVER_CLOSE_DELAY_MS = 500;
@@ -62982,7 +63088,7 @@ function openCommandFor(platform, target) {
   switch (platform) {
     case "win32":
       return {
-        command: path87.win32.join(windowsDirectory(), "System32", "cmd.exe"),
+        command: path88.win32.join(windowsDirectory(), "System32", "cmd.exe"),
         args: ["/d", "/c", "start", "", target]
       };
     case "darwin":
@@ -62993,16 +63099,16 @@ function openCommandFor(platform, target) {
 }
 function windowsDirectory() {
   const configured = process.env.SystemRoot ?? process.env.WINDIR;
-  return configured && path87.win32.isAbsolute(configured) ? path87.win32.normalize(configured) : DEFAULT_WINDOWS_DIRECTORY;
+  return configured && path88.win32.isAbsolute(configured) ? path88.win32.normalize(configured) : DEFAULT_WINDOWS_DIRECTORY;
 }
 
 // src/cli/baseline-project.ts
 import { Buffer as Buffer4 } from "node:buffer";
 import { readdirSync as readdirSync35, statSync as statSync36 } from "node:fs";
-import path89 from "node:path";
+import path90 from "node:path";
 
 // src/evidence/git-ref-local-package.ts
-import path88 from "node:path";
+import path89 from "node:path";
 function hasGitRefLocalNpmPackage(graph) {
   return graph.nodes.some((node) => node.ecosystem === "npm" && localPackageSpecifier(node.resolved) !== undefined);
 }
@@ -63071,13 +63177,13 @@ function localPackageSpecifier(resolved) {
   }
 }
 function resolveLocalPackageDirectory(input) {
-  if (input.specifier.includes("\x00") || path88.posix.isAbsolute(input.specifier) || path88.win32.isAbsolute(input.specifier)) {
+  if (input.specifier.includes("\x00") || path89.posix.isAbsolute(input.specifier) || path89.win32.isAbsolute(input.specifier)) {
     return;
   }
-  const lockfileDirectory = path88.dirname(path88.resolve(input.projectRoot, input.lockfileRelativePath));
-  const absolutePackageDirectory = path88.resolve(lockfileDirectory, input.specifier);
-  const snapshotRelativePath = path88.relative(input.snapshotRoot, absolutePackageDirectory);
-  if (snapshotRelativePath === ".." || snapshotRelativePath.startsWith(`..${path88.sep}`) || path88.isAbsolute(snapshotRelativePath)) {
+  const lockfileDirectory = path89.dirname(path89.resolve(input.projectRoot, input.lockfileRelativePath));
+  const absolutePackageDirectory = path89.resolve(lockfileDirectory, input.specifier);
+  const snapshotRelativePath = path89.relative(input.snapshotRoot, absolutePackageDirectory);
+  if (snapshotRelativePath === ".." || snapshotRelativePath.startsWith(`..${path89.sep}`) || path89.isAbsolute(snapshotRelativePath)) {
     return;
   }
   return snapshotRelativePath === "" ? "" : snapshotRelativePath.replace(/\\/g, "/");
@@ -63115,7 +63221,7 @@ function readBaselineGoWorkModuleInputs(input) {
     const sourceFiles = input.baselineFiles ? readBaselineGoSourceFiles({
       projectRoot: input.project.rootDir,
       baselineRef: input.baselineRef,
-      moduleRootRelativePath: path89.posix.dirname(modulePath.goModRelativePath),
+      moduleRootRelativePath: path90.posix.dirname(modulePath.goModRelativePath),
       baselineFiles: input.baselineFiles,
       readRefFile: input.readRefFile
     }) : ok(undefined);
@@ -63189,7 +63295,7 @@ function loadBaselineProjectGraph(input) {
     if (baselineLockfiles.length === 0 && listed.value.includes("package.json")) {
       baselineLockfiles = [{
         kind: "package-json",
-        path: path89.join(projectRoot, "package.json")
+        path: path90.join(projectRoot, "package.json")
       }];
     }
   } else {
@@ -63208,7 +63314,7 @@ function loadBaselineProjectGraph(input) {
   if (baselineLockfiles.length === 0) {
     return ok({
       graph: {
-        rootName: path89.basename(projectRoot),
+        rootName: path90.basename(projectRoot),
         lockfilePath: `${input.baselineRef}:<none>`,
         lockfilePaths: [],
         nodes: []
@@ -63225,7 +63331,7 @@ function loadBaselineProjectGraph(input) {
       lockfile,
       baselineRef: input.baselineRef,
       readRefFile: input.readRefFile,
-      rootNameHint: input.currentProject.scanGraph.rootName ?? path89.basename(projectRoot),
+      rootNameHint: input.currentProject.scanGraph.rootName ?? path90.basename(projectRoot),
       ...input.mavenExternalPoms ? { mavenExternalPoms: input.mavenExternalPoms } : {},
       ...baselineFiles ? { baselineFiles } : {}
     });
@@ -63288,7 +63394,7 @@ function parseBaselineLockfileGraph(input) {
   if (isErr(baselineLockfile)) {
     return baselineLockfile;
   }
-  const lockfileDirectory = path89.posix.dirname(relativeLockfilePath);
+  const lockfileDirectory = path90.posix.dirname(relativeLockfilePath);
   const relativeCompanionPath = (filename) => lockfileDirectory === "." ? filename : `${lockfileDirectory}/${filename}`;
   const packageJsonRelativePath = relativeCompanionPath("package.json");
   const baselinePackageJson = input.lockfile.kind === "yarn-lock" ? input.readRefFile({
@@ -63431,7 +63537,7 @@ function parseBaselineLockfileGraph(input) {
     ...baselineGoSum.value ? { goSumText: baselineGoSum.value } : {},
     ...baselineGoSourceFiles.value ? { goSourceFiles: baselineGoSourceFiles.value } : {},
     ...baselineGoWorkModules.value?.length ? { goWorkModuleInputs: baselineGoWorkModules.value } : {},
-    goWorkDir: path89.dirname(input.lockfile.path),
+    goWorkDir: path90.dirname(input.lockfile.path),
     ...baselineComposerJson.value ? { composerJsonText: baselineComposerJson.value } : {},
     ...baselineDirectoryPackagesProps.value?.text ? { directoryPackagesPropsText: baselineDirectoryPackagesProps.value.text } : {},
     ...baselineDirectoryPackagesProps.value?.path ? { directoryPackagesPropsPath: baselineDirectoryPackagesProps.value.path } : {},
@@ -63470,8 +63576,8 @@ function diffLockfileKey(lockfile) {
   return `${lockfile.kind}\x00${lockfile.path}`;
 }
 function projectRelativeLockfilePath(projectRoot, lockfilePath) {
-  const relativePath = path89.relative(projectRoot, lockfilePath).replace(/\\/g, "/");
-  return relativePath === "" ? path89.basename(lockfilePath) : relativePath;
+  const relativePath = path90.relative(projectRoot, lockfilePath).replace(/\\/g, "/");
+  return relativePath === "" ? path90.basename(lockfilePath) : relativePath;
 }
 function readBaselinePrimaryLockfile(input) {
   if (isGradleDependencyLocksDirectory(input.lockfilePath)) {
@@ -63491,7 +63597,7 @@ function readBaselineGradleDependencyLocksDirectory(input) {
       const prefix = `${normalizedDirectory}/`;
       entries = [...input.baselineFiles].filter((entry) => entry.startsWith(prefix)).map((entry) => entry.slice(prefix.length)).filter((entry) => !entry.includes("/") && entry.toLowerCase().endsWith(".lockfile")).sort();
     } else {
-      entries = readdirSync35(input.lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile5(path89.join(input.lockfilePath, entry))).sort();
+      entries = readdirSync35(input.lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile5(path90.join(input.lockfilePath, entry))).sort();
     }
   } catch (cause) {
     return err(createError({
@@ -63536,7 +63642,7 @@ function readBaselineGradleDependencyLocksDirectory(input) {
 `));
 }
 function baselineLockfilePathForKind(input) {
-  return input.kind === "gradle-lock" ? path89.join(input.rootName, input.relativeLockfilePath) : `${input.baselineRef}:${input.relativeLockfilePath}`;
+  return input.kind === "gradle-lock" ? path90.join(input.rootName, input.relativeLockfilePath) : `${input.baselineRef}:${input.relativeLockfilePath}`;
 }
 function readBaselineCargoMemberManifests(input) {
   const memberManifestPaths = input.baselineFiles ? findCargoWorkspaceMemberManifestPathsFromRelativePaths({
@@ -63602,7 +63708,7 @@ function readBaselineYarnWorkspacePackageJsons(input) {
 }
 function createBaselineRequirementsIncludedFileReader(input) {
   return ({ includePath, fromFilePath, directive }) => {
-    if (path89.isAbsolute(includePath)) {
+    if (path90.isAbsolute(includePath)) {
       return err(createError({
         code: "REQUIREMENTS_PARSE_FAILED",
         category: "unsupported_input",
@@ -63615,7 +63721,7 @@ function createBaselineRequirementsIncludedFileReader(input) {
       }));
     }
     const fromRelativePath = stripBaselineRefPrefix(fromFilePath, input.baselineRef);
-    const includedRelativePath = normalizeBaselineRelativePath(path89.join(path89.dirname(fromRelativePath), includePath));
+    const includedRelativePath = normalizeBaselineRelativePath(path90.join(path90.dirname(fromRelativePath), includePath));
     if (!includedRelativePath) {
       return err(createError({
         code: "REQUIREMENTS_PARSE_FAILED",
@@ -63675,7 +63781,7 @@ function baselinePythonLocalSourceErrorsForKind(kind) {
 }
 function createBaselinePythonLocalSourceFileReader(input) {
   return ({ sourcePath, relativeFilePath, fromFilePath }) => {
-    if (path89.isAbsolute(sourcePath)) {
+    if (path90.isAbsolute(sourcePath)) {
       return err(createError({
         code: input.errors.parseCode,
         category: "unsupported_input",
@@ -63688,7 +63794,7 @@ function createBaselinePythonLocalSourceFileReader(input) {
       }));
     }
     const fromRelativePath = stripBaselineRefPrefix(fromFilePath, input.baselineRef);
-    const sourceRelativePath = normalizeBaselineRelativePath(path89.join(path89.dirname(fromRelativePath), sourcePath));
+    const sourceRelativePath = normalizeBaselineRelativePath(path90.join(path90.dirname(fromRelativePath), sourcePath));
     if (!sourceRelativePath) {
       return err(createError({
         code: input.errors.parseCode,
@@ -63701,7 +63807,7 @@ function createBaselinePythonLocalSourceFileReader(input) {
         }
       }));
     }
-    const sourceFileRelativePath = normalizeBaselineRelativePath(path89.join(sourceRelativePath, relativeFilePath));
+    const sourceFileRelativePath = normalizeBaselineRelativePath(path90.join(sourceRelativePath, relativeFilePath));
     if (!sourceFileRelativePath) {
       return err(createError({
         code: input.errors.parseCode,
@@ -63734,18 +63840,18 @@ function stripBaselineRefPrefix(filePath, baselineRef) {
   return filePath.startsWith(prefix) ? filePath.slice(prefix.length) : filePath;
 }
 function normalizeBaselineRelativePath(relativePath) {
-  const normalized = path89.normalize(relativePath).replace(/\\/g, "/");
-  if (normalized === "." || normalized.startsWith("../") || normalized === ".." || path89.isAbsolute(normalized)) {
+  const normalized = path90.normalize(relativePath).replace(/\\/g, "/");
+  if (normalized === "." || normalized.startsWith("../") || normalized === ".." || path90.isAbsolute(normalized)) {
     return;
   }
   return normalized;
 }
 function isGradleDependencyLocksDirectory(lockfilePath) {
-  const segments = path89.normalize(lockfilePath).split(path89.sep);
+  const segments = path90.normalize(lockfilePath).split(path90.sep);
   return segments.length >= 2 && segments[segments.length - 1] === "dependency-locks" && segments[segments.length - 2] === "gradle";
 }
 function findBaselineDirectoryPackagesPropsPath(input) {
-  let current = path89.posix.dirname(projectRelativeLockfilePath(input.projectRoot, input.projectFilePath));
+  let current = path90.posix.dirname(projectRelativeLockfilePath(input.projectRoot, input.projectFilePath));
   while (true) {
     const candidate = current === "." ? "Directory.Packages.props" : `${current}/Directory.Packages.props`;
     if (input.baselineFiles.has(candidate)) {
@@ -63754,7 +63860,7 @@ function findBaselineDirectoryPackagesPropsPath(input) {
     if (current === ".") {
       return;
     }
-    const parent = path89.posix.dirname(current);
+    const parent = path90.posix.dirname(current);
     current = parent === current ? "." : parent;
   }
 }
@@ -63763,7 +63869,7 @@ function readBaselineDirectoryPackagesProps(input) {
     projectRoot: input.project.rootDir,
     projectFilePath: input.project.lockfile.path,
     baselineFiles: input.baselineFiles
-  }) : normalizeBaselineRelativePath(path89.relative(input.project.rootDir, findNearestDirectoryPackagesPropsPath(input.project.lockfile.path) ?? ""));
+  }) : normalizeBaselineRelativePath(path90.relative(input.project.rootDir, findNearestDirectoryPackagesPropsPath(input.project.lockfile.path) ?? ""));
   if (!relativePath) {
     return ok(undefined);
   }
@@ -63812,13 +63918,13 @@ function isFile5(pathname) {
 }
 
 // src/cli/cache-command.ts
-import path90 from "node:path";
+import path91 from "node:path";
 function runCacheCommand(command, io) {
   const env = io.env ?? process.env;
   const configuredCacheDir = command.cacheDir ?? env.OHRISK_CACHE_DIR;
-  const cacheDir = configuredCacheDir ? path90.resolve(io.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(env);
+  const cacheDir = configuredCacheDir ? path91.resolve(io.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(env);
   const cache = openArtifactCacheForManagement(cacheDir);
-  const location = configuredCacheDir ? path90.relative(io.cwd, cacheDir) || "." : cacheDir;
+  const location = configuredCacheDir ? path91.relative(io.cwd, cacheDir) || "." : cacheDir;
   if (command.action === "status") {
     const status = cache.status();
     if (!status.ok) {
@@ -63912,7 +64018,7 @@ import {
   realpathSync as realpathSync7,
   writeFileSync as writeFileSync3
 } from "node:fs";
-import path91 from "node:path";
+import path92 from "node:path";
 function runInitCommand(command, io) {
   const discovered = discoverProject({
     cwd: io.cwd,
@@ -63944,7 +64050,7 @@ function runInitCommand(command, io) {
     {
       rootDir: projectRoot,
       relativePath: ".ohrisk.yml",
-      displayPath: displayRelativePath(repositoryRoot, path91.join(projectRoot, ".ohrisk.yml")),
+      displayPath: displayRelativePath(repositoryRoot, path92.join(projectRoot, ".ohrisk.yml")),
       content: renderPolicyTemplate()
     },
     ...command.workflow ? [{
@@ -63961,7 +64067,7 @@ function runInitCommand(command, io) {
     ...command.waivers ? [{
       rootDir: projectRoot,
       relativePath: ".ohrisk-waivers.json",
-      displayPath: displayRelativePath(repositoryRoot, path91.join(projectRoot, ".ohrisk-waivers.json")),
+      displayPath: displayRelativePath(repositoryRoot, path92.join(projectRoot, ".ohrisk-waivers.json")),
       content: renderWaiverTemplate()
     }] : []
   ];
@@ -64010,14 +64116,14 @@ function prepareInitFile(plan) {
   if (!relativeSegments) {
     return err(initWriteFailure(plan.displayPath, "Generated path was not a safe relative path."));
   }
-  const absolutePath = path91.join(plan.rootDir, ...relativeSegments);
+  const absolutePath = path92.join(plan.rootDir, ...relativeSegments);
   if (!isPathInsideOrEqual6(absolutePath, plan.rootDir)) {
     return err(initWriteFailure(plan.displayPath, "Generated path escaped its initialization root."));
   }
   let currentPath = plan.rootDir;
   try {
     for (const segment of relativeSegments.slice(0, -1)) {
-      currentPath = path91.join(currentPath, segment);
+      currentPath = path92.join(currentPath, segment);
       if (!existsSync48(currentPath)) {
         continue;
       }
@@ -64061,7 +64167,7 @@ function writePreparedInitFile(file) {
   let currentPath = file.rootDir;
   try {
     for (const segment of relativeSegments.slice(0, -1)) {
-      currentPath = path91.join(currentPath, segment);
+      currentPath = path92.join(currentPath, segment);
       if (!existsSync48(currentPath)) {
         mkdirSync2(currentPath, { mode: 493 });
       }
@@ -64141,14 +64247,14 @@ function renderWorkflowTemplate(input) {
 function findNearestGitRoot2(startPath) {
   let currentPath = startPath;
   while (true) {
-    if (existsSync48(path91.join(currentPath, ".git"))) {
+    if (existsSync48(path92.join(currentPath, ".git"))) {
       try {
         return realpathSync7(currentPath);
       } catch {
         return currentPath;
       }
     }
-    const parentPath = path91.dirname(currentPath);
+    const parentPath = path92.dirname(currentPath);
     if (parentPath === currentPath) {
       return;
     }
@@ -64167,15 +64273,15 @@ function normalizedRelativeSegments(value) {
   return segments;
 }
 function displayRelativePath(rootDir, targetPath) {
-  const relativePath = path91.relative(rootDir, targetPath);
-  return relativePath === "" ? "." : relativePath.split(path91.sep).join("/");
+  const relativePath = path92.relative(rootDir, targetPath);
+  return relativePath === "" ? "." : relativePath.split(path92.sep).join("/");
 }
 function isSafeWorkflowDirectory(value) {
   return !value.includes("${{") && !/[\u0000-\u001f\u007f]/u.test(value) && (value === "." || normalizedRelativeSegments(value) !== undefined);
 }
 function isPathInsideOrEqual6(childPath, parentPath) {
-  const relativePath = path91.relative(parentPath, childPath);
-  return relativePath === "" || !relativePath.startsWith("..") && !path91.isAbsolute(relativePath);
+  const relativePath = path92.relative(parentPath, childPath);
+  return relativePath === "" || !relativePath.startsWith("..") && !path92.isAbsolute(relativePath);
 }
 function normalizedText(value) {
   return value.replace(/\r\n/g, `
@@ -64344,22 +64450,22 @@ function renderVersionHelp() {
 
 // src/report/write-output.ts
 import {
-  closeSync as closeSync5,
+  closeSync as closeSync6,
   constants,
   fsyncSync,
   lstatSync as lstatSync5,
   mkdirSync as mkdirSync3,
-  openSync as openSync5,
+  openSync as openSync6,
   realpathSync as realpathSync8,
   renameSync as renameSync2,
-  rmSync as rmSync3,
+  rmSync as rmSync4,
   writeFileSync as writeFileSync4
 } from "node:fs";
 import { randomBytes as randomBytes2 } from "node:crypto";
-import path92 from "node:path";
+import path93 from "node:path";
 var writeReportFile = (input) => {
-  const resolvedCwd = path92.resolve(input.cwd);
-  const resolvedPath = path92.resolve(resolvedCwd, input.outputPath);
+  const resolvedCwd = path93.resolve(input.cwd);
+  const resolvedPath = path93.resolve(resolvedCwd, input.outputPath);
   if (!isProjectRelativeOutputPath(input.outputPath) || !isPathInsideOrEqual7(resolvedPath, resolvedCwd)) {
     return err(reportOutputPathOutsideError({
       outputPath: input.outputPath,
@@ -64401,8 +64507,8 @@ var writeReportFile = (input) => {
 };
 function ensureSafeReportParent(input) {
   const realProjectRoot = realpathSync8(input.projectRoot);
-  const parentPath = path92.dirname(input.resolvedPath);
-  const relativeParent = path92.relative(input.projectRoot, parentPath);
+  const parentPath = path93.dirname(input.resolvedPath);
+  const relativeParent = path93.relative(input.projectRoot, parentPath);
   if (relativeParent === "") {
     return ok({
       resolvedPath: input.resolvedPath,
@@ -64410,7 +64516,7 @@ function ensureSafeReportParent(input) {
       realProjectRoot
     });
   }
-  if (relativeParent.startsWith("..") || path92.isAbsolute(relativeParent)) {
+  if (relativeParent.startsWith("..") || path93.isAbsolute(relativeParent)) {
     return err(reportOutputPathOutsideError({
       outputPath: input.outputPath,
       projectRoot: input.projectRoot,
@@ -64421,7 +64527,7 @@ function ensureSafeReportParent(input) {
     }));
   }
   let currentPath = input.projectRoot;
-  for (const segment of relativeParent.split(path92.sep)) {
+  for (const segment of relativeParent.split(path93.sep)) {
     if (segment === "" || segment === "." || segment === "..") {
       return err(reportOutputPathOutsideError({
         outputPath: input.outputPath,
@@ -64432,7 +64538,7 @@ function ensureSafeReportParent(input) {
         reason: "invalid_parent_segment"
       }));
     }
-    const candidatePath = path92.join(currentPath, segment);
+    const candidatePath = path93.join(currentPath, segment);
     const stepResult = resolveOrCreateReportComponent({
       candidatePath,
       outputPath: input.outputPath,
@@ -64550,11 +64656,11 @@ function writeValidatedReportFile(input) {
   let tempFileDescriptor;
   try {
     tempPath = createReportTempPath(input.validatedPath.realParent, input.resolvedPath);
-    tempFileDescriptor = openSync5(tempPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 384);
+    tempFileDescriptor = openSync6(tempPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 384);
     writeFileSync4(tempFileDescriptor, `${input.contents}
 `, "utf8");
     fsyncSync(tempFileDescriptor);
-    closeSync5(tempFileDescriptor);
+    closeSync6(tempFileDescriptor);
     tempFileDescriptor = undefined;
     const revalidatedPath = validateResolvedReportPath({
       outputPath: input.outputPath,
@@ -64599,13 +64705,13 @@ function writeValidatedReportFile(input) {
       closeReportTempFile(tempFileDescriptor);
     }
     if (tempPath !== undefined) {
-      rmSync3(tempPath, { force: true });
+      rmSync4(tempPath, { force: true });
     }
   }
 }
 function validateResolvedReportPath(input) {
   const realProjectRoot = realpathSync8(input.projectRoot);
-  const realParent = realpathSync8(path92.dirname(input.resolvedPath));
+  const realParent = realpathSync8(path93.dirname(input.resolvedPath));
   const existingOutputIsSymlink = isSymbolicLinkPath(input.resolvedPath);
   if (existingOutputIsSymlink || !isPathInsideOrEqual7(realParent, realProjectRoot)) {
     return err(reportOutputPathOutsideError({
@@ -64624,9 +64730,9 @@ function validateResolvedReportPath(input) {
   });
 }
 function createReportTempPath(realParent, resolvedPath) {
-  const baseName = path92.basename(resolvedPath);
+  const baseName = path93.basename(resolvedPath);
   const suffix = randomBytes2(8).toString("hex");
-  return path92.join(realParent, `.ohrisk-report-${process.pid}-${Date.now()}-${suffix}-${baseName}.tmp`);
+  return path93.join(realParent, `.ohrisk-report-${process.pid}-${Date.now()}-${suffix}-${baseName}.tmp`);
 }
 function promoteTempReportFile(tempPath, resolvedPath) {
   try {
@@ -64644,7 +64750,7 @@ function promoteTempReportFile(tempPath, resolvedPath) {
   if (!existingTarget.isFile()) {
     throw new Error("Report output path exists and is not a regular file.");
   }
-  rmSync3(resolvedPath, { force: false });
+  rmSync4(resolvedPath, { force: false });
   renameSync2(tempPath, resolvedPath);
 }
 function isReplaceBlockedByExistingTarget(cause) {
@@ -64688,7 +64794,7 @@ function isAlreadyExistsError(cause) {
 }
 function closeReportTempFile(fileDescriptor) {
   try {
-    closeSync5(fileDescriptor);
+    closeSync6(fileDescriptor);
   } catch {}
 }
 function isSymbolicLinkPath(filePath) {
@@ -64699,20 +64805,20 @@ function isSymbolicLinkPath(filePath) {
   }
 }
 function isProjectRelativeOutputPath(outputPath) {
-  if (outputPath.includes("\x00") || path92.isAbsolute(outputPath) || path92.win32.isAbsolute(outputPath) || path92.posix.isAbsolute(outputPath) || /^[A-Za-z]:/.test(outputPath)) {
+  if (outputPath.includes("\x00") || path93.isAbsolute(outputPath) || path93.win32.isAbsolute(outputPath) || path93.posix.isAbsolute(outputPath) || /^[A-Za-z]:/.test(outputPath)) {
     return false;
   }
   return outputPath.split(/[\\/]+/).every((segment) => segment !== "" && segment !== "." && segment !== "..");
 }
 function isPathInsideOrEqual7(childPath, parentPath) {
-  const relativePath = path92.relative(parentPath, childPath);
-  return relativePath === "" || !relativePath.startsWith("..") && !path92.isAbsolute(relativePath);
+  const relativePath = path93.relative(parentPath, childPath);
+  return relativePath === "" || !relativePath.startsWith("..") && !path93.isAbsolute(relativePath);
 }
 function isSameRealPath(leftPath, rightPath) {
   if (process.platform === "win32") {
-    return path92.normalize(leftPath).toLowerCase() === path92.normalize(rightPath).toLowerCase();
+    return path93.normalize(leftPath).toLowerCase() === path93.normalize(rightPath).toLowerCase();
   }
-  return path92.normalize(leftPath) === path92.normalize(rightPath);
+  return path93.normalize(leftPath) === path93.normalize(rightPath);
 }
 
 // src/cli/report-output.ts
@@ -67786,13 +67892,13 @@ function redactTemporaryPathText(value, temporaryRoot) {
 
 // src/policy/waivers.ts
 import { existsSync as existsSync49 } from "node:fs";
-import path93 from "node:path";
+import path94 from "node:path";
 var DEFAULT_WAIVER_FILE_NAME = ".ohrisk-waivers.json";
 var WAIVER_FILE_MAX_BYTES = 1024 * 1024;
 var WAIVER_ROOT_KEYS = new Set(["waivers"]);
 var WAIVER_KEYS = new Set(["id", "fingerprint", "reason", "expiresOn"]);
 function readRiskWaivers(projectRoot, options) {
-  const waiverPath = path93.join(projectRoot, DEFAULT_WAIVER_FILE_NAME);
+  const waiverPath = path94.join(projectRoot, DEFAULT_WAIVER_FILE_NAME);
   if (!existsSync49(waiverPath)) {
     return ok([]);
   }
@@ -68097,12 +68203,12 @@ function isDirectDependencyPath(pathSegments, dependencyPathSegments) {
 
 // src/cli/workspace-root.ts
 import { realpathSync as realpathSync9, statSync as statSync37 } from "node:fs";
-import path94 from "node:path";
+import path95 from "node:path";
 function resolveWorkspaceRootPath(input) {
   if (!input.workspaceRootPath) {
     return ok(undefined);
   }
-  const resolvedPath = path94.resolve(input.cwd, input.workspaceRootPath);
+  const resolvedPath = path95.resolve(input.cwd, input.workspaceRootPath);
   try {
     const realPath = realpathSync9(resolvedPath);
     if (!statSync37(realPath).isDirectory()) {
@@ -68114,7 +68220,7 @@ function resolveWorkspaceRootPath(input) {
   }
 }
 function workspaceRootInvalidError2(workspaceRootPath) {
-  const absolute = path94.isAbsolute(workspaceRootPath);
+  const absolute = path95.isAbsolute(workspaceRootPath);
   return createError({
     code: "INVALID_ARGUMENT",
     category: "invalid_input",
@@ -68687,7 +68793,7 @@ function discoverFilesystemProject(input) {
     return discovered;
   }
   const lockfileCount = discovered.value.lockfiles?.length ?? 1;
-  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, lockfileCount > 1 ? `Reading ${lockfileCount} lockfiles...` : `Reading ${path95.basename(discovered.value.lockfile.path)}...`);
+  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, lockfileCount > 1 ? `Reading ${lockfileCount} lockfiles...` : `Reading ${path96.basename(discovered.value.lockfile.path)}...`);
   return discovered;
 }
 async function evaluateProjectScan(input) {
@@ -68830,7 +68936,7 @@ function resolveEvidenceRuntimeOptions(input) {
     }
   }
   const configuredCacheDir = input.cacheDir ?? input.env.OHRISK_CACHE_DIR;
-  const cacheDir = configuredCacheDir ? path95.resolve(input.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(input.env);
+  const cacheDir = configuredCacheDir ? path96.resolve(input.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(input.env);
   return ok({
     offline: input.offline,
     cacheDir,
@@ -68891,7 +68997,7 @@ function isCliEntrypoint(metaUrl, argvPath) {
   try {
     return realpathSync10(fileURLToPath4(metaUrl)) === realpathSync10(argvPath);
   } catch {
-    return path95.resolve(fileURLToPath4(metaUrl)) === path95.resolve(argvPath);
+    return path96.resolve(fileURLToPath4(metaUrl)) === path96.resolve(argvPath);
   }
 }
 function defaultIO() {

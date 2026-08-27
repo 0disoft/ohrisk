@@ -286,8 +286,9 @@ input이면 해당 경로의 license 파일을 evidence로 읽는다. 공개 Git
 SHA-256 `narHash`가 모두 잠겨 있을 때만 고정 codeload archive를 받고, 정확한 NixOS
 nixpkgs release `nixexprs.tar.xz` input도 `/nixpkgs/...` 또는 `/nixos/<channel>/...` URL
 경로의 12자리 revision이 full commit과 일치할 때 고정 NixOS host에서 받는다. 압축 해제된 NAR source tree hash가 일치한 뒤에만
-root 법적 파일을 evidence로 사용한다. XZ 출력은 중복 chunk buffer 없이 누적하고 320MiB와
-100,000개 TAR entry로 제한한다. 짧은 revision, custom host, 잘못된 hash는 원격
+root 법적 파일을 evidence로 사용한다. XZ 출력은 고유 이름으로 독점 생성한 임시 TAR 파일로 스트리밍하고
+320MiB와 100,000개 TAR entry로 제한하며 성공과 실패 모두에서 제거한다. 짧은 revision,
+custom host, 잘못된 hash는 원격
 요청을 하지 않는다. Nix derivation package graph 복원과
 Nixpkgs package license extraction은 아직 지원하지 않는다.
 Unity Package Manager는 `Packages/packages-lock.json`에 기록된 non-built-in package
