@@ -1,6 +1,17 @@
 # Changelog
 
-## 1.15.2 - Unreleased
+## 1.15.2 - 2026-08-27
+
+- pnpm lockfiles split across multiple YAML documents are now merged without
+  dropping importer, package, or snapshot data. Ohrisk accepts compatible
+  split importer declarations while conflicting dependency values and
+  lockfile versions remain fail-closed.
+- Package-scoped MIT-CMU inventories such as Pillow's root license now retain
+  the package license ahead of later bundled component notices, avoiding false
+  conflicting-evidence findings without suppressing those component terms.
+- Concurrent packages pinned to the same Cargo GitHub commit now share one
+  checksum-verified archive fetch and index operation instead of repeating the
+  same immutable-source work for every package.
 
 - Nix `flake.lock` inputs may collect root legal files from exact NixOS nixpkgs
   release `nixexprs.tar.xz` archives under both `/nixpkgs/...` and

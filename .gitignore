@@ -3,6 +3,7 @@ node_modules/
 
 # Bun
 .bun/
+.bun-cache/
 bun.lockb
 
 # Build output

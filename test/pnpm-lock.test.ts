@@ -144,7 +144,7 @@ describe("parsePnpmLockfile", () => {
     expect(result.error.details).toMatchObject({
       lockfilePath: "conflicting-multi-document-pnpm-lock.yaml"
     });
-    expect(result.error.details.cause).toContain("importers > . > dependencies > shared");
+    expect(result.error.details?.cause).toContain("importers > . > dependencies > shared");
   });
 
   test("stops walking dependency cycles without dropping reachable paths", () => {
