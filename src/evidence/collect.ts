@@ -75,8 +75,11 @@ import {
 import { collectMavenJarEvidence } from "./maven-jar";
 import {
   collectNixGitHubArchiveEvidence,
+  collectNixTarXzArchiveEvidence,
   isVerifiedNixGitHubNode,
-  NIX_GITHUB_ARCHIVE_HOSTS
+  isVerifiedNixReleaseTarballNode,
+  NIX_GITHUB_ARCHIVE_HOSTS,
+  NIX_RELEASE_ARCHIVE_HOSTS
 } from "./nix-github";
 import { collectNugetNupkgEvidence } from "./nuget-nupkg";
 import {
@@ -809,6 +812,46 @@ async function collectNodeEvidence(input: {
     });
   }
 
+  const nixResolved = input.node.resolved;
+  const nixIntegrity = input.node.integrity;
+  if (
+    input.node.ecosystem === "nix"
+    && nixResolved !== undefined
+    && nixIntegrity !== undefined
+    && isVerifiedNixReleaseTarballNode(input.node)
+  ) {
+    return collectRemoteTarballEvidence({
+      packageId: input.node.id,
+      resolved: nixResolved,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      tarballMaxBytes: input.tarballMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      signal: input.signal,
+      allowedHosts: input.allowedHosts,
+      permittedHosts: NIX_RELEASE_ARCHIVE_HOSTS,
+      integrity: nixIntegrity,
+      skipIntegrityCheck: true,
+      urlError: {
+        code: "TARBALL_FETCH_FAILED",
+        message: "NixOS release source archive URL targets an unsupported or blocked host.",
+        resolveFailureMessage: "Failed to resolve the fixed NixOS release archive host.",
+        details: {
+          packageId: input.node.id,
+          resolved: safeUrlForErrorDetails(nixResolved)
+        }
+      },
+      collectEvidence: (tarball) => collectNixTarXzArchiveEvidence({
+        packageId: input.node.id,
+        tarball,
+        expectedNarHash: nixIntegrity,
+        signal: input.signal
+      })
+    });
+  }
+
   if (input.node.ecosystem === "pub" && input.node.resolved) {
     return collectRemoteTarballEvidence({
       packageId: input.node.id,
@@ -841,8 +884,6 @@ async function collectNodeEvidence(input: {
     });
   }
 
-  const nixResolved = input.node.resolved;
-  const nixIntegrity = input.node.integrity;
   if (
     input.node.ecosystem === "nix"
     && nixResolved !== undefined
@@ -3186,7 +3227,9 @@ async function collectRemoteTarballEvidence(input: {
   signal: AbortSignal;
   allowedHosts: ReadonlySet<string>;
   permittedHosts?: ReadonlySet<string>;
-  collectEvidence?: (tarball: Buffer) => Result<LicenseEvidence, OhriskError>;
+  collectEvidence?: (
+    tarball: Buffer
+  ) => Result<LicenseEvidence, OhriskError> | Promise<Result<LicenseEvidence, OhriskError>>;
   urlError?: {
     code: "REGISTRY_METADATA_FETCH_FAILED" | "TARBALL_FETCH_FAILED";
     message: string;
@@ -3286,7 +3329,7 @@ async function collectRemoteTarballEvidence(input: {
     }
 
     const evidence = input.collectEvidence
-      ? input.collectEvidence(tarball.value)
+      ? await input.collectEvidence(tarball.value)
       : collectTarballEvidence({
           packageId: input.packageId,
           tarball: tarball.value

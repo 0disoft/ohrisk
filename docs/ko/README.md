@@ -283,9 +283,11 @@ license metadata와 license 파일에서 읽는다. Helm transitive chart graph 
 chart repository fetch는 아직 지원하지 않는다.
 Nix는 `flake.lock`의 root input graph에서 reachable flake input을 스캔한다. 로컬 path
 input이면 해당 경로의 license 파일을 evidence로 읽는다. 공개 GitHub input은 full commit과
-SHA-256 `narHash`가 모두 잠겨 있을 때만 고정 codeload archive를 받고, 압축 해제된 NAR
-source tree hash가 일치한 뒤 root 법적 파일을 evidence로 사용한다. 짧은 revision, custom
-GitHub host, 잘못된 hash는 원격 요청을 하지 않는다. Nix derivation package graph 복원과
+SHA-256 `narHash`가 모두 잠겨 있을 때만 고정 codeload archive를 받고, 정확한 NixOS
+nixpkgs release `nixexprs.tar.xz` input도 URL 경로의 12자리 revision이 full commit과
+일치할 때 고정 NixOS host에서 받는다. 압축 해제된 NAR source tree hash가 일치한 뒤에만
+root 법적 파일을 evidence로 사용한다. 짧은 revision, custom host, 잘못된 hash는 원격
+요청을 하지 않는다. Nix derivation package graph 복원과
 Nixpkgs package license extraction은 아직 지원하지 않는다.
 Unity Package Manager는 `Packages/packages-lock.json`에 기록된 non-built-in package
 entry를 스캔한다. Unity built-in module은 제외하고, evidence는 로컬 `Packages/` 또는

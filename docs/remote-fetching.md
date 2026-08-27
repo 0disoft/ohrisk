@@ -91,8 +91,13 @@ Remote fetching is limited to these explicit adapters:
   path, entry, expansion, compression-ratio, symlink, and legal-file handling,
   strips the single archive root, and hashes the resulting tree with Nix Archive
   serialization. Root legal files are trusted only after that NAR digest matches.
-  Short revisions, branches, tags, malformed hashes, alternate GitHub hosts, and
-  non-GitHub flake input types remain local-only and receive no credentials.
+  Exact NixOS nixpkgs release `nixexprs.tar.xz` inputs are also accepted from
+  `releases.nixos.org` when their directory embeds the first 12 characters of a
+  full locked commit and the lock supplies a canonical `narHash`. XZ output is
+  capped at 256 MiB and 100,000 TAR entries before the same path and NAR checks
+  run. Short revisions, branches, tags, malformed hashes, alternate hosts, and
+  other non-GitHub flake
+  input types remain local-only and receive no credentials.
 
 The repository adapter accepts only `github.com` owner/repository URLs, disables
 credential prompts, submodule fetching, and symlink checkout, rejects non-portable or

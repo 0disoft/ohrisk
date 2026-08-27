@@ -161,6 +161,7 @@
   },
   "files": [
     "CHANGELOG.md",
+    "THIRD_PARTY_LICENSES",
     "bin",
     "dist",
     "schemas"
@@ -172,5 +173,8 @@
     "@yarnpkg/lockfile": "^1.1.0",
     "typescript": "^7.0.2",
     "yaml": "^2.9.0"
+  },
+  "dependencies": {
+    "xz-decompress": "^0.2.3"
   }
 }

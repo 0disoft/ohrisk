@@ -2,6 +2,11 @@
 
 ## 1.15.2 - Unreleased
 
+- Nix `flake.lock` inputs may collect root legal files from exact NixOS nixpkgs
+  release `nixexprs.tar.xz` archives. Ohrisk requires a full commit, matching
+  12-character release path, canonical `narHash`, fixed NixOS host, XZ output
+  capped at 256 MiB and 100,000 entries, and a matching extracted NAR tree
+  before trusting the evidence.
 - Checksum-identified Go module ZIPs may verify up to 65,535 entries and 512 MiB of expanded
   content without retaining unrelated source files. Per-entry, compression-ratio,
   CRC, work, and cancellation limits remain fail-closed, while retained license

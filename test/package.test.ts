@@ -54,7 +54,13 @@ describe("package metadata", () => {
       "ohrisk-summary": "bin/ohrisk-summary.mjs",
       "ohrisk-notices": "bin/ohrisk-notices.mjs"
     });
-    expect(packageJson.files).toEqual(["CHANGELOG.md", "bin", "dist", "schemas"]);
+    expect(packageJson.files).toEqual([
+      "CHANGELOG.md",
+      "THIRD_PARTY_LICENSES",
+      "bin",
+      "dist",
+      "schemas"
+    ]);
     expect(packageJson.exports).toEqual({
       "./report-types": {
         types: "./dist/report-types.d.ts"
@@ -84,6 +90,7 @@ describe("package metadata", () => {
     expect(packageJson.publishConfig?.access).toBe("public");
     expect(packageJson.repository?.url).toBe("git+https://github.com/0disoft/ohrisk.git");
     expect(packageJson.dependencies?.["@0disoft/laqu"]).toBeUndefined();
+    expect(packageJson.dependencies?.["xz-decompress"]).toBe("^0.2.3");
     expect(packageJson.devDependencies?.["@0disoft/laqu"]).toBe("^1.1.9");
     expect(packageJson.devDependencies?.["@types/bun"]).toBe("^1.3.14");
     expect(packageJson.devDependencies?.["@types/node"]).toBe("^26.2.0");

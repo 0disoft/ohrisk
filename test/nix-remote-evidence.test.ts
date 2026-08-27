@@ -1,12 +1,17 @@
 import { describe, expect, test } from "bun:test";
 
 import { collectGraphEvidence } from "../src/evidence/collect";
+import { collectNixTarXzArchiveEvidence } from "../src/evidence/nix-github";
 import { createTarGz } from "./helpers/tar";
 
 const COMMIT = "11707dc2f618dd54ca8739b309ec4fc024de578b";
 const NAR_HASH = "sha256-r0cHBTAAc4xNl3OihOmqGSfHf081XrpZZQOpmm1WuuU=";
+const XZ_TAR = Buffer.from(
+  "/Td6WFoAAATm1rRGAgAhARYAAAB0L+Wj4Cf/AHtdADmbyxHv7EAclFRpnwybSnTHNC+PyWMy2ovnXO/NOmuYopQfWMBVjupAai7b/Izu5w4x4HG7JVSM3w9lH/Y6Z6w9hAW6wi4g5end7xLAuaYaN0q4Mk5L8gzNX3oG9aCDQ4aHsG383Xg2l+6v59tV0Kg1PjER/gr3K40GugAAKEzIcy6IazAAAZcBgFAAAB1Ds3+xxGf7AgAAAAAEWVo=",
+  "base64"
+);
 
-describe("remote Nix GitHub evidence", () => {
+describe("remote Nix evidence", () => {
   test("collects root license evidence only after the GitHub source tree matches narHash", async () => {
     const archive = createTarGz({ "source/LICENSE": "MIT License\n" });
     const fetchedUrls: string[] = [];
@@ -73,6 +78,42 @@ describe("remote Nix GitHub evidence", () => {
     if (!evidence.ok) throw new Error(evidence.error.message);
     expect(evidence.value[0]).toMatchObject({ source: "unavailable" });
   });
+
+  test("collects verified NixOS release tar.xz evidence", async () => {
+    const graph = nixTarXzGraph(NAR_HASH);
+    const evidence = await collectGraphEvidence({
+      graph,
+      projectRoot: ".",
+      allowLocalProjectEvidence: false,
+      resolveArtifactHost: async () => [{ address: "1.1.1.1", family: 4 }],
+      fetchArtifact: async (url) => artifactResponse(XZ_TAR, url)
+    });
+
+    expect(evidence.ok).toBe(true);
+    if (!evidence.ok) throw new Error(evidence.error.message);
+    expect(evidence.value).toEqual([expect.objectContaining({
+      packageId: graph.nodes[0]!.id,
+      source: "tarball",
+      warnings: [],
+      files: [{ path: "LICENSE", kind: "license", text: "MIT License\n" }]
+    })]);
+  });
+
+  test("fails closed when NixOS release tar.xz exceeds the expanded size limit", async () => {
+    const evidence = await collectNixTarXzArchiveEvidence({
+      packageId: "nixpkgs@fixture",
+      tarball: XZ_TAR,
+      expectedNarHash: NAR_HASH,
+      unpackedMaxBytes: 1
+    });
+
+    expect(evidence.ok).toBe(false);
+    if (evidence.ok) throw new Error("Expected bounded XZ decompression to fail.");
+    expect(evidence.error).toMatchObject({
+      code: "TARBALL_PARSE_FAILED",
+      details: { maxUnpackedBytes: 1 }
+    });
+  });
 });
 
 function nixGraph(integrity: string) {
@@ -89,6 +130,25 @@ function nixGraph(integrity: string) {
       dependencyType: "unknown" as const,
       direct: true,
       paths: [["root", "risk-flake"]]
+    }]
+  };
+}
+
+function nixTarXzGraph(integrity: string) {
+  const rev = "ed67bc86e84e51d4a88e73c7fd36006dc876476f";
+  const resolved = "https://releases.nixos.org/nixpkgs/nixpkgs-26.05pre993032.ed67bc86e84e/nixexprs.tar.xz";
+  return {
+    lockfilePath: "flake.lock",
+    nodes: [{
+      id: `tarball:${resolved}@${rev}`,
+      name: `tarball:${resolved}`,
+      version: rev,
+      ecosystem: "nix" as const,
+      resolved,
+      integrity,
+      dependencyType: "unknown" as const,
+      direct: true,
+      paths: [["root", "nixpkgs"]]
     }]
   };
 }

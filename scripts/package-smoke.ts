@@ -118,6 +118,11 @@ try {
       packages: [{
         purl: `pkg:npm/ohrisk@${expectedVersion}`,
         licenseFiles: ["node_modules/ohrisk/LICENSE"]
+      }, {
+        purl: "pkg:npm/xz-decompress@0.2.3",
+        licenseFiles: [
+          "node_modules/ohrisk/THIRD_PARTY_LICENSES/xz-decompress-MIT.txt"
+        ]
       }]
     }, null, 2)}\n`,
     "utf8"

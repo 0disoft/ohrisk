@@ -286,18 +286,50 @@ function nixNodeIdentity(input: {
           integrity: narHash
         }
       : undefined;
+  const nixosReleaseArchive = type === "tarball"
+    && url !== undefined
+    && rev !== undefined
+    && /^[0-9a-f]{40}$/u.test(rev)
+    && narHash !== undefined
+    && /^sha256-[A-Za-z0-9+/]{43}=$/u.test(narHash)
+    && isLockedNixosReleaseArchive(url, rev)
+      ? { resolved: url, integrity: narHash }
+      : undefined;
+  const remoteArchive = githubArchive ?? nixosReleaseArchive;
+  const resolvedCoordinates = remoteArchive
+    ?? (pathValue
+      ? { resolved: pathValue }
+      : url
+        ? { resolved: url }
+        : {});
 
   return ok({
     name,
     version,
-    ...(githubArchive
-      ? githubArchive
-      : pathValue
-        ? { resolved: pathValue }
-        : url
-          ? { resolved: url }
-          : {})
+    ...resolvedCoordinates
   });
+}
+
+function isLockedNixosReleaseArchive(url: string, rev: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (
+      parsed.protocol !== "https:"
+      || parsed.hostname !== "releases.nixos.org"
+      || parsed.port !== ""
+      || parsed.username !== ""
+      || parsed.password !== ""
+      || parsed.search !== ""
+      || parsed.hash !== ""
+    ) {
+      return false;
+    }
+    const match = /^\/nixpkgs\/nixpkgs-[A-Za-z0-9._+-]+\.([0-9a-f]{12})\/nixexprs\.tar\.xz$/u
+      .exec(parsed.pathname);
+    return match?.[1] === rev.slice(0, 12);
+  } catch {
+    return false;
+  }
 }
 
 function nixNodeName(input: {

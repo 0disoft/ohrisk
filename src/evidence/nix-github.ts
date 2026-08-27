@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { gunzipSync } from "node:zlib";
+import { XzReadableStream } from "xz-decompress";
 
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
@@ -7,11 +8,14 @@ import { classifyEvidenceFile } from "./license-files";
 import type { LicenseEvidence, LicenseEvidenceFile } from "./types";
 
 const NIX_GITHUB_ARCHIVE_MAX_BYTES = 100 * 1024 * 1024;
+const NIX_RELEASE_ARCHIVE_MAX_BYTES = 256 * 1024 * 1024;
 const NIX_GITHUB_ARCHIVE_MAX_ENTRIES = 50_000;
+const NIX_RELEASE_ARCHIVE_MAX_ENTRIES = 100_000;
 const NIX_GITHUB_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 const NIX_GITHUB_EVIDENCE_FILE_LIMIT = 50;
 const NIX_GITHUB_MAX_COMPRESSION_RATIO = 200;
 export const NIX_GITHUB_ARCHIVE_HOSTS = new Set(["codeload.github.com"]);
+export const NIX_RELEASE_ARCHIVE_HOSTS = new Set(["releases.nixos.org"]);
 
 type NixTreeNode =
   | { type: "directory"; entries: Map<string, NixTreeNode> }
@@ -59,25 +63,89 @@ export function collectNixGitHubArchiveEvidence(input: {
     }));
   }
 
+  return collectVerifiedNixTarEvidence({
+    packageId: input.packageId,
+    tar,
+    compressedBytes: compressed.byteLength,
+    expectedDigest,
+    expectedNarHash: input.expectedNarHash,
+    maxEntries: input.maxEntries ?? NIX_GITHUB_ARCHIVE_MAX_ENTRIES,
+    sourceLabel: "Nix GitHub"
+  });
+}
+
+export async function collectNixTarXzArchiveEvidence(input: {
+  packageId: string;
+  tarball: Buffer | Uint8Array;
+  expectedNarHash: string;
+  unpackedMaxBytes?: number;
+  maxEntries?: number;
+  signal?: AbortSignal;
+}): Promise<Result<LicenseEvidence, OhriskError>> {
+  const expectedDigest = parseSha256Sri(input.expectedNarHash);
+  if (!expectedDigest) {
+    return ok(unavailableEvidence(
+      input.packageId,
+      "Nix release input narHash is missing or malformed; remote source was not trusted."
+    ));
+  }
+
+  const compressed = Buffer.from(input.tarball);
+  const unpackedMaxBytes = input.unpackedMaxBytes ?? NIX_RELEASE_ARCHIVE_MAX_BYTES;
+  const decompressed = await decompressXz({
+    compressed,
+    maxBytes: unpackedMaxBytes,
+    ...(input.signal ? { signal: input.signal } : {})
+  });
+  if (!decompressed.ok) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to decompress package tarball evidence.",
+      details: {
+        packageId: input.packageId,
+        maxUnpackedBytes: unpackedMaxBytes,
+        cause: decompressed.cause
+      }
+    }));
+  }
+
+  return collectVerifiedNixTarEvidence({
+    packageId: input.packageId,
+    tar: decompressed.tar,
+    compressedBytes: compressed.byteLength,
+    expectedDigest,
+    expectedNarHash: input.expectedNarHash,
+    maxEntries: input.maxEntries ?? NIX_RELEASE_ARCHIVE_MAX_ENTRIES,
+    sourceLabel: "NixOS release"
+  });
+}
+
+function collectVerifiedNixTarEvidence(input: {
+  packageId: string;
+  tar: Buffer;
+  compressedBytes: number;
+  expectedDigest: Buffer;
+  expectedNarHash: string;
+  maxEntries: number;
+  sourceLabel: string;
+}): Result<LicenseEvidence, OhriskError> {
   try {
     if (
-      tar.byteLength >= 1024 * 1024
-      && tar.byteLength > compressed.byteLength * NIX_GITHUB_MAX_COMPRESSION_RATIO
+      input.tar.byteLength >= 1024 * 1024
+      && input.tar.byteLength > input.compressedBytes * NIX_GITHUB_MAX_COMPRESSION_RATIO
     ) {
-      throw new Error("Nix GitHub archive exceeded the supported compression ratio.");
+      throw new Error(`${input.sourceLabel} archive exceeded the supported compression ratio.`);
     }
 
-    const entries = parseGitHubTar({
-      tar,
-      maxEntries: input.maxEntries ?? NIX_GITHUB_ARCHIVE_MAX_ENTRIES
-    });
+    const entries = parseGitHubTar({ tar: input.tar, maxEntries: input.maxEntries });
     const tree = buildNixTree(entries);
     const actualDigest = hashNixArchive(tree);
-    if (!timingSafeEqual(actualDigest, expectedDigest)) {
+    if (!timingSafeEqual(actualDigest, input.expectedDigest)) {
       return err(createError({
         code: "PACKAGE_INTEGRITY_CHECK_FAILED",
         category: "unsupported_input",
-        message: "Nix GitHub source tree did not match the locked narHash.",
+        message: `${input.sourceLabel} source tree did not match the locked narHash.`,
         details: {
           packageId: input.packageId,
           reason: "nix_nar_hash_mismatch",
@@ -93,19 +161,52 @@ export function collectNixGitHubArchiveEvidence(input: {
       files,
       source: "tarball",
       warnings: files.length === 0
-        ? ["No supported root license, notice, attribution, or legal evidence file found in the verified Nix GitHub source tree."]
+        ? [`No supported root license, notice, attribution, or legal evidence file found in the verified ${input.sourceLabel} source tree.`]
         : []
     });
   } catch (cause) {
     return err(createError({
       code: "TARBALL_PARSE_FAILED",
       category: "unsupported_input",
-      message: "Failed to parse or hash the Nix GitHub source archive.",
+      message: `Failed to parse or hash the ${input.sourceLabel} source archive.`,
       details: {
         packageId: input.packageId,
         cause: cause instanceof Error ? cause.message : String(cause)
       }
     }));
+  }
+}
+
+async function decompressXz(input: {
+  compressed: Buffer;
+  maxBytes: number;
+  signal?: AbortSignal;
+}): Promise<{ ok: true; tar: Buffer } | { ok: false; cause: string }> {
+  const stream = new XzReadableStream(new Blob([Uint8Array.from(input.compressed)]).stream());
+  const reader = stream.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      if (input.signal?.aborted) {
+        await reader.cancel(input.signal.reason);
+        return { ok: false, cause: "Nix archive decompression was cancelled." };
+      }
+      const next = await reader.read();
+      if (next.done) break;
+      const chunk = Buffer.from(next.value);
+      total += chunk.byteLength;
+      if (!Number.isSafeInteger(total) || total > input.maxBytes) {
+        await reader.cancel("expanded archive limit exceeded");
+        return { ok: false, cause: "Nix archive exceeded the expanded size limit." };
+      }
+      chunks.push(chunk);
+    }
+    return { ok: true, tar: Buffer.concat(chunks, total) };
+  } catch (cause) {
+    return { ok: false, cause: cause instanceof Error ? cause.message : String(cause) };
+  } finally {
+    reader.releaseLock();
   }
 }
 
@@ -125,6 +226,39 @@ export function isVerifiedNixGitHubNode(input: {
   const repo = ownerRepo?.split("/")[1];
   if (repo === "." || repo === "..") return false;
   return input.resolved === `https://codeload.github.com/${ownerRepo}/tar.gz/${input.version}`;
+}
+
+export function isVerifiedNixReleaseTarballNode(input: {
+  name: string;
+  version: string;
+  resolved?: string;
+  integrity?: string;
+}): boolean {
+  if (!/^[0-9a-f]{40}$/u.test(input.version) || !parseSha256Sri(input.integrity)) {
+    return false;
+  }
+  if (input.resolved === undefined || input.name !== `tarball:${input.resolved}`) {
+    return false;
+  }
+  try {
+    const parsed = new URL(input.resolved);
+    if (
+      parsed.protocol !== "https:"
+      || parsed.hostname !== "releases.nixos.org"
+      || parsed.port !== ""
+      || parsed.username !== ""
+      || parsed.password !== ""
+      || parsed.search !== ""
+      || parsed.hash !== ""
+    ) {
+      return false;
+    }
+    const match = /^\/nixpkgs\/nixpkgs-[A-Za-z0-9._+-]+\.([0-9a-f]{12})\/nixexprs\.tar\.xz$/u
+      .exec(parsed.pathname);
+    return match?.[1] === input.version.slice(0, 12);
+  } catch {
+    return false;
+  }
 }
 
 function parseGitHubTar(input: { tar: Buffer; maxEntries: number }): ParsedTarEntry[] {
