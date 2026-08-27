@@ -1844,6 +1844,45 @@ describe("normalizeLicenseEvidence", () => {
     expect(normalized.evidenceSources).toContain("file: licenses/LICENSE (license)");
   });
 
+  test("keeps a Pillow wheel license inventory under its package MIT-CMU declaration", () => {
+    const normalized = normalizeLicenseEvidence({
+      packageId: "pillow@12.3.0",
+      metadataLicense: "MIT-CMU",
+      metadataSource: "pillow-12.3.0.dist-info/METADATA",
+      files: [{
+        path: "pillow-12.3.0.dist-info/licenses/LICENSE",
+        kind: "license",
+        text: [
+          "Like PIL, Pillow is licensed under the open source MIT-CMU License:",
+          "Permission to use, copy, modify and distribute this software and its",
+          "documentation for any purpose and without fee is hereby granted,",
+          "provided that the above copyright notice appears in all copies,",
+          "and that the name of Secret Labs AB or the author not be used in",
+          "advertising or publicity pertaining to distribution of the software",
+          "without specific, written prior permission.",
+          "SECRET LABS AB AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE.",
+          "",
+          "----",
+          "LIBAVIF",
+          "Apache License",
+          "Version 2.0, January 2004",
+          "TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION"
+        ].join("\n")
+      }],
+      source: "tarball",
+      warnings: []
+    });
+
+    expect(normalized).toMatchObject({
+      original: "MIT-CMU",
+      expression: "MIT-CMU",
+      choices: ["MIT-CMU"],
+      signals: [],
+      confidence: "high"
+    });
+    expect(normalized.signals).not.toContain("conflicting-evidence");
+  });
+
   test("does not treat FreeType commercial-product permission and name-use rules as a ban", () => {
     const normalized = normalizeLicenseEvidence({
       packageId: "freetype-bundled@2.14.3",

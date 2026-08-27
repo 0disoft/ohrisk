@@ -786,6 +786,10 @@ function recognizeStandardLicenseText(text: string): string | undefined {
     return "EPL-2.0";
   }
 
+  if (isRecognizableMitCmuLicenseText(text)) {
+    return "MIT-CMU";
+  }
+
   if (isRecognizableApacheLicenseText(text)) {
     return "Apache-2.0";
   }
@@ -935,6 +939,14 @@ function recognizeGnuLicenseText(text: string): string | undefined {
   }
 
   return earliest?.expression;
+}
+
+function isRecognizableMitCmuLicenseText(text: string): boolean {
+  const packageDeclaration = text.slice(0, 4_096).replace(/\s+/g, " ");
+  return /\blicensed under (?:the )?(?:open source )?MIT-CMU License\b/i.test(packageDeclaration)
+    && /\bPermission to use, copy, modify and distribute this software and its documentation for any purpose and without fee is hereby granted\b/i.test(packageDeclaration)
+    && /\bname of .{1,120} not be used in advertising or publicity pertaining to distribution of the software\b/i.test(packageDeclaration)
+    && /\bDISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE\b/i.test(packageDeclaration);
 }
 
 function isRecognizableApacheLicenseText(text: string): boolean {

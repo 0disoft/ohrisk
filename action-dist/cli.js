@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 8ec07fd48ef486027aa282dbee6fb6e5da5f06e4a509ff0ae703b5cb638a55ee
+// ohrisk-action-source-sha256: 5a38ecedee9ae8dbc47873fdaffa1d8927f8d7c576757694bffaf9dc5ca9040c
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -44079,6 +44079,9 @@ function recognizeStandardLicenseText(text) {
   if (/\bEclipse Public License\b[\s\S]*\bVersion 2\.0\b/i.test(text)) {
     return "EPL-2.0";
   }
+  if (isRecognizableMitCmuLicenseText(text)) {
+    return "MIT-CMU";
+  }
   if (isRecognizableApacheLicenseText(text)) {
     return "Apache-2.0";
   }
@@ -44177,6 +44180,10 @@ function recognizeGnuLicenseText(text) {
     }
   }
   return earliest?.expression;
+}
+function isRecognizableMitCmuLicenseText(text) {
+  const packageDeclaration = text.slice(0, 4096).replace(/\s+/g, " ");
+  return /\blicensed under (?:the )?(?:open source )?MIT-CMU License\b/i.test(packageDeclaration) && /\bPermission to use, copy, modify and distribute this software and its documentation for any purpose and without fee is hereby granted\b/i.test(packageDeclaration) && /\bname of .{1,120} not be used in advertising or publicity pertaining to distribution of the software\b/i.test(packageDeclaration) && /\bDISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE\b/i.test(packageDeclaration);
 }
 function isRecognizableApacheLicenseText(text) {
   const fullLicense = /\bApache License\b[\s\S]*\bVersion 2\.0\b/i.test(text) && /\bTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\b/i.test(text);
