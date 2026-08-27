@@ -208,6 +208,12 @@ describe("standalone release wiring", () => {
     expect(publish).toContain("releases/$RELEASE_ID/assets?per_page=100");
     expect(publish).toContain("Accept: application/octet-stream");
     expect(publish).not.toContain("gh release download \"$GITHUB_REF_NAME\"");
+    const executeSmoke = publish.slice(
+      publish.indexOf("- name: Execute native release asset without a repository token"),
+      publish.indexOf("  publish:")
+    );
+    expect(executeSmoke).toContain("ASSET: ${{ steps.download_asset.outputs.asset }}");
+    expect(executeSmoke).not.toContain("GH_TOKEN");
     expect(publish).toContain("- standalone-smoke");
     for (const candidate of STANDALONE_TARGETS) {
       expect(publish).toContain(candidate.assetName);

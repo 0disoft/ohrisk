@@ -141,7 +141,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     permissions:
-      contents: read
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -150,7 +150,8 @@ jobs:
           - macos-latest
 
     steps:
-      - name: Download and execute native release asset
+      - name: Download native draft release asset
+        id: download_asset
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -183,9 +184,17 @@ jobs:
             -H "Accept: application/octet-stream" \
             "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
             > "$executable"
+          echo "asset=$asset" >> "$GITHUB_OUTPUT"
 
+      - name: Execute native release asset without a repository token
+        shell: bash
+        env:
+          ASSET: ${{ steps.download_asset.outputs.asset }}
+        run: |
+          set -euo pipefail
+          executable="./release-smoke/$ASSET"
           if [ ! -f "$executable" ]; then
-            echo "::error::Draft release is missing native standalone asset $asset."
+            echo "::error::Draft release is missing native standalone asset $ASSET."
             exit 1
           fi
           if [ "$RUNNER_OS" != "Windows" ]; then
