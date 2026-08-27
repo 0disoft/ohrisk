@@ -9,19 +9,16 @@ import { classifyEvidenceFile } from "./license-files";
 import type { LicenseEvidence, LicenseEvidenceFile } from "./types";
 
 const NIX_GITHUB_ARCHIVE_MAX_BYTES = 100 * 1024 * 1024;
-const NIX_RELEASE_ARCHIVE_MAX_BYTES = 256 * 1024 * 1024;
+const NIX_RELEASE_ARCHIVE_MAX_BYTES = 320 * 1024 * 1024;
 const NIX_GITHUB_ARCHIVE_MAX_ENTRIES = 50_000;
 const NIX_RELEASE_ARCHIVE_MAX_ENTRIES = 100_000;
 const NIX_GITHUB_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 const NIX_GITHUB_EVIDENCE_FILE_LIMIT = 50;
 const NIX_GITHUB_MAX_COMPRESSION_RATIO = 200;
+const NIX_XZ_INITIAL_CAPACITY_RATIO = 7;
+const NIX_XZ_EVENT_LOOP_YIELD_BYTES = 16 * 1024 * 1024;
 export const NIX_GITHUB_ARCHIVE_HOSTS = new Set(["codeload.github.com"]);
 export const NIX_RELEASE_ARCHIVE_HOSTS = new Set(["releases.nixos.org"]);
-
-type NixTreeNode =
-  | { type: "directory"; entries: Map<string, NixTreeNode> }
-  | { type: "regular"; data: Buffer; executable: boolean }
-  | { type: "symlink"; target: string };
 
 type ParsedTarEntry = {
   path: string;
@@ -140,8 +137,7 @@ function collectVerifiedNixTarEvidence(input: {
     }
 
     const entries = parseGitHubTar({ tar: input.tar, maxEntries: input.maxEntries });
-    const tree = buildNixTree(entries);
-    const actualDigest = hashNixArchive(tree);
+    const actualDigest = hashNixArchive(entries);
     if (!timingSafeEqual(actualDigest, input.expectedDigest)) {
       return err(createError({
         code: "PACKAGE_INTEGRITY_CHECK_FAILED",
@@ -183,10 +179,21 @@ async function decompressXz(input: {
   maxBytes: number;
   signal?: AbortSignal;
 }): Promise<{ ok: true; tar: Buffer } | { ok: false; cause: string }> {
-  const stream = new XzReadableStream(new Blob([Uint8Array.from(input.compressed)]).stream());
+  const compressedStream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(input.compressed);
+      controller.close();
+    }
+  });
+  const stream = new XzReadableStream(compressedStream);
   const reader = stream.getReader();
-  const chunks: Buffer[] = [];
+  const estimatedCapacity = input.compressed.byteLength * NIX_XZ_INITIAL_CAPACITY_RATIO;
+  let output = Buffer.allocUnsafe(Math.min(
+    input.maxBytes,
+    Math.max(64 * 1024, estimatedCapacity)
+  ));
   let total = 0;
+  let nextYieldAt = NIX_XZ_EVENT_LOOP_YIELD_BYTES;
   try {
     while (true) {
       if (input.signal?.aborted) {
@@ -195,20 +202,36 @@ async function decompressXz(input: {
       }
       const next = await reader.read();
       if (next.done) break;
-      const chunk = Buffer.from(next.value);
-      total += chunk.byteLength;
+      const previousTotal = total;
+      total += next.value.byteLength;
       if (!Number.isSafeInteger(total) || total > input.maxBytes) {
         await reader.cancel("expanded archive limit exceeded");
         return { ok: false, cause: "Nix archive exceeded the expanded size limit." };
       }
-      chunks.push(chunk);
+      if (total > output.byteLength) {
+        const grown = Buffer.allocUnsafe(Math.min(
+          input.maxBytes,
+          Math.max(total, output.byteLength * 2)
+        ));
+        output.copy(grown, 0, 0, previousTotal);
+        output = grown;
+      }
+      output.set(next.value, previousTotal);
+      if (total >= nextYieldAt) {
+        await yieldToEventLoop();
+        nextYieldAt = total + NIX_XZ_EVENT_LOOP_YIELD_BYTES;
+      }
     }
-    return { ok: true, tar: Buffer.concat(chunks, total) };
+    return { ok: true, tar: output.subarray(0, total) };
   } catch (cause) {
     return { ok: false, cause: cause instanceof Error ? cause.message : String(cause) };
   } finally {
     reader.releaseLock();
   }
+}
+
+async function yieldToEventLoop(): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
 export function isVerifiedNixGitHubNode(input: {
@@ -376,53 +399,67 @@ function parseGitHubTar(input: { tar: Buffer; maxEntries: number }): ParsedTarEn
   return entries;
 }
 
-function buildNixTree(entries: ParsedTarEntry[]): NixTreeNode {
-  const root: NixTreeNode = { type: "directory", entries: new Map() };
+function hashNixArchive(entries: ParsedTarEntry[]): Buffer {
+  const emptyData = Buffer.alloc(0);
+  const nodesByPath = new Map<string, ParsedTarEntry>(entries.map((entry) => [entry.path, entry]));
   for (const entry of entries) {
-    const segments = entry.path.split("/");
-    let directory = root;
-    for (let index = 0; index < segments.length - 1; index += 1) {
-      const segment = segments[index]!;
-      const existing = directory.entries.get(segment);
-      if (!existing) {
-        const child: NixTreeNode = { type: "directory", entries: new Map() };
-        directory.entries.set(segment, child);
-        directory = child;
-      } else if (existing.type === "directory") {
-        directory = existing;
-      } else {
+    let parentPath = parentTreePath(entry.path);
+    while (parentPath !== "") {
+      const existing = nodesByPath.get(parentPath);
+      if (existing && existing.type !== "directory") {
         throw new Error("Nix GitHub archive contains a file-directory path collision.");
       }
+      if (!existing) {
+        nodesByPath.set(parentPath, {
+          path: parentPath,
+          type: "directory",
+          data: emptyData,
+          executable: false
+        });
+      }
+      parentPath = parentTreePath(parentPath);
     }
-
-    const name = segments.at(-1)!;
-    const node: NixTreeNode = entry.type === "directory"
-      ? { type: "directory", entries: new Map() }
-      : entry.type === "regular"
-        ? { type: "regular", data: entry.data, executable: entry.executable }
-        : { type: "symlink", target: entry.linkTarget! };
-    const existing = directory.entries.get(name);
-    if (existing) {
-      if (existing.type === "directory" && node.type === "directory") continue;
-      throw new Error("Nix GitHub archive contains a duplicate entry path.");
-    }
-    directory.entries.set(name, node);
   }
-  return root;
-}
 
-function hashNixArchive(root: NixTreeNode): Buffer {
+  const root: ParsedTarEntry = {
+    path: "",
+    type: "directory",
+    data: emptyData,
+    executable: false
+  };
+  nodesByPath.set("", root);
+  const childrenByParent = new Map<string, Array<{
+    node: ParsedTarEntry;
+    nameBytes: Buffer;
+  }>>();
+  for (const node of nodesByPath.values()) {
+    if (node.path === "") continue;
+    const parentPath = parentTreePath(node.path);
+    const children = childrenByParent.get(parentPath) ?? [];
+    const name = treeBaseName(node.path);
+    children.push({ node, nameBytes: Buffer.from(name, "utf8") });
+    childrenByParent.set(parentPath, children);
+  }
+
   const hash = createHash("sha256");
+  const encodedStrings = new Map<string, Buffer>();
+  const lengthBytes = Buffer.allocUnsafe(8);
+  const paddingBytes = Buffer.alloc(7);
   const writeString = (value: string | Buffer): void => {
-    const bytes = typeof value === "string" ? Buffer.from(value, "utf8") : value;
-    const length = Buffer.alloc(8);
-    length.writeBigUInt64LE(BigInt(bytes.byteLength));
-    hash.update(length);
+    let bytes: Buffer;
+    if (typeof value === "string") {
+      bytes = encodedStrings.get(value) ?? Buffer.from(value, "utf8");
+      encodedStrings.set(value, bytes);
+    } else {
+      bytes = value;
+    }
+    lengthBytes.writeBigUInt64LE(BigInt(bytes.byteLength));
+    hash.update(lengthBytes);
     hash.update(bytes);
     const padding = (8 - (bytes.byteLength % 8)) % 8;
-    if (padding > 0) hash.update(Buffer.alloc(padding));
+    if (padding > 0) hash.update(paddingBytes.subarray(0, padding));
   };
-  const writeNode = (node: NixTreeNode): void => {
+  const writeNode = (node: ParsedTarEntry): void => {
     writeString("(");
     writeString("type");
     writeString(node.type);
@@ -435,18 +472,18 @@ function hashNixArchive(root: NixTreeNode): Buffer {
       writeString(node.data);
     } else if (node.type === "symlink") {
       writeString("target");
-      writeString(node.target);
+      writeString(node.linkTarget!);
     } else {
-      const sorted = [...node.entries].sort(([left], [right]) =>
-        Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"))
+      const sorted = (childrenByParent.get(node.path) ?? []).sort((left, right) =>
+        Buffer.compare(left.nameBytes, right.nameBytes)
       );
-      for (const [name, child] of sorted) {
+      for (const child of sorted) {
         writeString("entry");
         writeString("(");
         writeString("name");
-        writeString(name);
+        writeString(child.nameBytes);
         writeString("node");
-        writeNode(child);
+        writeNode(child.node);
         writeString(")");
       }
     }
@@ -456,6 +493,16 @@ function hashNixArchive(root: NixTreeNode): Buffer {
   writeString("nix-archive-1");
   writeNode(root);
   return hash.digest();
+}
+
+function parentTreePath(value: string): string {
+  const separator = value.lastIndexOf("/");
+  return separator === -1 ? "" : value.slice(0, separator);
+}
+
+function treeBaseName(value: string): string {
+  const separator = value.lastIndexOf("/");
+  return separator === -1 ? value : value.slice(separator + 1);
 }
 
 function collectRootEvidenceFiles(entries: ParsedTarEntry[]): LicenseEvidenceFile[] {
