@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 09ffe4f0c899ead450cdfae54d5942f3544716f8fdf21528562199f25bbee1c4
+// ohrisk-action-source-sha256: 4a15cb1da9611e38022e4c4d23eabef77ce083eb7051945898656631e86449a6
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18344,6 +18344,15 @@ function mergeArtifactIdentity(left, right) {
   return { ...merged, ...retained };
 }
 
+// src/graph/unresolved-dependencies.ts
+function unresolvedDependencyKey(item) {
+  return JSON.stringify([item.from ?? null, item.name, item.dependencyType, item.reason]);
+}
+function uniqueUnresolvedDependencies(items) {
+  const byKey = new Map(items.map((item) => [unresolvedDependencyKey(item), item]));
+  return [...byKey.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, item]) => item);
+}
+
 // src/graph/merge.ts
 function mergeDependencyGraphs(graphs) {
   const first = graphs[0];
@@ -18359,6 +18368,7 @@ function mergeDependencyGraphs(graphs) {
   const edgesByKey = new Map;
   const unknownDependencyNodeIds = new Set;
   let rootDependenciesUnknown = false;
+  const unresolvedDependencies = [];
   for (const node of disambiguatePackageRecordIds(graphs.flatMap((item) => item.graph.nodes))) {
     const purl = packageUrl(node);
     if (!canonicalIdByPurl.has(purl)) {
@@ -18374,6 +18384,10 @@ function mergeDependencyGraphs(graphs) {
       lockfileKind: item.source.lockfileKind,
       lockfilePath: item.source.lockfilePath
     };
+    unresolvedDependencies.push(...(item.graph.unresolvedDependencies ?? []).map((dependency) => ({
+      ...dependency,
+      ...dependency.from === undefined ? {} : { from: idMap.get(dependency.from) ?? dependency.from }
+    })));
     rootDependenciesUnknown ||= item.graph.edges === undefined || item.graph.rootDependenciesUnknown === true;
     for (const id of item.graph.edges === undefined ? item.graph.nodes.map((node) => node.id) : item.graph.unknownDependencyNodeIds ?? []) {
       unknownDependencyNodeIds.add(idMap.get(id) ?? id);
@@ -18422,6 +18436,7 @@ function mergeDependencyGraphs(graphs) {
     edges: [...edgesByKey.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([, edge]) => edge),
     ...unknownDependencyNodeIds.size > 0 ? { unknownDependencyNodeIds: [...unknownDependencyNodeIds].sort() } : {},
     ...rootDependenciesUnknown ? { rootDependenciesUnknown: true } : {},
+    ...unresolvedDependencies.length > 0 ? { unresolvedDependencies: uniqueUnresolvedDependencies(unresolvedDependencies) } : {},
     ...evidenceByPackageId.size > 0 ? { embeddedEvidence: [...evidenceByPackageId.values()].sort((left, right) => left.packageId.localeCompare(right.packageId)) } : {},
     ...warnings.length > 0 ? { warnings: unique(warnings) } : {},
     ...diagnostics.length > 0 ? { diagnostics: mergeGraphDiagnostics(diagnostics) } : {}
@@ -27851,17 +27866,26 @@ function parsePackageLockText(input, lockfilePath = "package-lock.json") {
   const recordIndex = indexPackageLockRecords(records);
   const traversalStates = [];
   const pathLimitAffected = new Set;
+  const unresolved = new Map;
   for (const rootEntry of rootEntries) {
     for (const rootDependency of collectRootDependencies3(rootEntry.pkg)) {
-      const record = resolvePackageRecord2(omitUndefined({
+      const resolution = resolvePackageRecord2(omitUndefined({
         recordIndex,
         name: rootDependency.name,
         range: rootDependency.range,
         parentPath: rootEntry.packagePath
       }));
-      if (!record) {
+      if ((!resolution || resolution.inferred) && !rootDependency.optional) {
+        addUnresolved(unresolved, {
+          name: rootDependency.name,
+          dependencyType: rootDependency.type,
+          reason: resolution ? "unproven_installation" : "missing_installation"
+        });
+      }
+      if (!resolution || rootDependency.optional && resolution.inferred) {
         continue;
       }
+      const record = resolution.record;
       traversalStates.push({
         record,
         dependencyType: rootDependency.type,
@@ -27872,6 +27896,7 @@ function parsePackageLockText(input, lockfilePath = "package-lock.json") {
       });
     }
   }
+  collectUnresolvedInstallations(traversalStates, recordIndex, unresolved);
   walkDependencies({
     states: traversalStates,
     recordIndex,
@@ -27882,6 +27907,7 @@ function parsePackageLockText(input, lockfilePath = "package-lock.json") {
     rootName,
     lockfilePath,
     nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    ...unresolved.size > 0 ? { unresolvedDependencies: uniqueUnresolvedDependencies([...unresolved.values()]) } : {},
     diagnostics: pathLimitAffected.size > 0 ? [{
       code: "dependency_paths_truncated",
       affectedNodeCount: pathLimitAffected.size,
@@ -27895,8 +27921,15 @@ function parsePackageLockV1(input) {
   const rootDependencies = readV1DependencyMap(input.dependencies);
   const referencedRootDependencies = collectReferencedRootV1DependencyNames(rootDependencies);
   const nodeMap = new Map;
+  const unresolved = new Map;
   for (const [name, dependency] of Object.entries(rootDependencies)) {
     if (!dependency || typeof dependency.version !== "string") {
+      if (dependency?.optional !== true)
+        addUnresolved(unresolved, {
+          name,
+          dependencyType: dependencyTypeForV1Dependency(dependency ?? {}),
+          reason: "missing_installation"
+        });
       continue;
     }
     if (referencedRootDependencies.has(name)) {
@@ -27910,13 +27943,15 @@ function parsePackageLockV1(input) {
       path: [rootName ?? "<root>"],
       rootDependencies,
       nodeMap,
+      unresolved,
       seen: new Set
     });
   }
   return ok(omitUndefined({
     rootName,
     lockfilePath: input.lockfilePath,
-    nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id))
+    nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    ...unresolved.size > 0 ? { unresolvedDependencies: uniqueUnresolvedDependencies([...unresolved.values()]) } : {}
   }));
 }
 function parseLockfileJson3(input, lockfilePath) {
@@ -28019,11 +28054,16 @@ function collectRootDependencies3(rootPackage) {
   return collectDependencyEdges3(rootPackage);
 }
 function collectDependencyEdges3(pkg) {
+  const optional = readDependencyMap2(pkg.optionalDependencies);
+  const peers = dependencyEntries2(pkg.peerDependencies, "peer").map((edge) => {
+    const metadata = isObjectRecord3(pkg.peerDependenciesMeta) ? pkg.peerDependenciesMeta[edge.name] : undefined;
+    return { ...edge, ...isObjectRecord3(metadata) && metadata.optional === true ? { optional: true } : {} };
+  });
   return [
-    ...dependencyEntries2(pkg.dependencies, "production"),
+    ...dependencyEntries2(pkg.dependencies, "production").filter((edge) => !Object.hasOwn(optional, edge.name)),
     ...dependencyEntries2(pkg.devDependencies, "development"),
-    ...dependencyEntries2(pkg.optionalDependencies, "optional"),
-    ...dependencyEntries2(pkg.peerDependencies, "peer")
+    ...dependencyEntries2(optional, "optional").map((edge) => ({ ...edge, optional: true })),
+    ...peers
   ];
 }
 function dependencyEntries2(value, type) {
@@ -28056,14 +28096,47 @@ function resolvePackageRecord2(input) {
     if (directory.split("/").at(-1) !== "node_modules") {
       const candidate = input.recordIndex.byPackagePath.get(`${directory ? `${directory}/` : ""}node_modules/${reference.requestedName}`);
       if (candidate)
-        return candidate;
+        return { record: candidate, inferred: false };
     }
     if (!directory)
       break;
     const separator = directory.lastIndexOf("/");
     directory = separator < 0 ? "" : directory.slice(0, separator);
   }
-  return input.recordIndex.byNameAndVersion.get(`${reference.lookupName}\x00${reference.lookupRange}`) ?? onlyPackageRecordWithName(input.recordIndex, reference.lookupName);
+  const inferred = input.recordIndex.byNameAndVersion.get(`${reference.lookupName}\x00${reference.lookupRange}`) ?? onlyPackageRecordWithName(input.recordIndex, reference.lookupName);
+  return inferred ? { record: inferred, inferred: true } : undefined;
+}
+function addUnresolved(target, item) {
+  target.set(unresolvedDependencyKey(item), item);
+}
+function collectUnresolvedInstallations(roots, index, unresolved) {
+  const queue = roots.map((state) => ({ record: state.record, type: state.dependencyType }));
+  const seen = new Set;
+  for (let cursor = 0;cursor < queue.length; cursor++) {
+    const state = queue[cursor];
+    const key = JSON.stringify([state.record.packagePath, state.type]);
+    if (seen.has(key))
+      continue;
+    seen.add(key);
+    for (const edge of state.record.dependencies) {
+      const resolution = resolvePackageRecord2({
+        recordIndex: index,
+        name: edge.name,
+        range: edge.range,
+        parentPath: state.record.packagePath
+      });
+      const type = dependencyTypeForChildEdge4(state.type, edge.type);
+      if ((!resolution || resolution.inferred) && !edge.optional)
+        addUnresolved(unresolved, {
+          from: state.record.id,
+          name: edge.name,
+          dependencyType: type,
+          reason: resolution ? "unproven_installation" : "missing_installation"
+        });
+      if (resolution && !(edge.optional && resolution.inferred))
+        queue.push({ record: resolution.record, type });
+    }
+  }
 }
 function onlyPackageRecordWithName(recordIndex, name) {
   const matches = recordIndex.byName.get(name) ?? [];
@@ -28149,15 +28222,16 @@ function walkDependencies(input) {
       if (!child) {
         continue;
       }
-      const childRecord = resolvePackageRecord2({
+      const resolution = resolvePackageRecord2({
         recordIndex: input.recordIndex,
         name: child.name,
         range: child.range,
         parentPath: state.record.packagePath
       });
-      if (!childRecord) {
+      if (!resolution || child.optional && resolution.inferred) {
         continue;
       }
+      const childRecord = resolution.record;
       stack.push({
         record: childRecord,
         dependencyType: dependencyTypeForChildEdge4(state.dependencyType, child.type),
@@ -28205,7 +28279,14 @@ function walkV1Dependency(input) {
   const childNames = new Set([...Object.keys(nestedDependencies), ...requiredNames]);
   for (const childName of childNames) {
     const child = nestedDependencies[childName] ?? input.rootDependencies[childName];
-    if (!child) {
+    if (!child || typeof child.version !== "string") {
+      if (child?.optional !== true)
+        addUnresolved(input.unresolved, {
+          from: id,
+          name: childName,
+          dependencyType: dependencyTypeForChildEdge4(input.dependencyType, child ? dependencyTypeForV1Dependency(child) : "production"),
+          reason: "missing_installation"
+        });
       continue;
     }
     walkV1Dependency({
@@ -28216,6 +28297,7 @@ function walkV1Dependency(input) {
       path: nextPath,
       rootDependencies: input.rootDependencies,
       nodeMap: input.nodeMap,
+      unresolved: input.unresolved,
       seen: nextSeen
     });
   }
@@ -58640,11 +58722,49 @@ function severityRank2(severity) {
 function buildScanCompleteness(input) {
   const unavailablePackageCount = input.evidence.filter((evidence) => evidence.source === "unavailable").length;
   const skippedRepositoryEntryCount = input.repository ? input.repository.submodules.skippedCount + input.repository.symbolicLinks.skippedCount + input.repository.nonPortablePaths.skippedCount : 0;
+  const unresolvedDependencies = input.graph?.unresolvedDependencies ?? [];
+  const unresolvedDependencyCount = unresolvedDependencies.length;
+  const unknownRelationshipNodeCount = input.graph?.edges === undefined ? input.graph?.nodes.length ?? 0 : input.graph.unknownDependencyNodeIds?.length ?? 0;
+  const rootRelationshipsUnknown = input.graph?.edges === undefined || input.graph.rootDependenciesUnknown === true;
+  const identifiedIds = new Set(input.normalizedLicenses?.filter((license) => license.expression !== undefined && !license.signals.some((signal) => signal === "missing" || signal === "malformed" || signal === "conflicting-evidence")).map((license) => license.packageId));
+  const unidentifiedPackageCount = input.graph ? input.graph.nodes.filter((node) => !identifiedIds.has(node.id)).length : (input.normalizedLicenses?.length ?? 0) - identifiedIds.size;
   return {
-    status: unavailablePackageCount > 0 || skippedRepositoryEntryCount > 0 ? "partial" : "complete",
+    status: unavailablePackageCount > 0 || skippedRepositoryEntryCount > 0 || unresolvedDependencyCount > 0 ? "partial" : "complete",
     unavailablePackageCount,
-    skippedRepositoryEntryCount
+    skippedRepositoryEntryCount,
+    ...input.graph ? {
+      unresolvedDependencyCount,
+      ...unresolvedDependencyCount > 0 ? { unresolvedDependencies } : {},
+      dimensions: {
+        input: { status: skippedRepositoryEntryCount > 0 ? "partial" : "complete", skippedRepositoryEntryCount },
+        graph: {
+          status: unresolvedDependencyCount > 0 ? "partial" : unknownRelationshipNodeCount > 0 || rootRelationshipsUnknown ? "unknown" : "complete",
+          unresolvedDependencyCount,
+          unknownRelationshipNodeCount,
+          rootRelationshipsUnknown
+        },
+        evidence: {
+          status: unavailablePackageCount > 0 ? "partial" : "complete",
+          unavailablePackageCount,
+          artifactConflictPackageCount: input.evidence.filter((item) => item.artifactIdentityConflict).length
+        },
+        licenses: {
+          status: input.normalizedLicenses === undefined ? "not-assessed" : unidentifiedPackageCount > 0 ? "unidentified" : "identified",
+          unidentifiedPackageCount
+        }
+      }
+    } : {}
   };
+}
+function formatScanCompleteness(completeness) {
+  const reasons = [
+    completeness.unavailablePackageCount > 0 ? `${completeness.unavailablePackageCount} package evidence source${completeness.unavailablePackageCount === 1 ? "" : "s"} unavailable` : undefined,
+    completeness.skippedRepositoryEntryCount > 0 ? `${completeness.skippedRepositoryEntryCount} repository entr${completeness.skippedRepositoryEntryCount === 1 ? "y" : "ies"} skipped` : undefined,
+    (completeness.unresolvedDependencyCount ?? 0) > 0 ? `${completeness.unresolvedDependencyCount} unresolved dependency requests` : undefined
+  ].filter((reason) => reason !== undefined);
+  const summary = completeness.status === "complete" ? "complete" : `partial (${reasons.join(", ")})`;
+  const dimensions = completeness.dimensions;
+  return dimensions ? `${summary}; input ${dimensions.input.status}, graph ${dimensions.graph.status}, evidence ${dimensions.evidence.status}, licenses ${dimensions.licenses.status}` : summary;
 }
 function incompleteEvidenceGateFailed(input) {
   return input.enabled && input.completeness.status === "partial" && !input.allowPartialEvidence;
@@ -58683,6 +58803,13 @@ function renderCycloneDxReport(input) {
         "bom-ref": "project"
       },
       properties: [
+        {
+          name: "ohrisk:completeness",
+          value: JSON.stringify(input.completeness ?? buildScanCompleteness({
+            ...input,
+            evidence: input.evidence ?? []
+          }))
+        },
         {
           name: "ohrisk:projectRoot",
           value: "."
@@ -59046,6 +59173,8 @@ function comparisonCompletenessLines(input) {
     `Comparison completeness: ${status}`,
     `Baseline completeness: ${baseline.status} (${baseline.unavailablePackageCount} unavailable packages)`,
     `Current completeness: ${current.status} (${current.unavailablePackageCount} unavailable packages)`,
+    ...baseline.dimensions ? [`Baseline inspection: ${formatScanCompleteness(baseline)}`] : [],
+    ...current.dimensions ? [`Current inspection: ${formatScanCompleteness(current)}`] : [],
     `Partial evidence allowed: ${input.allowPartialEvidence ?? false}`,
     `Evidence gate failed: ${input.evidenceGateFailed ?? false}`
   ];
@@ -59269,6 +59398,7 @@ function renderSarifReport(input) {
           }
         ],
         properties: {
+          ohriskCompleteness: input.completeness ?? buildScanCompleteness(input),
           ohriskWaiverMode: input.waiverMode,
           ohriskActiveFindingCount: input.riskFindings.length,
           ohriskWaivedFindingCount: input.waivedFindings.length,
@@ -62387,16 +62517,6 @@ var HTML_REPORT_CONTENT_SECURITY_POLICY = [
 // src/report/scan-report.ts
 var HTML_DEFERRED_FINGERPRINT_MIN_CHARS = 512;
 var HTML_FINGERPRINT_PREVIEW_CHARS = 240;
-function formatScanCompleteness(completeness) {
-  if (completeness.status === "complete") {
-    return "complete";
-  }
-  const reasons = [
-    completeness.unavailablePackageCount > 0 ? `${completeness.unavailablePackageCount} package evidence source${completeness.unavailablePackageCount === 1 ? "" : "s"} unavailable` : undefined,
-    completeness.skippedRepositoryEntryCount > 0 ? `${completeness.skippedRepositoryEntryCount} repository entr${completeness.skippedRepositoryEntryCount === 1 ? "y" : "ies"} skipped` : undefined
-  ].filter((reason) => reason !== undefined);
-  return `partial (${reasons.join(", ")})`;
-}
 function renderScanReport(input) {
   const summary = buildScanSummary(input);
   const completeness = input.completeness ?? buildScanCompleteness(input);
@@ -62454,6 +62574,7 @@ function renderScanReport(input) {
     `Production only: ${input.prodOnly ? "yes" : "no"}`,
     `Dependencies: ${summary.dependencyGraph.total} total, ${summary.dependencyGraph.direct} direct, ${summary.dependencyGraph.transitive} transitive`,
     ...renderDependencyGraphDiagnostics(input.graph.diagnostics ?? []),
+    ...(input.graph.unresolvedDependencies ?? []).map((item) => `Unresolved dependency [${item.reason}]: ${JSON.stringify(item.from ?? "<root>")} -> ${JSON.stringify(item.name)} (${item.dependencyType})`),
     `Evidence: ${summary.evidence.files} files, ${summary.evidence.warnings} warnings`,
     `Completeness: ${formatScanCompleteness(completeness)}`,
     `Licenses: ${summary.licenses.highConfidence} high-confidence, ${summary.licenses.mediumConfidence} medium-confidence, ${summary.licenses.lowConfidence} low-confidence`,
@@ -63295,6 +63416,7 @@ function renderMarkdownReport2(input, summary) {
     `- Production only: ${formatMarkdownInlineCode(input.prodOnly ? "yes" : "no")}`,
     `- Dependencies: ${formatMarkdownInlineCode(`${summary.dependencyGraph.total} total`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.direct} direct`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.transitive} transitive`)}`,
     ...renderMarkdownDependencyGraphDiagnostics(input.graph.diagnostics ?? []),
+    ...(input.graph.unresolvedDependencies ?? []).map((item) => `- Unresolved dependency ${formatMarkdownInlineCode(item.reason)}: ${formatMarkdownInlineCode(item.from ?? "<root>")} → ${formatMarkdownInlineCode(item.name)} (${item.dependencyType})`),
     `- Evidence: ${formatMarkdownInlineCode(`${summary.evidence.files} files`)}, ${formatMarkdownInlineCode(`${summary.evidence.warnings} warnings`)}`,
     `- Completeness: ${formatMarkdownInlineCode(formatScanCompleteness(input.completeness ?? buildScanCompleteness(input)))}`,
     `- Licenses: ${formatMarkdownInlineCode(`${summary.licenses.highConfidence} high-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.mediumConfidence} medium-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.lowConfidence} low-confidence`)}`,
@@ -69136,6 +69258,9 @@ function productionPath(rootName, nodeId, parents, capacity) {
 }
 function filteredRelationships(graph, nodeIds, prodOnly) {
   return {
+    ...graph.unresolvedDependencies === undefined ? {} : {
+      unresolvedDependencies: graph.unresolvedDependencies.filter((item) => (item.from === undefined || nodeIds.has(item.from)) && (!prodOnly || item.dependencyType !== "development"))
+    },
     ...graph.edges === undefined ? {} : { edges: graph.edges.filter((edge) => nodeIds.has(edge.to) && (edge.from === undefined || nodeIds.has(edge.from)) && (!prodOnly || edge.dependencyType !== "development")) },
     ...graph.unknownDependencyNodeIds === undefined ? {} : {
       unknownDependencyNodeIds: graph.unknownDependencyNodeIds.filter((id) => nodeIds.has(id))
@@ -69370,8 +69495,8 @@ async function runDiff(command, io, signal) {
     baselineFindings,
     currentFindings: current.value.riskFindings
   });
-  const baselineCompleteness = buildScanCompleteness({ evidence: relevantBaselineEvidence });
-  const currentCompleteness = buildScanCompleteness({ evidence: current.value.evidence });
+  const baselineCompleteness = buildScanCompleteness({ evidence: relevantBaselineEvidence, graph: baselineScanGraph, normalizedLicenses: baselineLicenses });
+  const currentCompleteness = buildScanCompleteness({ evidence: current.value.evidence, graph: current.value.graph, normalizedLicenses: current.value.normalizedLicenses });
   const completeness = {
     status: baselineCompleteness.status === "partial" || currentCompleteness.status === "partial" ? "partial" : "complete",
     baseline: baselineCompleteness,
@@ -69569,6 +69694,8 @@ async function runScanAt(input) {
   }
   const completeness = buildScanCompleteness({
     evidence: scanned.value.evidence,
+    graph: scanned.value.graph,
+    normalizedLicenses: scanned.value.normalizedLicenses,
     ...input.repository ? { repository: input.repository } : {}
   });
   const reportInput = {

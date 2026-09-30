@@ -351,8 +351,8 @@ async function runDiff(
     currentFindings: current.value.riskFindings
   });
 
-  const baselineCompleteness = buildScanCompleteness({ evidence: relevantBaselineEvidence });
-  const currentCompleteness = buildScanCompleteness({ evidence: current.value.evidence });
+  const baselineCompleteness = buildScanCompleteness({ evidence: relevantBaselineEvidence, graph: baselineScanGraph, normalizedLicenses: baselineLicenses });
+  const currentCompleteness = buildScanCompleteness({ evidence: current.value.evidence, graph: current.value.graph, normalizedLicenses: current.value.normalizedLicenses });
   const completeness: ComparisonCompleteness = {
     status: baselineCompleteness.status === "partial" || currentCompleteness.status === "partial"
       ? "partial" : "complete",
@@ -597,6 +597,8 @@ async function runScanAt(input: {
 
   const completeness = buildScanCompleteness({
     evidence: scanned.value.evidence,
+    graph: scanned.value.graph,
+    normalizedLicenses: scanned.value.normalizedLicenses,
     ...(input.repository ? { repository: input.repository } : {})
   });
 

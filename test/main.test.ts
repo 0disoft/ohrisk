@@ -18,6 +18,7 @@ import { main, type CliIO } from "../src/cli/main";
 import { createProcessCommandSignal } from "../src/cli/cancellation";
 import { createArtifactCache } from "../src/evidence/cache";
 import { fetchMavenCentralModelPoms } from "../src/evidence/collect";
+import type { ScanCompleteness } from "../src/policy/completeness";
 import { createReportOpener } from "../src/report/open-report";
 import { createError } from "../src/shared/errors";
 import { err, ok } from "../src/shared/result";
@@ -3705,6 +3706,7 @@ describe("main", () => {
       const payload = JSON.parse(stdout.join("\n")) as {
         runs: Array<{
           properties: {
+            ohriskCompleteness: ScanCompleteness;
             ohriskWaiverMode: string;
             ohriskActiveFindingCount: number;
             ohriskWaivedFindingCount: number;
@@ -3727,6 +3729,16 @@ describe("main", () => {
       };
 
       expect(payload.runs[0]?.properties).toEqual({
+        ohriskCompleteness: expect.objectContaining({
+          status: "complete",
+          unavailablePackageCount: 0,
+          skippedRepositoryEntryCount: 0,
+          unresolvedDependencyCount: 0,
+          dimensions: expect.objectContaining({
+            input: expect.objectContaining({ status: "complete" }),
+            evidence: expect.objectContaining({ status: "complete" })
+          })
+        }),
         ohriskWaiverMode: "local",
         ohriskActiveFindingCount: 4,
         ohriskWaivedFindingCount: 1,
@@ -7791,7 +7803,7 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
           skippedRepositoryEntryCount: number;
         };
       };
-      expect(strictPayload.completeness).toEqual({
+      expect(strictPayload.completeness).toMatchObject({
         status: "partial",
         unavailablePackageCount: 1,
         skippedRepositoryEntryCount: 0

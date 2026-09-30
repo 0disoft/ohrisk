@@ -1,4 +1,6 @@
 import path from "node:path";
+import { buildScanCompleteness, type ScanCompleteness } from "../policy/completeness";
+import type { LicenseEvidence } from "../evidence/types";
 
 import type { DependencyEdge, DependencyGraph, DependencyNode } from "../graph/types";
 import { dependencyEdgesForGraph } from "../graph/dependency-edges";
@@ -15,6 +17,8 @@ export type CycloneDxReportInput = {
   riskFindings: RiskFinding[];
   waiverMode: "local" | "ignored";
   repository?: RemoteRepositoryReportSource;
+  evidence?: LicenseEvidence[];
+  completeness?: ScanCompleteness;
 };
 
 type CycloneDxComponent = {
@@ -82,6 +86,12 @@ export function renderCycloneDxReport(input: CycloneDxReportInput): string {
           "bom-ref": "project"
         },
         properties: [
+          {
+            name: "ohrisk:completeness",
+            value: JSON.stringify(input.completeness ?? buildScanCompleteness({
+              ...input, evidence: input.evidence ?? []
+            }))
+          },
           {
             name: "ohrisk:projectRoot",
             value: "."

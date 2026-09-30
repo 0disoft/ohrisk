@@ -13,7 +13,8 @@ import {
   LOCKFILE_MAX_BYTES,
   readInputTextFile
 } from "./read-input-file";
-import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
+import type { DependencyGraph, DependencyNode, DependencyType, UnresolvedDependency } from "./types";
+import { unresolvedDependencyKey, uniqueUnresolvedDependencies } from "./unresolved-dependencies";
 
 type PackageLockPackage = {
   name?: unknown;
@@ -24,6 +25,7 @@ type PackageLockPackage = {
   devDependencies?: unknown;
   optionalDependencies?: unknown;
   peerDependencies?: unknown;
+  peerDependenciesMeta?: unknown;
   dev?: unknown;
   optional?: unknown;
 };
@@ -49,6 +51,7 @@ type PackageLockDependencyEdge = {
   name: string;
   range: string;
   type: DependencyType;
+  optional?: boolean;
 };
 
 type PackageLockRootEntry = {
@@ -162,19 +165,26 @@ export function parsePackageLockText(
   const recordIndex = indexPackageLockRecords(records);
   const traversalStates: PackageLockTraversalState[] = [];
   const pathLimitAffected = new Set<string>();
+  const unresolved = new Map<string, UnresolvedDependency>();
 
   for (const rootEntry of rootEntries) {
     for (const rootDependency of collectRootDependencies(rootEntry.pkg)) {
-      const record = resolvePackageRecord(omitUndefined({
+      const resolution = resolvePackageRecord(omitUndefined({
         recordIndex,
         name: rootDependency.name,
         range: rootDependency.range,
         parentPath: rootEntry.packagePath
       }));
-
-      if (!record) {
+      if ((!resolution || resolution.inferred) && !rootDependency.optional) {
+        addUnresolved(unresolved, {
+          name: rootDependency.name, dependencyType: rootDependency.type,
+          reason: resolution ? "unproven_installation" : "missing_installation"
+        });
+      }
+      if (!resolution || (rootDependency.optional && resolution.inferred)) {
         continue;
       }
+      const record = resolution.record;
 
       traversalStates.push({
         record,
@@ -187,6 +197,8 @@ export function parsePackageLockText(
     }
   }
 
+  collectUnresolvedInstallations(traversalStates, recordIndex, unresolved);
+
   walkDependencies({
     states: traversalStates,
     recordIndex,
@@ -198,6 +210,7 @@ export function parsePackageLockText(
     rootName,
     lockfilePath,
     nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    ...(unresolved.size > 0 ? { unresolvedDependencies: uniqueUnresolvedDependencies([...unresolved.values()]) } : {}),
     diagnostics: pathLimitAffected.size > 0
       ? [{
           code: "dependency_paths_truncated" as const,
@@ -218,9 +231,13 @@ function parsePackageLockV1(input: {
   const rootDependencies = readV1DependencyMap(input.dependencies);
   const referencedRootDependencies = collectReferencedRootV1DependencyNames(rootDependencies);
   const nodeMap = new Map<string, DependencyNode>();
+  const unresolved = new Map<string, UnresolvedDependency>();
 
   for (const [name, dependency] of Object.entries(rootDependencies)) {
     if (!dependency || typeof dependency.version !== "string") {
+      if (dependency?.optional !== true) addUnresolved(unresolved, {
+        name, dependencyType: dependencyTypeForV1Dependency(dependency ?? {}), reason: "missing_installation"
+      });
       continue;
     }
 
@@ -236,6 +253,7 @@ function parsePackageLockV1(input: {
       path: [rootName ?? "<root>"],
       rootDependencies,
       nodeMap,
+      unresolved,
       seen: new Set()
     });
   }
@@ -243,7 +261,8 @@ function parsePackageLockV1(input: {
   return ok(omitUndefined({
     rootName,
     lockfilePath: input.lockfilePath,
-    nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id))
+    nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    ...(unresolved.size > 0 ? { unresolvedDependencies: uniqueUnresolvedDependencies([...unresolved.values()]) } : {})
   }));
 }
 
@@ -386,11 +405,16 @@ function collectRootDependencies(rootPackage: PackageLockPackage | undefined): P
 }
 
 function collectDependencyEdges(pkg: PackageLockPackage): PackageLockDependencyEdge[] {
+  const optional = readDependencyMap(pkg.optionalDependencies);
+  const peers = dependencyEntries(pkg.peerDependencies, "peer").map((edge) => {
+    const metadata = isObjectRecord(pkg.peerDependenciesMeta) ? pkg.peerDependenciesMeta[edge.name] : undefined;
+    return { ...edge, ...(isObjectRecord(metadata) && metadata.optional === true ? { optional: true } : {}) };
+  });
   return [
-    ...dependencyEntries(pkg.dependencies, "production"),
+    ...dependencyEntries(pkg.dependencies, "production").filter((edge) => !Object.hasOwn(optional, edge.name)),
     ...dependencyEntries(pkg.devDependencies, "development"),
-    ...dependencyEntries(pkg.optionalDependencies, "optional"),
-    ...dependencyEntries(pkg.peerDependencies, "peer")
+    ...dependencyEntries(optional, "optional").map((edge) => ({ ...edge, optional: true })),
+    ...peers
   ];
 }
 
@@ -426,7 +450,7 @@ function resolvePackageRecord(input: {
   name: string;
   range: string;
   parentPath?: string;
-}): PackageLockRecord | undefined {
+}): { record: PackageLockRecord; inferred: boolean } | undefined {
   const reference = resolveNpmDependencyReference(input.name, input.range);
   let directory = input.parentPath ?? "";
   while (true) {
@@ -435,17 +459,48 @@ function resolvePackageRecord(input: {
       const candidate = input.recordIndex.byPackagePath.get(
         `${directory ? `${directory}/` : ""}node_modules/${reference.requestedName}`
       );
-      if (candidate) return candidate;
+      if (candidate) return { record: candidate, inferred: false };
     }
     if (!directory) break;
     const separator = directory.lastIndexOf("/");
     directory = separator < 0 ? "" : directory.slice(0, separator);
   }
 
-  return input.recordIndex.byNameAndVersion.get(
+  const inferred = input.recordIndex.byNameAndVersion.get(
       `${reference.lookupName}\0${reference.lookupRange}`
     )
     ?? onlyPackageRecordWithName(input.recordIndex, reference.lookupName);
+  return inferred ? { record: inferred, inferred: true } : undefined;
+}
+
+function addUnresolved(target: Map<string, UnresolvedDependency>, item: UnresolvedDependency): void {
+  target.set(unresolvedDependencyKey(item), item);
+}
+
+/** Traverse installation records independently of the bounded display-path walk. */
+function collectUnresolvedInstallations(
+  roots: readonly PackageLockTraversalState[], index: PackageLockRecordIndex,
+  unresolved: Map<string, UnresolvedDependency>
+): void {
+  const queue = roots.map((state) => ({ record: state.record, type: state.dependencyType }));
+  const seen = new Set<string>();
+  for (let cursor = 0; cursor < queue.length; cursor++) {
+    const state = queue[cursor]!;
+    const key = JSON.stringify([state.record.packagePath, state.type]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    for (const edge of state.record.dependencies) {
+      const resolution = resolvePackageRecord({
+        recordIndex: index, name: edge.name, range: edge.range, parentPath: state.record.packagePath
+      });
+      const type = dependencyTypeForChildEdge(state.type, edge.type);
+      if ((!resolution || resolution.inferred) && !edge.optional) addUnresolved(unresolved, {
+        from: state.record.id, name: edge.name, dependencyType: type,
+        reason: resolution ? "unproven_installation" : "missing_installation"
+      });
+      if (resolution && !(edge.optional && resolution.inferred)) queue.push({ record: resolution.record, type });
+    }
+  }
 }
 
 function onlyPackageRecordWithName(
@@ -551,15 +606,16 @@ function walkDependencies(input: {
       if (!child) {
         continue;
       }
-      const childRecord = resolvePackageRecord({
+      const resolution = resolvePackageRecord({
         recordIndex: input.recordIndex,
         name: child.name,
         range: child.range,
         parentPath: state.record.packagePath
       });
-      if (!childRecord) {
+      if (!resolution || (child.optional && resolution.inferred)) {
         continue;
       }
+      const childRecord = resolution.record;
 
       stack.push({
         record: childRecord,
@@ -582,6 +638,7 @@ function walkV1Dependency(input: {
   rootDependencies: Record<string, PackageLockV1Dependency>;
   nodeMap: Map<string, DependencyNode>;
   seen: Set<string>;
+  unresolved: Map<string, UnresolvedDependency>;
 }): void {
   if (typeof input.dependency.version !== "string") {
     return;
@@ -628,7 +685,12 @@ function walkV1Dependency(input: {
 
   for (const childName of childNames) {
     const child = nestedDependencies[childName] ?? input.rootDependencies[childName];
-    if (!child) {
+    if (!child || typeof child.version !== "string") {
+      if (child?.optional !== true) addUnresolved(input.unresolved, {
+        from: id, name: childName,
+        dependencyType: dependencyTypeForChildEdge(input.dependencyType, child ? dependencyTypeForV1Dependency(child) : "production"),
+        reason: "missing_installation"
+      });
       continue;
     }
 
@@ -643,6 +705,7 @@ function walkV1Dependency(input: {
       path: nextPath,
       rootDependencies: input.rootDependencies,
       nodeMap: input.nodeMap,
+      unresolved: input.unresolved,
       seen: nextSeen
     });
   }

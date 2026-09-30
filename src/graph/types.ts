@@ -85,6 +85,14 @@ export type DependencyEdge = {
   origins?: DependencyOrigin[];
 };
 
+export type UnresolvedDependency = {
+  /** Omitted for a request from a project or workspace root. */
+  from?: string;
+  name: string;
+  dependencyType: DependencyType;
+  reason: "missing_installation" | "unproven_installation";
+};
+
 export type DependencyGraph = {
   rootName?: string;
   lockfilePath: string;
@@ -96,6 +104,7 @@ export type DependencyGraph = {
   /** Nodes whose outgoing relationships are not known to be exhaustive. */
   unknownDependencyNodeIds?: string[];
   rootDependenciesUnknown?: boolean;
+  unresolvedDependencies?: UnresolvedDependency[];
   embeddedEvidence?: LicenseEvidence[];
   warnings?: string[];
   diagnostics?: DependencyGraphDiagnostic[];

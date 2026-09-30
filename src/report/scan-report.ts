@@ -1,4 +1,4 @@
-import { buildScanCompleteness, type ScanCompleteness } from "../policy/completeness";
+import { buildScanCompleteness, formatScanCompleteness, type ScanCompleteness } from "../policy/completeness";
 export { buildScanCompleteness };
 export type { ScanCompleteness };
 import { omitUndefined } from "../shared/object";
@@ -101,21 +101,6 @@ export type RemoteRepositoryReportSource = {
   };
 };
 
-function formatScanCompleteness(completeness: ScanCompleteness): string {
-  if (completeness.status === "complete") {
-    return "complete";
-  }
-  const reasons = [
-    completeness.unavailablePackageCount > 0
-      ? `${completeness.unavailablePackageCount} package evidence source${completeness.unavailablePackageCount === 1 ? "" : "s"} unavailable`
-      : undefined,
-    completeness.skippedRepositoryEntryCount > 0
-      ? `${completeness.skippedRepositoryEntryCount} repository entr${completeness.skippedRepositoryEntryCount === 1 ? "y" : "ies"} skipped`
-      : undefined
-  ].filter((reason): reason is string => reason !== undefined);
-  return `partial (${reasons.join(", ")})`;
-}
-
 export function renderScanReport(input: ScanReportInput): string {
   const summary = buildScanSummary(input);
   const completeness = input.completeness ?? buildScanCompleteness(input);
@@ -177,6 +162,8 @@ export function renderScanReport(input: ScanReportInput): string {
     `Production only: ${input.prodOnly ? "yes" : "no"}`,
     `Dependencies: ${summary.dependencyGraph.total} total, ${summary.dependencyGraph.direct} direct, ${summary.dependencyGraph.transitive} transitive`,
     ...renderDependencyGraphDiagnostics(input.graph.diagnostics ?? []),
+    ...(input.graph.unresolvedDependencies ?? []).map((item) =>
+      `Unresolved dependency [${item.reason}]: ${JSON.stringify(item.from ?? "<root>")} -> ${JSON.stringify(item.name)} (${item.dependencyType})`),
     `Evidence: ${summary.evidence.files} files, ${summary.evidence.warnings} warnings`,
     `Completeness: ${formatScanCompleteness(completeness)}`,
     `Licenses: ${summary.licenses.highConfidence} high-confidence, ${summary.licenses.mediumConfidence} medium-confidence, ${summary.licenses.lowConfidence} low-confidence`,
@@ -1227,6 +1214,8 @@ function renderMarkdownReport(
     `- Production only: ${formatMarkdownInlineCode(input.prodOnly ? "yes" : "no")}`,
     `- Dependencies: ${formatMarkdownInlineCode(`${summary.dependencyGraph.total} total`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.direct} direct`)}, ${formatMarkdownInlineCode(`${summary.dependencyGraph.transitive} transitive`)}`,
     ...renderMarkdownDependencyGraphDiagnostics(input.graph.diagnostics ?? []),
+    ...(input.graph.unresolvedDependencies ?? []).map((item) =>
+      `- Unresolved dependency ${formatMarkdownInlineCode(item.reason)}: ${formatMarkdownInlineCode(item.from ?? "<root>")} → ${formatMarkdownInlineCode(item.name)} (${item.dependencyType})`),
     `- Evidence: ${formatMarkdownInlineCode(`${summary.evidence.files} files`)}, ${formatMarkdownInlineCode(`${summary.evidence.warnings} warnings`)}`,
     `- Completeness: ${formatMarkdownInlineCode(formatScanCompleteness(input.completeness ?? buildScanCompleteness(input)))}`,
     `- Licenses: ${formatMarkdownInlineCode(`${summary.licenses.highConfidence} high-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.mediumConfidence} medium-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.lowConfidence} low-confidence`)}`,

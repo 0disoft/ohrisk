@@ -232,6 +232,11 @@ function productionPath(rootName: string, nodeId: string, parents: Map<string, s
 
 function filteredRelationships(graph: DependencyGraph, nodeIds: Set<string>, prodOnly: boolean): Partial<DependencyGraph> {
   return {
+    ...(graph.unresolvedDependencies === undefined ? {} : {
+      unresolvedDependencies: graph.unresolvedDependencies.filter((item) =>
+        (item.from === undefined || nodeIds.has(item.from))
+        && (!prodOnly || item.dependencyType !== "development"))
+    }),
     ...(graph.edges === undefined ? {} : { edges: graph.edges.filter((edge) =>
       nodeIds.has(edge.to) && (edge.from === undefined || nodeIds.has(edge.from))
       && (!prodOnly || edge.dependencyType !== "development")) }),

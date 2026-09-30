@@ -70,8 +70,8 @@ configured artifact cache and network policy.
 - `--profile saas|distributed-app` selects the shipping model, with organization policy overrides applied afterward.
 - `--prod` narrows scans to production-relevant dependencies when supported by the input ecosystem.
 - `--fail-on unknown|review|high|low` controls the `ci` and `diff` failure threshold.
-- `ci` fails when package evidence or repository coverage is partial, and
-  `diff --fail-on` fails when either side's evidence is partial.
+- `ci` fails when package evidence, repository coverage, or required dependency
+  resolution is partial; `diff --fail-on` applies that rule to either side.
   `--allow-partial-evidence` is an explicit fail-open override for environments
   that intentionally accept that reduced assurance.
 - `--json`, `--markdown`, `--html`, `--sarif`, and `--cyclonedx` select report formats.
@@ -251,9 +251,14 @@ the current lockfile path to exist in that ref.
 comparison while still exiting `0`. `diff --fail-on <severity>` exits `1` when
 introduced findings meet the threshold, and it also exits `1` when either the
 baseline or current side has partial evidence, unless `--allow-partial-evidence`
-is passed. A side is partial when any collected package evidence comes from an
-unavailable source; a finding whose license is unknown but whose evidence was
-collected is not itself partial. JSON, terminal, and Markdown output report the
+is passed. A side is partial when package evidence is unavailable or a required
+dependency installation is missing or unproven. npm name-based fallback is
+retained as potentially relevant evidence but reports `unproven_installation`;
+it does not prove the requested installation. Absent optional dependencies and
+explicitly optional peers are legitimate omissions. A finding whose license is
+unknown but whose evidence was collected is not itself partial. Inspection
+dimensions separately record input, graph, evidence, and license identification.
+JSON, terminal, and Markdown output report the
 comparison `completeness` with `baseline` and `current` sub-status, plus
 `evidenceGateFailed` and `allowPartialEvidence`.
 

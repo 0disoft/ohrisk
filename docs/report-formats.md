@@ -16,6 +16,23 @@ includes different levels of waiver detail.
 
 ## JSON schema versioning
 
+Scan and each side of a diff share the same inspection completeness contract.
+Alongside the existing status and evidence/repository counters, candidate schema
+3.6 adds `unresolvedDependencyCount`, safe `unresolvedDependencies` records, and
+`dimensions` for input coverage, dependency relationships, evidence collection,
+and license identification. Missing required installations and name-based
+recovery without an installation path make a result partial. npm optional
+dependencies and explicitly optional peers may be absent without making it
+partial. Development-only unresolved requests are excluded by production scans.
+
+Unknown relationships are reported separately from proven missing requests;
+available evidence whose license is unidentified is also separate from a
+collection failure. Display-path truncation alone does not make the inspection
+partial. SARIF run properties expose this object as `ohriskCompleteness`, and
+CycloneDX metadata carries the same JSON object in `ohrisk:completeness`.
+Source URL specifications and credentials are not included in unresolved
+request records.
+
 When merged inputs declare conflicting artifacts for one package URL, Ohrisk
 retains the source declarations internally and does not collect from an arbitrary
 location. Evidence is marked unavailable and JSON includes the structured
@@ -91,9 +108,10 @@ for consumers that already use them.
 
 Schema 3.6 adds optional diff completeness fields. `diff` JSON may include
 `completeness` with `status`, `baseline`, and `current` sub-status, plus
-`evidenceGateFailed` and `allowPartialEvidence`. These fields report evidence
-collection rather than full dependency-graph coverage; each side reports
-`status`, `unavailablePackageCount`, and `skippedRepositoryEntryCount`. The
+`evidenceGateFailed` and `allowPartialEvidence`. Each side reports `status`,
+unavailable-package and skipped-repository-entry counts, unresolved requests,
+and separate inspection dimensions. Unknown graph coverage remains visible
+without equating it with a proven missing installation. The
 `ohrisk-summary` companion accepts both 3.5.0 and 3.6.0 scan and diff reports and
 reports the diff completeness status and gate failure.
 
@@ -156,8 +174,8 @@ Structured output for scripting and CI automation.
 - **Input changes**: diff JSON includes `lockfileChanges.current`, `baseline`, `added`, and `removed` arrays with project-relative paths and lockfile kinds
 - **Diff classification**: `newFindings`, `changedFindings`, and `resolvedFindings` are separate; `findings` remains the combined new-and-changed threshold set
 - **Evidence diagnostics**: scan JSON groups package/file/warning counts by `local`, `registry`, `sbom`, `tarball`, and `unavailable`, with stable diagnostic codes and typed dependency-graph truncation diagnostics
-- **Scan completeness**: scan JSON reports `complete` or `partial` plus unavailable-package and skipped-repository-entry counts; CI rejects `partial` by default independently of the risk threshold
-- **Diff completeness**: diff JSON may include `completeness` with `status`, `baseline`, and `current` sub-status, plus `evidenceGateFailed` and `allowPartialEvidence`; these fields reflect evidence collection rather than graph coverage, and `diff --fail-on` fails on partial evidence unless `--allow-partial-evidence` is set
+- **Scan completeness**: scan JSON reports `complete` or `partial` with evidence, repository and unresolved-request counters and inspection dimensions; CI rejects `partial` by default independently of the risk threshold
+- **Diff completeness**: diff JSON may include `completeness` with `status`, `baseline`, and `current` inspection state, plus `evidenceGateFailed` and `allowPartialEvidence`; `diff --fail-on` rejects unavailable evidence or unresolved required installations unless `--allow-partial-evidence` is set
 - **Python license provenance**: classifier-derived values use `<source> classifier: <expression>` evidence. Conflicting recognized license-file expressions add `conflicting-evidence`, produce unknown severity, and preserve every conflicting file match for review.
 - **Metadata/file reconciliation**: parseable package metadata and recognized license files remain separate assertions. Any recognized file expression outside the metadata choices adds `conflicting-evidence`, preserves both claims, and produces unknown severity. Multiple files do not conflict when every expression is covered by one metadata classifier choice set or by one explicit license-file choice expression. Deprecated GNU IDs compare against their current `-only` or `-or-later` equivalents without creating a false conflict. Canonical GNU or MPL version text is compatible with metadata granting that version or later, but explicit file-level broader permission still conflicts with narrower metadata. SPDX identifier lines wrapped in Markdown inline-code delimiters are normalized before parsing. Standard MIT notice variations and explicit BSD one-clause, BSD three-clause, and bzip2 text remain distinct expressions.
 - **Bundled-component reconciliation**: when a primary `LICENSE` or `LICENCE` file has a qualified sibling such as `LICENSE.libyaml`, `LICENSE_zstd.txt`, `LICENSE.thirdparty`, `LICENSE.vendor`, or `LICENSE.component`, or a sibling `THIRD_PARTY_LICENSES*` inventory, the additional file is cumulative component evidence. Its recognized expression is combined with the package expression using SPDX `AND`; document extensions and known package-license alternatives such as `LICENSE-MIT`, `LICENSE-APACHE`, and `LICENSE-BSD-3-Clause` remain ordinary package-license evidence.

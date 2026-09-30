@@ -1,4 +1,5 @@
 import path from "node:path";
+import { buildScanCompleteness } from "../policy/completeness";
 
 import { OHRISK_VERSION } from "../cli/version";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
@@ -110,6 +111,7 @@ export function renderSarifReport(input: ScanReportInput): string {
             }
           ],
           properties: {
+            ohriskCompleteness: input.completeness ?? buildScanCompleteness(input),
             ohriskWaiverMode: input.waiverMode,
             ohriskActiveFindingCount: input.riskFindings.length,
             ohriskWaivedFindingCount: input.waivedFindings.length,

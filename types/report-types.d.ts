@@ -322,6 +322,28 @@ export type ScanCompleteness = {
   status: "complete" | "partial";
   unavailablePackageCount: number;
   skippedRepositoryEntryCount: number;
+  unresolvedDependencyCount?: number;
+  unresolvedDependencies?: UnresolvedDependency[];
+  dimensions?: ScanCompletenessDimensions;
+};
+
+export type UnresolvedDependency = {
+  from?: string;
+  name: string;
+  dependencyType: RiskDependencyType;
+  reason: "missing_installation" | "unproven_installation";
+};
+
+export type ScanCompletenessDimensions = {
+  input: { status: "complete" | "partial"; skippedRepositoryEntryCount: number };
+  graph: {
+    status: "complete" | "partial" | "unknown";
+    unresolvedDependencyCount: number;
+    unknownRelationshipNodeCount: number;
+    rootRelationshipsUnknown: boolean;
+  };
+  evidence: { status: "complete" | "partial"; unavailablePackageCount: number; artifactConflictPackageCount: number };
+  licenses: { status: "identified" | "unidentified" | "not-assessed"; unidentifiedPackageCount: number };
 };
 
 export type ThresholdOutcome = {

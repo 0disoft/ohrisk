@@ -3,6 +3,177 @@
   "$id": "urn:ohrisk:schema:common:3.6.0",
   "title": "Ohrisk report common definitions",
   "$defs": {
+    "unresolvedDependency": {
+      "type": "object",
+      "required": [
+        "name",
+        "dependencyType",
+        "reason"
+      ],
+      "properties": {
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dependencyType": {
+          "$ref": "urn:ohrisk:schema:common:3.6.0#/$defs/riskDependencyType"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "missing_installation",
+            "unproven_installation"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "scanCompletenessDimensions": {
+      "type": "object",
+      "required": [
+        "input",
+        "graph",
+        "evidence",
+        "licenses"
+      ],
+      "properties": {
+        "input": {
+          "type": "object",
+          "required": [
+            "status",
+            "skippedRepositoryEntryCount"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "complete",
+                "partial"
+              ]
+            },
+            "skippedRepositoryEntryCount": {
+              "$ref": "urn:ohrisk:schema:common:3.6.0#/$defs/nonNegativeInteger"
+            }
+          },
+          "additionalProperties": false
+        },
+        "graph": {
+          "type": "object",
+          "required": [
+            "status",
+            "unresolvedDependencyCount",
+            "unknownRelationshipNodeCount",
+            "rootRelationshipsUnknown"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "complete",
+                "partial",
+                "unknown"
+              ]
+            },
+            "unresolvedDependencyCount": {
+              "$ref": "urn:ohrisk:schema:common:3.6.0#/$defs/nonNegativeInteger"
+            },
+            "unknownRelationshipNodeCount": {
+              "$ref": "urn:ohrisk:schema:common:3.6.0#/$defs/nonNegativeInteger"
+            },
+            "rootRelationshipsUnknown": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "evidence": {
+          "type": "object",
+          "required": [
+            "status",
+            "unavailablePackageCount",
+            "artifactConflictPackageCount"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "complete",
+                "partial"
+              ]
+            },
+            "unavailablePackageCount": {
+              "$ref": "urn:ohrisk:schema:common:3.6.0#/$defs/nonNegativeInteger"
+            },
+            "artifactConflictPackageCount": {
+              "$ref": "urn:ohrisk:schema:common:3.6.0#/$defs/nonNegativeInteger"
+            }
+          },
+          "additionalProperties": false
+        },
+        "licenses": {
+          "type": "object",
+          "required": [
+            "status",
+            "unidentifiedPackageCount"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "identified",
+                "unidentified",
+                "not-assessed"
+              ]
+            },
+            "unidentifiedPackageCount": {
+              "$ref": "urn:ohrisk:schema:common:3.6.0#/$defs/nonNegativeInteger"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "scanCompleteness": {
+      "type": "object",
+      "required": [
+        "status",
+        "unavailablePackageCount",
+        "skippedRepositoryEntryCount"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "partial"
+          ]
+        },
+        "unavailablePackageCount": {
+          "$ref": "urn:ohrisk:schema:common:3.6.0#/$defs/nonNegativeInteger"
+        },
+        "skippedRepositoryEntryCount": {
+          "$ref": "urn:ohrisk:schema:common:3.6.0#/$defs/nonNegativeInteger"
+        },
+        "unresolvedDependencyCount": {
+          "$ref": "urn:ohrisk:schema:common:3.6.0#/$defs/nonNegativeInteger"
+        },
+        "unresolvedDependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:ohrisk:schema:common:3.6.0#/$defs/unresolvedDependency"
+          }
+        },
+        "dimensions": {
+          "$ref": "urn:ohrisk:schema:common:3.6.0#/$defs/scanCompletenessDimensions"
+        }
+      },
+      "additionalProperties": false
+    },
     "usageProfile": {
       "type": "string",
       "enum": [

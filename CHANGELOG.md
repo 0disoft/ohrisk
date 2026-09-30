@@ -2,6 +2,16 @@
 
 ## 1.16.0 - Unreleased
 
+- npm v1 and modern lockfiles retain missing required dependency requests and
+  mark name-based installation recovery unproven. These requests survive graph
+  merging, input reordering, and bounded display paths, and make CI and gated
+  diffs partial even when no package evidence fetch failed. Optional dependencies
+  and optional peers may be absent; production scans exclude development-only
+  missing requests.
+- Inspection completeness separates input, dependency relationships, evidence
+  collection, and license identification. JSON scan and diff sides share the
+  same contract, with matching state in SARIF and CycloneDX metadata.
+
 - Merged package artifacts no longer select the first input when locations or
   checksums conflict. Unresolved identities are unavailable evidence and produce
   a structured `artifact_identity_conflict` diagnostic, so strict CI and diff

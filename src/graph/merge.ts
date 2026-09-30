@@ -4,6 +4,7 @@ import { packageUrl } from "./package-url";
 import { disambiguatePackageRecordIds } from "./package-identity";
 import { dependencyEdgesForGraph } from "./dependency-edges";
 import { mergeArtifactIdentity } from "./artifact-identity";
+import { uniqueUnresolvedDependencies } from "./unresolved-dependencies";
 import type {
   DependencyGraph,
   DependencyEdge,
@@ -36,6 +37,7 @@ export function mergeDependencyGraphs(graphs: SourcedDependencyGraph[]): Depende
   const edgesByKey = new Map<string, DependencyEdge>();
   const unknownDependencyNodeIds = new Set<string>();
   let rootDependenciesUnknown = false;
+  const unresolvedDependencies: NonNullable<DependencyGraph["unresolvedDependencies"]> = [];
   for (const node of disambiguatePackageRecordIds(graphs.flatMap((item) => item.graph.nodes))) {
     const purl = packageUrl(node);
     if (!canonicalIdByPurl.has(purl)) {
@@ -54,6 +56,10 @@ export function mergeDependencyGraphs(graphs: SourcedDependencyGraph[]): Depende
       lockfileKind: item.source.lockfileKind,
       lockfilePath: item.source.lockfilePath
     };
+    unresolvedDependencies.push(...(item.graph.unresolvedDependencies ?? []).map((dependency) => ({
+      ...dependency,
+      ...(dependency.from === undefined ? {} : { from: idMap.get(dependency.from) ?? dependency.from })
+    })));
 
     rootDependenciesUnknown ||= item.graph.edges === undefined || item.graph.rootDependenciesUnknown === true;
     for (const id of item.graph.edges === undefined
@@ -119,6 +125,7 @@ export function mergeDependencyGraphs(graphs: SourcedDependencyGraph[]): Depende
     ...(unknownDependencyNodeIds.size > 0
       ? { unknownDependencyNodeIds: [...unknownDependencyNodeIds].sort() } : {}),
     ...(rootDependenciesUnknown ? { rootDependenciesUnknown: true } : {}),
+    ...(unresolvedDependencies.length > 0 ? { unresolvedDependencies: uniqueUnresolvedDependencies(unresolvedDependencies) } : {}),
     ...(evidenceByPackageId.size > 0
       ? { embeddedEvidence: [...evidenceByPackageId.values()].sort((left, right) =>
           left.packageId.localeCompare(right.packageId)) }

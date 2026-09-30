@@ -30,7 +30,13 @@ The action's `fail-on` input is empty by default. With the default `command: ci`
 the action forwards no threshold flag and the CLI keeps its own `high` default.
 With `command: scan`, the same empty default avoids passing an unsupported
 threshold.
-CI separately fails when package evidence or repository coverage is partial.
+CI separately fails when package evidence, repository coverage, or required
+dependency installation resolution is partial. A missing dependency request
+cannot pass merely because there were no packages from which to collect evidence.
+The JSON completeness dimensions separate input, graph, evidence, and license
+identification; unknown graph relationships or an unidentified license do not
+alone imply a failed collection. npm optional dependencies and optional peers
+may be absent, and production scans exclude development-only missing requests.
 Set `allow-partial-evidence: "true"` only when that reduced assurance is an
 intentional, separately reviewed exception.
 

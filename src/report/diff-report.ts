@@ -3,7 +3,7 @@ import type { RiskDiff } from "../diff/compare";
 import { NOTICE_ACTION } from "../policy/evaluate";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
 import type { UsageProfile } from "../policy/profiles";
-import type { ComparisonCompleteness } from "../policy/completeness";
+import { formatScanCompleteness, type ComparisonCompleteness } from "../policy/completeness";
 import type { PolicyConfigSummary } from "../policy/config";
 import {
   formatMarkdownInlineCode,
@@ -121,6 +121,8 @@ function comparisonCompletenessLines(input: DiffReportInput): string[] {
     `Comparison completeness: ${status}`,
     `Baseline completeness: ${baseline.status} (${baseline.unavailablePackageCount} unavailable packages)`,
     `Current completeness: ${current.status} (${current.unavailablePackageCount} unavailable packages)`,
+    ...(baseline.dimensions ? [`Baseline inspection: ${formatScanCompleteness(baseline)}`] : []),
+    ...(current.dimensions ? [`Current inspection: ${formatScanCompleteness(current)}`] : []),
     `Partial evidence allowed: ${input.allowPartialEvidence ?? false}`,
     `Evidence gate failed: ${input.evidenceGateFailed ?? false}`
   ];
