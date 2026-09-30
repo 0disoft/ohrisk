@@ -2,6 +2,11 @@
 
 ## 1.16.0 - Unreleased
 
+- Held-out release evaluation requires reviewed SPDX semantics, choices,
+  exceptions, evidence signals, and package/component scope in addition to
+  severity and confidence. Reports distinguish semantic mistakes, risk under-
+  and over-classification, and decisions deferred for insufficient evidence.
+
 - npm, pnpm, and uv source edges and reachable package records survive bounded
   display-path truncation. Independent source traversal retains cycles and
   scoped relationships, reports missing pnpm/uv records, and fails explicitly

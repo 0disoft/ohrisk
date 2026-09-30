@@ -5,7 +5,7 @@
     "rationale": "An exact SPDX BSD-2-Clause declaration is a permissive distributed-application case.",
     "evidence": { "metadataLicense": "BSD-2-Clause", "metadataSource": "held-out metadata", "files": [], "source": "tarball", "warnings": [] },
     "profile": "distributed-app",
-    "expected": { "severity": "low", "confidence": "high" },
+    "expected": {"severity":"low","confidence":"high","license":{"expression":"BSD-2-Clause","choices":["BSD-2-Clause"],"joiner":"single","exceptions":[],"signals":[],"packageExpression":"BSD-2-Clause","componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
@@ -14,7 +14,7 @@
     "rationale": "An exact SPDX ISC declaration provides a second permissive-license family outside the tuning corpus.",
     "evidence": { "metadataLicense": "ISC", "metadataSource": "held-out metadata", "files": [], "source": "tarball", "warnings": [] },
     "profile": "distributed-app",
-    "expected": { "severity": "low", "confidence": "high" },
+    "expected": {"severity":"low","confidence":"high","license":{"expression":"ISC","choices":["ISC"],"joiner":"single","exceptions":[],"signals":[],"packageExpression":"ISC","componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
@@ -23,7 +23,7 @@
     "rationale": "An exact SPDX Zlib declaration checks a permissive license not represented by the release corpus shards.",
     "evidence": { "metadataLicense": "Zlib", "metadataSource": "held-out metadata", "files": [], "source": "tarball", "warnings": [] },
     "profile": "distributed-app",
-    "expected": { "severity": "low", "confidence": "high" },
+    "expected": {"severity":"low","confidence":"high","license":{"expression":"Zlib","choices":["Zlib"],"joiner":"single","exceptions":[],"signals":[],"packageExpression":"Zlib","componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
@@ -32,7 +32,7 @@
     "rationale": "The zero-clause BSD identifier checks that numeric SPDX identifiers remain ordinary permissive declarations.",
     "evidence": { "metadataLicense": "0BSD", "metadataSource": "held-out metadata", "files": [], "source": "tarball", "warnings": [] },
     "profile": "distributed-app",
-    "expected": { "severity": "low", "confidence": "high" },
+    "expected": {"severity":"low","confidence":"high","license":{"expression":"0BSD","choices":["0BSD"],"joiner":"single","exceptions":[],"signals":[],"packageExpression":"0BSD","componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
@@ -41,7 +41,7 @@
     "rationale": "An exact CC0-1.0 declaration checks public-domain dedication handling without file-text recognition.",
     "evidence": { "metadataLicense": "CC0-1.0", "metadataSource": "held-out metadata", "files": [], "source": "tarball", "warnings": [] },
     "profile": "distributed-app",
-    "expected": { "severity": "low", "confidence": "high" },
+    "expected": {"severity":"low","confidence":"high","license":{"expression":"CC0-1.0","choices":["CC0-1.0"],"joiner":"single","exceptions":[],"signals":[],"packageExpression":"CC0-1.0","componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
@@ -50,7 +50,7 @@
     "rationale": "GPL-2.0-only is a restrictive copyleft declaration for a distributed application profile.",
     "evidence": { "metadataLicense": "GPL-2.0-only", "metadataSource": "held-out metadata", "files": [], "source": "tarball", "warnings": [] },
     "profile": "distributed-app",
-    "expected": { "severity": "high", "confidence": "high" },
+    "expected": {"severity":"high","confidence":"high","license":{"expression":"GPL-2.0-only","choices":["GPL-2.0-only"],"joiner":"single","exceptions":[],"signals":[],"packageExpression":"GPL-2.0-only","componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
@@ -59,7 +59,7 @@
     "rationale": "GPL-3.0-or-later checks the restrictive distributed profile with an or-later SPDX identifier.",
     "evidence": { "metadataLicense": "GPL-3.0-or-later", "metadataSource": "held-out metadata", "files": [], "source": "tarball", "warnings": [] },
     "profile": "distributed-app",
-    "expected": { "severity": "high", "confidence": "high" },
+    "expected": {"severity":"high","confidence":"high","license":{"expression":"GPL-3.0-or-later","choices":["GPL-3.0-or-later"],"joiner":"single","exceptions":[],"signals":[],"packageExpression":"GPL-3.0-or-later","componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
@@ -68,7 +68,7 @@
     "rationale": "AGPL-3.0-or-later checks network copyleft treatment for the SaaS profile.",
     "evidence": { "metadataLicense": "AGPL-3.0-or-later", "metadataSource": "held-out metadata", "files": [], "source": "tarball", "warnings": [] },
     "profile": "saas",
-    "expected": { "severity": "high", "confidence": "high" },
+    "expected": {"severity":"high","confidence":"high","license":{"expression":"AGPL-3.0-or-later","choices":["AGPL-3.0-or-later"],"joiner":"single","exceptions":[],"signals":[],"packageExpression":"AGPL-3.0-or-later","componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
@@ -77,7 +77,7 @@
     "rationale": "SSPL-1.0 checks a source-available service restriction under the SaaS profile.",
     "evidence": { "metadataLicense": "SSPL-1.0", "metadataSource": "held-out metadata", "files": [], "source": "tarball", "warnings": [] },
     "profile": "saas",
-    "expected": { "severity": "high", "confidence": "high" },
+    "expected": {"severity":"high","confidence":"high","license":{"expression":"SSPL-1.0","choices":["SSPL-1.0"],"joiner":"single","exceptions":[],"signals":["commercial-restriction"],"packageExpression":"SSPL-1.0","componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
@@ -86,7 +86,7 @@
     "rationale": "BUSL-1.1 checks a time-delayed source-available license under commercial SaaS use.",
     "evidence": { "metadataLicense": "BUSL-1.1", "metadataSource": "held-out metadata", "files": [], "source": "tarball", "warnings": [] },
     "profile": "saas",
-    "expected": { "severity": "high", "confidence": "high" },
+    "expected": {"severity":"high","confidence":"high","license":{"expression":"BUSL-1.1","choices":["BUSL-1.1"],"joiner":"single","exceptions":[],"signals":["commercial-restriction"],"packageExpression":"BUSL-1.1","componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
@@ -95,7 +95,7 @@
     "rationale": "Elastic-2.0 checks explicit managed-service restrictions under the SaaS profile.",
     "evidence": { "metadataLicense": "Elastic-2.0", "metadataSource": "held-out metadata", "files": [], "source": "tarball", "warnings": [] },
     "profile": "saas",
-    "expected": { "severity": "high", "confidence": "high" },
+    "expected": {"severity":"high","confidence":"high","license":{"expression":"Elastic-2.0","choices":["Elastic-2.0"],"joiner":"single","exceptions":[],"signals":[],"packageExpression":"Elastic-2.0","componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
@@ -104,7 +104,7 @@
     "rationale": "An explicit UNLICENSED declaration withholds permission and must remain high risk for distribution.",
     "evidence": { "packageJsonLicense": "UNLICENSED", "files": [], "source": "tarball", "warnings": [] },
     "profile": "distributed-app",
-    "expected": { "severity": "high", "confidence": "high" },
+    "expected": {"severity":"high","confidence":"high","license":{"expression":"UNLICENSED","choices":["UNLICENSED"],"joiner":"single","exceptions":[],"signals":[],"packageExpression":"UNLICENSED","componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
@@ -113,7 +113,7 @@
     "rationale": "An explicit OR expression permits the MIT branch instead of imposing the GPL branch.",
     "evidence": { "metadataLicense": "MIT OR GPL-2.0-only", "metadataSource": "held-out metadata", "files": [], "source": "tarball", "warnings": [] },
     "profile": "distributed-app",
-    "expected": { "severity": "low", "confidence": "high" },
+    "expected": {"severity":"low","confidence":"high","license":{"expression":"MIT OR GPL-2.0-only","choices":["MIT","GPL-2.0-only"],"joiner":"or","exceptions":[],"signals":[],"packageExpression":"MIT OR GPL-2.0-only","componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
@@ -122,7 +122,7 @@
     "rationale": "An explicit AND expression requires both MIT and GPL obligations for distribution.",
     "evidence": { "metadataLicense": "MIT AND GPL-2.0-only", "metadataSource": "held-out metadata", "files": [], "source": "tarball", "warnings": [] },
     "profile": "distributed-app",
-    "expected": { "severity": "high", "confidence": "high" },
+    "expected": {"severity":"high","confidence":"high","license":{"expression":"MIT AND GPL-2.0-only","choices":["MIT","GPL-2.0-only"],"joiner":"and","exceptions":[],"signals":[],"packageExpression":"MIT AND GPL-2.0-only","componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
@@ -131,7 +131,7 @@
     "rationale": "Apache-2.0 with the LLVM exception remains a permissive exception-bearing expression.",
     "evidence": { "metadataLicense": "Apache-2.0 WITH LLVM-exception", "metadataSource": "held-out metadata", "files": [], "source": "tarball", "warnings": [] },
     "profile": "distributed-app",
-    "expected": { "severity": "low", "confidence": "high" },
+    "expected": {"severity":"low","confidence":"high","license":{"expression":"Apache-2.0 WITH LLVM-exception","choices":["Apache-2.0"],"joiner":"single","exceptions":["LLVM-exception"],"signals":[],"packageExpression":"Apache-2.0 WITH LLVM-exception","componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
@@ -140,16 +140,16 @@
     "rationale": "GPL-2.0-only with the Classpath exception still requires an explicit restrictive-license review for distribution.",
     "evidence": { "metadataLicense": "GPL-2.0-only WITH Classpath-exception-2.0", "metadataSource": "held-out metadata", "files": [], "source": "tarball", "warnings": [] },
     "profile": "distributed-app",
-    "expected": { "severity": "review", "confidence": "high" },
+    "expected": {"severity":"review","confidence":"high","license":{"expression":"GPL-2.0-only WITH Classpath-exception-2.0","choices":["GPL-2.0-only"],"joiner":"single","exceptions":["Classpath-exception-2.0"],"signals":[],"packageExpression":"GPL-2.0-only WITH Classpath-exception-2.0","componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
     "id": "bsd-file-only",
     "sourceUrl": "https://spdx.org/licenses/BSD-3-Clause.html",
-    "rationale": "A file-only SPDX BSD-3-Clause marker is usable but remains below declared-metadata confidence.",
-    "evidence": { "files": [{ "path": "COPYRIGHT", "kind": "license", "text": "SPDX-License-Identifier: BSD-3-Clause" }], "source": "tarball", "warnings": [] },
+    "rationale": "A package BSD-3-Clause file and a scoped bundled ISC license accumulate obligations without becoming conflicting package assertions.",
+    "evidence": {"files":[{"path":"COPYRIGHT","kind":"license","text":"SPDX-License-Identifier: BSD-3-Clause"},{"path":"vendor/ISC-LICENSE","kind":"license","text":"SPDX-License-Identifier: ISC","scope":"component"}],"source":"tarball","warnings":[]},
     "profile": "distributed-app",
-    "expected": { "severity": "low", "confidence": "medium" },
+    "expected": {"severity":"low","confidence":"medium","license":{"expression":"BSD-3-Clause AND ISC","choices":["BSD-3-Clause","ISC"],"joiner":"and","exceptions":[],"signals":[],"packageExpression":"BSD-3-Clause","componentExpressions":["ISC"]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
@@ -158,7 +158,7 @@
     "rationale": "A package with no declaration and no legal file must remain unknown rather than permissive.",
     "evidence": { "files": [], "source": "tarball", "warnings": ["No license evidence was found."] },
     "profile": "distributed-app",
-    "expected": { "severity": "unknown", "confidence": "low" },
+    "expected": {"severity":"unknown","confidence":"low","license":{"expression":null,"choices":[],"joiner":"single","exceptions":[],"signals":["missing"],"packageExpression":null,"componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
@@ -167,7 +167,7 @@
     "rationale": "MIT metadata and recognizable AGPL file text in the same package are conflicting evidence.",
     "evidence": { "metadataLicense": "MIT", "metadataSource": "held-out metadata", "files": [{ "path": "COPYING", "kind": "copying", "text": "GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3, 19 November 2007\nTERMS AND CONDITIONS" }], "source": "tarball", "warnings": [] },
     "profile": "saas",
-    "expected": { "severity": "unknown", "confidence": "low" },
+    "expected": {"severity":"unknown","confidence":"low","license":{"expression":"MIT","choices":["MIT"],"joiner":"single","exceptions":[],"signals":["conflicting-evidence"],"packageExpression":"MIT","componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   },
   {
@@ -176,7 +176,7 @@
     "rationale": "Custom legal text explicitly prohibiting commercial use is high risk for a SaaS product.",
     "evidence": { "files": [{ "path": "TERMS.txt", "kind": "license", "text": "Commercial use is prohibited without a separate written agreement." }], "source": "tarball", "warnings": [] },
     "profile": "saas",
-    "expected": { "severity": "high", "confidence": "low" },
+    "expected": {"severity":"high","confidence":"low","license":{"expression":null,"choices":[],"joiner":"single","exceptions":[],"signals":["commercial-restriction","missing","custom-text"],"packageExpression":null,"componentExpressions":[]}},
     "external": { "scancode": { "status": "not-run", "note": "Pending independent tool run." }, "licensee": { "status": "not-run", "note": "Pending independent tool run." } }
   }
 ]

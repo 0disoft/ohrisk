@@ -2,7 +2,7 @@ import type { LicenseEvidence } from "../src/evidence/types";
 import type { DependencyNode } from "../src/graph/types";
 import { normalizeLicenseEvidence } from "../src/license/normalize";
 import { parseSpdxExpression, type SpdxExpressionNode } from "../src/license/spdx";
-import type { NormalizedLicenseConfidence } from "../src/license/types";
+import type { NormalizedLicense, NormalizedLicenseConfidence } from "../src/license/types";
 import { evaluateLicenseRisk } from "../src/policy/evaluate";
 import type { UsageProfile } from "../src/policy/profiles";
 import type { RiskSeverity } from "../src/policy/types";
@@ -20,6 +20,19 @@ export type ExternalLicenseToolObservation = {
   note?: string;
 };
 
+export type HeldoutLicenseSemantics = {
+  expression: string | null;
+  choices: string[];
+  joiner: NormalizedLicense["joiner"];
+  exceptions: string[];
+  signals: NormalizedLicense["signals"];
+  packageExpression: string | null;
+  componentExpressions: string[];
+};
+
+export type HeldoutOutcome = "match" | "semantic-mismatch" | "decision-mismatch"
+  | "under-classified-risk" | "over-classified-risk" | "deferred-for-insufficient-evidence";
+
 export type HeldoutLicenseCase = {
   id: string;
   sourceUrl: string;
@@ -29,6 +42,8 @@ export type HeldoutLicenseCase = {
   expected: {
     severity: RiskSeverity;
     confidence: NormalizedLicenseConfidence;
+    /** Mandatory for validated release datasets; optional for tool materialization inputs. */
+    license?: HeldoutLicenseSemantics;
   };
   external: {
     scancode: ExternalLicenseToolObservation;
@@ -51,6 +66,8 @@ export type HeldoutLicenseEvaluation = {
   expected: HeldoutLicenseCase["expected"];
   actual: HeldoutLicenseCase["expected"];
   exactDecisionMatch: boolean;
+  semanticsMatch: boolean;
+  outcome: HeldoutOutcome;
   ohriskExpression?: string;
   ohriskChoices: string[];
   external: {
@@ -66,6 +83,10 @@ export type HeldoutLicenseSummary = {
   scancodeDisagreements: number;
   licenseeDisagreements: number;
   unavailableToolObservations: number;
+  semanticMismatches: number;
+  underClassifiedRisk: number;
+  overClassifiedRisk: number;
+  deferredForInsufficientEvidence: number;
 };
 
 export function validateHeldoutLicenseDataset(
@@ -99,6 +120,17 @@ export function validateHeldoutLicenseDataset(
     if (typeof candidate.rationale !== "string" || candidate.rationale.trim().length < 20) {
       errors.push(`Held-out case ${String(id)} must include a reviewable rationale.`);
     }
+    const expected = candidate.expected;
+    if (!isRecord(expected) || !["low", "review", "high", "unknown"].includes(String(expected.severity))
+      || !["low", "medium", "high"].includes(String(expected.confidence)) || !isLicenseSemantics(expected.license)) {
+      errors.push(`Held-out case ${String(id)} must include a reviewed decision and complete license semantics.`);
+    }
+    if (candidate.profile !== "saas" && candidate.profile !== "distributed-app") {
+      errors.push(`Held-out case ${String(id)} has an invalid profile.`);
+    }
+    if (!isRecord(candidate.evidence) || !Array.isArray(candidate.evidence.files)) {
+      errors.push(`Held-out case ${String(id)} must include license evidence files.`);
+    }
     if (!isRecord(candidate.external)) {
       errors.push(`Held-out case ${String(id)} must include external observations.`);
       continue;
@@ -121,6 +153,10 @@ export function evaluateHeldoutLicenseCases(
     cases: evaluations.length,
     exactDecisionMatches: evaluations.filter((item) => item.exactDecisionMatch).length,
     ohriskDecisionMismatches: evaluations.filter((item) => !item.exactDecisionMatch).length,
+    semanticMismatches: evaluations.filter((item) => !item.semanticsMatch).length,
+    underClassifiedRisk: evaluations.filter((item) => item.outcome === "under-classified-risk").length,
+    overClassifiedRisk: evaluations.filter((item) => item.outcome === "over-classified-risk").length,
+    deferredForInsufficientEvidence: evaluations.filter((item) => item.outcome === "deferred-for-insufficient-evidence").length,
     scancodeDisagreements: evaluations.filter(
       (item) => item.external.scancode.status === "disagree"
     ).length,
@@ -151,14 +187,18 @@ export function renderHeldoutLicenseReport(input: {
     `| Cases | ${input.summary.cases} |`,
     `| Exact Ohrisk decision matches | ${input.summary.exactDecisionMatches} |`,
     `| Ohrisk decision mismatches | ${input.summary.ohriskDecisionMismatches} |`,
+    `| License semantic mismatches | ${input.summary.semanticMismatches} |`,
+    `| Under-classified risk | ${input.summary.underClassifiedRisk} |`,
+    `| Over-classified risk | ${input.summary.overClassifiedRisk} |`,
+    `| Deferred for insufficient evidence | ${input.summary.deferredForInsufficientEvidence} |`,
     `| ScanCode disagreements | ${input.summary.scancodeDisagreements} |`,
     `| Licensee disagreements | ${input.summary.licenseeDisagreements} |`,
     `| Unavailable external observations | ${input.summary.unavailableToolObservations} |`,
     "",
     "## Cases",
     "",
-    "| Case | Source | Expected | Actual | Ohrisk expression | ScanCode | Licensee |",
-    "| --- | --- | --- | --- | --- | --- | --- |"
+    "| Case | Source | Expected | Actual | Ohrisk expression | ScanCode | Licensee | Outcome |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- |"
   ];
 
   for (const item of input.evaluations) {
@@ -169,10 +209,19 @@ export function renderHeldoutLicenseReport(input: {
       `${item.actual.severity}/${item.actual.confidence}`,
       markdownCell(item.ohriskExpression ?? "none"),
       renderExternalComparison(item.external.scancode),
-      renderExternalComparison(item.external.licensee)
+      renderExternalComparison(item.external.licensee),
+      item.outcome
     ].join(" | ").replace(/^/u, "| ").replace(/$/u, " |"));
   }
 
+  const mismatches = input.evaluations.filter((item) => !item.semanticsMatch);
+  if (mismatches.length) {
+    lines.push("", "## Semantic discrepancies", "");
+    for (const item of mismatches) {
+      lines.push(`### ${markdownCell(item.id)}`, "", "```json",
+        JSON.stringify({ expected: item.expected.license ?? null, actual: item.actual.license }, null, 2), "```", "");
+    }
+  }
   return `${lines.join("\n")}\n`;
 }
 
@@ -186,8 +235,12 @@ function evaluateHeldoutLicenseCase(item: HeldoutLicenseCase): HeldoutLicenseEva
   });
   const actual = {
     severity: finding.severity,
-    confidence: normalized.confidence
+    confidence: normalized.confidence,
+    license: observedLicenseSemantics(item.evidence, normalized)
   };
+  const semanticsMatch = item.expected.license !== undefined
+    && licenseSemanticsMatch(actual.license, item.expected.license);
+  const decisionMatch = actual.severity === item.expected.severity && actual.confidence === item.expected.confidence;
 const ohriskExpressions = canonicalLicenseExpressions(
   normalized.expression ? [normalized.expression] : normalized.choices
 );
@@ -197,8 +250,9 @@ const ohriskExpressions = canonicalLicenseExpressions(
     rationale: item.rationale,
     expected: item.expected,
     actual,
-    exactDecisionMatch: actual.severity === item.expected.severity
-      && actual.confidence === item.expected.confidence,
+    exactDecisionMatch: decisionMatch && semanticsMatch,
+    semanticsMatch,
+    outcome: classifyOutcome(actual, item.expected, decisionMatch && semanticsMatch, semanticsMatch),
     ...(normalized.expression ? { ohriskExpression: normalized.expression } : {}),
     ohriskChoices: normalized.choices,
     external: {
@@ -206,6 +260,56 @@ scancode: compareExternalObservation(ohriskExpressions, item.external.scancode),
 licensee: compareExternalObservation(ohriskExpressions, item.external.licensee)
     }
   };
+}
+
+function observedLicenseSemantics(evidence: HeldoutLicenseCase["evidence"], normalized: NormalizedLicense): HeldoutLicenseSemantics {
+  const packageLicense = normalizeLicenseEvidence({ ...evidence, packageId: normalized.packageId,
+    files: evidence.files.filter((file) => file.scope !== "component") });
+  const components = evidence.files.filter((file) => file.scope === "component").map((file) => {
+    const { scope: _scope, ...standalone } = file;
+    return normalizeLicenseEvidence({ packageId: normalized.packageId, source: evidence.source, warnings: [],
+      files: [{ ...standalone, path: "LICENSE" }] }).expression;
+  });
+  return {
+    expression: normalized.expression ?? null, choices: normalized.choices, joiner: normalized.joiner,
+    exceptions: normalized.exceptions ?? [], signals: normalized.signals,
+    packageExpression: packageLicense.expression ?? null,
+    componentExpressions: components.filter((expression): expression is string => expression !== undefined)
+  };
+}
+
+export function licenseSemanticsMatch(actual: HeldoutLicenseSemantics, expected: HeldoutLicenseSemantics): boolean {
+  const expressionMatches = (a: string | null, b: string | null) => a === null || b === null ? a === b
+    : setEquals(canonicalLicenseExpressions([a]), canonicalLicenseExpressions([b]));
+  return expressionMatches(actual.expression, expected.expression)
+    && setEquals(new Set(actual.choices), new Set(expected.choices))
+    && actual.joiner === expected.joiner
+    && setEquals(new Set(actual.exceptions), new Set(expected.exceptions))
+    && setEquals(new Set(actual.signals), new Set(expected.signals))
+    && expressionMatches(actual.packageExpression, expected.packageExpression)
+    && setEquals(canonicalLicenseExpressions(actual.componentExpressions), canonicalLicenseExpressions(expected.componentExpressions));
+}
+
+function classifyOutcome(actual: HeldoutLicenseCase["expected"], expected: HeldoutLicenseCase["expected"],
+  exact: boolean, semanticsMatch: boolean): HeldoutOutcome {
+  if (actual.severity === "unknown") return "deferred-for-insufficient-evidence";
+  const rank = { low: 0, review: 1, high: 2 };
+  if (expected.severity !== "unknown") {
+    if (rank[actual.severity] < rank[expected.severity]) return "under-classified-risk";
+    if (rank[actual.severity] > rank[expected.severity]) return "over-classified-risk";
+  }
+  return exact ? "match" : semanticsMatch ? "decision-mismatch" : "semantic-mismatch";
+}
+
+function isLicenseSemantics(input: unknown): input is HeldoutLicenseSemantics {
+  if (!isRecord(input)) return false;
+  const expression = (value: unknown) => value === null || (typeof value === "string" && value.trim().length > 0);
+  const strings = (value: unknown) => Array.isArray(value) && value.every((item) => typeof item === "string");
+  return expression(input.expression) && expression(input.packageExpression)
+    && ["single", "and", "or", "mixed"].includes(String(input.joiner))
+    && strings(input.choices) && strings(input.exceptions) && strings(input.signals)
+    && (input.signals as string[]).every((signal) => ["missing", "malformed", "conflicting-evidence", "custom-text", "commercial-restriction", "notice-required"].includes(signal))
+    && strings(input.componentExpressions);
 }
 
 function compareExternalObservation(
