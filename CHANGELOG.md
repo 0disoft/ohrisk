@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.16.0 - Unreleased
+## 1.16.0 - 2026-10-01
 
 - Bounded evidence scheduling, source selection, local discovery and ecosystem
   acquisition are separated from one common secure remote artifact reader.
@@ -96,7 +96,7 @@
   mirror collection with normal archive integrity verification.
 - Release verification uses the global 82% line and 90% function coverage gate
   consistently across Bun versions. Installed package smoke tests check the
-  current report schema 3.6 exports.
+  current report schema 3.9 exports.
 
 - Mixed-ecosystem scans and SBOM inputs now keep packages with the same name
   and version separate, including their paths, license evidence, and findings.
