@@ -247,7 +247,7 @@ export const COMMAND_USAGE = {
   init: "ohrisk init [--profile saas|distributed-app] [--fail-on high|unknown|review|low] [--no-workflow] [--waivers]",
   scan: "ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
   ci: "ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--allow-partial-evidence] [--output <file>] [--open]",
-  diff: "ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--output <file>]",
+  diff: "ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--allow-partial-evidence] [--output <file>]",
   explain: "ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
   cache: "ohrisk cache status|prune|clear [--cache-dir <path>] [--json]",
   help: "ohrisk help [command]",
@@ -432,7 +432,7 @@ const HELP_OPTION_SPECS = {
   allowPartialEvidence: {
     options: ["--allow-partial-evidence"],
     syntax: "--allow-partial-evidence",
-    description: "Let ci pass when evidence or repository coverage is partial."
+    description: "Allow partial evidence in a CI or diff gate."
   },
   strictWaivers: {
     options: ["--strict-waivers"],
@@ -497,7 +497,7 @@ const HELP_OPTION_ORDER = {
   diff: [
     "profile", "lockfile", "all", "policy", "workspaceRoot", "prod", "offline", "cacheDir",
     "jobs", "timeout", "registryUrl", "registryTokenEnv", "allowHost", "json", "markdown",
-    "failOn", "output", "help"
+    "failOn", "allowPartialEvidence", "output", "help"
   ],
   cache: ["cacheDir", "maxSize", "maxAge", "json", "help"],
   explain: ["profile", "policy", "workspaceRoot", "json", "output", "help"],
@@ -539,7 +539,7 @@ const COMMAND_OPTION_KEYS = {
   diff: [
     "profile", "prod", "lockfile", "all", "policy", "offline", "cacheDir", "jobs", "timeout",
     "registryUrl", "registryTokenEnv", "allowHost", "workspaceRoot", "json", "markdown", "output",
-    "failOn", "help"
+    "failOn", "allowPartialEvidence", "help"
   ],
   explain: [
     "profile", "policy", "workspaceRoot", "json", "output", "help"

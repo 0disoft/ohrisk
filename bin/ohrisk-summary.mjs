@@ -11,9 +11,7 @@ import path from "node:path";
 const SEVERITIES = ["low", "review", "unknown", "high"];
 const DEFAULT_MAX_FINDINGS = 20;
 const MAX_REPORT_BYTES = 64 * 1024 * 1024;
-const REPORT_SCHEMA_VERSION = "3.5.0";
-const SCAN_REPORT_SCHEMA = `urn:ohrisk:schema:scan-report:${REPORT_SCHEMA_VERSION}`;
-const DIFF_REPORT_SCHEMA = `urn:ohrisk:schema:diff-report:${REPORT_SCHEMA_VERSION}`;
+const REPORT_SCHEMA_VERSIONS = ["3.5.0", "3.6.0"];
 const SUMMARY_SCHEMA = "urn:ohrisk:schema:report-summary:1.0.0";
 
 try {
@@ -71,7 +69,7 @@ function summarizeReport(report, maxFindings) {
     : 0;
   const failingFindingCount = nonNegativeInteger(report.failingFindingCount)
     ?? computedFailingCount;
-  const completeness = reportType === "scan" && isObject(report.completeness)
+  const completeness = isObject(report.completeness)
     && (report.completeness.status === "complete" || report.completeness.status === "partial")
     ? report.completeness.status
     : "not-reported";
@@ -86,7 +84,7 @@ function summarizeReport(report, maxFindings) {
     schemaVersion: "1.0.0",
     status: report.status,
     reportType,
-    failed: thresholdFailed || waiverDriftFailed,
+    failed: thresholdFailed || waiverDriftFailed || report.evidenceGateFailed === true,
     thresholdFailed,
     waiverDriftFailed,
     failOn: failOn ?? null,
@@ -123,12 +121,13 @@ function readReport(filePath) {
     throw new Error(`${displayPath(filePath)} is not a supported Ohrisk scan or diff report.`);
   }
   const expectedSchema = parsed.status === "profile_risk_evaluated"
-    ? SCAN_REPORT_SCHEMA
-    : DIFF_REPORT_SCHEMA;
-  if (parsed.$schema !== expectedSchema || parsed.schemaVersion !== REPORT_SCHEMA_VERSION) {
-    throw new Error(`${displayPath(filePath)} does not use the supported Ohrisk ${REPORT_SCHEMA_VERSION} report schema.`);
+    ? `urn:ohrisk:schema:scan-report:${parsed.schemaVersion}`
+    : `urn:ohrisk:schema:diff-report:${parsed.schemaVersion}`;
+  if (parsed.$schema !== expectedSchema || !REPORT_SCHEMA_VERSIONS.includes(parsed.schemaVersion)) {
+    throw new Error(`${displayPath(filePath)} does not use a supported Ohrisk ${REPORT_SCHEMA_VERSIONS.join(" or ")} report schema.`);
   }
   assertOptionalBoolean(parsed, "failed");
+  assertOptionalBoolean(parsed, "evidenceGateFailed");
   assertOptionalBoolean(parsed, "waiverDriftFailed");
   assertOptionalSeverity(parsed, "failOn");
   assertOptionalNonNegativeInteger(parsed, "failingFindingCount");

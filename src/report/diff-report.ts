@@ -3,6 +3,7 @@ import type { RiskDiff } from "../diff/compare";
 import { NOTICE_ACTION } from "../policy/evaluate";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
 import type { UsageProfile } from "../policy/profiles";
+import type { ComparisonCompleteness } from "../policy/completeness";
 import type { PolicyConfigSummary } from "../policy/config";
 import {
   formatMarkdownInlineCode,
@@ -28,6 +29,9 @@ export type DiffLockfileChanges = {
 };
 
 export type DiffReportInput = {
+  completeness?: ComparisonCompleteness;
+  evidenceGateFailed?: boolean;
+  allowPartialEvidence?: boolean;
   baselineRef: string;
   profile: UsageProfile;
   prodOnly: boolean;
@@ -44,7 +48,9 @@ export function renderDiffReport(input: DiffReportInput): string {
   const changedSummary = summarize(input.diff.changedFindings);
   const resolvedSummary = summarize(input.diff.resolvedFindings);
   const introducedSummary = summarize(input.diff.introducedFindings);
-  const nextAction = nextActionFor(input.diff.introducedFindings);
+  const nextAction = input.completeness?.status === "partial"
+    ? "Restore unavailable baseline or current evidence before relying on this comparison."
+    : nextActionFor(input.diff.introducedFindings);
   const thresholdSummary = buildThresholdSummary(input.diff.introducedFindings, input.failOn);
 
   if (input.json) {
@@ -52,6 +58,11 @@ export function renderDiffReport(input: DiffReportInput): string {
         $schema: OHRISK_DIFF_REPORT_SCHEMA,
         schemaVersion: OHRISK_REPORT_SCHEMA_VERSION,
         status: "risk_diff_evaluated",
+        ...(input.completeness ? {
+          completeness: input.completeness,
+          evidenceGateFailed: input.evidenceGateFailed ?? false,
+          allowPartialEvidence: input.allowPartialEvidence ?? false
+        } : {}),
         baselineRef: input.baselineRef,
         profile: input.profile,
         prodOnly: input.prodOnly,
@@ -84,6 +95,7 @@ export function renderDiffReport(input: DiffReportInput): string {
   return [
     "Ohrisk diff",
     `Baseline: ${input.baselineRef}`,
+    ...comparisonCompletenessLines(input),
     `Profile: ${input.profile}`,
     `Production only: ${input.prodOnly ? "yes" : "no"}`,
     `Findings: ${input.diff.currentFindings.length} current, ${input.diff.baselineFindings.length} baseline, ${input.diff.newFindings.length} new, ${input.diff.changedFindings.length} changed, ${input.diff.resolvedFindings.length} resolved`,
@@ -102,15 +114,30 @@ export function renderDiffReport(input: DiffReportInput): string {
   ].join("\n");
 }
 
+function comparisonCompletenessLines(input: DiffReportInput): string[] {
+  if (!input.completeness) return [];
+  const { status, baseline, current } = input.completeness;
+  return [
+    `Comparison completeness: ${status}`,
+    `Baseline completeness: ${baseline.status} (${baseline.unavailablePackageCount} unavailable packages)`,
+    `Current completeness: ${current.status} (${current.unavailablePackageCount} unavailable packages)`,
+    `Partial evidence allowed: ${input.allowPartialEvidence ?? false}`,
+    `Evidence gate failed: ${input.evidenceGateFailed ?? false}`
+  ];
+}
+
 function renderMarkdownReport(input: DiffReportInput): string {
   const introducedSummary = summarize(input.diff.introducedFindings);
-  const nextAction = nextActionFor(input.diff.introducedFindings);
+  const nextAction = input.completeness?.status === "partial"
+    ? "Restore unavailable baseline or current evidence before relying on this comparison."
+    : nextActionFor(input.diff.introducedFindings);
   const thresholdSummary = buildThresholdSummary(input.diff.introducedFindings, input.failOn);
 
   return [
     "# Ohrisk diff",
     "",
     `- Baseline: ${formatMarkdownInlineCode(input.baselineRef)}`,
+    ...comparisonCompletenessLines(input).map((line) => `- ${line}`),
     `- Profile: ${formatMarkdownInlineCode(input.profile)}`,
     `- Production only: ${formatMarkdownInlineCode(input.prodOnly ? "yes" : "no")}`,
     `- Findings: ${formatMarkdownInlineCode(`${input.diff.currentFindings.length} current`)}, ${formatMarkdownInlineCode(`${input.diff.baselineFindings.length} baseline`)}, ${formatMarkdownInlineCode(`${input.diff.newFindings.length} new`)}, ${formatMarkdownInlineCode(`${input.diff.changedFindings.length} changed`)}, ${formatMarkdownInlineCode(`${input.diff.resolvedFindings.length} resolved`)}`,

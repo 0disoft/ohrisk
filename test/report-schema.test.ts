@@ -61,6 +61,21 @@ const policy: PolicyConfigSummary = {
 };
 
 describe("machine-readable report schemas", () => {
+  test("validates both diff completeness sides and rejects missing evidence counters", () => {
+    const diff = renderCompleteDiffReport();
+    const complete = { status: "complete", unavailablePackageCount: 0, skippedRepositoryEntryCount: 0 };
+    const partial = { status: "partial", unavailablePackageCount: 1, skippedRepositoryEntryCount: 0 };
+    const report = {
+      ...diff, completeness: { status: "partial", baseline: partial, current: complete },
+      evidenceGateFailed: true, allowPartialEvidence: false
+    };
+    expectValid(OHRISK_DIFF_REPORT_SCHEMA, report);
+    expectInvalid(OHRISK_DIFF_REPORT_SCHEMA, {
+      ...report, completeness: { ...report.completeness, baseline: { status: "partial" } }
+    });
+    expectInvalid(OHRISK_DIFF_REPORT_SCHEMA, { ...report, evidenceGateFailed: "true" });
+  });
+
   test("keeps every packaged schema identifier aligned with runtime constants", () => {
     schemaRegistry.assertSupportedKeywords();
 

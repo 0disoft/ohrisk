@@ -47,6 +47,7 @@ import {
   type ResolvedPolicyConfig
 } from "../policy/config";
 import { hasFindingAtOrAbove } from "../policy/severity";
+import { incompleteEvidenceGateFailed, type ComparisonCompleteness } from "../policy/completeness";
 import { renderCycloneDxReport } from "../report/cyclonedx-report";
 import { renderDiffReport } from "../report/diff-report";
 import { renderExplainReport } from "../report/explain-report";
@@ -350,8 +351,25 @@ async function runDiff(
     currentFindings: current.value.riskFindings
   });
 
+  const baselineCompleteness = buildScanCompleteness({ evidence: relevantBaselineEvidence });
+  const currentCompleteness = buildScanCompleteness({ evidence: current.value.evidence });
+  const completeness: ComparisonCompleteness = {
+    status: baselineCompleteness.status === "partial" || currentCompleteness.status === "partial"
+      ? "partial" : "complete",
+    baseline: baselineCompleteness,
+    current: currentCompleteness
+  };
+  const evidenceGateFailed = incompleteEvidenceGateFailed({
+    enabled: command.failOn !== undefined,
+    allowPartialEvidence: command.allowPartialEvidence ?? false,
+    completeness
+  });
+
   const output = renderDiffReport({
     baselineRef: command.baselineRef,
+    completeness,
+    evidenceGateFailed,
+    allowPartialEvidence: command.allowPartialEvidence ?? false,
     profile: command.profile,
     prodOnly: command.prodOnly,
     diff,
@@ -389,6 +407,8 @@ async function runDiff(
   if (command.failOn && hasFindingAtOrAbove(diff.introducedFindings, command.failOn)) {
     return 1;
   }
+
+  if (evidenceGateFailed) return 1;
 
   return 0;
 }
@@ -662,9 +682,11 @@ async function runScanAt(input: {
   }
 
   if (
-    command.kind === "ci"
-    && completeness.status === "partial"
-    && !command.allowPartialEvidence
+    incompleteEvidenceGateFailed({
+      enabled: command.kind === "ci",
+      allowPartialEvidence: command.kind === "ci" && command.allowPartialEvidence,
+      completeness
+    })
   ) {
     return 1;
   }

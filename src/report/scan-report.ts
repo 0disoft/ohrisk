@@ -1,3 +1,6 @@
+import { buildScanCompleteness, type ScanCompleteness } from "../policy/completeness";
+export { buildScanCompleteness };
+export type { ScanCompleteness };
 import { omitUndefined } from "../shared/object";
 import path from "node:path";
 
@@ -77,12 +80,6 @@ export type ScanReportInput = {
   completeness?: ScanCompleteness;
 };
 
-export type ScanCompleteness = {
-  status: "complete" | "partial";
-  unavailablePackageCount: number;
-  skippedRepositoryEntryCount: number;
-};
-
 export type RemoteRepositoryReportSource = {
   owner: string;
   name: string;
@@ -103,27 +100,6 @@ export type RemoteRepositoryReportSource = {
     pathsTruncated: boolean;
   };
 };
-
-export function buildScanCompleteness(input: {
-  evidence: LicenseEvidence[];
-  repository?: RemoteRepositoryReportSource;
-}): ScanCompleteness {
-  const unavailablePackageCount = input.evidence.filter(
-    (evidence) => evidence.source === "unavailable"
-  ).length;
-  const skippedRepositoryEntryCount = input.repository
-    ? input.repository.submodules.skippedCount
-      + input.repository.symbolicLinks.skippedCount
-      + input.repository.nonPortablePaths.skippedCount
-    : 0;
-  return {
-    status: unavailablePackageCount > 0 || skippedRepositoryEntryCount > 0
-      ? "partial"
-      : "complete",
-    unavailablePackageCount,
-    skippedRepositoryEntryCount
-  };
-}
 
 function formatScanCompleteness(completeness: ScanCompleteness): string {
   if (completeness.status === "complete") {

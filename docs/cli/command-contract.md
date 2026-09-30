@@ -69,8 +69,9 @@ configured artifact cache and network policy.
 - `explain --policy <path>` accepts `--workspace-root <path>` for the inheritance boundary. It reports policy sources as relative paths and never applies package rules because explain has no package identity.
 - `--profile saas|distributed-app` selects the shipping model, with organization policy overrides applied afterward.
 - `--prod` narrows scans to production-relevant dependencies when supported by the input ecosystem.
-- `--fail-on unknown|review|high|low` controls CI failure threshold.
-- `ci` also fails when package evidence or repository coverage is partial.
+- `--fail-on unknown|review|high|low` controls the `ci` and `diff` failure threshold.
+- `ci` fails when package evidence or repository coverage is partial, and
+  `diff --fail-on` fails when either side's evidence is partial.
   `--allow-partial-evidence` is an explicit fail-open override for environments
   that intentionally accept that reduced assurance.
 - `--json`, `--markdown`, `--html`, `--sarif`, and `--cyclonedx` select report formats.
@@ -201,6 +202,19 @@ contributing lockfile remain available as provenance. Conflicting package
 metadata is reported instead of silently replacing the first deterministic
 record.
 
+When Ohrisk merges inputs, it keeps the package identifier an input produced
+when it identifies one package coordinate, so existing report and waiver
+identities stay stable. If that identifier aliases distinct package
+coordinates, such as an equal name and version in two ecosystems, the merged
+package uses its Package URL so the packages remain separate. The remap covers
+dependency-path segments, including npm alias segments written as
+`<alias> -> <packageId>`, and embedded evidence package IDs, so each finding,
+its evidence, and its waiver key agree on one identity independently of input
+order.
+CycloneDX JSON/XML and SPDX JSON/RDF/tag-value inputs apply the same
+disambiguation to their own package records before the graph is built, so a
+collision inside a single SBOM is separated too.
+
 Automatic remote same-root merging excludes CycloneDX and SPDX inputs when a
 dependency manifest or lockfile is present. Explicit `--all` keeps those inputs,
 but an overlapping SBOM license claim cannot replace evidence collected from the
@@ -233,6 +247,16 @@ remains the combined new-and-changed threshold set. A baseline with no
 supported input is represented as an empty dependency graph instead of forcing
 the current lockfile path to exist in that ref.
 
+`diff` without `--fail-on` is informational and may report a partial
+comparison while still exiting `0`. `diff --fail-on <severity>` exits `1` when
+introduced findings meet the threshold, and it also exits `1` when either the
+baseline or current side has partial evidence, unless `--allow-partial-evidence`
+is passed. A side is partial when any collected package evidence comes from an
+unavailable source; a finding whose license is unknown but whose evidence was
+collected is not itself partial. JSON, terminal, and Markdown output report the
+comparison `completeness` with `baseline` and `current` sub-status, plus
+`evidenceGateFailed` and `allowPartialEvidence`.
+
 Baseline evidence is isolated from the current worktree. npm `file:` and
 relative workspace packages are read from the requested Git ref within the
 selected project or explicit `--workspace-root`; other baseline package
@@ -262,9 +286,17 @@ Git, path, alternate-registry, and checksumless crate sources are not fetched.
 For modern npm `package-lock.json` and `npm-shrinkwrap.json`, graph traversal is
 also iterative and retains every reachable package while storing at most 64
 dependency paths per package. Additional paths use the same typed truncation
-diagnostic instead of expanding path combinations without a bound. Package
-`license` fields in the lockfile or npm registry metadata are not authoritative
-evidence; installed sources or integrity-verified tarballs are inspected instead.
+diagnostic instead of expanding path combinations without a bound. Each
+dependency edge is resolved by walking the installation directories from the
+owning package up to the project root, nearest first, and taking the first
+locked `node_modules` path that exists; a directory whose last segment is
+`node_modules` is skipped the way Node does. This resolves hoisted, nested,
+scoped, aliased `npm:` ranges, and workspace root installations. When no
+ancestor path matches, resolution falls back to an exact name-and-version
+record and then to a single same-name record. Legacy npm v1 `dependencies`
+trees keep their existing resolution. Package `license` fields in the lockfile
+or npm registry metadata are not authoritative evidence; installed sources or
+integrity-verified tarballs are inspected instead.
 
 For modern Dart and Flutter `pubspec.lock`, exact pub.dev hosted records retain
 their archive SHA-256 and fixed archive URL. Remote evidence verifies the full
@@ -371,7 +403,7 @@ the scanned repository or `PATH` for an opener executable; Windows also disables
 `cmd.exe` AutoRun processing for the dispatch.
 
 - JSON, Markdown, HTML, SARIF, and CycloneDX behavior is owned by `docs/report-formats.md`.
-- Scan, diff, and explain JSON documents include `$schema` and `schemaVersion`; incompatible contract changes require a schema-version change. Schema 3.0 rejects unknown properties, separates diff classifications, and validates typed evidence and dependency-graph diagnostics alongside findings, licenses, policy summaries, waivers, thresholds, and lockfile changes. Explain JSON includes its redacted policy summary and the fixed `license-only` policy scope.
+- Scan, diff, and explain JSON documents include `$schema` and `schemaVersion`; incompatible contract changes require a schema-version change. Schema 3.0 rejects unknown properties, separates diff classifications, and validates typed evidence and dependency-graph diagnostics alongside findings, licenses, policy summaries, waivers, thresholds, and lockfile changes. Explain JSON includes its redacted policy summary and the fixed `license-only` policy scope. Scan, diff, and explain JSON currently publish schema version `3.6.0`.
 - `.ohrisk-waivers.json` has its own closed Draft 2020-12 input contract at `schemas/waiver-file.schema.json`; the parser and schema both reject unknown root and item fields.
 - Shareable formats must not expose absolute local project roots, lockfiles, policy paths, cache paths, or credentials.
 - Machine-readable IDs, fingerprints, enum values, and paths must remain stable unless the change is documented and tested.

@@ -1068,6 +1068,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
   let workspaceRootPath: string | undefined;
   let outputPath: string | undefined;
   let failOn: RiskSeverity | undefined;
+  let allowPartialEvidence = false;
   let baselineRef: string | undefined;
   const outputFormatOptions = outputFormatOptionsFor("diff");
 
@@ -1277,6 +1278,9 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
         index += 1;
         break;
       }
+      case "--allow-partial-evidence":
+        allowPartialEvidence = true;
+        break;
       case "--help":
       case "-h":
         return ok({ kind: "help", target: "diff" });
@@ -1362,6 +1366,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
     ...(allowedHosts.length > 0 ? { allowedHosts: [...new Set(allowedHosts)] } : {}),
     ...(workspaceRootPath ? { workspaceRootPath } : {}),
     ...(outputPath ? { outputPath } : {}),
+    ...(allowPartialEvidence ? { allowPartialEvidence: true } : {}),
     ...(failOn ? { failOn } : {})
   });
 }

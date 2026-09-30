@@ -28,7 +28,7 @@ full report payload. Notice generation uses
 `schemas/notices-evidence.schema.json` and
 `schemas/notices-result.schema.json`.
 
-Schema `3.5.0` is a closed contract. Report roots and structured nested objects
+Schema `3.6.0` is a closed contract. Report roots and structured nested objects
 reject unknown properties, while common `$defs` define findings, evidence,
 normalized licenses, policy summaries, waivers, thresholds, provenance, remote
 repository submodule coverage, and
@@ -76,6 +76,14 @@ Use `moduleResolution: "NodeNext"` or `"Bundler"` and enable
 `resolveJsonModule` when importing the JSON files from TypeScript. Existing
 explicit paths such as `ohrisk/schemas/scan-report.schema.json` remain exported
 for consumers that already use them.
+
+Schema 3.6 adds optional diff completeness fields. `diff` JSON may include
+`completeness` with `status`, `baseline`, and `current` sub-status, plus
+`evidenceGateFailed` and `allowPartialEvidence`. These fields report evidence
+collection rather than full dependency-graph coverage; each side reports
+`status`, `unavailablePackageCount`, and `skippedRepositoryEntryCount`. The
+`ohrisk-summary` companion accepts both 3.5.0 and 3.6.0 scan and diff reports and
+reports the diff completeness status and gate failure.
 
 Schema 3.5 adds the `conflicting-evidence` normalized-license signal. Python
 license classifiers are identified as classifiers in evidence text. A single
@@ -137,6 +145,7 @@ Structured output for scripting and CI automation.
 - **Diff classification**: `newFindings`, `changedFindings`, and `resolvedFindings` are separate; `findings` remains the combined new-and-changed threshold set
 - **Evidence diagnostics**: scan JSON groups package/file/warning counts by `local`, `registry`, `sbom`, `tarball`, and `unavailable`, with stable diagnostic codes and typed dependency-graph truncation diagnostics
 - **Scan completeness**: scan JSON reports `complete` or `partial` plus unavailable-package and skipped-repository-entry counts; CI rejects `partial` by default independently of the risk threshold
+- **Diff completeness**: diff JSON may include `completeness` with `status`, `baseline`, and `current` sub-status, plus `evidenceGateFailed` and `allowPartialEvidence`; these fields reflect evidence collection rather than graph coverage, and `diff --fail-on` fails on partial evidence unless `--allow-partial-evidence` is set
 - **Python license provenance**: classifier-derived values use `<source> classifier: <expression>` evidence. Conflicting recognized license-file expressions add `conflicting-evidence`, produce unknown severity, and preserve every conflicting file match for review.
 - **Metadata/file reconciliation**: parseable package metadata and recognized license files remain separate assertions. Any recognized file expression outside the metadata choices adds `conflicting-evidence`, preserves both claims, and produces unknown severity. Multiple files do not conflict when every expression is covered by one metadata classifier choice set or by one explicit license-file choice expression. Deprecated GNU IDs compare against their current `-only` or `-or-later` equivalents without creating a false conflict. Canonical GNU or MPL version text is compatible with metadata granting that version or later, but explicit file-level broader permission still conflicts with narrower metadata. SPDX identifier lines wrapped in Markdown inline-code delimiters are normalized before parsing. Standard MIT notice variations and explicit BSD one-clause, BSD three-clause, and bzip2 text remain distinct expressions.
 - **Bundled-component reconciliation**: when a primary `LICENSE` or `LICENCE` file has a qualified sibling such as `LICENSE.libyaml`, `LICENSE_zstd.txt`, `LICENSE.thirdparty`, `LICENSE.vendor`, or `LICENSE.component`, or a sibling `THIRD_PARTY_LICENSES*` inventory, the additional file is cumulative component evidence. Its recognized expression is combined with the package expression using SPDX `AND`; document extensions and known package-license alternatives such as `LICENSE-MIT`, `LICENSE-APACHE`, and `LICENSE-BSD-3-Clause` remain ordinary package-license evidence.
@@ -148,7 +157,7 @@ Structured output for scripting and CI automation.
 - **Obligation evidence**: distributed-app findings may include `obligation: license-text` and `obligation: notice-file` entries with a trigger and `status: unknown`. These are conservative required-artifact hints, not proof that a release artifact satisfies or misses an obligation. Because evidence participates in fingerprints, affected fingerprint waivers require review after upgrade.
 - **Maven evidence corrections**: canonical SPDX aliases, allowed repository provenance, and checksum/identity-verified JAR evidence may change severity, reason, evidence, and therefore finding fingerprints. Fingerprint waivers for corrected Maven findings must be reviewed after upgrade; finding-ID waivers remain tied to the same package/path identity.
 - **Remote repository coverage**: remote scan JSON includes `repository.owner`, `repository.name`, bounded `repository.submodules` mode/count/paths, separate `repository.symbolicLinks`, and `repository.nonPortablePaths` skipped counts, relative paths, and path-list truncation state
-- **Schema validation**: scan, diff, and explain JSON must satisfy the packaged 3.5.0 schema; unknown object properties are rejected
+- **Schema validation**: scan, diff, and explain JSON must satisfy the packaged 3.6.0 schema; unknown object properties are rejected
 - **Local paths**: `projectRoot` is represented as `.`, and lockfile metadata uses a project-relative path so CI artifacts do not expose workspace paths
 
 ## Markdown

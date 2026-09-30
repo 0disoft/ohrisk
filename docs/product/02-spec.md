@@ -77,13 +77,15 @@ and modules without an exact ZIP checksum are never sent to the proxy.
 ## Output Contract
 
 Supported formats are terminal text, JSON, Markdown, HTML, SARIF, and CycloneDX.
-Scan, diff, and explain JSON use strict packaged Draft 2020-12 schema 3.5.0
+Scan, diff, and explain JSON use strict packaged Draft 2020-12 schema 3.6.0
 contracts. Scan JSON includes typed evidence source and graph diagnostics plus
 optional remote repository, skipped-submodule, skipped-symbolic-link, and
 skipped-non-portable-path
 coverage metadata; diff
 JSON records new, changed, and resolved findings plus current, baseline, added,
-and removed lockfile sets.
+and removed lockfile sets, and emits the optional `completeness` field with
+`baseline` and `current` status plus `evidenceGateFailed` and
+`allowPartialEvidence`.
 Format-specific behavior is owned by `docs/report-formats.md` and matching tests.
 
 The npm package exposes the report instance contracts through the type-only

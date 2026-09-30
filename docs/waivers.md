@@ -48,6 +48,17 @@ If package IDs or path segments contain finding delimiters such as `::`, `>`,
 `|`, or `%`, Ohrisk percent-escapes those characters in the generated `id` so
 different dependency paths cannot collapse into the same waiver key.
 
+A scan can change a package ID when Ohrisk disambiguates colliding package
+coordinates. Ohrisk keeps a package identifier when it identifies one package
+coordinate, but when the same identifier aliases distinct coordinates, such as
+an equal name and version in two ecosystems, the package uses its Package URL.
+This applies to merged inputs and to a single CycloneDX or SPDX SBOM. A waiver
+written against the earlier ambiguous ID no longer matches those findings, so
+it is reported as unmatched instead of suppressing both packages. Review the
+unmatched waiver and write one waiver per finding ID rather than renewing the
+shared ID. With unambiguous identities the original identifier is retained and
+existing waivers keep matching.
+
 Waiving by `id` matches any finding for the same package in the same dependency
 path, regardless of severity or reason text. Use this when you accept a
 package's risk broadly and the finding's severity or evidence may change

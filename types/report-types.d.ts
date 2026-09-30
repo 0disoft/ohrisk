@@ -5,7 +5,7 @@
  * runtime validation source of truth.
  */
 
-export type ReportSchemaVersion = "3.5.0";
+export type ReportSchemaVersion = "3.6.0";
 
 export type CommonReportSchemaId =
   `urn:ohrisk:schema:common:${ReportSchemaVersion}`;
@@ -364,6 +364,13 @@ export type ScanReport = ThresholdOutcome & WaiverDriftOutcome & {
 };
 
 export type DiffReport = ThresholdOutcome & {
+  completeness?: {
+    status: "complete" | "partial";
+    baseline: ScanCompleteness;
+    current: ScanCompleteness;
+  };
+  evidenceGateFailed?: boolean;
+  allowPartialEvidence?: boolean;
   $schema: DiffReportSchemaId;
   schemaVersion: ReportSchemaVersion;
   status: "risk_diff_evaluated";

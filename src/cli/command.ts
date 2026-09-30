@@ -98,6 +98,7 @@ export type CliCommand =
   | {
       kind: "diff";
       baselineRef: string;
+      allowPartialEvidence?: boolean;
       profile: UsageProfile;
       prodOnly: boolean;
       json: boolean;
