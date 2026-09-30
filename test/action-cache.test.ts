@@ -75,6 +75,43 @@ type CacheSettingsResult = {
 };
 
 describe("Ohrisk Action persistent artifact cache", () => {
+  test.skipIf(!bashAvailable)("forwards the partial evidence override for ci and diff and rejects scan", () => {
+    withWorkspace((workspace) => {
+      const run = actionStep("run");
+      if (!run.run) throw new Error("Action run step has no shell source.");
+      mkdirSync(path.join(workspace, "action-dist"));
+      writeFileSync(path.join(workspace, "action-dist", "cli.js"),
+        "process.stdout.write(JSON.stringify(process.argv.slice(2)));\n");
+      const defaults = Object.fromEntries(Object.entries(run.env ?? {}).map(([name, expression]) => {
+        const inputName = /inputs\.([a-z-]+)/u.exec(expression)?.[1];
+        return [name, inputName ? action.inputs?.[inputName]?.default ?? "" : ""];
+      }));
+      for (const command of ["ci", "diff", "scan"]) {
+        const result = spawnSync("bash", ["-c", run.run], {
+          cwd: workspace, encoding: "utf8", timeout: 10_000,
+          env: {
+            ...process.env, ...defaults, OHRISK_ACTION_PATH: workspace,
+            OHRISK_COMMAND: command, OHRISK_BASELINE_REF: command === "diff" ? "main" : "",
+            OHRISK_ALLOW_PARTIAL_EVIDENCE: "true", OHRISK_FAIL_ON: command === "scan" ? "" : "high",
+            GITHUB_OUTPUT: path.join(workspace, "github-output.txt")
+          }
+        });
+        if (command === "scan") {
+          expect(result.status).toBe(1);
+          expect(result.stdout).toContain("allow-partial-evidence requires command=ci or command=diff");
+        } else {
+          expect(result.status).toBe(0);
+          expect(result.stderr).toBe("");
+          const args = JSON.parse(result.stdout);
+          expect(args[0]).toBe(command);
+          if (command === "diff") expect(args[1]).toBe("main");
+          expect(args).toContain("--allow-partial-evidence");
+          expect(args).toContain("--fail-on");
+        }
+      }
+    });
+  });
+
   test("pins restore and save actions and exposes the exact cache-hit result", () => {
     const settings = actionStep("cache-settings");
     const restore = actionStep("artifact-cache");

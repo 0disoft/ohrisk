@@ -67,7 +67,7 @@ inputs:
     required: false
     default: "false"
   allow-partial-evidence:
-    description: Allow command=ci to pass when package evidence or repository coverage is incomplete.
+    description: Allow command=ci or a gated command=diff to pass with incomplete evidence.
     required: false
     default: "false"
   offline:
@@ -533,8 +533,8 @@ runs:
           exit 1
         fi
 
-        if [ "$OHRISK_COMMAND" != "ci" ] && [ "$OHRISK_ALLOW_PARTIAL_EVIDENCE" = "true" ]; then
-          echo "::error::allow-partial-evidence requires command=ci."
+        if [ "$OHRISK_COMMAND" = "scan" ] && [ "$OHRISK_ALLOW_PARTIAL_EVIDENCE" = "true" ]; then
+          echo "::error::allow-partial-evidence requires command=ci or command=diff."
           exit 1
         fi
 

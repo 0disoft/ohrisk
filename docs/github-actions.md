@@ -34,6 +34,10 @@ history. Checkout depth and baseline availability are the caller's
 responsibility. For `scan`, leave `fail-on` empty (the default). For `ci`, an
 empty action input preserves the CLI's `high` default.
 
+Gated diffs fail if either side has unavailable package evidence. Set
+`allow-partial-evidence: "true"` only when accepting a partial comparison; the
+report retains its completeness status. The same input is supported by `ci`.
+
 ### Permissionless report summary
 
 The nested `summary-action` consumes one completed scan or diff JSON report,

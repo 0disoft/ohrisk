@@ -229,7 +229,7 @@ describe("Ohrisk GitHub Action", () => {
       "no-waivers is not supported when command=diff"
     );
     expect(actionSource).toContain("strict-waivers requires command=ci");
-    expect(actionSource).toContain("allow-partial-evidence requires command=ci");
+    expect(actionSource).toContain("allow-partial-evidence requires command=ci or command=diff");
     expect(actionSource).toContain('args+=("--allow-partial-evidence")');
     expect(actionSource).not.toContain("npm install");
     expect(actionSource).not.toContain('version="latest"');

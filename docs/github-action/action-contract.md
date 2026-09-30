@@ -49,8 +49,11 @@ forwarded as `--archive` after path validation, cannot be combined with
 CLI to scan every supported lockfile found at the single archive project root.
 
 `ci` fails partial evidence or repository coverage independently of `fail-on`.
-The Boolean `allow-partial-evidence` input is an explicit CI-only override and
-is rejected for `scan` and `diff`.
+`diff` with `fail-on` also fails when either the baseline or current evidence
+collection is incomplete. The Boolean `allow-partial-evidence` input explicitly
+allows partial results for `ci` and `diff`; it is rejected for `scan`. An
+informational diff without `fail-on` reports partial comparison status without
+failing solely because evidence is unavailable.
 
 ## Persistent artifact cache
 
@@ -130,7 +133,7 @@ additional token permissions for persistent caching. Workflows that upload
 SARIF must grant `security-events: write` to the upload step.
 
 The nested `summary-action` is report-driven and permissionless. It reads one
-workspace-contained Ohrisk 3.5 scan or diff JSON report, writes escaped bounded
+workspace-contained Ohrisk 3.5 or 3.6 scan or diff JSON report, writes escaped bounded
 Markdown only to the runner-provided step-summary file, and writes bounded
 scalar values only to the runner-provided output file. It performs no scan,
 network request, GitHub API call, or pull-request mutation.
