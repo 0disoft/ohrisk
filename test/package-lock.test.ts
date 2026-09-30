@@ -9,6 +9,30 @@ import { parsePackageLockfile, parsePackageLockText } from "../src/graph/npm-pac
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 
 describe("parsePackageLockfile", () => {
+  for (const requestedName of ["x", "@scope/x", "compat"]) {
+    test(`resolves the nearest ancestor installation for ${requestedName}`, () => {
+      const name = requestedName === "compat" ? "actual" : requestedName;
+      const range = requestedName === "compat" ? "npm:actual@*" : "*";
+      const result = parsePackageLockText(JSON.stringify({
+        name: "app", lockfileVersion: 3,
+        packages: {
+          "": { dependencies: { a: "1.0.0", [requestedName]: range } },
+          "node_modules/a": { version: "1.0.0", dependencies: { b: "1.0.0" } },
+          "node_modules/a/node_modules/b": { version: "1.0.0", dependencies: { [requestedName]: range } },
+          [`node_modules/${requestedName}`]: { name, version: "2.0.0" },
+          [`node_modules/a/node_modules/${requestedName}`]: { name, version: "1.0.0" }
+        }
+      }));
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      const expectedSegment = requestedName === "compat" ? "compat -> actual@1.0.0" : `${name}@1.0.0`;
+      expect(result.value.nodes.find((node) => node.id === `${name}@1.0.0`)?.paths)
+        .toContainEqual(["app", "a@1.0.0", "b@1.0.0", expectedSegment]);
+      expect(result.value.nodes.find((node) => node.id === `${name}@2.0.0`)?.paths)
+        .not.toContainEqual(["app", "a@1.0.0", "b@1.0.0", `${name}@2.0.0`]);
+    });
+  }
+
   test("parses direct and transitive dependencies from a package-lock.json", () => {
     const result = parsePackageLockfile(
       path.join(fixturesDir, "package-lock-project", "package-lock.json")

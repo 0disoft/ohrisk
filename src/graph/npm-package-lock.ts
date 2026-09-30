@@ -428,14 +428,21 @@ function resolvePackageRecord(input: {
   parentPath?: string;
 }): PackageLockRecord | undefined {
   const reference = resolveNpmDependencyReference(input.name, input.range);
-  const nestedPath = input.parentPath
-    ? `${input.parentPath}/node_modules/${reference.requestedName}`
-    : undefined;
-  const topLevelPath = `node_modules/${reference.requestedName}`;
+  let directory = input.parentPath ?? "";
+  while (true) {
+    // Node skips a node_modules directory itself while walking its ancestors.
+    if (directory.split("/").at(-1) !== "node_modules") {
+      const candidate = input.recordIndex.byPackagePath.get(
+        `${directory ? `${directory}/` : ""}node_modules/${reference.requestedName}`
+      );
+      if (candidate) return candidate;
+    }
+    if (!directory) break;
+    const separator = directory.lastIndexOf("/");
+    directory = separator < 0 ? "" : directory.slice(0, separator);
+  }
 
-  return (nestedPath ? input.recordIndex.byPackagePath.get(nestedPath) : undefined)
-    ?? input.recordIndex.byPackagePath.get(topLevelPath)
-    ?? input.recordIndex.byNameAndVersion.get(
+  return input.recordIndex.byNameAndVersion.get(
       `${reference.lookupName}\0${reference.lookupRange}`
     )
     ?? onlyPackageRecordWithName(input.recordIndex, reference.lookupName);
