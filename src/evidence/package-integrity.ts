@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { recordArtifactCheck } from "./artifact-capture";
 
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
@@ -49,6 +50,7 @@ export function verifyPackageIntegrity(input: {
       actualDigest.byteLength === entry.digest.byteLength
       && timingSafeEqual(actualDigest, entry.digest)
     ) {
+      recordArtifactCheck({ packageId: input.packageId, bytes: input.artifact, kind: "sri", value: actual });
       return ok(undefined);
     }
   }

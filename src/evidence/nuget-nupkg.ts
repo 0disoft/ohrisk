@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { recordArtifactCheck } from "./artifact-capture";
 import path from "node:path";
 
 import { readArchiveBytes } from "../archive/archive-reader";
@@ -180,6 +181,7 @@ function verifyNugetNupkgIntegrity(input: {
       }
     }));
   }
+  recordArtifactCheck({ packageId: input.packageId, bytes: input.nupkg, kind: "nuget-sha512", value: `sha512-${actual.toString("base64")}` });
   return ok(undefined);
 }
 

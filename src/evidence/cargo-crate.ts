@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { recordArtifactCheck } from "./artifact-capture";
 import path from "node:path";
 
 import { readArchiveBytes } from "../archive/archive-reader";
@@ -185,6 +186,7 @@ function verifyCargoCrateIntegrity(input: {
       }
     }));
   }
+  recordArtifactCheck({ packageId: input.packageId, bytes: input.crate, kind: "cargo-sha256", value: `sha256-${actual.toString("base64")}` });
   return ok(undefined);
 }
 

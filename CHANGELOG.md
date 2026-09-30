@@ -2,6 +2,10 @@
 
 ## 1.16.0 - Unreleased
 
+- Evidence collection can capture bounded content receipts separately from
+  successful declared-integrity checks, including cache, revalidation, network
+  and local retrieval. Requested HTTP origins omit credentials, query and fragment.
+
 - Yarn classic inputs receive a bounded token preflight before the external
   parser, rejecting unterminated strings and accepting end-of-file comments
   without entering the dependency's unbounded lexer loops.

@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { recordArtifactBytes, recordArtifactCheck } from "./artifact-capture";
 import {
   closeSync,
   existsSync,
@@ -2228,7 +2229,9 @@ function readLocalArtifactFileWithLimit(input: {
       const chunk = Buffer.alloc(readSize);
       const bytesRead = readSync(fileDescriptor, chunk, 0, chunk.length, null);
       if (bytesRead === 0) {
-        return ok(Buffer.concat(chunks, observedBytes));
+        const bytes = Buffer.concat(chunks, observedBytes);
+        recordArtifactBytes({ packageId: input.packageId, bytes, retrieval: "local" });
+        return ok(bytes);
       }
 
       observedBytes += bytesRead;
@@ -2688,6 +2691,7 @@ async function collectRemoteMavenJarEvidence(input: {
     }));
   }
 
+  recordArtifactCheck({ packageId: input.packageId, bytes: jarBytes.value, kind: "maven-sha256", value: observed.toString("hex") });
   return collectMavenJarEvidence({
     packageId: input.packageId,
     coordinates: input.coordinates,
@@ -3545,6 +3549,7 @@ async function readRemoteArtifactBytes(input: {
 
   const cached = input.artifactCache?.read(input.url, input.maxBytes);
   if (cached && (!cached.stale || input.offline)) {
+    recordArtifactBytes({ packageId: input.packageId, bytes: cached.bytes, requestedOrigin: input.url, retrieval: "cache" });
     return ok(cached.bytes);
   }
 
@@ -3706,6 +3711,8 @@ async function readRemoteArtifactBytes(input: {
   } else {
     input.artifactCache?.remove(input.url);
   }
+  recordArtifactBytes({ packageId: input.packageId, bytes: artifact.value.bytes, requestedOrigin: input.url,
+    retrieval: artifact.value.notModified ? "revalidated-cache" : "network" });
   return ok(artifact.value.bytes);
 }
 

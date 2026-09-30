@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 0e74fc086bd7fcfd25ffdc36f13c693e8f12edc02a5b4a7b917b5ca55ce8801e
+// ohrisk-action-source-sha256: 594c6c43a42f44dae6160ebdd6bc4337eaa39652f8567dbd54e7dcdb2170668b
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18284,7 +18284,74 @@ function edgeLimitError(limit) {
 }
 
 // src/evidence/package-integrity.ts
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash as createHash2, timingSafeEqual } from "node:crypto";
+
+// src/evidence/artifact-capture.ts
+import { AsyncLocalStorage } from "node:async_hooks";
+import { createHash } from "node:crypto";
+var activeCapture = new AsyncLocalStorage;
+function recordArtifactBytes(input) {
+  const capture = activeCapture.getStore();
+  if (!capture || capture.closed)
+    return;
+  const sha256 = createHash("sha256").update(input.bytes).digest("hex");
+  const requestedOrigin = safeArtifactOrigin(input.requestedOrigin);
+  const key = JSON.stringify([input.packageId, requestedOrigin ?? null, sha256]);
+  const existing = capture.receipts.get(key);
+  if (existing) {
+    if (!existing.retrievals.includes(input.retrieval))
+      existing.retrievals.push(input.retrieval);
+    return;
+  }
+  if (capture.receipts.size >= capture.maxArtifacts) {
+    capture.truncated = true;
+    return;
+  }
+  capture.receipts.set(key, {
+    packageId: input.packageId,
+    ...requestedOrigin ? { requestedOrigin } : {},
+    sha256,
+    byteLength: input.bytes.byteLength,
+    retrievals: [input.retrieval],
+    checks: []
+  });
+  capture.contentKeys.add(contentKey(input.packageId, sha256));
+}
+function recordArtifactCheck(input) {
+  const capture = activeCapture.getStore();
+  if (!capture || capture.closed)
+    return;
+  const sha256 = createHash("sha256").update(input.bytes).digest("hex");
+  const key = contentKey(input.packageId, sha256);
+  if (!capture.contentKeys.has(key))
+    recordArtifactBytes({ packageId: input.packageId, bytes: input.bytes, retrieval: "verification-only" });
+  if (!capture.contentKeys.has(key))
+    return;
+  const checks = capture.checks.get(key) ?? new Map;
+  checks.set(JSON.stringify([input.kind, input.value]), { kind: input.kind, value: input.value });
+  capture.checks.set(key, checks);
+}
+function contentKey(packageId, sha256) {
+  return JSON.stringify([packageId, sha256]);
+}
+function safeArtifactOrigin(value) {
+  if (!value)
+    return;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" && url.protocol !== "http:")
+      return;
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return;
+  }
+}
+
+// src/evidence/package-integrity.ts
 var SUPPORTED_INTEGRITY_DIGEST_BYTES = {
   sha1: 20,
   sha256: 32,
@@ -18311,10 +18378,11 @@ function verifyPackageIntegrity(input) {
   }
   const computed = [];
   for (const entry of supported) {
-    const actualDigest = createHash(entry.algorithm).update(input.artifact).digest();
+    const actualDigest = createHash2(entry.algorithm).update(input.artifact).digest();
     const actual = `${entry.algorithm}-${actualDigest.toString("base64")}`;
     computed.push(actual);
     if (actualDigest.byteLength === entry.digest.byteLength && timingSafeEqual(actualDigest, entry.digest)) {
+      recordArtifactCheck({ packageId: input.packageId, bytes: input.artifact, kind: "sri", value: actual });
       return ok(undefined);
     }
   }
@@ -40341,7 +40409,7 @@ function noProjectError(source) {
 }
 
 // src/archive/archive-reader.ts
-import { createHash as createHash2 } from "node:crypto";
+import { createHash as createHash3 } from "node:crypto";
 import { closeSync as closeSync3, fstatSync, openSync as openSync3, readSync as readSync3, realpathSync as realpathSync2, statSync as statSync6 } from "node:fs";
 import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import { gunzipSync, inflateRawSync } from "node:zlib";
@@ -40434,7 +40502,7 @@ function readOwnedArchiveBuffer(input) {
     checkDeadline(budget, safeName);
     const format = detectFormat(input.bytes, input.formatHint, safeName);
     const indexed = format === "zip" ? parseZip(input.bytes, budget, safeName) : parseTarContainer(input.bytes, format, budget, safeName, input.tarLinkPolicy ?? "reject", input.onTarSymlink);
-    const sha256 = createHash2("sha256").update(input.bytes).digest("hex");
+    const sha256 = createHash3("sha256").update(input.bytes).digest("hex");
     checkDeadline(budget, safeName);
     const source = createArchiveSource({
       format,
@@ -40502,7 +40570,7 @@ function createArchiveSource(input) {
       chargeHashing(input.budget, entry.size, input.basename, entry.path);
       const data = entry.materialize(startedAt);
       checkDeadlineSince(input.budget, startedAt, input.basename, entry.path);
-      return ok(createHash2("sha256").update(data).digest("hex"));
+      return ok(createHash3("sha256").update(data).digest("hex"));
     } catch (cause) {
       return err(toOhriskError(cause, "ARCHIVE_READ_FAILED", "invalid_input", input.basename));
     }
@@ -41526,7 +41594,7 @@ function indexFindings(findings, side) {
 }
 
 // src/evidence/cache.ts
-import { createHash as createHash3 } from "node:crypto";
+import { createHash as createHash4 } from "node:crypto";
 import {
   existsSync as existsSync18,
   lstatSync as lstatSync3,
@@ -42465,7 +42533,7 @@ function isRegularFile(filePath) {
   }
 }
 function sha256(bytes) {
-  return createHash3("sha256").update(bytes).digest("hex");
+  return createHash4("sha256").update(bytes).digest("hex");
 }
 function removeQuietly(filePath) {
   try {
@@ -42491,7 +42559,7 @@ function cacheOperationError(message, rootDir, cause) {
 }
 
 // src/evidence/collect.ts
-import { createHash as createHash10, timingSafeEqual as timingSafeEqual7 } from "node:crypto";
+import { createHash as createHash11, timingSafeEqual as timingSafeEqual7 } from "node:crypto";
 import {
   closeSync as closeSync5,
   existsSync as existsSync46,
@@ -43125,7 +43193,7 @@ function abortableDelay(ms, signal) {
 }
 
 // src/evidence/cargo-crate.ts
-import { createHash as createHash4, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+import { createHash as createHash5, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
 import path52 from "node:path";
 
 // src/license/spdx-catalog.ts
@@ -45539,7 +45607,7 @@ function unavailableCargoCrateEvidence(packageId, warning) {
 }
 function verifyCargoCrateIntegrity(input) {
   const expected = decodeSha256Integrity(input.integrity);
-  const actual = createHash4("sha256").update(input.crate).digest();
+  const actual = createHash5("sha256").update(input.crate).digest();
   if (!expected || expected.length !== actual.length || !timingSafeEqual2(expected, actual)) {
     return err(createError({
       code: "PACKAGE_INTEGRITY_CHECK_FAILED",
@@ -45552,6 +45620,7 @@ function verifyCargoCrateIntegrity(input) {
       }
     }));
   }
+  recordArtifactCheck({ packageId: input.packageId, bytes: input.crate, kind: "cargo-sha256", value: `sha256-${actual.toString("base64")}` });
   return ok(undefined);
 }
 function decodeSha256Integrity(integrity) {
@@ -50689,7 +50758,7 @@ function isFile4(pathname) {
 }
 
 // src/evidence/zig-package.ts
-import { createHash as createHash5 } from "node:crypto";
+import { createHash as createHash6 } from "node:crypto";
 import { existsSync as existsSync44, readdirSync as readdirSync33, statSync as statSync32 } from "node:fs";
 import path78 from "node:path";
 import { TextDecoder as TextDecoder3 } from "node:util";
@@ -51167,14 +51236,14 @@ function computeZigPackageHash(entries) {
   const perFileHashes = [];
   let totalSize = 0;
   for (const entry of sorted) {
-    const hasher = createHash5("sha256");
+    const hasher = createHash6("sha256");
     hasher.update(Buffer.from(entry.normalizedPath, "latin1"));
     hasher.update(Buffer.from([0, 0]));
     hasher.update(entry.data);
     perFileHashes.push(hasher.digest());
     totalSize += entry.data.length;
   }
-  const overallHasher = createHash5("sha256");
+  const overallHasher = createHash6("sha256");
   for (const fileHash of perFileHashes) {
     overallHasher.update(fileHash);
   }
@@ -51924,7 +51993,7 @@ function adapter(id, lockfileKinds, packageEcosystems) {
 }
 
 // src/evidence/go-module-zip.ts
-import { createHash as createHash6, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
+import { createHash as createHash7, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
 import { TextDecoder as TextDecoder4 } from "node:util";
 var GO_MODULE_ZIP_MAX_ENTRIES = 65535;
 var GO_MODULE_ZIP_ENTRY_MAX_BYTES = 50 * 1024 * 1024;
@@ -52049,7 +52118,7 @@ function readVerifiedGoModuleRequirements(input) {
   return [...new Set(parsed.value.records.map((record) => record.modulePath))].sort();
 }
 function hashGoModuleArchive(input) {
-  const summary = createHash6("sha256");
+  const summary = createHash7("sha256");
   const entries = [...input.entries].sort((left, right) => {
     const leftName = left.type === "directory" ? `${left.path}/` : left.path;
     const rightName = right.type === "directory" ? `${right.path}/` : right.path;
@@ -52067,7 +52136,7 @@ function hashGoModuleArchive(input) {
     }
     let fileDigest;
     if (entry.type === "directory") {
-      fileDigest = createHash6("sha256").digest("hex");
+      fileDigest = createHash7("sha256").digest("hex");
     } else {
       const hashed = input.hashEntrySha256(entry.path);
       if (!hashed.ok) {
@@ -52081,8 +52150,8 @@ function hashGoModuleArchive(input) {
   return ok(`h1:${summary.digest("base64")}`);
 }
 function hashGoModBytes(goMod) {
-  const fileDigest = createHash6("sha256").update(goMod).digest("hex");
-  const summary = createHash6("sha256").update(`${fileDigest}  go.mod
+  const fileDigest = createHash7("sha256").update(goMod).digest("hex");
+  const summary = createHash7("sha256").update(`${fileDigest}  go.mod
 `, "utf8").digest("base64");
   return `h1:${summary}`;
 }
@@ -52186,7 +52255,7 @@ function escapeGoProxyText(value) {
 }
 
 // src/evidence/hex-tarball.ts
-import { createHash as createHash7, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
+import { createHash as createHash8, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
 var HEX_OUTER_ENTRY_LIMIT = 8;
 var HEX_CONTENT_ENTRY_LIMIT = 50000;
 var HEX_CONTENT_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
@@ -52244,7 +52313,7 @@ function collectHexTarballEvidence(input) {
     }));
   }
   const expectedInnerChecksum = parseInnerChecksum(checksumBytes.value);
-  const computedInnerChecksum = createHash7("sha256").update(versionBytes.value).update(metadataBytes.value).update(contentsBytes.value).digest();
+  const computedInnerChecksum = createHash8("sha256").update(versionBytes.value).update(metadataBytes.value).update(contentsBytes.value).digest();
   if (!expectedInnerChecksum || !timingSafeEqual4(expectedInnerChecksum, computedInnerChecksum)) {
     return err(hexTarballError(input, "Hex package inner checksum did not match its payload.", {
       reason: "hex_inner_checksum_mismatch"
@@ -52603,7 +52672,7 @@ function isPackageLicenseEvidencePath(filePath) {
 
 // src/evidence/nix-github.ts
 var import_xz_decompress = __toESM(require_xz_decompress(), 1);
-import { createHash as createHash8, timingSafeEqual as timingSafeEqual5 } from "node:crypto";
+import { createHash as createHash9, timingSafeEqual as timingSafeEqual5 } from "node:crypto";
 import { closeSync as closeSync4, mkdtempSync as mkdtempSync2, openSync as openSync4, readSync as readSync4, rmSync as rmSync3, writeSync } from "node:fs";
 import { tmpdir as tmpdir2 } from "node:os";
 import path80 from "node:path";
@@ -53044,7 +53113,7 @@ function hashNixArchive(source, entries) {
     children.push({ node, nameBytes: Buffer.from(name, "utf8") });
     childrenByParent.set(parentPath, children);
   }
-  const hash = createHash8("sha256");
+  const hash = createHash9("sha256");
   const encodedStrings = new Map;
   const lengthBytes = Buffer.allocUnsafe(8);
   const paddingBytes = Buffer.alloc(7);
@@ -53237,7 +53306,7 @@ function unavailableEvidence2(packageId, warning) {
 }
 
 // src/evidence/nuget-nupkg.ts
-import { createHash as createHash9, timingSafeEqual as timingSafeEqual6 } from "node:crypto";
+import { createHash as createHash10, timingSafeEqual as timingSafeEqual6 } from "node:crypto";
 import path81 from "node:path";
 
 // src/evidence/nuget-registry.ts
@@ -53655,7 +53724,7 @@ function collectNugetNupkgEvidence(input) {
 }
 function verifyNugetNupkgIntegrity(input) {
   const expected = decodeCanonicalSha512(input.expectedSha512);
-  const actual = createHash9("sha512").update(input.nupkg).digest();
+  const actual = createHash10("sha512").update(input.nupkg).digest();
   if (input.nupkg.byteLength !== input.expectedSize || !expected || expected.length !== actual.length || !timingSafeEqual6(expected, actual)) {
     return err(createError({
       code: "PACKAGE_INTEGRITY_CHECK_FAILED",
@@ -53669,6 +53738,7 @@ function verifyNugetNupkgIntegrity(input) {
       }
     }));
   }
+  recordArtifactCheck({ packageId: input.packageId, bytes: input.nupkg, kind: "nuget-sha512", value: `sha512-${actual.toString("base64")}` });
   return ok(undefined);
 }
 function decodeCanonicalSha512(value) {
@@ -56063,7 +56133,9 @@ function readLocalArtifactFileWithLimit(input) {
       const chunk = Buffer.alloc(readSize);
       const bytesRead = readSync5(fileDescriptor, chunk, 0, chunk.length, null);
       if (bytesRead === 0) {
-        return ok(Buffer.concat(chunks, observedBytes));
+        const bytes = Buffer.concat(chunks, observedBytes);
+        recordArtifactBytes({ packageId: input.packageId, bytes, retrieval: "local" });
+        return ok(bytes);
       }
       observedBytes += bytesRead;
       if (observedBytes > input.maxBytes) {
@@ -56410,7 +56482,7 @@ async function collectRemoteMavenJarEvidence(input) {
     return jarBytes.error.category === "network" ? ok(undefined) : jarBytes;
   }
   const expected = Buffer.from(checksum, "hex");
-  const observed = createHash10("sha256").update(jarBytes.value).digest();
+  const observed = createHash11("sha256").update(jarBytes.value).digest();
   if (expected.length !== observed.length || !timingSafeEqual7(expected, observed)) {
     return err(createError({
       code: "PACKAGE_INTEGRITY_CHECK_FAILED",
@@ -56423,6 +56495,7 @@ async function collectRemoteMavenJarEvidence(input) {
       }
     }));
   }
+  recordArtifactCheck({ packageId: input.packageId, bytes: jarBytes.value, kind: "maven-sha256", value: observed.toString("hex") });
   return collectMavenJarEvidence({
     packageId: input.packageId,
     coordinates: input.coordinates,
@@ -57037,6 +57110,7 @@ async function readRemoteArtifactBytes(input) {
   }
   const cached = input.artifactCache?.read(input.url, input.maxBytes);
   if (cached && (!cached.stale || input.offline)) {
+    recordArtifactBytes({ packageId: input.packageId, bytes: cached.bytes, requestedOrigin: input.url, retrieval: "cache" });
     return ok(cached.bytes);
   }
   if (input.offline) {
@@ -57186,6 +57260,12 @@ async function readRemoteArtifactBytes(input) {
   } else {
     input.artifactCache?.remove(input.url);
   }
+  recordArtifactBytes({
+    packageId: input.packageId,
+    bytes: artifact.value.bytes,
+    requestedOrigin: input.url,
+    retrieval: artifact.value.notModified ? "revalidated-cache" : "network"
+  });
   return ok(artifact.value.bytes);
 }
 async function readTransientRemoteArtifactWithRetry(input) {
@@ -57976,7 +58056,7 @@ function traverseGoModuleGraph(roots, adjacency) {
 }
 
 // src/policy/finding-id.ts
-import { createHash as createHash11 } from "node:crypto";
+import { createHash as createHash12 } from "node:crypto";
 function buildReviewDecision(input) {
   const id = [
     "review-v1",
@@ -57994,7 +58074,7 @@ function buildReviewDecision(input) {
   };
 }
 function buildEvidenceFingerprint(evidence) {
-  return createHash11("sha256").update(JSON.stringify(canonicalStringSet(evidence))).digest("hex");
+  return createHash12("sha256").update(JSON.stringify(canonicalStringSet(evidence))).digest("hex");
 }
 function buildFindingId(input) {
   return joinFindingIdentity(input.packageId, input.dependencyType, input.dependencyScope, canonicalPathSet(input.paths));
@@ -58071,7 +58151,7 @@ function encodeFindingComponent(value) {
 }
 
 // src/policy/config.ts
-import { createHash as createHash12 } from "node:crypto";
+import { createHash as createHash13 } from "node:crypto";
 import { existsSync as existsSync47, readFileSync as readFileSync3, realpathSync as realpathSync6, statSync as statSync35 } from "node:fs";
 import { isIP as isIP3 } from "node:net";
 import path85 from "node:path";
@@ -58124,7 +58204,7 @@ function policyConfigDigest(config) {
     registryAuth: [...config.registryAuth.entries()].sort(([left], [right]) => compareStrings2(left, right)).map(([host, auth]) => [host, auth.tokenEnv]),
     npmRegistryUrl: config.npmRegistryUrl ?? null
   });
-  return createHash12("sha256").update(value, "utf8").digest("hex");
+  return createHash13("sha256").update(value, "utf8").digest("hex");
 }
 function normalizedEvaluationPolicy(policy) {
   return {
@@ -66393,7 +66473,7 @@ function reportFormatLabel(command) {
 }
 
 // node_modules/.bun/@0disoft+laqu@1.1.9/node_modules/@0disoft/laqu/dist/runtime.js
-import { AsyncLocalStorage } from "node:async_hooks";
+import { AsyncLocalStorage as AsyncLocalStorage2 } from "node:async_hooks";
 
 // node_modules/.bun/@0disoft+laqu@1.1.9/node_modules/@0disoft/laqu/dist/unicode-width-ranges.js
 var wideRanges = [
@@ -68612,7 +68692,7 @@ class LaquRuntime {
   #processLifecycle;
   #terminalResizeCleanup;
   #handles = new Set;
-  #taskCloseContext = new AsyncLocalStorage;
+  #taskCloseContext = new AsyncLocalStorage2;
   #activeScopedTasks = 0;
   #closeRequestedByScopedTask = false;
   #scopedTasksDrained;
