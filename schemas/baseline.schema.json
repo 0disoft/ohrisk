@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:ohrisk:schema:baseline:1.0.0",
+  "$id": "urn:ohrisk:schema:baseline:1.1.0",
   "title": "Ohrisk checked-in baseline",
   "type": "object",
   "required": [
@@ -13,8 +13,8 @@
     "findings"
   ],
   "properties": {
-    "$schema": { "const": "urn:ohrisk:schema:baseline:1.0.0" },
-    "schemaVersion": { "const": "1.0.0" },
+    "$schema": { "const": "urn:ohrisk:schema:baseline:1.1.0" },
+    "schemaVersion": { "const": "1.1.0" },
     "sourceReportSchema": {
       "type": "string",
       "pattern": "^urn:ohrisk:schema:scan-report:[0-9]+\\.[0-9]+\\.[0-9]+$"

@@ -15,6 +15,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { main, type CliIO } from "../src/cli/main";
+import type { Lockfile, InputSupport } from "../types/report-types";
 import { createProcessCommandSignal } from "../src/cli/cancellation";
 import { createArtifactCache } from "../src/evidence/cache";
 import { fetchMavenCentralModelPoms } from "../src/evidence/collect";
@@ -369,12 +370,12 @@ describe("main", () => {
 
       expect(exitCode, stderr.join("\n")).toBe(0);
       const report = JSON.parse(stdout.join("\n")) as {
-        lockfiles: { kind: string; path: string }[];
+        lockfiles: Lockfile[];
         dependencyGraph: { total: number };
       };
       expect(report.lockfiles).toEqual([
-        { kind: "requirements-txt", path: "docs/requirements.txt" },
-        { kind: "go-mod", path: "tools/go.mod" }
+        { kind: "requirements-txt", path: "docs/requirements.txt", support: { relationships: "direct-only", developmentScope: "unavailable", artifactPins: "none" } },
+        { kind: "go-mod", path: "tools/go.mod", support: { relationships: "bounded-paths", developmentScope: "heuristic", artifactPins: "checksums" } }
       ]);
       expect(report.dependencyGraph.total).toBe(0);
     } finally {
@@ -430,11 +431,11 @@ describe("main", () => {
 
       expect(exitCode, stderr.join("\n")).toBe(0);
       const report = JSON.parse(stdout.join("\n")) as {
-        lockfiles: { kind: string; path: string }[];
+        lockfiles: Lockfile[];
       };
       expect(report.lockfiles).toEqual([
-        { kind: "maven-pom", path: "pom.xml" },
-        { kind: "requirements-txt", path: "requirements.txt" }
+        { kind: "maven-pom", path: "pom.xml", support: { relationships: "bounded-paths", developmentScope: "declared", artifactPins: "none" } },
+        { kind: "requirements-txt", path: "requirements.txt", support: { relationships: "direct-only", developmentScope: "unavailable", artifactPins: "none" } }
       ]);
     } finally {
       rmSync(invocationRoot, { recursive: true, force: true });
@@ -3707,6 +3708,7 @@ describe("main", () => {
         runs: Array<{
           properties: {
             ohriskCompleteness: ScanCompleteness;
+            ohriskInputSupport: Array<{ kind: string; support: InputSupport }>;
             ohriskWaiverMode: string;
             ohriskActiveFindingCount: number;
             ohriskWaivedFindingCount: number;
@@ -3739,6 +3741,7 @@ describe("main", () => {
             evidence: expect.objectContaining({ status: "complete" })
           })
         }),
+        ohriskInputSupport: [{ kind: "bun", support: { relationships: "bounded-paths", developmentScope: "declared", artifactPins: "checksums" } }],
         ohriskWaiverMode: "local",
         ohriskActiveFindingCount: 4,
         ohriskWaivedFindingCount: 1,
@@ -5440,23 +5443,23 @@ ExternalRef: PACKAGE-MANAGER purl pkg:npm/noassertion-spdx-tag-value-child@1.0.0
       expect(listCalls).toBe(1);
       const payload = JSON.parse(stdout.join("\n")) as {
         lockfileChanges: {
-          current: Array<{ kind: string; path: string }>;
-          baseline: Array<{ kind: string; path: string }>;
-          added: Array<{ kind: string; path: string }>;
-          removed: Array<{ kind: string; path: string }>;
+          current: Lockfile[];
+          baseline: Lockfile[];
+          added: Lockfile[];
+          removed: Lockfile[];
         };
       };
       expect(payload.lockfileChanges).toEqual({
         current: [
-          { kind: "cargo-lock", path: "Cargo.lock" },
-          { kind: "package-lock", path: "package-lock.json" }
+          { kind: "cargo-lock", path: "Cargo.lock", support: { relationships: "bounded-paths", developmentScope: "companion-dependent", artifactPins: "checksums-or-revisions" } },
+          { kind: "package-lock", path: "package-lock.json", support: { relationships: "source-edges", developmentScope: "declared", artifactPins: "checksums" } }
         ],
         baseline: [
-          { kind: "package-lock", path: "package-lock.json" },
-          { kind: "yarn-lock", path: "yarn.lock" }
+          { kind: "package-lock", path: "package-lock.json", support: { relationships: "source-edges", developmentScope: "declared", artifactPins: "checksums" } },
+          { kind: "yarn-lock", path: "yarn.lock", support: { relationships: "bounded-paths", developmentScope: "companion-dependent", artifactPins: "checksums" } }
         ],
-        added: [{ kind: "cargo-lock", path: "Cargo.lock" }],
-        removed: [{ kind: "yarn-lock", path: "yarn.lock" }]
+        added: [{ kind: "cargo-lock", path: "Cargo.lock", support: { relationships: "bounded-paths", developmentScope: "companion-dependent", artifactPins: "checksums-or-revisions" } }],
+        removed: [{ kind: "yarn-lock", path: "yarn.lock", support: { relationships: "bounded-paths", developmentScope: "companion-dependent", artifactPins: "checksums" } }]
       });
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });

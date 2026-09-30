@@ -61,6 +61,18 @@ const policy: PolicyConfigSummary = {
 };
 
 describe("machine-readable report schemas", () => {
+  test("validates decision and reported-evidence fields without accepting incomplete usage scope", () => {
+    const scan = renderCompleteScanReport();
+    const decision = { id: "review-v1::pkg%3Anpm/example@1::distributed-app::production-only::production::direct",
+      fingerprint: "decision-fingerprint", profile: "distributed-app", prodOnly: true };
+    const updated = { ...scan.findings[0], decision, evidenceFingerprint: "a".repeat(64) };
+    expectValid(OHRISK_SCAN_REPORT_SCHEMA, { ...scan, findings: [updated] });
+    expectInvalid(OHRISK_SCAN_REPORT_SCHEMA, { ...scan, findings: [{ ...updated, decision: { id: decision.id, fingerprint: decision.fingerprint } }] });
+    expectInvalid(OHRISK_SCAN_REPORT_SCHEMA, { ...scan, findings: [{ ...updated, evidenceFingerprint: "not-a-digest" }] });
+    const diff = renderCompleteDiffReport();
+    expectValid(OHRISK_DIFF_REPORT_SCHEMA, { ...diff, provenanceChangedFindingCount: 1, provenanceChangedFindings: [updated] });
+    expectInvalid(OHRISK_DIFF_REPORT_SCHEMA, { ...diff, provenanceChangedFindingCount: -1 });
+  });
   test("reports input capability separately from scan completeness and rejects invented capabilities", () => {
     const scan = renderCompleteScanReport();
     expect(scan.lockfiles[0].support).toEqual({ relationships: "source-edges", developmentScope: "declared", artifactPins: "checksums" });

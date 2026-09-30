@@ -1,12 +1,22 @@
 # CI Usage Guide
 
+Reports in schema 3.8 carry scoped review decisions independently of display
+paths. Gated diffs use these decisions when present and report path/evidence
+label changes in `provenanceChangedFindings`, outside introduced-risk counts.
+The baseline CLI creates schema 1.1 artifacts whose finding `id` and
+`fingerprint` store the scoped decision when available. It still reads 1.0
+baselines with their original keys; it does not infer a broader review scope
+from a legacy path ID. Report schema/profile/production/policy configuration
+changes require review and baseline regeneration. Use `decisionFingerprint`
+waivers only after explicitly reviewing their package and usage scope.
+
 Semantic fingerprint comparison in CI waivers, gated diffs, and the packaged
 baseline CLI ignores source-label and ordinary evidence-file renames. License
 meaning, confidence, exceptions, restriction scope, bundled component terms,
 and conflicting evidence still participate in review decisions. Older semantic
 fingerprints use the same comparison; opaque legacy fingerprints remain exact.
 Baseline configuration checks for profile, production scope, policy, and report
-schema remain unchanged. Dependency path changes still change finding IDs.
+schema remain unchanged. Dependency path changes still change legacy finding IDs.
 
 Examples for running Ohrisk in GitHub Actions.
 

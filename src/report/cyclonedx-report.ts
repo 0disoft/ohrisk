@@ -266,6 +266,8 @@ function renderComponent(input: {
               name: "ohrisk:fingerprint",
               value: input.finding.fingerprint
             },
+            ...(input.finding.decision ? [{ name: "ohrisk:decision", value: JSON.stringify(input.finding.decision) }] : []),
+            ...(input.finding.evidenceFingerprint ? [{ name: "ohrisk:evidenceFingerprint", value: input.finding.evidenceFingerprint }] : []),
             {
               name: "ohrisk:riskSeverity",
               value: input.finding.severity

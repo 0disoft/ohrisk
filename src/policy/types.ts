@@ -25,6 +25,8 @@ export type RiskDependencyType =
 export type RiskFinding = {
   id: string;
   fingerprint: string;
+  decision?: import("../../types/report-types").ReviewDecision;
+  evidenceFingerprint?: string;
   packageId: string;
   severity: RiskSeverity;
   reason: string;

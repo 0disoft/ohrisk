@@ -57,6 +57,7 @@ export function evaluateScanPolicyAndWaivers(input: {
     licenses: normalizedLicenses,
     dependencies: graph.nodes,
     profile: input.profile,
+    prodOnly: input.prodOnly,
     policy: input.policy
   });
   const policy = summarizePolicyConfig(input.policy);

@@ -8,19 +8,21 @@ export type RiskDiff = {
   changedFindings: RiskFinding[];
   resolvedFindings: RiskFinding[];
   introducedFindings: RiskFinding[];
+  provenanceChangedFindings?: RiskFinding[];
 };
 
 export function diffRiskFindings(input: {
   baselineFindings: RiskFinding[];
   currentFindings: RiskFinding[];
 }): RiskDiff {
-  const baselineById = new Map(input.baselineFindings.map((finding) => [finding.id, finding]));
-  const currentIds = new Set(input.currentFindings.map((finding) => finding.id));
+  const baselineById = indexFindings(input.baselineFindings, "baseline");
+  const currentIds = new Set(indexFindings(input.currentFindings, "current").keys());
   const newFindings: RiskFinding[] = [];
   const changedFindings: RiskFinding[] = [];
+  const provenanceChangedFindings: RiskFinding[] = [];
 
   for (const finding of input.currentFindings) {
-    const baseline = baselineById.get(finding.id);
+    const baseline = baselineById.get(comparisonIdentity(finding));
     if (!baseline) {
       newFindings.push(finding);
       continue;
@@ -28,10 +30,12 @@ export function diffRiskFindings(input: {
 
     if (findingKey(baseline) !== findingKey(finding)) {
       changedFindings.push(finding);
+    } else if (baseline.id !== finding.id || baseline.evidenceFingerprint !== finding.evidenceFingerprint) {
+      provenanceChangedFindings.push(finding);
     }
   }
 
-  const resolvedFindings = input.baselineFindings.filter((finding) => !currentIds.has(finding.id));
+  const resolvedFindings = input.baselineFindings.filter((finding) => !currentIds.has(comparisonIdentity(finding)));
 
   return {
     baselineFindings: input.baselineFindings,
@@ -39,10 +43,25 @@ export function diffRiskFindings(input: {
     newFindings,
     changedFindings,
     resolvedFindings,
-    introducedFindings: [...newFindings, ...changedFindings]
+    introducedFindings: [...newFindings, ...changedFindings],
+    provenanceChangedFindings
   };
 }
 
 function findingKey(finding: RiskFinding): string {
-  return comparableFindingFingerprint(finding.fingerprint);
+  return comparableFindingFingerprint(finding.decision?.fingerprint ?? finding.fingerprint);
+}
+
+function comparisonIdentity(finding: RiskFinding): string {
+  return finding.decision ? `decision:${finding.decision.id}` : `legacy:${finding.id}`;
+}
+
+function indexFindings(findings: RiskFinding[], side: string): Map<string, RiskFinding> {
+  const indexed = new Map<string, RiskFinding>();
+  for (const finding of findings) {
+    const key = comparisonIdentity(finding);
+    if (indexed.has(key)) throw new Error(`Finding comparison identity is ambiguous in ${side} inputs.`);
+    indexed.set(key, finding);
+  }
+  return indexed;
 }

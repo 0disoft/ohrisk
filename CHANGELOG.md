@@ -2,6 +2,15 @@
 
 ## 1.16.0 - Unreleased
 
+- Review decisions use package coordinates, usage profile, production-only
+  selection, and dependency type/scope independently of display paths. New
+  `decisionFingerprint` waivers opt into this bounded identity; legacy ID and
+  fingerprint waivers retain their existing scope. Diff and baseline checks use
+  decision keys when present, while provenance-only changes remain visible
+  without introducing risk. Report schema 3.8 and waiver/baseline schema 1.1
+  describe this contract. Older baselines remain readable without automatic
+  conversion of their reviewed keys; report-configuration changes require review.
+
 - Adapters declare relationship reconstruction, development-scope detection
   and retained artifact pins for every supported input kind. Report schema 3.7
   exposes the support boundary separately from actual inspection completeness

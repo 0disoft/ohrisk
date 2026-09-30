@@ -2,7 +2,7 @@ import { packageUrl } from "../graph/package-url";
 import type { DependencyNode } from "../graph/types";
 import type { NormalizedLicense } from "../license/types";
 import type { SpdxExpressionNode, SpdxLicenseNode } from "../license/spdx";
-import { buildFindingId, buildSemanticFindingFingerprint } from "./finding-id";
+import { buildFindingId, buildSemanticFindingFingerprint, buildReviewDecision, buildEvidenceFingerprint } from "./finding-id";
 import type { UsageProfile } from "./profiles";
 import {
   evaluationPolicyForProfile,
@@ -108,6 +108,7 @@ export function evaluateLicenseRisk(input: {
   profile: UsageProfile;
   policy?: EvaluationPolicy;
   includePackagePolicy?: boolean;
+  prodOnly?: boolean;
 }): RiskFinding {
   const effectivePolicy = input.policy
     ? evaluationPolicyForProfile(input.policy, input.profile)
@@ -146,6 +147,11 @@ export function evaluateLicenseRisk(input: {
 
   return {
     id,
+    ...(input.includePackagePolicy === false ? {} : {
+      decision: buildReviewDecision({ packageUrl: packageUrl(input.dependency), dependencyType: input.dependency.dependencyType,
+        dependencyScope, profile: input.profile, prodOnly: input.prodOnly ?? false, severity, recommendation, license: input.license })
+    }),
+    evidenceFingerprint: buildEvidenceFingerprint(evidence),
     fingerprint: buildSemanticFindingFingerprint({
       id,
       severity,
@@ -184,6 +190,7 @@ export function evaluateLicenseRisks(input: {
   licenses: NormalizedLicense[];
   dependencies: DependencyNode[];
   profile: UsageProfile;
+  prodOnly?: boolean;
   policy?: EvaluationPolicy;
 }): RiskFinding[] {
   const dependencyById = new Map(input.dependencies.map((dependency) => [dependency.id, dependency]));
@@ -199,6 +206,7 @@ export function evaluateLicenseRisks(input: {
         license,
         dependency,
         profile: input.profile,
+        prodOnly: input.prodOnly ?? false,
         ...(input.policy ? { policy: input.policy } : {})
       });
     })

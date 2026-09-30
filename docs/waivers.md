@@ -1,5 +1,25 @@
 # Waiver Guide
 
+## Matching a scoped review decision
+
+Scan JSON findings include `decision.id` and `decision.fingerprint`. Their
+identity contains the package PURL, usage profile, production-only selection,
+and dependency type/directness, independently of explanatory dependency paths.
+After reviewing a finding, copy its exact `decision.fingerprint` to the
+`decisionFingerprint` field in `.ohrisk-waivers.json`, with a reason and expiry.
+This selector survives parent-path changes and ordinary evidence-file renames.
+It stops matching when license meaning, confidence, restrictions, or the scoped
+usage conditions change. License-only `explain` results do not issue this
+project review decision.
+
+If a waiver supplies `decisionFingerprint` together with legacy `id` or
+`fingerprint`, only the decision selector is used; the older fields cannot
+silently widen its scope. Invalid decision selectors are errors. Reports record
+`matchedBy: "decisionFingerprint"`. Existing ID/fingerprint waivers retain their
+previous exact path scope and are never automatically converted to decision
+waivers. Review before opting into the new matching scope. The packaged waiver
+file schema is 1.1 and still accepts files using the older fields.
+
 Waivers let you exclude a specific license risk finding from the CI threshold
 without removing it from reports. A waiver records a decision — you accepted
 this risk for now — so the finding stays visible while CI stays green.
@@ -26,11 +46,11 @@ Waivers live in `.ohrisk-waivers.json` at the project root:
 }
 ```
 
-Each waiver requires at least one of `id` or `fingerprint`, plus a non-empty
+Each waiver requires at least one of `id`, `fingerprint`, or `decisionFingerprint`, plus a non-empty
 `reason`. The `expiresOn` field is optional but recommended.
 
 The file contract is closed: the root accepts only `waivers`, and each waiver
-accepts only `id`, `fingerprint`, `reason`, and `expiresOn`. Unknown fields are
+accepts only `id`, `fingerprint`, `decisionFingerprint`, `reason`, and `expiresOn`. Unknown fields are
 rejected instead of ignored, so typos such as `expiresOnn` cannot silently turn
 an expiring waiver into a permanent one. The packaged Draft 2020-12 contract is
 [`schemas/waiver-file.schema.json`](../schemas/waiver-file.schema.json).
@@ -105,7 +125,7 @@ IDs still include dependency paths; changing the path set requires review:
 ```
 
 If both `id` and `fingerprint` are present, a finding matching either one is
-waived. The `matchedBy` field in the report records which field matched, with
+waived when `decisionFingerprint` is absent. The `matchedBy` field records which field matched, with
 `id` taking priority in the label.
 
 ## expiresOn

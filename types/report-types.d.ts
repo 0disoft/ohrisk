@@ -5,7 +5,7 @@
  * runtime validation source of truth.
  */
 
-export type ReportSchemaVersion = "3.7.0";
+export type ReportSchemaVersion = "3.8.0";
 
 export type CommonReportSchemaId =
   `urn:ohrisk:schema:common:${ReportSchemaVersion}`;
@@ -15,10 +15,10 @@ export type DiffReportSchemaId =
   `urn:ohrisk:schema:diff-report:${ReportSchemaVersion}`;
 export type ExplainReportSchemaId =
   `urn:ohrisk:schema:explain-report:${ReportSchemaVersion}`;
-export type WaiverFileSchemaVersion = "1.0.0";
+export type WaiverFileSchemaVersion = "1.1.0";
 export type WaiverFileSchemaId =
   `urn:ohrisk:schema:waiver-file:${WaiverFileSchemaVersion}`;
-export type BaselineSchemaVersion = "1.0.0";
+export type BaselineSchemaVersion = "1.1.0";
 export type BaselineSchemaId =
   `urn:ohrisk:schema:baseline:${BaselineSchemaVersion}`;
 export type BaselineCheckSchemaId =
@@ -51,6 +51,8 @@ export type RiskDependencyScope = "direct" | "transitive";
 export type Finding = {
   id: string;
   fingerprint: string;
+  decision?: ReviewDecision;
+  evidenceFingerprint?: string;
   packageId: string;
   severity: RiskSeverity;
   reason: string;
@@ -62,11 +64,19 @@ export type Finding = {
   recommendation: RiskRecommendation;
 };
 
+export type ReviewDecision = {
+  id: string;
+  fingerprint: string;
+  profile: UsageProfile;
+  prodOnly: boolean;
+};
+
 export type RiskFinding = Finding;
 
 export type RiskWaiver = {
   id?: string;
   fingerprint?: string;
+  decisionFingerprint?: string;
   reason: string;
   expiresOn?: string;
 };
@@ -74,7 +84,7 @@ export type RiskWaiver = {
 export type WaivedRiskFinding = {
   finding: Finding;
   waiver: RiskWaiver;
-  matchedBy: "id" | "fingerprint";
+  matchedBy: "id" | "fingerprint" | "decisionFingerprint";
 };
 
 export type NormalizedLicenseSignal =
@@ -394,6 +404,8 @@ export type ScanReport = ThresholdOutcome & WaiverDriftOutcome & {
 };
 
 export type DiffReport = ThresholdOutcome & {
+  provenanceChangedFindingCount?: number;
+  provenanceChangedFindings?: Finding[];
   completeness?: {
     status: "complete" | "partial";
     baseline: ScanCompleteness;

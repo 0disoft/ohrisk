@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 6e61965f9c25f9c4ed7b7ae6ac81e99b873598d210f8be2dfbe4a52ad6c83265
+// ohrisk-action-source-sha256: a56a8ed34e756b6a8f1843bf88fb51318318787104d53670b307274da073c9e3
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -41413,32 +41413,49 @@ function comparableFindingFingerprint(fingerprint) {
 
 // src/diff/compare.ts
 function diffRiskFindings(input) {
-  const baselineById = new Map(input.baselineFindings.map((finding) => [finding.id, finding]));
-  const currentIds = new Set(input.currentFindings.map((finding) => finding.id));
+  const baselineById = indexFindings(input.baselineFindings, "baseline");
+  const currentIds = new Set(indexFindings(input.currentFindings, "current").keys());
   const newFindings = [];
   const changedFindings = [];
+  const provenanceChangedFindings = [];
   for (const finding of input.currentFindings) {
-    const baseline = baselineById.get(finding.id);
+    const baseline = baselineById.get(comparisonIdentity(finding));
     if (!baseline) {
       newFindings.push(finding);
       continue;
     }
     if (findingKey(baseline) !== findingKey(finding)) {
       changedFindings.push(finding);
+    } else if (baseline.id !== finding.id || baseline.evidenceFingerprint !== finding.evidenceFingerprint) {
+      provenanceChangedFindings.push(finding);
     }
   }
-  const resolvedFindings = input.baselineFindings.filter((finding) => !currentIds.has(finding.id));
+  const resolvedFindings = input.baselineFindings.filter((finding) => !currentIds.has(comparisonIdentity(finding)));
   return {
     baselineFindings: input.baselineFindings,
     currentFindings: input.currentFindings,
     newFindings,
     changedFindings,
     resolvedFindings,
-    introducedFindings: [...newFindings, ...changedFindings]
+    introducedFindings: [...newFindings, ...changedFindings],
+    provenanceChangedFindings
   };
 }
 function findingKey(finding) {
-  return comparableFindingFingerprint(finding.fingerprint);
+  return comparableFindingFingerprint(finding.decision?.fingerprint ?? finding.fingerprint);
+}
+function comparisonIdentity(finding) {
+  return finding.decision ? `decision:${finding.decision.id}` : `legacy:${finding.id}`;
+}
+function indexFindings(findings, side) {
+  const indexed = new Map;
+  for (const finding of findings) {
+    const key = comparisonIdentity(finding);
+    if (indexed.has(key))
+      throw new Error(`Finding comparison identity is ambiguous in ${side} inputs.`);
+    indexed.set(key, finding);
+  }
+  return indexed;
 }
 
 // src/evidence/cache.ts
@@ -57892,6 +57909,26 @@ function traverseGoModuleGraph(roots, adjacency) {
 }
 
 // src/policy/finding-id.ts
+import { createHash as createHash11 } from "node:crypto";
+function buildReviewDecision(input) {
+  const id = [
+    "review-v1",
+    input.packageUrl,
+    input.profile,
+    input.prodOnly ? "production-only" : "all-dependencies",
+    input.dependencyType,
+    input.dependencyScope
+  ].map(encodeFindingComponent).join("::");
+  return {
+    id,
+    profile: input.profile,
+    prodOnly: input.prodOnly,
+    fingerprint: buildSemanticFindingFingerprint({ id, severity: input.severity, recommendation: input.recommendation, license: input.license })
+  };
+}
+function buildEvidenceFingerprint(evidence) {
+  return createHash11("sha256").update(JSON.stringify(canonicalStringSet(evidence))).digest("hex");
+}
 function buildFindingId(input) {
   return joinFindingIdentity(input.packageId, input.dependencyType, input.dependencyScope, canonicalPathSet(input.paths));
 }
@@ -57967,7 +58004,7 @@ function encodeFindingComponent(value) {
 }
 
 // src/policy/config.ts
-import { createHash as createHash11 } from "node:crypto";
+import { createHash as createHash12 } from "node:crypto";
 import { existsSync as existsSync47, readFileSync as readFileSync3, realpathSync as realpathSync6, statSync as statSync35 } from "node:fs";
 import { isIP as isIP3 } from "node:net";
 import path85 from "node:path";
@@ -58020,7 +58057,7 @@ function policyConfigDigest(config) {
     registryAuth: [...config.registryAuth.entries()].sort(([left], [right]) => compareStrings2(left, right)).map(([host, auth]) => [host, auth.tokenEnv]),
     npmRegistryUrl: config.npmRegistryUrl ?? null
   });
-  return createHash11("sha256").update(value, "utf8").digest("hex");
+  return createHash12("sha256").update(value, "utf8").digest("hex");
 }
 function normalizedEvaluationPolicy(policy) {
   return {
@@ -58758,6 +58795,19 @@ function evaluateLicenseRisk(input) {
   });
   return {
     id,
+    ...input.includePackagePolicy === false ? {} : {
+      decision: buildReviewDecision({
+        packageUrl: packageUrl(input.dependency),
+        dependencyType: input.dependency.dependencyType,
+        dependencyScope,
+        profile: input.profile,
+        prodOnly: input.prodOnly ?? false,
+        severity,
+        recommendation,
+        license: input.license
+      })
+    },
+    evidenceFingerprint: buildEvidenceFingerprint(evidence),
     fingerprint: buildSemanticFindingFingerprint({
       id,
       severity,
@@ -58795,6 +58845,7 @@ function evaluateLicenseRisks(input) {
       license,
       dependency,
       profile: input.profile,
+      prodOnly: input.prodOnly ?? false,
       ...input.policy ? { policy: input.policy } : {}
     });
   }).filter((finding) => finding !== undefined).sort(compareFindings);
@@ -59281,6 +59332,8 @@ function renderComponent(input) {
           name: "ohrisk:fingerprint",
           value: input.finding.fingerprint
         },
+        ...input.finding.decision ? [{ name: "ohrisk:decision", value: JSON.stringify(input.finding.decision) }] : [],
+        ...input.finding.evidenceFingerprint ? [{ name: "ohrisk:evidenceFingerprint", value: input.finding.evidenceFingerprint }] : [],
         {
           name: "ohrisk:riskSeverity",
           value: input.finding.severity
@@ -59415,7 +59468,7 @@ function formatThresholdSummary(summary) {
 }
 
 // src/report/schema.ts
-var OHRISK_REPORT_SCHEMA_VERSION = "3.7.0";
+var OHRISK_REPORT_SCHEMA_VERSION = "3.8.0";
 var OHRISK_COMMON_REPORT_SCHEMA = `urn:ohrisk:schema:common:${OHRISK_REPORT_SCHEMA_VERSION}`;
 var OHRISK_SCAN_REPORT_SCHEMA = `urn:ohrisk:schema:scan-report:${OHRISK_REPORT_SCHEMA_VERSION}`;
 var OHRISK_DIFF_REPORT_SCHEMA = `urn:ohrisk:schema:diff-report:${OHRISK_REPORT_SCHEMA_VERSION}`;
@@ -59454,6 +59507,8 @@ function renderDiffReport(input) {
       changedFindingCount: input.diff.changedFindings.length,
       resolvedFindingCount: input.diff.resolvedFindings.length,
       introducedFindingCount: input.diff.introducedFindings.length,
+      provenanceChangedFindingCount: input.diff.provenanceChangedFindings?.length ?? 0,
+      provenanceChangedFindings: input.diff.provenanceChangedFindings ?? [],
       newRisks: summary,
       changedRisks: changedSummary,
       resolvedRisks: resolvedSummary,
@@ -59483,6 +59538,7 @@ function renderDiffReport(input) {
     ...comparisonCompletenessLines(input),
     `Profile: ${input.profile}`,
     `Production only: ${input.prodOnly ? "yes" : "no"}`,
+    `Provenance-only changes: ${input.diff.provenanceChangedFindings?.length ?? 0}`,
     `Findings: ${input.diff.currentFindings.length} current, ${input.diff.baselineFindings.length} baseline, ${input.diff.newFindings.length} new, ${input.diff.changedFindings.length} changed, ${input.diff.resolvedFindings.length} resolved`,
     ...renderLockfileChangeLines(input.lockfileChanges),
     `Introduced risks: ${introducedSummary.high} high, ${introducedSummary.review} review, ${introducedSummary.unknown} unknown, ${introducedSummary.low} low`,
@@ -59524,6 +59580,7 @@ function renderMarkdownReport(input) {
     ...comparisonCompletenessLines(input).map((line) => `- ${line}`),
     `- Profile: ${formatMarkdownInlineCode(input.profile)}`,
     `- Production only: ${formatMarkdownInlineCode(input.prodOnly ? "yes" : "no")}`,
+    `- Provenance-only changes: ${input.diff.provenanceChangedFindings?.length ?? 0}`,
     `- Findings: ${formatMarkdownInlineCode(`${input.diff.currentFindings.length} current`)}, ${formatMarkdownInlineCode(`${input.diff.baselineFindings.length} baseline`)}, ${formatMarkdownInlineCode(`${input.diff.newFindings.length} new`)}, ${formatMarkdownInlineCode(`${input.diff.changedFindings.length} changed`)}, ${formatMarkdownInlineCode(`${input.diff.resolvedFindings.length} resolved`)}`,
     ...renderMarkdownLockfileChangeLines(input.lockfileChanges),
     `- Introduced risks: ${formatMarkdownInlineCode(`${introducedSummary.high} high`)}, ${formatMarkdownInlineCode(`${introducedSummary.review} review`)}, ${formatMarkdownInlineCode(`${introducedSummary.unknown} unknown`)}, ${formatMarkdownInlineCode(`${introducedSummary.low} low`)}`,
@@ -59842,11 +59899,13 @@ function resultFor(finding, lockfileUri) {
       }
     ],
     partialFingerprints: {
-      primaryLocationLineHash: finding.fingerprint
+      primaryLocationLineHash: finding.decision?.fingerprint ?? finding.fingerprint
     },
     properties: {
       findingId: finding.id,
       fingerprint: finding.fingerprint,
+      ...finding.decision ? { decision: finding.decision } : {},
+      ...finding.evidenceFingerprint ? { evidenceFingerprint: finding.evidenceFingerprint } : {},
       packageId: finding.packageId,
       reason: finding.reason,
       recommendation: finding.recommendation,
@@ -63997,6 +64056,8 @@ function renderFindings2(findings) {
       `- [${finding.severity}] ${finding.packageId}`,
       `  id: ${finding.id}`,
       `  fingerprint: ${finding.fingerprint}`,
+      ...finding.decision ? [`  decisionFingerprint: ${finding.decision.fingerprint}`] : [],
+      ...finding.evidenceFingerprint ? [`  evidenceFingerprint: ${finding.evidenceFingerprint}`] : [],
       `  ${finding.reason}`,
       `  recommendation: ${finding.recommendation}`,
       `  action: ${finding.action}`,
@@ -64176,6 +64237,8 @@ function formatDependencyContext2(finding) {
   return `${finding.dependencyType} ${finding.dependencyScope}`;
 }
 function formatWaiverTarget(waiver) {
+  if (waiver.decisionFingerprint)
+    return `decisionFingerprint: ${waiver.decisionFingerprint}`;
   if (waiver.id) {
     return `id: ${waiver.id}`;
   }
@@ -69264,7 +69327,7 @@ import path95 from "node:path";
 var DEFAULT_WAIVER_FILE_NAME = ".ohrisk-waivers.json";
 var WAIVER_FILE_MAX_BYTES = 1024 * 1024;
 var WAIVER_ROOT_KEYS = new Set(["waivers"]);
-var WAIVER_KEYS = new Set(["id", "fingerprint", "reason", "expiresOn"]);
+var WAIVER_KEYS = new Set(["id", "fingerprint", "decisionFingerprint", "reason", "expiresOn"]);
 function readRiskWaivers(projectRoot, options) {
   const waiverPath = path95.join(projectRoot, DEFAULT_WAIVER_FILE_NAME);
   if (!existsSync49(waiverPath)) {
@@ -69341,7 +69404,7 @@ function applyRiskWaivers(input) {
     waivedFindings.push({
       finding,
       waiver,
-      matchedBy: waiver.id === finding.id || waiver.id === legacy.id ? "id" : "fingerprint"
+      matchedBy: waiver.decisionFingerprint !== undefined ? "decisionFingerprint" : waiver.id === finding.id || waiver.id === legacy.id ? "id" : "fingerprint"
     });
   }
   return {
@@ -69382,10 +69445,14 @@ function parseWaiver(value, index) {
   }
   const id = readOptionalString2(value.id);
   const fingerprint = readOptionalString2(value.fingerprint);
+  const decisionFingerprint = readOptionalString2(value.decisionFingerprint);
+  if (Object.hasOwn(value, "decisionFingerprint") && !decisionFingerprint) {
+    return err(`Waiver at index ${index} decisionFingerprint must be a non-empty string.`);
+  }
   const reason = readOptionalString2(value.reason);
   const expiresOn = readOptionalString2(value.expiresOn);
-  if (!id && !fingerprint) {
-    return err(`Waiver at index ${index} must include id or fingerprint.`);
+  if (!id && !fingerprint && !decisionFingerprint) {
+    return err(`Waiver at index ${index} must include id, fingerprint, or decisionFingerprint.`);
   }
   if (!reason) {
     return err(`Waiver at index ${index} must include a non-empty reason.`);
@@ -69396,6 +69463,7 @@ function parseWaiver(value, index) {
   return ok({
     ...id ? { id } : {},
     ...fingerprint ? { fingerprint } : {},
+    ...decisionFingerprint ? { decisionFingerprint } : {},
     reason,
     ...expiresOn ? { expiresOn } : {}
   });
@@ -69422,6 +69490,9 @@ function legacyIdentityFor(finding) {
   };
 }
 function matchesWaiver(waiver, finding, legacy) {
+  if (waiver.decisionFingerprint !== undefined) {
+    return finding.decision !== undefined && comparableFindingFingerprint(waiver.decisionFingerprint) === comparableFindingFingerprint(finding.decision.fingerprint);
+  }
   return waiver.id === finding.id || waiver.id === legacy.id || waiver.fingerprint === finding.fingerprint || waiver.fingerprint !== undefined && comparableFindingFingerprint(waiver.fingerprint) === comparableFindingFingerprint(finding.fingerprint) || waiver.fingerprint === legacy.fingerprint;
 }
 function isExpired(waiver, now) {
@@ -69459,6 +69530,7 @@ function evaluateScanPolicyAndWaivers(input) {
     licenses: normalizedLicenses,
     dependencies: graph.nodes,
     profile: input.profile,
+    prodOnly: input.prodOnly,
     policy: input.policy
   });
   const policy = summarizePolicyConfig(input.policy);
@@ -69808,6 +69880,7 @@ async function runDiff(command, io, signal) {
     licenses: baselineLicenses,
     dependencies: baselineScanGraph.nodes,
     profile: command.profile,
+    prodOnly: command.prodOnly,
     policy: policy.value
   });
   const current = await evaluateProjectScan({

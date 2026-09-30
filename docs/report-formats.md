@@ -1,5 +1,17 @@
 # Report Formats Guide
 
+Schema 3.8 adds optional finding `decision` objects (id, fingerprint, profile,
+prodOnly) and `evidenceFingerprint`. Decision identities use package PURLs and
+usage/dependency conditions rather than display paths. Legacy `id` and
+`fingerprint` remain available for existing waivers. `evidenceFingerprint` is a
+SHA-256 digest of the reported evidence-label set, not an artifact-content hash.
+Diff `provenanceChangedFindings` and its count preserve path/evidence-label
+changes without treating them as introduced risk. SARIF includes decision and
+evidence properties and uses the decision fingerprint for result tracking;
+CycloneDX uses `ohrisk:decision` and `ohrisk:evidenceFingerprint` properties.
+Waiver/baseline schema 1.1 describes scoped selection; legacy inputs remain
+readable without automatic approval migration.
+
 Report schema `3.7.0` adds optional input `support` declarations to lockfile
 entries. Scan JSON and both diff sides describe relationship reconstruction,
 development-scope detection, and retained artifact pins. SARIF records
@@ -8,7 +20,7 @@ and HTML scan summaries describe the same adapter contract. These declarations
 are capabilities, not proof that a particular scan or artifact was verified.
 See [Input Support Contract](input-support.md) for the generated matrix.
 Baseline configuration digests include the report schema; review and regenerate
-existing baselines when upgrading from 3.6 to 3.7 rather than silently reusing them.
+existing baselines when changing report schema versions rather than silently reusing them.
 
 Finding fingerprints contain normalized license decisions. Ordinary evidence
 locations and metadata-source labels do not change that decision. Restriction
@@ -93,7 +105,7 @@ full report payload. Notice generation uses
 `schemas/notices-evidence.schema.json` and
 `schemas/notices-result.schema.json`.
 
-Schema `3.7.0` is a closed contract. Report roots and structured nested objects
+Schema `3.8.0` is a closed contract. Report roots and structured nested objects
 reject unknown properties, while common `$defs` define findings, evidence,
 normalized licenses, policy summaries, waivers, thresholds, provenance, remote
 repository submodule coverage, and
@@ -148,7 +160,7 @@ Schema 3.6 adds optional diff completeness fields. `diff` JSON may include
 unavailable-package and skipped-repository-entry counts, unresolved requests,
 and separate inspection dimensions. Unknown graph coverage remains visible
 without equating it with a proven missing installation. The
-`ohrisk-summary` companion accepts 3.5.0, 3.6.0, and 3.7.0 scan and diff reports and
+`ohrisk-summary` companion accepts 3.5.0, 3.6.0, 3.7.0, and 3.8.0 scan and diff reports and
 reports the diff completeness status and gate failure.
 
 Schema 3.5 adds the `conflicting-evidence` normalized-license signal. Python
@@ -223,7 +235,7 @@ Structured output for scripting and CI automation.
 - **Obligation evidence**: distributed-app findings may include `obligation: license-text` and `obligation: notice-file` entries with a trigger and `status: unknown`. These are conservative required-artifact hints, not proof that a release artifact satisfies or misses an obligation. Because evidence participates in fingerprints, affected fingerprint waivers require review after upgrade.
 - **Maven evidence corrections**: canonical SPDX aliases, allowed repository provenance, and checksum/identity-verified JAR evidence may change severity, reason, evidence, and therefore finding fingerprints. Fingerprint waivers for corrected Maven findings must be reviewed after upgrade; finding-ID waivers remain tied to the same package/path identity.
 - **Remote repository coverage**: remote scan JSON includes `repository.owner`, `repository.name`, bounded `repository.submodules` mode/count/paths, separate `repository.symbolicLinks`, and `repository.nonPortablePaths` skipped counts, relative paths, and path-list truncation state
-- **Schema validation**: scan, diff, and explain JSON must satisfy the packaged 3.7.0 schema; unknown object properties are rejected
+- **Schema validation**: scan, diff, and explain JSON must satisfy the packaged 3.8.0 schema; unknown object properties are rejected
 - **Local paths**: `projectRoot` is represented as `.`, and lockfile metadata uses a project-relative path so CI artifacts do not expose workspace paths
 
 ## Markdown

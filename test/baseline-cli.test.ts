@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { evaluateLicenseRisk } from "../src/policy/evaluate";
 import {
   JsonSchemaRegistry,
   type JsonSchema
@@ -10,8 +11,8 @@ import {
 
 const temporaryDirectories: string[] = [];
 const baselineCli = path.join(import.meta.dir, "..", "bin", "ohrisk-baseline.mjs");
-const baselineSchemaId = "urn:ohrisk:schema:baseline:1.0.0";
-const baselineCheckSchemaId = "urn:ohrisk:schema:baseline-check:1.0.0";
+const baselineSchemaId = "urn:ohrisk:schema:baseline:1.1.0";
+const baselineCheckSchemaId = "urn:ohrisk:schema:baseline-check:1.1.0";
 const schemaRegistry = new JsonSchemaRegistry([
   readSchema("baseline.schema.json"),
   readSchema("baseline-check.schema.json")
@@ -24,6 +25,37 @@ afterEach(() => {
 });
 
 describe("ohrisk-baseline", () => {
+  test("stores scoped decision keys and accepts path changes without losing semantic gates", () => {
+    const workspace = temporaryDirectory();
+    const make = (parent: string, expression = "AGPL-3.0-only") => evaluateLicenseRisk({
+      dependency: { id: "example@1", name: "example", version: "1", ecosystem: "npm", dependencyType: "production", direct: false,
+        paths: [["app", parent, "example@1"]] },
+      license: { packageId: "example@1", expression, choices: [expression], joiner: "single", confidence: "high", signals: [], evidenceSources: ["LICENSE"] },
+      profile: "saas", prodOnly: true
+    });
+    const old = make("parent@1");
+    writeReport(workspace, "old.json", [old], { schemaVersion: "3.8.0" });
+    expect(run(workspace, ["create", "--report", "old.json", "--output", "baseline.json"]).status).toBe(0);
+    const stored = JSON.parse(readFileSync(path.join(workspace, "baseline.json"), "utf8"));
+    expect(stored.findings[0].id).toBe(old.decision!.id);
+    expectValid(baselineSchemaId, stored);
+    writeReport(workspace, "new.json", [make("another@2")], { schemaVersion: "3.8.0" });
+    expect(run(workspace, ["check", "--report", "new.json", "--baseline", "baseline.json"]).status).toBe(0);
+    writeReport(workspace, "new.json", [make("another@2", "SSPL-1.0")], { schemaVersion: "3.8.0" });
+    expect(run(workspace, ["check", "--report", "new.json", "--baseline", "baseline.json"]).status).toBe(1);
+    writeReport(workspace, "new.json", [{ ...old, decision: { ...old.decision!, prodOnly: false } }], { schemaVersion: "3.8.0" });
+    expect(run(workspace, ["check", "--report", "new.json", "--baseline", "baseline.json"]).status).toBe(2);
+  });
+
+  test("reads version 1.0 baselines without silently migrating their reviewed keys", () => {
+    const workspace = temporaryDirectory();
+    writeReport(workspace, "report.json", [finding("fp", "A", "pkg:npm/a@1", "high")]);
+    expect(run(workspace, ["create", "--report", "report.json", "--output", "baseline.json"]).status).toBe(0);
+    const old = JSON.parse(readFileSync(path.join(workspace, "baseline.json"), "utf8"));
+    old.$schema = "urn:ohrisk:schema:baseline:1.0.0"; old.schemaVersion = "1.0.0";
+    writeFileSync(path.join(workspace, "baseline.json"), JSON.stringify(old));
+    expect(run(workspace, ["check", "--report", "report.json", "--baseline", "baseline.json"]).status).toBe(0);
+  });
   test("accepts old semantic fingerprints after provenance changes, but gates semantic changes", () => {
     const workspace = temporaryDirectory();
     const fingerprint = (source: string, expression = "AGPL-3.0-only") => `A::high::replace::${JSON.stringify({
@@ -362,7 +394,7 @@ describe("ohrisk-baseline", () => {
 
     expect(schemaRegistry.validate(baselineSchemaId, {
       $schema: baselineSchemaId,
-      schemaVersion: "1.0.0",
+      schemaVersion: "1.1.0",
       sourceReportSchema: "urn:ohrisk:schema:scan-report:3.5.0",
       profile: "saas",
       prodOnly: true,
@@ -373,7 +405,7 @@ describe("ohrisk-baseline", () => {
 
     expect(schemaRegistry.validate(baselineCheckSchemaId, {
       $schema: baselineCheckSchemaId,
-      schemaVersion: "1.0.0",
+      schemaVersion: "1.1.0",
       status: "baseline_checked",
       failed: false,
       failOn: "critical",
@@ -410,12 +442,12 @@ function writeReport(
   directory: string,
   name: string,
   findings: unknown[],
-  overrides: { profile?: string; prodOnly?: boolean; policyDigest?: string } = {}
+  overrides: { profile?: string; prodOnly?: boolean; policyDigest?: string; schemaVersion?: string } = {}
 ): void {
   writeFileSync(
     path.join(directory, name),
     `${JSON.stringify({
-      $schema: "urn:ohrisk:schema:scan-report:3.5.0",
+      $schema: `urn:ohrisk:schema:scan-report:${overrides.schemaVersion ?? "3.5.0"}`,
       profile: overrides.profile ?? "saas",
       prodOnly: overrides.prodOnly ?? true,
       policy: {

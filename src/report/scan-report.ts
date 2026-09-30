@@ -1595,6 +1595,8 @@ function renderFindings(findings: RiskFinding[]): string[] {
       `- [${finding.severity}] ${finding.packageId}`,
       `  id: ${finding.id}`,
       `  fingerprint: ${finding.fingerprint}`,
+      ...(finding.decision ? [`  decisionFingerprint: ${finding.decision.fingerprint}`] : []),
+      ...(finding.evidenceFingerprint ? [`  evidenceFingerprint: ${finding.evidenceFingerprint}`] : []),
       `  ${finding.reason}`,
       `  recommendation: ${finding.recommendation}`,
       `  action: ${finding.action}`,
@@ -1842,6 +1844,7 @@ function formatDependencyContext(finding: RiskFinding): string {
 }
 
 function formatWaiverTarget(waiver: RiskWaiver): string {
+  if (waiver.decisionFingerprint) return `decisionFingerprint: ${waiver.decisionFingerprint}`;
   if (waiver.id) {
     return `id: ${waiver.id}`;
   }

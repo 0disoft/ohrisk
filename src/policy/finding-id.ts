@@ -1,6 +1,29 @@
 import type { NormalizedLicense } from "../license/types";
 import type { RiskFinding } from "./types";
 import { semanticEvidenceSources } from "../../bin/finding-fingerprint.mjs";
+import { createHash } from "node:crypto";
+import type { ReviewDecision, UsageProfile } from "../../types/report-types";
+
+export function buildReviewDecision(input: {
+  packageUrl: string;
+  dependencyType: RiskFinding["dependencyType"];
+  dependencyScope: RiskFinding["dependencyScope"];
+  profile: UsageProfile;
+  prodOnly: boolean;
+  severity: RiskFinding["severity"];
+  recommendation: RiskFinding["recommendation"];
+  license: NormalizedLicense;
+}): ReviewDecision {
+  const id = ["review-v1", input.packageUrl, input.profile, input.prodOnly ? "production-only" : "all-dependencies",
+    input.dependencyType, input.dependencyScope].map(encodeFindingComponent).join("::");
+  return { id, profile: input.profile, prodOnly: input.prodOnly,
+    fingerprint: buildSemanticFindingFingerprint({ id, severity: input.severity, recommendation: input.recommendation, license: input.license }) };
+}
+
+/** Digest of reported evidence labels; this is not an artifact-content checksum. */
+export function buildEvidenceFingerprint(evidence: readonly string[]): string {
+  return createHash("sha256").update(JSON.stringify(canonicalStringSet(evidence))).digest("hex");
+}
 
 export function buildFindingId(input: {
   packageId: string;

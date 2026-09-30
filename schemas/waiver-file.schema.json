@@ -1,28 +1,58 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:ohrisk:schema:waiver-file:1.0.0",
+  "$id": "urn:ohrisk:schema:waiver-file:1.1.0",
   "title": "Ohrisk waiver file",
   "type": "object",
-  "required": ["waivers"],
+  "required": [
+    "waivers"
+  ],
   "properties": {
     "waivers": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["reason"],
+        "required": [
+          "reason"
+        ],
         "properties": {
-          "id": { "type": "string", "pattern": "\\S" },
-          "fingerprint": { "type": "string", "pattern": "\\S" },
-          "reason": { "type": "string", "pattern": "\\S" },
+          "id": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "fingerprint": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "reason": {
+            "type": "string",
+            "pattern": "\\S"
+          },
           "expiresOn": {
             "type": "string",
             "format": "date",
             "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "decisionFingerprint": {
+            "pattern": "\\S",
+            "type": "string"
           }
         },
         "anyOf": [
-          { "required": ["id"] },
-          { "required": ["fingerprint"] }
+          {
+            "required": [
+              "id"
+            ]
+          },
+          {
+            "required": [
+              "fingerprint"
+            ]
+          },
+          {
+            "required": [
+              "decisionFingerprint"
+            ]
+          }
         ],
         "additionalProperties": false
       }

@@ -67,7 +67,9 @@ type SarifResult = {
     findingId: string;
     fingerprint: string;
     waived?: boolean;
-    waiverMatchedBy?: "id" | "fingerprint";
+    waiverMatchedBy?: "id" | "fingerprint" | "decisionFingerprint";
+    decision?: RiskFinding["decision"];
+    evidenceFingerprint?: string;
     waiverReason?: string;
   };
 };
@@ -245,11 +247,13 @@ function resultFor(finding: RiskFinding, lockfileUri: string): SarifResult {
       }
     ],
     partialFingerprints: {
-      primaryLocationLineHash: finding.fingerprint
+      primaryLocationLineHash: finding.decision?.fingerprint ?? finding.fingerprint
     },
     properties: {
       findingId: finding.id,
       fingerprint: finding.fingerprint,
+      ...(finding.decision ? { decision: finding.decision } : {}),
+      ...(finding.evidenceFingerprint ? { evidenceFingerprint: finding.evidenceFingerprint } : {}),
       packageId: finding.packageId,
       reason: finding.reason,
       recommendation: finding.recommendation,

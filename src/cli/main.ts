@@ -323,6 +323,7 @@ async function runDiff(
     licenses: baselineLicenses,
     dependencies: baselineScanGraph.nodes,
     profile: command.profile,
+    prodOnly: command.prodOnly,
     policy: policy.value
   });
   const current = await evaluateProjectScan({

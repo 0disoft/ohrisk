@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:ohrisk:schema:baseline-check:1.0.0",
+  "$id": "urn:ohrisk:schema:baseline-check:1.1.0",
   "title": "Ohrisk baseline check report",
   "type": "object",
   "required": [
@@ -20,8 +20,8 @@
     "failingFindings"
   ],
   "properties": {
-    "$schema": { "const": "urn:ohrisk:schema:baseline-check:1.0.0" },
-    "schemaVersion": { "const": "1.0.0" },
+    "$schema": { "const": "urn:ohrisk:schema:baseline-check:1.1.0" },
+    "schemaVersion": { "const": "1.1.0" },
     "status": { "const": "baseline_checked" },
     "failed": { "type": "boolean" },
     "failOn": { "$ref": "#/$defs/severity" },

@@ -11,8 +11,8 @@ import {
 import path from "node:path";
 import { comparableFindingFingerprint } from "./finding-fingerprint.mjs";
 
-const BASELINE_SCHEMA = "urn:ohrisk:schema:baseline:1.0.0";
-const CHECK_SCHEMA = "urn:ohrisk:schema:baseline-check:1.0.0";
+const BASELINE_SCHEMA = "urn:ohrisk:schema:baseline:1.1.0";
+const CHECK_SCHEMA = "urn:ohrisk:schema:baseline-check:1.1.0";
 const SEVERITIES = ["low", "review", "unknown", "high"];
 const DEFAULT_BASELINE_PATH = ".ohrisk-baseline.json";
 
@@ -109,7 +109,7 @@ function checkBaseline(options) {
   );
   const result = {
     $schema: CHECK_SCHEMA,
-    schemaVersion: "1.0.0",
+    schemaVersion: "1.1.0",
     status: "baseline_checked",
     failed: failingFindings.length > 0,
     failOn,
@@ -137,7 +137,7 @@ function baselineFromReport(report) {
   const findingsById = new Map();
 
   for (const rawFinding of report.findings) {
-    const finding = normalizeFinding(rawFinding);
+    const finding = normalizeFinding(rawFinding, report);
     if (findingsById.has(finding.id)) {
       throw new Error(`scan report contains duplicate finding id ${JSON.stringify(finding.id)}.`);
     }
@@ -154,7 +154,7 @@ function baselineFromReport(report) {
 
   return {
     $schema: BASELINE_SCHEMA,
-    schemaVersion: "1.0.0",
+    schemaVersion: "1.1.0",
     sourceReportSchema: report.$schema,
     profile: report.profile,
     prodOnly: report.prodOnly,
@@ -190,11 +190,11 @@ function readScanReport(filePath) {
 
 function readBaseline(filePath) {
   const baseline = readJson(filePath);
-  if (!isObject(baseline) || baseline.$schema !== BASELINE_SCHEMA) {
+  if (!isObject(baseline) || ![BASELINE_SCHEMA, "urn:ohrisk:schema:baseline:1.0.0"].includes(baseline.$schema)) {
     throw new Error(`${displayPath(filePath)} is not an Ohrisk baseline file.`);
   }
   if (
-    baseline.schemaVersion !== "1.0.0"
+    baseline.$schema !== `urn:ohrisk:schema:baseline:${baseline.schemaVersion}`
     || typeof baseline.configurationDigest !== "string"
     || !/^[0-9a-f]{64}$/.test(baseline.configurationDigest)
     || !Array.isArray(baseline.findings)
@@ -202,7 +202,7 @@ function readBaseline(filePath) {
     throw new Error(`${displayPath(filePath)} has an unsupported baseline shape.`);
   }
 
-  const findings = baseline.findings.map(normalizeFinding).sort(compareFindings);
+  const findings = baseline.findings.map((finding) => normalizeFinding(finding)).sort(compareFindings);
   const findingIds = new Set();
   for (const finding of findings) {
     if (findingIds.has(finding.id)) {
@@ -217,7 +217,7 @@ function readBaseline(filePath) {
   };
 }
 
-function normalizeFinding(value) {
+function normalizeFinding(value, report) {
   if (!isObject(value)) {
     throw new Error("Every finding must be a JSON object.");
   }
@@ -232,6 +232,15 @@ function normalizeFinding(value) {
     || !SEVERITIES.includes(severity)
   ) {
     throw new Error("Every finding must contain fingerprint, id, packageId, and a supported severity.");
+  }
+  if (report && value.decision !== undefined) {
+    const decision = value.decision;
+    if (!isObject(decision) || typeof decision.id !== "string" || decision.id.length === 0
+      || typeof decision.fingerprint !== "string" || !decision.fingerprint.startsWith(`${decision.id}::${severity}::`)
+      || decision.profile !== report.profile || decision.prodOnly !== report.prodOnly) {
+      throw new Error("Finding decision must match the report's profile, production scope and severity.");
+    }
+    return { id: decision.id, fingerprint: decision.fingerprint, packageId, severity };
   }
   return { fingerprint, id, packageId, severity };
 }

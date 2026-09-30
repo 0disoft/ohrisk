@@ -16,11 +16,12 @@ import type { RiskFinding } from "./types";
 export const DEFAULT_WAIVER_FILE_NAME = ".ohrisk-waivers.json";
 export const WAIVER_FILE_MAX_BYTES = 1024 * 1024;
 const WAIVER_ROOT_KEYS = new Set(["waivers"]);
-const WAIVER_KEYS = new Set(["id", "fingerprint", "reason", "expiresOn"]);
+const WAIVER_KEYS = new Set(["id", "fingerprint", "decisionFingerprint", "reason", "expiresOn"]);
 
 export type RiskWaiver = {
   id?: string;
   fingerprint?: string;
+  decisionFingerprint?: string;
   reason: string;
   expiresOn?: string;
 };
@@ -28,7 +29,7 @@ export type RiskWaiver = {
 export type WaivedRiskFinding = {
   finding: RiskFinding;
   waiver: RiskWaiver;
-  matchedBy: "id" | "fingerprint";
+  matchedBy: "id" | "fingerprint" | "decisionFingerprint";
 };
 
 export type AppliedRiskWaivers = {
@@ -141,7 +142,8 @@ export function applyRiskWaivers(input: {
     waivedFindings.push({
       finding,
       waiver,
-      matchedBy: waiver.id === finding.id || waiver.id === legacy.id
+      matchedBy: waiver.decisionFingerprint !== undefined ? "decisionFingerprint"
+        : waiver.id === finding.id || waiver.id === legacy.id
         ? "id"
         : "fingerprint"
     });
@@ -196,11 +198,15 @@ function parseWaiver(value: unknown, index: number): Result<RiskWaiver, string> 
 
   const id = readOptionalString(value.id);
   const fingerprint = readOptionalString(value.fingerprint);
+  const decisionFingerprint = readOptionalString(value.decisionFingerprint);
+  if (Object.hasOwn(value, "decisionFingerprint") && !decisionFingerprint) {
+    return err(`Waiver at index ${index} decisionFingerprint must be a non-empty string.`);
+  }
   const reason = readOptionalString(value.reason);
   const expiresOn = readOptionalString(value.expiresOn);
 
-  if (!id && !fingerprint) {
-    return err(`Waiver at index ${index} must include id or fingerprint.`);
+  if (!id && !fingerprint && !decisionFingerprint) {
+    return err(`Waiver at index ${index} must include id, fingerprint, or decisionFingerprint.`);
   }
 
   if (!reason) {
@@ -214,6 +220,7 @@ function parseWaiver(value: unknown, index: number): Result<RiskWaiver, string> 
   return ok({
     ...(id ? { id } : {}),
     ...(fingerprint ? { fingerprint } : {}),
+    ...(decisionFingerprint ? { decisionFingerprint } : {}),
     reason,
     ...(expiresOn ? { expiresOn } : {})
   });
@@ -250,6 +257,10 @@ function matchesWaiver(
   finding: RiskFinding,
   legacy: { id: string; fingerprint: string }
 ): boolean {
+  if (waiver.decisionFingerprint !== undefined) {
+    return finding.decision !== undefined
+      && comparableFindingFingerprint(waiver.decisionFingerprint) === comparableFindingFingerprint(finding.decision.fingerprint);
+  }
   return waiver.id === finding.id
     || waiver.id === legacy.id
     || waiver.fingerprint === finding.fingerprint
