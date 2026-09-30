@@ -9,6 +9,7 @@ import {
   writeFileSync
 } from "node:fs";
 import path from "node:path";
+import { comparableFindingFingerprint } from "./finding-fingerprint.mjs";
 
 const BASELINE_SCHEMA = "urn:ohrisk:schema:baseline:1.0.0";
 const CHECK_SCHEMA = "urn:ohrisk:schema:baseline-check:1.0.0";
@@ -92,7 +93,7 @@ function checkBaseline(options) {
       });
       continue;
     }
-    if (finding.fingerprint !== previous.fingerprint) {
+    if (comparableFindingFingerprint(finding.fingerprint) !== comparableFindingFingerprint(previous.fingerprint)) {
       changedFindings.push({
         ...finding,
         previousFingerprint: previous.fingerprint,

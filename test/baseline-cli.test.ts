@@ -24,6 +24,18 @@ afterEach(() => {
 });
 
 describe("ohrisk-baseline", () => {
+  test("accepts old semantic fingerprints after provenance changes, but gates semantic changes", () => {
+    const workspace = temporaryDirectory();
+    const fingerprint = (source: string, expression = "AGPL-3.0-only") => `A::high::replace::${JSON.stringify({
+      expression, choices: [expression], joiner: "single", signals: [], evidenceSources: [source], confidence: "high", exceptions: []
+    }).replace(/:/g, "%3A")}`;
+    writeReport(workspace, "old.json", [finding(fingerprint("file: LICENSE (license)"), "A", "pkg:npm/a@1", "high")]);
+    expect(run(workspace, ["create", "--report", "old.json", "--output", "baseline.json"]).status).toBe(0);
+    writeReport(workspace, "new.json", [finding(fingerprint("file: COPYING (license)"), "A", "pkg:npm/a@1", "high")]);
+    expect(run(workspace, ["check", "--report", "new.json", "--baseline", "baseline.json"]).status).toBe(0);
+    writeReport(workspace, "new.json", [finding(fingerprint("file: COPYING (license)", "GPL-3.0-only"), "A", "pkg:npm/a@1", "high")]);
+    expect(run(workspace, ["check", "--report", "new.json", "--baseline", "baseline.json"]).status).toBe(1);
+  });
   test("creates a deterministic baseline and accepts an unchanged report", () => {
     const workspace = temporaryDirectory();
     writeReport(workspace, "report.json", [

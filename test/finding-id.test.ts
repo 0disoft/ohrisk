@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { comparableFindingFingerprint } from "../bin/finding-fingerprint.mjs";
 
 import {
   buildFindingFingerprint,
@@ -8,6 +9,25 @@ import {
 } from "../src/policy/finding-id";
 
 describe("finding identity", () => {
+  test("ignores provenance labels but retains component and restriction semantics", () => {
+    const input: Parameters<typeof buildSemanticFindingFingerprint>[0] = {
+      id: "pkg::production::direct::root>pkg", severity: "high", recommendation: "replace",
+      license: { expression: "AGPL-3.0-only", choices: ["AGPL-3.0-only"], joiner: "single",
+        signals: [], confidence: "high", exceptions: [], evidenceSources: ["file: LICENSE (license)"] }
+    };
+    const make = (sources: string[]) => buildSemanticFindingFingerprint({ ...input, license: { ...input.license, evidenceSources: sources } });
+    expect(make(["file: COPYING (license)", "package.json license: AGPL-3.0-only"])).toBe(make(input.license.evidenceSources));
+    expect(make(["restriction scope: component in vendor/LICENSE"])).toBe(make(["restriction scope: component in third-party/COPYING"]));
+    expect(make(["restriction scope: documentation in LICENSE"])).not.toBe(make(["restriction scope: component in LICENSE"]));
+    expect(make(["bundled component license match: MIT from vendor/LICENSE"])).not.toBe(make([]));
+    const oldFacts = { expression: input.license.expression, choices: input.license.choices,
+      joiner: input.license.joiner, signals: [], evidenceSources: input.license.evidenceSources,
+      confidence: "high", exceptions: [] };
+    const old = `${input.id}::high::replace::${JSON.stringify(oldFacts).replace(/:/g, "%3A")}`;
+    expect(comparableFindingFingerprint(old)).toBe(comparableFindingFingerprint(make([])));
+    expect(comparableFindingFingerprint("opaque::not-json")).toBe("opaque::not-json");
+    expect(comparableFindingFingerprint(old.replace('"exceptions"', '"unknownField"'))).not.toBe(comparableFindingFingerprint(make([])));
+  });
   test("preserves existing readable finding IDs when components do not contain delimiters", () => {
     const id = buildFindingId({
       packageId: "agpl-child@0.1.0",

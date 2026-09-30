@@ -1,5 +1,14 @@
 # Report Formats Guide
 
+Finding fingerprints contain normalized license decisions. Ordinary evidence
+locations and metadata-source labels do not change that decision. Restriction
+scope, bundled component licenses, conflicts, warnings, private-package flags,
+and deprecated SPDX identifiers remain in semantic evidence facts. Full
+provenance remains available in each finding's evidence list. Waivers, diff,
+and baseline checks share compatibility comparison for older semantic
+fingerprints; opaque legacy formats keep exact matching. The report field
+structure and path-based finding IDs are unchanged.
+
 Ohrisk supports six output formats. Each serves a different audience and
 includes different levels of waiver detail.
 

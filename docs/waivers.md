@@ -74,21 +74,27 @@ between scanner versions:
 
 ## Matching by fingerprint
 
-A finding's `fingerprint` extends the `id` with severity, recommendation,
-reason, and evidence:
+A finding's semantic `fingerprint` extends the `id` with severity,
+recommendation, and normalized license facts:
 
 ```
-id::severity::recommendation::reason::evidence
+id::severity::recommendation::escaped-semantic-license-json
 ```
 
-The `id` prefix remains readable for ordinary package names. Fingerprint suffix
-components such as reason and evidence are percent-escaped when they contain
-finding delimiters, so exact fingerprint waivers do not collide.
+The facts include the expression, choices, AND/OR joiner, signals, confidence,
+exceptions, and decision-relevant evidence facts. File names and metadata-source
+labels are provenance, so renaming LICENSE to COPYING alone does not invalidate
+a review. Restriction scope, bundled component licenses, conflicts, warnings,
+private-package flags, and deprecated SPDX identifiers remain review-relevant.
+Conflicting annotations are retained conservatively, including their locations.
+Fingerprint components are percent-escaped.
 
-Waiving by `fingerprint` matches only when the finding is exactly the same. If
-the finding's severity, reason, or evidence changes — for example, because
-license detection improved — the waiver stops matching and the finding becomes
-active again. Use this when you want the waiver to break on any finding change:
+Waiving by `fingerprint` matches the same license decision. Changes in severity,
+recommendation, license meaning, confidence, or retained evidence facts require
+review. Recognized older semantic fingerprints use the same provenance
+normalization in waivers, diffs, and baselines. Opaque older reason/evidence
+fingerprints retain exact legacy matching; this example shows that older format.
+IDs still include dependency paths; changing the path set requires review:
 
 ```json
 {

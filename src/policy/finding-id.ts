@@ -1,5 +1,6 @@
 import type { NormalizedLicense } from "../license/types";
 import type { RiskFinding } from "./types";
+import { semanticEvidenceSources } from "../../bin/finding-fingerprint.mjs";
 
 export function buildFindingId(input: {
   packageId: string;
@@ -102,7 +103,7 @@ export function buildSemanticFindingFingerprint(input: {
     choices: canonicalStringSet(input.license.choices),
     joiner: input.license.joiner,
     signals: canonicalStringSet(input.license.signals),
-    evidenceSources: canonicalStringSet(input.license.evidenceSources),
+    evidenceSources: semanticEvidenceSources(input.license.evidenceSources),
     confidence: input.license.confidence,
     exceptions: canonicalStringSet(input.license.exceptions ?? [])
   });

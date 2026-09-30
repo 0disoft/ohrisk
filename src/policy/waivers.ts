@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { comparableFindingFingerprint } from "../../bin/finding-fingerprint.mjs";
 
 import { createError, type OhriskError } from "../shared/errors";
 import {
@@ -252,6 +253,8 @@ function matchesWaiver(
   return waiver.id === finding.id
     || waiver.id === legacy.id
     || waiver.fingerprint === finding.fingerprint
+    || (waiver.fingerprint !== undefined
+      && comparableFindingFingerprint(waiver.fingerprint) === comparableFindingFingerprint(finding.fingerprint))
     || waiver.fingerprint === legacy.fingerprint;
 }
 

@@ -1,4 +1,5 @@
 import type { RiskFinding } from "../policy/types";
+import { comparableFindingFingerprint } from "../../bin/finding-fingerprint.mjs";
 
 export type RiskDiff = {
   baselineFindings: RiskFinding[];
@@ -43,5 +44,5 @@ export function diffRiskFindings(input: {
 }
 
 function findingKey(finding: RiskFinding): string {
-  return finding.fingerprint;
+  return comparableFindingFingerprint(finding.fingerprint);
 }

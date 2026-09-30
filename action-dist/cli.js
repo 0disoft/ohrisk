@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 267f54b8d96f97ed5eaffbeaa019e47c8b680d88d87853b2776fef3333d0afe6
+// ohrisk-action-source-sha256: e8ee5f437b7ac10e2b56ff476ef34a100de27eefb6f8a54043be3bbfe6e48cd1
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -41387,6 +41387,30 @@ function toOhriskError(cause, fallbackCode, fallbackCategory, archiveName) {
   });
 }
 
+// bin/finding-fingerprint.mjs
+function semanticEvidenceSources(sources) {
+  return [...new Set(sources.filter((source) => /^(?:restriction scope:|bundled component license match:|conflicting |deprecated SPDX |warning:|package.json private:)/.test(source)).map((source) => source.startsWith("restriction scope:") ? source.replace(/ in .+$/s, "") : source.startsWith("bundled component license match:") ? source.replace(/ from .+$/s, "") : source))].sort();
+}
+function comparableFindingFingerprint(fingerprint) {
+  const separator = fingerprint.lastIndexOf("::");
+  if (separator < 0)
+    return fingerprint;
+  try {
+    const value = JSON.parse(fingerprint.slice(separator + 2).replace(/%7C/g, "|").replace(/%3E/g, ">").replace(/%3A/g, ":").replace(/%25/g, "%"));
+    const keys = ["expression", "choices", "joiner", "signals", "confidence", "exceptions"];
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some((key) => !keys.includes(key) && key !== "evidenceSources") || keys.some((key) => !Object.hasOwn(value, key)) || value.expression !== null && typeof value.expression !== "string" || typeof value.joiner !== "string" || typeof value.confidence !== "string" || ["choices", "signals", "exceptions", ...Object.hasOwn(value, "evidenceSources") ? ["evidenceSources"] : []].some((key) => !Array.isArray(value[key]) || value[key].some((item) => typeof item !== "string")))
+      return fingerprint;
+    const canonical = Object.fromEntries(keys.map((key) => [
+      key,
+      Array.isArray(value[key]) ? [...new Set(value[key])].sort() : value[key]
+    ]));
+    canonical.evidenceSources = semanticEvidenceSources(value.evidenceSources ?? []);
+    return fingerprint.slice(0, separator + 2) + JSON.stringify(canonical).replace(/%/g, "%25").replace(/:/g, "%3A").replace(/>/g, "%3E").replace(/\|/g, "%7C");
+  } catch {
+    return fingerprint;
+  }
+}
+
 // src/diff/compare.ts
 function diffRiskFindings(input) {
   const baselineById = new Map(input.baselineFindings.map((finding) => [finding.id, finding]));
@@ -41414,7 +41438,7 @@ function diffRiskFindings(input) {
   };
 }
 function findingKey(finding) {
-  return finding.fingerprint;
+  return comparableFindingFingerprint(finding.fingerprint);
 }
 
 // src/evidence/cache.ts
@@ -57831,7 +57855,7 @@ function buildSemanticFindingFingerprint(input) {
     choices: canonicalStringSet(input.license.choices),
     joiner: input.license.joiner,
     signals: canonicalStringSet(input.license.signals),
-    evidenceSources: canonicalStringSet(input.license.evidenceSources),
+    evidenceSources: semanticEvidenceSources(input.license.evidenceSources),
     confidence: input.license.confidence,
     exceptions: canonicalStringSet(input.license.exceptions ?? [])
   });
@@ -69298,7 +69322,7 @@ function legacyIdentityFor(finding) {
   };
 }
 function matchesWaiver(waiver, finding, legacy) {
-  return waiver.id === finding.id || waiver.id === legacy.id || waiver.fingerprint === finding.fingerprint || waiver.fingerprint === legacy.fingerprint;
+  return waiver.id === finding.id || waiver.id === legacy.id || waiver.fingerprint === finding.fingerprint || waiver.fingerprint !== undefined && comparableFindingFingerprint(waiver.fingerprint) === comparableFindingFingerprint(finding.fingerprint) || waiver.fingerprint === legacy.fingerprint;
 }
 function isExpired(waiver, now) {
   if (!waiver.expiresOn) {

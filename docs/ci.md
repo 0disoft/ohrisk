@@ -1,5 +1,13 @@
 # CI Usage Guide
 
+Semantic fingerprint comparison in CI waivers, gated diffs, and the packaged
+baseline CLI ignores source-label and ordinary evidence-file renames. License
+meaning, confidence, exceptions, restriction scope, bundled component terms,
+and conflicting evidence still participate in review decisions. Older semantic
+fingerprints use the same comparison; opaque legacy fingerprints remain exact.
+Baseline configuration checks for profile, production scope, policy, and report
+schema remain unchanged. Dependency path changes still change finding IDs.
+
 Examples for running Ohrisk in GitHub Actions.
 
 ## Dedicated action

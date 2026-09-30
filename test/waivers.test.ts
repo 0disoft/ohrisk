@@ -15,6 +15,7 @@ import {
   buildLegacyFindingId
 } from "../src/policy/finding-id";
 import type { RiskFinding } from "../src/policy/types";
+import { buildSemanticFindingFingerprint } from "../src/policy/finding-id";
 
 function findingWithPaths(paths: string[][]): RiskFinding {
   const id = buildFindingId({
@@ -47,6 +48,18 @@ function findingWithPaths(paths: string[][]): RiskFinding {
 }
 
 describe("readRiskWaivers", () => {
+  test("matches pre-upgrade semantic fingerprints without weakening license decisions", () => {
+    const finding = findingWithPaths([["root", "shared@1.0.2"]]);
+    const license = { expression: "AGPL-3.0-only", choices: ["AGPL-3.0-only"], joiner: "single" as const,
+      signals: [], confidence: "high" as const, exceptions: [], evidenceSources: ["file: LICENSE (license)"] };
+    const old = `${finding.id}::high::replace::${JSON.stringify(license).replace(/:/g, "%3A")}`;
+    finding.fingerprint = buildSemanticFindingFingerprint({ id: finding.id, severity: "high", recommendation: "replace", license });
+    const waivers = [{ fingerprint: old, reason: "Reviewed." }];
+    expect(applyRiskWaivers({ findings: [finding], waivers }).waivedFindings).toHaveLength(1);
+    finding.fingerprint = buildSemanticFindingFingerprint({ id: finding.id, severity: "high", recommendation: "replace",
+      license: { ...license, expression: "GPL-3.0-only", choices: ["GPL-3.0-only"] } });
+    expect(applyRiskWaivers({ findings: [finding], waivers }).waivedFindings).toHaveLength(0);
+  });
   test("publishes a closed waiver-file schema for roots and items", () => {
     const schema = JSON.parse(
       readFileSync(path.resolve(import.meta.dir, "../schemas/waiver-file.schema.json"), "utf8")

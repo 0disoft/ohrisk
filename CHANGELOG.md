@@ -2,6 +2,12 @@
 
 ## 1.16.0 - Unreleased
 
+- Finding decisions ignore ordinary evidence-source labels and file renames
+  while retaining license meaning, confidence, scope, component terms and
+  conflicts. Waivers, diffs and packaged baselines share comparison with older
+  semantic fingerprints; opaque legacy fingerprints remain exact. Dependency
+  path changes still require review through the existing finding IDs.
+
 - SBOM imports preserve public PURL qualifiers and subpaths in package identity,
   preventing architecture, distribution, and file-specific coordinates from
   collapsing into one finding. Qualifier order is canonical; authentication

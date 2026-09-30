@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { diffRiskFindings } from "../src/diff/compare";
 import { buildFindingFingerprint, buildFindingId } from "../src/policy/finding-id";
 import type { RiskFinding } from "../src/policy/types";
+import { buildSemanticFindingFingerprint } from "../src/policy/finding-id";
 
 function finding(overrides: Partial<RiskFinding> = {}): RiskFinding {
   const base: RiskFinding = {
@@ -26,6 +27,15 @@ function finding(overrides: Partial<RiskFinding> = {}): RiskFinding {
 }
 
 describe("diffRiskFindings", () => {
+  test("compares old and current semantic fingerprints without provenance-only changes", () => {
+    const baseline = finding();
+    const license = { expression: "AGPL-3.0-only", choices: ["AGPL-3.0-only"], joiner: "single" as const,
+      signals: [], confidence: "high" as const, exceptions: [], evidenceSources: ["file: LICENSE (license)"] };
+    baseline.fingerprint = `${baseline.id}::high::replace::${JSON.stringify(license).replace(/:/g, "%3A")}`;
+    const current = finding({ fingerprint: buildSemanticFindingFingerprint({ id: baseline.id,
+      severity: "high", recommendation: "replace", license: { ...license, evidenceSources: ["file: COPYING (license)"] } }) });
+    expect(diffRiskFindings({ baselineFindings: [baseline], currentFindings: [current] }).introducedFindings).toEqual([]);
+  });
   test("reports an existing finding as changed when evidence fingerprint changes", () => {
     const baseline = finding();
     const current = finding({

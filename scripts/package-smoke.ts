@@ -81,6 +81,16 @@ try {
     throw new Error("Packaged report summary smoke test returned an invalid contract.");
   }
 
+  runWithPath("ohrisk-baseline", [
+    "create", "--report", "scan-report.json", "--output", "smoke-baseline.json"
+  ], consumerDir, consumerBinDir);
+  const baselineCheck = readJsonObject(runWithPath("ohrisk-baseline", [
+    "check", "--report", "scan-report.json", "--baseline", "smoke-baseline.json", "--json"
+  ], consumerDir, consumerBinDir));
+  if (baselineCheck.status !== "baseline_checked" || baselineCheck.failed !== false) {
+    throw new Error("Packaged baseline CLI failed to accept its unchanged scan.");
+  }
+
   const archiveName = "source.tar";
   writeFileSync(
     path.join(consumerDir, archiveName),
