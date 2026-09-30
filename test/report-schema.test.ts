@@ -61,6 +61,16 @@ const policy: PolicyConfigSummary = {
 };
 
 describe("machine-readable report schemas", () => {
+  test("reports input capability separately from scan completeness and rejects invented capabilities", () => {
+    const scan = renderCompleteScanReport();
+    expect(scan.lockfiles[0].support).toEqual({ relationships: "source-edges", developmentScope: "declared", artifactPins: "checksums" });
+    expectValid(OHRISK_SCAN_REPORT_SCHEMA, scan);
+    expectInvalid(OHRISK_SCAN_REPORT_SCHEMA, { ...scan, lockfiles: [{ ...scan.lockfiles[0], support: { ...scan.lockfiles[0].support, verified: true } }] });
+    expectInvalid(OHRISK_SCAN_REPORT_SCHEMA, { ...scan, lockfiles: [{ ...scan.lockfiles[0], support: { ...scan.lockfiles[0].support, relationships: "exhaustive" } }] });
+    const diff = renderCompleteDiffReport();
+    expect(diff.lockfileChanges.current[0].support).toBeDefined();
+    expectValid(OHRISK_DIFF_REPORT_SCHEMA, diff);
+  });
   test("validates both diff completeness sides and rejects missing evidence counters", () => {
     const diff = renderCompleteDiffReport();
     const complete = { status: "complete", unavailablePackageCount: 0, skippedRepositoryEntryCount: 0 };

@@ -20,11 +20,13 @@ import {
 } from "../project/discover";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, isErr, ok, type Result } from "../shared/result";
+import { builtInInputSupport, validInputSupport, type InputSupport } from "./input-support";
 
 export type EcosystemAdapter = {
   id: string;
   lockfileKinds: readonly SupportedLockfileKind[];
   packageEcosystems: readonly PackageEcosystem[];
+  support: Readonly<Partial<Record<SupportedLockfileKind, InputSupport>>>;
   discover: (project: ProjectInput) => ProjectLockfile[];
   parse: (
     project: ProjectInput,
@@ -98,6 +100,11 @@ export function registerEcosystemAdapter(
   if (new Set(adapterToRegister.lockfileKinds).size !== adapterToRegister.lockfileKinds.length) {
     throw new Error("Ecosystem adapter lockfile kinds must be unique.");
   }
+  if (!adapterToRegister.support || adapterToRegister.lockfileKinds.some((kind) => !validInputSupport(adapterToRegister.support[kind]))
+    || Object.keys(adapterToRegister.support).some((kind) =>
+      !adapterToRegister.lockfileKinds.includes(kind as SupportedLockfileKind))) {
+    throw new Error("Ecosystem adapter must declare support for exactly its registered lockfile kinds.");
+  }
 
   const previous = new Map<SupportedLockfileKind, EcosystemAdapter | undefined>();
   for (const kind of adapterToRegister.lockfileKinds) {
@@ -132,6 +139,24 @@ export function ecosystemAdapterForLockfile(
   kind: SupportedLockfileKind
 ): EcosystemAdapter | undefined {
   return adaptersByLockfileKind.get(kind);
+}
+
+export function inputSupportForLockfile(kind: string): InputSupport | undefined {
+  const support = ecosystemAdapterForLockfile(kind as SupportedLockfileKind)?.support[kind as SupportedLockfileKind];
+  return support ? { ...support } : undefined;
+}
+
+export function projectInputSupport(project: ProjectInput): Array<{ kind: string; support: InputSupport }> {
+  return [...new Set(projectLockfiles(project).map((lockfile) => lockfile.kind))].sort().flatMap((kind) => {
+    const support = inputSupportForLockfile(kind);
+    return support ? [{ kind, support }] : [];
+  });
+}
+
+export function formatProjectInputSupport(project: ProjectInput): string {
+  return projectInputSupport(project).map(({ kind, support }) =>
+    `${kind}: relationships ${support.relationships}, development scope ${support.developmentScope}, artifact pins ${support.artifactPins}`
+  ).join("; ");
 }
 
 export function registeredEcosystemAdapters(): EcosystemAdapter[] {
@@ -342,6 +367,7 @@ function adapter(
     id,
     lockfileKinds,
     packageEcosystems,
+    support: Object.fromEntries(lockfileKinds.map((kind) => [kind, builtInInputSupport(kind)])),
     discover: (project) => projectLockfiles(project)
       .filter((lockfile) => lockfileKindSet.has(lockfile.kind)),
     parse: (project, context) => parseProjectLockfile(project, {

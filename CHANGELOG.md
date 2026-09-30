@@ -2,6 +2,13 @@
 
 ## 1.16.0 - Unreleased
 
+- Adapters declare relationship reconstruction, development-scope detection
+  and retained artifact pins for every supported input kind. Report schema 3.7
+  exposes the support boundary separately from actual inspection completeness
+  in scan/diff JSON, SARIF and CycloneDX; scan summaries show it as well. A
+  generated support matrix stays synchronized with registered adapters. Baseline
+  schema configuration changes require review; summaries still accept 3.5/3.6.
+
 - Finding decisions ignore ordinary evidence-source labels and file renames
   while retaining license meaning, confidence, scope, component terms and
   conflicts. Waivers, diffs and packaged baselines share comparison with older

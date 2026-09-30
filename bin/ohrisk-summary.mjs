@@ -11,7 +11,7 @@ import path from "node:path";
 const SEVERITIES = ["low", "review", "unknown", "high"];
 const DEFAULT_MAX_FINDINGS = 20;
 const MAX_REPORT_BYTES = 64 * 1024 * 1024;
-const REPORT_SCHEMA_VERSIONS = ["3.5.0", "3.6.0"];
+const REPORT_SCHEMA_VERSIONS = ["3.5.0", "3.6.0", "3.7.0"];
 const SUMMARY_SCHEMA = "urn:ohrisk:schema:report-summary:1.0.0";
 
 try {

@@ -1,5 +1,6 @@
 import path from "node:path";
 import { buildScanCompleteness, type ScanCompleteness } from "../policy/completeness";
+import { projectInputSupport } from "../ecosystems/registry";
 import type { LicenseEvidence } from "../evidence/types";
 
 import type { DependencyEdge, DependencyGraph, DependencyNode } from "../graph/types";
@@ -86,6 +87,7 @@ export function renderCycloneDxReport(input: CycloneDxReportInput): string {
           "bom-ref": "project"
         },
         properties: [
+          { name: "ohrisk:inputSupport", value: JSON.stringify(projectInputSupport(input.project)) },
           {
             name: "ohrisk:completeness",
             value: JSON.stringify(input.completeness ?? buildScanCompleteness({

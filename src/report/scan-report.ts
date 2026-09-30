@@ -13,6 +13,8 @@ import type {
   LicenseEvidenceSource
 } from "../evidence/types";
 import { packageUrl } from "../graph/package-url";
+import { inputSupportForLockfile, formatProjectInputSupport } from "../ecosystems/registry";
+import type { InputSupport } from "../ecosystems/input-support";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
 import type { NormalizedLicense } from "../license/types";
 import { NOTICE_ACTION } from "../policy/evaluate";
@@ -166,6 +168,7 @@ export function renderScanReport(input: ScanReportInput): string {
       `Unresolved dependency [${item.reason}]: ${JSON.stringify(item.from ?? "<root>")} -> ${JSON.stringify(item.name)} (${item.dependencyType})`),
     `Evidence: ${summary.evidence.files} files, ${summary.evidence.warnings} warnings`,
     `Completeness: ${formatScanCompleteness(completeness)}`,
+    `Input support: ${formatProjectInputSupport(input.project)}`,
     `Licenses: ${summary.licenses.highConfidence} high-confidence, ${summary.licenses.mediumConfidence} medium-confidence, ${summary.licenses.lowConfidence} low-confidence`,
     `License issues: ${summary.licenses.missing} missing, ${summary.licenses.malformed} malformed`,
     `Risks: ${summary.risks.high} high, ${summary.risks.review} review, ${summary.risks.unknown} unknown, ${summary.risks.low} low`,
@@ -1218,6 +1221,7 @@ function renderMarkdownReport(
       `- Unresolved dependency ${formatMarkdownInlineCode(item.reason)}: ${formatMarkdownInlineCode(item.from ?? "<root>")} → ${formatMarkdownInlineCode(item.name)} (${item.dependencyType})`),
     `- Evidence: ${formatMarkdownInlineCode(`${summary.evidence.files} files`)}, ${formatMarkdownInlineCode(`${summary.evidence.warnings} warnings`)}`,
     `- Completeness: ${formatMarkdownInlineCode(formatScanCompleteness(input.completeness ?? buildScanCompleteness(input)))}`,
+    `- Input support: ${formatMarkdownInlineCode(formatProjectInputSupport(input.project))}`,
     `- Licenses: ${formatMarkdownInlineCode(`${summary.licenses.highConfidence} high-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.mediumConfidence} medium-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.lowConfidence} low-confidence`)}`,
     `- License issues: ${formatMarkdownInlineCode(`${summary.licenses.missing} missing`)}, ${formatMarkdownInlineCode(`${summary.licenses.malformed} malformed`)}`,
     `- Risks: ${formatMarkdownInlineCode(`${summary.risks.high} high`)}, ${formatMarkdownInlineCode(`${summary.risks.review} review`)}, ${formatMarkdownInlineCode(`${summary.risks.unknown} unknown`)}, ${formatMarkdownInlineCode(`${summary.risks.low} low`)}`,
@@ -1281,7 +1285,7 @@ function displayDependencyOrigins(
 function displayLockfileSummary(project: ScanReportInput["project"]): string {
   return displayLockfiles(project)
     .map((lockfile) => `${lockfile.path} (${lockfile.kind})`)
-    .join(", ");
+    .join(", ") + `; input support: ${formatProjectInputSupport(project)}`;
 }
 
 function renderAdditionalLockfileLines(project: ScanReportInput["project"]): string[] {
@@ -1300,9 +1304,10 @@ function renderAdditionalMarkdownLockfileLines(
     : [];
 }
 
-function displayLockfiles(project: ScanReportInput["project"]): Array<{ kind: string; path: string }> {
+function displayLockfiles(project: ScanReportInput["project"]): Array<{ kind: string; path: string; support?: InputSupport }> {
   return projectLockfiles(project).map((lockfile) => ({
     kind: lockfile.kind,
+    ...(inputSupportForLockfile(lockfile.kind) ? { support: inputSupportForLockfile(lockfile.kind)! } : {}),
     path: displayProjectPath(project, lockfile.path)
   }));
 }

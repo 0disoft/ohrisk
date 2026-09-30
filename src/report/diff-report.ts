@@ -1,4 +1,5 @@
 import type { DiffReport } from "../../types/report-types";
+import { inputSupportForLockfile } from "../ecosystems/registry";
 import type { RiskDiff } from "../diff/compare";
 import { NOTICE_ACTION } from "../policy/evaluate";
 import type { RiskFinding, RiskSeverity } from "../policy/types";
@@ -20,6 +21,13 @@ export type DiffLockfile = {
   kind: string;
   path: string;
 };
+
+function reportLockfiles(lockfiles: DiffLockfile[]): DiffReport["lockfileChanges"]["current"] {
+  return lockfiles.map((lockfile) => {
+    const support = inputSupportForLockfile(lockfile.kind);
+    return { ...lockfile, ...(support ? { support } : {}) };
+  });
+}
 
 export type DiffLockfileChanges = {
   current: DiffLockfile[];
@@ -76,7 +84,12 @@ export function renderDiffReport(input: DiffReportInput): string {
         changedRisks: changedSummary,
         resolvedRisks: resolvedSummary,
         introducedRisks: introducedSummary,
-        lockfileChanges: input.lockfileChanges,
+        lockfileChanges: {
+          current: reportLockfiles(input.lockfileChanges.current),
+          baseline: reportLockfiles(input.lockfileChanges.baseline),
+          added: reportLockfiles(input.lockfileChanges.added),
+          removed: reportLockfiles(input.lockfileChanges.removed)
+        },
         nextAction,
         ...(input.policy ? { policy: input.policy } : {}),
         ...thresholdSummary,

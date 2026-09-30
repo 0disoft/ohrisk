@@ -421,7 +421,7 @@ the scanned repository or `PATH` for an opener executable; Windows also disables
 `cmd.exe` AutoRun processing for the dispatch.
 
 - JSON, Markdown, HTML, SARIF, and CycloneDX behavior is owned by `docs/report-formats.md`.
-- Scan, diff, and explain JSON documents include `$schema` and `schemaVersion`; incompatible contract changes require a schema-version change. Schema 3.0 rejects unknown properties, separates diff classifications, and validates typed evidence and dependency-graph diagnostics alongside findings, licenses, policy summaries, waivers, thresholds, and lockfile changes. Explain JSON includes its redacted policy summary and the fixed `license-only` policy scope. Scan, diff, and explain JSON currently publish schema version `3.6.0`.
+- Scan, diff, and explain JSON documents include `$schema` and `schemaVersion`; incompatible contract changes require a schema-version change. Schema 3.0 rejects unknown properties, separates diff classifications, and validates typed evidence and dependency-graph diagnostics alongside findings, licenses, policy summaries, waivers, thresholds, and lockfile changes. Explain JSON includes its redacted policy summary and the fixed `license-only` policy scope. Scan, diff, and explain JSON currently publish schema version `3.7.0`.
 - `.ohrisk-waivers.json` has its own closed Draft 2020-12 input contract at `schemas/waiver-file.schema.json`; the parser and schema both reject unknown root and item fields.
 - Shareable formats must not expose absolute local project roots, lockfiles, policy paths, cache paths, or credentials.
 - Machine-readable IDs, fingerprints, enum values, and paths must remain stable unless the change is documented and tested.

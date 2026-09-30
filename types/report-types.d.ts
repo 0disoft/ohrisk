@@ -5,7 +5,7 @@
  * runtime validation source of truth.
  */
 
-export type ReportSchemaVersion = "3.6.0";
+export type ReportSchemaVersion = "3.7.0";
 
 export type CommonReportSchemaId =
   `urn:ohrisk:schema:common:${ReportSchemaVersion}`;
@@ -277,9 +277,16 @@ export type WaiverCounts = {
   unmatched: number;
 };
 
+export type InputSupport = {
+  relationships: "source-edges" | "bounded-paths" | "direct-only" | "inventory";
+  developmentScope: "declared" | "companion-dependent" | "heuristic" | "unavailable";
+  artifactPins: "checksums" | "checksums-or-revisions" | "revisions" | "none";
+};
+
 export type Lockfile = {
   kind: string;
   path: string;
+  support?: InputSupport;
 };
 
 export type PackageProvenance = {

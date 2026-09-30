@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: e8ee5f437b7ac10e2b56ff476ef34a100de27eefb6f8a54043be3bbfe6e48cd1
+// ohrisk-action-source-sha256: 6e61965f9c25f9c4ed7b7ae6ac81e99b873598d210f8be2dfbe4a52ad6c83265
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -51521,6 +51521,73 @@ function collectEcosystemEvidence(input) {
   return ecosystemEvidenceCollectors.get(input.node.ecosystem)?.(input);
 }
 
+// src/ecosystems/input-support.ts
+var declarations = {
+  bun: ["bounded-paths", "declared", "checksums"],
+  "package-lock": ["source-edges", "declared", "checksums"],
+  "npm-shrinkwrap": ["source-edges", "declared", "checksums"],
+  "pnpm-lock": ["source-edges", "declared", "checksums"],
+  "deno-lock": ["bounded-paths", "declared", "checksums"],
+  "yarn-lock": ["bounded-paths", "companion-dependent", "checksums"],
+  "package-json": ["direct-only", "declared", "none"],
+  "cargo-lock": ["bounded-paths", "companion-dependent", "checksums-or-revisions"],
+  "go-work": ["bounded-paths", "heuristic", "checksums"],
+  "go-mod": ["bounded-paths", "heuristic", "checksums"],
+  "pipfile-lock": ["inventory", "declared", "none"],
+  "pdm-lock": ["bounded-paths", "declared", "none"],
+  "poetry-lock": ["bounded-paths", "declared", "none"],
+  "pyproject-toml": ["direct-only", "declared", "none"],
+  "requirements-txt": ["direct-only", "unavailable", "none"],
+  "uv-lock": ["source-edges", "declared", "none"],
+  pylock: ["bounded-paths", "unavailable", "none"],
+  "gradle-lock": ["inventory", "declared", "none"],
+  "gradle-version-catalog": ["direct-only", "unavailable", "none"],
+  "maven-pom": ["bounded-paths", "declared", "none"],
+  "bazel-module": ["direct-only", "declared", "none"],
+  "nuget-lock": ["bounded-paths", "companion-dependent", "checksums"],
+  "nuget-assets": ["bounded-paths", "companion-dependent", "checksums"],
+  "dotnet-project": ["direct-only", "declared", "none"],
+  "nuget-packages-config": ["inventory", "unavailable", "none"],
+  "conan-lock": ["inventory", "declared", "none"],
+  "conda-environment": ["direct-only", "unavailable", "none"],
+  "conda-lock": ["bounded-paths", "declared", "none"],
+  "vcpkg-json": ["bounded-paths", "declared", "none"],
+  "terraform-lock": ["inventory", "unavailable", "none"],
+  "helm-chart-lock": ["direct-only", "unavailable", "checksums"],
+  "helm-chart-yaml": ["direct-only", "unavailable", "none"],
+  "nix-flake-lock": ["source-edges", "unavailable", "checksums-or-revisions"],
+  "unity-packages-lock": ["bounded-paths", "unavailable", "none"],
+  "renv-lock": ["inventory", "declared", "none"],
+  "julia-manifest": ["bounded-paths", "declared", "none"],
+  "stack-lock": ["inventory", "unavailable", "checksums"],
+  "cpanfile-snapshot": ["bounded-paths", "unavailable", "none"],
+  "luarocks-lock": ["inventory", "unavailable", "none"],
+  "pubspec-lock": ["inventory", "declared", "checksums"],
+  "swift-package-resolved": ["inventory", "unavailable", "none"],
+  "cartfile-resolved": ["inventory", "unavailable", "none"],
+  "podfile-lock": ["bounded-paths", "unavailable", "none"],
+  "mix-lock": ["inventory", "declared", "checksums"],
+  "rebar-lock": ["inventory", "unavailable", "none"],
+  "gemfile-lock": ["bounded-paths", "companion-dependent", "none"],
+  "composer-lock": ["bounded-paths", "declared", "none"],
+  "cyclonedx-json": ["source-edges", "declared", "none"],
+  "cyclonedx-xml": ["source-edges", "declared", "none"],
+  "spdx-json": ["source-edges", "unavailable", "none"],
+  "spdx-rdf": ["source-edges", "unavailable", "none"],
+  "spdx-tag-value": ["source-edges", "unavailable", "none"],
+  "zig-zon": ["direct-only", "unavailable", "checksums"]
+};
+function builtInInputSupport(kind) {
+  const [relationships, developmentScope, artifactPins] = declarations[kind];
+  return { relationships, developmentScope, artifactPins };
+}
+function validInputSupport(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return false;
+  const record = value;
+  return Object.keys(record).length === 3 && Object.keys(record).every((key) => ["relationships", "developmentScope", "artifactPins"].includes(key)) && typeof record.relationships === "string" && ["source-edges", "bounded-paths", "direct-only", "inventory"].includes(record.relationships) && typeof record.developmentScope === "string" && ["declared", "companion-dependent", "heuristic", "unavailable"].includes(record.developmentScope) && typeof record.artifactPins === "string" && ["checksums", "checksums-or-revisions", "revisions", "none"].includes(record.artifactPins);
+}
+
 // src/ecosystems/registry.ts
 var MAX_REMOTE_MAVEN_MODEL_POMS = 32;
 var DEFAULT_ADAPTERS = [
@@ -51566,6 +51633,9 @@ function registerEcosystemAdapter(adapterToRegister, options = {}) {
   if (new Set(adapterToRegister.lockfileKinds).size !== adapterToRegister.lockfileKinds.length) {
     throw new Error("Ecosystem adapter lockfile kinds must be unique.");
   }
+  if (!adapterToRegister.support || adapterToRegister.lockfileKinds.some((kind) => !validInputSupport(adapterToRegister.support[kind])) || Object.keys(adapterToRegister.support).some((kind) => !adapterToRegister.lockfileKinds.includes(kind))) {
+    throw new Error("Ecosystem adapter must declare support for exactly its registered lockfile kinds.");
+  }
   const previous = new Map;
   for (const kind of adapterToRegister.lockfileKinds) {
     const existing = adaptersByLockfileKind.get(kind);
@@ -51592,6 +51662,19 @@ function registerEcosystemAdapter(adapterToRegister, options = {}) {
 }
 function ecosystemAdapterForLockfile(kind) {
   return adaptersByLockfileKind.get(kind);
+}
+function inputSupportForLockfile(kind) {
+  const support = ecosystemAdapterForLockfile(kind)?.support[kind];
+  return support ? { ...support } : undefined;
+}
+function projectInputSupport(project) {
+  return [...new Set(projectLockfiles(project).map((lockfile) => lockfile.kind))].sort().flatMap((kind) => {
+    const support = inputSupportForLockfile(kind);
+    return support ? [{ kind, support }] : [];
+  });
+}
+function formatProjectInputSupport(project) {
+  return projectInputSupport(project).map(({ kind, support }) => `${kind}: relationships ${support.relationships}, development scope ${support.developmentScope}, artifact pins ${support.artifactPins}`).join("; ");
 }
 function registeredEcosystemAdapters() {
   return [...new Set(adaptersByLockfileKind.values())];
@@ -51746,6 +51829,7 @@ function adapter(id, lockfileKinds, packageEcosystems) {
     id,
     lockfileKinds,
     packageEcosystems,
+    support: Object.fromEntries(lockfileKinds.map((kind) => [kind, builtInInputSupport(kind)])),
     discover: (project) => projectLockfiles(project).filter((lockfile) => lockfileKindSet.has(lockfile.kind)),
     parse: (project, context) => parseProjectLockfile(project, {
       ...context?.scanRootDir === undefined ? {} : { pythonLocalSourceRootDir: context.scanRootDir },
@@ -59041,6 +59125,7 @@ function renderCycloneDxReport(input) {
         "bom-ref": "project"
       },
       properties: [
+        { name: "ohrisk:inputSupport", value: JSON.stringify(projectInputSupport(input.project)) },
         {
           name: "ohrisk:completeness",
           value: JSON.stringify(input.completeness ?? buildScanCompleteness({
@@ -59330,13 +59415,19 @@ function formatThresholdSummary(summary) {
 }
 
 // src/report/schema.ts
-var OHRISK_REPORT_SCHEMA_VERSION = "3.6.0";
+var OHRISK_REPORT_SCHEMA_VERSION = "3.7.0";
 var OHRISK_COMMON_REPORT_SCHEMA = `urn:ohrisk:schema:common:${OHRISK_REPORT_SCHEMA_VERSION}`;
 var OHRISK_SCAN_REPORT_SCHEMA = `urn:ohrisk:schema:scan-report:${OHRISK_REPORT_SCHEMA_VERSION}`;
 var OHRISK_DIFF_REPORT_SCHEMA = `urn:ohrisk:schema:diff-report:${OHRISK_REPORT_SCHEMA_VERSION}`;
 var OHRISK_EXPLAIN_REPORT_SCHEMA = `urn:ohrisk:schema:explain-report:${OHRISK_REPORT_SCHEMA_VERSION}`;
 
 // src/report/diff-report.ts
+function reportLockfiles(lockfiles) {
+  return lockfiles.map((lockfile) => {
+    const support = inputSupportForLockfile(lockfile.kind);
+    return { ...lockfile, ...support ? { support } : {} };
+  });
+}
 function renderDiffReport(input) {
   const summary = summarize(input.diff.newFindings);
   const changedSummary = summarize(input.diff.changedFindings);
@@ -59367,7 +59458,12 @@ function renderDiffReport(input) {
       changedRisks: changedSummary,
       resolvedRisks: resolvedSummary,
       introducedRisks: introducedSummary,
-      lockfileChanges: input.lockfileChanges,
+      lockfileChanges: {
+        current: reportLockfiles(input.lockfileChanges.current),
+        baseline: reportLockfiles(input.lockfileChanges.baseline),
+        added: reportLockfiles(input.lockfileChanges.added),
+        removed: reportLockfiles(input.lockfileChanges.removed)
+      },
       nextAction,
       ...input.policy ? { policy: input.policy } : {},
       ...thresholdSummary,
@@ -59637,6 +59733,7 @@ function renderSarifReport(input) {
         ],
         properties: {
           ohriskCompleteness: input.completeness ?? buildScanCompleteness(input),
+          ohriskInputSupport: projectInputSupport(input.project),
           ohriskWaiverMode: input.waiverMode,
           ohriskActiveFindingCount: input.riskFindings.length,
           ohriskWaivedFindingCount: input.waivedFindings.length,
@@ -62815,6 +62912,7 @@ function renderScanReport(input) {
     ...(input.graph.unresolvedDependencies ?? []).map((item) => `Unresolved dependency [${item.reason}]: ${JSON.stringify(item.from ?? "<root>")} -> ${JSON.stringify(item.name)} (${item.dependencyType})`),
     `Evidence: ${summary.evidence.files} files, ${summary.evidence.warnings} warnings`,
     `Completeness: ${formatScanCompleteness(completeness)}`,
+    `Input support: ${formatProjectInputSupport(input.project)}`,
     `Licenses: ${summary.licenses.highConfidence} high-confidence, ${summary.licenses.mediumConfidence} medium-confidence, ${summary.licenses.lowConfidence} low-confidence`,
     `License issues: ${summary.licenses.missing} missing, ${summary.licenses.malformed} malformed`,
     `Risks: ${summary.risks.high} high, ${summary.risks.review} review, ${summary.risks.unknown} unknown, ${summary.risks.low} low`,
@@ -63657,6 +63755,7 @@ function renderMarkdownReport2(input, summary) {
     ...(input.graph.unresolvedDependencies ?? []).map((item) => `- Unresolved dependency ${formatMarkdownInlineCode(item.reason)}: ${formatMarkdownInlineCode(item.from ?? "<root>")} → ${formatMarkdownInlineCode(item.name)} (${item.dependencyType})`),
     `- Evidence: ${formatMarkdownInlineCode(`${summary.evidence.files} files`)}, ${formatMarkdownInlineCode(`${summary.evidence.warnings} warnings`)}`,
     `- Completeness: ${formatMarkdownInlineCode(formatScanCompleteness(input.completeness ?? buildScanCompleteness(input)))}`,
+    `- Input support: ${formatMarkdownInlineCode(formatProjectInputSupport(input.project))}`,
     `- Licenses: ${formatMarkdownInlineCode(`${summary.licenses.highConfidence} high-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.mediumConfidence} medium-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.lowConfidence} low-confidence`)}`,
     `- License issues: ${formatMarkdownInlineCode(`${summary.licenses.missing} missing`)}, ${formatMarkdownInlineCode(`${summary.licenses.malformed} malformed`)}`,
     `- Risks: ${formatMarkdownInlineCode(`${summary.risks.high} high`)}, ${formatMarkdownInlineCode(`${summary.risks.review} review`)}, ${formatMarkdownInlineCode(`${summary.risks.unknown} unknown`)}, ${formatMarkdownInlineCode(`${summary.risks.low} low`)}`,
@@ -63701,7 +63800,7 @@ function displayDependencyOrigins(project, node) {
   return [...uniqueOrigins.values()].sort((left, right) => left.path.localeCompare(right.path) || left.kind.localeCompare(right.kind));
 }
 function displayLockfileSummary(project) {
-  return displayLockfiles(project).map((lockfile) => `${lockfile.path} (${lockfile.kind})`).join(", ");
+  return displayLockfiles(project).map((lockfile) => `${lockfile.path} (${lockfile.kind})`).join(", ") + `; input support: ${formatProjectInputSupport(project)}`;
 }
 function renderAdditionalLockfileLines(project) {
   const lockfiles = displayLockfiles(project);
@@ -63714,6 +63813,7 @@ function renderAdditionalMarkdownLockfileLines(project) {
 function displayLockfiles(project) {
   return projectLockfiles(project).map((lockfile) => ({
     kind: lockfile.kind,
+    ...inputSupportForLockfile(lockfile.kind) ? { support: inputSupportForLockfile(lockfile.kind) } : {},
     path: displayProjectPath(project, lockfile.path)
   }));
 }

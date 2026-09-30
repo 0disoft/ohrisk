@@ -174,7 +174,7 @@ describe("ohrisk-summary", () => {
     const result = run(workspace, ["--report", "forged.json"]);
 
     expect(result.status).toBe(2);
-    expect(result.stderr).toContain("does not use a supported Ohrisk 3.5.0 or 3.6.0 report schema");
+    expect(result.stderr).toContain("does not use a supported Ohrisk 3.5.0 or 3.6.0 or 3.7.0 report schema");
   });
 
   test("reports omitted findings accurately when max-findings is zero", () => {
