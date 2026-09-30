@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: e93cf7e4feabfd1f16c2ba160c3212fedf64cebc44e7c31b772de87307d29b65
+// ohrisk-action-source-sha256: 267f54b8d96f97ed5eaffbeaa019e47c8b680d88d87853b2776fef3333d0afe6
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -17794,6 +17794,60 @@ var OHRISK_VERSION = package_default.version;
 // src/archive/archive-project.ts
 import path49 from "node:path";
 
+// src/graph/package-url-qualifiers.ts
+function readPackageUrlDetails(input) {
+  const hash = input.indexOf("#");
+  const query = input.indexOf("?");
+  const qualifiers = Object.create(null);
+  if (query >= 0 && (hash < 0 || query < hash)) {
+    for (const entry of input.slice(query + 1, hash < 0 ? undefined : hash).split("&")) {
+      const separator = entry.indexOf("=");
+      if (separator <= 0)
+        continue;
+      const key = decode(entry.slice(0, separator)).toLowerCase();
+      if (!/^[a-z][a-z0-9._-]*$/u.test(key) || /(?:auth|token|secret|password|credential|api[_.-]?key)/iu.test(key))
+        continue;
+      const decoded = decode(entry.slice(separator + 1));
+      const raw = key === "checksum" ? [...new Set(decoded.split(",").map((value) => value.toLowerCase()))].sort().join(",") : decoded;
+      const value = key.endsWith("_url") || /^(?:[a-z][a-z0-9+.-]*):\/\//iu.test(raw) ? publicSourceUrl(raw) : raw;
+      if (value)
+        qualifiers[key] = value;
+    }
+  }
+  const subpath = hash >= 0 ? input.slice(hash + 1).split("/").map(decode).filter((part) => part !== "" && part !== ".").join("/") : "";
+  return {
+    ...Object.keys(qualifiers).length ? { qualifiers } : {},
+    ...subpath && !subpath.split("/").includes("..") ? { subpath } : {}
+  };
+}
+function packageUrlDetailsSuffix(details) {
+  const qualifiers = Object.entries(details.qualifiers ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join("&");
+  const subpath = details.subpath?.split("/").map(encodeURIComponent).join("/");
+  return `${qualifiers ? `?${qualifiers}` : ""}${subpath ? `#${subpath}` : ""}`;
+}
+function decode(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+function publicSourceUrl(value) {
+  const vcsPrefix = value.match(/^(?:git|hg|svn|bzr)\+/u)?.[0] ?? "";
+  try {
+    const url = new URL(value.slice(vcsPrefix.length));
+    if (url.protocol !== "https:" && url.protocol !== "http:")
+      return;
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return vcsPrefix + url.href;
+  } catch {
+    return;
+  }
+}
+
 // src/graph/package-url.ts
 function parsePackageUrl(input) {
   if (!input.startsWith("pkg:")) {
@@ -17831,12 +17885,19 @@ function parsePackageUrl(input) {
   if (!name) {
     return;
   }
-  return {
+  const details = readPackageUrlDetails(input);
+  const identity = {
     ecosystem,
     name,
     version,
+    ...details.qualifiers ? { purlQualifiers: details.qualifiers } : {},
+    ...details.subpath ? { purlSubpath: details.subpath } : {},
     id: ecosystem === "conda" ? `conda:${name}@${version}` : `${name}@${version}`
   };
+  if (packageUrlDetailsSuffix(details)) {
+    identity.id = packageUrl({ ...identity, dependencyType: "unknown", direct: false, paths: [] });
+  }
+  return identity;
 }
 function packageEcosystemForPurlType(input) {
   switch (input.type) {
@@ -17994,6 +18055,12 @@ function decodePurlComponent(value) {
   }
 }
 function packageUrl(node) {
+  return basePackageUrl(node) + packageUrlDetailsSuffix({
+    ...node.purlQualifiers ? { qualifiers: node.purlQualifiers } : {},
+    ...node.purlSubpath ? { subpath: node.purlSubpath } : {}
+  });
+}
+function basePackageUrl(node) {
   switch (node.ecosystem) {
     case "npm":
       return `pkg:npm/${encodePurlPath(node.name)}@${encodeURIComponent(node.version)}`;
@@ -18008,7 +18075,7 @@ function packageUrl(node) {
     case "nuget":
       return `pkg:nuget/${encodeURIComponent(node.name)}@${encodeURIComponent(node.version)}`;
     case "conan":
-      return `pkg:conan/${encodeURIComponent(node.name)}@${encodeURIComponent(node.version)}`;
+      return `pkg:conan/${encodePurlPath(node.name)}@${encodeURIComponent(node.version)}`;
     case "conda":
       return `pkg:conda/${encodeURIComponent(node.name)}@${encodeURIComponent(node.version)}`;
     case "bazel":
@@ -20439,6 +20506,8 @@ function readCycloneDxComponentRecords(value) {
       version: identity.version,
       id: identity.id,
       ecosystem: identity.ecosystem,
+      ...purl?.purlQualifiers ? { purlQualifiers: purl.purlQualifiers } : {},
+      ...purl?.purlSubpath ? { purlSubpath: purl.purlSubpath } : {},
       dependencyType: readCycloneDxDependencyType(component),
       licenseExpressions: readCycloneDxLicenseExpressions(component.licenses)
     });
@@ -20694,6 +20763,8 @@ function traverseCycloneDxDependencies(input) {
       name: record.name,
       version: record.version,
       ecosystem: record.ecosystem,
+      ...record.purlQualifiers ? { purlQualifiers: record.purlQualifiers } : {},
+      ...record.purlSubpath ? { purlSubpath: record.purlSubpath } : {},
       dependencyType,
       direct: directRefs.has(ref),
       paths: []
@@ -35867,6 +35938,8 @@ function parseSpdxDocument(document2, lockfilePath, options = {}) {
         name: record.name,
         version: record.version,
         ecosystem: record.ecosystem,
+        ...record.purlQualifiers ? { purlQualifiers: record.purlQualifiers } : {},
+        ...record.purlSubpath ? { purlSubpath: record.purlSubpath } : {},
         dependencyType: "production",
         direct: paths.some((item) => item.length === 2),
         paths: [...paths]
@@ -35939,6 +36012,8 @@ function readSpdxPackageRecords(value, extractedLicenseTexts) {
       version: purl.version,
       id: purl.id,
       ecosystem: purl.ecosystem,
+      purlQualifiers: purl.purlQualifiers,
+      purlSubpath: purl.purlSubpath,
       licenseDeclared,
       licenseConcluded,
       licenseRefFiles: licenseRefEvidence.files,

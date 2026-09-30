@@ -26,6 +26,8 @@ type SpdxPackageRecord = {
   version: string;
   id: string;
   ecosystem: DependencyNode["ecosystem"];
+  purlQualifiers?: Record<string, string>;
+  purlSubpath?: string;
   licenseDeclared?: string;
   licenseConcluded?: string;
   licenseRefFiles: LicenseEvidence["files"];
@@ -151,6 +153,8 @@ export function parseSpdxDocument(
         name: record.name,
         version: record.version,
         ecosystem: record.ecosystem,
+        ...(record.purlQualifiers ? { purlQualifiers: record.purlQualifiers } : {}),
+        ...(record.purlSubpath ? { purlSubpath: record.purlSubpath } : {}),
         dependencyType: "production",
         direct: paths.some((item) => item.length === 2),
         paths: [...paths]
@@ -240,6 +244,8 @@ function readSpdxPackageRecords(
       version: purl.version,
       id: purl.id,
       ecosystem: purl.ecosystem,
+      purlQualifiers: purl.purlQualifiers,
+      purlSubpath: purl.purlSubpath,
       licenseDeclared,
       licenseConcluded,
       licenseRefFiles: licenseRefEvidence.files,

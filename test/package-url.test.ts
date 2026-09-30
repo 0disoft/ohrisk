@@ -298,7 +298,8 @@ describe("parsePackageUrl", () => {
       ecosystem: "conan",
       name: "example.com/risklib",
       version: "1.0.0",
-      id: "example.com/risklib@1.0.0"
+      id: "pkg:conan/example.com/risklib@1.0.0?channel=stable&user=acme",
+      purlQualifiers: { user: "acme", channel: "stable" }
     });
 
     expect(parsePackageUrl("pkg:conda/risk-conda@1.0.0")).toEqual({

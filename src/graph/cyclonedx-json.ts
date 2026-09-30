@@ -30,6 +30,8 @@ type CycloneDxComponentRecord = {
   version: string;
   id: string;
   ecosystem: PackageEcosystem;
+  purlQualifiers?: Record<string, string>;
+  purlSubpath?: string;
   dependencyType: DependencyType;
   licenseExpressions: string[];
 };
@@ -226,6 +228,8 @@ function readCycloneDxComponentRecords(value: unknown): CycloneDxComponentRecord
       version: identity.version,
       id: identity.id,
       ecosystem: identity.ecosystem,
+      ...(purl?.purlQualifiers ? { purlQualifiers: purl.purlQualifiers } : {}),
+      ...(purl?.purlSubpath ? { purlSubpath: purl.purlSubpath } : {}),
       dependencyType: readCycloneDxDependencyType(component),
       licenseExpressions: readCycloneDxLicenseExpressions(component.licenses)
     });
@@ -580,6 +584,8 @@ function traverseCycloneDxDependencies(input: {
       name: record.name,
       version: record.version,
       ecosystem: record.ecosystem,
+      ...(record.purlQualifiers ? { purlQualifiers: record.purlQualifiers } : {}),
+      ...(record.purlSubpath ? { purlSubpath: record.purlSubpath } : {}),
       dependencyType,
       direct: directRefs.has(ref),
       paths: []

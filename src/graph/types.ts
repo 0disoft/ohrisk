@@ -53,6 +53,9 @@ export type DependencyNode = {
   name: string;
   version: string;
   ecosystem: PackageEcosystem;
+  /** Public identifying SBOM qualifiers; URL credentials and query values are excluded. */
+  purlQualifiers?: Record<string, string>;
+  purlSubpath?: string;
   installNames?: string[];
   resolved?: string;
   integrity?: string;

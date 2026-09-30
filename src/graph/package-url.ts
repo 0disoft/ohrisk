@@ -1,10 +1,13 @@
 import type { DependencyNode, PackageEcosystem } from "./types";
+import { packageUrlDetailsSuffix, readPackageUrlDetails } from "./package-url-qualifiers";
 
 export type ParsedPackageUrl = {
   ecosystem: PackageEcosystem;
   name: string;
   version: string;
   id: string;
+  purlQualifiers?: Record<string, string>;
+  purlSubpath?: string;
 };
 
 export function parsePackageUrl(input: string): ParsedPackageUrl | undefined {
@@ -55,12 +58,19 @@ export function parsePackageUrl(input: string): ParsedPackageUrl | undefined {
     return undefined;
   }
 
-  return {
+  const details = readPackageUrlDetails(input);
+  const identity = {
     ecosystem,
     name,
     version,
+    ...(details.qualifiers ? { purlQualifiers: details.qualifiers } : {}),
+    ...(details.subpath ? { purlSubpath: details.subpath } : {}),
     id: ecosystem === "conda" ? `conda:${name}@${version}` : `${name}@${version}`
   };
+  if (packageUrlDetailsSuffix(details)) {
+    identity.id = packageUrl({ ...identity, dependencyType: "unknown", direct: false, paths: [] });
+  }
+  return identity;
 }
 
 function packageEcosystemForPurlType(input: {
@@ -257,6 +267,13 @@ function decodePurlComponent(value: string): string {
 }
 
 export function packageUrl(node: DependencyNode): string {
+  return basePackageUrl(node) + packageUrlDetailsSuffix({
+    ...(node.purlQualifiers ? { qualifiers: node.purlQualifiers } : {}),
+    ...(node.purlSubpath ? { subpath: node.purlSubpath } : {})
+  });
+}
+
+function basePackageUrl(node: DependencyNode): string {
   switch (node.ecosystem) {
     case "npm":
       return `pkg:npm/${encodePurlPath(node.name)}@${encodeURIComponent(node.version)}`;
@@ -271,7 +288,7 @@ export function packageUrl(node: DependencyNode): string {
     case "nuget":
       return `pkg:nuget/${encodeURIComponent(node.name)}@${encodeURIComponent(node.version)}`;
     case "conan":
-      return `pkg:conan/${encodeURIComponent(node.name)}@${encodeURIComponent(node.version)}`;
+      return `pkg:conan/${encodePurlPath(node.name)}@${encodeURIComponent(node.version)}`;
     case "conda":
       return `pkg:conda/${encodeURIComponent(node.name)}@${encodeURIComponent(node.version)}`;
     case "bazel":

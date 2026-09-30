@@ -16,6 +16,14 @@ includes different levels of waiver detail.
 
 ## JSON schema versioning
 
+Imported PURL qualifiers and subpaths are retained as part of package identity.
+Qualifier keys are normalized and sorted, and ordinary unqualified package IDs
+remain unchanged. Packages with different public qualifiers or subpaths keep
+separate evidence and findings. Existing waivers for formerly collapsed qualified
+packages require review. Authentication qualifiers are omitted; source URL
+qualifiers exclude userinfo, queries, and fragments before identity and output.
+These URLs are identifying metadata and do not authorize remote fetching.
+
 npm, pnpm, and uv source relationships are enumerated independently of bounded
 display paths. A shared package's 65th incoming edge and descendants remain in
 the scan and CycloneDX dependency graph. Source traversal rejects more than

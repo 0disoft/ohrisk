@@ -184,6 +184,12 @@ but automatic discovery excludes it because its dependency entries are not fully
 error lists that input and points to explicit `--lockfile` selection for the exact parse failure;
 Ohrisk does not infer versions from ranges.
 
+SBOM PURL qualifiers and subpaths distinguish otherwise equal package coordinates
+through parsing, merging, policy evaluation, and CycloneDX output. Qualifier order
+does not change identity. URL credentials and query/fragment values and sensitive
+qualifier keys are excluded from public identity. Unqualified package IDs remain
+compatible; formerly collapsed qualified package waivers need explicit review.
+
 npm, pnpm, and uv lockfile source edges are retained independently of display
 path limits. A bounded record traversal preserves reachable packages and scoped
 relationships, including cycles. Missing required records make CI and gated

@@ -2,6 +2,12 @@
 
 ## 1.16.0 - Unreleased
 
+- SBOM imports preserve public PURL qualifiers and subpaths in package identity,
+  preventing architecture, distribution, and file-specific coordinates from
+  collapsing into one finding. Qualifier order is canonical; authentication
+  material is omitted from public identity and reports. Unqualified IDs are
+  unchanged; waivers for previously collapsed qualified packages require review.
+
 - Held-out release evaluation requires reviewed SPDX semantics, choices,
   exceptions, evidence signals, and package/component scope in addition to
   severity and confidence. Reports distinguish semantic mistakes, risk under-
