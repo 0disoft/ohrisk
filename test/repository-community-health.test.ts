@@ -24,7 +24,7 @@ describe("repository community health", () => {
     const contributing = read("CONTRIBUTING.md");
 
     expect(contributing).toContain("Node.js 24");
-    expect(contributing).toContain("Bun 1.3.14");
+    expect(contributing).toContain("bun@1.4.2");
     expect(contributing).toContain("bun run verify:release");
     expect(contributing).toContain("Adding an ecosystem");
     expect(contributing).toContain("Do not include credentials");

@@ -3,10 +3,17 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { assertBundleRuntimeVersion } from "../scripts/bundle";
+
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageVersion = readPackageVersion();
 
 describe("package metadata", () => {
+  test("rejects a different Bun bundler version before generating artifacts", () => {
+    expect(() => assertBundleRuntimeVersion("1.4.2")).not.toThrow();
+    expect(() => assertBundleRuntimeVersion("1.3.14")).toThrow("Bundle build requires bun@1.4.2");
+  });
+
   test("is publishable as the ohrisk CLI package", () => {
     const packageJson = JSON.parse(
       readFileSync(path.join(repoRoot, "package.json"), "utf8")
@@ -46,7 +53,7 @@ describe("package metadata", () => {
     expect(packageJson.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(packageJson.private).toBeUndefined();
     expect(packageJson.license).toBe("MIT");
-    expect(packageJson.packageManager).toBe("bun@1.3.14");
+    expect(packageJson.packageManager).toBe("bun@1.4.2");
     expect(packageJson.engines?.node).toBe(">=24.0.0");
     expect(packageJson.bin).toEqual({
       ohrisk: "dist/cli.js",

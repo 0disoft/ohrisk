@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: f78f6227f7cd3fdb8fb6e6fa5729dd593d136d619dd414070e73395dc55a8bf4
+// ohrisk-action-source-sha256: 84eaac7c9cea78eff7f3d62fd4bec2dcdd552ecc5174b66f393d63d15e43a388
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -17655,11 +17655,11 @@ function renderCommandCancelled(commandLabel) {
 // package.json
 var package_default = {
   name: "ohrisk",
-  version: "1.16.0",
+  version: "1.16.1",
   description: "Catch open-source license risk before your PR ships.",
   license: "MIT",
   type: "module",
-  packageManager: "bun@1.3.14",
+  packageManager: "bun@1.4.2",
   engines: {
     node: ">=24.0.0"
   },

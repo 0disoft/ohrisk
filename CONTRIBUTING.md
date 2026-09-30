@@ -5,7 +5,7 @@ test are the easiest to review.
 
 ## Before you start
 
-- Use Node.js 24 and Bun 1.3.14.
+- Use Node.js 24 and the Bun version in `package.json` (`bun@1.4.2`).
 - Search existing issues before opening a duplicate.
 - Use a private security advisory for vulnerabilities; never disclose them in
   a public issue or pull request.

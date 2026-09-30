@@ -40,7 +40,7 @@ describe("release check workflow", () => {
       jobs?: Record<string, unknown>;
     };
 
-    expect(packageJson.packageManager).toBe("bun@1.3.14");
+    expect(packageJson.packageManager).toBe("bun@1.4.2");
     expect(packageJson.engines?.node).toBe(">=24.0.0");
     expect(workflow).toContain("name: Release Check");
     expect(workflow).toContain("pull_request:");
@@ -56,7 +56,8 @@ describe("release check workflow", () => {
     expect(workflow).toContain("- windows-latest");
     expect(workflow).toContain(`uses: ${CHECKOUT_ACTION}`);
     expect(workflow).toContain(`uses: ${SETUP_BUN_ACTION}`);
-    expect(workflow).toContain("bun-version: 1.3.14");
+    expect(workflow).toContain("bun-version-file: package.json");
+    expect(workflow).not.toMatch(/bun-version:/);
     expect(workflow).toContain(`uses: ${SETUP_NODE_ACTION}`);
     expect(workflow).toContain("node-version: 24");
     expect(workflow).toContain("bun install --frozen-lockfile");
@@ -114,6 +115,8 @@ describe("npm publish workflow", () => {
     expect(workflow).toContain('- "v*"');
     expect(workflow).toContain("contents: write");
     expect(workflow).toContain("id-token: write");
+    expect(workflow.match(/bun-version-file: package.json/g)).toHaveLength(3);
+    expect(workflow).not.toMatch(/bun-version:/);
     expect(workflow).toContain(`uses: ${CHECKOUT_ACTION}`);
     expect(workflow).toContain(`uses: ${SETUP_NODE_ACTION}`);
     expect(workflow).toContain(`uses: ${SETUP_BUN_ACTION}`);

@@ -10,6 +10,7 @@ export const CLI_BUNDLE_VIRTUAL_DIRNAME = "/__ohrisk_bundle__";
 export const CLI_BUNDLE_VIRTUAL_FILENAME = `${CLI_BUNDLE_VIRTUAL_DIRNAME}/${CLI_BUNDLE_FILENAME}`;
 
 export async function buildCliBundle(outdir: string): Promise<string> {
+  assertBundleRuntimeVersion();
   const sourceFingerprint = actionBundleSourceFingerprint();
   const result = await Bun.build({
     entrypoints: [CLI_ENTRYPOINT],
@@ -84,7 +85,15 @@ function listSourceFiles(directory: string): string[] {
 }
 
 export function assertVersionContract(): string {
+  assertBundleRuntimeVersion();
   return readPackageVersion();
+}
+
+export function assertBundleRuntimeVersion(runtimeVersion = Bun.version): void {
+  const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as { packageManager?: string };
+  if (packageJson.packageManager !== `bun@${runtimeVersion}`) {
+    throw new Error(`Bundle build requires ${packageJson.packageManager}; running bun@${runtimeVersion}.`);
+  }
 }
 
 export function assertBuiltCliVersion(cliPath: string, packageVersion: string): void {

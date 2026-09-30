@@ -1,6 +1,10 @@
 # Changelog
 
-## 1.16.0 - 2026-10-01
+## 1.16.1 - 2026-10-01
+
+- CI and publication read the Bun version from `package.json`. Bundle builds
+  reject mismatched Bun runtimes before writing output. This release supersedes
+  the unpublished 1.16.0 tag, whose gate rejected a bundle built with another Bun version.
 
 - Bounded evidence scheduling, source selection, local discovery and ecosystem
   acquisition are separated from one common secure remote artifact reader.
