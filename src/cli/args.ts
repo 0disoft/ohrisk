@@ -386,6 +386,8 @@ function parseScanLikeArgs(
   let strictWaivers = CLI_DEFAULTS.strictWaivers;
   let allowPartialEvidence = CLI_DEFAULTS.allowPartialEvidence;
   let requireCompleteGraph = false;
+  let snapshotPath: string | undefined;
+  let fromSnapshotPath: string | undefined;
   const outputFormatOptions = outputFormatOptionsFor(kind);
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -670,6 +672,15 @@ function parseScanLikeArgs(
 
         cyclonedx = true;
         break;
+      case "--snapshot":
+      case "--from-snapshot": {
+        const value = readRequiredOptionValue(argv, index, arg);
+        if (isErr(value)) return value;
+        if (arg === "--snapshot") snapshotPath = value.value;
+        else fromSnapshotPath = value.value;
+        index += 1;
+        break;
+      }
       case "--output": {
         const value = readRequiredOptionValue(argv, index, "--output");
         if (isErr(value)) {
@@ -784,6 +795,10 @@ function parseScanLikeArgs(
   }
 
   const presentOptions = new Set<string>();
+  if (snapshotPath && outputPath === snapshotPath) return err(createError({ code: "INVALID_ARGUMENT", category: "invalid_input", message: "Snapshot and report output paths must differ." }));
+  if (fromSnapshotPath && (repository || archivePath || lockfilePath || allLockfiles || registryUrl || registryTokenEnv || allowedHosts.length > 0)) {
+    return err(createError({ code: "INVALID_ARGUMENT", category: "invalid_input", message: "--from-snapshot cannot be combined with dependency inputs or registry options." }));
+  }
   if (allLockfiles) presentOptions.add("--all");
   if (lockfilePath) presentOptions.add("--lockfile");
   if (archivePath) presentOptions.add("--archive");
@@ -855,6 +870,8 @@ function parseScanLikeArgs(
       html,
       cyclonedx,
       noWaivers,
+      ...(snapshotPath ? { snapshotPath } : {}),
+      ...(fromSnapshotPath ? { fromSnapshotPath } : {}),
       ...(lockfilePath ? { lockfilePath } : {}),
       ...(archivePath ? { archivePath } : {}),
       ...(allLockfiles ? { allLockfiles: true } : {}),
@@ -888,6 +905,8 @@ function parseScanLikeArgs(
     cyclonedx,
     noWaivers,
     ...(requireCompleteGraph ? { requireCompleteGraph: true } : {}),
+    ...(snapshotPath ? { snapshotPath } : {}),
+    ...(fromSnapshotPath ? { fromSnapshotPath } : {}),
     ...(lockfilePath ? { lockfilePath } : {}),
     ...(archivePath ? { archivePath } : {}),
     ...(repository ? { repository } : {}),

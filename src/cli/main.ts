@@ -116,6 +116,9 @@ import {
   type ScanResult
 } from "./scan-policy";
 import { resolveWorkspaceRootPath } from "./workspace-root";
+import { captureArtifacts } from "../evidence/artifact-capture";
+import { createInspectionSnapshot, digest, inputReceipts, readInspectionSnapshot, snapshotError, waiverDigest, SNAPSHOT_MAX_BYTES } from "../snapshot/inspection-snapshot";
+import { writeReportFile } from "../report/write-output";
 
 export { loadBaselineProjectGraph } from "./baseline-project";
 export { filterGraphBeforeEvidence } from "./scan-policy";
@@ -538,6 +541,11 @@ async function runScanAt(input: {
   inventory?: RepositoryTreeInventory;
 }): Promise<number> {
   const { command, io, reportProgress, signal } = input;
+  if (command.snapshotPath && command.outputPath && path.resolve(io.cwd, command.snapshotPath) === path.resolve(io.cwd, command.outputPath)) {
+    await closeScanProgressReporter(reportProgress, "failure");
+    io.stderr("Snapshot and report output paths must differ.");
+    return 2;
+  }
   const now = io.now ?? Date.now;
   const workspaceRoot = resolveWorkspaceRootPath({
     cwd: io.cwd,
@@ -548,7 +556,7 @@ async function runScanAt(input: {
     return exitCodeForError(workspaceRoot.error);
   }
 
-  const scanned = await scanProject({
+  const scan = () => scanProject({
     cwd: input.scanCwd,
     ...(input.configurationRoot ? { configurationRoot: input.configurationRoot } : {}),
     ...(input.runtimeRoot ? { runtimeRoot: input.runtimeRoot } : {}),
@@ -567,6 +575,8 @@ async function runScanAt(input: {
     ...(input.repository || command.archivePath ? { autoMergeSameRoot: true } : {}),
     ...(input.repository ? { autoMergeDescendantProjects: true } : {}),
     allLockfiles: command.allLockfiles ?? false,
+    ...(command.fromSnapshotPath ? { fromSnapshotPath: command.fromSnapshotPath } : {}),
+    captureSnapshot: Boolean(command.snapshotPath),
     ...(command.policyPath ? { policyPath: command.policyPath } : {}),
     offline: command.offline ?? false,
     ...(command.cacheDir ? { cacheDir: command.cacheDir } : {}),
@@ -585,6 +595,8 @@ async function runScanAt(input: {
     signal,
     ...(input.inventory ? { inventory: input.inventory } : {})
   });
+  const captured = command.snapshotPath ? await captureArtifacts(scan) : { value: await scan(), artifacts: [], truncated: false };
+  const scanned = captured.value;
 
   if (isErr(scanned)) {
     await closeScanProgressReporter(reportProgress, "failure");
@@ -599,11 +611,29 @@ async function runScanAt(input: {
     return exitCodeForError(scanError);
   }
 
+  const repository = input.repository ?? scanned.value.snapshotRepository;
+  const sourceSnapshot = scanned.value.snapshotSource;
+  if (sourceSnapshot) io.stderr(`Replaying saved evidence from Ohrisk ${sourceSnapshot.payload.tool.version}; dependencies and evidence retained; policy ${sourceSnapshot.payload.policyDigest === scanned.value.policy.digest ? "unchanged" : "changed"}; rules ${sourceSnapshot.payload.tool.rulesVersion === OHRISK_VERSION ? "same version" : "changed version"}; waivers ${sourceSnapshot.payload.waiverDigest === scanned.value.snapshotWaiverDigest ? "unchanged" : "changed"}.`);
+  if (command.snapshotPath) {
+    const snapshot = createInspectionSnapshot({ scan: scanned.value, inputs: scanned.value.snapshotInputs ?? [],
+      waiverDigest: scanned.value.snapshotWaiverDigest ?? null, prodOnly: command.prodOnly,
+      artifacts: sourceSnapshot?.payload.artifacts ?? captured.artifacts,
+      artifactsTruncated: sourceSnapshot?.payload.artifactsTruncated ?? captured.truncated,
+      ...(sourceSnapshot ? { replayedFrom: sourceSnapshot.payloadSha256 } : {}), ...(repository ? { repository } : {}) });
+    const contents = JSON.stringify(snapshot, null, 2);
+    if (Buffer.byteLength(contents) > SNAPSHOT_MAX_BYTES) {
+      await closeScanProgressReporter(reportProgress, "failure");
+      io.stderr("Snapshot exceeds the 32 MiB limit.");
+      return 2;
+    }
+    const written = (io.writeReport ?? writeReportFile)({ cwd: io.cwd, outputPath: command.snapshotPath, contents });
+    if (isErr(written)) { await closeScanProgressReporter(reportProgress, "failure"); io.stderr(formatError(written.error)); return exitCodeForError(written.error); }
+  }
   const completeness = buildScanCompleteness({
     evidence: scanned.value.evidence,
     graph: scanned.value.graph,
     normalizedLicenses: scanned.value.normalizedLicenses,
-    ...(input.repository ? { repository: input.repository } : {})
+    ...(repository ? { repository } : {})
   });
   const graphGate = buildGraphGate({ required: command.requireCompleteGraph ?? false, completeness });
 
@@ -635,7 +665,7 @@ async function runScanAt(input: {
     policy: scanned.value.policy,
     completeness,
     ...(graphGate.required ? { graphGate } : {}),
-    ...(input.repository ? { repository: input.repository } : {})
+    ...(repository ? { repository } : {})
   };
 
   reportProgress?.(SCAN_PROGRESS_RENDER_PERCENT, `Rendering ${reportFormatLabel(command)} report...`);
@@ -708,6 +738,8 @@ async function runScanAt(input: {
 }
 
 async function scanProject(input: {
+  fromSnapshotPath?: string;
+  captureSnapshot?: boolean;
   cwd: string;
   configurationRoot?: string;
   runtimeRoot?: string;
@@ -737,6 +769,21 @@ async function scanProject(input: {
   signal?: AbortSignal;
   inventory?: RepositoryTreeInventory;
 }): Promise<Result<ScanResult, OhriskError>> {
+  if (input.fromSnapshotPath) {
+    const snapshot = readInspectionSnapshot(path.resolve(input.cwd, input.fromSnapshotPath));
+    if (isErr(snapshot)) return snapshot;
+    if (snapshot.value.payload.prodOnly && !input.prodOnly) return snapshotError("A production-only snapshot cannot be replayed as a full dependency scan. Use --prod.");
+    const policy = readPolicyConfig({ projectRoot: input.configurationRoot ?? input.cwd,
+      ...(input.policyPath ? { policyPath: input.policyPath } : {}), ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}) });
+    if (isErr(policy)) return policy;
+    const payload = snapshot.value.payload;
+    const project: ProjectInput = { rootDir: input.cwd, lockfile: payload.project.lockfiles[0]!, lockfiles: payload.project.lockfiles };
+    const evaluated = evaluateScanPolicyAndWaivers({ project, collectionGraph: payload.graph, evidence: payload.evidence,
+      profile: input.profile, policy: policy.value, prodOnly: input.prodOnly, applyWaivers: input.applyWaivers });
+    if (isErr(evaluated)) return evaluated;
+    return ok({ ...evaluated.value, snapshotSource: snapshot.value, snapshotInputs: payload.inputs, snapshotWaiverDigest: waiverDigest(input.cwd, input.applyWaivers),
+      ...(payload.repository ? { snapshotRepository: payload.repository } : {}) });
+  }
   let project: ProjectInput;
   let scanGraph: DependencyGraph | undefined;
   if (input.archivePath) {
@@ -772,6 +819,8 @@ async function scanProject(input: {
     project = discovered.value;
   }
 
+  const capturedInputs = input.captureSnapshot ? inputReceipts(project) : undefined;
+  const capturedWaivers = input.captureSnapshot ? waiverDigest(input.configurationRoot ?? (project.source ? input.cwd : project.rootDir), input.applyWaivers) : undefined;
   const policy = readPolicyConfig({
     projectRoot: input.configurationRoot
       ?? (project.source ? input.cwd : project.rootDir),
@@ -828,7 +877,7 @@ async function scanProject(input: {
     scanGraph = filterGraphBeforeEvidence(graph.value, input.prodOnly);
   }
 
-  return evaluateProjectScan({
+  const evaluated = await evaluateProjectScan({
     project,
     scanGraph,
     profile: input.profile,
@@ -855,6 +904,9 @@ async function scanProject(input: {
     ...(input.progress ? { progress: input.progress } : {}),
     ...(input.signal ? { signal: input.signal } : {})
   });
+  if (isErr(evaluated)) return evaluated;
+  if (capturedInputs && digest(JSON.stringify(capturedInputs)) !== digest(JSON.stringify(inputReceipts(project)))) return snapshotError("Selected dependency inputs changed during the scan; snapshot was not saved.");
+  return ok({ ...evaluated.value, ...(capturedInputs ? { snapshotInputs: capturedInputs, snapshotWaiverDigest: capturedWaivers ?? null } : {}) });
 }
 
 function loadArchiveProjectGraph(input: {

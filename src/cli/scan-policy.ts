@@ -25,6 +25,10 @@ import type { OhriskError } from "../shared/errors";
 import { isErr, ok, type Result } from "../shared/result";
 
 export type ScanResult = {
+  snapshotInputs?: import("../snapshot/inspection-snapshot").InputReceipt[];
+  snapshotSource?: import("../snapshot/inspection-snapshot").InspectionSnapshot;
+  snapshotWaiverDigest?: string | null;
+  snapshotRepository?: import("../report/scan-report").RemoteRepositoryReportSource;
   project: ProjectInput;
   graph: DependencyGraph;
   evidence: LicenseEvidence[];

@@ -40,6 +40,8 @@ export type CliCommand =
     }
   | {
       kind: "scan";
+      snapshotPath?: string;
+      fromSnapshotPath?: string;
       requireCompleteGraph?: boolean;
       profile: UsageProfile;
       prodOnly: boolean;
@@ -69,6 +71,8 @@ export type CliCommand =
     }
   | {
       kind: "ci";
+      snapshotPath?: string;
+      fromSnapshotPath?: string;
       requireCompleteGraph?: boolean;
       profile: UsageProfile;
       prodOnly: boolean;

@@ -1,5 +1,9 @@
 # Report Formats Guide
 
+Local inspection snapshots use a separate 1.0.0 schema and retain extracted
+evidence for offline policy replay. See [inspection snapshots](inspection-snapshots.md)
+for integrity and privacy boundaries.
+
 Schema 3.9 adds an optional `graphGate` with Boolean `required` and `failed`
 fields when `--require-complete-graph` is selected. The gate requires graph
 dimension `complete` for the scan, or both baseline and current in a diff.

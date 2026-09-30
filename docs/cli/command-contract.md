@@ -1,5 +1,10 @@
 # Command Contract
 
+`scan` and `ci` accept `--snapshot <path>` to save local inspection data
+and `--from-snapshot <path>` to reevaluate stored evidence without network
+or dependency discovery. Current policies and waivers still apply. See
+[inspection snapshots](../inspection-snapshots.md).
+
 `scan`, `ci`, and `diff` accept `--require-complete-graph`. When selected,
 dependency relationships must be assessed as `complete`; partial, unknown,
 or unassessed relationships produce exit code 1 after the report is written.

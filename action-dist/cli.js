@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 594c6c43a42f44dae6160ebdd6bc4337eaa39652f8567dbd54e7dcdb2170668b
+// ohrisk-action-source-sha256: 97a129ae0513bf9d9a2ae0f6f3880281e312b0ab4c6b38c29a2064c1f59c3e3e
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -14780,7 +14780,7 @@ var require_xz_decompress = __commonJS(function(exports, module) {
 // src/cli/main.ts
 import { isIP as isIP4 } from "node:net";
 import { realpathSync as realpathSync10 } from "node:fs";
-import path97 from "node:path";
+import path98 from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // src/shared/errors.ts
@@ -15864,6 +15864,16 @@ var HELP_OPTION_SPECS = {
     syntax: "--archive <path>",
     description: "Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk."
   },
+  snapshot: {
+    options: ["--snapshot"],
+    syntax: "--snapshot <path>",
+    description: "Save collected graph and evidence for offline policy replay."
+  },
+  fromSnapshot: {
+    options: ["--from-snapshot"],
+    syntax: "--from-snapshot <path>",
+    description: "Reevaluate saved evidence without collecting or fetching."
+  },
   repo: {
     options: ["--repo"],
     syntax: "--repo <url>",
@@ -16100,6 +16110,8 @@ var HELP_OPTION_ORDER = {
     "language",
     "cyclonedx",
     "requireCompleteGraph",
+    "snapshot",
+    "fromSnapshot",
     "output",
     "open",
     "help"
@@ -16130,6 +16142,8 @@ var HELP_OPTION_ORDER = {
     "allowPartialEvidence",
     "requireCompleteGraph",
     "strictWaivers",
+    "snapshot",
+    "fromSnapshot",
     "output",
     "open",
     "help"
@@ -16197,6 +16211,8 @@ var SCAN_AND_CI_OPTION_KEYS = [
   "archive",
   "workspaceRoot",
   "output",
+  "snapshot",
+  "fromSnapshot",
   "open",
   "help"
 ];
@@ -16673,6 +16689,8 @@ function parseScanLikeArgs(argv, kind) {
   let strictWaivers = CLI_DEFAULTS.strictWaivers;
   let allowPartialEvidence = CLI_DEFAULTS.allowPartialEvidence;
   let requireCompleteGraph = false;
+  let snapshotPath;
+  let fromSnapshotPath;
   const outputFormatOptions = outputFormatOptionsFor(kind);
   for (let index = 0;index < argv.length; index += 1) {
     const arg = argv[index];
@@ -16922,6 +16940,18 @@ function parseScanLikeArgs(argv, kind) {
         }
         cyclonedx = true;
         break;
+      case "--snapshot":
+      case "--from-snapshot": {
+        const value = readRequiredOptionValue(argv, index, arg);
+        if (isErr(value))
+          return value;
+        if (arg === "--snapshot")
+          snapshotPath = value.value;
+        else
+          fromSnapshotPath = value.value;
+        index += 1;
+        break;
+      }
       case "--output": {
         const value = readRequiredOptionValue(argv, index, "--output");
         if (isErr(value)) {
@@ -17020,6 +17050,11 @@ function parseScanLikeArgs(argv, kind) {
     }
   }
   const presentOptions = new Set;
+  if (snapshotPath && outputPath === snapshotPath)
+    return err(createError({ code: "INVALID_ARGUMENT", category: "invalid_input", message: "Snapshot and report output paths must differ." }));
+  if (fromSnapshotPath && (repository || archivePath || lockfilePath || allLockfiles || registryUrl || registryTokenEnv || allowedHosts.length > 0)) {
+    return err(createError({ code: "INVALID_ARGUMENT", category: "invalid_input", message: "--from-snapshot cannot be combined with dependency inputs or registry options." }));
+  }
   if (allLockfiles)
     presentOptions.add("--all");
   if (lockfilePath)
@@ -17096,6 +17131,8 @@ function parseScanLikeArgs(argv, kind) {
       html,
       cyclonedx,
       noWaivers,
+      ...snapshotPath ? { snapshotPath } : {},
+      ...fromSnapshotPath ? { fromSnapshotPath } : {},
       ...lockfilePath ? { lockfilePath } : {},
       ...archivePath ? { archivePath } : {},
       ...allLockfiles ? { allLockfiles: true } : {},
@@ -17128,6 +17165,8 @@ function parseScanLikeArgs(argv, kind) {
     cyclonedx,
     noWaivers,
     ...requireCompleteGraph ? { requireCompleteGraph: true } : {},
+    ...snapshotPath ? { snapshotPath } : {},
+    ...fromSnapshotPath ? { fromSnapshotPath } : {},
     ...lockfilePath ? { lockfilePath } : {},
     ...archivePath ? { archivePath } : {},
     ...repository ? { repository } : {},
@@ -18290,6 +18329,26 @@ import { createHash as createHash2, timingSafeEqual } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 var activeCapture = new AsyncLocalStorage;
+async function captureArtifacts(work, options = {}) {
+  const maxArtifacts = options.maxArtifacts ?? 50000;
+  if (!Number.isSafeInteger(maxArtifacts) || maxArtifacts < 1 || maxArtifacts > 50000) {
+    throw new RangeError("Artifact capture limit must be an integer from 1 to 50000.");
+  }
+  const capture = { receipts: new Map, contentKeys: new Set, checks: new Map, maxArtifacts, truncated: false, closed: false };
+  const value = await activeCapture.run(capture, async () => {
+    try {
+      return await work();
+    } finally {
+      capture.closed = true;
+    }
+  });
+  const artifacts = [...capture.receipts.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, receipt]) => ({
+    ...receipt,
+    retrievals: [...receipt.retrievals].sort(),
+    checks: [...capture.checks.get(contentKey(receipt.packageId, receipt.sha256))?.entries() ?? []].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, check]) => ({ ...check }))
+  }));
+  return { value, artifacts, truncated: capture.truncated };
+}
 function recordArtifactBytes(input) {
   const capture = activeCapture.getStore();
   if (!capture || capture.closed)
@@ -43197,6 +43256,7 @@ import { createHash as createHash5, timingSafeEqual as timingSafeEqual2 } from "
 import path52 from "node:path";
 
 // src/license/spdx-catalog.ts
+var SPDX_LICENSE_LIST_SOURCE_COMMIT = "5bf6d9610255540bfbee6890765a616042bf1e11";
 var ACTIVE_SPDX_LICENSE_IDS = new Set([
   "0BSD",
   "3D-Slicer-1.0",
@@ -69912,6 +69972,181 @@ function workspaceRootInvalidError2(workspaceRootPath) {
   });
 }
 
+// src/snapshot/inspection-snapshot.ts
+import { createHash as createHash14 } from "node:crypto";
+import { existsSync as existsSync50, readFileSync as readFileSync6, statSync as statSync38 } from "node:fs";
+import path97 from "node:path";
+
+// src/snapshot/snapshot-validation.ts
+var ECOSYSTEMS = new Set("npm pypi maven cargo go nuget conan conda vcpkg bazel terraform helm nix unity cran julia hackage cpan luarocks carthage cocoapods hex gem composer pub swift zig".split(" "));
+var DEPENDENCY_TYPES = new Set(["production", "development", "optional", "peer", "unknown"]);
+var SOURCES = new Set(["local", "registry", "sbom", "tarball", "unavailable"]);
+var RETRIEVALS = new Set(["network", "cache", "revalidated-cache", "local", "verification-only"]);
+var SHA256 = /^[0-9a-f]{64}$/u;
+var record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+var string = (value) => typeof value === "string" && value.length <= 1024 * 1024;
+var strings = (value, max = 50000) => Array.isArray(value) && value.length <= max && value.every(string);
+var optional = (value, check) => value === undefined || check(value);
+var boolean = (value) => typeof value === "boolean";
+var hash = (value) => string(value) && SHA256.test(value);
+var nonnegative = (value) => Number.isSafeInteger(value) && value >= 0;
+var array = (value, max, check) => Array.isArray(value) && value.length <= max && value.every(check);
+function validateSnapshotPayload(value) {
+  if (!record(value) || !record(value.tool) || !string(value.tool.version) || !string(value.tool.rulesVersion) || !string(value.tool.spdxSourceCommit) || !string(value.capturedAt) || !Number.isFinite(Date.parse(value.capturedAt)) || !hash(value.policyDigest) || !(value.waiverDigest === null || hash(value.waiverDigest)) || !boolean(value.prodOnly) || !boolean(value.artifactsTruncated) || !record(value.project) || !Array.isArray(value.project.lockfiles) || value.project.lockfiles.length < 1 || !array(value.project.lockfiles, 256, (v) => record(v) && string(v.kind) && inputSupportForLockfile(v.kind) !== undefined && string(v.path)) || !optional(value.replayedFrom, hash) || !array(value.inputs, 256, (v) => record(v) && string(v.path) && (v.status === "unavailable" || v.status === "hashed" && hash(v.sha256))) || !validGraph(value.graph) || !array(value.evidence, 50000, validEvidence) || !array(value.artifacts, 50000, validArtifact) || !optional(value.repository, validRepository))
+    return false;
+  const ids = new Set(value.graph.nodes.map((node) => node.id));
+  const evidenceIds = new Set;
+  for (const item of value.evidence) {
+    if (!ids.has(item.packageId) || evidenceIds.has(item.packageId))
+      return false;
+    evidenceIds.add(item.packageId);
+  }
+  if (evidenceIds.size !== ids.size)
+    return false;
+  return true;
+}
+function validGraph(value) {
+  if (!record(value) || !string(value.lockfilePath) || !array(value.nodes, 50000, validNode) || !optional(value.rootName, string) || !optional(value.lockfilePaths, strings) || !optional(value.mavenRepositoryUrls, strings) || !optional(value.warnings, strings) || !optional(value.rootDependenciesUnknown, boolean) || !optional(value.unknownDependencyNodeIds, strings) || !optional(value.diagnostics, (v) => array(v, 50000, (d) => record(d) && (d.code === "dependency_paths_truncated" || d.code === "dependency_path_depth_summarized") && nonnegative(d.affectedNodeCount) && nonnegative(d.limit) && string(d.message))))
+    return false;
+  const ids = new Set(value.nodes.map((node) => node.id));
+  if (ids.size !== value.nodes.length)
+    return false;
+  const reference = (v) => string(v) && ids.has(v);
+  return optional(value.edges, (v) => array(v, 500000, (edge) => record(edge) && reference(edge.to) && optional(edge.from, reference) && DEPENDENCY_TYPES.has(edge.dependencyType) && optional(edge.origins, validOrigins))) && optional(value.unknownDependencyNodeIds, (v) => array(v, 50000, reference)) && optional(value.unresolvedDependencies, (v) => array(v, 50000, (item) => record(item) && optional(item.from, reference) && string(item.name) && DEPENDENCY_TYPES.has(item.dependencyType) && (item.reason === "missing_installation" || item.reason === "unproven_installation")));
+}
+function validOrigins(value) {
+  return array(value, 256, (v) => record(v) && string(v.lockfileKind) && string(v.lockfilePath));
+}
+function validNode(value) {
+  return record(value) && string(value.id) && string(value.name) && string(value.version) && ECOSYSTEMS.has(value.ecosystem) && DEPENDENCY_TYPES.has(value.dependencyType) && boolean(value.direct) && array(value.paths, 64, (v) => strings(v, 512)) && optional(value.origins, validOrigins) && optional(value.installNames, strings) && ["resolved", "integrity", "yarnCacheChecksum", "goModIntegrity", "purlSubpath"].every((key) => optional(value[key], string)) && optional(value.artifactIdentityConflict, (v) => v === true) && optional(value.purlQualifiers, (v) => record(v) && Object.values(v).every(string)) && optional(value.artifactVariants, (v) => array(v, 256, (item) => record(item) && ["resolved", "integrity", "yarnCacheChecksum", "goModIntegrity"].every((key) => optional(item[key], string))));
+}
+function validEvidence(value) {
+  return record(value) && string(value.packageId) && SOURCES.has(value.source) && strings(value.warnings) && array(value.files, 256, (file) => record(file) && string(file.path) && string(file.text) && ["license", "notice", "copying", "other"].includes(file.kind) && optional(file.scope, (v) => v === "component")) && ["packageJsonLicense", "metadataLicense", "metadataSource", "sbomDeclaredLicense", "sbomConcludedLicense"].every((key) => optional(value[key], string)) && optional(value.packageJsonPrivate, boolean) && optional(value.artifactIdentityConflict, (v) => v === true) && optional(value.metadataLicenseKind, (v) => v === "declared" || v === "classifier") && optional(value.goModuleRequirements, strings) && optional(value.conflictingLicenseClaims, strings);
+}
+function validArtifact(value) {
+  return record(value) && string(value.packageId) && hash(value.sha256) && nonnegative(value.byteLength) && optional(value.requestedOrigin, (v) => string(v) && /^https?:\/\//u.test(v) && (() => {
+    try {
+      const url = new URL(v);
+      return !url.username && !url.password && !url.search && !url.hash;
+    } catch {
+      return false;
+    }
+  })()) && array(value.retrievals, 5, (v) => RETRIEVALS.has(v)) && array(value.checks, 256, (v) => record(v) && string(v.kind) && string(v.value));
+}
+function validRepository(value) {
+  return record(value) && string(value.owner) && string(value.name) && ["submodules", "symbolicLinks", "nonPortablePaths"].every((key) => record(value[key]) && nonnegative(value[key].skippedCount) && strings(value[key].skippedPaths, 256) && boolean(value[key].pathsTruncated)) && record(value.submodules) && ["ignore", "reject"].includes(value.submodules.mode);
+}
+
+// src/snapshot/inspection-snapshot.ts
+var SNAPSHOT_SCHEMA_VERSION = "1.0.0";
+var SNAPSHOT_MAX_BYTES = 32 * 1024 * 1024;
+function inputReceipts(project) {
+  if (project.source)
+    return [{ path: path97.basename(project.source.displayPath), sha256: project.source.sha256, status: "hashed" }];
+  return projectLockfiles(project).map((file) => {
+    const displayPath = relativePath(project.rootDir, file.path);
+    try {
+      if (!statSync38(file.path).isFile() || statSync38(file.path).size > SNAPSHOT_MAX_BYTES)
+        return { path: displayPath, status: "unavailable" };
+      const bytes = readFileSync6(file.path);
+      if (bytes.length > SNAPSHOT_MAX_BYTES)
+        return { path: displayPath, status: "unavailable" };
+      return { path: displayPath, sha256: digest(bytes), status: "hashed" };
+    } catch {
+      return { path: displayPath, status: "unavailable" };
+    }
+  });
+}
+function waiverDigest(root, enabled) {
+  const file = path97.join(root, DEFAULT_WAIVER_FILE_NAME);
+  if (!enabled || !existsSync50(file))
+    return null;
+  const bytes = readTextFileWithLimit({ filePath: file, maxBytes: 1024 * 1024 });
+  if (!bytes.ok)
+    return null;
+  return digest(bytes.value);
+}
+function createInspectionSnapshot(input) {
+  const root = input.scan.project.rootDir;
+  const graph = structuredClone(input.scan.graph);
+  graph.lockfilePath = relativePath(root, graph.lockfilePath);
+  if (graph.lockfilePaths)
+    graph.lockfilePaths = graph.lockfilePaths.map((file) => relativePath(root, file));
+  for (const node of graph.nodes) {
+    for (const origin of node.origins ?? [])
+      origin.lockfilePath = relativePath(root, origin.lockfilePath);
+  }
+  for (const edge of graph.edges ?? []) {
+    for (const origin of edge.origins ?? [])
+      origin.lockfilePath = relativePath(root, origin.lockfilePath);
+  }
+  delete graph.embeddedEvidence;
+  const evidence = structuredClone(input.scan.evidence);
+  for (const item of evidence)
+    for (const file of item.files)
+      file.path = relativePath(root, file.path);
+  const payload = scrub({
+    tool: { version: OHRISK_VERSION, rulesVersion: OHRISK_VERSION, spdxSourceCommit: SPDX_LICENSE_LIST_SOURCE_COMMIT },
+    capturedAt: new Date().toISOString(),
+    inputs: input.inputs,
+    policyDigest: input.scan.policy.digest,
+    waiverDigest: input.waiverDigest,
+    prodOnly: input.prodOnly,
+    project: { lockfiles: projectLockfiles(input.scan.project).map((file) => ({ kind: file.kind, path: relativePath(root, file.path) })) },
+    ...input.replayedFrom ? { replayedFrom: input.replayedFrom } : {},
+    graph,
+    evidence,
+    artifacts: input.artifacts,
+    artifactsTruncated: input.artifactsTruncated,
+    ...input.repository ? { repository: input.repository } : {}
+  });
+  return {
+    $schema: "urn:ohrisk:schema:inspection-snapshot:1.0.0",
+    schemaVersion: SNAPSHOT_SCHEMA_VERSION,
+    payloadSha256: digest(JSON.stringify(payload)),
+    payload
+  };
+}
+function readInspectionSnapshot(filePath) {
+  const loaded = readTextFileWithLimit({ filePath, maxBytes: SNAPSHOT_MAX_BYTES });
+  if (!loaded.ok)
+    return snapshotError("Snapshot could not be read within the 32 MiB limit.");
+  try {
+    const value = JSON.parse(loaded.value);
+    if (!isRecord31(value) || value.$schema !== "urn:ohrisk:schema:inspection-snapshot:1.0.0" || value.schemaVersion !== SNAPSHOT_SCHEMA_VERSION || typeof value.payloadSha256 !== "string" || !validateSnapshotPayload(value.payload) || digest(JSON.stringify(value.payload)) !== value.payloadSha256) {
+      return snapshotError("Snapshot structure or content digest does not match.");
+    }
+    return ok(value);
+  } catch {
+    return snapshotError("Snapshot is not valid bounded JSON.");
+  }
+}
+function snapshotError(message) {
+  return err(createError({ code: "INVALID_ARGUMENT", category: "invalid_input", message }));
+}
+function digest(value) {
+  return createHash14("sha256").update(value).digest("hex");
+}
+function relativePath(root, value) {
+  if (!path97.isAbsolute(value))
+    return value.replace(/\\/gu, "/");
+  const relative = path97.relative(root, value);
+  return relative.startsWith("..") || path97.isAbsolute(relative) ? `[external]/${path97.basename(value)}` : relative.replace(/\\/gu, "/");
+}
+function isRecord31(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function scrub(value) {
+  if (typeof value === "string") {
+    return value.replace(/https?:\/\/[^\s<>"']+/giu, (url) => safeArtifactOrigin(url) ?? "[url]").replace(/file:\/\/[^\s<>"']+/giu, "[local-path]").replace(/[A-Za-z]:[\\/][^\s<>"']+/gu, "[local-path]");
+  }
+  if (Array.isArray(value))
+    return value.map(scrub);
+  if (isRecord31(value))
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, scrub(item)]));
+  return value;
+}
+
 // src/cli/main.ts
 async function main(argv = process.argv.slice(2), io = defaultIO()) {
   const parsed = parseArgs(argv);
@@ -70230,6 +70465,11 @@ async function runScan(command, io, signal) {
 }
 async function runScanAt(input) {
   const { command, io, reportProgress, signal } = input;
+  if (command.snapshotPath && command.outputPath && path98.resolve(io.cwd, command.snapshotPath) === path98.resolve(io.cwd, command.outputPath)) {
+    await closeScanProgressReporter(reportProgress, "failure");
+    io.stderr("Snapshot and report output paths must differ.");
+    return 2;
+  }
   const now = io.now ?? Date.now;
   const workspaceRoot = resolveWorkspaceRootPath({
     cwd: io.cwd,
@@ -70239,7 +70479,7 @@ async function runScanAt(input) {
     io.stderr(formatError(workspaceRoot.error));
     return exitCodeForError(workspaceRoot.error);
   }
-  const scanned = await scanProject({
+  const scan = () => scanProject({
     cwd: input.scanCwd,
     ...input.configurationRoot ? { configurationRoot: input.configurationRoot } : {},
     ...input.runtimeRoot ? { runtimeRoot: input.runtimeRoot } : {},
@@ -70253,6 +70493,8 @@ async function runScanAt(input) {
     ...input.repository || command.archivePath ? { autoMergeSameRoot: true } : {},
     ...input.repository ? { autoMergeDescendantProjects: true } : {},
     allLockfiles: command.allLockfiles ?? false,
+    ...command.fromSnapshotPath ? { fromSnapshotPath: command.fromSnapshotPath } : {},
+    captureSnapshot: Boolean(command.snapshotPath),
     ...command.policyPath ? { policyPath: command.policyPath } : {},
     offline: command.offline ?? false,
     ...command.cacheDir ? { cacheDir: command.cacheDir } : {},
@@ -70271,6 +70513,8 @@ async function runScanAt(input) {
     signal,
     ...input.inventory ? { inventory: input.inventory } : {}
   });
+  const captured = command.snapshotPath ? await captureArtifacts(scan) : { value: await scan(), artifacts: [], truncated: false };
+  const scanned = captured.value;
   if (isErr(scanned)) {
     await closeScanProgressReporter(reportProgress, "failure");
     if (isCommandCancelled(signal)) {
@@ -70281,11 +70525,39 @@ async function runScanAt(input) {
     io.stderr(formatError(scanError));
     return exitCodeForError(scanError);
   }
+  const repository = input.repository ?? scanned.value.snapshotRepository;
+  const sourceSnapshot = scanned.value.snapshotSource;
+  if (sourceSnapshot)
+    io.stderr(`Replaying saved evidence from Ohrisk ${sourceSnapshot.payload.tool.version}; dependencies and evidence retained; policy ${sourceSnapshot.payload.policyDigest === scanned.value.policy.digest ? "unchanged" : "changed"}; rules ${sourceSnapshot.payload.tool.rulesVersion === OHRISK_VERSION ? "same version" : "changed version"}; waivers ${sourceSnapshot.payload.waiverDigest === scanned.value.snapshotWaiverDigest ? "unchanged" : "changed"}.`);
+  if (command.snapshotPath) {
+    const snapshot = createInspectionSnapshot({
+      scan: scanned.value,
+      inputs: scanned.value.snapshotInputs ?? [],
+      waiverDigest: scanned.value.snapshotWaiverDigest ?? null,
+      prodOnly: command.prodOnly,
+      artifacts: sourceSnapshot?.payload.artifacts ?? captured.artifacts,
+      artifactsTruncated: sourceSnapshot?.payload.artifactsTruncated ?? captured.truncated,
+      ...sourceSnapshot ? { replayedFrom: sourceSnapshot.payloadSha256 } : {},
+      ...repository ? { repository } : {}
+    });
+    const contents = JSON.stringify(snapshot, null, 2);
+    if (Buffer.byteLength(contents) > SNAPSHOT_MAX_BYTES) {
+      await closeScanProgressReporter(reportProgress, "failure");
+      io.stderr("Snapshot exceeds the 32 MiB limit.");
+      return 2;
+    }
+    const written = (io.writeReport ?? writeReportFile)({ cwd: io.cwd, outputPath: command.snapshotPath, contents });
+    if (isErr(written)) {
+      await closeScanProgressReporter(reportProgress, "failure");
+      io.stderr(formatError(written.error));
+      return exitCodeForError(written.error);
+    }
+  }
   const completeness = buildScanCompleteness({
     evidence: scanned.value.evidence,
     graph: scanned.value.graph,
     normalizedLicenses: scanned.value.normalizedLicenses,
-    ...input.repository ? { repository: input.repository } : {}
+    ...repository ? { repository } : {}
   });
   const graphGate = buildGraphGate({ required: command.requireCompleteGraph ?? false, completeness });
   const reportInput = {
@@ -70311,7 +70583,7 @@ async function runScanAt(input) {
     policy: scanned.value.policy,
     completeness,
     ...graphGate.required ? { graphGate } : {},
-    ...input.repository ? { repository: input.repository } : {}
+    ...repository ? { repository } : {}
   };
   reportProgress?.(SCAN_PROGRESS_RENDER_PERCENT, `Rendering ${reportFormatLabel(command)} report...`);
   const output = command.cyclonedx ? renderCycloneDxReport(reportInput) : command.sarif ? renderSarifReport(reportInput) : renderScanReport(reportInput);
@@ -70368,6 +70640,40 @@ async function runScanAt(input) {
   return 0;
 }
 async function scanProject(input) {
+  if (input.fromSnapshotPath) {
+    const snapshot = readInspectionSnapshot(path98.resolve(input.cwd, input.fromSnapshotPath));
+    if (isErr(snapshot))
+      return snapshot;
+    if (snapshot.value.payload.prodOnly && !input.prodOnly)
+      return snapshotError("A production-only snapshot cannot be replayed as a full dependency scan. Use --prod.");
+    const policy = readPolicyConfig({
+      projectRoot: input.configurationRoot ?? input.cwd,
+      ...input.policyPath ? { policyPath: input.policyPath } : {},
+      ...input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}
+    });
+    if (isErr(policy))
+      return policy;
+    const payload = snapshot.value.payload;
+    const project = { rootDir: input.cwd, lockfile: payload.project.lockfiles[0], lockfiles: payload.project.lockfiles };
+    const evaluated = evaluateScanPolicyAndWaivers({
+      project,
+      collectionGraph: payload.graph,
+      evidence: payload.evidence,
+      profile: input.profile,
+      policy: policy.value,
+      prodOnly: input.prodOnly,
+      applyWaivers: input.applyWaivers
+    });
+    if (isErr(evaluated))
+      return evaluated;
+    return ok({
+      ...evaluated.value,
+      snapshotSource: snapshot.value,
+      snapshotInputs: payload.inputs,
+      snapshotWaiverDigest: waiverDigest(input.cwd, input.applyWaivers),
+      ...payload.repository ? { snapshotRepository: payload.repository } : {}
+    });
+  }
   let project;
   let scanGraph;
   if (input.archivePath) {
@@ -70402,6 +70708,8 @@ async function scanProject(input) {
     }
     project = discovered.value;
   }
+  const capturedInputs = input.captureSnapshot ? inputReceipts(project) : undefined;
+  const capturedWaivers = input.captureSnapshot ? waiverDigest(input.configurationRoot ?? (project.source ? input.cwd : project.rootDir), input.applyWaivers) : undefined;
   const policy = readPolicyConfig({
     projectRoot: input.configurationRoot ?? (project.source ? input.cwd : project.rootDir),
     ...input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {},
@@ -70445,7 +70753,7 @@ async function scanProject(input) {
     }
     scanGraph = filterGraphBeforeEvidence(graph.value, input.prodOnly);
   }
-  return evaluateProjectScan({
+  const evaluated = await evaluateProjectScan({
     project,
     scanGraph,
     profile: input.profile,
@@ -70463,6 +70771,11 @@ async function scanProject(input) {
     ...input.progress ? { progress: input.progress } : {},
     ...input.signal ? { signal: input.signal } : {}
   });
+  if (isErr(evaluated))
+    return evaluated;
+  if (capturedInputs && digest(JSON.stringify(capturedInputs)) !== digest(JSON.stringify(inputReceipts(project))))
+    return snapshotError("Selected dependency inputs changed during the scan; snapshot was not saved.");
+  return ok({ ...evaluated.value, ...capturedInputs ? { snapshotInputs: capturedInputs, snapshotWaiverDigest: capturedWaivers ?? null } : {} });
 }
 function loadArchiveProjectGraph(input) {
   input.progress?.(SCAN_PROGRESS_DISCOVER_PERCENT, "Reading archive index...");
@@ -70503,7 +70816,7 @@ function discoverFilesystemProject(input) {
     return discovered;
   }
   const lockfileCount = discovered.value.lockfiles?.length ?? 1;
-  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, lockfileCount > 1 ? `Reading ${lockfileCount} lockfiles...` : `Reading ${path97.basename(discovered.value.lockfile.path)}...`);
+  input.progress?.(SCAN_PROGRESS_READ_LOCKFILE_PERCENT, lockfileCount > 1 ? `Reading ${lockfileCount} lockfiles...` : `Reading ${path98.basename(discovered.value.lockfile.path)}...`);
   return discovered;
 }
 async function evaluateProjectScan(input) {
@@ -70647,7 +70960,7 @@ function resolveEvidenceRuntimeOptions(input) {
     }
   }
   const configuredCacheDir = input.cacheDir ?? input.env.OHRISK_CACHE_DIR;
-  const cacheDir = configuredCacheDir ? path97.resolve(input.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(input.env);
+  const cacheDir = configuredCacheDir ? path98.resolve(input.cwd, configuredCacheDir) : defaultArtifactCacheDirectory(input.env);
   return ok({
     offline: input.offline,
     cacheDir,
@@ -70708,7 +71021,7 @@ function isCliEntrypoint(metaUrl, argvPath) {
   try {
     return realpathSync10(fileURLToPath4(metaUrl)) === realpathSync10(argvPath);
   } catch {
-    return path97.resolve(fileURLToPath4(metaUrl)) === path97.resolve(argvPath);
+    return path98.resolve(fileURLToPath4(metaUrl)) === path98.resolve(argvPath);
   }
 }
 function defaultIO() {

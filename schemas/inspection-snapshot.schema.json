@@ -1,0 +1,347 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ohrisk:schema:inspection-snapshot:1.0.0",
+  "title": "Local Ohrisk inspection snapshot",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "const": "urn:ohrisk:schema:inspection-snapshot:1.0.0"
+    },
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "payloadSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "tool": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "rulesVersion": {
+              "type": "string"
+            },
+            "spdxSourceCommit": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "version",
+            "rulesVersion",
+            "spdxSourceCommit"
+          ]
+        },
+        "capturedAt": {
+          "type": "string"
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "hashed",
+                  "unavailable"
+                ]
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "path",
+              "status"
+            ]
+          },
+          "maxItems": 256
+        },
+        "policyDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "waiverDigest": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "prodOnly": {
+          "type": "boolean"
+        },
+        "project": {
+          "type": "object",
+          "properties": {
+            "lockfiles": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "path"
+                ]
+              },
+              "maxItems": 256,
+              "minItems": 1
+            }
+          },
+          "required": [
+            "lockfiles"
+          ]
+        },
+        "graph": {
+          "type": "object",
+          "properties": {
+            "lockfilePath": {
+              "type": "string"
+            },
+            "nodes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "string"
+                  },
+                  "ecosystem": {
+                    "type": "string"
+                  },
+                  "dependencyType": {
+                    "enum": [
+                      "production",
+                      "development",
+                      "optional",
+                      "peer",
+                      "unknown"
+                    ]
+                  },
+                  "direct": {
+                    "type": "boolean"
+                  },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 512
+                    },
+                    "maxItems": 64
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "version",
+                  "ecosystem",
+                  "dependencyType",
+                  "direct",
+                  "paths"
+                ]
+              },
+              "maxItems": 50000
+            },
+            "edges": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "type": "string"
+                  },
+                  "to": {
+                    "type": "string"
+                  },
+                  "dependencyType": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "to",
+                  "dependencyType"
+                ]
+              },
+              "maxItems": 500000
+            }
+          },
+          "required": [
+            "lockfilePath",
+            "nodes"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "packageId": {
+                "type": "string"
+              },
+              "source": {
+                "enum": [
+                  "local",
+                  "registry",
+                  "sbom",
+                  "tarball",
+                  "unavailable"
+                ]
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": [
+                        "license",
+                        "notice",
+                        "copying",
+                        "other"
+                      ]
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "kind",
+                    "text"
+                  ]
+                },
+                "maxItems": 256
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50000
+              }
+            },
+            "required": [
+              "packageId",
+              "source",
+              "files",
+              "warnings"
+            ]
+          },
+          "maxItems": 50000
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "packageId": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "byteLength": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "retrievals": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "network",
+                    "cache",
+                    "revalidated-cache",
+                    "local",
+                    "verification-only"
+                  ]
+                },
+                "maxItems": 5
+              },
+              "checks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "value"
+                  ]
+                },
+                "maxItems": 256
+              }
+            },
+            "required": [
+              "packageId",
+              "sha256",
+              "byteLength",
+              "retrievals",
+              "checks"
+            ]
+          },
+          "maxItems": 50000
+        },
+        "artifactsTruncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "tool",
+        "capturedAt",
+        "inputs",
+        "policyDigest",
+        "waiverDigest",
+        "prodOnly",
+        "project",
+        "graph",
+        "evidence",
+        "artifacts",
+        "artifactsTruncated"
+      ]
+    }
+  },
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "payloadSha256",
+    "payload"
+  ]
+}

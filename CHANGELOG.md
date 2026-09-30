@@ -2,6 +2,11 @@
 
 ## 1.16.0 - Unreleased
 
+- Scan and CI save bounded inspection snapshots and replay their graph and
+  extracted evidence under current policies without artifact collection or
+  network access. Input and payload digests, rule versions, artifact receipts,
+  production-only scope and repository coverage survive offline reevaluation.
+
 - Evidence collection can capture bounded content receipts separately from
   successful declared-integrity checks, including cache, revalidation, network
   and local retrieval. Requested HTTP origins omit credentials, query and fragment.

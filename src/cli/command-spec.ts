@@ -303,6 +303,14 @@ const HELP_OPTION_SPECS = {
     syntax: "--archive <path>",
     description: "Scan a ZIP, TAR, TAR.GZ, or TGZ without extracting it to disk."
   },
+  snapshot: {
+    options: ["--snapshot"], syntax: "--snapshot <path>",
+    description: "Save collected graph and evidence for offline policy replay."
+  },
+  fromSnapshot: {
+    options: ["--from-snapshot"], syntax: "--from-snapshot <path>",
+    description: "Reevaluate saved evidence without collecting or fetching."
+  },
   repo: {
     options: ["--repo"],
     syntax: "--repo <url>",
@@ -493,13 +501,13 @@ const HELP_OPTION_ORDER = {
     "profile", "lockfile", "archive", "repo", "submodules", "all", "policy",
     "workspaceRoot", "prod", "noWaivers", "offline", "cacheDir", "jobs", "timeout",
     "registryUrl", "registryTokenEnv", "allowHost", "json", "sarif", "markdown", "html",
-    "language", "cyclonedx", "requireCompleteGraph", "output", "open", "help"
+    "language", "cyclonedx", "requireCompleteGraph", "snapshot", "fromSnapshot", "output", "open", "help"
   ],
   ci: [
     "profile", "lockfile", "archive", "all", "policy", "workspaceRoot", "prod", "noWaivers",
     "offline", "cacheDir", "jobs", "timeout", "registryUrl", "registryTokenEnv", "allowHost",
     "json", "sarif", "markdown", "html", "language", "cyclonedx", "failOn",
-    "allowPartialEvidence", "requireCompleteGraph", "strictWaivers", "output", "open", "help"
+    "allowPartialEvidence", "requireCompleteGraph", "strictWaivers", "snapshot", "fromSnapshot", "output", "open", "help"
   ],
   diff: [
     "profile", "lockfile", "all", "policy", "workspaceRoot", "prod", "offline", "cacheDir",
@@ -531,7 +539,7 @@ const SCAN_AND_CI_OPTION_KEYS = [
   "profile", "prod", "all", "policy", "offline", "cacheDir", "jobs", "timeout",
   "registryUrl", "registryTokenEnv", "allowHost", "json", "sarif", "markdown", "html",
   "language", "cyclonedx", "noWaivers", "lockfile", "archive", "workspaceRoot", "output",
-  "open", "help"
+  "snapshot", "fromSnapshot", "open", "help"
 ] as const satisfies readonly HelpOptionKey[];
 
 const COMMAND_OPTION_KEYS = {
