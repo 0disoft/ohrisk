@@ -1,5 +1,13 @@
 # Command Contract
 
+`scan`, `ci`, and `diff` accept `--require-complete-graph`. When selected,
+dependency relationships must be assessed as `complete`; partial, unknown,
+or unassessed relationships produce exit code 1 after the report is written.
+Both diff revisions must meet the requirement. This gate is independent of
+the finding threshold and the partial-evidence override. Without the option,
+graph uncertainty remains visible in inspection dimensions without being
+treated as a collection failure.
+
 - Status: Project-owned
 - Repository Type: cli-tool
 

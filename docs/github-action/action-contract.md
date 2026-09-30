@@ -57,6 +57,13 @@ failing solely because evidence is unavailable.
 
 ## Persistent artifact cache
 
+The Boolean `require-complete-graph` input defaults to false and is forwarded
+as `--require-complete-graph` for scan, CI, and diff. When true, unknown or
+partial dependency relationships fail independently of risk thresholds and
+`allow-partial-evidence`. Both diff revisions must meet this requirement.
+Report schema 3.9 records `graphGate`; the summary CLI includes its failure in
+the combined gate outcome.
+
 Persistent caching is disabled by default. `cache` is an Action-only
 orchestration input; the CLI continues to own `--cache-dir`. `cache: "true"`
 restores and saves the CLI's existing artifact cache without introducing a

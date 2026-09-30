@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: a56a8ed34e756b6a8f1843bf88fb51318318787104d53670b307274da073c9e3
+// ohrisk-action-source-sha256: daf37a41197d717cf9bbcd16584443db0ec440e24b368cfa643e9526b5885e54
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -15693,6 +15693,7 @@ var ACTION_INPUT_DEFAULTS = {
   "no-waivers": "false",
   "strict-waivers": "false",
   "allow-partial-evidence": "false",
+  "require-complete-graph": "false",
   offline: "false",
   "cache-dir": "",
   jobs: "",
@@ -15819,9 +15820,9 @@ function findViolatedCommandOptionRule(input) {
 }
 var COMMAND_USAGE = {
   init: "ohrisk init [--profile saas|distributed-app] [--fail-on high|unknown|review|low] [--no-workflow] [--waivers]",
-  scan: "ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
-  ci: "ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--allow-partial-evidence] [--output <file>] [--open]",
-  diff: "ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--allow-partial-evidence] [--output <file>]",
+  scan: "ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open] [--require-complete-graph]",
+  ci: "ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--allow-partial-evidence] [--output <file>] [--open] [--require-complete-graph]",
+  diff: "ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--allow-partial-evidence] [--output <file>] [--require-complete-graph]",
   explain: "ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
   cache: "ohrisk cache status|prune|clear [--cache-dir <path>] [--json]",
   help: "ohrisk help [command]",
@@ -15996,6 +15997,11 @@ var HELP_OPTION_SPECS = {
     syntax: "--allow-partial-evidence",
     description: "Allow partial evidence in a CI or diff gate."
   },
+  requireCompleteGraph: {
+    options: ["--require-complete-graph"],
+    syntax: "--require-complete-graph",
+    description: "Fail when dependency relationships are partial or unknown, independently of evidence overrides."
+  },
   strictWaivers: {
     options: ["--strict-waivers"],
     syntax: "--strict-waivers",
@@ -16061,6 +16067,7 @@ var HELP_OPTION_ORDER = {
     "open",
     "failOn",
     "allowPartialEvidence",
+    "requireCompleteGraph",
     "strictWaivers",
     "noWorkflow",
     "waiverTemplate",
@@ -16092,6 +16099,7 @@ var HELP_OPTION_ORDER = {
     "html",
     "language",
     "cyclonedx",
+    "requireCompleteGraph",
     "output",
     "open",
     "help"
@@ -16120,6 +16128,7 @@ var HELP_OPTION_ORDER = {
     "cyclonedx",
     "failOn",
     "allowPartialEvidence",
+    "requireCompleteGraph",
     "strictWaivers",
     "output",
     "open",
@@ -16143,6 +16152,7 @@ var HELP_OPTION_ORDER = {
     "markdown",
     "failOn",
     "allowPartialEvidence",
+    "requireCompleteGraph",
     "output",
     "help"
   ],
@@ -16192,12 +16202,13 @@ var SCAN_AND_CI_OPTION_KEYS = [
 ];
 var COMMAND_OPTION_KEYS = {
   init: ["profile", "failOn", "noWorkflow", "waiverTemplate", "help"],
-  scan: [...SCAN_AND_CI_OPTION_KEYS, "repo", "submodules"],
+  scan: [...SCAN_AND_CI_OPTION_KEYS, "requireCompleteGraph", "repo", "submodules"],
   ci: [
     ...SCAN_AND_CI_OPTION_KEYS,
     "failOn",
     "strictWaivers",
-    "allowPartialEvidence"
+    "allowPartialEvidence",
+    "requireCompleteGraph"
   ],
   diff: [
     "profile",
@@ -16218,6 +16229,7 @@ var COMMAND_OPTION_KEYS = {
     "output",
     "failOn",
     "allowPartialEvidence",
+    "requireCompleteGraph",
     "help"
   ],
   explain: [
@@ -16660,6 +16672,7 @@ function parseScanLikeArgs(argv, kind) {
   let failOn = CLI_DEFAULTS.failOn;
   let strictWaivers = CLI_DEFAULTS.strictWaivers;
   let allowPartialEvidence = CLI_DEFAULTS.allowPartialEvidence;
+  let requireCompleteGraph = false;
   const outputFormatOptions = outputFormatOptionsFor(kind);
   for (let index = 0;index < argv.length; index += 1) {
     const arg = argv[index];
@@ -16966,6 +16979,9 @@ function parseScanLikeArgs(argv, kind) {
         strictWaivers = true;
         break;
       }
+      case "--require-complete-graph":
+        requireCompleteGraph = true;
+        break;
       case "--allow-partial-evidence": {
         if (kind !== "ci") {
           return err(createError({
@@ -17097,7 +17113,8 @@ function parseScanLikeArgs(argv, kind) {
       ...reportLanguageSet ? { reportLanguage } : {},
       failOn,
       strictWaivers,
-      allowPartialEvidence
+      allowPartialEvidence,
+      ...requireCompleteGraph ? { requireCompleteGraph: true } : {}
     });
   }
   return ok({
@@ -17110,6 +17127,7 @@ function parseScanLikeArgs(argv, kind) {
     html,
     cyclonedx,
     noWaivers,
+    ...requireCompleteGraph ? { requireCompleteGraph: true } : {},
     ...lockfilePath ? { lockfilePath } : {},
     ...archivePath ? { archivePath } : {},
     ...repository ? { repository } : {},
@@ -17269,6 +17287,7 @@ function parseDiffArgs(argv) {
   let outputPath;
   let failOn;
   let allowPartialEvidence = false;
+  let requireCompleteGraph = false;
   let baselineRef;
   const outputFormatOptions = outputFormatOptionsFor("diff");
   for (let index = 0;index < argv.length; index += 1) {
@@ -17453,6 +17472,9 @@ function parseDiffArgs(argv) {
       case "--allow-partial-evidence":
         allowPartialEvidence = true;
         break;
+      case "--require-complete-graph":
+        requireCompleteGraph = true;
+        break;
       case "--help":
       case "-h":
         return ok({ kind: "help", target: "diff" });
@@ -17527,6 +17549,7 @@ function parseDiffArgs(argv) {
     ...workspaceRootPath ? { workspaceRootPath } : {},
     ...outputPath ? { outputPath } : {},
     ...allowPartialEvidence ? { allowPartialEvidence: true } : {},
+    ...requireCompleteGraph ? { requireCompleteGraph: true } : {},
     ...failOn ? { failOn } : {}
   });
 }
@@ -59143,6 +59166,15 @@ function incompleteEvidenceGateFailed(input) {
   return input.enabled && input.completeness.status === "partial" && !input.allowPartialEvidence;
 }
 
+// src/policy/inspection-gate.ts
+function buildGraphGate(input) {
+  const scans = "baseline" in input.completeness ? [input.completeness.baseline, input.completeness.current] : [input.completeness];
+  return {
+    required: input.required,
+    failed: input.required && scans.some((scan) => scan.dimensions?.graph.status !== "complete")
+  };
+}
+
 // src/report/cyclonedx-report.ts
 import path86 from "node:path";
 function renderCycloneDxReport(input) {
@@ -59177,6 +59209,7 @@ function renderCycloneDxReport(input) {
       },
       properties: [
         { name: "ohrisk:inputSupport", value: JSON.stringify(projectInputSupport(input.project)) },
+        ...input.graphGate ? [{ name: "ohrisk:graphGate", value: JSON.stringify(input.graphGate) }] : [],
         {
           name: "ohrisk:completeness",
           value: JSON.stringify(input.completeness ?? buildScanCompleteness({
@@ -59468,7 +59501,7 @@ function formatThresholdSummary(summary) {
 }
 
 // src/report/schema.ts
-var OHRISK_REPORT_SCHEMA_VERSION = "3.8.0";
+var OHRISK_REPORT_SCHEMA_VERSION = "3.9.0";
 var OHRISK_COMMON_REPORT_SCHEMA = `urn:ohrisk:schema:common:${OHRISK_REPORT_SCHEMA_VERSION}`;
 var OHRISK_SCAN_REPORT_SCHEMA = `urn:ohrisk:schema:scan-report:${OHRISK_REPORT_SCHEMA_VERSION}`;
 var OHRISK_DIFF_REPORT_SCHEMA = `urn:ohrisk:schema:diff-report:${OHRISK_REPORT_SCHEMA_VERSION}`;
@@ -59486,13 +59519,14 @@ function renderDiffReport(input) {
   const changedSummary = summarize(input.diff.changedFindings);
   const resolvedSummary = summarize(input.diff.resolvedFindings);
   const introducedSummary = summarize(input.diff.introducedFindings);
-  const nextAction = input.completeness?.status === "partial" ? "Restore unavailable baseline or current evidence before relying on this comparison." : nextActionFor(input.diff.introducedFindings);
+  const nextAction = input.graphGate?.failed ? "Provide complete dependency relationships for both revisions before relying on this comparison." : input.completeness?.status === "partial" ? "Restore unavailable baseline or current evidence before relying on this comparison." : nextActionFor(input.diff.introducedFindings);
   const thresholdSummary = buildThresholdSummary(input.diff.introducedFindings, input.failOn);
   if (input.json) {
     const report = {
       $schema: OHRISK_DIFF_REPORT_SCHEMA,
       schemaVersion: OHRISK_REPORT_SCHEMA_VERSION,
       status: "risk_diff_evaluated",
+      ...input.graphGate ? { graphGate: input.graphGate } : {},
       ...input.completeness ? {
         completeness: input.completeness,
         evidenceGateFailed: input.evidenceGateFailed ?? false,
@@ -59560,6 +59594,7 @@ function comparisonCompletenessLines(input) {
     return [];
   const { status, baseline, current } = input.completeness;
   return [
+    ...input.graphGate ? [`Complete graph required: ${input.graphGate.required}`, `Graph gate failed: ${input.graphGate.failed}`] : [],
     `Comparison completeness: ${status}`,
     `Baseline completeness: ${baseline.status} (${baseline.unavailablePackageCount} unavailable packages)`,
     `Current completeness: ${current.status} (${current.unavailablePackageCount} unavailable packages)`,
@@ -59571,7 +59606,7 @@ function comparisonCompletenessLines(input) {
 }
 function renderMarkdownReport(input) {
   const introducedSummary = summarize(input.diff.introducedFindings);
-  const nextAction = input.completeness?.status === "partial" ? "Restore unavailable baseline or current evidence before relying on this comparison." : nextActionFor(input.diff.introducedFindings);
+  const nextAction = input.graphGate?.failed ? "Provide complete dependency relationships for both revisions before relying on this comparison." : input.completeness?.status === "partial" ? "Restore unavailable baseline or current evidence before relying on this comparison." : nextActionFor(input.diff.introducedFindings);
   const thresholdSummary = buildThresholdSummary(input.diff.introducedFindings, input.failOn);
   return [
     "# Ohrisk diff",
@@ -59790,6 +59825,7 @@ function renderSarifReport(input) {
         ],
         properties: {
           ohriskCompleteness: input.completeness ?? buildScanCompleteness(input),
+          ...input.graphGate ? { ohriskGraphGate: input.graphGate } : {},
           ohriskInputSupport: projectInputSupport(input.project),
           ohriskWaiverMode: input.waiverMode,
           ohriskActiveFindingCount: input.riskFindings.length,
@@ -62914,7 +62950,7 @@ var HTML_FINGERPRINT_PREVIEW_CHARS = 240;
 function renderScanReport(input) {
   const summary = buildScanSummary(input);
   const completeness = input.completeness ?? buildScanCompleteness(input);
-  const nextAction = nextActionFor2(input.riskFindings, input.repository);
+  const nextAction = nextActionFor2(input.riskFindings, input.repository, input.graphGate);
   const thresholdSummary = buildThresholdSummary(input.riskFindings, input.failOn);
   const waiverDriftSummary = buildWaiverDriftSummary(input);
   if (input.json) {
@@ -62937,6 +62973,7 @@ function renderScanReport(input) {
       dependencyOrigins: dependencyProvenance(input),
       evidence: summary.evidence,
       completeness,
+      ...input.graphGate ? { graphGate: input.graphGate } : {},
       licenses: summary.licenses,
       risks: summary.risks,
       waiverMode: input.waiverMode,
@@ -62971,6 +63008,7 @@ function renderScanReport(input) {
     ...(input.graph.unresolvedDependencies ?? []).map((item) => `Unresolved dependency [${item.reason}]: ${JSON.stringify(item.from ?? "<root>")} -> ${JSON.stringify(item.name)} (${item.dependencyType})`),
     `Evidence: ${summary.evidence.files} files, ${summary.evidence.warnings} warnings`,
     `Completeness: ${formatScanCompleteness(completeness)}`,
+    ...graphGateLines(input),
     `Input support: ${formatProjectInputSupport(input.project)}`,
     `Licenses: ${summary.licenses.highConfidence} high-confidence, ${summary.licenses.mediumConfidence} medium-confidence, ${summary.licenses.lowConfidence} low-confidence`,
     `License issues: ${summary.licenses.missing} missing, ${summary.licenses.malformed} malformed`,
@@ -62992,6 +63030,12 @@ function renderScanReport(input) {
     `Next: ${nextAction}`
   ].join(`
 `);
+}
+function graphGateLines(input) {
+  return input.graphGate ? [
+    `Complete graph required: ${input.graphGate.required}`,
+    `Graph gate failed: ${input.graphGate.failed}`
+  ] : [];
 }
 function renderHtmlReport(input, summary) {
   const thresholdSummary = buildThresholdSummary(input.riskFindings, input.failOn);
@@ -63131,6 +63175,7 @@ function buildReviewSummaryCards(input, summary, text, waiverDriftSummary) {
   const evidenceRecoveryAdvice = buildEvidenceRecoveryAdvice(input, summary);
   return [
     [text.labels.status, text.messages.reviewStatus(summary.risks)],
+    ...input.graphGate ? [["Graph gate", input.graphGate.failed ? "failed: dependency relationships are not fully known" : "passed"]] : [],
     [text.labels.activeFindings, text.messages.activeFindings(summary.risks)],
     [text.labels.scope, text.messages.scope(input.profile, input.prodOnly)],
     [
@@ -63797,7 +63842,7 @@ function escapeHtml(value) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#x27;");
 }
 function renderMarkdownReport2(input, summary) {
-  const nextAction = nextActionFor2(input.riskFindings, input.repository);
+  const nextAction = nextActionFor2(input.riskFindings, input.repository, input.graphGate);
   const thresholdSummary = buildThresholdSummary(input.riskFindings, input.failOn);
   const waiverDriftSummary = buildWaiverDriftSummary(input);
   return [
@@ -63814,6 +63859,7 @@ function renderMarkdownReport2(input, summary) {
     ...(input.graph.unresolvedDependencies ?? []).map((item) => `- Unresolved dependency ${formatMarkdownInlineCode(item.reason)}: ${formatMarkdownInlineCode(item.from ?? "<root>")} → ${formatMarkdownInlineCode(item.name)} (${item.dependencyType})`),
     `- Evidence: ${formatMarkdownInlineCode(`${summary.evidence.files} files`)}, ${formatMarkdownInlineCode(`${summary.evidence.warnings} warnings`)}`,
     `- Completeness: ${formatMarkdownInlineCode(formatScanCompleteness(input.completeness ?? buildScanCompleteness(input)))}`,
+    ...graphGateLines(input).map((line) => `- ${line}`),
     `- Input support: ${formatMarkdownInlineCode(formatProjectInputSupport(input.project))}`,
     `- Licenses: ${formatMarkdownInlineCode(`${summary.licenses.highConfidence} high-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.mediumConfidence} medium-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.lowConfidence} low-confidence`)}`,
     `- License issues: ${formatMarkdownInlineCode(`${summary.licenses.missing} missing`)}, ${formatMarkdownInlineCode(`${summary.licenses.malformed} malformed`)}`,
@@ -64244,7 +64290,10 @@ function formatWaiverTarget(waiver) {
   }
   return `fingerprint: ${waiver.fingerprint ?? "unknown"}`;
 }
-function nextActionFor2(findings, repository) {
+function nextActionFor2(findings, repository, graphGate) {
+  if (graphGate?.failed) {
+    return "Provide dependency inputs with complete relationships before relying on this graph gate.";
+  }
   if (repository && hasIncompleteRepositoryCoverage(repository)) {
     return "Review skipped repository entries and scan any omitted dependency inputs separately before treating this report as complete.";
   }
@@ -64266,6 +64315,9 @@ function nextActionFor2(findings, repository) {
   return "No action needed for this profile.";
 }
 function localizedNextAction(input, text) {
+  if (input.graphGate?.failed) {
+    return "Provide dependency inputs with complete relationships before relying on this graph gate.";
+  }
   return input.repository && hasIncompleteRepositoryCoverage(input.repository) ? text.messages.incompleteRepositoryCoverageAction : text.messages.nextAction(input.riskFindings);
 }
 function renderRepositoryCoverageLines(repository) {
@@ -69918,10 +69970,12 @@ async function runDiff(command, io, signal) {
     allowPartialEvidence: command.allowPartialEvidence ?? false,
     completeness
   });
+  const graphGate = buildGraphGate({ required: command.requireCompleteGraph ?? false, completeness });
   const output = renderDiffReport({
     baselineRef: command.baselineRef,
     completeness,
     evidenceGateFailed,
+    ...graphGate.required ? { graphGate } : {},
     allowPartialEvidence: command.allowPartialEvidence ?? false,
     profile: command.profile,
     prodOnly: command.prodOnly,
@@ -69956,7 +70010,7 @@ async function runDiff(command, io, signal) {
   if (command.failOn && hasFindingAtOrAbove(diff.introducedFindings, command.failOn)) {
     return 1;
   }
-  if (evidenceGateFailed)
+  if (evidenceGateFailed || graphGate.failed)
     return 1;
   return 0;
 }
@@ -70109,6 +70163,7 @@ async function runScanAt(input) {
     normalizedLicenses: scanned.value.normalizedLicenses,
     ...input.repository ? { repository: input.repository } : {}
   });
+  const graphGate = buildGraphGate({ required: command.requireCompleteGraph ?? false, completeness });
   const reportInput = {
     project: scanned.value.project,
     graph: scanned.value.graph,
@@ -70131,6 +70186,7 @@ async function runScanAt(input) {
     unmatchedWaivers: scanned.value.unmatchedWaivers,
     policy: scanned.value.policy,
     completeness,
+    ...graphGate.required ? { graphGate } : {},
     ...input.repository ? { repository: input.repository } : {}
   };
   reportProgress?.(SCAN_PROGRESS_RENDER_PERCENT, `Rendering ${reportFormatLabel(command)} report...`);
@@ -70173,6 +70229,8 @@ async function runScanAt(input) {
   if (command.kind === "ci" && hasFindingAtOrAbove(scanned.value.riskFindings, command.failOn)) {
     return 1;
   }
+  if (graphGate.failed)
+    return 1;
   if (incompleteEvidenceGateFailed({
     enabled: command.kind === "ci",
     allowPartialEvidence: command.kind === "ci" && command.allowPartialEvidence,

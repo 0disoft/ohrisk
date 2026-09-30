@@ -65,6 +65,7 @@ export const ACTION_INPUT_DEFAULTS = {
   "no-waivers": "false",
   "strict-waivers": "false",
   "allow-partial-evidence": "false",
+  "require-complete-graph": "false",
   offline: "false",
   "cache-dir": "",
   jobs: "",
@@ -101,6 +102,7 @@ export const ACTION_BOOLEAN_INPUTS = [
   "no-waivers",
   "strict-waivers",
   "allow-partial-evidence",
+  "require-complete-graph",
   "offline"
 ] as const satisfies readonly (keyof typeof ACTION_INPUT_DEFAULTS)[];
 
@@ -245,9 +247,9 @@ export function findViolatedCommandOptionRule(input: {
 
 export const COMMAND_USAGE = {
   init: "ohrisk init [--profile saas|distributed-app] [--fail-on high|unknown|review|low] [--no-workflow] [--waivers]",
-  scan: "ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open]",
-  ci: "ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--allow-partial-evidence] [--output <file>] [--open]",
-  diff: "ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--allow-partial-evidence] [--output <file>]",
+  scan: "ohrisk scan [repository-url|--repo <url>] [--submodules ignore|reject] [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--output <file>] [--open] [--require-complete-graph]",
+  ci: "ohrisk ci [--archive <path>] [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--no-waivers] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--sarif|--markdown|--html|--cyclonedx] [--language en|ko|es|fr|zh|hi|ja|id|tr|ru|de] [--fail-on high|unknown|review|low] [--strict-waivers] [--allow-partial-evidence] [--output <file>] [--open] [--require-complete-graph]",
+  diff: "ohrisk diff <baseline-ref> [--lockfile <path>|--all] [--policy <path>] [--workspace-root <path>] [--profile saas|distributed-app] [--prod] [--offline] [--cache-dir <path>] [--jobs <1..64>] [--timeout <duration>] [--registry-url <url>] [--registry-token-env <name>] [--allow-host <hostname>] [--json|--markdown] [--fail-on high|unknown|review|low] [--allow-partial-evidence] [--output <file>] [--require-complete-graph]",
   explain: "ohrisk explain <license-expression> [--profile saas|distributed-app] [--json] [--output <file>]",
   cache: "ohrisk cache status|prune|clear [--cache-dir <path>] [--json]",
   help: "ohrisk help [command]",
@@ -434,6 +436,11 @@ const HELP_OPTION_SPECS = {
     syntax: "--allow-partial-evidence",
     description: "Allow partial evidence in a CI or diff gate."
   },
+  requireCompleteGraph: {
+    options: ["--require-complete-graph"],
+    syntax: "--require-complete-graph",
+    description: "Fail when dependency relationships are partial or unknown, independently of evidence overrides."
+  },
   strictWaivers: {
     options: ["--strict-waivers"],
     syntax: "--strict-waivers",
@@ -478,7 +485,7 @@ const HELP_OPTION_ORDER = {
     "profile", "lockfile", "archive", "repo", "submodules", "all", "policy",
     "workspaceRoot", "prod", "noWaivers", "offline", "cacheDir", "jobs", "timeout",
     "registryUrl", "registryTokenEnv", "allowHost", "json", "sarif", "markdown", "html",
-    "language", "cyclonedx", "output", "open", "failOn", "allowPartialEvidence",
+    "language", "cyclonedx", "output", "open", "failOn", "allowPartialEvidence", "requireCompleteGraph",
     "strictWaivers", "noWorkflow", "waiverTemplate", "help", "version"
   ],
   init: ["profile", "failOn", "noWorkflow", "waiverTemplate", "help"],
@@ -486,18 +493,18 @@ const HELP_OPTION_ORDER = {
     "profile", "lockfile", "archive", "repo", "submodules", "all", "policy",
     "workspaceRoot", "prod", "noWaivers", "offline", "cacheDir", "jobs", "timeout",
     "registryUrl", "registryTokenEnv", "allowHost", "json", "sarif", "markdown", "html",
-    "language", "cyclonedx", "output", "open", "help"
+    "language", "cyclonedx", "requireCompleteGraph", "output", "open", "help"
   ],
   ci: [
     "profile", "lockfile", "archive", "all", "policy", "workspaceRoot", "prod", "noWaivers",
     "offline", "cacheDir", "jobs", "timeout", "registryUrl", "registryTokenEnv", "allowHost",
     "json", "sarif", "markdown", "html", "language", "cyclonedx", "failOn",
-    "allowPartialEvidence", "strictWaivers", "output", "open", "help"
+    "allowPartialEvidence", "requireCompleteGraph", "strictWaivers", "output", "open", "help"
   ],
   diff: [
     "profile", "lockfile", "all", "policy", "workspaceRoot", "prod", "offline", "cacheDir",
     "jobs", "timeout", "registryUrl", "registryTokenEnv", "allowHost", "json", "markdown",
-    "failOn", "allowPartialEvidence", "output", "help"
+    "failOn", "allowPartialEvidence", "requireCompleteGraph", "output", "help"
   ],
   cache: ["cacheDir", "maxSize", "maxAge", "json", "help"],
   explain: ["profile", "policy", "workspaceRoot", "json", "output", "help"],
@@ -529,17 +536,18 @@ const SCAN_AND_CI_OPTION_KEYS = [
 
 const COMMAND_OPTION_KEYS = {
   init: ["profile", "failOn", "noWorkflow", "waiverTemplate", "help"],
-  scan: [...SCAN_AND_CI_OPTION_KEYS, "repo", "submodules"],
+  scan: [...SCAN_AND_CI_OPTION_KEYS, "requireCompleteGraph", "repo", "submodules"],
   ci: [
     ...SCAN_AND_CI_OPTION_KEYS,
     "failOn",
     "strictWaivers",
-    "allowPartialEvidence"
+    "allowPartialEvidence",
+    "requireCompleteGraph"
   ],
   diff: [
     "profile", "prod", "lockfile", "all", "policy", "offline", "cacheDir", "jobs", "timeout",
     "registryUrl", "registryTokenEnv", "allowHost", "workspaceRoot", "json", "markdown", "output",
-    "failOn", "allowPartialEvidence", "help"
+    "failOn", "allowPartialEvidence", "requireCompleteGraph", "help"
   ],
   explain: [
     "profile", "policy", "workspaceRoot", "json", "output", "help"

@@ -5,6 +5,11 @@
 
 ## Product Contract
 
+- Callers may require complete dependency relationships using
+  `--require-complete-graph` on scan, CI, and diff. Collection completion alone
+  does not prove transitive graph completeness. Unknown or partial relationships
+  fail this independent gate, even with a partial-evidence override.
+
 Ohrisk scans a project dependency graph, derives license evidence, applies a
 shipping-profile-aware risk policy, applies local waivers unless disabled, and
 renders the result for local review or CI gates.

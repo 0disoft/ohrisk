@@ -26,6 +26,17 @@ afterEach(() => {
 });
 
 describe("ohrisk-summary", () => {
+  test("preserves a graph gate failure even when collection and finding gates pass", () => {
+    const workspace = temporaryDirectory();
+    writeFileSync(path.join(workspace, "report.json"), JSON.stringify({
+      $schema: "urn:ohrisk:schema:diff-report:3.9.0", schemaVersion: "3.9.0",
+      status: "risk_diff_evaluated", findings: [], completeness: { status: "complete" },
+      graphGate: { required: true, failed: true }
+    }));
+    const result = run(workspace, ["--report", "report.json", "--json"]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ failed: true, thresholdFailed: false, completeness: "complete" });
+  });
   test("preserves a partial diff gate failure from schema 3.6", () => {
     const workspace = temporaryDirectory();
     writeFileSync(path.join(workspace, "report.json"), JSON.stringify({
@@ -174,7 +185,7 @@ describe("ohrisk-summary", () => {
     const result = run(workspace, ["--report", "forged.json"]);
 
     expect(result.status).toBe(2);
-    expect(result.stderr).toContain("does not use a supported Ohrisk 3.5.0 or 3.6.0 or 3.7.0 or 3.8.0 report schema");
+    expect(result.stderr).toContain("does not use a supported Ohrisk 3.5.0 or 3.6.0 or 3.7.0 or 3.8.0 or 3.9.0 report schema");
   });
 
   test("reports omitted findings accurately when max-findings is zero", () => {

@@ -5,7 +5,7 @@
  * runtime validation source of truth.
  */
 
-export type ReportSchemaVersion = "3.8.0";
+export type ReportSchemaVersion = "3.9.0";
 
 export type CommonReportSchemaId =
   `urn:ohrisk:schema:common:${ReportSchemaVersion}`;
@@ -375,7 +375,10 @@ export type WaiverDriftOutcome = {
   waiverDriftCount?: number;
 };
 
+export type GraphGateOutcome = { required: boolean; failed: boolean };
+
 export type ScanReport = ThresholdOutcome & WaiverDriftOutcome & {
+  graphGate?: GraphGateOutcome;
   $schema: ScanReportSchemaId;
   schemaVersion: ReportSchemaVersion;
   status: "profile_risk_evaluated";
@@ -404,6 +407,7 @@ export type ScanReport = ThresholdOutcome & WaiverDriftOutcome & {
 };
 
 export type DiffReport = ThresholdOutcome & {
+  graphGate?: GraphGateOutcome;
   provenanceChangedFindingCount?: number;
   provenanceChangedFindings?: Finding[];
   completeness?: {

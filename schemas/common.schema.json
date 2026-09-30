@@ -1,8 +1,17 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:ohrisk:schema:common:3.8.0",
+  "$id": "urn:ohrisk:schema:common:3.9.0",
   "title": "Ohrisk report common definitions",
   "$defs": {
+    "graphGate": {
+      "type": "object",
+      "required": ["required", "failed"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "failed": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
     "inputSupport": {
       "type": "object",
       "required": [
@@ -58,7 +67,7 @@
           "minLength": 1
         },
         "dependencyType": {
-          "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/riskDependencyType"
+          "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/riskDependencyType"
         },
         "reason": {
           "type": "string",
@@ -94,7 +103,7 @@
               ]
             },
             "skippedRepositoryEntryCount": {
-              "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/nonNegativeInteger"
+              "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/nonNegativeInteger"
             }
           },
           "additionalProperties": false
@@ -117,10 +126,10 @@
               ]
             },
             "unresolvedDependencyCount": {
-              "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/nonNegativeInteger"
+              "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/nonNegativeInteger"
             },
             "unknownRelationshipNodeCount": {
-              "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/nonNegativeInteger"
+              "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/nonNegativeInteger"
             },
             "rootRelationshipsUnknown": {
               "type": "boolean"
@@ -144,10 +153,10 @@
               ]
             },
             "unavailablePackageCount": {
-              "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/nonNegativeInteger"
+              "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/nonNegativeInteger"
             },
             "artifactConflictPackageCount": {
-              "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/nonNegativeInteger"
+              "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/nonNegativeInteger"
             }
           },
           "additionalProperties": false
@@ -168,7 +177,7 @@
               ]
             },
             "unidentifiedPackageCount": {
-              "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/nonNegativeInteger"
+              "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/nonNegativeInteger"
             }
           },
           "additionalProperties": false
@@ -192,22 +201,22 @@
           ]
         },
         "unavailablePackageCount": {
-          "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/nonNegativeInteger"
+          "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/nonNegativeInteger"
         },
         "skippedRepositoryEntryCount": {
-          "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/nonNegativeInteger"
+          "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/nonNegativeInteger"
         },
         "unresolvedDependencyCount": {
-          "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/nonNegativeInteger"
+          "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/nonNegativeInteger"
         },
         "unresolvedDependencies": {
           "type": "array",
           "items": {
-            "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/unresolvedDependency"
+            "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/unresolvedDependency"
           }
         },
         "dimensions": {
-          "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/scanCompletenessDimensions"
+          "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/scanCompletenessDimensions"
         }
       },
       "additionalProperties": false
@@ -308,7 +317,7 @@
               "maxItems": 100,
               "uniqueItems": true,
               "items": {
-                "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/relativePath"
+                "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/relativePath"
               }
             },
             "pathsTruncated": {
@@ -335,7 +344,7 @@
               "maxItems": 100,
               "uniqueItems": true,
               "items": {
-                "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/relativePath"
+                "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/relativePath"
               }
             },
             "pathsTruncated": {
@@ -362,7 +371,7 @@
               "maxItems": 100,
               "uniqueItems": true,
               "items": {
-                "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/relativePath"
+                "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/relativePath"
               }
             },
             "pathsTruncated": {
@@ -382,7 +391,7 @@
       ],
       "properties": {
         "support": {
-          "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/inputSupport"
+          "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/inputSupport"
         },
         "kind": {
           "type": "string",
@@ -425,7 +434,7 @@
           "minLength": 1
         },
         "severity": {
-          "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/riskSeverity"
+          "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/riskSeverity"
         },
         "reason": {
           "type": "string",
@@ -436,10 +445,10 @@
           "minLength": 1
         },
         "dependencyType": {
-          "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/riskDependencyType"
+          "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/riskDependencyType"
         },
         "dependencyScope": {
-          "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/riskDependencyScope"
+          "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/riskDependencyScope"
         },
         "evidence": {
           "type": "array",
@@ -461,10 +470,10 @@
           }
         },
         "recommendation": {
-          "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/riskRecommendation"
+          "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/riskRecommendation"
         },
         "decision": {
-          "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/reviewDecision"
+          "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/reviewDecision"
         },
         "evidenceFingerprint": {
           "pattern": "^[0-9a-f]{64}$",
@@ -528,10 +537,10 @@
       ],
       "properties": {
         "finding": {
-          "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/riskFinding"
+          "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/riskFinding"
         },
         "waiver": {
-          "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/riskWaiver"
+          "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/riskWaiver"
         },
         "matchedBy": {
           "type": "string",
@@ -651,7 +660,7 @@
           "type": "array",
           "uniqueItems": true,
           "items": {
-            "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/relativePath"
+            "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/relativePath"
           }
         },
         "allowLicenseCount": {
@@ -871,19 +880,19 @@
           ],
           "properties": {
             "local": {
-              "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/evidenceSourceCounts"
+              "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/evidenceSourceCounts"
             },
             "registry": {
-              "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/evidenceSourceCounts"
+              "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/evidenceSourceCounts"
             },
             "sbom": {
-              "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/evidenceSourceCounts"
+              "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/evidenceSourceCounts"
             },
             "tarball": {
-              "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/evidenceSourceCounts"
+              "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/evidenceSourceCounts"
             },
             "unavailable": {
-              "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/evidenceSourceCounts"
+              "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/evidenceSourceCounts"
             }
           },
           "additionalProperties": false
@@ -891,7 +900,7 @@
         "diagnostics": {
           "type": "array",
           "items": {
-            "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/evidenceDiagnostic"
+            "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/evidenceDiagnostic"
           }
         }
       },
@@ -974,7 +983,7 @@
           "type": "array",
           "minItems": 1,
           "items": {
-            "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/lockfile"
+            "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/lockfile"
           }
         }
       },
@@ -992,25 +1001,25 @@
         "current": {
           "type": "array",
           "items": {
-            "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/lockfile"
+            "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/lockfile"
           }
         },
         "baseline": {
           "type": "array",
           "items": {
-            "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/lockfile"
+            "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/lockfile"
           }
         },
         "added": {
           "type": "array",
           "items": {
-            "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/lockfile"
+            "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/lockfile"
           }
         },
         "removed": {
           "type": "array",
           "items": {
-            "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/lockfile"
+            "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/lockfile"
           }
         }
       },
@@ -1032,7 +1041,7 @@
           "type": "string"
         },
         "profile": {
-          "$ref": "urn:ohrisk:schema:common:3.8.0#/$defs/usageProfile"
+          "$ref": "urn:ohrisk:schema:common:3.9.0#/$defs/usageProfile"
         }
       },
       "required": [

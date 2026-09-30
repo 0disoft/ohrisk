@@ -40,6 +40,7 @@ export type CliCommand =
     }
   | {
       kind: "scan";
+      requireCompleteGraph?: boolean;
       profile: UsageProfile;
       prodOnly: boolean;
       json: boolean;
@@ -68,6 +69,7 @@ export type CliCommand =
     }
   | {
       kind: "ci";
+      requireCompleteGraph?: boolean;
       profile: UsageProfile;
       prodOnly: boolean;
       json: boolean;
@@ -97,6 +99,7 @@ export type CliCommand =
     }
   | {
       kind: "diff";
+      requireCompleteGraph?: boolean;
       baselineRef: string;
       allowPartialEvidence?: boolean;
       profile: UsageProfile;

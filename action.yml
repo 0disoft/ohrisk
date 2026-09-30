@@ -70,6 +70,10 @@ inputs:
     description: Allow command=ci or a gated command=diff to pass with incomplete evidence.
     required: false
     default: "false"
+  require-complete-graph:
+    description: Fail when dependency relationships are partial or unknown, even when partial evidence is allowed.
+    required: false
+    default: "false"
   offline:
     description: Disable remote evidence requests and use only local evidence or cache entries.
     required: false
@@ -380,6 +384,7 @@ runs:
         OHRISK_NO_WAIVERS: ${{ inputs.no-waivers }}
         OHRISK_STRICT_WAIVERS: ${{ inputs.strict-waivers }}
         OHRISK_ALLOW_PARTIAL_EVIDENCE: ${{ inputs.allow-partial-evidence }}
+        OHRISK_REQUIRE_COMPLETE_GRAPH: ${{ inputs.require-complete-graph }}
         OHRISK_OFFLINE: ${{ inputs.offline }}
         OHRISK_CACHE_DIR: ${{ steps.cache-settings.outputs.cache-dir }}
         OHRISK_JOBS: ${{ inputs.jobs }}
@@ -481,6 +486,7 @@ runs:
         require_bool "no-waivers" "$OHRISK_NO_WAIVERS"
         require_bool "strict-waivers" "$OHRISK_STRICT_WAIVERS"
         require_bool "allow-partial-evidence" "$OHRISK_ALLOW_PARTIAL_EVIDENCE"
+        require_bool "require-complete-graph" "$OHRISK_REQUIRE_COMPLETE_GRAPH"
         require_bool "offline" "$OHRISK_OFFLINE"
 
         if [ "$OHRISK_ALL" = "true" ] && [ -n "$OHRISK_LOCKFILE" ]; then
@@ -601,6 +607,9 @@ runs:
 
         if [ "$OHRISK_ALLOW_PARTIAL_EVIDENCE" = "true" ]; then
           args+=("--allow-partial-evidence")
+        fi
+        if [ "$OHRISK_REQUIRE_COMPLETE_GRAPH" = "true" ]; then
+          args+=("--require-complete-graph")
         fi
 
         if [ "$OHRISK_OFFLINE" = "true" ]; then

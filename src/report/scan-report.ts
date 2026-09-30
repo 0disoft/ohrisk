@@ -4,7 +4,7 @@ export type { ScanCompleteness };
 import { omitUndefined } from "../shared/object";
 import path from "node:path";
 
-import type { ScanReport } from "../../types/report-types";
+import type { GraphGateOutcome, ScanReport } from "../../types/report-types";
 import type {
   EvidenceDiagnostic,
   EvidenceDiagnosticCode,
@@ -80,6 +80,7 @@ export type ScanReportInput = {
   policy?: PolicyConfigSummary;
   repository?: RemoteRepositoryReportSource;
   completeness?: ScanCompleteness;
+  graphGate?: GraphGateOutcome;
 };
 
 export type RemoteRepositoryReportSource = {
@@ -106,7 +107,7 @@ export type RemoteRepositoryReportSource = {
 export function renderScanReport(input: ScanReportInput): string {
   const summary = buildScanSummary(input);
   const completeness = input.completeness ?? buildScanCompleteness(input);
-  const nextAction = nextActionFor(input.riskFindings, input.repository);
+  const nextAction = nextActionFor(input.riskFindings, input.repository, input.graphGate);
   const thresholdSummary = buildThresholdSummary(input.riskFindings, input.failOn);
   const waiverDriftSummary = buildWaiverDriftSummary(input);
 
@@ -130,6 +131,7 @@ export function renderScanReport(input: ScanReportInput): string {
         dependencyOrigins: dependencyProvenance(input),
         evidence: summary.evidence,
         completeness,
+        ...(input.graphGate ? { graphGate: input.graphGate } : {}),
         licenses: summary.licenses,
         risks: summary.risks,
         waiverMode: input.waiverMode,
@@ -168,6 +170,7 @@ export function renderScanReport(input: ScanReportInput): string {
       `Unresolved dependency [${item.reason}]: ${JSON.stringify(item.from ?? "<root>")} -> ${JSON.stringify(item.name)} (${item.dependencyType})`),
     `Evidence: ${summary.evidence.files} files, ${summary.evidence.warnings} warnings`,
     `Completeness: ${formatScanCompleteness(completeness)}`,
+    ...graphGateLines(input),
     `Input support: ${formatProjectInputSupport(input.project)}`,
     `Licenses: ${summary.licenses.highConfidence} high-confidence, ${summary.licenses.mediumConfidence} medium-confidence, ${summary.licenses.lowConfidence} low-confidence`,
     `License issues: ${summary.licenses.missing} missing, ${summary.licenses.malformed} malformed`,
@@ -188,6 +191,13 @@ export function renderScanReport(input: ScanReportInput): string {
     "",
     `Next: ${nextAction}`
   ].join("\n");
+}
+
+function graphGateLines(input: ScanReportInput): string[] {
+  return input.graphGate ? [
+    `Complete graph required: ${input.graphGate.required}`,
+    `Graph gate failed: ${input.graphGate.failed}`
+  ] : [];
 }
 
 function renderHtmlReport(
@@ -368,6 +378,7 @@ function buildReviewSummaryCards(
 
   return [
     [text.labels.status, text.messages.reviewStatus(summary.risks)],
+    ...(input.graphGate ? [["Graph gate", input.graphGate.failed ? "failed: dependency relationships are not fully known" : "passed"] as const] : []),
     [text.labels.activeFindings, text.messages.activeFindings(summary.risks)],
     [text.labels.scope, text.messages.scope(input.profile, input.prodOnly)],
     [
@@ -1202,7 +1213,7 @@ function renderMarkdownReport(
   input: ScanReportInput,
   summary: ReturnType<typeof buildScanSummary>
 ): string {
-  const nextAction = nextActionFor(input.riskFindings, input.repository);
+  const nextAction = nextActionFor(input.riskFindings, input.repository, input.graphGate);
   const thresholdSummary = buildThresholdSummary(input.riskFindings, input.failOn);
   const waiverDriftSummary = buildWaiverDriftSummary(input);
 
@@ -1221,6 +1232,7 @@ function renderMarkdownReport(
       `- Unresolved dependency ${formatMarkdownInlineCode(item.reason)}: ${formatMarkdownInlineCode(item.from ?? "<root>")} → ${formatMarkdownInlineCode(item.name)} (${item.dependencyType})`),
     `- Evidence: ${formatMarkdownInlineCode(`${summary.evidence.files} files`)}, ${formatMarkdownInlineCode(`${summary.evidence.warnings} warnings`)}`,
     `- Completeness: ${formatMarkdownInlineCode(formatScanCompleteness(input.completeness ?? buildScanCompleteness(input)))}`,
+    ...graphGateLines(input).map((line) => `- ${line}`),
     `- Input support: ${formatMarkdownInlineCode(formatProjectInputSupport(input.project))}`,
     `- Licenses: ${formatMarkdownInlineCode(`${summary.licenses.highConfidence} high-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.mediumConfidence} medium-confidence`)}, ${formatMarkdownInlineCode(`${summary.licenses.lowConfidence} low-confidence`)}`,
     `- License issues: ${formatMarkdownInlineCode(`${summary.licenses.missing} missing`)}, ${formatMarkdownInlineCode(`${summary.licenses.malformed} malformed`)}`,
@@ -1854,8 +1866,12 @@ function formatWaiverTarget(waiver: RiskWaiver): string {
 
 function nextActionFor(
   findings: RiskFinding[],
-  repository?: RemoteRepositoryReportSource
+  repository?: RemoteRepositoryReportSource,
+  graphGate?: GraphGateOutcome
 ): string {
+  if (graphGate?.failed) {
+    return "Provide dependency inputs with complete relationships before relying on this graph gate.";
+  }
   if (repository && hasIncompleteRepositoryCoverage(repository)) {
     return "Review skipped repository entries and scan any omitted dependency inputs separately before treating this report as complete.";
   }
@@ -1884,6 +1900,9 @@ function nextActionFor(
 }
 
 function localizedNextAction(input: ScanReportInput, text: HtmlReportText): string {
+  if (input.graphGate?.failed) {
+    return "Provide dependency inputs with complete relationships before relying on this graph gate.";
+  }
   return input.repository && hasIncompleteRepositoryCoverage(input.repository)
     ? text.messages.incompleteRepositoryCoverageAction
     : text.messages.nextAction(input.riskFindings);

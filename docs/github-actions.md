@@ -1,5 +1,10 @@
 # GitHub Actions Guide
 
+For a gate that requires complete dependency relationships, set
+`require-complete-graph: "true"` on the composite Action. It defaults to false,
+supports `scan`, `ci`, and `diff`, and cannot be bypassed by
+`allow-partial-evidence`. Both diff revisions must have complete relationships.
+
 Use these workflows when you want Ohrisk to review dependency license risk in
 pull requests. The examples install the published CLI from npm and do not need
 project secrets.

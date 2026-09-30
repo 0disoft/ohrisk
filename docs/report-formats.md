@@ -1,5 +1,13 @@
 # Report Formats Guide
 
+Schema 3.9 adds an optional `graphGate` with Boolean `required` and `failed`
+fields when `--require-complete-graph` is selected. The gate requires graph
+dimension `complete` for the scan, or both baseline and current in a diff.
+Missing graph assessment, `unknown`, and `partial` fail the gate independently
+of risk thresholds and `--allow-partial-evidence`. SARIF run properties include
+`ohriskGraphGate`, and CycloneDX metadata includes `ohrisk:graphGate`.
+Collection completeness does not claim transitive-relationship completeness.
+
 Schema 3.8 adds optional finding `decision` objects (id, fingerprint, profile,
 prodOnly) and `evidenceFingerprint`. Decision identities use package PURLs and
 usage/dependency conditions rather than display paths. Legacy `id` and

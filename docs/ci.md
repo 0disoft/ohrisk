@@ -1,5 +1,12 @@
 # CI Usage Guide
 
+Add `--require-complete-graph` (or Action `require-complete-graph: "true"`)
+when your gate requires verified dependency relationships as well as collected
+package evidence. Unknown or partial graph relationships fail, including either
+side of a diff. This requirement also applies without `--fail-on` and cannot be
+bypassed by `--allow-partial-evidence`. Use inventory-only inputs without this
+requirement when their declared support cannot prove transitive relationships.
+
 Reports in schema 3.8 carry scoped review decisions independently of display
 paths. Gated diffs use these decisions when present and report path/evidence
 label changes in `provenanceChangedFindings`, outside introduced-risk counts.

@@ -2,6 +2,12 @@
 
 ## 1.16.0 - Unreleased
 
+- `--require-complete-graph` and the corresponding Action input independently
+  gate scan, CI, and both diff revisions on known dependency relationships.
+  Partial-evidence overrides cannot bypass this requirement. Report schema 3.9
+  exposes the graph gate in JSON, SARIF and CycloneDX; human reports and step
+  summaries preserve the outcome.
+
 - Review decisions use package coordinates, usage profile, production-only
   selection, and dependency type/scope independently of display paths. New
   `decisionFingerprint` waivers opt into this bounded identity; legacy ID and

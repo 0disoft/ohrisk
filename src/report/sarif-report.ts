@@ -115,6 +115,7 @@ export function renderSarifReport(input: ScanReportInput): string {
           ],
           properties: {
             ohriskCompleteness: input.completeness ?? buildScanCompleteness(input),
+            ...(input.graphGate ? { ohriskGraphGate: input.graphGate } : {}),
             ohriskInputSupport: projectInputSupport(input.project),
             ohriskWaiverMode: input.waiverMode,
             ohriskActiveFindingCount: input.riskFindings.length,

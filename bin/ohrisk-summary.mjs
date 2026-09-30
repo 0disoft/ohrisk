@@ -11,7 +11,7 @@ import path from "node:path";
 const SEVERITIES = ["low", "review", "unknown", "high"];
 const DEFAULT_MAX_FINDINGS = 20;
 const MAX_REPORT_BYTES = 64 * 1024 * 1024;
-const REPORT_SCHEMA_VERSIONS = ["3.5.0", "3.6.0", "3.7.0", "3.8.0"];
+const REPORT_SCHEMA_VERSIONS = ["3.5.0", "3.6.0", "3.7.0", "3.8.0", "3.9.0"];
 const SUMMARY_SCHEMA = "urn:ohrisk:schema:report-summary:1.0.0";
 
 try {
@@ -84,7 +84,7 @@ function summarizeReport(report, maxFindings) {
     schemaVersion: "1.0.0",
     status: report.status,
     reportType,
-    failed: thresholdFailed || waiverDriftFailed || report.evidenceGateFailed === true,
+    failed: thresholdFailed || waiverDriftFailed || report.evidenceGateFailed === true || report.graphGate?.failed === true,
     thresholdFailed,
     waiverDriftFailed,
     failOn: failOn ?? null,
@@ -128,6 +128,10 @@ function readReport(filePath) {
   }
   assertOptionalBoolean(parsed, "failed");
   assertOptionalBoolean(parsed, "evidenceGateFailed");
+  if (parsed.graphGate !== undefined && (!isObject(parsed.graphGate)
+    || typeof parsed.graphGate.required !== "boolean" || typeof parsed.graphGate.failed !== "boolean")) {
+    throw new Error(`${displayPath(filePath)} has an invalid graph gate.`);
+  }
   assertOptionalBoolean(parsed, "waiverDriftFailed");
   assertOptionalSeverity(parsed, "failOn");
   assertOptionalNonNegativeInteger(parsed, "failingFindingCount");

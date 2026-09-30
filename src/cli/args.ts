@@ -385,6 +385,7 @@ function parseScanLikeArgs(
   let failOn: RiskSeverity = CLI_DEFAULTS.failOn;
   let strictWaivers = CLI_DEFAULTS.strictWaivers;
   let allowPartialEvidence = CLI_DEFAULTS.allowPartialEvidence;
+  let requireCompleteGraph = false;
   const outputFormatOptions = outputFormatOptionsFor(kind);
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -737,6 +738,9 @@ function parseScanLikeArgs(
         strictWaivers = true;
         break;
       }
+      case "--require-complete-graph":
+        requireCompleteGraph = true;
+        break;
       case "--allow-partial-evidence": {
         if (kind !== "ci") {
           return err(
@@ -868,7 +872,8 @@ function parseScanLikeArgs(
       ...(reportLanguageSet ? { reportLanguage } : {}),
       failOn,
       strictWaivers,
-      allowPartialEvidence
+      allowPartialEvidence,
+      ...(requireCompleteGraph ? { requireCompleteGraph: true } : {})
     });
   }
 
@@ -882,6 +887,7 @@ function parseScanLikeArgs(
     html,
     cyclonedx,
     noWaivers,
+    ...(requireCompleteGraph ? { requireCompleteGraph: true } : {}),
     ...(lockfilePath ? { lockfilePath } : {}),
     ...(archivePath ? { archivePath } : {}),
     ...(repository ? { repository } : {}),
@@ -1069,6 +1075,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
   let outputPath: string | undefined;
   let failOn: RiskSeverity | undefined;
   let allowPartialEvidence = false;
+  let requireCompleteGraph = false;
   let baselineRef: string | undefined;
   const outputFormatOptions = outputFormatOptionsFor("diff");
 
@@ -1281,6 +1288,9 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
       case "--allow-partial-evidence":
         allowPartialEvidence = true;
         break;
+      case "--require-complete-graph":
+        requireCompleteGraph = true;
+        break;
       case "--help":
       case "-h":
         return ok({ kind: "help", target: "diff" });
@@ -1367,6 +1377,7 @@ function parseDiffArgs(argv: string[]): Result<CliCommand, OhriskError> {
     ...(workspaceRootPath ? { workspaceRootPath } : {}),
     ...(outputPath ? { outputPath } : {}),
     ...(allowPartialEvidence ? { allowPartialEvidence: true } : {}),
+    ...(requireCompleteGraph ? { requireCompleteGraph: true } : {}),
     ...(failOn ? { failOn } : {})
   });
 }

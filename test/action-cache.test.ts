@@ -77,6 +77,31 @@ type CacheSettingsResult = {
 };
 
 describe("Ohrisk Action persistent artifact cache", () => {
+  test.skipIf(!bashAvailable)("forwards the complete graph gate for every command and rejects non-Boolean input", () => {
+    withWorkspace((workspace) => {
+      const step = actionStep("run");
+      if (!step.run) throw new Error("Missing Action shell source");
+      mkdirSync(path.join(workspace, "action-dist"));
+      writeFileSync(path.join(workspace, "action-dist", "cli.js"), "process.stdout.write(JSON.stringify(process.argv.slice(2)));\n");
+      const defaults = Object.fromEntries(Object.entries(step.env ?? {}).map(([name, expression]) => {
+        const input = /inputs\.([a-z-]+)/u.exec(expression)?.[1];
+        return [name, input ? action.inputs?.[input]?.default ?? "" : ""];
+      }));
+      for (const command of ["scan", "ci", "diff"]) {
+        for (const requirement of ["true", "false", "yes"]) {
+          const result = spawnSync(bashCommand, ["-s"], {
+            input: step.run, cwd: workspace, encoding: "utf8", timeout: 10_000,
+            env: { ...process.env, MSYS2_ARG_CONV_EXCL: "*", ...defaults, OHRISK_ACTION_PATH: workspace,
+              OHRISK_COMMAND: command, OHRISK_BASELINE_REF: command === "diff" ? "main" : "",
+              OHRISK_REQUIRE_COMPLETE_GRAPH: requirement, GITHUB_OUTPUT: path.join(workspace, "github-output.txt") }
+          });
+          expect(result.status).toBe(requirement === "yes" ? 1 : 0);
+          if (requirement === "yes") expect(result.stdout).toContain("require-complete-graph must be true or false");
+          else expect(JSON.parse(result.stdout).includes("--require-complete-graph")).toBe(requirement === "true");
+        }
+      }
+    });
+  });
   test.skipIf(!bashAvailable)("forwards the partial evidence override for ci and diff and rejects scan", () => {
     withWorkspace((workspace) => {
       const run = actionStep("run");

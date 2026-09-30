@@ -1,4 +1,4 @@
-import type { DiffReport } from "../../types/report-types";
+import type { DiffReport, GraphGateOutcome } from "../../types/report-types";
 import { inputSupportForLockfile } from "../ecosystems/registry";
 import type { RiskDiff } from "../diff/compare";
 import { NOTICE_ACTION } from "../policy/evaluate";
@@ -38,6 +38,7 @@ export type DiffLockfileChanges = {
 
 export type DiffReportInput = {
   completeness?: ComparisonCompleteness;
+  graphGate?: GraphGateOutcome;
   evidenceGateFailed?: boolean;
   allowPartialEvidence?: boolean;
   baselineRef: string;
@@ -56,7 +57,9 @@ export function renderDiffReport(input: DiffReportInput): string {
   const changedSummary = summarize(input.diff.changedFindings);
   const resolvedSummary = summarize(input.diff.resolvedFindings);
   const introducedSummary = summarize(input.diff.introducedFindings);
-  const nextAction = input.completeness?.status === "partial"
+  const nextAction = input.graphGate?.failed
+    ? "Provide complete dependency relationships for both revisions before relying on this comparison."
+    : input.completeness?.status === "partial"
     ? "Restore unavailable baseline or current evidence before relying on this comparison."
     : nextActionFor(input.diff.introducedFindings);
   const thresholdSummary = buildThresholdSummary(input.diff.introducedFindings, input.failOn);
@@ -66,6 +69,7 @@ export function renderDiffReport(input: DiffReportInput): string {
         $schema: OHRISK_DIFF_REPORT_SCHEMA,
         schemaVersion: OHRISK_REPORT_SCHEMA_VERSION,
         status: "risk_diff_evaluated",
+        ...(input.graphGate ? { graphGate: input.graphGate } : {}),
         ...(input.completeness ? {
           completeness: input.completeness,
           evidenceGateFailed: input.evidenceGateFailed ?? false,
@@ -134,6 +138,7 @@ function comparisonCompletenessLines(input: DiffReportInput): string[] {
   if (!input.completeness) return [];
   const { status, baseline, current } = input.completeness;
   return [
+    ...(input.graphGate ? [`Complete graph required: ${input.graphGate.required}`, `Graph gate failed: ${input.graphGate.failed}`] : []),
     `Comparison completeness: ${status}`,
     `Baseline completeness: ${baseline.status} (${baseline.unavailablePackageCount} unavailable packages)`,
     `Current completeness: ${current.status} (${current.unavailablePackageCount} unavailable packages)`,
@@ -146,7 +151,9 @@ function comparisonCompletenessLines(input: DiffReportInput): string[] {
 
 function renderMarkdownReport(input: DiffReportInput): string {
   const introducedSummary = summarize(input.diff.introducedFindings);
-  const nextAction = input.completeness?.status === "partial"
+  const nextAction = input.graphGate?.failed
+    ? "Provide complete dependency relationships for both revisions before relying on this comparison."
+    : input.completeness?.status === "partial"
     ? "Restore unavailable baseline or current evidence before relying on this comparison."
     : nextActionFor(input.diff.introducedFindings);
   const thresholdSummary = buildThresholdSummary(input.diff.introducedFindings, input.failOn);

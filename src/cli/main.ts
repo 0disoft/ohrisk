@@ -48,6 +48,7 @@ import {
 } from "../policy/config";
 import { hasFindingAtOrAbove } from "../policy/severity";
 import { incompleteEvidenceGateFailed, type ComparisonCompleteness } from "../policy/completeness";
+import { buildGraphGate } from "../policy/inspection-gate";
 import { renderCycloneDxReport } from "../report/cyclonedx-report";
 import { renderDiffReport } from "../report/diff-report";
 import { renderExplainReport } from "../report/explain-report";
@@ -365,11 +366,13 @@ async function runDiff(
     allowPartialEvidence: command.allowPartialEvidence ?? false,
     completeness
   });
+  const graphGate = buildGraphGate({ required: command.requireCompleteGraph ?? false, completeness });
 
   const output = renderDiffReport({
     baselineRef: command.baselineRef,
     completeness,
     evidenceGateFailed,
+    ...(graphGate.required ? { graphGate } : {}),
     allowPartialEvidence: command.allowPartialEvidence ?? false,
     profile: command.profile,
     prodOnly: command.prodOnly,
@@ -409,7 +412,7 @@ async function runDiff(
     return 1;
   }
 
-  if (evidenceGateFailed) return 1;
+  if (evidenceGateFailed || graphGate.failed) return 1;
 
   return 0;
 }
@@ -602,6 +605,7 @@ async function runScanAt(input: {
     normalizedLicenses: scanned.value.normalizedLicenses,
     ...(input.repository ? { repository: input.repository } : {})
   });
+  const graphGate = buildGraphGate({ required: command.requireCompleteGraph ?? false, completeness });
 
   const reportInput: ScanReportInput = {
     project: scanned.value.project,
@@ -630,6 +634,7 @@ async function runScanAt(input: {
     unmatchedWaivers: scanned.value.unmatchedWaivers,
     policy: scanned.value.policy,
     completeness,
+    ...(graphGate.required ? { graphGate } : {}),
     ...(input.repository ? { repository: input.repository } : {})
   };
 
@@ -683,6 +688,7 @@ async function runScanAt(input: {
   if (command.kind === "ci" && hasFindingAtOrAbove(scanned.value.riskFindings, command.failOn)) {
     return 1;
   }
+  if (graphGate.failed) return 1;
 
   if (
     incompleteEvidenceGateFailed({

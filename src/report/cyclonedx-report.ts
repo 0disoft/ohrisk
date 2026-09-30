@@ -10,6 +10,7 @@ import type { RiskFinding } from "../policy/types";
 import type { ProjectInput } from "../project/discover";
 import { packageUrl } from "./package-url";
 import type { RemoteRepositoryReportSource } from "./scan-report";
+import type { GraphGateOutcome } from "../../types/report-types";
 
 export type CycloneDxReportInput = {
   project: ProjectInput;
@@ -20,6 +21,7 @@ export type CycloneDxReportInput = {
   repository?: RemoteRepositoryReportSource;
   evidence?: LicenseEvidence[];
   completeness?: ScanCompleteness;
+  graphGate?: GraphGateOutcome;
 };
 
 type CycloneDxComponent = {
@@ -88,6 +90,7 @@ export function renderCycloneDxReport(input: CycloneDxReportInput): string {
         },
         properties: [
           { name: "ohrisk:inputSupport", value: JSON.stringify(projectInputSupport(input.project)) },
+          ...(input.graphGate ? [{ name: "ohrisk:graphGate", value: JSON.stringify(input.graphGate) }] : []),
           {
             name: "ohrisk:completeness",
             value: JSON.stringify(input.completeness ?? buildScanCompleteness({

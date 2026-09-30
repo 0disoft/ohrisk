@@ -61,6 +61,15 @@ const policy: PolicyConfigSummary = {
 };
 
 describe("machine-readable report schemas", () => {
+  test("validates complete graph gate outcomes in scan and diff reports", () => {
+    for (const [identifier, report] of [[OHRISK_SCAN_REPORT_SCHEMA, renderCompleteScanReport()],
+      [OHRISK_DIFF_REPORT_SCHEMA, renderCompleteDiffReport()]] as const) {
+      expectValid(identifier, { ...report, graphGate: { required: true, failed: true } });
+      expectInvalid(identifier, { ...report, graphGate: { required: true } });
+      expectInvalid(identifier, { ...report, graphGate: { required: true, failed: "false" } });
+      expectInvalid(identifier, { ...report, graphGate: { required: true, failed: false, bypass: true } });
+    }
+  });
   test("validates decision and reported-evidence fields without accepting incomplete usage scope", () => {
     const scan = renderCompleteScanReport();
     const decision = { id: "review-v1::pkg%3Anpm/example@1::distributed-app::production-only::production::direct",
