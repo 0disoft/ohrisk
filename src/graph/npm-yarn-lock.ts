@@ -2,6 +2,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import * as yarnLockfileModule from "@yarnpkg/lockfile";
 import { parse as parseYaml } from "yaml";
+import { prepareYarnClassicInput } from "./yarn-classic-input";
 
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
@@ -600,7 +601,7 @@ function parseLockfile(
   }
 
   try {
-    const parsed = yarnLockfile.parse(input);
+    const parsed = yarnLockfile.parse(prepareYarnClassicInput(input));
     if (parsed.type === "conflict") {
       return err(
         createError({

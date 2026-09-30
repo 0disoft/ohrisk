@@ -2,6 +2,15 @@
 
 ## 1.16.0 - Unreleased
 
+- Yarn classic inputs receive a bounded token preflight before the external
+  parser, rejecting unterminated strings and accepting end-of-file comments
+  without entering the dependency's unbounded lexer loops.
+
+- Parser boundary tests cover all registered input kinds with bounded seeded
+  mutations, structural graph invariants, and retained synthetic failure inputs
+  for deterministic reproduction. Archive readers use the same seeded corpus
+  under explicit entry and decompression limits.
+
 - `--require-complete-graph` and the corresponding Action input independently
   gate scan, CI, and both diff revisions on known dependency relationships.
   Partial-evidence overrides cannot bypass this requirement. Report schema 3.9

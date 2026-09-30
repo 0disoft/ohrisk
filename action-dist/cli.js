@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: daf37a41197d717cf9bbcd16584443db0ec440e24b368cfa643e9526b5885e54
+// ohrisk-action-source-sha256: 0e74fc086bd7fcfd25ffdc36f13c693e8f12edc02a5b4a7b917b5ca55ce8801e
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -29243,6 +29243,50 @@ function isObjectRecord4(value) {
 var yarnLockfileModule = __toESM(require_lockfile(), 1);
 import { existsSync as existsSync8, readdirSync as readdirSync5, statSync as statSync3 } from "node:fs";
 import path28 from "node:path";
+
+// src/graph/yarn-classic-input.ts
+function prepareYarnClassicInput(input) {
+  let offset = 0;
+  while (offset < input.length) {
+    const first = input[offset];
+    if (first === "#") {
+      const newline = input.indexOf(`
+`, offset);
+      offset = newline < 0 ? input.length : newline + 1;
+    } else if (first === '"') {
+      const start = offset++;
+      while (offset < input.length) {
+        if (input[offset] === '"' && !(input[offset - 1] === "\\" && input[offset - 2] !== "\\"))
+          break;
+        offset++;
+      }
+      if (offset === input.length)
+        throw new SyntaxError("Unterminated Yarn classic quoted token.");
+      JSON.parse(input.slice(start, ++offset));
+    } else if (/^[0-9]$/u.test(first)) {
+      while (offset < input.length && /^[0-9]$/u.test(input[offset]))
+        offset++;
+    } else if (input.startsWith("true", offset)) {
+      offset += 4;
+    } else if (input.startsWith("false", offset)) {
+      offset += 5;
+    } else if (/^[a-zA-Z/-]$/u.test(first)) {
+      while (offset < input.length && ![":", " ", `
+`, "\r", ","].includes(input[offset]))
+        offset++;
+    } else if ([" ", `
+`, "\r", ":", ","].includes(first)) {
+      offset++;
+    } else {
+      throw new SyntaxError("Invalid Yarn classic token.");
+    }
+  }
+  return input.endsWith(`
+`) ? input : input + `
+`;
+}
+
+// src/graph/npm-yarn-lock.ts
 var yarnLockfile = yarnLockfileModule;
 var YARN_MAX_PATHS_PER_PACKAGE = 64;
 function parseYarnLockfile(lockfilePath, packageJsonPath = path28.join(path28.dirname(lockfilePath), "package.json"), options = {}) {
@@ -29590,7 +29634,7 @@ function parseLockfile(input, lockfilePath) {
     return parseBerryLockfile(input, lockfilePath);
   }
   try {
-    const parsed = yarnLockfile.parse(input);
+    const parsed = yarnLockfile.parse(prepareYarnClassicInput(input));
     if (parsed.type === "conflict") {
       return err(createError({
         code: "YARN_LOCK_PARSE_FAILED",

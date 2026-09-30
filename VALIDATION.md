@@ -19,6 +19,18 @@ This document names stable validation expectations for Ohrisk changes.
 
 ## Change-Specific Expectations
 
+`test/parser-fuzz.test.ts` exercises every registered lockfile kind using a
+fixed malformed corpus plus three deterministic mutation seeds. Successful
+parses must have unique package IDs and references to existing nodes. Failed
+generated cases retain the exact synthetic text or archive bytes, seed and
+case index under ignored `.tmp/parser-fuzz-repro/`; review a retained case
+before promoting it into a permanent regression fixture. Each synchronous parse
+is checkpointed so that a timeout also retains its
+last attempted input. Successful probes replace their checkpoint with a small
+passed marker; the three fixed seeds bound retained probe-file count.
+Input generation is bounded to 32 cases per seed and 8192 UTF-16 code units per text. This checks
+boundary safety and structural invariants, not license-classification accuracy.
+
 - CLI argument or command behavior: run `bun run typecheck` and `bun test`.
 - Parser, evidence, policy, waiver, or report-renderer behavior: run `bun test`; prefer targeted tests first when debugging, then the full suite.
 - README, docs, or examples: run relevant documentation contract tests when present, and include `bun test` before claiming full readiness.

@@ -10,6 +10,19 @@ const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fix
 const yarnProjectDir = path.join(fixturesDir, "yarn-project");
 
 describe("parseYarnLockfile", () => {
+  test("accepts trailing comments without a newline and rejects unterminated quoted tokens", () => {
+    const valid = readFileSync(path.join(yarnProjectDir, "yarn.lock"), "utf8");
+    const manifest = readFileSync(path.join(yarnProjectDir, "package.json"), "utf8");
+    const baseline = parseYarnLockText({ lockfileText: valid, packageJsonText: manifest });
+    const trailing = parseYarnLockText({ lockfileText: valid.trimEnd() + "\n# trailing comment", packageJsonText: manifest });
+    expect(trailing).toEqual(baseline);
+    for (const malformed of ['"unterminated', 'example@1.0.0:\n  version "1.0.0', 'example@1.0.0:\n  resolved "escaped\\"']) {
+      const result = parseYarnLockText({ lockfileText: malformed, packageJsonText: "{}" });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe("YARN_LOCK_PARSE_FAILED");
+    }
+    expect(parseYarnLockText({ lockfileText: "# comment without a newline", packageJsonText: "{}" }).ok).toBe(true);
+  });
   test("parses direct and transitive dependencies from a Yarn v1 lockfile", () => {
     const result = parseYarnLockfile(path.join(yarnProjectDir, "yarn.lock"));
 
