@@ -2,6 +2,10 @@
 
 ## 1.16.0 - Unreleased
 
+- A bounded offline benchmark compares cold, warm and offline artifact caches
+  in fresh processes, measuring collection, nested gzip decompression, license
+  normalization, rendering and peak memory without external network traffic.
+
 - Scan and CI save bounded inspection snapshots and replay their graph and
   extracted evidence under current policies without artifact collection or
   network access. Input and payload digests, rule versions, artifact receipts,

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 97a129ae0513bf9d9a2ae0f6f3880281e312b0ab4c6b38c29a2064c1f59c3e3e
+// ohrisk-action-source-sha256: 642ab6bc479a490bb85196372b8c4d9150dfed2f703959cba9f64a4ca26b2f8e
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -50825,6 +50825,29 @@ import { TextDecoder as TextDecoder3 } from "node:util";
 
 // src/evidence/tarball.ts
 import { gunzipSync as gunzipSync3 } from "node:zlib";
+
+// src/shared/inspection-metrics.ts
+import { AsyncLocalStorage as AsyncLocalStorage2 } from "node:async_hooks";
+import { performance as performance2 } from "node:perf_hooks";
+var active = new AsyncLocalStorage2;
+function measureInspectionPhase(phase, work) {
+  const metrics = active.getStore();
+  if (!metrics)
+    return work();
+  const start = performance2.now();
+  try {
+    return work();
+  } finally {
+    record(metrics, phase, start);
+  }
+}
+function record(metrics, phase, start) {
+  metrics.milliseconds[phase] += performance2.now() - start;
+  metrics.calls[phase] += 1;
+  metrics.peakSampledRssBytes = Math.max(metrics.peakSampledRssBytes, process.memoryUsage().rss);
+}
+
+// src/evidence/tarball.ts
 var PACKAGE_TARBALL_UNPACKED_MAX_BYTES = 100 * 1024 * 1024;
 var PACKAGE_TARBALL_MAX_ENTRIES = 50000;
 function collectTarballEvidence(input) {
@@ -50951,7 +50974,7 @@ function collectPubTarballEvidence(input) {
 }
 function gunzipTarballWithLimit(input) {
   try {
-    return ok(gunzipSync3(input.tarball, { maxOutputLength: input.maxBytes }));
+    return ok(measureInspectionPhase("decompress", () => gunzipSync3(input.tarball, { maxOutputLength: input.maxBytes })));
   } catch (cause) {
     return err(createError({
       code: "TARBALL_PARSE_FAILED",
@@ -66533,7 +66556,7 @@ function reportFormatLabel(command) {
 }
 
 // node_modules/.bun/@0disoft+laqu@1.1.9/node_modules/@0disoft/laqu/dist/runtime.js
-import { AsyncLocalStorage as AsyncLocalStorage2 } from "node:async_hooks";
+import { AsyncLocalStorage as AsyncLocalStorage3 } from "node:async_hooks";
 
 // node_modules/.bun/@0disoft+laqu@1.1.9/node_modules/@0disoft/laqu/dist/unicode-width-ranges.js
 var wideRanges = [
@@ -68752,7 +68775,7 @@ class LaquRuntime {
   #processLifecycle;
   #terminalResizeCleanup;
   #handles = new Set;
-  #taskCloseContext = new AsyncLocalStorage2;
+  #taskCloseContext = new AsyncLocalStorage3;
   #activeScopedTasks = 0;
   #closeRequestedByScopedTask = false;
   #scopedTasksDrained;
@@ -69983,7 +70006,7 @@ var DEPENDENCY_TYPES = new Set(["production", "development", "optional", "peer",
 var SOURCES = new Set(["local", "registry", "sbom", "tarball", "unavailable"]);
 var RETRIEVALS = new Set(["network", "cache", "revalidated-cache", "local", "verification-only"]);
 var SHA256 = /^[0-9a-f]{64}$/u;
-var record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+var record2 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 var string = (value) => typeof value === "string" && value.length <= 1024 * 1024;
 var strings = (value, max = 50000) => Array.isArray(value) && value.length <= max && value.every(string);
 var optional = (value, check) => value === undefined || check(value);
@@ -69992,7 +70015,7 @@ var hash = (value) => string(value) && SHA256.test(value);
 var nonnegative = (value) => Number.isSafeInteger(value) && value >= 0;
 var array = (value, max, check) => Array.isArray(value) && value.length <= max && value.every(check);
 function validateSnapshotPayload(value) {
-  if (!record(value) || !record(value.tool) || !string(value.tool.version) || !string(value.tool.rulesVersion) || !string(value.tool.spdxSourceCommit) || !string(value.capturedAt) || !Number.isFinite(Date.parse(value.capturedAt)) || !hash(value.policyDigest) || !(value.waiverDigest === null || hash(value.waiverDigest)) || !boolean(value.prodOnly) || !boolean(value.artifactsTruncated) || !record(value.project) || !Array.isArray(value.project.lockfiles) || value.project.lockfiles.length < 1 || !array(value.project.lockfiles, 256, (v) => record(v) && string(v.kind) && inputSupportForLockfile(v.kind) !== undefined && string(v.path)) || !optional(value.replayedFrom, hash) || !array(value.inputs, 256, (v) => record(v) && string(v.path) && (v.status === "unavailable" || v.status === "hashed" && hash(v.sha256))) || !validGraph(value.graph) || !array(value.evidence, 50000, validEvidence) || !array(value.artifacts, 50000, validArtifact) || !optional(value.repository, validRepository))
+  if (!record2(value) || !record2(value.tool) || !string(value.tool.version) || !string(value.tool.rulesVersion) || !string(value.tool.spdxSourceCommit) || !string(value.capturedAt) || !Number.isFinite(Date.parse(value.capturedAt)) || !hash(value.policyDigest) || !(value.waiverDigest === null || hash(value.waiverDigest)) || !boolean(value.prodOnly) || !boolean(value.artifactsTruncated) || !record2(value.project) || !Array.isArray(value.project.lockfiles) || value.project.lockfiles.length < 1 || !array(value.project.lockfiles, 256, (v) => record2(v) && string(v.kind) && inputSupportForLockfile(v.kind) !== undefined && string(v.path)) || !optional(value.replayedFrom, hash) || !array(value.inputs, 256, (v) => record2(v) && string(v.path) && (v.status === "unavailable" || v.status === "hashed" && hash(v.sha256))) || !validGraph(value.graph) || !array(value.evidence, 50000, validEvidence) || !array(value.artifacts, 50000, validArtifact) || !optional(value.repository, validRepository))
     return false;
   const ids = new Set(value.graph.nodes.map((node) => node.id));
   const evidenceIds = new Set;
@@ -70006,35 +70029,35 @@ function validateSnapshotPayload(value) {
   return true;
 }
 function validGraph(value) {
-  if (!record(value) || !string(value.lockfilePath) || !array(value.nodes, 50000, validNode) || !optional(value.rootName, string) || !optional(value.lockfilePaths, strings) || !optional(value.mavenRepositoryUrls, strings) || !optional(value.warnings, strings) || !optional(value.rootDependenciesUnknown, boolean) || !optional(value.unknownDependencyNodeIds, strings) || !optional(value.diagnostics, (v) => array(v, 50000, (d) => record(d) && (d.code === "dependency_paths_truncated" || d.code === "dependency_path_depth_summarized") && nonnegative(d.affectedNodeCount) && nonnegative(d.limit) && string(d.message))))
+  if (!record2(value) || !string(value.lockfilePath) || !array(value.nodes, 50000, validNode) || !optional(value.rootName, string) || !optional(value.lockfilePaths, strings) || !optional(value.mavenRepositoryUrls, strings) || !optional(value.warnings, strings) || !optional(value.rootDependenciesUnknown, boolean) || !optional(value.unknownDependencyNodeIds, strings) || !optional(value.diagnostics, (v) => array(v, 50000, (d) => record2(d) && (d.code === "dependency_paths_truncated" || d.code === "dependency_path_depth_summarized") && nonnegative(d.affectedNodeCount) && nonnegative(d.limit) && string(d.message))))
     return false;
   const ids = new Set(value.nodes.map((node) => node.id));
   if (ids.size !== value.nodes.length)
     return false;
   const reference = (v) => string(v) && ids.has(v);
-  return optional(value.edges, (v) => array(v, 500000, (edge) => record(edge) && reference(edge.to) && optional(edge.from, reference) && DEPENDENCY_TYPES.has(edge.dependencyType) && optional(edge.origins, validOrigins))) && optional(value.unknownDependencyNodeIds, (v) => array(v, 50000, reference)) && optional(value.unresolvedDependencies, (v) => array(v, 50000, (item) => record(item) && optional(item.from, reference) && string(item.name) && DEPENDENCY_TYPES.has(item.dependencyType) && (item.reason === "missing_installation" || item.reason === "unproven_installation")));
+  return optional(value.edges, (v) => array(v, 500000, (edge) => record2(edge) && reference(edge.to) && optional(edge.from, reference) && DEPENDENCY_TYPES.has(edge.dependencyType) && optional(edge.origins, validOrigins))) && optional(value.unknownDependencyNodeIds, (v) => array(v, 50000, reference)) && optional(value.unresolvedDependencies, (v) => array(v, 50000, (item) => record2(item) && optional(item.from, reference) && string(item.name) && DEPENDENCY_TYPES.has(item.dependencyType) && (item.reason === "missing_installation" || item.reason === "unproven_installation")));
 }
 function validOrigins(value) {
-  return array(value, 256, (v) => record(v) && string(v.lockfileKind) && string(v.lockfilePath));
+  return array(value, 256, (v) => record2(v) && string(v.lockfileKind) && string(v.lockfilePath));
 }
 function validNode(value) {
-  return record(value) && string(value.id) && string(value.name) && string(value.version) && ECOSYSTEMS.has(value.ecosystem) && DEPENDENCY_TYPES.has(value.dependencyType) && boolean(value.direct) && array(value.paths, 64, (v) => strings(v, 512)) && optional(value.origins, validOrigins) && optional(value.installNames, strings) && ["resolved", "integrity", "yarnCacheChecksum", "goModIntegrity", "purlSubpath"].every((key) => optional(value[key], string)) && optional(value.artifactIdentityConflict, (v) => v === true) && optional(value.purlQualifiers, (v) => record(v) && Object.values(v).every(string)) && optional(value.artifactVariants, (v) => array(v, 256, (item) => record(item) && ["resolved", "integrity", "yarnCacheChecksum", "goModIntegrity"].every((key) => optional(item[key], string))));
+  return record2(value) && string(value.id) && string(value.name) && string(value.version) && ECOSYSTEMS.has(value.ecosystem) && DEPENDENCY_TYPES.has(value.dependencyType) && boolean(value.direct) && array(value.paths, 64, (v) => strings(v, 512)) && optional(value.origins, validOrigins) && optional(value.installNames, strings) && ["resolved", "integrity", "yarnCacheChecksum", "goModIntegrity", "purlSubpath"].every((key) => optional(value[key], string)) && optional(value.artifactIdentityConflict, (v) => v === true) && optional(value.purlQualifiers, (v) => record2(v) && Object.values(v).every(string)) && optional(value.artifactVariants, (v) => array(v, 256, (item) => record2(item) && ["resolved", "integrity", "yarnCacheChecksum", "goModIntegrity"].every((key) => optional(item[key], string))));
 }
 function validEvidence(value) {
-  return record(value) && string(value.packageId) && SOURCES.has(value.source) && strings(value.warnings) && array(value.files, 256, (file) => record(file) && string(file.path) && string(file.text) && ["license", "notice", "copying", "other"].includes(file.kind) && optional(file.scope, (v) => v === "component")) && ["packageJsonLicense", "metadataLicense", "metadataSource", "sbomDeclaredLicense", "sbomConcludedLicense"].every((key) => optional(value[key], string)) && optional(value.packageJsonPrivate, boolean) && optional(value.artifactIdentityConflict, (v) => v === true) && optional(value.metadataLicenseKind, (v) => v === "declared" || v === "classifier") && optional(value.goModuleRequirements, strings) && optional(value.conflictingLicenseClaims, strings);
+  return record2(value) && string(value.packageId) && SOURCES.has(value.source) && strings(value.warnings) && array(value.files, 256, (file) => record2(file) && string(file.path) && string(file.text) && ["license", "notice", "copying", "other"].includes(file.kind) && optional(file.scope, (v) => v === "component")) && ["packageJsonLicense", "metadataLicense", "metadataSource", "sbomDeclaredLicense", "sbomConcludedLicense"].every((key) => optional(value[key], string)) && optional(value.packageJsonPrivate, boolean) && optional(value.artifactIdentityConflict, (v) => v === true) && optional(value.metadataLicenseKind, (v) => v === "declared" || v === "classifier") && optional(value.goModuleRequirements, strings) && optional(value.conflictingLicenseClaims, strings);
 }
 function validArtifact(value) {
-  return record(value) && string(value.packageId) && hash(value.sha256) && nonnegative(value.byteLength) && optional(value.requestedOrigin, (v) => string(v) && /^https?:\/\//u.test(v) && (() => {
+  return record2(value) && string(value.packageId) && hash(value.sha256) && nonnegative(value.byteLength) && optional(value.requestedOrigin, (v) => string(v) && /^https?:\/\//u.test(v) && (() => {
     try {
       const url = new URL(v);
       return !url.username && !url.password && !url.search && !url.hash;
     } catch {
       return false;
     }
-  })()) && array(value.retrievals, 5, (v) => RETRIEVALS.has(v)) && array(value.checks, 256, (v) => record(v) && string(v.kind) && string(v.value));
+  })()) && array(value.retrievals, 5, (v) => RETRIEVALS.has(v)) && array(value.checks, 256, (v) => record2(v) && string(v.kind) && string(v.value));
 }
 function validRepository(value) {
-  return record(value) && string(value.owner) && string(value.name) && ["submodules", "symbolicLinks", "nonPortablePaths"].every((key) => record(value[key]) && nonnegative(value[key].skippedCount) && strings(value[key].skippedPaths, 256) && boolean(value[key].pathsTruncated)) && record(value.submodules) && ["ignore", "reject"].includes(value.submodules.mode);
+  return record2(value) && string(value.owner) && string(value.name) && ["submodules", "symbolicLinks", "nonPortablePaths"].every((key) => record2(value[key]) && nonnegative(value[key].skippedCount) && strings(value[key].skippedPaths, 256) && boolean(value[key].pathsTruncated)) && record2(value.submodules) && ["ignore", "reject"].includes(value.submodules.mode);
 }
 
 // src/snapshot/inspection-snapshot.ts

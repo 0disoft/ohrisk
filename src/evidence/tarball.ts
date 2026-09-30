@@ -1,5 +1,6 @@
 import { gunzipSync } from "node:zlib";
 import { parse as parseYaml } from "yaml";
+import { measureInspectionPhase } from "../shared/inspection-metrics";
 
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
@@ -181,7 +182,7 @@ export function gunzipTarballWithLimit(input: {
   maxBytes: number;
 }): Result<Buffer, OhriskError> {
   try {
-    return ok(gunzipSync(input.tarball, { maxOutputLength: input.maxBytes }));
+    return ok(measureInspectionPhase("decompress", () => gunzipSync(input.tarball, { maxOutputLength: input.maxBytes })));
   } catch (cause) {
     return err(
       createError({
