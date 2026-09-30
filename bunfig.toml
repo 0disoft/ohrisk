@@ -4,7 +4,8 @@ linker = "isolated"
 
 [test]
 coverageDir = "coverage"
-coverageThreshold = { lines = 0.80, functions = 0.75, statements = 0.80 }
+# The project gate enforces global 82% line and 90% function coverage in
+# scripts/check-coverage.ts. Bun's threshold is per file, so it is not used here.
 coveragePathIgnorePatterns = [
   "src/report/locales/**",
   "src/types/**"

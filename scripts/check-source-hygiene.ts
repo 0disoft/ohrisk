@@ -153,6 +153,9 @@ const bunfig = readFileSync("bunfig.toml", "utf8");
 if (!bunfig.includes("[install]") || !bunfig.includes("exact = true")) {
   failures.push("bunfig.toml must preserve exact dependency installation");
 }
+if (/^\s*coverageThreshold\s*=/m.test(bunfig)) {
+  failures.push("bunfig.toml must leave per-file thresholds unset; use the global LCOV gate");
+}
 const coverageScriptPath = path.join("scripts", "check-coverage.ts");
 if (packageJson.scripts?.["test:coverage"] !== "bun scripts/check-coverage.ts") {
   failures.push("package.json test:coverage must execute the repository coverage gate");

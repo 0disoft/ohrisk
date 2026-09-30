@@ -74,7 +74,7 @@ function run(): void {
 
   const result = spawnSync(
     process.execPath,
-    ["test", "--coverage", "--coverage-reporter=lcov"],
+    ["test", "--coverage", "--coverage-reporter=lcov", "--coverage-reporter=text"],
     {
       cwd: repoRoot,
       env: process.env,

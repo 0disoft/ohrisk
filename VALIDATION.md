@@ -10,6 +10,9 @@ This document names stable validation expectations for Ohrisk changes.
 
 - typecheck: `bun run typecheck`
 - test: `bun test`
+- coverage: `bun run test:coverage` enforces global LCOV totals of at least 82%
+  lines and 90% functions. Bun's per-file threshold is intentionally unset so
+  supported Bun versions use the same repository-owned gate.
 - release-check: `bun run verify:release`
 - package-smoke: covered by `bun run verify:release`
 - scaffold-doctor: `ssealed doctor --strict`
