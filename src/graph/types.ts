@@ -41,6 +41,13 @@ export type DependencyOrigin = {
   lockfilePath: string;
 };
 
+export type DependencyArtifact = {
+  resolved?: string;
+  integrity?: string;
+  yarnCacheChecksum?: string;
+  goModIntegrity?: string;
+};
+
 export type DependencyNode = {
   id: string;
   name: string;
@@ -53,6 +60,10 @@ export type DependencyNode = {
   yarnCacheChecksum?: string;
   /** Internal checksum for the module's standalone go.mod response. */
   goModIntegrity?: string;
+  /** Source artifact declarations retained for deterministic multi-input merging. */
+  artifactVariants?: DependencyArtifact[];
+  /** No single artifact is justified by the input declarations. */
+  artifactIdentityConflict?: true;
   dependencyType: DependencyType;
   direct: boolean;
   paths: string[][];

@@ -269,8 +269,11 @@ describe("multi-lockfile projects", () => {
     });
     expect(merged.nodes[0]?.paths).toContainEqual(["root", "parent", "shared@1.0.0"]);
     expect(merged.warnings).toEqual([
-      "Multiple lockfiles resolve pkg:npm/shared@1.0.0 to different artifact locations.",
-      "Multiple lockfiles declare different integrity values for pkg:npm/shared@1.0.0."
+      "Multiple lockfiles declare conflicting artifact identities for pkg:npm/shared@1.0.0. Evidence collection requires a resolved identity."
     ]);
+    expect(merged.nodes[0]?.artifactIdentityConflict).toBe(true);
+    expect(merged.nodes[0]?.artifactVariants).toHaveLength(2);
+    expect(merged.nodes[0]?.resolved).toBeUndefined();
+    expect(merged.nodes[0]?.integrity).toBeUndefined();
   });
 });

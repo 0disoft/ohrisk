@@ -3,6 +3,7 @@ import type { ProjectLockfile } from "../project/discover";
 import { packageUrl } from "./package-url";
 import { disambiguatePackageRecordIds } from "./package-identity";
 import { dependencyEdgesForGraph } from "./dependency-edges";
+import { mergeArtifactIdentity } from "./artifact-identity";
 import type {
   DependencyGraph,
   DependencyEdge,
@@ -79,9 +80,6 @@ export function mergeDependencyGraphs(graphs: SourcedDependencyGraph[]): Depende
       const canonicalId = canonicalIdByPurl.get(purl) ?? node.id;
       const remapped = remapNode(node, canonicalId, idMap, origin);
       const existing = nodesByPurl.get(purl);
-      if (existing) {
-        warnings.push(...artifactConflictWarnings(existing, remapped, purl));
-      }
       nodesByPurl.set(purl, existing ? mergeDependencyNode(existing, remapped) : remapped);
     }
 
@@ -100,6 +98,11 @@ export function mergeDependencyGraphs(graphs: SourcedDependencyGraph[]): Depende
   }
 
   const lockfilePaths = unique(graphs.map((item) => item.source.lockfilePath));
+  for (const [purl, node] of nodesByPurl) {
+    if (node.artifactIdentityConflict) {
+      warnings.push(`Multiple lockfiles declare conflicting artifact identities for ${purl}. Evidence collection requires a resolved identity.`);
+    }
+  }
   const rootNames = unique(
     graphs.flatMap((item) => item.graph.rootName ? [item.graph.rootName] : [])
   );
@@ -164,50 +167,9 @@ function remapNode(
 }
 
 
-function artifactConflictWarnings(
-  left: DependencyNode,
-  right: DependencyNode,
-  purl: string
-): string[] {
-  const warnings: string[] = [];
-  if (left.resolved && right.resolved && left.resolved !== right.resolved) {
-    warnings.push(`Multiple lockfiles resolve ${purl} to different artifact locations.`);
-  }
-  if (left.integrity && right.integrity && left.integrity !== right.integrity) {
-    warnings.push(`Multiple lockfiles declare different integrity values for ${purl}.`);
-  }
-  if (
-    left.yarnCacheChecksum
-    && right.yarnCacheChecksum
-    && left.yarnCacheChecksum !== right.yarnCacheChecksum
-  ) {
-    warnings.push(`Multiple lockfiles declare different Yarn cache checksums for ${purl}.`);
-  }
-  if (
-    left.goModIntegrity
-    && right.goModIntegrity
-    && left.goModIntegrity !== right.goModIntegrity
-  ) {
-    warnings.push(`Multiple lockfiles declare different go.mod integrity values for ${purl}.`);
-  }
-  return warnings;
-}
-
 function mergeDependencyNode(left: DependencyNode, right: DependencyNode): DependencyNode {
-  return {
+  const merged: DependencyNode = {
     ...left,
-    ...(left.resolved ? {} : right.resolved ? { resolved: right.resolved } : {}),
-    ...(left.integrity ? {} : right.integrity ? { integrity: right.integrity } : {}),
-    ...(left.yarnCacheChecksum
-      ? {}
-      : right.yarnCacheChecksum
-        ? { yarnCacheChecksum: right.yarnCacheChecksum }
-        : {}),
-    ...(left.goModIntegrity
-      ? {}
-      : right.goModIntegrity
-        ? { goModIntegrity: right.goModIntegrity }
-        : {}),
     ...((left.installNames?.length ?? 0) > 0 || (right.installNames?.length ?? 0) > 0
       ? { installNames: unique([...(left.installNames ?? []), ...(right.installNames ?? [])]) }
       : {}),
@@ -216,6 +178,10 @@ function mergeDependencyNode(left: DependencyNode, right: DependencyNode): Depen
     paths: uniquePaths([...left.paths, ...right.paths]),
     origins: uniqueOrigins([...(left.origins ?? []), ...(right.origins ?? [])])
   };
+  for (const field of ["resolved", "integrity", "yarnCacheChecksum", "goModIntegrity", "artifactVariants", "artifactIdentityConflict"] as const) {
+    delete merged[field];
+  }
+  return Object.assign(merged, mergeArtifactIdentity(left, right));
 }
 
 function mergeDependencyType(left: DependencyType, right: DependencyType): DependencyType {

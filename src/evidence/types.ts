@@ -24,6 +24,7 @@ export type MetadataLicenseKind = "declared" | "classifier";
 export type EvidenceDiagnosticCode =
   | "collector_warning"
   | "license_evidence_missing"
+  | "artifact_identity_conflict"
   | "source_unavailable";
 
 export type EvidenceDiagnostic = {
@@ -41,6 +42,7 @@ export type EvidenceSourceCounts = {
 
 export type LicenseEvidence = {
   packageId: string;
+  artifactIdentityConflict?: true;
   /** Internal verified Go module graph edges; not serialized into report contracts. */
   goModuleRequirements?: string[];
   /** License claims preserved from conflicting artifacts merged into one package node. */

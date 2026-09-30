@@ -304,9 +304,11 @@ describe("mergeDependencyGraphs", () => {
       message: "CycloneDX dependency paths were limited."
     }]);
     expect(merged.warnings).toEqual([
-      "Multiple lockfiles resolve pkg:npm/%40scope/example@1.0.0 to different artifact locations.",
-      "Multiple lockfiles declare different integrity values for pkg:npm/%40scope/example@1.0.0."
+      "Multiple lockfiles declare conflicting artifact identities for pkg:npm/%40scope/example@1.0.0. Evidence collection requires a resolved identity."
     ]);
+    expect(merged.nodes[0]?.artifactIdentityConflict).toBe(true);
+    expect(merged.nodes[0]?.resolved).toBeUndefined();
+    expect(merged.nodes[0]?.integrity).toBeUndefined();
   });
 
   test("preserves conflicting license claims from different artifacts", () => {

@@ -2,6 +2,15 @@
 
 ## 1.16.0 - Unreleased
 
+- Merged package artifacts no longer select the first input when locations or
+  checksums conflict. Unresolved identities are unavailable evidence and produce
+  a structured `artifact_identity_conflict` diagnostic, so strict CI and diff
+  gates reject them. Equal supported digest encodings permit deterministic
+  mirror collection with normal archive integrity verification.
+- Release verification uses the global 82% line and 90% function coverage gate
+  consistently across Bun versions. Installed package smoke tests check the
+  current report schema 3.6 exports.
+
 - Mixed-ecosystem scans and SBOM inputs now keep packages with the same name
   and version separate, including their paths, license evidence, and findings.
   Existing waivers for formerly colliding package IDs require review.

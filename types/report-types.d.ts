@@ -239,6 +239,7 @@ export type LicenseEvidenceSource =
 export type EvidenceDiagnosticCode =
   | "collector_warning"
   | "license_evidence_missing"
+  | "artifact_identity_conflict"
   | "source_unavailable";
 
 export type EvidenceSourceCounts = {

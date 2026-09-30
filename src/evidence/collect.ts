@@ -619,6 +619,13 @@ async function collectNodeEvidence(input: {
   loadNugetServiceIndex: NugetServiceIndexLoader;
   cargoGitHubArchiveEvidenceCache: CargoGitHubArchiveEvidenceCache;
 }): Promise<Result<LicenseEvidence, OhriskError>> {
+  if (input.node.artifactIdentityConflict) {
+    return ok({
+      packageId: input.node.id, source: "unavailable", files: [],
+      artifactIdentityConflict: true,
+      warnings: ["Conflicting artifact identities were declared for this package; resolve the input conflict before collecting evidence."]
+    });
+  }
   const projectContainedGoReplacementEvidence =
     !input.allowLocalProjectEvidence
     && input.allowProjectContainedGoReplacementEvidence

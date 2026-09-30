@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: d8fa9eacaafd6f7ca34afae8650ec53f7cb7f664127cb07a284463b0ce79c1e3
+// ohrisk-action-source-sha256: 09ffe4f0c899ead450cdfae54d5942f3544716f8fdf21528562199f25bbee1c4
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -18193,6 +18193,157 @@ function edgeLimitError(limit) {
   }));
 }
 
+// src/evidence/package-integrity.ts
+import { createHash, timingSafeEqual } from "node:crypto";
+var SUPPORTED_INTEGRITY_DIGEST_BYTES = {
+  sha1: 20,
+  sha256: 32,
+  sha384: 48,
+  sha512: 64
+};
+function verifyPackageIntegrity(input) {
+  if (!input.integrity) {
+    return ok(undefined);
+  }
+  const supported = parseSupportedIntegrityEntries(input.integrity);
+  if (supported.length === 0) {
+    return err(createError({
+      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
+      category: "unsupported_input",
+      message: "Package artifact integrity could not be verified because no supported digest was found.",
+      details: {
+        packageId: input.packageId,
+        resolved: input.resolvedDetail,
+        integrity: input.integrity,
+        supportedAlgorithms: ["sha512", "sha384", "sha256", "sha1"]
+      }
+    }));
+  }
+  const computed = [];
+  for (const entry of supported) {
+    const actualDigest = createHash(entry.algorithm).update(input.artifact).digest();
+    const actual = `${entry.algorithm}-${actualDigest.toString("base64")}`;
+    computed.push(actual);
+    if (actualDigest.byteLength === entry.digest.byteLength && timingSafeEqual(actualDigest, entry.digest)) {
+      return ok(undefined);
+    }
+  }
+  return err(createError({
+    code: "PACKAGE_INTEGRITY_CHECK_FAILED",
+    category: "unsupported_input",
+    message: "Package artifact integrity did not match the lockfile digest.",
+    details: {
+      packageId: input.packageId,
+      resolved: input.resolvedDetail,
+      integrity: input.integrity,
+      computed
+    }
+  }));
+}
+function sha256HexIntegrity(sha256) {
+  return `sha256-${Buffer.from(sha256, "hex").toString("base64")}`;
+}
+function parseSupportedIntegrityEntries(integrity) {
+  return integrity.split(/\s+/).map((entry) => {
+    const separatorIndex = entry.indexOf("-");
+    if (separatorIndex <= 0) {
+      return;
+    }
+    const algorithm = entry.slice(0, separatorIndex);
+    const digest = entry.slice(separatorIndex + 1);
+    if (!isSupportedIntegrityAlgorithm(algorithm) || digest === "") {
+      return;
+    }
+    const decoded = decodeIntegrityDigest({ algorithm, digest });
+    if (!decoded) {
+      return;
+    }
+    return {
+      algorithm,
+      digest: decoded
+    };
+  }).filter((entry) => entry !== undefined);
+}
+function isSupportedIntegrityAlgorithm(value) {
+  return Object.prototype.hasOwnProperty.call(SUPPORTED_INTEGRITY_DIGEST_BYTES, value);
+}
+function decodeIntegrityDigest(input) {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(input.digest)) {
+    return;
+  }
+  const paddingStart = input.digest.indexOf("=");
+  if (paddingStart !== -1 && !/^=+$/.test(input.digest.slice(paddingStart))) {
+    return;
+  }
+  if (input.digest.length % 4 === 1) {
+    return;
+  }
+  const decoded = Buffer.from(input.digest, "base64");
+  if (decoded.byteLength !== SUPPORTED_INTEGRITY_DIGEST_BYTES[input.algorithm]) {
+    return;
+  }
+  const normalizedInput = input.digest.replace(/=+$/, "");
+  const normalizedDecoded = decoded.toString("base64").replace(/=+$/, "");
+  return normalizedDecoded === normalizedInput ? decoded : undefined;
+}
+
+// src/graph/artifact-identity.ts
+var ARTIFACT_FIELDS = ["resolved", "integrity", "yarnCacheChecksum", "goModIntegrity"];
+function canonicalIntegrity(value) {
+  return [...new Set(value.trim().split(/\s+/).map((token) => {
+    const entry = parseSupportedIntegrityEntries(token)[0];
+    return entry ? `${entry.algorithm}-${entry.digest.toString("base64")}` : token;
+  }))].sort().join(" ");
+}
+function artifactDeclaration(node) {
+  const artifact = {};
+  for (const field of ARTIFACT_FIELDS) {
+    const value = node[field];
+    if (value)
+      artifact[field] = field === "integrity" ? canonicalIntegrity(value) : value;
+  }
+  return artifact;
+}
+function compatible(left, right) {
+  for (const field of ARTIFACT_FIELDS) {
+    if (field === "resolved")
+      continue;
+    if (left[field] && right[field] && left[field] !== right[field])
+      return false;
+  }
+  if (left.resolved && right.resolved && left.resolved !== right.resolved) {
+    return left.integrity !== undefined && left.integrity === right.integrity && parseSupportedIntegrityEntries(left.integrity).length > 0;
+  }
+  return true;
+}
+function mergeArtifactIdentity(left, right) {
+  const byKey = new Map;
+  for (const node of [left, right]) {
+    for (const source of node.artifactVariants ?? [node]) {
+      const artifact = artifactDeclaration(source);
+      if (Object.keys(artifact).length > 0)
+        byKey.set(JSON.stringify(artifact), artifact);
+    }
+  }
+  const variants = [...byKey.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, artifact]) => artifact);
+  let conflicting = left.artifactIdentityConflict === true || right.artifactIdentityConflict === true;
+  for (let index = 0;index < variants.length; index++) {
+    for (const other of variants.slice(index + 1)) {
+      conflicting ||= !compatible(variants[index], other);
+    }
+  }
+  const retained = variants.length > 1 ? { artifactVariants: variants } : {};
+  if (conflicting)
+    return { ...retained, artifactIdentityConflict: true };
+  const merged = {};
+  for (const field of ARTIFACT_FIELDS) {
+    const values = variants.flatMap((artifact) => artifact[field] ? [artifact[field]] : []).sort();
+    if (values[0] !== undefined)
+      merged[field] = values[0];
+  }
+  return { ...merged, ...retained };
+}
+
 // src/graph/merge.ts
 function mergeDependencyGraphs(graphs) {
   const first = graphs[0];
@@ -18243,9 +18394,6 @@ function mergeDependencyGraphs(graphs) {
       const canonicalId = canonicalIdByPurl.get(purl) ?? node.id;
       const remapped = remapNode(node, canonicalId, idMap, origin);
       const existing = nodesByPurl.get(purl);
-      if (existing) {
-        warnings.push(...artifactConflictWarnings(existing, remapped, purl));
-      }
       nodesByPurl.set(purl, existing ? mergeDependencyNode(existing, remapped) : remapped);
     }
     for (const evidence of item.graph.embeddedEvidence ?? []) {
@@ -18259,6 +18407,11 @@ function mergeDependencyGraphs(graphs) {
     mavenRepositoryUrls.push(...item.graph.mavenRepositoryUrls ?? []);
   }
   const lockfilePaths = unique(graphs.map((item) => item.source.lockfilePath));
+  for (const [purl, node] of nodesByPurl) {
+    if (node.artifactIdentityConflict) {
+      warnings.push(`Multiple lockfiles declare conflicting artifact identities for ${purl}. Evidence collection requires a resolved identity.`);
+    }
+  }
   const rootNames = unique(graphs.flatMap((item) => item.graph.rootName ? [item.graph.rootName] : []));
   return {
     ...rootNames.length === 1 ? { rootName: rootNames[0] } : {},
@@ -18300,35 +18453,19 @@ function remapNode(node, canonicalId, idMap, origin) {
     origins: uniqueOrigins([...node.origins ?? [], origin])
   };
 }
-function artifactConflictWarnings(left, right, purl) {
-  const warnings = [];
-  if (left.resolved && right.resolved && left.resolved !== right.resolved) {
-    warnings.push(`Multiple lockfiles resolve ${purl} to different artifact locations.`);
-  }
-  if (left.integrity && right.integrity && left.integrity !== right.integrity) {
-    warnings.push(`Multiple lockfiles declare different integrity values for ${purl}.`);
-  }
-  if (left.yarnCacheChecksum && right.yarnCacheChecksum && left.yarnCacheChecksum !== right.yarnCacheChecksum) {
-    warnings.push(`Multiple lockfiles declare different Yarn cache checksums for ${purl}.`);
-  }
-  if (left.goModIntegrity && right.goModIntegrity && left.goModIntegrity !== right.goModIntegrity) {
-    warnings.push(`Multiple lockfiles declare different go.mod integrity values for ${purl}.`);
-  }
-  return warnings;
-}
 function mergeDependencyNode(left, right) {
-  return {
+  const merged = {
     ...left,
-    ...left.resolved ? {} : right.resolved ? { resolved: right.resolved } : {},
-    ...left.integrity ? {} : right.integrity ? { integrity: right.integrity } : {},
-    ...left.yarnCacheChecksum ? {} : right.yarnCacheChecksum ? { yarnCacheChecksum: right.yarnCacheChecksum } : {},
-    ...left.goModIntegrity ? {} : right.goModIntegrity ? { goModIntegrity: right.goModIntegrity } : {},
     ...(left.installNames?.length ?? 0) > 0 || (right.installNames?.length ?? 0) > 0 ? { installNames: unique([...left.installNames ?? [], ...right.installNames ?? []]) } : {},
     dependencyType: mergeDependencyType(left.dependencyType, right.dependencyType),
     direct: left.direct || right.direct,
     paths: uniquePaths([...left.paths, ...right.paths]),
     origins: uniqueOrigins([...left.origins ?? [], ...right.origins ?? []])
   };
+  for (const field of ["resolved", "integrity", "yarnCacheChecksum", "goModIntegrity", "artifactVariants", "artifactIdentityConflict"]) {
+    delete merged[field];
+  }
+  return Object.assign(merged, mergeArtifactIdentity(left, right));
 }
 function mergeDependencyType(left, right) {
   const rank = {
@@ -24656,13 +24793,13 @@ function parseHackagePackage(input) {
     name: match[1],
     version: match[2],
     resolved: hackageCabalUrl(match[1], match[2]),
-    integrity: sha256HexIntegrity(checksum)
+    integrity: sha256HexIntegrity2(checksum)
   };
 }
 function hackageCabalUrl(packageName, version) {
   return `https://hackage.haskell.org/package/${packageName}-${version}/${packageName}.cabal`;
 }
-function sha256HexIntegrity(sha256) {
+function sha256HexIntegrity2(sha256) {
   return `sha256-${Buffer.from(sha256, "hex").toString("base64")}`;
 }
 function stackLockShapeError(lockfilePath, reason, index, entry) {
@@ -39841,7 +39978,7 @@ function noProjectError(source) {
 }
 
 // src/archive/archive-reader.ts
-import { createHash } from "node:crypto";
+import { createHash as createHash2 } from "node:crypto";
 import { closeSync as closeSync3, fstatSync, openSync as openSync3, readSync as readSync3, realpathSync as realpathSync2, statSync as statSync6 } from "node:fs";
 import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import { gunzipSync, inflateRawSync } from "node:zlib";
@@ -39934,7 +40071,7 @@ function readOwnedArchiveBuffer(input) {
     checkDeadline(budget, safeName);
     const format = detectFormat(input.bytes, input.formatHint, safeName);
     const indexed = format === "zip" ? parseZip(input.bytes, budget, safeName) : parseTarContainer(input.bytes, format, budget, safeName, input.tarLinkPolicy ?? "reject", input.onTarSymlink);
-    const sha256 = createHash("sha256").update(input.bytes).digest("hex");
+    const sha256 = createHash2("sha256").update(input.bytes).digest("hex");
     checkDeadline(budget, safeName);
     const source = createArchiveSource({
       format,
@@ -40002,7 +40139,7 @@ function createArchiveSource(input) {
       chargeHashing(input.budget, entry.size, input.basename, entry.path);
       const data = entry.materialize(startedAt);
       checkDeadlineSince(input.budget, startedAt, input.basename, entry.path);
-      return ok(createHash("sha256").update(data).digest("hex"));
+      return ok(createHash2("sha256").update(data).digest("hex"));
     } catch (cause) {
       return err(toOhriskError(cause, "ARCHIVE_READ_FAILED", "invalid_input", input.basename));
     }
@@ -40985,7 +41122,7 @@ function findingKey(finding) {
 }
 
 // src/evidence/cache.ts
-import { createHash as createHash2 } from "node:crypto";
+import { createHash as createHash3 } from "node:crypto";
 import {
   existsSync as existsSync18,
   lstatSync as lstatSync3,
@@ -41924,7 +42061,7 @@ function isRegularFile(filePath) {
   }
 }
 function sha256(bytes) {
-  return createHash2("sha256").update(bytes).digest("hex");
+  return createHash3("sha256").update(bytes).digest("hex");
 }
 function removeQuietly(filePath) {
   try {
@@ -42584,7 +42721,7 @@ function abortableDelay(ms, signal) {
 }
 
 // src/evidence/cargo-crate.ts
-import { createHash as createHash3, timingSafeEqual } from "node:crypto";
+import { createHash as createHash4, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
 import path52 from "node:path";
 
 // src/license/spdx-catalog.ts
@@ -44998,8 +45135,8 @@ function unavailableCargoCrateEvidence(packageId, warning) {
 }
 function verifyCargoCrateIntegrity(input) {
   const expected = decodeSha256Integrity(input.integrity);
-  const actual = createHash3("sha256").update(input.crate).digest();
-  if (!expected || expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+  const actual = createHash4("sha256").update(input.crate).digest();
+  if (!expected || expected.length !== actual.length || !timingSafeEqual2(expected, actual)) {
     return err(createError({
       code: "PACKAGE_INTEGRITY_CHECK_FAILED",
       category: "unsupported_input",
@@ -50148,7 +50285,7 @@ function isFile4(pathname) {
 }
 
 // src/evidence/zig-package.ts
-import { createHash as createHash4 } from "node:crypto";
+import { createHash as createHash5 } from "node:crypto";
 import { existsSync as existsSync44, readdirSync as readdirSync33, statSync as statSync32 } from "node:fs";
 import path78 from "node:path";
 import { TextDecoder as TextDecoder3 } from "node:util";
@@ -50626,14 +50763,14 @@ function computeZigPackageHash(entries) {
   const perFileHashes = [];
   let totalSize = 0;
   for (const entry of sorted) {
-    const hasher = createHash4("sha256");
+    const hasher = createHash5("sha256");
     hasher.update(Buffer.from(entry.normalizedPath, "latin1"));
     hasher.update(Buffer.from([0, 0]));
     hasher.update(entry.data);
     perFileHashes.push(hasher.digest());
     totalSize += entry.data.length;
   }
-  const overallHasher = createHash4("sha256");
+  const overallHasher = createHash5("sha256");
   for (const fileHash of perFileHashes) {
     overallHasher.update(fileHash);
   }
@@ -51299,7 +51436,7 @@ function adapter(id, lockfileKinds, packageEcosystems) {
 }
 
 // src/evidence/go-module-zip.ts
-import { createHash as createHash5, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+import { createHash as createHash6, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
 import { TextDecoder as TextDecoder4 } from "node:util";
 var GO_MODULE_ZIP_MAX_ENTRIES = 65535;
 var GO_MODULE_ZIP_ENTRY_MAX_BYTES = 50 * 1024 * 1024;
@@ -51424,7 +51561,7 @@ function readVerifiedGoModuleRequirements(input) {
   return [...new Set(parsed.value.records.map((record) => record.modulePath))].sort();
 }
 function hashGoModuleArchive(input) {
-  const summary = createHash5("sha256");
+  const summary = createHash6("sha256");
   const entries = [...input.entries].sort((left, right) => {
     const leftName = left.type === "directory" ? `${left.path}/` : left.path;
     const rightName = right.type === "directory" ? `${right.path}/` : right.path;
@@ -51442,7 +51579,7 @@ function hashGoModuleArchive(input) {
     }
     let fileDigest;
     if (entry.type === "directory") {
-      fileDigest = createHash5("sha256").digest("hex");
+      fileDigest = createHash6("sha256").digest("hex");
     } else {
       const hashed = input.hashEntrySha256(entry.path);
       if (!hashed.ok) {
@@ -51456,15 +51593,15 @@ function hashGoModuleArchive(input) {
   return ok(`h1:${summary.digest("base64")}`);
 }
 function hashGoModBytes(goMod) {
-  const fileDigest = createHash5("sha256").update(goMod).digest("hex");
-  const summary = createHash5("sha256").update(`${fileDigest}  go.mod
+  const fileDigest = createHash6("sha256").update(goMod).digest("hex");
+  const summary = createHash6("sha256").update(`${fileDigest}  go.mod
 `, "utf8").digest("base64");
   return `h1:${summary}`;
 }
 function equalGoChecksums(expected, computed) {
   const expectedDigest = decodeGoChecksum(expected);
   const computedDigest = decodeGoChecksum(computed);
-  return expectedDigest !== undefined && computedDigest !== undefined && expectedDigest.length === computedDigest.length && timingSafeEqual2(expectedDigest, computedDigest);
+  return expectedDigest !== undefined && computedDigest !== undefined && expectedDigest.length === computedDigest.length && timingSafeEqual3(expectedDigest, computedDigest);
 }
 function decodeGoChecksum(value) {
   if (!/^h1:[A-Za-z0-9+/]{43}=$/u.test(value)) {
@@ -51561,7 +51698,7 @@ function escapeGoProxyText(value) {
 }
 
 // src/evidence/hex-tarball.ts
-import { createHash as createHash6, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
+import { createHash as createHash7, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
 var HEX_OUTER_ENTRY_LIMIT = 8;
 var HEX_CONTENT_ENTRY_LIMIT = 50000;
 var HEX_CONTENT_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
@@ -51619,8 +51756,8 @@ function collectHexTarballEvidence(input) {
     }));
   }
   const expectedInnerChecksum = parseInnerChecksum(checksumBytes.value);
-  const computedInnerChecksum = createHash6("sha256").update(versionBytes.value).update(metadataBytes.value).update(contentsBytes.value).digest();
-  if (!expectedInnerChecksum || !timingSafeEqual3(expectedInnerChecksum, computedInnerChecksum)) {
+  const computedInnerChecksum = createHash7("sha256").update(versionBytes.value).update(metadataBytes.value).update(contentsBytes.value).digest();
+  if (!expectedInnerChecksum || !timingSafeEqual4(expectedInnerChecksum, computedInnerChecksum)) {
     return err(hexTarballError(input, "Hex package inner checksum did not match its payload.", {
       reason: "hex_inner_checksum_mismatch"
     }));
@@ -51754,102 +51891,6 @@ function hexTarballError(input, message, details) {
 // src/evidence/local-artifact-path.ts
 import { existsSync as existsSync45, realpathSync as realpathSync4, statSync as statSync33 } from "node:fs";
 import path79 from "node:path";
-
-// src/evidence/package-integrity.ts
-import { createHash as createHash7, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
-var SUPPORTED_INTEGRITY_DIGEST_BYTES = {
-  sha1: 20,
-  sha256: 32,
-  sha384: 48,
-  sha512: 64
-};
-function verifyPackageIntegrity(input) {
-  if (!input.integrity) {
-    return ok(undefined);
-  }
-  const supported = parseSupportedIntegrityEntries(input.integrity);
-  if (supported.length === 0) {
-    return err(createError({
-      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
-      category: "unsupported_input",
-      message: "Package artifact integrity could not be verified because no supported digest was found.",
-      details: {
-        packageId: input.packageId,
-        resolved: input.resolvedDetail,
-        integrity: input.integrity,
-        supportedAlgorithms: ["sha512", "sha384", "sha256", "sha1"]
-      }
-    }));
-  }
-  const computed = [];
-  for (const entry of supported) {
-    const actualDigest = createHash7(entry.algorithm).update(input.artifact).digest();
-    const actual = `${entry.algorithm}-${actualDigest.toString("base64")}`;
-    computed.push(actual);
-    if (actualDigest.byteLength === entry.digest.byteLength && timingSafeEqual4(actualDigest, entry.digest)) {
-      return ok(undefined);
-    }
-  }
-  return err(createError({
-    code: "PACKAGE_INTEGRITY_CHECK_FAILED",
-    category: "unsupported_input",
-    message: "Package artifact integrity did not match the lockfile digest.",
-    details: {
-      packageId: input.packageId,
-      resolved: input.resolvedDetail,
-      integrity: input.integrity,
-      computed
-    }
-  }));
-}
-function sha256HexIntegrity2(sha256) {
-  return `sha256-${Buffer.from(sha256, "hex").toString("base64")}`;
-}
-function parseSupportedIntegrityEntries(integrity) {
-  return integrity.split(/\s+/).map((entry) => {
-    const separatorIndex = entry.indexOf("-");
-    if (separatorIndex <= 0) {
-      return;
-    }
-    const algorithm = entry.slice(0, separatorIndex);
-    const digest = entry.slice(separatorIndex + 1);
-    if (!isSupportedIntegrityAlgorithm(algorithm) || digest === "") {
-      return;
-    }
-    const decoded = decodeIntegrityDigest({ algorithm, digest });
-    if (!decoded) {
-      return;
-    }
-    return {
-      algorithm,
-      digest: decoded
-    };
-  }).filter((entry) => entry !== undefined);
-}
-function isSupportedIntegrityAlgorithm(value) {
-  return Object.prototype.hasOwnProperty.call(SUPPORTED_INTEGRITY_DIGEST_BYTES, value);
-}
-function decodeIntegrityDigest(input) {
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(input.digest)) {
-    return;
-  }
-  const paddingStart = input.digest.indexOf("=");
-  if (paddingStart !== -1 && !/^=+$/.test(input.digest.slice(paddingStart))) {
-    return;
-  }
-  if (input.digest.length % 4 === 1) {
-    return;
-  }
-  const decoded = Buffer.from(input.digest, "base64");
-  if (decoded.byteLength !== SUPPORTED_INTEGRITY_DIGEST_BYTES[input.algorithm]) {
-    return;
-  }
-  const normalizedInput = input.digest.replace(/=+$/, "");
-  const normalizedDecoded = decoded.toString("base64").replace(/=+$/, "");
-  return normalizedDecoded === normalizedInput ? decoded : undefined;
-}
-
-// src/evidence/local-artifact-path.ts
 function resolveExistingLocalArtifactPath(input) {
   const allowedRoots = realpathLocalArtifactRoots({
     projectRoot: input.projectRoot,
@@ -53504,7 +53545,7 @@ function collectRubyGemArchiveEvidence(input) {
   const integrity = verifyPackageIntegrity({
     packageId: input.packageId,
     resolvedDetail: rubyGemsArtifactUrl(input.packageName, input.version),
-    integrity: sha256HexIntegrity2(input.sha256),
+    integrity: sha256HexIntegrity(input.sha256),
     artifact: gemBytes
   });
   if (!integrity.ok)
@@ -54255,6 +54296,15 @@ function createCargoGitHubArchiveEvidenceCache(nodes) {
   return cache;
 }
 async function collectNodeEvidence(input) {
+  if (input.node.artifactIdentityConflict) {
+    return ok({
+      packageId: input.node.id,
+      source: "unavailable",
+      files: [],
+      artifactIdentityConflict: true,
+      warnings: ["Conflicting artifact identities were declared for this package; resolve the input conflict before collecting evidence."]
+    });
+  }
   const projectContainedGoReplacementEvidence = !input.allowLocalProjectEvidence && input.allowProjectContainedGoReplacementEvidence && input.node.ecosystem === "go" && input.node.resolved !== undefined && !input.node.resolved.startsWith("go-module:") ? collectRegisteredEcosystemEvidence({
     node: input.node,
     projectRoot: input.projectRoot
@@ -56007,7 +56057,7 @@ async function collectPyPiReleaseEvidence(input) {
     node: input.node,
     resolved: release.value.artifact.url,
     artifactFilename: release.value.artifact.filename,
-    integrity: sha256HexIntegrity2(release.value.artifact.sha256),
+    integrity: sha256HexIntegrity(release.value.artifact.sha256),
     yanked: release.value.artifact.yanked,
     fetchArtifact: input.fetchArtifact,
     resolveArtifactHost: input.resolveArtifactHost,
@@ -63429,6 +63479,14 @@ function summarizeEvidence(evidence) {
         occurrenceCount: 1
       });
     }
+    if (item.artifactIdentityConflict) {
+      addEvidenceDiagnostic(diagnosticCounts, {
+        code: "artifact_identity_conflict",
+        source: item.source,
+        packageId: item.packageId,
+        occurrenceCount: 1
+      });
+    }
     if (item.files.length === 0 && !hasDeclaredLicenseEvidence(item)) {
       addEvidenceDiagnostic(diagnosticCounts, {
         code: "license_evidence_missing",
@@ -69764,7 +69822,8 @@ async function evaluateProjectScan(input) {
 async function collectEvidenceForGraph(input) {
   const embeddedEvidence = input.graph.embeddedEvidence ?? [];
   const graphNodeIds = new Set(input.graph.nodes.map((node) => node.id));
-  const relevantEmbeddedEvidence = embeddedEvidence.filter((evidence) => graphNodeIds.has(evidence.packageId));
+  const conflictingArtifactIds = new Set(input.graph.nodes.filter((node) => node.artifactIdentityConflict).map((node) => node.id));
+  const relevantEmbeddedEvidence = embeddedEvidence.filter((evidence) => graphNodeIds.has(evidence.packageId) && !conflictingArtifactIds.has(evidence.packageId));
   const nodesById = new Map(input.graph.nodes.map((node) => [node.id, node]));
   const ignoredOverlappingSbomIds = new Set(relevantEmbeddedEvidence.filter((evidence) => {
     const node = nodesById.get(evidence.packageId);

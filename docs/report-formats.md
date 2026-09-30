@@ -16,6 +16,18 @@ includes different levels of waiver detail.
 
 ## JSON schema versioning
 
+When merged inputs declare conflicting artifacts for one package URL, Ohrisk
+retains the source declarations internally and does not collect from an arbitrary
+location. Evidence is marked unavailable and JSON includes the structured
+`artifact_identity_conflict` evidence diagnostic. CI and gated diffs reject the
+partial result unless `--allow-partial-evidence` is explicit. Embedded SBOM
+claims cannot override an unresolved artifact identity.
+
+Equivalent supported checksum encodings are normalized. Mirrors with the same
+supported checksum share deterministic collection, and the selected archive
+must still pass the normal integrity verification before its evidence is used.
+Different locations without a shared supported checksum remain unresolved.
+
 Every Ohrisk JSON report includes `$schema` and `schemaVersion`. The published
 Draft 2020-12 contracts live in `schemas/common.schema.json`,
 `schemas/scan-report.schema.json`, `schemas/diff-report.schema.json`,

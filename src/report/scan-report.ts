@@ -1510,6 +1510,12 @@ function summarizeEvidence(evidence: LicenseEvidence[]): {
         occurrenceCount: 1
       });
     }
+    if (item.artifactIdentityConflict) {
+      addEvidenceDiagnostic(diagnosticCounts, {
+        code: "artifact_identity_conflict", source: item.source,
+        packageId: item.packageId, occurrenceCount: 1
+      });
+    }
     if (item.files.length === 0 && !hasDeclaredLicenseEvidence(item)) {
       addEvidenceDiagnostic(diagnosticCounts, {
         code: "license_evidence_missing",

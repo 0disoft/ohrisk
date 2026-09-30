@@ -998,8 +998,10 @@ async function collectEvidenceForGraph(input: {
 }): Promise<Result<LicenseEvidence[], OhriskError>> {
   const embeddedEvidence = input.graph.embeddedEvidence ?? [];
   const graphNodeIds = new Set(input.graph.nodes.map((node) => node.id));
+  const conflictingArtifactIds = new Set(input.graph.nodes
+    .filter((node) => node.artifactIdentityConflict).map((node) => node.id));
   const relevantEmbeddedEvidence = embeddedEvidence.filter((evidence) =>
-    graphNodeIds.has(evidence.packageId)
+    graphNodeIds.has(evidence.packageId) && !conflictingArtifactIds.has(evidence.packageId)
   );
   const nodesById = new Map(input.graph.nodes.map((node) => [node.id, node]));
   const ignoredOverlappingSbomIds = new Set(
