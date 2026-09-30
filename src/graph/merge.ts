@@ -29,13 +29,25 @@ export function mergeDependencyGraphs(graphs: SourcedDependencyGraph[]): Depende
   const warnings: string[] = [];
   const diagnostics: DependencyGraphDiagnostic[] = [];
   const mavenRepositoryUrls: string[] = [];
+  const purlsById = new Map<string, Set<string>>();
 
   for (const item of graphs) {
     for (const node of item.graph.nodes) {
       const purl = packageUrl(node);
+      const purls = purlsById.get(node.id) ?? new Set<string>();
+      purls.add(purl);
+      purlsById.set(node.id, purls);
       if (!canonicalIdByPurl.has(purl)) {
         canonicalIdByPurl.set(purl, node.id);
       }
+    }
+  }
+
+  // Preserve established identities unless they alias distinct package coordinates.
+  // PURL identities disambiguate those packages independently of input order.
+  for (const [purl, id] of canonicalIdByPurl) {
+    if ((purlsById.get(id)?.size ?? 0) > 1) {
+      canonicalIdByPurl.set(purl, purl);
     }
   }
 
@@ -90,7 +102,8 @@ export function mergeDependencyGraphs(graphs: SourcedDependencyGraph[]): Depende
       : {}),
     nodes: [...nodesByPurl.values()].sort((left, right) => left.id.localeCompare(right.id)),
     ...(evidenceByPackageId.size > 0
-      ? { embeddedEvidence: [...evidenceByPackageId.values()] }
+      ? { embeddedEvidence: [...evidenceByPackageId.values()].sort((left, right) =>
+          left.packageId.localeCompare(right.packageId)) }
       : {}),
     ...(warnings.length > 0 ? { warnings: unique(warnings) } : {}),
     ...(diagnostics.length > 0 ? { diagnostics: mergeGraphDiagnostics(diagnostics) } : {})
@@ -124,7 +137,12 @@ function remapNode(
     ...node,
     id: canonicalId,
     paths: node.paths.map((dependencyPath) =>
-      dependencyPath.map((segment) => idMap.get(segment) ?? segment)
+      dependencyPath.map((segment) => {
+        const aliasSeparator = segment.lastIndexOf(" -> ");
+        if (aliasSeparator < 0) return idMap.get(segment) ?? segment;
+        const packageId = segment.slice(aliasSeparator + 4);
+        return `${segment.slice(0, aliasSeparator + 4)}${idMap.get(packageId) ?? packageId}`;
+      })
     ),
     origins: uniqueOrigins([...(node.origins ?? []), origin])
   };

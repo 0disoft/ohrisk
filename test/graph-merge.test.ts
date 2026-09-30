@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { mergeDependencyGraphs, type SourcedDependencyGraph } from "../src/graph/merge";
 import { parseSpdxJsonText } from "../src/graph/spdx-json";
 import { evaluateLicenseRisks } from "../src/policy/evaluate";
+import { normalizeAllLicenseEvidence } from "../src/license/normalize";
 import type { DependencyGraph } from "../src/graph/types";
 
 function spdxDiamondDoc(rootName: string): string {
@@ -64,6 +65,48 @@ function sharedFindingIds(graph: DependencyGraph): string[] {
 }
 
 describe("mergeDependencyGraphs", () => {
+  test("keeps cross-ecosystem identities, evidence and findings independent of input order", () => {
+    const inputs: SourcedDependencyGraph[] = ["npm", "pypi"].map((ecosystem) => ({
+      source: {
+        lockfileKind: ecosystem === "npm" ? "package-lock" : "uv-lock",
+        lockfilePath: `/repo/${ecosystem}.lock`
+      },
+      graph: {
+        lockfilePath: `/repo/${ecosystem}.lock`,
+        nodes: [{
+          id: "example@1.0.0", name: "example", version: "1.0.0",
+          ecosystem: ecosystem as "npm" | "pypi",
+          dependencyType: "production", direct: true,
+          paths: [[ecosystem, "compat -> example@1.0.0"]]
+        }],
+        embeddedEvidence: [{
+          packageId: "example@1.0.0", source: "sbom", files: [], warnings: [],
+          metadataLicense: ecosystem === "npm" ? "MIT" : "AGPL-3.0-only"
+        }]
+      }
+    }));
+    const forward = mergeDependencyGraphs(inputs);
+    const reversed = mergeDependencyGraphs([...inputs].reverse());
+    expect(forward.nodes).toEqual(reversed.nodes);
+    expect(forward.embeddedEvidence).toEqual(reversed.embeddedEvidence);
+    expect(forward.nodes.map((node) => node.id)).toEqual([
+      "pkg:npm/example@1.0.0", "pkg:pypi/example@1.0.0"
+    ]);
+    for (const node of forward.nodes) {
+      expect(node.paths[0]?.[1]).toBe(`compat -> ${node.id}`);
+      expect(forward.embeddedEvidence?.find((item) => item.packageId === node.id)?.metadataLicense)
+        .toBe(node.ecosystem === "npm" ? "MIT" : "AGPL-3.0-only");
+    }
+    const findings = evaluateLicenseRisks({
+      dependencies: forward.nodes, profile: "saas",
+      licenses: normalizeAllLicenseEvidence(forward.embeddedEvidence ?? [])
+    });
+    expect(new Set(findings.map((finding) => finding.id)).size).toBe(2);
+    expect(new Set(findings.map((finding) => finding.packageId)).size).toBe(2);
+    expect(findings.find((finding) => finding.packageId === "pkg:npm/example@1.0.0")?.severity).toBe("low");
+    expect(findings.find((finding) => finding.packageId === "pkg:pypi/example@1.0.0")?.severity).toBe("high");
+  });
+
   test("preserves Yarn cache checksums across merged dependency graphs", () => {
     const node = {
       id: "example@1.0.0",
