@@ -73,7 +73,13 @@ function cycloneDxXmlToDocument(
   const document: Record<string, unknown> = {
     bomFormat: "CycloneDX",
     components: readCycloneDxXmlComponents(firstChild(root, "components")),
-    dependencies: dependencies.value
+    dependencies: dependencies.value,
+    compositions: childNodes(firstChild(root, "compositions"), "composition").map((composition) => ({
+      aggregate: childText(composition, "aggregate") ?? "not_specified",
+      dependencies: childNodes(firstChild(composition, "dependencies"), "dependency")
+        .map((dependency) => dependency.attributes.ref ?? "")
+        .filter((ref) => ref !== "")
+    }))
   };
   const metadata = readCycloneDxXmlMetadata(firstChild(root, "metadata"));
   if (metadata) {

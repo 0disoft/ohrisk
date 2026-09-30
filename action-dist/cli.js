@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: 7cecbdd44016b26c1395129dfcaf5c075e47dbf8eda6e96c11451cd8e9bcb263
+// ohrisk-action-source-sha256: d8fa9eacaafd6f7ca34afae8650ec53f7cb7f664127cb07a284463b0ce79c1e3
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -17609,7 +17609,7 @@ function evidenceCollectionStartMessage(graph, prodOnly) {
 // package.json
 var package_default = {
   name: "ohrisk",
-  version: "1.15.2",
+  version: "1.16.0",
   description: "Catch open-source license risk before your PR ships.",
   license: "MIT",
   type: "module",
@@ -18114,6 +18114,85 @@ function disambiguatePackageRecordIds(records) {
   return records.map((record, index) => (owners.get(record.id)?.size ?? 0) > 1 ? { ...record, id: coordinates[index] } : record);
 }
 
+// src/graph/dependency-edges.ts
+var DEPENDENCY_GRAPH_MAX_EDGES = 1e6;
+function dependencyEdgesForGraph(graph) {
+  if (graph.edges !== undefined)
+    return graph.edges;
+  const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const edges = new Map;
+  const add = (edge) => {
+    edges.set(JSON.stringify([edge.from ?? null, edge.to, edge.dependencyType]), edge);
+  };
+  for (const node of graph.nodes) {
+    if (node.direct)
+      add({ to: node.id, dependencyType: node.dependencyType });
+    for (const path of node.paths) {
+      const ids = path.map((segment) => {
+        const separator = segment.lastIndexOf(" -> ");
+        return separator < 0 ? segment : segment.slice(separator + 4);
+      });
+      for (let index = 1;index < ids.length; index++) {
+        const from = ids[index - 1];
+        const child = nodesById.get(ids[index]);
+        if (nodesById.has(from) && child) {
+          add({ from, to: child.id, dependencyType: child.dependencyType });
+        }
+      }
+    }
+  }
+  return [...edges.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([, edge]) => edge);
+}
+function collectDependencyEdges(input) {
+  const edges = new Map;
+  const unknownIds = new Set(input.unknownRefs?.flatMap((ref) => {
+    const id = input.idForRef(ref);
+    return id === undefined ? [] : [id];
+  }));
+  let rootDependenciesUnknown = input.rootDependenciesUnknown ?? false;
+  const limit = input.maxEdges ?? DEPENDENCY_GRAPH_MAX_EDGES;
+  const addEdge = (from, childRef) => {
+    const to = input.idForRef(childRef);
+    if (to === undefined) {
+      if (from === undefined)
+        rootDependenciesUnknown = true;
+      else
+        unknownIds.add(from);
+      return true;
+    }
+    const dependencyType = input.dependencyTypeForRef(childRef);
+    const edge = { ...from === undefined ? {} : { from }, to, dependencyType };
+    edges.set(JSON.stringify([from ?? null, to, dependencyType]), edge);
+    return edges.size <= limit;
+  };
+  for (const rootRef of input.rootRefs) {
+    if (!addEdge(undefined, rootRef))
+      return edgeLimitError(limit);
+  }
+  for (const ref of input.refs) {
+    const from = input.idForRef(ref);
+    if (from === undefined)
+      continue;
+    for (const child of input.childRefs(ref)) {
+      if (!addEdge(from, child))
+        return edgeLimitError(limit);
+    }
+  }
+  return ok({
+    edges: [...edges.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([, edge]) => edge),
+    ...unknownIds.size > 0 ? { unknownDependencyNodeIds: [...unknownIds].sort() } : {},
+    ...rootDependenciesUnknown ? { rootDependenciesUnknown: true } : {}
+  });
+}
+function edgeLimitError(limit) {
+  return err(createError({
+    code: "DEPENDENCY_GRAPH_LIMIT_EXCEEDED",
+    category: "unsupported_input",
+    message: `Dependency relationships exceeded the supported edge limit of ${limit}.`,
+    details: { limit }
+  }));
+}
+
 // src/graph/merge.ts
 function mergeDependencyGraphs(graphs) {
   const first = graphs[0];
@@ -18126,6 +18205,9 @@ function mergeDependencyGraphs(graphs) {
   const warnings = [];
   const diagnostics = [];
   const mavenRepositoryUrls = [];
+  const edgesByKey = new Map;
+  const unknownDependencyNodeIds = new Set;
+  let rootDependenciesUnknown = false;
   for (const node of disambiguatePackageRecordIds(graphs.flatMap((item) => item.graph.nodes))) {
     const purl = packageUrl(node);
     if (!canonicalIdByPurl.has(purl)) {
@@ -18141,6 +18223,21 @@ function mergeDependencyGraphs(graphs) {
       lockfileKind: item.source.lockfileKind,
       lockfilePath: item.source.lockfilePath
     };
+    rootDependenciesUnknown ||= item.graph.edges === undefined || item.graph.rootDependenciesUnknown === true;
+    for (const id of item.graph.edges === undefined ? item.graph.nodes.map((node) => node.id) : item.graph.unknownDependencyNodeIds ?? []) {
+      unknownDependencyNodeIds.add(idMap.get(id) ?? id);
+    }
+    for (const edge of dependencyEdgesForGraph(item.graph)) {
+      const remapped = {
+        ...edge,
+        ...edge.from === undefined ? {} : { from: idMap.get(edge.from) ?? edge.from },
+        to: idMap.get(edge.to) ?? edge.to,
+        origins: uniqueOrigins([...edge.origins ?? [], origin])
+      };
+      const key = JSON.stringify([remapped.from ?? null, remapped.to, remapped.dependencyType]);
+      const existingEdge = edgesByKey.get(key);
+      edgesByKey.set(key, existingEdge ? { ...remapped, origins: uniqueOrigins([...existingEdge.origins ?? [], ...remapped.origins]) } : remapped);
+    }
     for (const node of item.graph.nodes) {
       const purl = packageUrl(node);
       const canonicalId = canonicalIdByPurl.get(purl) ?? node.id;
@@ -18169,6 +18266,9 @@ function mergeDependencyGraphs(graphs) {
     lockfilePaths,
     ...mavenRepositoryUrls.length > 0 ? { mavenRepositoryUrls: unique(mavenRepositoryUrls).sort() } : {},
     nodes: [...nodesByPurl.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    edges: [...edgesByKey.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([, edge]) => edge),
+    ...unknownDependencyNodeIds.size > 0 ? { unknownDependencyNodeIds: [...unknownDependencyNodeIds].sort() } : {},
+    ...rootDependenciesUnknown ? { rootDependenciesUnknown: true } : {},
     ...evidenceByPackageId.size > 0 ? { embeddedEvidence: [...evidenceByPackageId.values()].sort((left, right) => left.packageId.localeCompare(right.packageId)) } : {},
     ...warnings.length > 0 ? { warnings: unique(warnings) } : {},
     ...diagnostics.length > 0 ? { diagnostics: mergeGraphDiagnostics(diagnostics) } : {}
@@ -20092,10 +20192,55 @@ function parseCycloneDxDocument(bom, lockfilePath) {
   const nodeMap = traversal.nodeMap;
   const nodes = [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id));
   const nodeIds = new Set(nodes.map((node) => node.id));
+  const componentsByRef = new Map(components.map((component) => [component.ref, component]));
+  const unknownRefs = new Set(components.filter((component) => !dependencyMap.value.has(component.ref)).map((component) => component.ref));
+  const metadataRef = readCycloneDxMetadataComponentRef(bom);
+  const metadataKey = metadataRef === undefined ? undefined : aliases.get(metadataRef) ?? metadataRef;
+  const sourceRootRefs = metadataKey !== undefined && dependencyMap.value.has(metadataKey) ? dependencyMap.value.get(metadataKey) : rootRefs;
+  if (metadataKey !== undefined && dependencyMap.value.has(metadataKey)) {
+    const declaredRootIds = new Set(sourceRootRefs.map((ref) => componentsByRef.get(ref)?.id));
+    for (const node of nodes)
+      node.direct = declaredRootIds.has(node.id);
+  }
+  let rootDependenciesUnknown = metadataRef === undefined || !dependencyMap.value.has(aliases.get(metadataRef) ?? metadataRef);
+  for (const composition of Array.isArray(bom.compositions) ? bom.compositions : []) {
+    if (!isRecord4(composition) || composition.aggregate === "complete")
+      continue;
+    const refs = Array.isArray(composition.dependencies) ? composition.dependencies : [];
+    if (refs.length === 0) {
+      components.forEach((component) => unknownRefs.add(component.ref));
+      rootDependenciesUnknown = true;
+    } else {
+      for (const ref of refs) {
+        if (typeof ref !== "string")
+          continue;
+        const canonicalRef = aliases.get(ref) ?? ref;
+        if (componentsByRef.has(canonicalRef))
+          unknownRefs.add(canonicalRef);
+        else
+          rootDependenciesUnknown = true;
+      }
+    }
+  }
+  const relationships = collectDependencyEdges({
+    refs: components.map((component) => component.ref),
+    rootRefs: sourceRootRefs,
+    idForRef: (ref) => {
+      const id = componentsByRef.get(ref)?.id;
+      return id !== undefined && nodeIds.has(id) ? id : undefined;
+    },
+    childRefs: (ref) => dependencyMap.value.get(ref) ?? [],
+    dependencyTypeForRef: (ref) => componentsByRef.get(ref)?.dependencyType ?? "unknown",
+    unknownRefs: [...unknownRefs],
+    rootDependenciesUnknown
+  });
+  if (!relationships.ok)
+    return relationships;
   return ok({
     rootName,
     lockfilePath,
     nodes,
+    ...relationships.value,
     embeddedEvidence: components.filter((component) => nodeIds.has(component.id)).map(cycloneDxComponentEvidence),
     ...traversal.diagnostics.length > 0 ? { diagnostics: traversal.diagnostics } : {}
   });
@@ -20899,7 +21044,11 @@ function cycloneDxXmlToDocument(root, lockfilePath) {
   const document2 = {
     bomFormat: "CycloneDX",
     components: readCycloneDxXmlComponents(firstChild(root, "components")),
-    dependencies: dependencies.value
+    dependencies: dependencies.value,
+    compositions: childNodes(firstChild(root, "compositions"), "composition").map((composition) => ({
+      aggregate: childText(composition, "aggregate") ?? "not_specified",
+      dependencies: childNodes(firstChild(composition, "dependencies"), "dependency").map((dependency) => dependency.attributes.ref ?? "").filter((ref) => ref !== "")
+    }))
   };
   const metadata = readCycloneDxXmlMetadata(firstChild(root, "metadata"));
   if (metadata) {
@@ -26935,9 +27084,20 @@ function parseNixFlakeLockText(input, lockfilePath = "flake.lock", options = {})
       paths
     });
   }
+  const recordsByKey = new Map(records.map((record) => [record.nodeKey, record]));
+  const relationships = collectDependencyEdges({
+    refs: records.map((record) => record.nodeKey),
+    rootRefs: nixChildRefs(nodesObject, rootNodeKey),
+    idForRef: (ref) => recordsByKey.get(ref)?.id,
+    childRefs: (ref) => nixChildRefs(nodesObject, ref),
+    dependencyTypeForRef: () => "unknown"
+  });
+  if (!relationships.ok)
+    return relationships;
   return ok({
     rootName,
     lockfilePath,
+    ...relationships.value,
     ...pathCollection.value.diagnostics.length > 0 ? { diagnostics: pathCollection.value.diagnostics } : {},
     nodes: records.map((record) => ({
       id: record.id,
@@ -27172,7 +27332,7 @@ function parsePackageRecords(packages) {
       tuple
     });
     const metadata = tupleFields.metadata;
-    const dependencies = collectDependencyEdges(metadata);
+    const dependencies = collectDependencyEdges2(metadata);
     records.push({
       key,
       name: identity.name,
@@ -27278,9 +27438,9 @@ function collectRootDependencies2(workspace) {
   if (!workspace) {
     return [];
   }
-  return collectDependencyEdges(workspace);
+  return collectDependencyEdges2(workspace);
 }
-function collectDependencyEdges(source) {
+function collectDependencyEdges2(source) {
   return [
     ...dependencyEntries(source.dependencies, "production"),
     ...dependencyEntries(source.devDependencies, "development"),
@@ -27664,7 +27824,7 @@ function parsePackageRecords2(packages) {
       id: `${name}@${pkg.version}`,
       ...resolved ? { resolved } : {},
       ...integrity ? { integrity } : {},
-      dependencies: collectDependencyEdges2(pkg)
+      dependencies: collectDependencyEdges3(pkg)
     });
   }
   return records;
@@ -27719,9 +27879,9 @@ function collectRootDependencies3(rootPackage) {
   if (!rootPackage) {
     return [];
   }
-  return collectDependencyEdges2(rootPackage);
+  return collectDependencyEdges3(rootPackage);
 }
-function collectDependencyEdges2(pkg) {
+function collectDependencyEdges3(pkg) {
   return [
     ...dependencyEntries2(pkg.dependencies, "production"),
     ...dependencyEntries2(pkg.devDependencies, "development"),
@@ -28340,7 +28500,7 @@ function parsePackageRecords3(input) {
       id: `${identity.name}@${identity.version}`,
       ...resolved ? { resolved } : {},
       ...integrity ? { integrity } : {},
-      dependencies: collectDependencyEdges3(input.catalogs, packageEntry, snapshotEntry)
+      dependencies: collectDependencyEdges4(input.catalogs, packageEntry, snapshotEntry)
     });
   }
   return records;
@@ -28452,9 +28612,9 @@ function collectRootDependencies4(importer, catalogs) {
   if (!importer) {
     return [];
   }
-  return collectDependencyEdges3(catalogs, importer);
+  return collectDependencyEdges4(catalogs, importer);
 }
-function collectDependencyEdges3(catalogs, ...sources) {
+function collectDependencyEdges4(catalogs, ...sources) {
   return sources.flatMap((source) => [
     ...dependencyEntries3(source.dependencies, "production", catalogs),
     ...dependencyEntries3(source.devDependencies, "development", catalogs),
@@ -35361,10 +35521,25 @@ function parseSpdxDocument(document2, lockfilePath, options = {}) {
   const diagnostics = pathCollection.value.diagnostics;
   const nodes = [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id));
   const nodeIds = new Set(nodes.map((node) => node.id));
+  const relationships = collectDependencyEdges({
+    refs: packages.map((pkg) => pkg.spdxId),
+    rootRefs,
+    idForRef: (ref) => {
+      const id = packagesBySpdxId.get(ref)?.id;
+      return id !== undefined && nodeIds.has(id) ? id : undefined;
+    },
+    childRefs: (ref) => dependencyMap.value.get(ref) ?? [],
+    dependencyTypeForRef: () => "production",
+    unknownRefs: packages.map((pkg) => pkg.spdxId),
+    rootDependenciesUnknown: true
+  });
+  if (!relationships.ok)
+    return relationships;
   return ok({
     rootName,
     lockfilePath,
     nodes,
+    ...relationships.value,
     ...diagnostics.length > 0 ? { diagnostics } : {},
     embeddedEvidence: packages.filter((pkg) => nodeIds.has(pkg.id)).map(spdxPackageEvidence)
   });
@@ -58430,7 +58605,18 @@ import path86 from "node:path";
 function renderCycloneDxReport(input) {
   const licensesByPackageId = new Map(input.normalizedLicenses.map((license) => [license.packageId, license]));
   const findingsByPackageId = new Map(input.riskFindings.map((finding) => [finding.packageId, finding]));
-  const childRefsByNodeId = directChildRefsByNodeId(input.graph.nodes);
+  const edges = dependencyEdgesForGraph(input.graph);
+  const childRefsByNodeId = directChildRefsByNodeId(input.graph.nodes, edges);
+  const nodeById = new Map(input.graph.nodes.map((node) => [node.id, node]));
+  const rootChildRefs = [...new Set(edges.filter((edge) => edge.from === undefined).flatMap((edge) => {
+    const node = nodeById.get(edge.to);
+    return node ? [componentBomRef(node)] : [];
+  }))].sort();
+  const rootDependenciesUnknown = input.graph.edges === undefined || input.graph.rootDependenciesUnknown === true;
+  const unknownIds = new Set(input.graph.edges === undefined ? input.graph.nodes.map((node) => node.id) : input.graph.unknownDependencyNodeIds ?? []);
+  const unknownRefs = input.graph.nodes.filter((node) => unknownIds.has(node.id)).map(componentBomRef);
+  if (rootDependenciesUnknown)
+    unknownRefs.unshift("project");
   const components = input.graph.nodes.map((node) => renderComponent({
     node,
     license: licensesByPackageId.get(node.id),
@@ -58469,15 +58655,16 @@ function renderCycloneDxReport(input) {
     },
     components,
     dependencies: [
-      {
+      ...!rootDependenciesUnknown || rootChildRefs.length > 0 ? [{
         ref: "project",
-        dependsOn: components.filter((component) => component.properties.some((property) => property.name === "ohrisk:direct" && property.value === "true")).map((component) => component["bom-ref"])
-      },
-      ...input.graph.nodes.map((node) => ({
+        dependsOn: rootChildRefs
+      }] : [],
+      ...input.graph.nodes.filter((node) => !unknownIds.has(node.id) || (childRefsByNodeId.get(node.id)?.length ?? 0) > 0).map((node) => ({
         ref: componentBomRef(node),
         dependsOn: childRefsByNodeId.get(node.id) ?? []
       }))
-    ]
+    ],
+    ...unknownRefs.length > 0 ? { compositions: [{ aggregate: "unknown", dependencies: unknownRefs }] } : {}
   }, null, 2);
 }
 function repositoryProperties(repository) {
@@ -58647,25 +58834,17 @@ function componentScope(node) {
       return "required";
   }
 }
-function directChildRefsByNodeId(nodes) {
+function directChildRefsByNodeId(nodes, edges) {
   const nodeIds = new Set(nodes.map((node) => node.id));
   const nodeOrder = new Map(nodes.map((node, index) => [node.id, index]));
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const childIdsByNodeId = new Map;
-  for (const candidate of nodes) {
-    for (const path of candidate.paths) {
-      const packagePath = path.map(packageIdFromPathSegment);
-      for (let index = 0;index < packagePath.length - 1; index += 1) {
-        const parentId = packagePath[index];
-        const childId = packagePath[index + 1];
-        if (!parentId || !childId || !nodeIds.has(parentId) || !nodeIds.has(childId)) {
-          continue;
-        }
-        const childIds = childIdsByNodeId.get(parentId) ?? new Set;
-        childIds.add(childId);
-        childIdsByNodeId.set(parentId, childIds);
-      }
-    }
+  for (const edge of edges) {
+    if (edge.from === undefined || !nodeIds.has(edge.from) || !nodeIds.has(edge.to))
+      continue;
+    const childIds = childIdsByNodeId.get(edge.from) ?? new Set;
+    childIds.add(edge.to);
+    childIdsByNodeId.set(edge.from, childIds);
   }
   const childRefsByNodeId = new Map;
   for (const [nodeId, childIds] of childIdsByNodeId.entries()) {
@@ -58676,9 +58855,6 @@ function directChildRefsByNodeId(nodes) {
     childRefsByNodeId.set(nodeId, childRefs);
   }
   return childRefsByNodeId;
-}
-function packageIdFromPathSegment(segment) {
-  return segment.split(" -> ").at(-1)?.trim() ?? segment;
 }
 
 // src/report/markdown.ts
@@ -68810,19 +68986,32 @@ function filterGraphForProdOnly(graph, prodOnly) {
   }
   const productionNodeIds = new Set(graph.nodes.filter(isProductionRelevantDependency).map((node) => node.id));
   const dependencyPathSegments = dependencyPathSegmentSets(graph.nodes, productionNodeIds);
-  const nodes = graph.nodes.filter((node) => productionNodeIds.has(node.id)).map((node) => {
-    const paths = node.paths.filter((dependencyPath) => isProductionRelevantPath(dependencyPath, dependencyPathSegments));
+  const productionParents = graph.edges === undefined ? undefined : productionParentsFromEdges(graph, productionNodeIds);
+  const relationshipsUnknown = graph.rootDependenciesUnknown === true || (graph.unknownDependencyNodeIds?.length ?? 0) > 0;
+  const rootIds = new Set(graph.edges?.filter((edge) => edge.from === undefined && edge.dependencyType !== "development").map((edge) => edge.to));
+  let recoveredSegmentBudget = BOUNDED_PATHS_MAX_STORED_PATH_SEGMENTS;
+  let remainingNodes = graph.nodes.length;
+  const nodes = graph.nodes.filter((node) => productionNodeIds.has(node.id)).filter((node) => productionParents === undefined || productionParents.has(node.id) || relationshipsUnknown).map((node) => {
+    remainingNodes -= 1;
+    let paths = node.paths.filter((dependencyPath) => isProductionRelevantPath(dependencyPath, dependencyPathSegments));
+    if (paths.length === 0 && productionParents?.has(node.id)) {
+      const capacity = Math.max(3, recoveredSegmentBudget - remainingNodes * 3);
+      const recovered = productionPath(graph.rootName ?? "<root>", node.id, productionParents, capacity);
+      recoveredSegmentBudget -= recovered.length;
+      paths = [recovered];
+    }
     return {
       ...node,
-      direct: paths.some((dependencyPath) => isDirectDependencyPath(dependencyPath, dependencyPathSegments.all)),
+      direct: productionParents === undefined ? paths.length === 0 ? node.direct : paths.some((dependencyPath) => isDirectDependencyPath(dependencyPath, dependencyPathSegments.all)) : rootIds.has(node.id) || graph.rootDependenciesUnknown === true && node.direct,
       paths
     };
-  }).filter((node) => node.paths.length > 0);
+  });
   const nodeIds = new Set(nodes.map((node) => node.id));
   const embeddedEvidence = graph.embeddedEvidence?.filter((evidence) => nodeIds.has(evidence.packageId));
   return {
     ...graph,
     nodes,
+    ...filteredRelationships(graph, nodeIds, true),
     ...embeddedEvidence ? { embeddedEvidence } : {}
   };
 }
@@ -68844,7 +69033,55 @@ function filterGraphBeforeEvidence(graph, prodOnly) {
   return {
     ...graph,
     nodes,
+    ...filteredRelationships(graph, nodeIds, false),
     ...embeddedEvidence ? { embeddedEvidence } : {}
+  };
+}
+function productionParentsFromEdges(graph, candidateIds) {
+  const children = new Map;
+  const parents = new Map;
+  const queue = [];
+  for (const edge of graph.edges ?? []) {
+    if (edge.dependencyType === "development" || !candidateIds.has(edge.to))
+      continue;
+    if (edge.from === undefined) {
+      if (!parents.has(edge.to)) {
+        parents.set(edge.to, undefined);
+        queue.push(edge.to);
+      }
+    } else if (candidateIds.has(edge.from)) {
+      const childIds = children.get(edge.from) ?? [];
+      childIds.push(edge.to);
+      children.set(edge.from, childIds);
+    }
+  }
+  for (let index = 0;index < queue.length; index++) {
+    const current = queue[index];
+    for (const child of children.get(current) ?? []) {
+      if (!parents.has(child)) {
+        parents.set(child, current);
+        queue.push(child);
+      }
+    }
+  }
+  return parents;
+}
+function productionPath(rootName, nodeId, parents, capacity) {
+  const tail = [];
+  let current = nodeId;
+  const maxDepth = Math.max(1, Math.min(BOUNDED_PATHS_MAX_PATH_DEPTH, capacity - 2));
+  while (current !== undefined && tail.length < maxDepth) {
+    tail.push(current);
+    current = parents.get(current);
+  }
+  return [rootName, ...current === undefined ? [] : [BOUNDED_PATHS_TRUNCATED_SEGMENT], ...tail.reverse()];
+}
+function filteredRelationships(graph, nodeIds, prodOnly) {
+  return {
+    ...graph.edges === undefined ? {} : { edges: graph.edges.filter((edge) => nodeIds.has(edge.to) && (edge.from === undefined || nodeIds.has(edge.from)) && (!prodOnly || edge.dependencyType !== "development")) },
+    ...graph.unknownDependencyNodeIds === undefined ? {} : {
+      unknownDependencyNodeIds: graph.unknownDependencyNodeIds.filter((id) => nodeIds.has(id))
+    }
   };
 }
 function isProductionRelevantDependency(node) {

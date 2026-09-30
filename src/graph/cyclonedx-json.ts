@@ -2,6 +2,7 @@ import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 import { parsePackageUrl } from "./package-url";
 import { disambiguatePackageRecordIds } from "./package-identity";
+import { collectDependencyEdges } from "./dependency-edges";
 import {
   inputFileReadErrorCategory,
   inputFileReadErrorDetails,
@@ -113,10 +114,51 @@ export function parseCycloneDxDocument(
   const nodes = [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id));
   const nodeIds = new Set(nodes.map((node) => node.id));
 
+  const componentsByRef = new Map(components.map((component) => [component.ref, component]));
+  const unknownRefs = new Set(components.filter((component) =>
+    !dependencyMap.value.has(component.ref)).map((component) => component.ref));
+  const metadataRef = readCycloneDxMetadataComponentRef(bom);
+  const metadataKey = metadataRef === undefined ? undefined : aliases.get(metadataRef) ?? metadataRef;
+  const sourceRootRefs = metadataKey !== undefined && dependencyMap.value.has(metadataKey)
+    ? dependencyMap.value.get(metadataKey)! : rootRefs;
+  if (metadataKey !== undefined && dependencyMap.value.has(metadataKey)) {
+    const declaredRootIds = new Set(sourceRootRefs.map((ref) => componentsByRef.get(ref)?.id));
+    for (const node of nodes) node.direct = declaredRootIds.has(node.id);
+  }
+  let rootDependenciesUnknown = metadataRef === undefined
+    || !dependencyMap.value.has(aliases.get(metadataRef) ?? metadataRef);
+  for (const composition of Array.isArray(bom.compositions) ? bom.compositions : []) {
+    if (!isRecord(composition) || composition.aggregate === "complete") continue;
+    const refs = Array.isArray(composition.dependencies) ? composition.dependencies : [];
+    if (refs.length === 0) {
+      components.forEach((component) => unknownRefs.add(component.ref));
+      rootDependenciesUnknown = true;
+    } else {
+      for (const ref of refs) {
+        if (typeof ref !== "string") continue;
+        const canonicalRef = aliases.get(ref) ?? ref;
+        if (componentsByRef.has(canonicalRef)) unknownRefs.add(canonicalRef);
+        else rootDependenciesUnknown = true;
+      }
+    }
+  }
+  const relationships = collectDependencyEdges({
+    refs: components.map((component) => component.ref), rootRefs: sourceRootRefs,
+    idForRef: (ref) => {
+      const id = componentsByRef.get(ref)?.id;
+      return id !== undefined && nodeIds.has(id) ? id : undefined;
+    },
+    childRefs: (ref) => dependencyMap.value.get(ref) ?? [],
+    dependencyTypeForRef: (ref) => componentsByRef.get(ref)?.dependencyType ?? "unknown",
+    unknownRefs: [...unknownRefs], rootDependenciesUnknown
+  });
+  if (!relationships.ok) return relationships;
+
   return ok({
     rootName,
     lockfilePath,
     nodes,
+    ...relationships.value,
     embeddedEvidence: components
       .filter((component) => nodeIds.has(component.id))
       .map(cycloneDxComponentEvidence),

@@ -14,6 +14,7 @@ import {
   type BoundedPathLimits
 } from "./bounded-dependency-paths";
 import type { DependencyGraph, DependencyNode } from "./types";
+import { collectDependencyEdges } from "./dependency-edges";
 
 type NixNodeRecord = {
   nodeKey: string;
@@ -143,9 +144,20 @@ export function parseNixFlakeLockText(
     });
   }
 
+  const recordsByKey = new Map(records.map((record) => [record.nodeKey, record]));
+  const relationships = collectDependencyEdges({
+    refs: records.map((record) => record.nodeKey),
+    rootRefs: nixChildRefs(nodesObject, rootNodeKey),
+    idForRef: (ref) => recordsByKey.get(ref)?.id,
+    childRefs: (ref) => nixChildRefs(nodesObject, ref),
+    dependencyTypeForRef: () => "unknown"
+  });
+  if (!relationships.ok) return relationships;
+
   return ok({
     rootName,
     lockfilePath,
+    ...relationships.value,
     ...(pathCollection.value.diagnostics.length > 0
       ? { diagnostics: pathCollection.value.diagnostics }
       : {}),

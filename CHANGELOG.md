@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.16.0 - Unreleased
+
+- Mixed-ecosystem scans and SBOM inputs now keep packages with the same name
+  and version separate, including their paths, license evidence, and findings.
+  Existing waivers for formerly colliding package IDs require review.
+- npm lockfile resolution checks every ancestor installation before selecting
+  a hoisted root package, including scoped packages and npm aliases.
+- Gated diffs reject incomplete evidence from either revision unless explicitly
+  allowed. Report schema 3.6 records each side's completeness and gate status;
+  report summaries retain partial comparison failures.
+- The bundled GitHub Action forwards `allow-partial-evidence` for `ci` and
+  `diff`, and its documentation describes informational and gated comparisons.
+- CycloneDX, SPDX, and Nix inputs retain source dependency edges independently
+  of bounded display paths. CycloneDX output distinguishes unknown adjacency
+  from explicit leaves, including XML composition declarations. Production
+  filtering preserves reachable packages when their saved display paths omit
+  the production route.
+
 ## 1.15.2 - 2026-08-27
 
 - pnpm lockfiles split across multiple YAML documents are now merged without

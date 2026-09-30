@@ -2,8 +2,10 @@ import type { LicenseEvidence } from "../evidence/types";
 import type { ProjectLockfile } from "../project/discover";
 import { packageUrl } from "./package-url";
 import { disambiguatePackageRecordIds } from "./package-identity";
+import { dependencyEdgesForGraph } from "./dependency-edges";
 import type {
   DependencyGraph,
+  DependencyEdge,
   DependencyGraphDiagnostic,
   DependencyNode,
   DependencyOrigin,
@@ -30,6 +32,9 @@ export function mergeDependencyGraphs(graphs: SourcedDependencyGraph[]): Depende
   const warnings: string[] = [];
   const diagnostics: DependencyGraphDiagnostic[] = [];
   const mavenRepositoryUrls: string[] = [];
+  const edgesByKey = new Map<string, DependencyEdge>();
+  const unknownDependencyNodeIds = new Set<string>();
+  let rootDependenciesUnknown = false;
   for (const node of disambiguatePackageRecordIds(graphs.flatMap((item) => item.graph.nodes))) {
     const purl = packageUrl(node);
     if (!canonicalIdByPurl.has(purl)) {
@@ -48,6 +53,26 @@ export function mergeDependencyGraphs(graphs: SourcedDependencyGraph[]): Depende
       lockfileKind: item.source.lockfileKind,
       lockfilePath: item.source.lockfilePath
     };
+
+    rootDependenciesUnknown ||= item.graph.edges === undefined || item.graph.rootDependenciesUnknown === true;
+    for (const id of item.graph.edges === undefined
+      ? item.graph.nodes.map((node) => node.id)
+      : item.graph.unknownDependencyNodeIds ?? []) {
+      unknownDependencyNodeIds.add(idMap.get(id) ?? id);
+    }
+    for (const edge of dependencyEdgesForGraph(item.graph)) {
+      const remapped: DependencyEdge = {
+        ...edge,
+        ...(edge.from === undefined ? {} : { from: idMap.get(edge.from) ?? edge.from }),
+        to: idMap.get(edge.to) ?? edge.to,
+        origins: uniqueOrigins([...(edge.origins ?? []), origin])
+      };
+      const key = JSON.stringify([remapped.from ?? null, remapped.to, remapped.dependencyType]);
+      const existingEdge = edgesByKey.get(key);
+      edgesByKey.set(key, existingEdge
+        ? { ...remapped, origins: uniqueOrigins([...(existingEdge.origins ?? []), ...remapped.origins!]) }
+        : remapped);
+    }
 
     for (const node of item.graph.nodes) {
       const purl = packageUrl(node);
@@ -87,6 +112,10 @@ export function mergeDependencyGraphs(graphs: SourcedDependencyGraph[]): Depende
       ? { mavenRepositoryUrls: unique(mavenRepositoryUrls).sort() }
       : {}),
     nodes: [...nodesByPurl.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    edges: [...edgesByKey.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([, edge]) => edge),
+    ...(unknownDependencyNodeIds.size > 0
+      ? { unknownDependencyNodeIds: [...unknownDependencyNodeIds].sort() } : {}),
+    ...(rootDependenciesUnknown ? { rootDependenciesUnknown: true } : {}),
     ...(evidenceByPackageId.size > 0
       ? { embeddedEvidence: [...evidenceByPackageId.values()].sort((left, right) =>
           left.packageId.localeCompare(right.packageId)) }

@@ -65,6 +65,32 @@ function sharedFindingIds(graph: DependencyGraph): string[] {
 }
 
 describe("mergeDependencyGraphs", () => {
+  test("remaps explicit edge endpoints and unknown adjacency across ecosystem ID collisions", () => {
+    const inputs: SourcedDependencyGraph[] = ["npm", "pypi"].map((ecosystem) => ({
+      source: { lockfileKind: ecosystem === "npm" ? "package-lock" : "uv-lock", lockfilePath: `${ecosystem}.lock` },
+      graph: {
+        lockfilePath: `${ecosystem}.lock`,
+        nodes: ["parent", "child"].map((name) => ({
+          id: `${name}@1.0.0`, name, version: "1.0.0", ecosystem: ecosystem as "npm" | "pypi",
+          dependencyType: "production" as const, direct: name === "parent", paths: []
+        })),
+        edges: [
+          { to: "parent@1.0.0", dependencyType: "production" },
+          { from: "parent@1.0.0", to: "child@1.0.0", dependencyType: "production" }
+        ], unknownDependencyNodeIds: ["child@1.0.0"]
+      }
+    }));
+    const forward = mergeDependencyGraphs(inputs);
+    const reversed = mergeDependencyGraphs([...inputs].reverse());
+    expect(forward.edges).toEqual(reversed.edges);
+    for (const ecosystem of ["npm", "pypi"]) {
+      expect(forward.edges).toContainEqual(expect.objectContaining({
+        from: `pkg:${ecosystem}/parent@1.0.0`, to: `pkg:${ecosystem}/child@1.0.0`
+      }));
+    }
+    expect(forward.unknownDependencyNodeIds).toEqual(["pkg:npm/child@1.0.0", "pkg:pypi/child@1.0.0"]);
+  });
+
   test("keeps cross-ecosystem identities, evidence and findings independent of input order", () => {
     const inputs: SourcedDependencyGraph[] = ["npm", "pypi"].map((ecosystem) => ({
       source: {

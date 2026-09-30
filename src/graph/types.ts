@@ -66,12 +66,25 @@ export type DependencyGraphDiagnostic = {
   message: string;
 };
 
+export type DependencyEdge = {
+  /** Omitted for a dependency declared by the project root. */
+  from?: string;
+  to: string;
+  dependencyType: DependencyType;
+  origins?: DependencyOrigin[];
+};
+
 export type DependencyGraph = {
   rootName?: string;
   lockfilePath: string;
   lockfilePaths?: string[];
   mavenRepositoryUrls?: string[];
   nodes: DependencyNode[];
+  /** Source relationships, independent of bounded explanatory paths. */
+  edges?: DependencyEdge[];
+  /** Nodes whose outgoing relationships are not known to be exhaustive. */
+  unknownDependencyNodeIds?: string[];
+  rootDependenciesUnknown?: boolean;
   embeddedEvidence?: LicenseEvidence[];
   warnings?: string[];
   diagnostics?: DependencyGraphDiagnostic[];

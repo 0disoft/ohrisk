@@ -210,6 +210,18 @@ SARIF does not list expired or unmatched waiver objects. Use JSON or Markdown ou
 
 CycloneDX 1.5 JSON SBOM for supply chain tools.
 
+SBOM input relationships are preserved independently of the bounded display
+paths. CycloneDX and SPDX inputs retain every known edge even when a shared
+dependency has more than 64 explanatory paths. Production filtering follows
+these relationships rather than removing packages because their stored display
+paths were omitted. Nix input relationships are also retained separately.
+
+Unknown or non-exhaustive adjacency is identified by `compositions` with
+`aggregate: "unknown"`. A component with unknown adjacency is not emitted as
+an empty leaf. Known positive edges remain available; `dependsOn: []` is used
+only for a known leaf. Parsers that have not supplied explicit relationships
+retain their known path-derived edges and mark their adjacency as unknown.
+
 - **Active findings**: attached as component properties (`ohrisk:findingId`, `ohrisk:fingerprint`, `ohrisk:riskSeverity`, `ohrisk:recommendation`, `ohrisk:action`)
 - **Waived findings**: NOT listed. CycloneDX does not receive waived finding data.
 - **Expired/unmatched waivers**: NOT listed.

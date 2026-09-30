@@ -4,6 +4,7 @@ import { err, ok, type Result } from "../shared/result";
 import type { LicenseEvidence } from "../evidence/types";
 import { parsePackageUrl } from "./package-url";
 import { disambiguatePackageRecordIds } from "./package-identity";
+import { collectDependencyEdges } from "./dependency-edges";
 import {
   inputFileReadErrorCategory,
   inputFileReadErrorDetails,
@@ -163,11 +164,25 @@ export function parseSpdxDocument(
 
   const nodes = [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id));
   const nodeIds = new Set(nodes.map((node) => node.id));
+  const relationships = collectDependencyEdges({
+    refs: packages.map((pkg) => pkg.spdxId), rootRefs,
+    idForRef: (ref) => {
+      const id = packagesBySpdxId.get(ref)?.id;
+      return id !== undefined && nodeIds.has(id) ? id : undefined;
+    },
+    childRefs: (ref) => dependencyMap.value.get(ref) ?? [],
+    dependencyTypeForRef: () => "production",
+    // SPDX relationships declare positive edges but do not establish exhaustive adjacency.
+    unknownRefs: packages.map((pkg) => pkg.spdxId),
+    rootDependenciesUnknown: true
+  });
+  if (!relationships.ok) return relationships;
 
   return ok({
     rootName,
     lockfilePath,
     nodes,
+    ...relationships.value,
     ...(diagnostics.length > 0
       ? { diagnostics }
       : {}),

@@ -1,5 +1,8 @@
 import type { LicenseEvidence } from "../evidence/types";
 import { refineGoDependencyScopes } from "../graph/go-scope";
+import {
+  BOUNDED_PATHS_MAX_PATH_DEPTH, BOUNDED_PATHS_MAX_STORED_PATH_SEGMENTS, BOUNDED_PATHS_TRUNCATED_SEGMENT
+} from "../graph/bounded-dependency-paths";
 import type { DependencyGraph, DependencyNode } from "../graph/types";
 import { normalizeAllLicenseEvidence } from "../license/normalize";
 import type { NormalizedLicense } from "../license/types";
@@ -116,22 +119,38 @@ export function filterGraphForProdOnly(
       .map((node) => node.id)
   );
   const dependencyPathSegments = dependencyPathSegmentSets(graph.nodes, productionNodeIds);
+  const productionParents = graph.edges === undefined ? undefined : productionParentsFromEdges(graph, productionNodeIds);
+  const relationshipsUnknown = graph.rootDependenciesUnknown === true
+    || (graph.unknownDependencyNodeIds?.length ?? 0) > 0;
+  const rootIds = new Set(graph.edges?.filter((edge) => edge.from === undefined
+    && edge.dependencyType !== "development").map((edge) => edge.to));
+  let recoveredSegmentBudget = BOUNDED_PATHS_MAX_STORED_PATH_SEGMENTS;
+  let remainingNodes = graph.nodes.length;
   const nodes = graph.nodes
     .filter((node) => productionNodeIds.has(node.id))
+    .filter((node) => productionParents === undefined || productionParents.has(node.id)
+      || relationshipsUnknown)
     .map((node) => {
-      const paths = node.paths.filter((dependencyPath) =>
+      remainingNodes -= 1;
+      let paths = node.paths.filter((dependencyPath) =>
         isProductionRelevantPath(dependencyPath, dependencyPathSegments)
       );
+      if (paths.length === 0 && productionParents?.has(node.id)) {
+        const capacity = Math.max(3, recoveredSegmentBudget - remainingNodes * 3);
+        const recovered = productionPath(graph.rootName ?? "<root>", node.id, productionParents, capacity);
+        recoveredSegmentBudget -= recovered.length;
+        paths = [recovered];
+      }
 
       return {
         ...node,
-        direct: paths.some((dependencyPath) =>
-          isDirectDependencyPath(dependencyPath, dependencyPathSegments.all)
-        ),
+        direct: productionParents === undefined
+          ? paths.length === 0 ? node.direct : paths.some((dependencyPath) =>
+            isDirectDependencyPath(dependencyPath, dependencyPathSegments.all))
+          : rootIds.has(node.id) || (graph.rootDependenciesUnknown === true && node.direct),
         paths
       };
-    })
-    .filter((node) => node.paths.length > 0);
+    });
   const nodeIds = new Set(nodes.map((node) => node.id));
 
   const embeddedEvidence = graph.embeddedEvidence?.filter((evidence) =>
@@ -140,6 +159,7 @@ export function filterGraphForProdOnly(
   return {
     ...graph,
     nodes,
+    ...filteredRelationships(graph, nodeIds, true),
     ...(embeddedEvidence ? { embeddedEvidence } : {})
   };
 }
@@ -165,7 +185,59 @@ export function filterGraphBeforeEvidence(
   return {
     ...graph,
     nodes,
+    ...filteredRelationships(graph, nodeIds, false),
     ...(embeddedEvidence ? { embeddedEvidence } : {})
+  };
+}
+
+function productionParentsFromEdges(graph: DependencyGraph, candidateIds: Set<string>): Map<string, string | undefined> {
+  const children = new Map<string, string[]>();
+  const parents = new Map<string, string | undefined>();
+  const queue: string[] = [];
+  for (const edge of graph.edges ?? []) {
+    if (edge.dependencyType === "development" || !candidateIds.has(edge.to)) continue;
+    if (edge.from === undefined) {
+      if (!parents.has(edge.to)) {
+        parents.set(edge.to, undefined);
+        queue.push(edge.to);
+      }
+    } else if (candidateIds.has(edge.from)) {
+      const childIds = children.get(edge.from) ?? [];
+      childIds.push(edge.to);
+      children.set(edge.from, childIds);
+    }
+  }
+  for (let index = 0; index < queue.length; index++) {
+    const current = queue[index]!;
+    for (const child of children.get(current) ?? []) {
+      if (!parents.has(child)) {
+        parents.set(child, current);
+        queue.push(child);
+      }
+    }
+  }
+  return parents;
+}
+
+function productionPath(rootName: string, nodeId: string, parents: Map<string, string | undefined>, capacity: number): string[] {
+  const tail: string[] = [];
+  let current: string | undefined = nodeId;
+  const maxDepth = Math.max(1, Math.min(BOUNDED_PATHS_MAX_PATH_DEPTH, capacity - 2));
+  while (current !== undefined && tail.length < maxDepth) {
+    tail.push(current);
+    current = parents.get(current);
+  }
+  return [rootName, ...(current === undefined ? [] : [BOUNDED_PATHS_TRUNCATED_SEGMENT]), ...tail.reverse()];
+}
+
+function filteredRelationships(graph: DependencyGraph, nodeIds: Set<string>, prodOnly: boolean): Partial<DependencyGraph> {
+  return {
+    ...(graph.edges === undefined ? {} : { edges: graph.edges.filter((edge) =>
+      nodeIds.has(edge.to) && (edge.from === undefined || nodeIds.has(edge.from))
+      && (!prodOnly || edge.dependencyType !== "development")) }),
+    ...(graph.unknownDependencyNodeIds === undefined ? {} : {
+      unknownDependencyNodeIds: graph.unknownDependencyNodeIds.filter((id) => nodeIds.has(id))
+    })
   };
 }
 

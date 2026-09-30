@@ -18,7 +18,7 @@ publish, tag, change secrets, or change account settings.
 - GitHub Actions billing is available for the automated publish workflow.
 - `CHANGELOG.md` contains a dated section for the exact `package.json` version;
   an `Unreleased` candidate heading is intentionally rejected.
-- `git ls-remote --tags origin refs/tags/v1.15.1` prints no existing remote tag.
+- `git ls-remote --tags origin refs/tags/v1.16.0` prints no existing remote tag.
 
 The initial macOS and Windows standalone assets are unsigned. Code-signing or
 notarization certificates must not be added until their protected secrets,
@@ -75,8 +75,8 @@ update candidate references such as this file's example tag. Then push `main`
 and a version tag matching `package.json`:
 
 ```bash
-git tag v1.15.2
-git push origin v1.15.2
+git tag v1.16.0
+git push origin v1.16.0
 ```
 
 The tag workflow performs the irreversible work in this order:
@@ -116,9 +116,9 @@ authentication and running the same local gate:
 ```bash
 npm whoami
 npm publish --access public --provenance
-npm view ohrisk@1.15.2 version
-npm view ohrisk@1.15.2 dist.tarball
-npm view ohrisk@1.15.2 dist.integrity
+npm view ohrisk@1.16.0 version
+npm view ohrisk@1.16.0 dist.tarball
+npm view ohrisk@1.16.0 dist.integrity
 ```
 
 Standalone recovery must use a draft GitHub Release. Build all targets, inspect

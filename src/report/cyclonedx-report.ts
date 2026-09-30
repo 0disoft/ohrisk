@@ -1,6 +1,7 @@
 import path from "node:path";
 
-import type { DependencyGraph, DependencyNode } from "../graph/types";
+import type { DependencyEdge, DependencyGraph, DependencyNode } from "../graph/types";
+import { dependencyEdgesForGraph } from "../graph/dependency-edges";
 import type { NormalizedLicense } from "../license/types";
 import type { RiskFinding } from "../policy/types";
 import type { ProjectInput } from "../project/discover";
@@ -47,7 +48,19 @@ export function renderCycloneDxReport(input: CycloneDxReportInput): string {
   const findingsByPackageId = new Map(
     input.riskFindings.map((finding) => [finding.packageId, finding])
   );
-  const childRefsByNodeId = directChildRefsByNodeId(input.graph.nodes);
+  const edges = dependencyEdgesForGraph(input.graph);
+  const childRefsByNodeId = directChildRefsByNodeId(input.graph.nodes, edges);
+  const nodeById = new Map(input.graph.nodes.map((node) => [node.id, node]));
+  const rootChildRefs = [...new Set(edges.filter((edge) => edge.from === undefined).flatMap((edge) => {
+    const node = nodeById.get(edge.to);
+    return node ? [componentBomRef(node)] : [];
+  }))].sort();
+  const rootDependenciesUnknown = input.graph.edges === undefined || input.graph.rootDependenciesUnknown === true;
+  const unknownIds = new Set(input.graph.edges === undefined
+    ? input.graph.nodes.map((node) => node.id)
+    : input.graph.unknownDependencyNodeIds ?? []);
+  const unknownRefs = input.graph.nodes.filter((node) => unknownIds.has(node.id)).map(componentBomRef);
+  if (rootDependenciesUnknown) unknownRefs.unshift("project");
 
   const components = input.graph.nodes.map((node) =>
     renderComponent({
@@ -91,19 +104,17 @@ export function renderCycloneDxReport(input: CycloneDxReportInput): string {
       },
       components,
       dependencies: [
-        {
+        ...(!rootDependenciesUnknown || rootChildRefs.length > 0 ? [{
           ref: "project",
-          dependsOn: components
-            .filter((component) => component.properties.some(
-              (property) => property.name === "ohrisk:direct" && property.value === "true"
-            ))
-            .map((component) => component["bom-ref"])
-        },
-        ...input.graph.nodes.map((node) => ({
+          dependsOn: rootChildRefs
+        }] : []),
+        ...input.graph.nodes.filter((node) =>
+          !unknownIds.has(node.id) || (childRefsByNodeId.get(node.id)?.length ?? 0) > 0).map((node) => ({
           ref: componentBomRef(node),
           dependsOn: childRefsByNodeId.get(node.id) ?? []
         }))
-      ]
+      ],
+      ...(unknownRefs.length > 0 ? { compositions: [{ aggregate: "unknown", dependencies: unknownRefs }] } : {})
     },
     null,
     2
@@ -306,27 +317,17 @@ function componentScope(node: DependencyNode): "required" | "optional" | "exclud
   }
 }
 
-function directChildRefsByNodeId(nodes: DependencyNode[]): Map<string, string[]> {
+function directChildRefsByNodeId(nodes: DependencyNode[], edges: DependencyEdge[]): Map<string, string[]> {
   const nodeIds = new Set(nodes.map((node) => node.id));
   const nodeOrder = new Map(nodes.map((node, index) => [node.id, index]));
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const childIdsByNodeId = new Map<string, Set<string>>();
 
-  for (const candidate of nodes) {
-    for (const path of candidate.paths) {
-      const packagePath = path.map(packageIdFromPathSegment);
-      for (let index = 0; index < packagePath.length - 1; index += 1) {
-        const parentId = packagePath[index];
-        const childId = packagePath[index + 1];
-        if (!parentId || !childId || !nodeIds.has(parentId) || !nodeIds.has(childId)) {
-          continue;
-        }
-
-        const childIds = childIdsByNodeId.get(parentId) ?? new Set<string>();
-        childIds.add(childId);
-        childIdsByNodeId.set(parentId, childIds);
-      }
-    }
+  for (const edge of edges) {
+    if (edge.from === undefined || !nodeIds.has(edge.from) || !nodeIds.has(edge.to)) continue;
+    const childIds = childIdsByNodeId.get(edge.from) ?? new Set<string>();
+    childIds.add(edge.to);
+    childIdsByNodeId.set(edge.from, childIds);
   }
 
   const childRefsByNodeId = new Map<string, string[]>();
@@ -341,8 +342,4 @@ function directChildRefsByNodeId(nodes: DependencyNode[]): Map<string, string[]>
   }
 
   return childRefsByNodeId;
-}
-
-function packageIdFromPathSegment(segment: string): string {
-  return segment.split(" -> ").at(-1)?.trim() ?? segment;
 }
