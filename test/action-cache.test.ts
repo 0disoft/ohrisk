@@ -13,12 +13,14 @@ const action = parseYaml(actionSource) as CompositeAction;
 const CACHE_ACTION_SHA = "55cc8345863c7cc4c66a329aec7e433d2d1c52a9";
 const CACHE_RESTORE_ACTION = `actions/cache/restore@${CACHE_ACTION_SHA}`;
 const CACHE_SAVE_ACTION = `actions/cache/save@${CACHE_ACTION_SHA}`;
+const gitBash = path.join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bin", "bash.exe");
+const bashCommand = process.platform === "win32" && existsSync(gitBash) ? gitBash : "bash";
 // The bash-execution probes need a working bash. Windows dev machines without
 // Git Bash or WSL cannot run them, so those tests are skipped there; the Linux
 // CI release gate still executes them on every pull request.
 function hasWorkingBash(): boolean {
   try {
-    const result = spawnSync("bash", ["-c", "exit 0"], {
+    const result = spawnSync(bashCommand, ["-c", "exit 0"], {
       encoding: "utf8",
       timeout: 4000
     });
@@ -87,10 +89,10 @@ describe("Ohrisk Action persistent artifact cache", () => {
         return [name, inputName ? action.inputs?.[inputName]?.default ?? "" : ""];
       }));
       for (const command of ["ci", "diff", "scan"]) {
-        const result = spawnSync("bash", ["-c", run.run], {
-          cwd: workspace, encoding: "utf8", timeout: 10_000,
+        const result = spawnSync(bashCommand, ["-s"], {
+          input: run.run, cwd: workspace, encoding: "utf8", timeout: 10_000,
           env: {
-            ...process.env, ...defaults, OHRISK_ACTION_PATH: workspace,
+            ...process.env, MSYS2_ARG_CONV_EXCL: "*", ...defaults, OHRISK_ACTION_PATH: workspace,
             OHRISK_COMMAND: command, OHRISK_BASELINE_REF: command === "diff" ? "main" : "",
             OHRISK_ALLOW_PARTIAL_EVIDENCE: "true", OHRISK_FAIL_ON: command === "scan" ? "" : "high",
             GITHUB_OUTPUT: path.join(workspace, "github-output.txt")
@@ -216,7 +218,7 @@ describe("Ohrisk Action persistent artifact cache", () => {
         cacheDir: "../shared-cache",
         cwd: workspace
       });
-      expect(traversal.status).not.toBe(0);
+      expect(traversal.status, JSON.stringify(traversal)).not.toBe(0);
       expect(traversal.stdout).toContain(
         "cache-dir must not contain .. path segments"
       );
@@ -279,7 +281,7 @@ describe("Ohrisk Action persistent artifact cache", () => {
         cacheDir: "",
         cwd: workspace
       });
-      expect(result.status).toBe(0);
+      expect(result.status, JSON.stringify(result)).toBe(0);
       const expectedDigest = createHash("sha256").update(archiveBytes).digest("hex");
       expect(result.outputs["cache-key"]).toBe(
         `ohrisk-artifacts-v1-Linux-X64-test-dependency-digest-${expectedDigest}`
@@ -338,11 +340,13 @@ function invokeCacheSettings(input: CacheSettingsInvocation): CacheSettingsResul
     .replaceAll("${{ runner.os }}", "Linux")
     .replaceAll("${{ runner.arch }}", "X64");
 
-  const result = spawnSync("bash", ["-c", renderedScript], {
+  const result = spawnSync(bashCommand, ["-s"], {
+    input: renderedScript,
     cwd: input.cwd,
     encoding: "utf8",
     env: {
       ...process.env,
+      MSYS2_ARG_CONV_EXCL: "*",
       GITHUB_OUTPUT: outputPath,
       OHRISK_ARCHIVE: input.archive ?? "",
       OHRISK_CACHE_DIR: input.cacheDir,
