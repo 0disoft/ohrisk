@@ -2,6 +2,13 @@
 
 ## 1.16.0 - Unreleased
 
+- Bounded evidence scheduling, source selection, local discovery and ecosystem
+  acquisition are separated from one common secure remote artifact reader.
+  Successful Go, Nix, Zig and Hex integrity checks are retained in artifact receipts.
+
+- Cancelled replay saves no snapshot; replay accepts the supported two MiB
+  license-file bound while retaining the overall snapshot size limit.
+
 - Inspection execution, shared scan result summaries, HTML markup and browser
   filtering have separate module owners while retaining existing report contracts.
 

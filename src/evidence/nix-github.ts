@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { recordArtifactCheck } from "./artifact-capture";
 import { closeSync, mkdtempSync, openSync, readSync, rmSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -73,6 +74,7 @@ export function collectNixGitHubArchiveEvidence(input: {
 
   return collectVerifiedNixTarEvidence({
     packageId: input.packageId,
+    artifact: input.tarball,
     source: bufferTarSource(tar),
     compressedBytes: compressed.byteLength,
     expectedDigest,
@@ -114,6 +116,7 @@ export async function collectNixTarXzArchiveEvidence(input: {
 
 function collectVerifiedNixTarEvidence(input: {
   packageId: string;
+  artifact: Uint8Array;
   source: TarSource;
   compressedBytes: number;
   expectedDigest: Buffer;
@@ -145,6 +148,7 @@ function collectVerifiedNixTarEvidence(input: {
       }));
     }
 
+    recordArtifactCheck({ packageId: input.packageId, bytes: input.artifact, kind: "nix-nar-hash", value: input.expectedNarHash });
     const files = collectRootEvidenceFiles(input.source, entries);
     return ok({
       packageId: input.packageId,
@@ -199,6 +203,7 @@ async function collectTemporaryNixTarXzEvidence(input: {
     result = decompressed.ok
       ? collectVerifiedNixTarEvidence({
           packageId: input.packageId,
+          artifact: input.compressed,
           source: fileTarSource(descriptor, decompressed.bytesWritten),
           compressedBytes: input.compressedBytes,
           expectedDigest: input.expectedDigest,

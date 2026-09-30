@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { recordArtifactCheck } from "./artifact-capture";
 import { TextDecoder } from "node:util";
 
 import { readArchiveBytes } from "../archive/archive-reader";
@@ -88,6 +89,7 @@ export function collectGoModuleZipEvidence(input: {
     }));
   }
 
+  recordArtifactCheck({ packageId: input.packageId, bytes: input.zip, kind: "go-dirhash-h1", value: computedChecksum.value });
   const evidencePaths = archive.value.entries
     .filter((entry) => entry.type === "file")
     .map((entry) => entry.path)

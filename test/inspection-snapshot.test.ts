@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { main } from "../src/cli/main";
@@ -87,4 +87,21 @@ test("replay rejects fresh dependency input and registry options", () => {
   for (const extra of [["--lockfile", "package-lock.json"], ["--archive", "a.zip"], ["--all"], ["--registry-url", "https://registry.npmjs.org"]]) {
     expect(parseArgs(["scan", "--from-snapshot", "saved.json", ...extra]).ok).toBe(false);
   }
+});
+
+test("cancelled replay writes no new snapshot and supported two MiB license text remains readable", async () => {
+  const root = project();
+  try {
+    await run(root, ["scan", "--offline", "--snapshot", "saved.json"]);
+    const code = await main(["scan", "--from-snapshot", "saved.json", "--snapshot", "cancelled.json"], {
+      cwd: root, env: {}, signal: AbortSignal.abort(), stdout: () => {}, stderr: () => {}
+    });
+    expect(code).toBe(130);
+    expect(existsSync(path.join(root, "cancelled.json"))).toBe(false);
+    const saved = JSON.parse(readFileSync(path.join(root, "saved.json"), "utf8"));
+    saved.payload.evidence[0].files = [{ path: "LICENSE", kind: "license", text: "x".repeat(2 * 1024 * 1024) }];
+    saved.payloadSha256 = digest(JSON.stringify(saved.payload));
+    writeFileSync(path.join(root, "large.json"), JSON.stringify(saved));
+    expect(readInspectionSnapshot(path.join(root, "large.json")).ok).toBe(true);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

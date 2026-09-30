@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ohrisk-action-source-sha256: c3cecf16fb63fcda82a77f4b21a2bbc7f6b331e80f3014e197915669233b1619
+// ohrisk-action-source-sha256: f78f6227f7cd3fdb8fb6e6fa5729dd593d136d619dd414070e73395dc55a8bf4
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -17908,109 +17908,8 @@ function indexFindings(findings, side) {
   return indexed;
 }
 
-// src/evidence/collect.ts
-import { createHash as createHash11, timingSafeEqual as timingSafeEqual7 } from "node:crypto";
-
-// src/evidence/artifact-capture.ts
-import { AsyncLocalStorage } from "node:async_hooks";
-import { createHash } from "node:crypto";
-var activeCapture = new AsyncLocalStorage;
-async function captureArtifacts(work, options = {}) {
-  const maxArtifacts = options.maxArtifacts ?? 50000;
-  if (!Number.isSafeInteger(maxArtifacts) || maxArtifacts < 1 || maxArtifacts > 50000) {
-    throw new RangeError("Artifact capture limit must be an integer from 1 to 50000.");
-  }
-  const capture = { receipts: new Map, contentKeys: new Set, checks: new Map, maxArtifacts, truncated: false, closed: false };
-  const value = await activeCapture.run(capture, async () => {
-    try {
-      return await work();
-    } finally {
-      capture.closed = true;
-    }
-  });
-  const artifacts = [...capture.receipts.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, receipt]) => ({
-    ...receipt,
-    retrievals: [...receipt.retrievals].sort(),
-    checks: [...capture.checks.get(contentKey(receipt.packageId, receipt.sha256))?.entries() ?? []].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, check]) => ({ ...check }))
-  }));
-  return { value, artifacts, truncated: capture.truncated };
-}
-function recordArtifactBytes(input) {
-  const capture = activeCapture.getStore();
-  if (!capture || capture.closed)
-    return;
-  const sha256 = createHash("sha256").update(input.bytes).digest("hex");
-  const requestedOrigin = safeArtifactOrigin(input.requestedOrigin);
-  const key = JSON.stringify([input.packageId, requestedOrigin ?? null, sha256]);
-  const existing = capture.receipts.get(key);
-  if (existing) {
-    if (!existing.retrievals.includes(input.retrieval))
-      existing.retrievals.push(input.retrieval);
-    return;
-  }
-  if (capture.receipts.size >= capture.maxArtifacts) {
-    capture.truncated = true;
-    return;
-  }
-  capture.receipts.set(key, {
-    packageId: input.packageId,
-    ...requestedOrigin ? { requestedOrigin } : {},
-    sha256,
-    byteLength: input.bytes.byteLength,
-    retrievals: [input.retrieval],
-    checks: []
-  });
-  capture.contentKeys.add(contentKey(input.packageId, sha256));
-}
-function recordArtifactCheck(input) {
-  const capture = activeCapture.getStore();
-  if (!capture || capture.closed)
-    return;
-  const sha256 = createHash("sha256").update(input.bytes).digest("hex");
-  const key = contentKey(input.packageId, sha256);
-  if (!capture.contentKeys.has(key))
-    recordArtifactBytes({ packageId: input.packageId, bytes: input.bytes, retrieval: "verification-only" });
-  if (!capture.contentKeys.has(key))
-    return;
-  const checks = capture.checks.get(key) ?? new Map;
-  checks.set(JSON.stringify([input.kind, input.value]), { kind: input.kind, value: input.value });
-  capture.checks.set(key, checks);
-}
-function contentKey(packageId, sha256) {
-  return JSON.stringify([packageId, sha256]);
-}
-function safeArtifactOrigin(value) {
-  if (!value)
-    return;
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "https:" && url.protocol !== "http:")
-      return;
-    url.username = "";
-    url.password = "";
-    url.search = "";
-    url.hash = "";
-    return url.toString();
-  } catch {
-    return;
-  }
-}
-
-// src/evidence/collect.ts
-import {
-  closeSync as closeSync5,
-  existsSync as existsSync46,
-  openSync as openSync5,
-  readdirSync as readdirSync34,
-  readSync as readSync5,
-  statSync as statSync34
-} from "node:fs";
-import path82 from "node:path";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
-import { gunzipSync as gunzipSync6 } from "node:zlib";
-
 // src/evidence/cache.ts
-import { createHash as createHash2 } from "node:crypto";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   lstatSync as lstatSync3,
@@ -18955,7 +18854,7 @@ function isRegularFile(filePath) {
   }
 }
 function sha256(bytes) {
-  return createHash2("sha256").update(bytes).digest("hex");
+  return createHash("sha256").update(bytes).digest("hex");
 }
 function removeQuietly(filePath) {
   try {
@@ -18978,95 +18877,6 @@ function cacheOperationError(message, rootDir, cause) {
       cause: cause instanceof Error ? cause.message : String(cause)
     }
   });
-}
-
-// src/evidence/artifact-response.ts
-function artifactBodyLimitDetails(limit) {
-  return limit.contentLength === undefined ? {
-    maxBytes: limit.maxBytes,
-    observedBytes: limit.observedBytes
-  } : {
-    maxBytes: limit.maxBytes,
-    observedBytes: limit.observedBytes,
-    contentLength: limit.contentLength
-  };
-}
-async function readResponseBodyWithLimit(input) {
-  const contentLength = readContentLength(input.response.headers);
-  if (contentLength !== undefined && contentLength > input.maxBytes) {
-    cancelReadableBody(input.response.body);
-    return err(input.createTooLargeError({
-      maxBytes: input.maxBytes,
-      observedBytes: contentLength,
-      contentLength
-    }));
-  }
-  if (input.response.body) {
-    return readStreamBodyWithLimit({
-      body: input.response.body,
-      signal: input.signal,
-      maxBytes: input.maxBytes,
-      ...contentLength === undefined ? {} : { contentLength },
-      createTooLargeError: input.createTooLargeError
-    });
-  }
-  return err(input.createUnreadableBodyError());
-}
-function cancelReadableBody(body) {
-  if (!body) {
-    return;
-  }
-  body.cancel().catch(() => {
-    return;
-  });
-}
-async function readStreamBodyWithLimit(input) {
-  const reader = input.body.getReader();
-  const cancelReader = () => {
-    reader.cancel().catch(() => {
-      return;
-    });
-  };
-  const chunks = [];
-  let observedBytes = 0;
-  try {
-    if (input.signal.aborted) {
-      cancelReader();
-    } else {
-      input.signal.addEventListener("abort", cancelReader, { once: true });
-    }
-    while (true) {
-      const chunk = await reader.read();
-      if (chunk.done) {
-        return ok(Buffer.concat(chunks, observedBytes));
-      }
-      observedBytes += chunk.value.byteLength;
-      if (observedBytes > input.maxBytes) {
-        cancelReader();
-        return err(input.createTooLargeError({
-          maxBytes: input.maxBytes,
-          observedBytes,
-          ...input.contentLength === undefined ? {} : { contentLength: input.contentLength }
-        }));
-      }
-      chunks.push(Buffer.from(chunk.value));
-    }
-  } finally {
-    input.signal.removeEventListener("abort", cancelReader);
-    reader.releaseLock();
-  }
-}
-function readContentLength(headers) {
-  const value = headers?.get("content-length");
-  const trimmed = value?.trim();
-  if (trimmed === undefined || trimmed === "") {
-    return;
-  }
-  if (!/^\d+$/.test(trimmed)) {
-    return;
-  }
-  const parsed = Number(trimmed);
-  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
 // src/evidence/artifact-transport.ts
@@ -19600,1123 +19410,1219 @@ function abortableDelay(ms, signal) {
   });
 }
 
-// src/evidence/cargo-crate.ts
-import { createHash as createHash4, timingSafeEqual } from "node:crypto";
-import path5 from "node:path";
+// src/evidence/local-artifact-path.ts
+import { existsSync as existsSync2, realpathSync, statSync as statSync2 } from "node:fs";
+import path4 from "node:path";
 
-// src/archive/archive-reader.ts
-import { createHash as createHash3 } from "node:crypto";
-import { closeSync, fstatSync, openSync, readSync, realpathSync, statSync as statSync2 } from "node:fs";
-import { basename, isAbsolute, relative, resolve, sep } from "node:path";
-import { gunzipSync, inflateRawSync } from "node:zlib";
-var BLOCK_BYTES = 512;
-var ZIP_EOCD_SIGNATURE = 101010256;
-var ZIP_CENTRAL_SIGNATURE = 33639248;
-var ZIP_LOCAL_SIGNATURE = 67324752;
-var ZIP64_EOCD_SIGNATURE = 101075792;
-var ZIP64_LOCATOR_SIGNATURE = 117853008;
-var ZIP_EOCD_BYTES = 22;
-var ZIP_MAX_COMMENT_BYTES = 65535;
-var ZIP64_UINT16 = 65535;
-var ZIP64_UINT32 = 4294967295;
-var ZIP_DATA_DESCRIPTOR_SIGNATURE = 134695760;
-var DEFAULT_ARCHIVE_LIMITS = Object.freeze({
-  inputBytes: 256 * 1024 * 1024,
-  entries: 50000,
-  pathBytes: 4096,
-  pathSegments: 64,
-  segmentBytes: 255,
-  entryBytes: 50 * 1024 * 1024,
-  expandedBytes: 512 * 1024 * 1024,
-  materializedBytes: 128 * 1024 * 1024,
-  compressionRatio: 200,
-  compressionRatioMinBytes: 1024 * 1024,
-  workDeadlineMs: 30000
-});
+// src/evidence/package-integrity.ts
+import { createHash as createHash3, timingSafeEqual } from "node:crypto";
 
-class ArchiveFailure extends Error {
-  code;
-  category;
-  details;
-  constructor(input) {
-    super(input.message);
-    this.name = "ArchiveFailure";
-    this.code = input.code;
-    this.category = input.category;
-    if (input.details !== undefined) {
-      this.details = input.details;
-    }
+// src/evidence/artifact-capture.ts
+import { AsyncLocalStorage } from "node:async_hooks";
+import { createHash as createHash2 } from "node:crypto";
+var activeCapture = new AsyncLocalStorage;
+async function captureArtifacts(work, options = {}) {
+  const maxArtifacts = options.maxArtifacts ?? 50000;
+  if (!Number.isSafeInteger(maxArtifacts) || maxArtifacts < 1 || maxArtifacts > 50000) {
+    throw new RangeError("Artifact capture limit must be an integer from 1 to 50000.");
   }
-}
-var CRC32_TABLE = buildCrc32Table();
-function readArchiveFile(input) {
-  const safeName = safeBasename(input.archivePath);
-  try {
-    const limits = resolveLimits(input.limits);
-    checkArchiveCancellation(input.signal, safeName);
-    const cwd = realpathSync(resolve(input.cwd));
-    const filePath = realpathSync(resolve(cwd, input.archivePath));
-    const relativePath = relative(cwd, filePath);
-    if (relativePath === "" || isAbsolute(relativePath) || relativePath === ".." || relativePath.startsWith(`..${sep}`)) {
-      fail("ARCHIVE_READ_FAILED", "invalid_input", "Archive path is outside the working directory.", {
-        basename: safeName
-      });
-    }
-    const bytes = readFileBytesWithLimit(filePath, limits.inputBytes, safeName, input.signal);
-    return readOwnedArchiveBuffer({
-      displayName: relativePath.split(sep).join("/"),
-      bytes,
-      limits,
-      ...input.now ? { now: input.now } : {},
-      ...input.signal ? { signal: input.signal } : {}
-    });
-  } catch (cause) {
-    return err(toOhriskError(cause, "ARCHIVE_READ_FAILED", "filesystem", safeName));
-  }
-}
-function readArchiveBytes(input) {
-  const safeName = safeBasename(input.displayName);
-  try {
-    const limits = resolveLimits(input.limits);
-    checkArchiveCancellation(input.signal, safeName);
-    enforceLimit("inputBytes", limits.inputBytes, input.bytes.byteLength, safeName);
-    return readOwnedArchiveBuffer({
-      ...input,
-      limits,
-      bytes: Buffer.from(input.bytes)
-    });
-  } catch (cause) {
-    return err(toOhriskError(cause, "ARCHIVE_MALFORMED", "invalid_input", safeName));
-  }
-}
-function readOwnedArchiveBuffer(input) {
-  const safeName = safeBasename(input.displayName);
-  try {
-    const limits = resolveLimits(input.limits);
-    enforceLimit("inputBytes", limits.inputBytes, input.bytes.byteLength, safeName);
-    const budget = createBudget(limits, input.now, input.signal);
-    checkDeadline(budget, safeName);
-    const format = detectFormat(input.bytes, input.formatHint, safeName);
-    const indexed = format === "zip" ? parseZip(input.bytes, budget, safeName) : parseTarContainer(input.bytes, format, budget, safeName, input.tarLinkPolicy ?? "reject", input.onTarSymlink);
-    const sha256 = createHash3("sha256").update(input.bytes).digest("hex");
-    checkDeadline(budget, safeName);
-    const source = createArchiveSource({
-      format,
-      displayPath: safeDisplayPath(input.displayName),
-      sha256,
-      indexed,
-      budget,
-      basename: safeName
-    });
-    return ok(source);
-  } catch (cause) {
-    return err(toOhriskError(cause, "ARCHIVE_MALFORMED", "invalid_input", safeName));
-  }
-}
-function createArchiveSource(input) {
-  const sorted = [...input.indexed].sort((left, right) => comparePaths(left.path, right.path));
-  const publicEntries = Object.freeze(sorted.map(({ path, type, size, compressedSize }) => Object.freeze({ path, type, size, compressedSize })));
-  const byPath = new Map(sorted.map((entry) => [entry.path, entry]));
-  const paths = Object.freeze(publicEntries.map((entry) => entry.path));
-  const beginWork = () => {
-    const startedAt = input.budget.now();
-    return Object.freeze({
-      checkpoint: (entryPath) => {
-        try {
-          checkDeadlineSince(input.budget, startedAt, input.basename, entryPath);
-          return ok(undefined);
-        } catch (cause) {
-          return err(toOhriskError(cause, "ARCHIVE_LIMIT_EXCEEDED", "unsupported_input", input.basename));
-        }
-      }
-    });
-  };
-  const readEntry = (entryPath) => {
+  const capture = { receipts: new Map, contentKeys: new Set, checks: new Map, maxArtifacts, truncated: false, closed: false };
+  const value = await activeCapture.run(capture, async () => {
     try {
-      const startedAt = input.budget.now();
-      checkDeadlineSince(input.budget, startedAt, input.basename);
-      const normalized = validateEntryPath(entryPath, input.budget.limits, false, input.basename);
-      const entry = byPath.get(normalized);
-      if (!entry || entry.type !== "file") {
-        fail("ARCHIVE_READ_FAILED", "invalid_input", "Archive file entry was not found.", {
-          basename: input.basename,
-          entryPath: normalized
-        });
-      }
-      chargeMaterialization(input.budget, entry.size, input.basename, entry.path);
-      const data = entry.materialize(startedAt);
-      checkDeadlineSince(input.budget, startedAt, input.basename, entry.path);
-      return ok(data);
-    } catch (cause) {
-      return err(toOhriskError(cause, "ARCHIVE_READ_FAILED", "invalid_input", input.basename));
+      return await work();
+    } finally {
+      capture.closed = true;
     }
-  };
-  const hashEntrySha256 = (entryPath) => {
-    try {
-      const startedAt = input.budget.now();
-      checkDeadlineSince(input.budget, startedAt, input.basename);
-      const normalized = validateEntryPath(entryPath, input.budget.limits, false, input.basename);
-      const entry = byPath.get(normalized);
-      if (!entry || entry.type !== "file") {
-        fail("ARCHIVE_READ_FAILED", "invalid_input", "Archive file entry was not found.", {
-          basename: input.basename,
-          entryPath: normalized
-        });
+  });
+  const artifacts = [...capture.receipts.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, receipt]) => ({
+    ...receipt,
+    retrievals: [...receipt.retrievals].sort(),
+    checks: [...capture.checks.get(contentKey(receipt.packageId, receipt.sha256))?.entries() ?? []].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, check]) => ({ ...check }))
+  }));
+  return { value, artifacts, truncated: capture.truncated };
+}
+function recordArtifactBytes(input) {
+  const capture = activeCapture.getStore();
+  if (!capture || capture.closed)
+    return;
+  const sha256 = createHash2("sha256").update(input.bytes).digest("hex");
+  const requestedOrigin = safeArtifactOrigin(input.requestedOrigin);
+  const key = JSON.stringify([input.packageId, requestedOrigin ?? null, sha256]);
+  const existing = capture.receipts.get(key);
+  if (existing) {
+    if (!existing.retrievals.includes(input.retrieval))
+      existing.retrievals.push(input.retrieval);
+    return;
+  }
+  if (capture.receipts.size >= capture.maxArtifacts) {
+    capture.truncated = true;
+    return;
+  }
+  capture.receipts.set(key, {
+    packageId: input.packageId,
+    ...requestedOrigin ? { requestedOrigin } : {},
+    sha256,
+    byteLength: input.bytes.byteLength,
+    retrievals: [input.retrieval],
+    checks: []
+  });
+  capture.contentKeys.add(contentKey(input.packageId, sha256));
+}
+function recordArtifactCheck(input) {
+  const capture = activeCapture.getStore();
+  if (!capture || capture.closed)
+    return;
+  const sha256 = createHash2("sha256").update(input.bytes).digest("hex");
+  const key = contentKey(input.packageId, sha256);
+  if (!capture.contentKeys.has(key))
+    recordArtifactBytes({ packageId: input.packageId, bytes: input.bytes, retrieval: "verification-only" });
+  if (!capture.contentKeys.has(key))
+    return;
+  const checks = capture.checks.get(key) ?? new Map;
+  checks.set(JSON.stringify([input.kind, input.value]), { kind: input.kind, value: input.value });
+  capture.checks.set(key, checks);
+}
+function contentKey(packageId, sha256) {
+  return JSON.stringify([packageId, sha256]);
+}
+function safeArtifactOrigin(value) {
+  if (!value)
+    return;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" && url.protocol !== "http:")
+      return;
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return;
+  }
+}
+
+// src/evidence/package-integrity.ts
+var SUPPORTED_INTEGRITY_DIGEST_BYTES = {
+  sha1: 20,
+  sha256: 32,
+  sha384: 48,
+  sha512: 64
+};
+function verifyPackageIntegrity(input) {
+  if (!input.integrity) {
+    return ok(undefined);
+  }
+  const supported = parseSupportedIntegrityEntries(input.integrity);
+  if (supported.length === 0) {
+    return err(createError({
+      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
+      category: "unsupported_input",
+      message: "Package artifact integrity could not be verified because no supported digest was found.",
+      details: {
+        packageId: input.packageId,
+        resolved: input.resolvedDetail,
+        integrity: input.integrity,
+        supportedAlgorithms: ["sha512", "sha384", "sha256", "sha1"]
       }
-      chargeHashing(input.budget, entry.size, input.basename, entry.path);
-      const data = entry.materialize(startedAt);
-      checkDeadlineSince(input.budget, startedAt, input.basename, entry.path);
-      return ok(createHash3("sha256").update(data).digest("hex"));
-    } catch (cause) {
-      return err(toOhriskError(cause, "ARCHIVE_READ_FAILED", "invalid_input", input.basename));
+    }));
+  }
+  const computed = [];
+  for (const entry of supported) {
+    const actualDigest = createHash3(entry.algorithm).update(input.artifact).digest();
+    const actual = `${entry.algorithm}-${actualDigest.toString("base64")}`;
+    computed.push(actual);
+    if (actualDigest.byteLength === entry.digest.byteLength && timingSafeEqual(actualDigest, entry.digest)) {
+      recordArtifactCheck({ packageId: input.packageId, bytes: input.artifact, kind: "sri", value: actual });
+      return ok(undefined);
     }
-  };
-  return Object.freeze({
-    format: input.format,
-    displayPath: input.displayPath,
-    sha256: input.sha256,
-    entries: publicEntries,
-    listPaths: () => paths,
-    beginWork,
-    readEntry,
-    hashEntrySha256,
-    readText: (entryPath, maxBytes) => {
-      if (maxBytes !== undefined) {
-        if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
-          return err(createError({
-            code: "ARCHIVE_LIMIT_EXCEEDED",
-            category: "invalid_input",
-            message: "Archive text read limit is invalid.",
-            details: {
-              basename: input.basename,
-              entryPath: safeEntryPathForError(entryPath),
-              limit: "readTextBytes",
-              max: maxBytes,
-              observed: maxBytes
-            }
-          }));
-        }
-        const candidate = byPath.get(entryPath);
-        if (candidate && candidate.type === "file" && candidate.size > maxBytes) {
-          return err(createError({
-            code: "ARCHIVE_LIMIT_EXCEEDED",
-            category: "unsupported_input",
-            message: "Archive text entry exceeds the caller limit.",
-            details: {
-              basename: input.basename,
-              entryPath: candidate.path,
-              limit: "readTextBytes",
-              max: maxBytes,
-              observed: candidate.size
-            }
-          }));
-        }
-      }
-      const data = readEntry(entryPath);
-      if (!data.ok) {
-        return data;
-      }
-      try {
-        return ok(decodeUtf8(data.value, entryPath, input.basename));
-      } catch (cause) {
-        return err(toOhriskError(cause, "ARCHIVE_INTEGRITY_FAILED", "invalid_input", input.basename));
-      }
+  }
+  return err(createError({
+    code: "PACKAGE_INTEGRITY_CHECK_FAILED",
+    category: "unsupported_input",
+    message: "Package artifact integrity did not match the lockfile digest.",
+    details: {
+      packageId: input.packageId,
+      resolved: input.resolvedDetail,
+      integrity: input.integrity,
+      computed
+    }
+  }));
+}
+function sha256HexIntegrity(sha256) {
+  return `sha256-${Buffer.from(sha256, "hex").toString("base64")}`;
+}
+function parseSupportedIntegrityEntries(integrity) {
+  return integrity.split(/\s+/).map((entry) => {
+    const separatorIndex = entry.indexOf("-");
+    if (separatorIndex <= 0) {
+      return;
+    }
+    const algorithm = entry.slice(0, separatorIndex);
+    const digest = entry.slice(separatorIndex + 1);
+    if (!isSupportedIntegrityAlgorithm(algorithm) || digest === "") {
+      return;
+    }
+    const decoded = decodeIntegrityDigest({ algorithm, digest });
+    if (!decoded) {
+      return;
+    }
+    return {
+      algorithm,
+      digest: decoded
+    };
+  }).filter((entry) => entry !== undefined);
+}
+function isSupportedIntegrityAlgorithm(value) {
+  return Object.prototype.hasOwnProperty.call(SUPPORTED_INTEGRITY_DIGEST_BYTES, value);
+}
+function decodeIntegrityDigest(input) {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(input.digest)) {
+    return;
+  }
+  const paddingStart = input.digest.indexOf("=");
+  if (paddingStart !== -1 && !/^=+$/.test(input.digest.slice(paddingStart))) {
+    return;
+  }
+  if (input.digest.length % 4 === 1) {
+    return;
+  }
+  const decoded = Buffer.from(input.digest, "base64");
+  if (decoded.byteLength !== SUPPORTED_INTEGRITY_DIGEST_BYTES[input.algorithm]) {
+    return;
+  }
+  const normalizedInput = input.digest.replace(/=+$/, "");
+  const normalizedDecoded = decoded.toString("base64").replace(/=+$/, "");
+  return normalizedDecoded === normalizedInput ? decoded : undefined;
+}
+
+// src/evidence/local-artifact-path.ts
+function resolveExistingLocalArtifactPath(input) {
+  const allowedRoots = realpathLocalArtifactRoots({
+    projectRoot: input.projectRoot,
+    workspaceRoot: input.workspaceRoot
+  });
+  if (!allowedRoots.ok) {
+    return err(allowedRoots.error);
+  }
+  const artifactPath = realpathSync(input.artifactPath);
+  if (!isPathInsideAnyRoot(artifactPath, allowedRoots.value) && !isVerifiableExternalLocalTarball({
+    artifactPath,
+    integrity: input.integrity
+  })) {
+    return err(localArtifactOutsideProjectError({
+      packageId: input.packageId,
+      resolved: input.resolved,
+      artifactPath: input.artifactPath
+    }));
+  }
+  return ok(artifactPath);
+}
+function resolveTrustedWorkspaceRoot(workspaceRoot) {
+  const resolvedPath = path4.resolve(workspaceRoot);
+  try {
+    const realPath = realpathSync(resolvedPath);
+    if (!statSync2(realPath).isDirectory()) {
+      return err(workspaceRootInvalidError(workspaceRoot, resolvedPath));
+    }
+    return ok(realPath);
+  } catch {
+    return err(workspaceRootInvalidError(workspaceRoot, resolvedPath));
+  }
+}
+function localArtifactOutsideProjectError(input) {
+  return createError({
+    code: "PACKAGE_EVIDENCE_READ_FAILED",
+    category: "unsupported_input",
+    message: "Resolved package artifact must stay inside the project, repository root, or explicit workspace root.",
+    details: {
+      packageId: input.packageId,
+      resolved: safeOptionalUrlForErrorDetails(input.resolved),
+      artifactPath: safeUrlForErrorDetails(input.artifactPath)
     }
   });
 }
-function parseZip(bytes, budget, archiveName) {
-  const eocd = findZipEocd(bytes, archiveName);
-  const diskNumber = readU16(bytes, eocd + 4, archiveName);
-  const centralDisk = readU16(bytes, eocd + 6, archiveName);
-  const entriesOnDisk = readU16(bytes, eocd + 8, archiveName);
-  const totalEntries = readU16(bytes, eocd + 10, archiveName);
-  const centralSize = readU32(bytes, eocd + 12, archiveName);
-  const centralOffset = readU32(bytes, eocd + 16, archiveName);
-  if (diskNumber !== 0 || centralDisk !== 0 || entriesOnDisk !== totalEntries) {
-    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Multi-disk ZIP archives are not supported.", {
-      basename: archiveName,
-      format: "zip"
-    });
-  }
-  if (entriesOnDisk === ZIP64_UINT16 || totalEntries === ZIP64_UINT16 || centralSize === ZIP64_UINT32 || centralOffset === ZIP64_UINT32 || hasSignatureAt(bytes, eocd - 20, ZIP64_LOCATOR_SIGNATURE) || hasSignatureAt(bytes, eocd - 56, ZIP64_EOCD_SIGNATURE)) {
-    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "ZIP64 archives are not supported.", {
-      basename: archiveName,
-      format: "zip"
-    });
-  }
-  enforceLimit("entries", budget.limits.entries, totalEntries, archiveName);
-  const centralEnd = safeAdd(centralOffset, centralSize, archiveName);
-  if (centralEnd !== eocd || centralEnd > bytes.length) {
-    malformed(archiveName, "ZIP central directory bounds are invalid.", "zip");
-  }
-  const entries = [];
-  const registry = new EntryRegistry(archiveName);
-  let expanded = 0;
-  let offset = centralOffset;
-  for (let index = 0;index < totalEntries; index += 1) {
-    checkDeadline(budget, archiveName);
-    if (readU32(bytes, offset, archiveName) !== ZIP_CENTRAL_SIGNATURE) {
-      malformed(archiveName, "ZIP central directory entry has an invalid signature.", "zip");
-    }
-    requireRange(bytes, offset, 46, archiveName);
-    const flags = readU16(bytes, offset + 8, archiveName);
-    const method = readU16(bytes, offset + 10, archiveName);
-    const crc = readU32(bytes, offset + 16, archiveName);
-    const compressedSize = readU32(bytes, offset + 20, archiveName);
-    const size = readU32(bytes, offset + 24, archiveName);
-    const nameLength = readU16(bytes, offset + 28, archiveName);
-    const extraLength = readU16(bytes, offset + 30, archiveName);
-    const commentLength = readU16(bytes, offset + 32, archiveName);
-    const diskStart = readU16(bytes, offset + 34, archiveName);
-    const externalAttributes = readU32(bytes, offset + 38, archiveName);
-    const localOffset = readU32(bytes, offset + 42, archiveName);
-    const recordLength = 46 + nameLength + extraLength + commentLength;
-    requireRange(bytes, offset, recordLength, archiveName);
-    if (offset + recordLength > centralEnd) {
-      malformed(archiveName, "ZIP central directory entry metadata is truncated.", "zip");
-    }
-    if ((flags & 1) !== 0 || (flags & 64) !== 0 || (flags & 8192) !== 0) {
-      fail("ARCHIVE_ENCRYPTED", "unsupported_input", "Encrypted ZIP entries are not supported.", {
-        basename: archiveName,
-        format: "zip"
-      });
-    }
-    if ((flags & ~2062) !== 0) {
-      fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "ZIP entry flags are not supported.", {
-        basename: archiveName,
-        format: "zip"
-      });
-    }
-    if (diskStart !== 0) {
-      fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Multi-disk ZIP entries are not supported.", {
-        basename: archiveName,
-        format: "zip"
-      });
-    }
-    if (compressedSize === ZIP64_UINT32 || size === ZIP64_UINT32 || localOffset === ZIP64_UINT32) {
-      fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "ZIP64 entries are not supported.", {
-        basename: archiveName,
-        format: "zip"
-      });
-    }
-    if (method !== 0 && method !== 8) {
-      fail("ARCHIVE_COMPRESSION_UNSUPPORTED", "unsupported_input", "ZIP compression method is not supported.", {
-        basename: archiveName,
-        format: "zip",
-        method
-      });
-    }
-    const rawName = bytes.subarray(offset + 46, offset + 46 + nameLength);
-    const decodedName = decodeUtf8(rawName, undefined, archiveName);
-    const directoryByName = decodedName.endsWith("/");
-    const entryPath = validateEntryPath(decodedName, budget.limits, directoryByName, archiveName);
-    const unixMode = externalAttributes >>> 16;
-    const unixType = unixMode & 61440;
-    const directoryByDos = (externalAttributes & 16) !== 0;
-    if (unixType !== 0 && unixType !== 32768 && unixType !== 16384) {
-      unsupportedType(archiveName, entryPath, "zip");
-    }
-    const zeroLengthDirectoryWithRegularUnixMode = (directoryByName || directoryByDos) && unixType === 32768 && size === 0;
-    if ((directoryByName || directoryByDos) && unixType === 32768 && !zeroLengthDirectoryWithRegularUnixMode) {
-      malformed(archiveName, "ZIP entry type metadata is inconsistent.", "zip", entryPath);
-    }
-    const type = directoryByName || directoryByDos || unixType === 16384 ? "directory" : "file";
-    const emptyDirectoryEncoding = size === 0 && (compressedSize === 0 || method === 8 && compressedSize === 2 && crc === 0);
-    if (type === "directory" && !emptyDirectoryEncoding || type === "file" && directoryByName) {
-      malformed(archiveName, "ZIP entry type metadata is inconsistent.", "zip", entryPath);
-    }
-    enforceEntryLimits({ size, compressedSize, budget, archiveName, entryPath });
-    expanded = safeAdd(expanded, size, archiveName);
-    enforceLimit("expandedBytes", budget.limits.expandedBytes, expanded, archiveName, entryPath);
-    const local = parseZipLocalHeader({
-      bytes,
-      localOffset,
-      centralOffset,
-      centralName: rawName,
-      flags,
-      method,
-      crc,
-      compressedSize,
-      size,
-      archiveName,
-      entryPath
-    });
-    registry.add(entryPath, type);
-    entries.push({
-      path: entryPath,
-      type,
-      size,
-      compressedSize,
-      crc32: crc,
-      flags,
-      method,
-      dataStart: local.dataStart,
-      dataEnd: local.dataEnd,
-      localOffset,
-      recordEnd: local.recordEnd
-    });
-    offset += recordLength;
-  }
-  if (offset !== centralEnd) {
-    malformed(archiveName, "ZIP central directory entry count does not match its size.", "zip");
-  }
-  validateZipLocalRecordLayout(entries, centralOffset, archiveName);
-  return entries.map((entry) => ({
-    path: entry.path,
-    type: entry.type,
-    size: entry.size,
-    compressedSize: entry.compressedSize,
-    materialize: (startedAt) => materializeZipEntry(bytes, entry, archiveName, budget, startedAt)
-  }));
+function isVerifiableExternalLocalTarball(input) {
+  return input.integrity !== undefined && parseSupportedIntegrityEntries(input.integrity).length > 0 && isSupportedLocalTarballPath(input.artifactPath);
 }
-function parseZipLocalHeader(input) {
-  requireRange(input.bytes, input.localOffset, 30, input.archiveName, input.entryPath);
-  if (readU32(input.bytes, input.localOffset, input.archiveName) !== ZIP_LOCAL_SIGNATURE) {
-    integrity(input.archiveName, input.entryPath, "ZIP local header signature does not match.", "zip");
-  }
-  const localFlags = readU16(input.bytes, input.localOffset + 6, input.archiveName);
-  const localMethod = readU16(input.bytes, input.localOffset + 8, input.archiveName);
-  const localCrc = readU32(input.bytes, input.localOffset + 14, input.archiveName);
-  const localCompressedSize = readU32(input.bytes, input.localOffset + 18, input.archiveName);
-  const localSize = readU32(input.bytes, input.localOffset + 22, input.archiveName);
-  const nameLength = readU16(input.bytes, input.localOffset + 26, input.archiveName);
-  const extraLength = readU16(input.bytes, input.localOffset + 28, input.archiveName);
-  requireRange(input.bytes, input.localOffset + 30, nameLength + extraLength, input.archiveName, input.entryPath);
-  const localName = input.bytes.subarray(input.localOffset + 30, input.localOffset + 30 + nameLength);
-  if (!localName.equals(input.centralName) || localFlags !== input.flags || localMethod !== input.method) {
-    integrity(input.archiveName, input.entryPath, "ZIP central and local headers do not match.", "zip");
-  }
-  const usesDescriptor = (input.flags & 8) !== 0;
-  if (!usesDescriptor && (localCrc !== input.crc || localCompressedSize !== input.compressedSize || localSize !== input.size) || usesDescriptor && !((localCrc === 0 || localCrc === input.crc) && (localCompressedSize === 0 || localCompressedSize === input.compressedSize) && (localSize === 0 || localSize === input.size))) {
-    integrity(input.archiveName, input.entryPath, "ZIP central and local size or CRC metadata do not match.", "zip");
-  }
-  const dataStart = safeAdd(input.localOffset + 30, nameLength + extraLength, input.archiveName);
-  const dataEnd = safeAdd(dataStart, input.compressedSize, input.archiveName);
-  if (dataEnd > input.centralOffset || dataEnd > input.bytes.length) {
-    malformed(input.archiveName, "ZIP entry data extends beyond its data area.", "zip", input.entryPath);
-  }
-  const recordEnd = usesDescriptor ? parseZipDataDescriptor({
-    bytes: input.bytes,
-    offset: dataEnd,
-    centralOffset: input.centralOffset,
-    crc: input.crc,
-    compressedSize: input.compressedSize,
-    size: input.size,
-    archiveName: input.archiveName,
-    entryPath: input.entryPath
-  }) : dataEnd;
-  return { dataStart, dataEnd, recordEnd };
+function isSupportedLocalTarballPath(artifactPath) {
+  const normalizedPath = artifactPath.replace(/\\/g, "/").toLowerCase();
+  return normalizedPath.endsWith(".tgz") || normalizedPath.endsWith(".tar.gz");
 }
-function parseZipDataDescriptor(input) {
-  requireRange(input.bytes, input.offset, 16, input.archiveName, input.entryPath);
-  if (input.offset + 16 > input.centralOffset) {
-    malformed(input.archiveName, "ZIP data descriptor extends beyond its data area.", "zip", input.entryPath);
-  }
-  if (readU32(input.bytes, input.offset, input.archiveName) !== ZIP_DATA_DESCRIPTOR_SIGNATURE) {
-    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Unsigned ZIP data descriptors are not supported.", {
-      basename: input.archiveName,
-      entryPath: input.entryPath,
-      format: "zip"
-    });
-  }
-  const crc = readU32(input.bytes, input.offset + 4, input.archiveName);
-  const compressedSize = readU32(input.bytes, input.offset + 8, input.archiveName);
-  const size = readU32(input.bytes, input.offset + 12, input.archiveName);
-  if (crc !== input.crc || compressedSize !== input.compressedSize || size !== input.size) {
-    integrity(input.archiveName, input.entryPath, "ZIP data descriptor does not match central metadata.", "zip");
-  }
-  return input.offset + 16;
+function workspaceRootInvalidError(workspaceRoot, resolvedPath) {
+  return createError({
+    code: "INVALID_ARGUMENT",
+    category: "invalid_input",
+    message: "--workspace-root must point to an existing directory.",
+    details: {
+      workspaceRoot,
+      resolvedPath
+    }
+  });
 }
-function validateZipLocalRecordLayout(entries, centralOffset, archiveName) {
-  const sorted = [...entries].sort((left, right) => left.localOffset - right.localOffset);
-  for (let index = 0;index < sorted.length; index += 1) {
-    const entry = sorted[index];
-    if (!entry) {
-      continue;
+function realpathLocalArtifactRoots(input) {
+  const workspaceRoot = input.workspaceRoot ? resolveTrustedWorkspaceRoot(input.workspaceRoot) : ok(undefined);
+  if (!workspaceRoot.ok) {
+    return err(workspaceRoot.error);
+  }
+  return ok([
+    realpathSync(resolveLocalArtifactRoot(input.projectRoot)),
+    ...workspaceRoot.value ? [workspaceRoot.value] : []
+  ]);
+}
+function resolveLocalArtifactRoot(projectRoot) {
+  return findNearestGitRoot(projectRoot) ?? path4.resolve(projectRoot);
+}
+function findNearestGitRoot(startPath) {
+  let currentPath = path4.resolve(startPath);
+  while (true) {
+    if (existsSync2(path4.join(currentPath, ".git"))) {
+      return currentPath;
     }
-    const nextOffset = sorted[index + 1]?.localOffset ?? centralOffset;
-    if (entry.recordEnd > nextOffset) {
-      malformed(archiveName, "ZIP local records overlap.", "zip", entry.path);
+    const parentPath = path4.dirname(currentPath);
+    if (parentPath === currentPath) {
+      return;
     }
+    currentPath = parentPath;
   }
 }
-function materializeZipEntry(bytes, entry, archiveName, budget, startedAt) {
-  try {
-    const compressed = bytes.subarray(entry.dataStart, entry.dataEnd);
-    const output = entry.method === 0 ? Buffer.from(compressed) : inflateRawSync(compressed, { maxOutputLength: Math.max(1, entry.size) });
-    if (output.length !== entry.size) {
-      integrity(archiveName, entry.path, "ZIP entry expanded size does not match metadata.", "zip");
-    }
-    if (crc32(output, budget, startedAt, archiveName, entry.path) !== entry.crc32) {
-      integrity(archiveName, entry.path, "ZIP entry CRC32 does not match metadata.", "zip");
-    }
-    return output;
-  } catch (cause) {
-    if (cause instanceof ArchiveFailure) {
-      throw cause;
-    }
-    integrity(archiveName, entry.path, "ZIP entry decompression failed.", "zip");
-  }
+function isPathInsideOrEqual(childPath, parentPath) {
+  const relativePath = path4.relative(parentPath, childPath);
+  return relativePath === "" || !relativePath.startsWith("..") && !path4.isAbsolute(relativePath);
 }
-function parseTarContainer(inputBytes, format, budget, archiveName, linkPolicy, onSymlink) {
-  let tar = inputBytes;
-  if (format === "tar.gz") {
-    const outputLimit = Math.min(budget.limits.expandedBytes, budget.limits.materializedBytes);
-    const outputLimitName = budget.limits.materializedBytes <= budget.limits.expandedBytes ? "materializedBytes" : "expandedBytes";
-    const observedLimit = Math.min(Number.MAX_SAFE_INTEGER, outputLimit + 1);
-    try {
-      tar = gunzipSync(inputBytes, { maxOutputLength: observedLimit });
-    } catch (cause) {
-      if (cause instanceof ArchiveFailure) {
-        throw cause;
-      }
-      if (isZlibOutputLimitError(cause)) {
-        limitFailure(outputLimitName, outputLimit, observedLimit, archiveName);
-      }
-      malformed(archiveName, "Gzip-compressed TAR data is malformed or exceeds its expansion limit.", format);
-    }
-    enforceLimit(outputLimitName, outputLimit, tar.length, archiveName);
-    enforceLimit("expandedBytes", budget.limits.expandedBytes, tar.length, archiveName);
-    enforceRatio(tar.length, inputBytes.length, budget.limits, archiveName);
-    chargeMaterialization(budget, tar.length, archiveName);
-  }
-  checkDeadline(budget, archiveName);
-  return parseTar(tar, format, budget, archiveName, linkPolicy, onSymlink);
-}
-function parseTar(tar, format, budget, archiveName, linkPolicy, onSymlink) {
-  if (tar.length < BLOCK_BYTES * 2 || tar.length % BLOCK_BYTES !== 0) {
-    malformed(archiveName, "TAR length or end padding is invalid.", format);
-  }
-  const entries = [];
-  const registry = new EntryRegistry(archiveName);
-  let offset = 0;
-  let headerCount = 0;
-  let expanded = 0;
-  let pendingPax;
-  let pendingLongName;
-  let sawEnd = false;
-  while (offset + BLOCK_BYTES <= tar.length) {
-    checkDeadline(budget, archiveName);
-    const header = tar.subarray(offset, offset + BLOCK_BYTES);
-    if (isZeroBlock(header)) {
-      requireRange(tar, offset, BLOCK_BYTES * 2, archiveName);
-      if (!isZeroBlock(tar.subarray(offset + BLOCK_BYTES, offset + BLOCK_BYTES * 2))) {
-        malformed(archiveName, "TAR end marker must contain two zero blocks.", format);
-      }
-      if (!isZeroBlock(tar.subarray(offset + BLOCK_BYTES * 2))) {
-        malformed(archiveName, "TAR trailing padding contains non-zero bytes.", format);
-      }
-      sawEnd = true;
-      break;
-    }
-    headerCount += 1;
-    enforceLimit("entries", budget.limits.entries, headerCount, archiveName);
-    validateTarHeader(header, archiveName, format);
-    const typeByte = header[156] ?? 0;
-    const type = typeByte === 0 ? "0" : String.fromCharCode(typeByte);
-    const headerSize = parseTarNumber(header.subarray(124, 136), archiveName, format, "size");
-    const extension = type === "x" || type === "g" || type === "L";
-    const effectiveSize = extension ? headerSize : pendingPax?.size ?? headerSize;
-    enforceLimit("entryBytes", budget.limits.entryBytes, effectiveSize, archiveName);
-    const dataStart = offset + BLOCK_BYTES;
-    const dataEnd = safeAdd(dataStart, effectiveSize, archiveName);
-    const paddedEnd = safeAdd(dataStart, roundToTarBlock(effectiveSize), archiveName);
-    if (dataEnd > tar.length || paddedEnd > tar.length) {
-      malformed(archiveName, "TAR entry extends beyond archive data.", format);
-    }
-    if (!isZeroBlock(tar.subarray(dataEnd, paddedEnd))) {
-      malformed(archiveName, "TAR entry padding contains non-zero bytes.", format);
-    }
-    const headerPath = readTarHeaderPath(header, archiveName, format);
-    if (type === "x" || type === "g") {
-      const pax = parsePax(tar.subarray(dataStart, dataEnd), archiveName, format, type === "g", budget);
-      if (type === "x") {
-        if (pendingPax !== undefined) {
-          malformed(archiveName, "PAX extended headers cannot replace an unconsumed header.", format);
-        }
-        pendingPax = pax;
-      }
-      offset = paddedEnd;
-      continue;
-    }
-    if (type === "L") {
-      if (pendingLongName !== undefined) {
-        malformed(archiveName, "GNU TAR longname headers cannot replace an unconsumed header.", format);
-      }
-      pendingLongName = parseGnuLongName(tar.subarray(dataStart, dataEnd), archiveName, format);
-      offset = paddedEnd;
-      continue;
-    }
-    if (pendingPax?.path !== undefined && pendingLongName !== undefined) {
-      malformed(archiveName, "TAR path extension headers are ambiguous.", format);
-    }
-    const rawPath = pendingPax?.path ?? pendingLongName ?? headerPath;
-    pendingPax = undefined;
-    pendingLongName = undefined;
-    const directory = type === "5";
-    const regular = type === "0" || type === "\x00";
-    const symlink = type === "2";
-    if (symlink && linkPolicy === "skip") {
-      const entryPath = validateEntryPath(rawPath, budget.limits, false, archiveName);
-      if (effectiveSize !== 0) {
-        malformed(archiveName, "TAR link entry has non-zero data size.", format, entryPath);
-      }
-      if (onSymlink) {
-        onSymlink(entryPath, decodeTarField(header.subarray(157, 257), archiveName, format));
-      }
-      offset = paddedEnd;
-      continue;
-    }
-    if (!directory && !regular) {
-      unsupportedType(archiveName, safeEntryPathForError(rawPath), format);
-    }
-    const entryPath = validateEntryPath(rawPath, budget.limits, directory || rawPath.endsWith("/"), archiveName);
-    if (directory && effectiveSize !== 0) {
-      malformed(archiveName, "TAR directory entry has non-zero data size.", format, entryPath);
-    }
-    enforceLimit("entryBytes", budget.limits.entryBytes, effectiveSize, archiveName, entryPath);
-    expanded = safeAdd(expanded, effectiveSize, archiveName);
-    enforceLimit("expandedBytes", budget.limits.expandedBytes, expanded, archiveName, entryPath);
-    registry.add(entryPath, directory ? "directory" : "file");
-    const capturedStart = dataStart;
-    const capturedEnd = dataEnd;
-    entries.push({
-      path: entryPath,
-      type: directory ? "directory" : "file",
-      size: effectiveSize,
-      compressedSize: format === "tar" ? effectiveSize : 0,
-      materialize: () => Buffer.from(tar.subarray(capturedStart, capturedEnd))
-    });
-    offset = paddedEnd;
-  }
-  if (!sawEnd || pendingPax || pendingLongName) {
-    malformed(archiveName, "TAR archive is missing a complete end marker or extension target.", format);
-  }
-  return entries;
-}
-function validateTarHeader(header, archiveName, format) {
-  const expected = parseTarNumber(header.subarray(148, 156), archiveName, format, "checksum");
-  let unsigned = 0;
-  let signed = 0;
-  for (let index = 0;index < header.length; index += 1) {
-    const byte = index >= 148 && index < 156 ? 32 : header[index] ?? 0;
-    unsigned += byte;
-    signed += byte > 127 ? byte - 256 : byte;
-  }
-  if (expected !== unsigned && expected !== signed) {
-    integrity(archiveName, undefined, "TAR header checksum does not match.", format);
-  }
-  const magic = header.subarray(257, 263);
-  const version = header.subarray(263, 265);
-  const v7 = isZeroBlock(magic) && isZeroBlock(version);
-  const ustar = magic.equals(Buffer.from("ustar\x00", "ascii")) && version.equals(Buffer.from("00", "ascii"));
-  const gnu = magic.equals(Buffer.from("ustar ", "ascii"));
-  if (!v7 && !ustar && !gnu) {
-    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "TAR dialect is not supported.", {
-      basename: archiveName,
-      format
-    });
-  }
-}
-function readTarHeaderPath(header, archiveName, format) {
-  const name = decodeTarField(header.subarray(0, 100), archiveName, format);
-  const prefix = decodeTarField(header.subarray(345, 500), archiveName, format);
-  return prefix === "" ? name : `${prefix}/${name}`;
-}
-function decodeTarField(bytes, archiveName, format) {
-  const nul = bytes.indexOf(0);
-  const content = bytes.subarray(0, nul === -1 ? bytes.length : nul);
-  if (nul !== -1 && !isZeroBlock(bytes.subarray(nul))) {
-    malformed(archiveName, "TAR string field contains data after NUL.", format);
-  }
-  return decodeUtf8(content, undefined, archiveName);
-}
-function parseGnuLongName(bytes, archiveName, format) {
-  const nul = bytes.indexOf(0);
-  const content = bytes.subarray(0, nul === -1 ? bytes.length : nul);
-  if (content.length === 0 || nul !== -1 && !isZeroBlock(bytes.subarray(nul))) {
-    malformed(archiveName, "GNU TAR longname record is malformed.", format);
-  }
-  return decodeUtf8(content, undefined, archiveName);
-}
-function parsePax(bytes, archiveName, format, global, budget) {
-  let offset = 0;
-  const values = new Map;
-  while (offset < bytes.length) {
-    checkDeadline(budget, archiveName);
-    const space = bytes.indexOf(32, offset);
-    if (space === -1) {
-      malformed(archiveName, "PAX record length is malformed.", format);
-    }
-    const lengthText = bytes.subarray(offset, space).toString("ascii");
-    if (!/^[1-9][0-9]*$/.test(lengthText)) {
-      malformed(archiveName, "PAX record length is malformed.", format);
-    }
-    const length = Number(lengthText);
-    if (!Number.isSafeInteger(length) || length <= space - offset + 2 || offset + length > bytes.length) {
-      malformed(archiveName, "PAX record extends beyond metadata data.", format);
-    }
-    const record = bytes.subarray(space + 1, offset + length);
-    if (record[record.length - 1] !== 10) {
-      malformed(archiveName, "PAX record is missing its newline terminator.", format);
-    }
-    const body = record.subarray(0, -1);
-    const equals = body.indexOf(61);
-    if (equals <= 0) {
-      malformed(archiveName, "PAX record key/value is malformed.", format);
-    }
-    const key = body.subarray(0, equals).toString("ascii");
-    if (!/^[A-Za-z0-9_.-]+$/.test(key) || values.has(key)) {
-      malformed(archiveName, "PAX record key is invalid or duplicated.", format);
-    }
-    if (key === "linkpath" || key.startsWith("GNU.sparse") || key.startsWith("SCHILY.dev") || key === "SCHILY.filetype" || key === "SCHILY.realsize") {
-      unsupportedType(archiveName, undefined, format);
-    }
-    values.set(key, decodeUtf8(body.subarray(equals + 1), undefined, archiveName));
-    offset += length;
-  }
-  const pathValue = values.get("path");
-  const sizeValue = values.get("size");
-  if (global && (pathValue !== undefined || sizeValue !== undefined)) {
-    malformed(archiveName, "Global PAX path or size metadata is not safe to apply.", format);
-  }
-  let size;
-  if (sizeValue !== undefined) {
-    if (!/^(0|[1-9][0-9]*)$/.test(sizeValue)) {
-      malformed(archiveName, "PAX size metadata is invalid.", format);
-    }
-    size = Number(sizeValue);
-    if (!Number.isSafeInteger(size)) {
-      malformed(archiveName, "PAX size metadata exceeds the safe integer range.", format);
-    }
-  }
-  return {
-    ...pathValue !== undefined ? { path: pathValue } : {},
-    ...size !== undefined ? { size } : {}
-  };
+function isPathInsideAnyRoot(childPath, parentPaths) {
+  return parentPaths.some((parentPath) => isPathInsideOrEqual(childPath, parentPath));
 }
 
-class EntryRegistry {
-  entries = new Map;
-  foldedEntries = new Map;
-  parentPrefixes = new Set;
-  foldedParentPrefixes = new Set;
-  archiveName;
-  constructor(archiveName) {
-    this.archiveName = archiveName;
-  }
-  add(entryPath, type) {
-    const foldedPath = foldEntryPath(entryPath);
-    if (this.entries.has(entryPath) || this.foldedEntries.has(foldedPath)) {
-      duplicate(this.archiveName, entryPath);
+// src/graph/xml.ts
+function parseXmlDocument(input, lockfilePath, parseError) {
+  const stack = [];
+  let root;
+  let index = 0;
+  while (index < input.length) {
+    const tagStart = input.indexOf("<", index);
+    if (tagStart === -1) {
+      const appended = appendText(input.slice(index), stack, lockfilePath, parseError);
+      return appended.ok ? completeXmlDocument(root, stack, lockfilePath, parseError) : appended;
     }
-    const segments = entryPath.split("/");
-    const foldedSegments = foldedPath.split("/");
-    const prefixes = [];
-    const foldedPrefixes = [];
-    let prefix = "";
-    let foldedPrefix = "";
-    for (let index = 1;index < segments.length; index += 1) {
-      prefix = prefix === "" ? segments[index - 1] ?? "" : `${prefix}/${segments[index - 1]}`;
-      foldedPrefix = foldedPrefix === "" ? foldedSegments[index - 1] ?? "" : `${foldedPrefix}/${foldedSegments[index - 1]}`;
-      if (this.entries.get(prefix) === "file" || this.foldedEntries.get(foldedPrefix) === "file") {
-        duplicate(this.archiveName, entryPath);
+    const textResult = appendText(input.slice(index, tagStart), stack, lockfilePath, parseError);
+    if (!textResult.ok) {
+      return textResult;
+    }
+    if (input.startsWith("<!--", tagStart)) {
+      const commentEnd = input.indexOf("-->", tagStart + 4);
+      if (commentEnd === -1) {
+        return parseError(lockfilePath, "Unclosed XML comment.");
       }
-      prefixes.push(prefix);
-      foldedPrefixes.push(foldedPrefix);
+      index = commentEnd + 3;
+      continue;
     }
-    if (type === "file" && (this.parentPrefixes.has(entryPath) || this.foldedParentPrefixes.has(foldedPath))) {
-      duplicate(this.archiveName, entryPath);
+    if (input.startsWith("<![CDATA[", tagStart)) {
+      const cdataEnd = input.indexOf("]]>", tagStart + 9);
+      if (cdataEnd === -1) {
+        return parseError(lockfilePath, "Unclosed XML CDATA section.");
+      }
+      const current = stack[stack.length - 1];
+      if (current) {
+        current.text += input.slice(tagStart + 9, cdataEnd);
+      }
+      index = cdataEnd + 3;
+      continue;
     }
-    this.entries.set(entryPath, type);
-    this.foldedEntries.set(foldedPath, type);
-    for (const value of prefixes) {
-      this.parentPrefixes.add(value);
+    if (input.startsWith("<?", tagStart)) {
+      const instructionEnd = input.indexOf("?>", tagStart + 2);
+      if (instructionEnd === -1) {
+        return parseError(lockfilePath, "Unclosed XML processing instruction.");
+      }
+      index = instructionEnd + 2;
+      continue;
     }
-    for (const value of foldedPrefixes) {
-      this.foldedParentPrefixes.add(value);
+    if (input.startsWith("<!", tagStart)) {
+      return parseError(lockfilePath, "Unsupported XML declaration.");
     }
+    const tagEnd = input.indexOf(">", tagStart + 1);
+    if (tagEnd === -1) {
+      return parseError(lockfilePath, "Unclosed XML tag.");
+    }
+    const rawTag = input.slice(tagStart + 1, tagEnd).trim();
+    if (rawTag === "") {
+      return parseError(lockfilePath, "Empty XML tag.");
+    }
+    if (rawTag.startsWith("/")) {
+      const closed = closeXmlNode(rawTag.slice(1), stack, lockfilePath, parseError);
+      if (!closed.ok) {
+        return closed;
+      }
+      const attached = attachXmlNode(closed.value, stack, root, lockfilePath, parseError);
+      if (!attached.ok) {
+        return attached;
+      }
+      root = attached.value;
+      index = tagEnd + 1;
+      continue;
+    }
+    const selfClosing = rawTag.endsWith("/");
+    const startTag = parseStartTag(selfClosing ? rawTag.slice(0, -1).trimEnd() : rawTag, lockfilePath, parseError);
+    if (!startTag.ok) {
+      return startTag;
+    }
+    const node = {
+      name: localName(startTag.value.name),
+      attributes: startTag.value.attributes,
+      children: [],
+      text: ""
+    };
+    if (selfClosing) {
+      const attached = attachXmlNode(node, stack, root, lockfilePath, parseError);
+      if (!attached.ok) {
+        return attached;
+      }
+      root = attached.value;
+    } else {
+      stack.push(node);
+    }
+    index = tagEnd + 1;
   }
+  return completeXmlDocument(root, stack, lockfilePath, parseError);
 }
-function validateEntryPath(rawPath, limits, allowDirectorySlash, archiveName) {
-  const path = allowDirectorySlash && rawPath.endsWith("/") ? rawPath.slice(0, -1) : rawPath;
-  const invalidRoot = path === "" || rawPath.includes("\\") || rawPath.startsWith("/") || rawPath.startsWith("//") || /^[A-Za-z]:/u.test(rawPath) || /[\u0000-\u001f\u007f-\u009f]/u.test(rawPath) || rawPath !== rawPath.normalize("NFC");
-  if (invalidRoot || !allowDirectorySlash && rawPath.endsWith("/")) {
-    invalidPath(archiveName, safeEntryPathForError(rawPath));
-  }
-  const segments = path.split("/");
-  const encodedPathBytes = Buffer.byteLength(path, "utf8");
-  if (encodedPathBytes > limits.pathBytes) {
-    limitFailure("pathBytes", limits.pathBytes, encodedPathBytes, archiveName, safeEntryPathForError(path));
-  }
-  if (segments.length > limits.pathSegments) {
-    limitFailure("pathSegments", limits.pathSegments, segments.length, archiveName, safeEntryPathForError(path));
-  }
-  for (const segment of segments) {
-    const base = segment.split(".", 1)[0]?.toUpperCase() ?? "";
-    if (segment === "" || segment === "." || segment === ".." || segment.includes(":") || /[. ]$/u.test(segment) || /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/u.test(base)) {
-      invalidPath(archiveName, safeEntryPathForError(path));
-    }
-    const segmentBytes = Buffer.byteLength(segment, "utf8");
-    if (segmentBytes > limits.segmentBytes) {
-      limitFailure("segmentBytes", limits.segmentBytes, segmentBytes, archiveName, safeEntryPathForError(path));
-    }
-  }
-  return path;
+function childText(node, name) {
+  const child = firstChild(node, name);
+  const text = child?.text.trim();
+  return text === "" ? undefined : text;
 }
-function resolveLimits(overrides) {
-  const resolved = { ...DEFAULT_ARCHIVE_LIMITS, ...overrides };
-  for (const [name, value] of Object.entries(resolved)) {
-    if (!Number.isSafeInteger(value) || value <= 0) {
-      fail("ARCHIVE_LIMIT_EXCEEDED", "invalid_input", "Archive limit configuration is invalid.", {
-        limit: name,
-        max: value,
-        observed: value
-      });
+function firstChild(node, name) {
+  return childNodes(node, name)[0];
+}
+function childNodes(node, name) {
+  return node?.children.filter((child) => child.name === name) ?? [];
+}
+function localName(name) {
+  const colonIndex = name.indexOf(":");
+  return colonIndex === -1 ? name : name.slice(colonIndex + 1);
+}
+function appendText(text, stack, lockfilePath, parseError) {
+  if (text === "") {
+    return ok(undefined);
+  }
+  const decoded = decodeXmlText(text, lockfilePath, parseError);
+  if (!decoded.ok) {
+    return decoded;
+  }
+  const current = stack[stack.length - 1];
+  if (current) {
+    current.text += decoded.value;
+  } else if (decoded.value.trim() !== "") {
+    return parseError(lockfilePath, "Unexpected text outside the XML root element.");
+  }
+  return ok(undefined);
+}
+function closeXmlNode(rawClosingTag, stack, lockfilePath, parseError) {
+  const closingName = localName(rawClosingTag.trim().split(/\s+/)[0] ?? "");
+  const node = stack.pop();
+  if (!node) {
+    return parseError(lockfilePath, "Unexpected XML closing tag.");
+  }
+  if (node.name !== closingName) {
+    return parseError(lockfilePath, `Mismatched XML closing tag. Expected </${node.name}> but found </${closingName}>.`);
+  }
+  return ok(node);
+}
+function attachXmlNode(node, stack, root, lockfilePath, parseError) {
+  const parent = stack[stack.length - 1];
+  if (parent) {
+    parent.children.push(node);
+    return ok(root);
+  }
+  if (root) {
+    return parseError(lockfilePath, "Multiple XML root elements.");
+  }
+  return ok(node);
+}
+function completeXmlDocument(root, stack, lockfilePath, parseError) {
+  if (stack.length > 0) {
+    return parseError(lockfilePath, `Unclosed XML tag <${stack[stack.length - 1]?.name}>.`);
+  }
+  if (!root) {
+    return parseError(lockfilePath, "Missing XML root element.");
+  }
+  return ok(root);
+}
+function parseStartTag(rawTag, lockfilePath, parseError) {
+  const nameMatch = rawTag.match(/^([^\s/>]+)/);
+  if (!nameMatch) {
+    return parseError(lockfilePath, "Missing XML element name.");
+  }
+  const name = nameMatch[1] ?? "";
+  const attributes = parseAttributes(rawTag.slice(name.length), lockfilePath, parseError);
+  if (!attributes.ok) {
+    return attributes;
+  }
+  return ok({
+    name,
+    attributes: attributes.value
+  });
+}
+function parseAttributes(input, lockfilePath, parseError) {
+  const attributes = {};
+  let index = 0;
+  while (index < input.length) {
+    while (/\s/.test(input[index] ?? "")) {
+      index += 1;
+    }
+    if (index >= input.length) {
+      break;
+    }
+    const nameStart = index;
+    while (index < input.length && !/[\s=]/.test(input[index] ?? "")) {
+      index += 1;
+    }
+    const name = input.slice(nameStart, index);
+    if (name === "") {
+      return parseError(lockfilePath, "Malformed XML attribute.");
+    }
+    while (/\s/.test(input[index] ?? "")) {
+      index += 1;
+    }
+    if (input[index] !== "=") {
+      return parseError(lockfilePath, `XML attribute "${name}" is missing a value.`);
+    }
+    index += 1;
+    while (/\s/.test(input[index] ?? "")) {
+      index += 1;
+    }
+    const quote = input[index];
+    if (quote !== '"' && quote !== "'") {
+      return parseError(lockfilePath, `XML attribute "${name}" must use quotes.`);
+    }
+    index += 1;
+    const valueStart = index;
+    while (index < input.length && input[index] !== quote) {
+      index += 1;
+    }
+    if (index >= input.length) {
+      return parseError(lockfilePath, `Unclosed XML attribute "${name}".`);
+    }
+    const decoded = decodeXmlText(input.slice(valueStart, index), lockfilePath, parseError);
+    if (!decoded.ok) {
+      return decoded;
+    }
+    attributes[localName(name)] = decoded.value;
+    index += 1;
+  }
+  return ok(attributes);
+}
+function decodeXmlText(input, lockfilePath, parseError) {
+  let failedEntity;
+  const decoded = input.replace(/&([^;]+);/g, (match, entity) => {
+    switch (entity) {
+      case "amp":
+        return "&";
+      case "lt":
+        return "<";
+      case "gt":
+        return ">";
+      case "quot":
+        return '"';
+      case "apos":
+        return "'";
+      default:
+        const codePoint = parseXmlNumericEntity(entity);
+        if (codePoint !== undefined) {
+          return String.fromCodePoint(codePoint);
+        }
+        failedEntity = match;
+        return match;
+    }
+  });
+  if (failedEntity) {
+    return parseError(lockfilePath, `Unsupported XML entity ${failedEntity}.`);
+  }
+  return ok(decoded);
+}
+function parseXmlNumericEntity(entity) {
+  const hexadecimal = entity.match(/^#x([0-9A-Fa-f]+)$/);
+  const decimal = entity.match(/^#([0-9]+)$/);
+  const digits = hexadecimal?.[1] ?? decimal?.[1];
+  if (!digits) {
+    return;
+  }
+  const codePoint = Number.parseInt(digits, hexadecimal ? 16 : 10);
+  return isXml10CodePoint(codePoint) ? codePoint : undefined;
+}
+function isXml10CodePoint(codePoint) {
+  return codePoint === 9 || codePoint === 10 || codePoint === 13 || codePoint >= 32 && codePoint <= 55295 || codePoint >= 57344 && codePoint <= 65533 || codePoint >= 65536 && codePoint <= 1114111;
+}
+
+// src/shared/maven-repository.ts
+import { existsSync as existsSync3 } from "node:fs";
+import path5 from "node:path";
+var MAVEN_GROUP_SEGMENT_PATTERN = /^[A-Za-z0-9_-]+$/;
+var MAVEN_ARTIFACT_SEGMENT_PATTERN = /^[A-Za-z0-9_.+-]+$/;
+function mavenRepositoryRoots(projectRoot, extraRoots = []) {
+  const roots = [
+    ...extraRoots,
+    path5.join(projectRoot, ".m2", "repository")
+  ];
+  const home = process.env.USERPROFILE ?? process.env.HOME;
+  if (home) {
+    roots.push(path5.join(home, ".m2", "repository"));
+  }
+  return [...new Set(roots.map((root) => path5.resolve(root)))];
+}
+function findMavenPomInRepository(input) {
+  const repositoryPath = mavenPomRepositoryPath(input);
+  const relativePomPath = repositoryPath?.replaceAll("/", path5.sep);
+  if (!relativePomPath) {
+    return;
+  }
+  for (const repositoryRoot of input.repositoryRoots) {
+    const root = path5.resolve(repositoryRoot);
+    const candidate = path5.resolve(root, relativePomPath);
+    if (!isPathInside(root, candidate)) {
+      continue;
+    }
+    if (existsSync3(candidate)) {
+      return candidate;
     }
   }
-  return resolved;
+  return;
 }
-function readFileBytesWithLimit(filePath, maxBytes, archiveName, signal) {
-  let descriptor;
+function mavenPomRepositoryPath(input) {
+  const groupSegments = input.groupId.split(".");
+  if (groupSegments.some((segment) => !isSafeMavenPathSegment(segment, MAVEN_GROUP_SEGMENT_PATTERN)) || !isSafeMavenPathSegment(input.artifactId, MAVEN_ARTIFACT_SEGMENT_PATTERN) || !isSafeMavenPathSegment(input.version, MAVEN_ARTIFACT_SEGMENT_PATTERN)) {
+    return;
+  }
+  return [
+    ...groupSegments,
+    input.artifactId,
+    input.version,
+    `${input.artifactId}-${input.version}.pom`
+  ].join("/");
+}
+function isSafeMavenPathSegment(segment, pattern) {
+  return segment.length > 0 && segment !== "." && segment !== ".." && !segment.includes("..") && !segment.includes("/") && !segment.includes("\\") && !segment.includes("\x00") && !path5.isAbsolute(segment) && !/^[A-Za-z]:/.test(segment) && pattern.test(segment);
+}
+function isPathInside(root, candidate) {
+  const relative = path5.relative(root, candidate);
+  return relative.length > 0 && !relative.startsWith("..") && !path5.isAbsolute(relative);
+}
+
+// src/shared/read-text-file.ts
+import { closeSync, openSync, readSync, statSync as statSync3 } from "node:fs";
+var TEXT_FILE_READ_CHUNK_BYTES = 64 * 1024;
+function readTextFileWithLimit(input) {
   try {
-    checkArchiveCancellation(signal, archiveName);
-    descriptor = openSync(filePath, "r");
-    const initial = fstatSync(descriptor, { bigint: true });
-    if (!initial.isFile()) {
-      fail("ARCHIVE_READ_FAILED", "filesystem", "Archive path is not a regular file.", {
-        basename: archiveName
+    const stats = statSync3(input.filePath);
+    if (stats.size > input.maxBytes) {
+      return err({
+        kind: "too_large",
+        maxBytes: input.maxBytes,
+        observedBytes: stats.size
       });
     }
-    if (initial.size > BigInt(maxBytes)) {
-      limitFailure("inputBytes", maxBytes, maxBytes + 1, archiveName);
-    }
-    const expectedBytes = Number(initial.size);
-    const bytes = Buffer.allocUnsafe(expectedBytes);
-    let offset = 0;
-    while (offset < expectedBytes) {
-      checkArchiveCancellation(signal, archiveName);
-      const bytesRead = readSync(descriptor, bytes, offset, expectedBytes - offset, offset);
+    return readOpenTextFileWithLimit(input);
+  } catch (cause) {
+    return err({
+      kind: "filesystem",
+      cause: cause instanceof Error ? cause.message : String(cause)
+    });
+  }
+}
+function textFileReadErrorCategory(error) {
+  return error.kind === "too_large" ? "unsupported_input" : "filesystem";
+}
+function textFileReadErrorDetails(error) {
+  return error.kind === "too_large" ? {
+    maxBytes: error.maxBytes,
+    observedBytes: error.observedBytes
+  } : {
+    cause: error.cause
+  };
+}
+function readOpenTextFileWithLimit(input) {
+  const chunks = [];
+  let observedBytes = 0;
+  let fileDescriptor;
+  try {
+    fileDescriptor = openSync(input.filePath, "r");
+    while (true) {
+      const readSize = Math.min(TEXT_FILE_READ_CHUNK_BYTES, Math.max(1, input.maxBytes + 1 - observedBytes));
+      const chunk = Buffer.alloc(readSize);
+      const bytesRead = readSync(fileDescriptor, chunk, 0, chunk.length, null);
       if (bytesRead === 0) {
-        archiveFileChanged(archiveName);
+        return ok(Buffer.concat(chunks, observedBytes).toString("utf8"));
       }
-      offset += bytesRead;
+      observedBytes += bytesRead;
+      if (observedBytes > input.maxBytes) {
+        return err({
+          kind: "too_large",
+          maxBytes: input.maxBytes,
+          observedBytes
+        });
+      }
+      chunks.push(bytesRead === chunk.length ? chunk : chunk.subarray(0, bytesRead));
     }
-    checkArchiveCancellation(signal, archiveName);
-    const growthProbe = Buffer.allocUnsafe(1);
-    const additionalBytes = readSync(descriptor, growthProbe, 0, 1, expectedBytes);
-    const final = fstatSync(descriptor, { bigint: true });
-    const currentPath = statSync2(filePath, { bigint: true });
-    if (final.size > BigInt(maxBytes) || currentPath.size > BigInt(maxBytes)) {
-      limitFailure("inputBytes", maxBytes, maxBytes + 1, archiveName);
-    }
-    if (additionalBytes !== 0 || initial.dev !== final.dev || initial.ino !== final.ino || initial.size !== final.size || initial.mtimeNs !== final.mtimeNs || initial.ctimeNs !== final.ctimeNs || final.dev !== currentPath.dev || final.ino !== currentPath.ino || final.size !== currentPath.size || final.mtimeNs !== currentPath.mtimeNs || final.ctimeNs !== currentPath.ctimeNs || final.birthtimeNs !== currentPath.birthtimeNs) {
-      archiveFileChanged(archiveName);
-    }
-    return bytes;
   } finally {
-    if (descriptor !== undefined) {
+    if (fileDescriptor !== undefined) {
       try {
-        closeSync(descriptor);
+        closeSync(fileDescriptor);
       } catch {}
     }
   }
 }
-function archiveFileChanged(archiveName) {
-  fail("ARCHIVE_READ_FAILED", "filesystem", "Archive file changed while it was being read.", {
-    basename: archiveName
-  });
-}
-function createBudget(limits, now, signal) {
-  const clock = now ?? Date.now;
-  return {
-    limits,
-    now: clock,
-    ...signal ? { signal } : {},
-    startedAt: clock(),
-    materializedBytes: 0,
-    hashedBytes: 0
-  };
-}
-function checkDeadline(budget, archiveName, entryPath) {
-  checkDeadlineSince(budget, budget.startedAt, archiveName, entryPath);
-}
-function checkDeadlineSince(budget, startedAt, archiveName, entryPath) {
-  checkArchiveCancellation(budget.signal, archiveName, entryPath);
-  const observed = Math.max(0, budget.now() - startedAt);
-  if (observed > budget.limits.workDeadlineMs) {
-    limitFailure("workDeadlineMs", budget.limits.workDeadlineMs, observed, archiveName, entryPath);
-  }
-}
-function checkArchiveCancellation(signal, archiveName, entryPath) {
-  if (!signal?.aborted)
-    return;
-  fail("ARCHIVE_READ_FAILED", "invalid_input", "Archive operation was cancelled.", {
-    basename: archiveName,
-    reason: "cancelled",
-    ...entryPath ? { entryPath } : {}
-  });
-}
-function chargeMaterialization(budget, amount, archiveName, entryPath) {
-  const observed = safeAdd(budget.materializedBytes, amount, archiveName);
-  enforceLimit("materializedBytes", budget.limits.materializedBytes, observed, archiveName, entryPath);
-  budget.materializedBytes = observed;
-}
-function chargeHashing(budget, amount, archiveName, entryPath) {
-  const observed = safeAdd(budget.hashedBytes, amount, archiveName);
-  enforceLimit("hashBytes", budget.limits.expandedBytes, observed, archiveName, entryPath);
-  budget.hashedBytes = observed;
-}
-function enforceEntryLimits(input) {
-  enforceLimit("entryBytes", input.budget.limits.entryBytes, input.size, input.archiveName, input.entryPath);
-  if (input.size >= input.budget.limits.compressionRatioMinBytes) {
-    const ratio = input.size / Math.max(1, input.compressedSize);
-    if (ratio > input.budget.limits.compressionRatio) {
-      limitFailure("compressionRatio", input.budget.limits.compressionRatio, ratio, input.archiveName, input.entryPath);
-    }
-  }
-}
-function enforceRatio(size, compressed, limits, archiveName) {
-  if (size >= limits.compressionRatioMinBytes) {
-    const ratio = size / Math.max(1, compressed);
-    if (ratio > limits.compressionRatio) {
-      limitFailure("compressionRatio", limits.compressionRatio, ratio, archiveName);
-    }
-  }
-}
-function enforceLimit(limit, max, observed, archiveName, entryPath) {
-  if (observed > max) {
-    limitFailure(limit, max, observed, archiveName, entryPath);
-  }
-}
-function limitFailure(limit, max, observed, archiveName, entryPath) {
-  fail("ARCHIVE_LIMIT_EXCEEDED", "unsupported_input", "Archive resource limit was exceeded.", {
-    basename: archiveName,
-    ...entryPath !== undefined ? { entryPath } : {},
-    limit,
-    max,
-    observed
-  });
-}
-function detectFormat(bytes, hint, archiveName) {
-  const detected = bytes.length >= 2 && bytes[0] === 31 && bytes[1] === 139 ? "tar.gz" : bytes.length >= 4 && (bytes.readUInt32LE(0) === ZIP_LOCAL_SIGNATURE || bytes.readUInt32LE(0) === ZIP_EOCD_SIGNATURE) ? "zip" : looksLikeTar(bytes) ? "tar" : undefined;
-  if (hint !== undefined) {
-    if (detected !== undefined && detected !== hint) {
-      fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Archive format hint does not match its bytes.", {
-        basename: archiveName,
-        format: hint
-      });
-    }
-    return hint;
-  }
-  if (detected === undefined) {
-    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Archive format is not supported.", {
-      basename: archiveName
+
+// src/evidence/maven-package.ts
+var MAVEN_POM_METADATA_MAX_BYTES = 2 * 1024 * 1024;
+var MAVEN_LICENSE_PARENT_MAX_DEPTH = 8;
+var MAVEN_LICENSE_NAME_MAX_CHARS = 200;
+var MAVEN_LICENSE_COUNT_MAX = 16;
+var MAVEN_PROPERTY_RESOLUTION_MAX_DEPTH = 8;
+var MAVEN_PROPERTY_REFERENCE_PATTERN = /\$\{([^{}]+)\}/gu;
+function collectMavenPackageEvidence(input) {
+  const requested = parseMavenPackageCoordinates(input.coordinates, input.version);
+  if (!requested) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: [`Maven coordinates were not parseable: ${input.coordinates}`]
     });
   }
-  return detected;
+  const repositoryRoots = mavenRepositoryRoots(input.projectRoot);
+  const maxParentDepth = input.maxParentDepth ?? MAVEN_LICENSE_PARENT_MAX_DEPTH;
+  const visited = new Set;
+  let current = requested;
+  for (let depth = 0;depth <= maxParentDepth; depth += 1) {
+    const coordinateKey = mavenCoordinateKey(current);
+    if (visited.has(coordinateKey)) {
+      return err(mavenPomMetadataError({
+        packageId: input.packageId,
+        source: coordinateKey,
+        message: "Maven POM license inheritance contains a parent cycle.",
+        details: { reason: "parent_cycle", coordinates: coordinateKey }
+      }));
+    }
+    visited.add(coordinateKey);
+    const pomPath = findMavenPomInRepository({ repositoryRoots, ...current });
+    if (!pomPath) {
+      const warning = depth === 0 ? `Maven POM metadata for ${input.coordinates}@${input.version} was not found in local .m2/repository caches; run Maven/Gradle dependency resolution first or provide a project .m2/repository cache.` : `Maven parent POM metadata for ${coordinateKey} was not found in local .m2/repository caches.`;
+      return ok({
+        packageId: input.packageId,
+        files: [],
+        source: "unavailable",
+        warnings: [warning]
+      });
+    }
+    const pomText = readTextFileWithLimit({
+      filePath: pomPath,
+      maxBytes: input.pomMaxBytes ?? MAVEN_POM_METADATA_MAX_BYTES
+    });
+    if (!pomText.ok) {
+      return err(createError({
+        code: "PACKAGE_EVIDENCE_READ_FAILED",
+        category: textFileReadErrorCategory(pomText.error),
+        message: pomReadFailedMessage(pomText.error),
+        details: {
+          packageId: input.packageId,
+          pomPath,
+          ...textFileReadErrorDetails(pomText.error)
+        }
+      }));
+    }
+    const metadata = parseMavenPomLicenseMetadata({
+      packageId: input.packageId,
+      requested: current,
+      source: coordinateKey,
+      text: pomText.value
+    });
+    if (!metadata.ok) {
+      return metadata;
+    }
+    if (metadata.value.licenses.length > 0) {
+      return ok({
+        packageId: input.packageId,
+        metadataLicense: metadata.value.licenses.join(" OR "),
+        metadataSource: depth === 0 ? "pom.xml" : `parent pom.xml (${coordinateKey})`,
+        files: [],
+        source: "local",
+        warnings: []
+      });
+    }
+    if (!metadata.value.parent) {
+      return ok({
+        packageId: input.packageId,
+        files: [],
+        source: "local",
+        warnings: ["Maven POM and its resolvable parent chain did not declare license names."]
+      });
+    }
+    current = metadata.value.parent;
+  }
+  return err(mavenPomMetadataError({
+    packageId: input.packageId,
+    source: mavenCoordinateKey(current),
+    message: "Maven POM license inheritance exceeded the maximum supported parent depth.",
+    details: { reason: "parent_depth", maxParentDepth }
+  }));
 }
-function looksLikeTar(bytes) {
-  if (bytes.length < BLOCK_BYTES * 2 || bytes.length % BLOCK_BYTES !== 0) {
-    return false;
+function parseMavenPackageCoordinates(coordinates, version) {
+  const [groupId, artifactId, extra] = coordinates.split(":");
+  if (!groupId || !artifactId || extra !== undefined) {
+    return;
   }
-  if (isZeroBlock(bytes.subarray(0, BLOCK_BYTES))) {
-    return true;
-  }
-  const magic = bytes.subarray(257, 263);
-  return magic.equals(Buffer.from("ustar\x00", "ascii")) || magic.equals(Buffer.from("ustar ", "ascii")) || isZeroBlock(magic);
+  const parsed = { groupId, artifactId, version };
+  return mavenPomRepositoryPath(parsed) ? parsed : undefined;
 }
-function findZipEocd(bytes, archiveName) {
-  if (bytes.length < ZIP_EOCD_BYTES) {
-    malformed(archiveName, "ZIP end of central directory is missing.", "zip");
+function parseMavenPomLicenseMetadata(input) {
+  const parsed = parseXmlDocument(input.text, input.source, (_source, cause) => err(mavenPomMetadataError({
+    packageId: input.packageId,
+    source: input.source,
+    message: "Maven POM metadata was not valid bounded XML.",
+    details: { reason: "malformed_xml", cause }
+  })));
+  if (!parsed.ok) {
+    return parsed;
   }
-  const minimum = Math.max(0, bytes.length - ZIP_EOCD_BYTES - ZIP_MAX_COMMENT_BYTES);
-  for (let offset = bytes.length - ZIP_EOCD_BYTES;offset >= minimum; offset -= 1) {
-    if (bytes.readUInt32LE(offset) === ZIP_EOCD_SIGNATURE) {
-      const commentLength = bytes.readUInt16LE(offset + 20);
-      if (offset + ZIP_EOCD_BYTES + commentLength === bytes.length) {
-        return offset;
+  if (parsed.value.name !== "project") {
+    return err(mavenPomMetadataError({
+      packageId: input.packageId,
+      source: input.source,
+      message: "Maven POM metadata did not use a project root element.",
+      details: { reason: "invalid_root", rootElement: parsed.value.name }
+    }));
+  }
+  const properties = readMavenPomProperties(parsed.value, input.requested);
+  const parent = readParentCoordinates({
+    packageId: input.packageId,
+    source: input.source,
+    parent: firstChild(parsed.value, "parent"),
+    properties
+  });
+  if (!parent.ok) {
+    return parent;
+  }
+  const artifactId = resolveMavenPomValue(childText(parsed.value, "artifactId"), properties);
+  const groupId = resolveMavenPomValue(childText(parsed.value, "groupId"), properties) ?? parent.value?.groupId;
+  const version = resolveMavenPomValue(childText(parsed.value, "version"), properties) ?? parent.value?.version;
+  if (artifactId !== input.requested.artifactId || groupId !== undefined && groupId !== input.requested.groupId || version !== undefined && version !== input.requested.version) {
+    return err(mavenPomMetadataError({
+      packageId: input.packageId,
+      source: input.source,
+      message: "Maven POM metadata did not match the requested package identity.",
+      details: {
+        reason: "identity_mismatch",
+        requested: mavenCoordinateKey(input.requested),
+        ...groupId ? { metadataGroupId: groupId } : {},
+        ...artifactId ? { metadataArtifactId: artifactId } : {},
+        ...version ? { metadataVersion: version } : {}
+      }
+    }));
+  }
+  const licenses = readPomLicenseNames({
+    packageId: input.packageId,
+    source: input.source,
+    project: parsed.value,
+    properties
+  });
+  if (!licenses.ok) {
+    return licenses;
+  }
+  return ok({
+    licenses: licenses.value,
+    ...parent.value ? { parent: parent.value } : {}
+  });
+}
+function mavenCoordinateKey(coordinates) {
+  return `${coordinates.groupId}:${coordinates.artifactId}@${coordinates.version}`;
+}
+function readParentCoordinates(input) {
+  if (!input.parent) {
+    return ok(undefined);
+  }
+  const groupId = resolveMavenPomValue(childText(input.parent, "groupId"), input.properties);
+  const artifactId = resolveMavenPomValue(childText(input.parent, "artifactId"), input.properties);
+  const version = resolveMavenPomValue(childText(input.parent, "version"), input.properties);
+  if (!groupId || !artifactId || !version) {
+    return err(mavenPomMetadataError({
+      packageId: input.packageId,
+      source: input.source,
+      message: "Maven parent POM coordinates were incomplete or unresolved.",
+      details: { reason: "parent_coordinates_unresolved" }
+    }));
+  }
+  const coordinates = { groupId, artifactId, version };
+  if (!mavenPomRepositoryPath(coordinates)) {
+    return err(mavenPomMetadataError({
+      packageId: input.packageId,
+      source: input.source,
+      message: "Maven parent POM coordinates were not safe exact repository coordinates.",
+      details: { reason: "parent_coordinates_invalid" }
+    }));
+  }
+  return ok(coordinates);
+}
+function readMavenPomProperties(project, requested) {
+  const properties = new Map([
+    ["project.groupId", requested.groupId],
+    ["pom.groupId", requested.groupId],
+    ["project.artifactId", requested.artifactId],
+    ["pom.artifactId", requested.artifactId],
+    ["project.version", requested.version],
+    ["pom.version", requested.version]
+  ]);
+  for (const property of firstChild(project, "properties")?.children ?? []) {
+    const value = property.text.trim();
+    if (value !== "") {
+      properties.set(property.name, value);
+    }
+  }
+  return properties;
+}
+function resolveMavenPomValue(value, properties) {
+  if (!value) {
+    return;
+  }
+  let resolved = value.trim();
+  for (let depth = 0;depth < MAVEN_PROPERTY_RESOLUTION_MAX_DEPTH; depth += 1) {
+    let changed = false;
+    resolved = resolved.replace(MAVEN_PROPERTY_REFERENCE_PATTERN, (reference, key) => {
+      const replacement = properties.get(key.trim());
+      if (replacement === undefined) {
+        return reference;
+      }
+      changed = true;
+      return replacement;
+    });
+    if (!changed) {
+      break;
+    }
+  }
+  return resolved === "" || resolved.includes("${") ? undefined : resolved;
+}
+function readPomLicenseNames(input) {
+  const licenseNodes = childNodes(firstChild(input.project, "licenses"), "license");
+  if (licenseNodes.length > MAVEN_LICENSE_COUNT_MAX) {
+    return err(mavenPomMetadataError({
+      packageId: input.packageId,
+      source: input.source,
+      message: "Maven POM declared too many license records.",
+      details: {
+        reason: "license_count",
+        maxLicenses: MAVEN_LICENSE_COUNT_MAX,
+        observedLicenses: licenseNodes.length
+      }
+    }));
+  }
+  const names = [];
+  for (const license of licenseNodes) {
+    const name = resolveMavenPomValue(childText(license, "name"), input.properties);
+    if (!name) {
+      continue;
+    }
+    const normalized = name.replace(/\s+/gu, " ").trim();
+    if (normalized.length > MAVEN_LICENSE_NAME_MAX_CHARS) {
+      return err(mavenPomMetadataError({
+        packageId: input.packageId,
+        source: input.source,
+        message: "Maven POM license name exceeded the maximum supported length.",
+        details: {
+          reason: "license_name_length",
+          maxChars: MAVEN_LICENSE_NAME_MAX_CHARS,
+          observedChars: normalized.length
+        }
+      }));
+    }
+    if (normalized !== "") {
+      names.push(normalized);
+    }
+  }
+  return ok([...new Set(names)]);
+}
+function mavenPomMetadataError(input) {
+  return createError({
+    code: "PACKAGE_EVIDENCE_READ_FAILED",
+    category: "unsupported_input",
+    message: input.message,
+    details: {
+      packageId: input.packageId,
+      pomSource: input.source,
+      ...input.details ?? {}
+    }
+  });
+}
+function pomReadFailedMessage(error) {
+  return error.kind === "too_large" ? "Maven POM metadata exceeded the maximum supported size." : "Failed to read Maven POM metadata.";
+}
+
+// src/evidence/bazel-module.ts
+import { existsSync as existsSync4, readdirSync as readdirSync4, statSync as statSync4 } from "node:fs";
+import path6 from "node:path";
+import { fileURLToPath } from "node:url";
+
+// src/evidence/license-files.ts
+function classifyEvidenceFile(path) {
+  const segments = path.replace(/\\/g, "/").split("/").filter(Boolean);
+  const normalized = segments.at(-1)?.toLowerCase();
+  if (!normalized) {
+    return;
+  }
+  if (segments.at(-2)?.toLowerCase() === "licenses" || normalized.endsWith(".license")) {
+    return "license";
+  }
+  if (/^third[-_ ]party[-_ ]notices?(?:[._-]|$)/i.test(normalized)) {
+    return "notice";
+  }
+  if (/^third[-_ ]party[-_ ]licenses?(?:[._-]|$)/i.test(normalized)) {
+    return "license";
+  }
+  if (hasEvidenceName(normalized, "notice")) {
+    return "notice";
+  }
+  if (hasEvidenceName(normalized, "copying")) {
+    return "copying";
+  }
+  if (hasEvidenceName(normalized, "unlicense") || hasEvidenceName(normalized, "license") || hasEvidenceName(normalized, "licence")) {
+    return "license";
+  }
+  if (hasEvidenceName(normalized, "copyright") || hasEvidenceName(normalized, "authors") || hasEvidenceName(normalized, "patents") || hasEvidenceName(normalized, "legal")) {
+    return "other";
+  }
+  return;
+}
+function hasEvidenceName(normalized, baseName) {
+  return normalized === baseName || normalized.startsWith(`${baseName}.`) || normalized.startsWith(`${baseName}-`) || normalized.startsWith(`${baseName}_`);
+}
+
+// src/evidence/bazel-module.ts
+var BAZEL_REGISTRY_JSON_MAX_BYTES = 64 * 1024;
+var BAZEL_SOURCE_JSON_MAX_BYTES = 64 * 1024;
+var BAZEL_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+var BAZEL_LICENSE_FILE_LIMIT = 50;
+function collectBazelModuleEvidence(input) {
+  const sourceDir = findBazelLocalPathSourceDir({
+    packageId: input.packageId,
+    packageName: input.packageName,
+    version: input.version,
+    projectRoot: input.projectRoot,
+    registryJsonMaxBytes: input.registryJsonMaxBytes ?? BAZEL_REGISTRY_JSON_MAX_BYTES,
+    sourceJsonMaxBytes: input.sourceJsonMaxBytes ?? BAZEL_SOURCE_JSON_MAX_BYTES
+  });
+  if (!sourceDir.ok) {
+    return err(sourceDir.error);
+  }
+  if (sourceDir.value) {
+    const warnings = [];
+    const files = readBazelEvidenceFiles({
+      sourceDir: sourceDir.value,
+      maxBytes: input.evidenceFileMaxBytes ?? BAZEL_EVIDENCE_FILE_MAX_BYTES,
+      warnings
+    });
+    if (files.length === 0) {
+      warnings.push("No supported license, notice, attribution, or legal evidence file found in Bazel module source.");
+    }
+    return ok({
+      packageId: input.packageId,
+      files,
+      source: "local",
+      warnings
+    });
+  }
+  return ok({
+    packageId: input.packageId,
+    files: [],
+    source: "unavailable",
+    warnings: [
+      "Bazel module license evidence was not found in local Bazel registry local_path sources. Remote Bazel registry metadata fetching is not supported yet."
+    ]
+  });
+}
+function findBazelLocalPathSourceDir(input) {
+  for (const registryRoot of findLocalBazelRegistryRoots(input.projectRoot)) {
+    const sourceJsonPath = path6.join(registryRoot, "modules", input.packageName, input.version, "source.json");
+    if (!existsSync4(sourceJsonPath)) {
+      continue;
+    }
+    const sourceJson = readJsonFile({
+      packageId: input.packageId,
+      filePath: sourceJsonPath,
+      maxBytes: input.sourceJsonMaxBytes,
+      label: "Bazel source metadata"
+    });
+    if (!sourceJson.ok) {
+      return err(sourceJson.error);
+    }
+    if (!isRecord(sourceJson.value) || sourceJson.value.type !== "local_path" || typeof sourceJson.value.path !== "string") {
+      continue;
+    }
+    const registryJson = readBazelRegistryJson({
+      packageId: input.packageId,
+      registryRoot,
+      maxBytes: input.registryJsonMaxBytes
+    });
+    if (!registryJson.ok) {
+      return err(registryJson.error);
+    }
+    const sourceDir = resolveBazelLocalPathSourceDir({
+      registryRoot,
+      moduleBasePath: registryJson.value,
+      sourcePath: sourceJson.value.path
+    });
+    if (sourceDir && isReadableDirectory(sourceDir)) {
+      return ok(sourceDir);
+    }
+  }
+  return ok(undefined);
+}
+function findLocalBazelRegistryRoots(projectRoot) {
+  const roots = new Set;
+  const projectRegistry = path6.resolve(projectRoot);
+  if (isReadableDirectory(path6.join(projectRegistry, "modules"))) {
+    roots.add(projectRegistry);
+  }
+  for (const registry of readBazelrcRegistries(path6.join(projectRoot, ".bazelrc"))) {
+    if (registry.startsWith("file://")) {
+      try {
+        const registryRoot = path6.resolve(fileURLToPath(registry));
+        if (isReadableDirectory(path6.join(registryRoot, "modules"))) {
+          roots.add(registryRoot);
+        }
+      } catch {
+        continue;
       }
     }
   }
-  malformed(archiveName, "ZIP end of central directory is missing or malformed.", "zip");
+  return [...roots];
 }
-function parseTarNumber(bytes, archiveName, format, field) {
-  if ((bytes[0] ?? 0) & 128) {
-    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Base-256 TAR numeric fields are not supported.", {
-      basename: archiveName,
-      format
+function readBazelrcRegistries(bazelrcPath) {
+  if (!existsSync4(bazelrcPath)) {
+    return [];
+  }
+  const text = readTextFileWithLimit({
+    filePath: bazelrcPath,
+    maxBytes: BAZEL_SOURCE_JSON_MAX_BYTES
+  });
+  if (!text.ok) {
+    return [];
+  }
+  return [...text.value.matchAll(/(?:^|\s)--registry=("[^"]+"|'[^']+'|\S+)/gm)].map((match) => (match[1] ?? "").replace(/^["']|["']$/g, "")).filter((value) => value !== "");
+}
+function readBazelRegistryJson(input) {
+  const registryJsonPath = path6.join(input.registryRoot, "bazel_registry.json");
+  if (!existsSync4(registryJsonPath)) {
+    return ok(undefined);
+  }
+  const registryJson = readJsonFile({
+    packageId: input.packageId,
+    filePath: registryJsonPath,
+    maxBytes: input.maxBytes,
+    label: "Bazel registry metadata"
+  });
+  if (!registryJson.ok) {
+    return err(registryJson.error);
+  }
+  return ok(isRecord(registryJson.value) && typeof registryJson.value.module_base_path === "string" ? registryJson.value.module_base_path : undefined);
+}
+function resolveBazelLocalPathSourceDir(input) {
+  if (path6.isAbsolute(input.sourcePath)) {
+    return path6.resolve(input.sourcePath);
+  }
+  const moduleBasePath = input.moduleBasePath ?? "";
+  if (moduleBasePath !== "" && path6.isAbsolute(moduleBasePath)) {
+    return path6.resolve(moduleBasePath, input.sourcePath);
+  }
+  return path6.resolve(input.registryRoot, moduleBasePath, input.sourcePath);
+}
+function readBazelEvidenceFiles(input) {
+  const files = [];
+  for (const entry of readDirectoryEntries(input.sourceDir)) {
+    if (!entry.isFile()) {
+      continue;
+    }
+    const kind = classifyEvidenceFile(entry.name);
+    if (!kind) {
+      continue;
+    }
+    if (files.length >= BAZEL_LICENSE_FILE_LIMIT) {
+      input.warnings.push(`Bazel module evidence file limit reached at ${BAZEL_LICENSE_FILE_LIMIT} files.`);
+      break;
+    }
+    const text = readTextFileWithLimit({
+      filePath: path6.join(input.sourceDir, entry.name),
+      maxBytes: input.maxBytes
+    });
+    if (!text.ok) {
+      input.warnings.push(`Skipped Bazel evidence file ${entry.name}: ${evidenceReadError(text.error)}.`);
+      continue;
+    }
+    files.push({
+      path: entry.name,
+      kind,
+      text: text.value
     });
   }
-  const text = bytes.toString("ascii").replace(/\0.*$/u, "").trim();
-  if (text === "") {
-    return 0;
-  }
-  if (!/^[0-7]+$/u.test(text)) {
-    malformed(archiveName, `TAR ${field} field is malformed.`, format);
-  }
-  const value = Number.parseInt(text, 8);
-  if (!Number.isSafeInteger(value)) {
-    malformed(archiveName, `TAR ${field} field exceeds the safe integer range.`, format);
-  }
-  return value;
+  return files.sort((left, right) => left.path.localeCompare(right.path));
 }
-function decodeUtf8(bytes, entryPath, archiveName) {
+function readJsonFile(input) {
+  const text = readTextFileWithLimit({
+    filePath: input.filePath,
+    maxBytes: input.maxBytes
+  });
+  if (!text.ok) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: textFileReadErrorCategory(text.error),
+      message: text.error.kind === "too_large" ? `${input.label} exceeded the maximum supported size.` : `Failed to read ${input.label}.`,
+      details: {
+        packageId: input.packageId,
+        metadataPath: input.filePath,
+        ...textFileReadErrorDetails(text.error)
+      }
+    }));
+  }
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return ok(JSON.parse(text.value));
+  } catch (cause) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "unsupported_input",
+      message: `Failed to parse ${input.label}.`,
+      details: {
+        packageId: input.packageId,
+        metadataPath: input.filePath,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
+function readDirectoryEntries(dir) {
+  try {
+    return readdirSync4(dir, { withFileTypes: true });
   } catch {
-    fail("ARCHIVE_INTEGRITY_FAILED", "invalid_input", "Archive text is not valid UTF-8.", {
-      basename: archiveName,
-      ...entryPath !== undefined ? { entryPath: safeEntryPathForError(entryPath) } : {}
-    });
+    return [];
   }
 }
-function readU16(bytes, offset, archiveName) {
-  requireRange(bytes, offset, 2, archiveName);
-  return bytes.readUInt16LE(offset);
-}
-function readU32(bytes, offset, archiveName) {
-  requireRange(bytes, offset, 4, archiveName);
-  return bytes.readUInt32LE(offset);
-}
-function requireRange(bytes, offset, length, archiveName, entryPath) {
-  if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || offset < 0 || length < 0 || offset + length > bytes.length) {
-    malformed(archiveName, "Archive structure is truncated.", undefined, entryPath);
+function evidenceReadError(error) {
+  switch (error.kind) {
+    case "too_large":
+      return `file exceeded ${error.maxBytes} bytes`;
+    case "filesystem":
+      return error.cause;
   }
 }
-function safeAdd(left, right, archiveName) {
-  const value = left + right;
-  if (!Number.isSafeInteger(value) || value < left) {
-    malformed(archiveName, "Archive numeric field overflows the safe integer range.");
-  }
-  return value;
-}
-function roundToTarBlock(size) {
-  return Math.ceil(size / BLOCK_BYTES) * BLOCK_BYTES;
-}
-function isZeroBlock(bytes) {
-  return bytes.every((byte) => byte === 0);
-}
-function hasSignatureAt(bytes, offset, signature) {
-  return offset >= 0 && offset + 4 <= bytes.length && bytes.readUInt32LE(offset) === signature;
-}
-function isZlibOutputLimitError(cause) {
-  if (!(cause instanceof Error)) {
+function isReadableDirectory(pathname) {
+  try {
+    return statSync4(pathname).isDirectory();
+  } catch {
     return false;
   }
-  const code = "code" in cause && typeof cause.code === "string" ? cause.code : "";
-  return code === "ERR_BUFFER_TOO_LARGE" || cause.message.includes("maxOutputLength") || cause.message.includes("larger than");
 }
-function foldEntryPath(entryPath) {
-  return entryPath.normalize("NFC").toLowerCase();
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function comparePaths(left, right) {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-function buildCrc32Table() {
-  const table = new Uint32Array(256);
-  for (let index = 0;index < table.length; index += 1) {
-    let value = index;
-    for (let bit = 0;bit < 8; bit += 1) {
-      value = (value & 1) !== 0 ? value >>> 1 ^ 3988292384 : value >>> 1;
-    }
-    table[index] = value >>> 0;
-  }
-  return table;
-}
-function crc32(bytes, budget, startedAt, archiveName, entryPath) {
-  let crc = 4294967295;
-  for (let index = 0;index < bytes.length; index += 1) {
-    if ((index & 65535) === 0) {
-      checkDeadlineSince(budget, startedAt, archiveName, entryPath);
-    }
-    const byte = bytes[index] ?? 0;
-    crc = crc >>> 8 ^ (CRC32_TABLE[(crc ^ byte) & 255] ?? 0);
-  }
-  return (crc ^ 4294967295) >>> 0;
-}
-function safeBasename(value) {
-  const normalized = value.replace(/\\/g, "/");
-  let name = basename(normalized).normalize("NFC").replace(/[\u0000-\u001f\u007f-\u009f:]/gu, "_").replace(/[. ]+$/u, "");
-  if (name === "" || name === "." || name === "/" || isWindowsDeviceName(name)) {
-    name = "archive";
-  }
-  while (Buffer.byteLength(name, "utf8") > 255) {
-    name = name.slice(0, -1);
-  }
-  return name || "archive";
-}
-function safeDisplayPath(value) {
-  const normalized = value.replace(/\\/g, "/");
-  const segments = normalized.split("/");
-  if (normalized.startsWith("/") || /^[A-Za-z]:/u.test(normalized) || normalized.startsWith("//") || normalized !== normalized.normalize("NFC") || Buffer.byteLength(normalized, "utf8") > 4096 || /[\u0000-\u001f\u007f-\u009f:]/u.test(normalized) || segments.some((segment) => segment === "" || segment === "." || segment === ".." || /[. ]$/u.test(segment) || Buffer.byteLength(segment, "utf8") > 255 || isWindowsDeviceName(segment))) {
-    return safeBasename(normalized);
-  }
-  return normalized;
-}
-function isWindowsDeviceName(segment) {
-  const base = segment.split(".", 1)[0]?.toUpperCase() ?? "";
-  return /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/u.test(base);
-}
-function safeEntryPathForError(value) {
-  if (value === undefined) {
-    return;
-  }
-  const withoutControls = value.replace(/[\u0000-\u001f\u007f-\u009f]/gu, "?");
-  return withoutControls.slice(0, 4096);
-}
-function invalidPath(archiveName, entryPath) {
-  fail("ARCHIVE_ENTRY_PATH_INVALID", "invalid_input", "Archive entry path is invalid.", {
-    basename: archiveName,
-    ...entryPath !== undefined ? { entryPath } : {}
-  });
-}
-function unsupportedType(archiveName, entryPath, format) {
-  fail("ARCHIVE_ENTRY_TYPE_UNSUPPORTED", "unsupported_input", "Archive entry type is not supported.", {
-    basename: archiveName,
-    ...entryPath !== undefined ? { entryPath } : {},
-    format
-  });
-}
-function duplicate(archiveName, entryPath) {
-  fail("ARCHIVE_DUPLICATE_ENTRY", "invalid_input", "Archive entries duplicate or collide by path.", {
-    basename: archiveName,
-    entryPath
-  });
-}
-function integrity(archiveName, entryPath, message, format) {
-  fail("ARCHIVE_INTEGRITY_FAILED", "invalid_input", message, {
-    basename: archiveName,
-    ...entryPath !== undefined ? { entryPath } : {},
-    ...format !== undefined ? { format } : {}
-  });
-}
-function malformed(archiveName, message, format, entryPath) {
-  fail("ARCHIVE_MALFORMED", "invalid_input", message, {
-    basename: archiveName,
-    ...entryPath !== undefined ? { entryPath } : {},
-    ...format !== undefined ? { format } : {}
-  });
-}
-function fail(code, category, message, details) {
-  throw new ArchiveFailure({ code, category, message, ...details ? { details } : {} });
-}
-function toOhriskError(cause, fallbackCode, fallbackCategory, archiveName) {
-  if (cause instanceof ArchiveFailure) {
-    return createError({
-      code: cause.code,
-      category: cause.category,
-      message: cause.message,
-      ...cause.details ? { details: cause.details } : {}
-    });
-  }
-  return createError({
-    code: fallbackCode,
-    category: fallbackCategory,
-    message: "Archive operation failed.",
-    details: { basename: archiveName }
-  });
-}
+
+// src/evidence/cargo-package.ts
+import { existsSync as existsSync5, readdirSync as readdirSync5, statSync as statSync5 } from "node:fs";
+import path7 from "node:path";
 
 // src/license/spdx-catalog.ts
 var SPDX_LICENSE_LIST_SOURCE_COMMIT = "5bf6d9610255540bfbee6890765a616042bf1e11";
@@ -22692,108 +22598,6 @@ function describeEvidenceSources(evidence) {
 }
 
 // src/evidence/cargo-package.ts
-import { existsSync as existsSync2, readdirSync as readdirSync4, statSync as statSync4 } from "node:fs";
-import path4 from "node:path";
-
-// src/shared/read-text-file.ts
-import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, statSync as statSync3 } from "node:fs";
-var TEXT_FILE_READ_CHUNK_BYTES = 64 * 1024;
-function readTextFileWithLimit(input) {
-  try {
-    const stats = statSync3(input.filePath);
-    if (stats.size > input.maxBytes) {
-      return err({
-        kind: "too_large",
-        maxBytes: input.maxBytes,
-        observedBytes: stats.size
-      });
-    }
-    return readOpenTextFileWithLimit(input);
-  } catch (cause) {
-    return err({
-      kind: "filesystem",
-      cause: cause instanceof Error ? cause.message : String(cause)
-    });
-  }
-}
-function textFileReadErrorCategory(error) {
-  return error.kind === "too_large" ? "unsupported_input" : "filesystem";
-}
-function textFileReadErrorDetails(error) {
-  return error.kind === "too_large" ? {
-    maxBytes: error.maxBytes,
-    observedBytes: error.observedBytes
-  } : {
-    cause: error.cause
-  };
-}
-function readOpenTextFileWithLimit(input) {
-  const chunks = [];
-  let observedBytes = 0;
-  let fileDescriptor;
-  try {
-    fileDescriptor = openSync2(input.filePath, "r");
-    while (true) {
-      const readSize = Math.min(TEXT_FILE_READ_CHUNK_BYTES, Math.max(1, input.maxBytes + 1 - observedBytes));
-      const chunk = Buffer.alloc(readSize);
-      const bytesRead = readSync2(fileDescriptor, chunk, 0, chunk.length, null);
-      if (bytesRead === 0) {
-        return ok(Buffer.concat(chunks, observedBytes).toString("utf8"));
-      }
-      observedBytes += bytesRead;
-      if (observedBytes > input.maxBytes) {
-        return err({
-          kind: "too_large",
-          maxBytes: input.maxBytes,
-          observedBytes
-        });
-      }
-      chunks.push(bytesRead === chunk.length ? chunk : chunk.subarray(0, bytesRead));
-    }
-  } finally {
-    if (fileDescriptor !== undefined) {
-      try {
-        closeSync2(fileDescriptor);
-      } catch {}
-    }
-  }
-}
-
-// src/evidence/license-files.ts
-function classifyEvidenceFile(path) {
-  const segments = path.replace(/\\/g, "/").split("/").filter(Boolean);
-  const normalized = segments.at(-1)?.toLowerCase();
-  if (!normalized) {
-    return;
-  }
-  if (segments.at(-2)?.toLowerCase() === "licenses" || normalized.endsWith(".license")) {
-    return "license";
-  }
-  if (/^third[-_ ]party[-_ ]notices?(?:[._-]|$)/i.test(normalized)) {
-    return "notice";
-  }
-  if (/^third[-_ ]party[-_ ]licenses?(?:[._-]|$)/i.test(normalized)) {
-    return "license";
-  }
-  if (hasEvidenceName(normalized, "notice")) {
-    return "notice";
-  }
-  if (hasEvidenceName(normalized, "copying")) {
-    return "copying";
-  }
-  if (hasEvidenceName(normalized, "unlicense") || hasEvidenceName(normalized, "license") || hasEvidenceName(normalized, "licence")) {
-    return "license";
-  }
-  if (hasEvidenceName(normalized, "copyright") || hasEvidenceName(normalized, "authors") || hasEvidenceName(normalized, "patents") || hasEvidenceName(normalized, "legal")) {
-    return "other";
-  }
-  return;
-}
-function hasEvidenceName(normalized, baseName) {
-  return normalized === baseName || normalized.startsWith(`${baseName}.`) || normalized.startsWith(`${baseName}-`) || normalized.startsWith(`${baseName}_`);
-}
-
-// src/evidence/cargo-package.ts
 var CARGO_MANIFEST_MAX_BYTES = 1024 * 1024;
 var CARGO_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var CARGO_LICENSE_FILE_LIMIT = 50;
@@ -22821,7 +22625,7 @@ function collectCargoPackageEvidence(input) {
   }
   const manifest = readCargoManifestMetadata({
     packageId: input.packageId,
-    manifestPath: path4.join(packageDir, "Cargo.toml"),
+    manifestPath: path7.join(packageDir, "Cargo.toml"),
     maxBytes: input.manifestMaxBytes ?? CARGO_MANIFEST_MAX_BYTES
   });
   if (!manifest.ok) {
@@ -22864,12 +22668,12 @@ function findCargoPackageDir(input) {
   const crateDirName = `${input.packageName}-${input.version}`;
   if (input.resolved && CARGO_CRATES_IO_SOURCES.has(input.resolved)) {
     for (const registrySourceRoot of cargoRegistrySourceRoots(input.projectRoot)) {
-      if (!existsSync2(registrySourceRoot) || !isReadableDirectory(registrySourceRoot)) {
+      if (!existsSync5(registrySourceRoot) || !isReadableDirectory2(registrySourceRoot)) {
         continue;
       }
       let registryDirs;
       try {
-        registryDirs = readdirSync4(registrySourceRoot, { withFileTypes: true });
+        registryDirs = readdirSync5(registrySourceRoot, { withFileTypes: true });
       } catch {
         continue;
       }
@@ -22877,8 +22681,8 @@ function findCargoPackageDir(input) {
         if (!registryDir.isDirectory() || !isCratesIoRegistryDirectory(registryDir.name)) {
           continue;
         }
-        const candidate = path4.join(registrySourceRoot, registryDir.name, crateDirName);
-        if (existsSync2(candidate) && isReadableDirectory(candidate)) {
+        const candidate = path7.join(registrySourceRoot, registryDir.name, crateDirName);
+        if (existsSync5(candidate) && isReadableDirectory2(candidate)) {
           return candidate;
         }
       }
@@ -22887,8 +22691,8 @@ function findCargoPackageDir(input) {
   if (input.resolved && !CARGO_CRATES_IO_SOURCES.has(input.resolved)) {
     return;
   }
-  const vendoredCandidate = path4.join(input.projectRoot, "vendor", input.packageName);
-  if (existsSync2(vendoredCandidate) && isReadableDirectory(vendoredCandidate)) {
+  const vendoredCandidate = path7.join(input.projectRoot, "vendor", input.packageName);
+  if (existsSync5(vendoredCandidate) && isReadableDirectory2(vendoredCandidate)) {
     return vendoredCandidate;
   }
   return;
@@ -22897,8 +22701,8 @@ function isCratesIoRegistryDirectory(name) {
   return name.startsWith("index.crates.io-") || name.startsWith("github.com-");
 }
 function readCargoPackageChecksumIntegrity(packageDir) {
-  const checksumPath = path4.join(packageDir, ".cargo-checksum.json");
-  if (!existsSync2(checksumPath)) {
+  const checksumPath = path7.join(packageDir, ".cargo-checksum.json");
+  if (!existsSync5(checksumPath)) {
     return;
   }
   const text = readTextFileWithLimit({
@@ -22928,20 +22732,20 @@ function unavailableLocalCargoEvidence(packageId, warning) {
 }
 function cargoRegistrySourceRoots(projectRoot) {
   const roots = [
-    path4.join(projectRoot, ".cargo", "registry", "src")
+    path7.join(projectRoot, ".cargo", "registry", "src")
   ];
   const cargoHome = process.env.CARGO_HOME;
   if (cargoHome) {
-    roots.push(path4.join(cargoHome, "registry", "src"));
+    roots.push(path7.join(cargoHome, "registry", "src"));
   }
   const home = process.env.USERPROFILE ?? process.env.HOME;
   if (home) {
-    roots.push(path4.join(home, ".cargo", "registry", "src"));
+    roots.push(path7.join(home, ".cargo", "registry", "src"));
   }
-  return [...new Set(roots.map((root) => path4.resolve(root)))];
+  return [...new Set(roots.map((root) => path7.resolve(root)))];
 }
 function readCargoManifestMetadata(input) {
-  if (!existsSync2(input.manifestPath)) {
+  if (!existsSync5(input.manifestPath)) {
     return ok({});
   }
   const text = readTextFileWithLimit({
@@ -23002,7 +22806,7 @@ function parseCargoManifestMetadata(text) {
 function readCargoEvidenceFiles(input) {
   const candidates = new Map;
   if (input.manifest.licenseFile) {
-    const absolutePath = path4.resolve(input.packageDir, input.manifest.licenseFile);
+    const absolutePath = path7.resolve(input.packageDir, input.manifest.licenseFile);
     candidates.set(absolutePath, {
       absolutePath,
       relativePath: input.manifest.licenseFile,
@@ -23017,13 +22821,13 @@ function readCargoEvidenceFiles(input) {
   }
   const files = [];
   const seen = new Set;
-  const packageRoot = path4.resolve(input.packageDir);
+  const packageRoot = path7.resolve(input.packageDir);
   for (const candidate of [...candidates.values()].slice(0, CARGO_LICENSE_FILE_LIMIT)) {
     if (seen.has(candidate.absolutePath)) {
       continue;
     }
     seen.add(candidate.absolutePath);
-    if (!isPathInside(packageRoot, candidate.absolutePath)) {
+    if (!isPathInside2(packageRoot, candidate.absolutePath)) {
       continue;
     }
     const text = readTextFileWithLimit({
@@ -23050,12 +22854,12 @@ function cargoReadmeEvidenceKind(absolutePath, relativePath, maxBytes) {
   return text.ok && recognizePackageDualLicenseDeclaration(text.value) ? "other" : undefined;
 }
 function evidenceFileCandidates(dir) {
-  if (!existsSync2(dir) || !isReadableDirectory(dir)) {
+  if (!existsSync5(dir) || !isReadableDirectory2(dir)) {
     return [];
   }
   try {
-    return readdirSync4(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path4.join(dir, entry.name),
+    return readdirSync5(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path7.join(dir, entry.name),
       relativePath: entry.name
     }));
   } catch {
@@ -23089,16 +22893,16 @@ function stripTomlComment(line) {
   }
   return line;
 }
-function isReadableDirectory(dir) {
+function isReadableDirectory2(dir) {
   try {
-    return statSync4(dir).isDirectory();
+    return statSync5(dir).isDirectory();
   } catch {
     return false;
   }
 }
-function isPathInside(parent, child) {
-  const relative = path4.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path4.isAbsolute(relative);
+function isPathInside2(parent, child) {
+  const relative = path7.relative(parent, child);
+  return relative === "" || !relative.startsWith("..") && !path7.isAbsolute(relative);
 }
 function manifestReadFailedMessage(error) {
   return error.kind === "too_large" ? "Cargo.toml metadata exceeded the maximum supported size." : "Failed to read Cargo.toml metadata.";
@@ -23110,1884 +22914,9 @@ function escapeRegExp(input) {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// src/evidence/cargo-crate.ts
-var CARGO_CRATE_MAX_ENTRIES = 50000;
-var CARGO_CRATE_ENTRY_MAX_BYTES = 50 * 1024 * 1024;
-var CARGO_CRATE_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
-var CARGO_CRATE_MATERIALIZED_MAX_BYTES = 128 * 1024 * 1024;
-var CARGO_CRATE_MANIFEST_MAX_BYTES = 1024 * 1024;
-var CARGO_CRATE_LICENSE_MAX_BYTES = 2 * 1024 * 1024;
-var CARGO_CRATE_LICENSE_FILE_LIMIT = 50;
-var SHA256_DIGEST_BYTES = 32;
-function collectCargoCrateEvidence(input) {
-  const verified = verifyCargoCrateIntegrity(input);
-  if (!verified.ok) {
-    return verified;
-  }
-  const archiveName = `${safeCargoDisplayPart(input.packageName)}-${safeCargoDisplayPart(input.version)}.crate`;
-  const archive = readArchiveBytes({
-    displayName: archiveName,
-    bytes: input.crate,
-    formatHint: "tar.gz",
-    limits: {
-      inputBytes: input.artifactMaxBytes,
-      entries: CARGO_CRATE_MAX_ENTRIES,
-      entryBytes: CARGO_CRATE_ENTRY_MAX_BYTES,
-      expandedBytes: CARGO_CRATE_EXPANDED_MAX_BYTES,
-      materializedBytes: CARGO_CRATE_MATERIALIZED_MAX_BYTES
-    }
-  });
-  if (!archive.ok) {
-    const warning = archive.error.code === "ARCHIVE_LIMIT_EXCEEDED" ? `Checksum-identified Cargo crate exceeded bounded archive limits (${archive.error.code}); its contents were not trusted.` : `Checksum-identified Cargo crate failed bounded archive inspection (${archive.error.code}); its contents were not trusted.`;
-    return ok(unavailableCargoCrateEvidence(input.packageId, warning));
-  }
-  const root = `${input.packageName}-${input.version}`;
-  const rootPrefix = `${root}/`;
-  const unexpectedEntry = archive.value.entries.find((entry) => entry.path !== root && !entry.path.startsWith(rootPrefix));
-  if (unexpectedEntry) {
-    return err(cargoCrateError(input, "Cargo crate archive did not use the requested package root.", {
-      reason: "cargo_crate_root_mismatch",
-      expectedRoot: root,
-      observedPath: unexpectedEntry.path
-    }));
-  }
-  const manifestPath = `${rootPrefix}Cargo.toml`;
-  const manifestEntry = archive.value.entries.find((entry) => entry.type === "file" && entry.path === manifestPath);
-  if (!manifestEntry) {
-    return err(cargoCrateError(input, "Cargo crate archive did not contain Cargo.toml.", {
-      reason: "cargo_crate_manifest_missing"
-    }));
-  }
-  const manifestText = archive.value.readText(manifestPath, CARGO_CRATE_MANIFEST_MAX_BYTES);
-  if (!manifestText.ok) {
-    return err(manifestText.error);
-  }
-  const manifest = parseCargoManifestMetadata(manifestText.value);
-  if (manifest.name !== input.packageName || manifest.version !== input.version) {
-    return err(cargoCrateError(input, "Cargo crate manifest identity did not match the requested package.", {
-      reason: "cargo_crate_identity_mismatch",
-      expectedName: input.packageName,
-      expectedVersion: input.version,
-      ...manifest.name ? { observedName: manifest.name } : {},
-      ...manifest.version ? { observedVersion: manifest.version } : {}
-    }));
-  }
-  const evidencePaths = new Map;
-  const declaredLicenseFile = normalizeDeclaredLicenseFile(manifest.licenseFile);
-  if (declaredLicenseFile) {
-    evidencePaths.set(declaredLicenseFile, "license");
-  }
-  for (const relativePath of archive.value.entries.filter((entry) => entry.type === "file" && entry.path.startsWith(rootPrefix)).map((entry) => entry.path.slice(rootPrefix.length)).filter((relativePath) => !relativePath.includes("/")).sort()) {
-    const kind = classifyEvidenceFile(relativePath);
-    if (kind && !evidencePaths.has(relativePath)) {
-      evidencePaths.set(relativePath, kind);
-    }
-  }
-  const readmePath = archive.value.entries.filter((entry) => entry.type === "file" && entry.path.startsWith(rootPrefix)).map((entry) => entry.path.slice(rootPrefix.length)).filter((relativePath) => !relativePath.includes("/") && isCargoReadme(relativePath)).sort()[0];
-  if (readmePath) {
-    const readme = archive.value.readText(`${rootPrefix}${readmePath}`, CARGO_CRATE_LICENSE_MAX_BYTES);
-    if (readme.ok && recognizePackageDualLicenseDeclaration(readme.value)) {
-      evidencePaths.set(readmePath, "other");
-    }
-  }
-  const warnings = [];
-  const files = [];
-  for (const [relativePath, kind] of [...evidencePaths.entries()].slice(0, CARGO_CRATE_LICENSE_FILE_LIMIT)) {
-    const entryPath = `${rootPrefix}${relativePath}`;
-    const entry = archive.value.entries.find((candidate) => candidate.type === "file" && candidate.path === entryPath);
-    if (!entry) {
-      warnings.push(`Cargo.toml declared missing license-file ${relativePath}.`);
-      continue;
-    }
-    const text = archive.value.readText(entryPath, CARGO_CRATE_LICENSE_MAX_BYTES);
-    if (!text.ok) {
-      warnings.push(`Skipped ${relativePath}: Cargo license evidence exceeded bounded text limits.`);
-      continue;
-    }
-    files.push({ path: relativePath, kind, text: text.value });
-  }
-  if (files.length === 0) {
-    warnings.push("Checksum-verified Cargo crate did not contain a package license evidence file.");
-  }
-  if (!manifest.license) {
-    warnings.push("Cargo.toml did not declare a package license.");
-  }
-  return ok({
-    packageId: input.packageId,
-    ...manifest.license ? { metadataLicense: manifest.license, metadataSource: "Cargo.toml" } : {},
-    files,
-    source: "tarball",
-    warnings
-  });
-}
-function unavailableCargoCrateEvidence(packageId, warning) {
-  return {
-    packageId,
-    files: [],
-    source: "unavailable",
-    warnings: [warning]
-  };
-}
-function verifyCargoCrateIntegrity(input) {
-  const expected = decodeSha256Integrity(input.integrity);
-  const actual = createHash4("sha256").update(input.crate).digest();
-  if (!expected || expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
-    return err(createError({
-      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
-      category: "unsupported_input",
-      message: "Cargo crate checksum did not match Cargo.lock.",
-      details: {
-        packageId: input.packageId,
-        integrity: input.integrity,
-        computed: `sha256-${actual.toString("base64")}`
-      }
-    }));
-  }
-  recordArtifactCheck({ packageId: input.packageId, bytes: input.crate, kind: "cargo-sha256", value: `sha256-${actual.toString("base64")}` });
-  return ok(undefined);
-}
-function decodeSha256Integrity(integrity) {
-  if (!/^sha256-[A-Za-z0-9+/]{43}=$/u.test(integrity)) {
-    return;
-  }
-  const digest = Buffer.from(integrity.slice("sha256-".length), "base64");
-  return digest.length === SHA256_DIGEST_BYTES ? digest : undefined;
-}
-function normalizeDeclaredLicenseFile(value) {
-  if (!value) {
-    return;
-  }
-  const normalized = path5.posix.normalize(value.replace(/\\/g, "/"));
-  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/")) {
-    return;
-  }
-  return normalized;
-}
-function isCargoReadme(relativePath) {
-  return /^README(?:\.(?:md|markdown|txt|text|rst))?$/iu.test(relativePath);
-}
-function safeCargoDisplayPart(value) {
-  return value.replace(/[^A-Za-z0-9._+-]/g, "_").slice(0, 120) || "package";
-}
-function cargoCrateError(input, message, details) {
-  return createError({
-    code: "PACKAGE_EVIDENCE_READ_FAILED",
-    category: "unsupported_input",
-    message,
-    details: {
-      packageId: input.packageId,
-      packageName: input.packageName,
-      version: input.version,
-      ...details
-    }
-  });
-}
-
-// src/evidence/cargo-git.ts
-import path7 from "node:path";
-
-// src/graph/rust-cargo-lock.ts
-import { Buffer as Buffer2 } from "node:buffer";
-import { existsSync as existsSync3, readdirSync as readdirSync5 } from "node:fs";
-import path6 from "node:path";
-
-// src/graph/read-input-file.ts
-var LOCKFILE_MAX_BYTES = 50 * 1024 * 1024;
-var PACKAGE_JSON_MAX_BYTES = 1024 * 1024;
-function readInputTextFile(input) {
-  return readTextFileWithLimit(input);
-}
-function inputFileReadErrorCategory(error) {
-  return textFileReadErrorCategory(error);
-}
-function inputFileReadErrorDetails(error) {
-  return textFileReadErrorDetails(error);
-}
-
-// src/graph/rust-cargo-lock.ts
-var CARGO_MAX_PATHS_PER_PACKAGE = 64;
-var CARGO_WORKSPACE_EVIDENCE_FILE_LIMIT = 50;
-var CARGO_WORKSPACE_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-function parseCargoWorkspacePackageMetadata(input) {
-  return readCargoPackageLicenseMetadata(input.manifestText, readCargoWorkspacePackageLicenseMetadata(input.workspaceManifestText));
-}
-function readCargoWorkspaceEvidenceFromSnapshot(input) {
-  const directory = normalizeProjectRelativeDirectory(input.directoryRelativePath);
-  if (directory === undefined) {
-    return { files: [], warnings: [] };
-  }
-  const prefix = directory === "" ? "" : `${directory}/`;
-  const candidates = [...input.relativePaths].map((relativePath) => relativePath.replace(/\\/g, "/")).filter((relativePath) => relativePath.startsWith(prefix)).map((relativePath) => ({
-    relativePath,
-    fileName: relativePath.slice(prefix.length)
-  })).filter((candidate) => candidate.fileName !== "" && !candidate.fileName.includes("/") && classifyEvidenceFile(candidate.fileName) !== undefined).sort((left, right) => left.fileName.localeCompare(right.fileName)).slice(0, CARGO_WORKSPACE_EVIDENCE_FILE_LIMIT);
-  const files = [];
-  const warnings = [];
-  const maxBytes = input.maxBytes ?? CARGO_WORKSPACE_EVIDENCE_FILE_MAX_BYTES;
-  for (const candidate of candidates) {
-    const kind = classifyEvidenceFile(candidate.fileName);
-    if (!kind) {
-      continue;
-    }
-    const text = input.readFile(candidate.relativePath);
-    if (!text.ok) {
-      warnings.push(`Failed to read ${candidate.fileName}.`);
-      continue;
-    }
-    const observedBytes = Buffer2.byteLength(text.value, "utf8");
-    if (observedBytes > maxBytes) {
-      warnings.push(`Skipped ${candidate.fileName}: evidence file exceeded the maximum supported size.`);
-      continue;
-    }
-    files.push({ path: candidate.fileName, kind, text: text.value });
-  }
-  return { files, warnings };
-}
-function parseCargoLockfile(lockfilePath, options = {}) {
-  const lockfileText = readInputTextFile({
-    filePath: lockfilePath,
-    maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES
-  });
-  if (!lockfileText.ok) {
-    return err(createError({
-      code: "CARGO_LOCK_READ_FAILED",
-      category: inputFileReadErrorCategory(lockfileText.error),
-      message: lockfileText.error.kind === "too_large" ? "Cargo.lock exceeded the maximum supported size." : "Failed to read Cargo.lock.",
-      details: {
-        lockfilePath,
-        ...inputFileReadErrorDetails(lockfileText.error)
-      }
-    }));
-  }
-  const manifest = readOptionalCargoManifest({
-    lockfilePath,
-    maxBytes: options.manifestMaxBytes ?? LOCKFILE_MAX_BYTES
-  });
-  if (!manifest.ok) {
-    return manifest;
-  }
-  const evidenceFileMaxBytes = options.evidenceFileMaxBytes ?? CARGO_WORKSPACE_EVIDENCE_FILE_MAX_BYTES;
-  const rootManifestEvidence = manifest.value ? readCargoWorkspaceEvidenceDirectory({
-    directory: path6.dirname(lockfilePath),
-    maxBytes: evidenceFileMaxBytes
-  }) : undefined;
-  const memberManifests = manifest.value ? readCargoWorkspaceMemberManifests({
-    lockfilePath,
-    rootManifestText: manifest.value,
-    maxBytes: options.manifestMaxBytes ?? LOCKFILE_MAX_BYTES,
-    evidenceFileMaxBytes
-  }) : ok([]);
-  if (!memberManifests.ok) {
-    return memberManifests;
-  }
-  return parseCargoLockText(lockfileText.value, lockfilePath, omitUndefined({
-    manifestText: manifest.value,
-    memberManifestTexts: memberManifests.value.map((item) => item.manifestText),
-    manifestEvidence: rootManifestEvidence,
-    memberManifestEvidence: memberManifests.value.map((item) => item.evidence)
-  }));
-}
-function parseCargoLockText(input, lockfilePath = "Cargo.lock", options = {}) {
-  try {
-    const records = parseCargoPackageRecords(input);
-    if (records.length === 0) {
-      return err(createError({
-        code: "CARGO_LOCK_PARSE_FAILED",
-        category: "unsupported_input",
-        message: "Failed to parse Cargo.lock. Ohrisk expected at least one [[package]] record.",
-        details: {
-          lockfilePath
-        }
-      }));
-    }
-    const rootName = options.rootName ?? readCargoPackageName(options.manifestText) ?? path6.basename(path6.dirname(lockfilePath)) ?? "<cargo-project>";
-    const rootDependencies = readCargoRootDependencies(omitUndefined({
-      manifestText: options.manifestText,
-      memberManifestTexts: options.memberManifestTexts,
-      records
-    }));
-    const nodeMap = new Map;
-    const recordIndex = indexCargoPackageRecords(records);
-    const traversalStates = [];
-    const pathLimitAffected = new Set;
-    for (const rootDependency of rootDependencies) {
-      const record = resolveCargoPackageRecord(records, omitUndefined({
-        name: rootDependency.name,
-        version: rootDependency.version
-      }));
-      if (!record) {
-        continue;
-      }
-      traversalStates.push({
-        record,
-        dependencyType: rootDependency.type,
-        direct: true,
-        path: [rootName]
-      });
-    }
-    walkCargoDependencies({
-      states: traversalStates,
-      recordIndex,
-      nodeMap,
-      pathLimitAffected
-    });
-    return ok({
-      rootName,
-      lockfilePath,
-      nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
-      ...cargoWorkspaceEmbeddedEvidence(options.manifestText, options.memberManifestTexts ?? [], records, options.manifestEvidence, options.memberManifestEvidence ?? []),
-      ...pathLimitAffected.size > 0 ? {
-        diagnostics: [{
-          code: "dependency_paths_truncated",
-          affectedNodeCount: pathLimitAffected.size,
-          limit: CARGO_MAX_PATHS_PER_PACKAGE,
-          message: "Cargo dependency paths were limited."
-        }]
-      } : {}
-    });
-  } catch (cause) {
-    return err(createError({
-      code: "CARGO_LOCK_PARSE_FAILED",
-      category: "unsupported_input",
-      message: "Failed to parse Cargo.lock.",
-      details: {
-        lockfilePath,
-        cause: cause instanceof Error ? cause.message : String(cause)
-      }
-    }));
-  }
-}
-function readOptionalCargoManifest(input) {
-  const manifestPath = path6.join(path6.dirname(input.lockfilePath), "Cargo.toml");
-  if (!existsSync3(manifestPath)) {
-    return ok(undefined);
-  }
-  const manifestText = readInputTextFile({
-    filePath: manifestPath,
-    maxBytes: input.maxBytes
-  });
-  if (!manifestText.ok) {
-    return err(createError({
-      code: "CARGO_MANIFEST_READ_FAILED",
-      category: inputFileReadErrorCategory(manifestText.error),
-      message: manifestText.error.kind === "too_large" ? "Cargo.toml exceeded the maximum supported size." : "Failed to read Cargo.toml.",
-      details: {
-        manifestPath,
-        ...inputFileReadErrorDetails(manifestText.error)
-      }
-    }));
-  }
-  return ok(manifestText.value);
-}
-function readCargoWorkspaceMemberManifests(input) {
-  const rootDir = path6.dirname(input.lockfilePath);
-  const manifests = [];
-  for (const memberManifest of findCargoWorkspaceMemberManifestPaths({
-    rootManifestText: input.rootManifestText,
-    lockfilePath: input.lockfilePath,
-    projectRoot: rootDir
-  })) {
-    if (!existsSync3(memberManifest.manifestPath)) {
-      continue;
-    }
-    const manifestText = readInputTextFile({
-      filePath: memberManifest.manifestPath,
-      maxBytes: input.maxBytes
-    });
-    if (!manifestText.ok) {
-      return err(createError({
-        code: "CARGO_MANIFEST_READ_FAILED",
-        category: inputFileReadErrorCategory(manifestText.error),
-        message: manifestText.error.kind === "too_large" ? "Cargo workspace member Cargo.toml exceeded the maximum supported size." : "Failed to read Cargo workspace member Cargo.toml.",
-        details: {
-          manifestPath: memberManifest.manifestPath,
-          ...inputFileReadErrorDetails(manifestText.error)
-        }
-      }));
-    }
-    manifests.push({
-      manifestText: manifestText.value,
-      evidence: readCargoWorkspaceEvidenceDirectory({
-        directory: path6.dirname(memberManifest.manifestPath),
-        maxBytes: input.evidenceFileMaxBytes
-      })
-    });
-  }
-  return ok(manifests);
-}
-function readCargoWorkspaceEvidenceDirectory(input) {
-  const files = [];
-  const warnings = [];
-  let entries;
-  try {
-    entries = readdirSync5(input.directory, { withFileTypes: true });
-  } catch {
-    return { files, warnings };
-  }
-  for (const entry of entries.filter((candidate) => candidate.isFile() && classifyEvidenceFile(candidate.name) !== undefined).sort((left, right) => left.name.localeCompare(right.name)).slice(0, CARGO_WORKSPACE_EVIDENCE_FILE_LIMIT)) {
-    const kind = classifyEvidenceFile(entry.name);
-    if (!kind) {
-      continue;
-    }
-    const text = readInputTextFile({
-      filePath: path6.join(input.directory, entry.name),
-      maxBytes: input.maxBytes
-    });
-    if (!text.ok) {
-      warnings.push(text.error.kind === "too_large" ? `Skipped ${entry.name}: evidence file exceeded the maximum supported size.` : `Failed to read ${entry.name}.`);
-      continue;
-    }
-    files.push({ path: entry.name, kind, text: text.value });
-  }
-  return { files, warnings };
-}
-function normalizeProjectRelativeDirectory(value) {
-  const normalized = path6.posix.normalize(value.replace(/\\/g, "/"));
-  if (normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/") || path6.win32.isAbsolute(value)) {
-    return;
-  }
-  return normalized === "." ? "" : normalized.replace(/\/$/u, "");
-}
-function findCargoWorkspaceMemberManifestPathsFromRelativePaths(input) {
-  const projectRoot = path6.resolve(input.projectRoot);
-  const lockfileRoot = path6.dirname(path6.resolve(input.lockfilePath));
-  const members = readCargoWorkspaceMembers(input.rootManifestText);
-  const implicitMembers = new Set(readCargoRootPathDependencyMembers(input.rootManifestText).map(normalizeCargoWorkspaceMemberPath).filter((memberPath) => memberPath !== undefined));
-  const excludes = readCargoWorkspaceExcludes(input.rootManifestText);
-  const paths = new Map;
-  for (const rawRelativeManifestPath of input.relativePaths) {
-    const relativeManifestPath = normalizeProjectRelativeManifestPath(rawRelativeManifestPath);
-    if (!relativeManifestPath || path6.posix.basename(relativeManifestPath) !== "Cargo.toml") {
-      continue;
-    }
-    const manifestPath = path6.resolve(projectRoot, ...relativeManifestPath.split("/"));
-    if (!isInsideDirectory(projectRoot, manifestPath) || manifestPath === path6.join(lockfileRoot, "Cargo.toml")) {
-      continue;
-    }
-    const memberPath = normalizeCargoWorkspaceMemberPath(path6.relative(lockfileRoot, path6.dirname(manifestPath)));
-    if (!memberPath) {
-      continue;
-    }
-    if (!implicitMembers.has(memberPath) && !members.some((pattern) => cargoWorkspaceMemberPatternMatches(memberPath, pattern))) {
-      continue;
-    }
-    if (excludes.some((pattern) => cargoWorkspaceMemberPatternMatches(memberPath, pattern))) {
-      continue;
-    }
-    paths.set(relativeManifestPath, {
-      memberPath,
-      manifestPath,
-      relativeManifestPath
-    });
-  }
-  return [...paths.values()].sort((left, right) => left.relativeManifestPath.localeCompare(right.relativeManifestPath));
-}
-function findCargoWorkspaceMemberManifestPaths(input) {
-  const rootDir = path6.dirname(input.lockfilePath);
-  const paths = new Map;
-  const excludedMemberPaths = new Set;
-  for (const excludePath of readCargoWorkspaceExcludes(input.rootManifestText)) {
-    if (path6.isAbsolute(excludePath)) {
-      continue;
-    }
-    for (const resolvedExcludePath of expandCargoWorkspaceMemberPath({
-      memberPath: excludePath,
-      rootDir,
-      projectRoot: input.projectRoot
-    })) {
-      const normalizedExcludePath = normalizeCargoWorkspaceMemberPath(resolvedExcludePath);
-      if (normalizedExcludePath) {
-        excludedMemberPaths.add(normalizedExcludePath);
-      }
-    }
-  }
-  const memberPaths = [
-    ...readCargoWorkspaceMembers(input.rootManifestText),
-    ...readCargoRootPathDependencyMembers(input.rootManifestText)
-  ];
-  for (const memberPath of memberPaths) {
-    if (path6.isAbsolute(memberPath)) {
-      continue;
-    }
-    for (const resolvedMemberPath of expandCargoWorkspaceMemberPath({
-      memberPath,
-      rootDir,
-      projectRoot: input.projectRoot
-    })) {
-      const normalizedMemberPath = normalizeCargoWorkspaceMemberPath(resolvedMemberPath);
-      if (!normalizedMemberPath || excludedMemberPaths.has(normalizedMemberPath)) {
-        continue;
-      }
-      const manifestPath = path6.resolve(rootDir, normalizedMemberPath, "Cargo.toml");
-      if (!isInsideDirectory(input.projectRoot, manifestPath)) {
-        continue;
-      }
-      const relativeManifestPath = normalizeRelativePath(path6.relative(input.projectRoot, manifestPath));
-      if (!relativeManifestPath) {
-        continue;
-      }
-      paths.set(relativeManifestPath, {
-        memberPath: normalizedMemberPath,
-        manifestPath,
-        relativeManifestPath
-      });
-    }
-  }
-  return [...paths.values()].sort((left, right) => left.relativeManifestPath.localeCompare(right.relativeManifestPath));
-}
-function normalizeProjectRelativeManifestPath(value) {
-  const normalized = path6.posix.normalize(value.replace(/\\/g, "/"));
-  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/")) {
-    return;
-  }
-  return normalized;
-}
-function cargoWorkspaceMemberPatternMatches(memberPath, rawPattern) {
-  const normalizedPattern = rawPattern.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/$/, "");
-  const memberSegments = memberPath.split("/").filter(Boolean);
-  const patternSegments = normalizedPattern.split("/").filter(Boolean);
-  if (memberSegments.length !== patternSegments.length) {
-    return false;
-  }
-  return patternSegments.every((segment, index) => cargoWorkspaceGlobSegmentPattern(segment).test(memberSegments[index] ?? ""));
-}
-function expandCargoWorkspaceMemberPath(input) {
-  if (!hasCargoWorkspaceGlob(input.memberPath)) {
-    return [input.memberPath];
-  }
-  const normalizedMemberPath = input.memberPath.replace(/\\/g, "/");
-  const segments = normalizedMemberPath.split("/").filter((segment) => segment.length > 0);
-  const expandedPaths = expandCargoWorkspaceMemberSegments({
-    segments,
-    index: 0,
-    currentPath: input.rootDir,
-    relativeSegments: [],
-    projectRoot: input.projectRoot
-  });
-  return expandedPaths.filter((memberPath) => existsSync3(path6.resolve(input.rootDir, memberPath, "Cargo.toml"))).sort((left, right) => left.localeCompare(right));
-}
-function expandCargoWorkspaceMemberSegments(input) {
-  if (input.index >= input.segments.length) {
-    return [input.relativeSegments.join("/")];
-  }
-  const segment = input.segments[input.index];
-  if (!segment) {
-    return [];
-  }
-  if (!hasCargoWorkspaceGlob(segment)) {
-    const nextPath = path6.resolve(input.currentPath, segment);
-    if (!isInsideDirectory(input.projectRoot, nextPath)) {
-      return [];
-    }
-    return expandCargoWorkspaceMemberSegments({
-      segments: input.segments,
-      index: input.index + 1,
-      currentPath: nextPath,
-      relativeSegments: [...input.relativeSegments, segment],
-      projectRoot: input.projectRoot
-    });
-  }
-  let entries;
-  try {
-    entries = readdirSync5(input.currentPath, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  const globPattern = cargoWorkspaceGlobSegmentPattern(segment);
-  return entries.filter((entry) => entry.isDirectory()).filter((entry) => globPattern.test(entry.name)).flatMap((entry) => {
-    const nextPath = path6.resolve(input.currentPath, entry.name);
-    if (!isInsideDirectory(input.projectRoot, nextPath)) {
-      return [];
-    }
-    return expandCargoWorkspaceMemberSegments({
-      segments: input.segments,
-      index: input.index + 1,
-      currentPath: nextPath,
-      relativeSegments: [...input.relativeSegments, entry.name],
-      projectRoot: input.projectRoot
-    });
-  });
-}
-function hasCargoWorkspaceGlob(value) {
-  return value.includes("*") || value.includes("?");
-}
-function cargoWorkspaceGlobSegmentPattern(segment) {
-  const escaped = segment.replace(/[\\^$+*?.()|[\]{}]/g, "\\$&");
-  const pattern = escaped.replace(/\\\*/g, "[^/]*").replace(/\\\?/g, "[^/]");
-  return new RegExp(`^${pattern}$`);
-}
-function readCargoWorkspaceMembers(input) {
-  return readCargoWorkspaceStringArray(input, "members");
-}
-function readCargoWorkspaceExcludes(input) {
-  return readCargoWorkspaceStringArray(input, "exclude");
-}
-function readCargoRootPathDependencyMembers(input) {
-  const memberPaths = [];
-  let section = "";
-  let dependencyTable = false;
-  for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment2(rawLine).trim();
-    if (line === "") {
-      continue;
-    }
-    if (line.startsWith("[") && line.endsWith("]")) {
-      section = line.slice(1, -1);
-      dependencyTable = isCargoPathDependencyTable(section);
-      continue;
-    }
-    if (dependencyTable) {
-      const memberPath = readStringAssignment2(line, "path");
-      if (memberPath) {
-        memberPaths.push(memberPath);
-      }
-      continue;
-    }
-    if (section !== "workspace.dependencies" && !dependencyTypeForCargoManifestSection(section)) {
-      continue;
-    }
-    const separatorIndex = line.indexOf("=");
-    if (separatorIndex <= 0) {
-      continue;
-    }
-    const memberPath = readInlineTableString(line.slice(separatorIndex + 1), "path");
-    if (memberPath) {
-      memberPaths.push(memberPath);
-    }
-  }
-  return [...new Set(memberPaths)];
-}
-function isCargoPathDependencyTable(section) {
-  if (readCargoManifestDependencyTable(section)) {
-    return true;
-  }
-  const parts = splitTomlDottedKey(section).map(unquoteTomlKey);
-  return parts.length === 3 && parts[0] === "workspace" && parts[1] === "dependencies";
-}
-function readCargoWorkspaceStringArray(input, key) {
-  const members = [];
-  let section = "";
-  let activeMembersArray;
-  for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment2(rawLine).trim();
-    if (line === "") {
-      continue;
-    }
-    if (activeMembersArray) {
-      activeMembersArray.push(line);
-      if (line.includes("]")) {
-        members.push(...readTomlStringArray(activeMembersArray.join(`
-`)));
-        activeMembersArray = undefined;
-      }
-      continue;
-    }
-    if (line.startsWith("[") && line.endsWith("]")) {
-      section = line.slice(1, -1);
-      continue;
-    }
-    if (section === "workspace" && line.startsWith(key) && line.includes("=")) {
-      const value = line.slice(line.indexOf("=") + 1).trim();
-      if (value.includes("[") && value.includes("]")) {
-        members.push(...readTomlStringArray(value));
-      } else if (value.startsWith("[")) {
-        activeMembersArray = [value];
-      }
-    }
-  }
-  return [...new Set(members)];
-}
-function parseCargoPackageRecords(input) {
-  const records = [];
-  let current;
-  let activeArray;
-  const flushArray = () => {
-    if (!activeArray || !current) {
-      activeArray = undefined;
-      return;
-    }
-    if (activeArray.key === "dependencies") {
-      current.dependencies.push(...readCargoDependencyEdges(activeArray.lines.join(`
-`)));
-    }
-    activeArray = undefined;
-  };
-  const flushCurrent = () => {
-    flushArray();
-    if (!current) {
-      return;
-    }
-    if (!current.name || !current.version) {
-      throw new Error("Encountered a [[package]] record without a string name and version.");
-    }
-    records.push({
-      name: current.name,
-      version: current.version,
-      id: `${current.name}@${current.version}`,
-      ...current.source ? { source: current.source } : {},
-      ...current.checksum ? { checksum: current.checksum } : {},
-      dependencies: current.dependencies
-    });
-  };
-  for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment2(rawLine).trim();
-    if (line === "") {
-      continue;
-    }
-    if (activeArray) {
-      activeArray.lines.push(line);
-      if (line.includes("]")) {
-        flushArray();
-      }
-      continue;
-    }
-    if (line === "[[package]]") {
-      flushCurrent();
-      current = {
-        dependencies: []
-      };
-      continue;
-    }
-    if (!current) {
-      continue;
-    }
-    const name = readStringAssignment2(line, "name");
-    if (name !== undefined) {
-      current.name = name;
-      continue;
-    }
-    const version = readStringAssignment2(line, "version");
-    if (version !== undefined) {
-      current.version = version;
-      continue;
-    }
-    const source = readStringAssignment2(line, "source");
-    if (source !== undefined) {
-      current.source = source;
-      continue;
-    }
-    const checksum = readStringAssignment2(line, "checksum");
-    if (checksum !== undefined) {
-      current.checksum = checksum;
-      continue;
-    }
-    if (line.startsWith("dependencies") && line.includes("=")) {
-      const value = line.slice(line.indexOf("=") + 1).trim();
-      if (value.includes("[") && value.includes("]")) {
-        current.dependencies.push(...readCargoDependencyEdges(value));
-      } else if (value.startsWith("[")) {
-        activeArray = {
-          key: "dependencies",
-          lines: [value]
-        };
-      }
-    }
-  }
-  flushCurrent();
-  return records;
-}
-function readCargoRootDependencies(input) {
-  const manifestTexts = [
-    ...input.manifestText ? [input.manifestText] : [],
-    ...input.memberManifestTexts ?? []
-  ];
-  if (manifestTexts.length > 0) {
-    const roots = mergeCargoManifestRootDependencies(manifestTexts, input.records);
-    if (roots.length > 0) {
-      return roots;
-    }
-  }
-  return inferCargoRootDependencies(input.records);
-}
-function mergeCargoManifestRootDependencies(manifestTexts, records) {
-  const roots = new Map;
-  const workspacePackageAliases = mergeCargoWorkspaceDependencyPackageAliases(manifestTexts);
-  for (const manifestText of manifestTexts) {
-    for (const dependency of parseCargoManifestRootDependencies(manifestText, records, workspacePackageAliases)) {
-      const existing = roots.get(dependency.name);
-      roots.set(dependency.name, existing ? omitUndefined({
-        name: dependency.name,
-        version: existing.version ?? dependency.version,
-        type: mergeDependencyType(existing.type, dependency.type)
-      }) : dependency);
-    }
-  }
-  return [...roots.values()].sort((left, right) => left.name.localeCompare(right.name));
-}
-function parseCargoManifestRootDependencies(input, records, workspacePackageAliases = new Map) {
-  const roots = new Map;
-  let section = "";
-  let activeDependencyTable;
-  const flushDependencyTable = () => {
-    if (!activeDependencyTable) {
-      return;
-    }
-    const dependencyName = activeDependencyTable.workspace === true ? workspacePackageAliases.get(activeDependencyTable.name) ?? activeDependencyTable.packageName ?? activeDependencyTable.name : activeDependencyTable.packageName ?? activeDependencyTable.name;
-    mergeRootDependency(roots, dependencyName, activeDependencyTable.type);
-    activeDependencyTable = undefined;
-  };
-  for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment2(rawLine).trim();
-    if (line === "") {
-      continue;
-    }
-    if (line.startsWith("[") && line.endsWith("]")) {
-      flushDependencyTable();
-      section = line.slice(1, -1);
-      activeDependencyTable = readCargoManifestDependencyTable(section);
-      continue;
-    }
-    if (activeDependencyTable) {
-      const packageName = readStringAssignment2(line, "package");
-      if (packageName) {
-        activeDependencyTable.packageName = packageName;
-      }
-      const workspace = readBooleanAssignment(line, "workspace");
-      if (workspace !== undefined) {
-        activeDependencyTable.workspace = workspace;
-      }
-      const optional = readBooleanAssignment(line, "optional");
-      if (optional === true && activeDependencyTable.type === "production") {
-        activeDependencyTable.type = "optional";
-      }
-      continue;
-    }
-    const dependencyType = dependencyTypeForCargoManifestSection(section);
-    if (!dependencyType) {
-      continue;
-    }
-    const dependency = readCargoManifestDependency(line, workspacePackageAliases);
-    if (dependency) {
-      mergeRootDependency(roots, dependency, dependencyType);
-    }
-  }
-  flushDependencyTable();
-  const rootPackage = resolveCargoRootPackageRecord(input, records);
-  return [...roots.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([name, type]) => ({
-    name,
-    ...cargoRootDependencyVersion(rootPackage, name),
-    type
-  }));
-}
-function readCargoManifestDependencyTable(section) {
-  const parts = splitTomlDottedKey(section).map(unquoteTomlKey);
-  if (parts.length < 2) {
-    return;
-  }
-  const dependencyName = parts.at(-1);
-  if (!dependencyName) {
-    return;
-  }
-  if (parts[0] === "dependencies" && parts.length === 2) {
-    return {
-      name: dependencyName,
-      type: "production"
-    };
-  }
-  if ((parts[0] === "dev-dependencies" || parts[0] === "build-dependencies") && parts.length === 2) {
-    return {
-      name: dependencyName,
-      type: "development"
-    };
-  }
-  if (parts[0] !== "target" || parts.length < 4) {
-    return;
-  }
-  const dependencySection = parts.at(-2);
-  if (dependencySection === "dependencies") {
-    return {
-      name: dependencyName,
-      type: "production"
-    };
-  }
-  if (dependencySection === "dev-dependencies" || dependencySection === "build-dependencies") {
-    return {
-      name: dependencyName,
-      type: "development"
-    };
-  }
-  return;
-}
-function dependencyTypeForCargoManifestSection(section) {
-  if (section === "dependencies" || /^target\..+\.dependencies$/.test(section)) {
-    return "production";
-  }
-  if (section === "dev-dependencies" || section === "build-dependencies" || /^target\..+\.(dev-dependencies|build-dependencies)$/.test(section)) {
-    return "development";
-  }
-  return;
-}
-function readCargoManifestDependency(line, workspacePackageAliases = new Map) {
-  const separatorIndex = line.indexOf("=");
-  if (separatorIndex <= 0) {
-    return;
-  }
-  const rawKey = line.slice(0, separatorIndex).trim();
-  const key = unquoteTomlKey(rawKey);
-  const value = line.slice(separatorIndex + 1).trim();
-  const workspaceDependencyName = readCargoWorkspaceDottedDependencyKey(rawKey, value);
-  if (workspaceDependencyName) {
-    return workspacePackageAliases.get(workspaceDependencyName) ?? workspaceDependencyName;
-  }
-  const packageName = readInlineTableString(value, "package");
-  if (readInlineTableBoolean(value, "workspace") === true) {
-    return workspacePackageAliases.get(key) ?? packageName ?? key;
-  }
-  return packageName ?? key;
-}
-function inferCargoRootDependencies(records) {
-  const referenced = new Set;
-  for (const record of records) {
-    for (const dependency of record.dependencies) {
-      const resolved = resolveCargoPackageRecord(records, dependency);
-      if (resolved) {
-        referenced.add(resolved.id);
-      }
-    }
-  }
-  return records.filter((record) => !referenced.has(record.id)).sort((left, right) => left.id.localeCompare(right.id)).map((record) => ({
-    name: record.name,
-    type: "unknown"
-  }));
-}
-function resolveCargoRootPackageRecord(manifestText, records) {
-  const packageName = readCargoPackageName(manifestText);
-  if (!packageName) {
-    return;
-  }
-  return resolveCargoPackageRecord(records, { name: packageName });
-}
-function cargoRootDependencyVersion(rootPackage, dependencyName) {
-  const dependency = rootPackage?.dependencies.find((edge) => edge.name === dependencyName);
-  return dependency?.version ? { version: dependency.version } : {};
-}
-function walkCargoDependencies(input) {
-  const stack = [...input.states].reverse();
-  const pathKeysByNodeId = new Map;
-  const expandedPathTypesByNodeId = new Map;
-  while (stack.length > 0) {
-    const state = stack.pop();
-    if (!state || state.path.includes(state.record.id)) {
-      continue;
-    }
-    const nextPath = [...state.path, state.record.id];
-    const pathKey = JSON.stringify(nextPath);
-    const existing = input.nodeMap.get(state.record.id);
-    const previousDependencyType = existing?.dependencyType;
-    const mergedDependencyType = previousDependencyType ? mergeDependencyType(previousDependencyType, state.dependencyType) : state.dependencyType;
-    const dependencyTypeStrengthened = previousDependencyType !== undefined && mergedDependencyType !== previousDependencyType;
-    const resolved = state.record.source;
-    const integrity = cargoChecksumIntegrity(state.record.checksum);
-    const node = existing ?? {
-      id: state.record.id,
-      name: state.record.name,
-      version: state.record.version,
-      ecosystem: "cargo",
-      ...resolved === undefined ? {} : { resolved },
-      ...integrity === undefined ? {} : { integrity },
-      dependencyType: mergedDependencyType,
-      direct: state.direct,
-      paths: []
-    };
-    node.direct = node.direct || state.direct;
-    node.dependencyType = mergedDependencyType;
-    if (!existing) {
-      input.nodeMap.set(state.record.id, node);
-    }
-    const pathKeys = pathKeysByNodeId.get(state.record.id) ?? new Set;
-    let traversalPath;
-    if (pathKeys.has(pathKey)) {
-      traversalPath = dependencyTypeStrengthened ? nextPath : undefined;
-    } else if (pathKeys.size < CARGO_MAX_PATHS_PER_PACKAGE) {
-      pathKeys.add(pathKey);
-      pathKeysByNodeId.set(state.record.id, pathKeys);
-      node.paths.push(nextPath);
-      traversalPath = nextPath;
-    } else {
-      input.pathLimitAffected.add(state.record.id);
-      traversalPath = dependencyTypeStrengthened ? node.paths[0] : undefined;
-    }
-    if (!traversalPath) {
-      continue;
-    }
-    const expansionKey = `${JSON.stringify(traversalPath)}\x00${state.dependencyType}`;
-    const expandedPathTypes = expandedPathTypesByNodeId.get(state.record.id) ?? new Set;
-    if (expandedPathTypes.has(expansionKey)) {
-      continue;
-    }
-    expandedPathTypes.add(expansionKey);
-    expandedPathTypesByNodeId.set(state.record.id, expandedPathTypes);
-    for (let index = state.record.dependencies.length - 1;index >= 0; index -= 1) {
-      const dependency = state.record.dependencies[index];
-      if (!dependency) {
-        continue;
-      }
-      const record = resolveCargoPackageRecordFromIndex(input.recordIndex, dependency);
-      if (!record) {
-        continue;
-      }
-      stack.push({
-        record,
-        dependencyType: state.dependencyType,
-        direct: false,
-        path: traversalPath
-      });
-    }
-  }
-}
-function cargoChecksumIntegrity(checksum) {
-  if (!checksum || !/^[0-9a-f]{64}$/u.test(checksum)) {
-    return;
-  }
-  return `sha256-${Buffer2.from(checksum, "hex").toString("base64")}`;
-}
-function indexCargoPackageRecords(records) {
-  const byName = new Map;
-  for (const record of records) {
-    const matches = byName.get(record.name) ?? [];
-    matches.push(record);
-    byName.set(record.name, matches);
-  }
-  return byName;
-}
-function resolveCargoPackageRecordFromIndex(recordIndex, dependency) {
-  const matches = (recordIndex.get(dependency.name) ?? []).filter((record) => dependency.version === undefined || record.version === dependency.version);
-  return matches.length === 1 ? matches[0] : undefined;
-}
-function resolveCargoPackageRecord(records, dependency) {
-  const matches = records.filter((record) => record.name === dependency.name && (dependency.version === undefined || record.version === dependency.version));
-  return matches.length === 1 ? matches[0] : undefined;
-}
-function readCargoDependencyEdges(value) {
-  const dependencies = [];
-  for (const match of value.matchAll(/"([^"]+)"/g)) {
-    const dependency = parseCargoDependencyString(match[1] ?? "");
-    if (dependency) {
-      dependencies.push(dependency);
-    }
-  }
-  return dependencies;
-}
-function parseCargoDependencyString(input) {
-  const parts = input.trim().split(/\s+/);
-  const name = parts[0];
-  if (!name) {
-    return;
-  }
-  const version = parts.find((part, index) => index > 0 && /^\d+\.\d+\.\d+/.test(part));
-  return {
-    name,
-    ...version ? { version } : {}
-  };
-}
-function readCargoPackageName(text) {
-  if (!text) {
-    return;
-  }
-  let section = "";
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = stripTomlComment2(rawLine).trim();
-    if (line.startsWith("[") && line.endsWith("]")) {
-      section = line.slice(1, -1);
-      continue;
-    }
-    if (section === "package") {
-      const name = readStringAssignment2(line, "name");
-      if (name) {
-        return name;
-      }
-    }
-  }
-  return;
-}
-function cargoWorkspaceEmbeddedEvidence(rootManifestText, manifestTexts, records, rootEvidence, memberEvidence) {
-  const workspaceMetadata = readCargoWorkspacePackageLicenseMetadata(rootManifestText);
-  const packageManifests = [
-    ...rootManifestText ? [{ text: rootManifestText, evidence: rootEvidence }] : [],
-    ...manifestTexts.map((text, index) => ({
-      text,
-      evidence: memberEvidence[index]
-    }))
-  ];
-  const embeddedEvidence = packageManifests.map((manifest) => {
-    const metadata = readCargoPackageLicenseMetadata(manifest.text, workspaceMetadata);
-    const evidence = manifest.evidence?.files.length ? manifest.evidence : rootEvidence;
-    if (!metadata.name || !metadata.version || !metadata.license && !evidence?.files.length) {
-      return;
-    }
-    const record = resolveCargoPackageRecord(records, {
-      name: metadata.name,
-      version: metadata.version
-    });
-    if (!record) {
-      return;
-    }
-    return {
-      packageId: record.id,
-      ...metadata.license ? {
-        metadataLicense: metadata.license,
-        metadataSource: "workspace Cargo.toml"
-      } : {},
-      files: evidence?.files ?? [],
-      source: "local",
-      warnings: evidence?.warnings ?? []
-    };
-  }).filter((evidence) => evidence !== undefined).sort((left, right) => left.packageId.localeCompare(right.packageId));
-  return embeddedEvidence.length > 0 ? { embeddedEvidence } : {};
-}
-function readCargoPackageLicenseMetadata(text, workspaceMetadata) {
-  let section = "";
-  const metadata = {};
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = stripTomlComment2(rawLine).trim();
-    if (line.startsWith("[") && line.endsWith("]")) {
-      section = line.slice(1, -1);
-      continue;
-    }
-    if (section !== "package") {
-      continue;
-    }
-    for (const key of ["name", "version", "license", "license-file"]) {
-      const value = readStringAssignment2(line, key);
-      if (value !== undefined) {
-        metadata[key === "license-file" ? "licenseFile" : key] = value;
-        break;
-      }
-      if (key !== "name") {
-        const metadataKey = key === "license-file" ? "licenseFile" : key;
-        const inheritedValue = workspaceMetadata?.[metadataKey];
-        if (inheritedValue !== undefined && readsWorkspaceInheritedValue(line, key)) {
-          metadata[metadataKey] = inheritedValue;
-          break;
-        }
-      }
-    }
-  }
-  return metadata;
-}
-function readCargoWorkspacePackageLicenseMetadata(text) {
-  if (!text) {
-    return {};
-  }
-  let section = "";
-  const metadata = {};
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = stripTomlComment2(rawLine).trim();
-    if (line.startsWith("[") && line.endsWith("]")) {
-      section = line.slice(1, -1);
-      continue;
-    }
-    if (section !== "workspace.package") {
-      continue;
-    }
-    for (const key of ["version", "license", "license-file"]) {
-      const value = readStringAssignment2(line, key);
-      if (value !== undefined) {
-        metadata[key === "license-file" ? "licenseFile" : key] = value;
-        break;
-      }
-    }
-  }
-  return metadata;
-}
-function readsWorkspaceInheritedValue(line, key) {
-  if (readBooleanAssignment(line, `${key}.workspace`) === true) {
-    return true;
-  }
-  const inlineTable = new RegExp(`^${escapeRegExp2(key)}\\s*=\\s*\\{(.*)\\}\\s*$`).exec(line);
-  return inlineTable?.[1] !== undefined && readInlineTableBoolean(inlineTable[1], "workspace") === true;
-}
-function readStringAssignment2(line, key) {
-  const match = new RegExp(`^${escapeRegExp2(key)}\\s*=\\s*"([^"]*)"`).exec(line);
-  return match?.[1];
-}
-function readBooleanAssignment(line, key) {
-  const match = new RegExp(`^${escapeRegExp2(key)}\\s*=\\s*(true|false)\\b`).exec(line);
-  if (!match) {
-    return;
-  }
-  return match[1] === "true";
-}
-function readInlineTableString(value, key) {
-  const match = new RegExp(`\\b${escapeRegExp2(key)}\\s*=\\s*"([^"]*)"`).exec(value);
-  return match?.[1];
-}
-function readInlineTableBoolean(value, key) {
-  const match = new RegExp(`\\b${escapeRegExp2(key)}\\s*=\\s*(true|false)\\b`).exec(value);
-  if (!match) {
-    return;
-  }
-  return match[1] === "true";
-}
-function readTomlStringArray(value) {
-  return [...value.matchAll(/"([^"]+)"/g)].map((match) => match[1]).filter((item) => item !== undefined && item !== "");
-}
-function mergeCargoWorkspaceDependencyPackageAliases(manifestTexts) {
-  const aliases = new Map;
-  for (const manifestText of manifestTexts) {
-    for (const [alias, packageName] of readCargoWorkspaceDependencyPackageAliases(manifestText)) {
-      aliases.set(alias, packageName);
-    }
-  }
-  return aliases;
-}
-function readCargoWorkspaceDependencyPackageAliases(input) {
-  const aliases = new Map;
-  let section = "";
-  for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment2(rawLine).trim();
-    if (line === "") {
-      continue;
-    }
-    if (line.startsWith("[") && line.endsWith("]")) {
-      section = line.slice(1, -1);
-      continue;
-    }
-    if (section !== "workspace.dependencies") {
-      continue;
-    }
-    const separatorIndex = line.indexOf("=");
-    if (separatorIndex <= 0) {
-      continue;
-    }
-    const alias = unquoteTomlKey(line.slice(0, separatorIndex).trim());
-    const packageName = readInlineTableString(line.slice(separatorIndex + 1).trim(), "package");
-    if (alias && packageName) {
-      aliases.set(alias, packageName);
-    }
-  }
-  return aliases;
-}
-function readCargoWorkspaceDottedDependencyKey(rawKey, value) {
-  if (value !== "true") {
-    return;
-  }
-  const parts = splitTomlDottedKey(rawKey).map(unquoteTomlKey);
-  if (parts.length !== 2 || parts[1] !== "workspace") {
-    return;
-  }
-  const dependencyName = parts[0];
-  return dependencyName && dependencyName.length > 0 ? dependencyName : undefined;
-}
-function splitTomlDottedKey(key) {
-  const parts = [];
-  let current = "";
-  let quote;
-  let escaped = false;
-  for (const char of key) {
-    if (escaped) {
-      current += char;
-      escaped = false;
-      continue;
-    }
-    if (quote === '"' && char === "\\") {
-      current += char;
-      escaped = true;
-      continue;
-    }
-    if (quote) {
-      current += char;
-      if (char === quote) {
-        quote = undefined;
-      }
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      current += char;
-      quote = char;
-      continue;
-    }
-    if (char === ".") {
-      parts.push(current.trim());
-      current = "";
-      continue;
-    }
-    current += char;
-  }
-  parts.push(current.trim());
-  return parts;
-}
-function mergeRootDependency(roots, name, type) {
-  const existing = roots.get(name);
-  roots.set(name, existing ? mergeDependencyType(existing, type) : type);
-}
-function unquoteTomlKey(key) {
-  if (key.startsWith('"') && key.endsWith('"') || key.startsWith("'") && key.endsWith("'")) {
-    return key.slice(1, -1);
-  }
-  return key;
-}
-function stripTomlComment2(line) {
-  let inString = false;
-  let escaped = false;
-  for (let index = 0;index < line.length; index += 1) {
-    const char = line[index];
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (char === "\\") {
-      escaped = true;
-      continue;
-    }
-    if (char === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (char === "#" && !inString) {
-      return line.slice(0, index);
-    }
-  }
-  return line;
-}
-function mergeDependencyType(left, right) {
-  return dependencyTypeRank(left) >= dependencyTypeRank(right) ? left : right;
-}
-function dependencyTypeRank(type) {
-  switch (type) {
-    case "production":
-      return 4;
-    case "optional":
-      return 3;
-    case "peer":
-      return 2;
-    case "development":
-      return 1;
-    case "unknown":
-      return 0;
-  }
-}
-function isInsideDirectory(rootPath, candidatePath) {
-  const relativePath = path6.relative(rootPath, candidatePath);
-  return relativePath === "" || relativePath !== ".." && !relativePath.startsWith(`..${path6.sep}`) && !path6.isAbsolute(relativePath);
-}
-function normalizeRelativePath(relativePath) {
-  const normalized = path6.normalize(relativePath).replace(/\\/g, "/");
-  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || path6.isAbsolute(normalized)) {
-    return;
-  }
-  return normalized;
-}
-function normalizeCargoWorkspaceMemberPath(memberPath) {
-  const normalized = path6.normalize(memberPath).replace(/\\/g, "/");
-  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || path6.isAbsolute(normalized)) {
-    return;
-  }
-  return normalized;
-}
-function escapeRegExp2(input) {
-  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-// src/evidence/cargo-git.ts
-var CARGO_GIT_MAX_ENTRIES = 50000;
-var CARGO_GIT_ENTRY_MAX_BYTES = 50 * 1024 * 1024;
-var CARGO_GIT_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
-var CARGO_GIT_MATERIALIZED_MAX_BYTES = 128 * 1024 * 1024;
-var CARGO_GIT_MANIFEST_MAX_BYTES = 1024 * 1024;
-var CARGO_GIT_LICENSE_MAX_BYTES = 2 * 1024 * 1024;
-var CARGO_GIT_MANIFEST_LIMIT = 256;
-var CARGO_GIT_LICENSE_FILE_LIMIT = 50;
-var GITHUB_COMPONENT = /^[A-Za-z0-9_.-]+$/u;
-var GIT_COMMIT = /^[0-9a-f]{40}$/iu;
-var CARGO_GIT_QUERY_KEYS = new Set(["branch", "rev", "tag"]);
-var CARGO_GITHUB_ARCHIVE_HOSTS = new Set(["codeload.github.com"]);
-function parseCargoGitHubSource(resolved) {
-  if (!resolved?.startsWith("git+")) {
-    return;
-  }
-  let source;
-  try {
-    source = new URL(resolved.slice("git+".length));
-  } catch {
-    return;
-  }
-  if (source.protocol !== "https:" || source.hostname.toLowerCase() !== "github.com" || source.port !== "" || source.username !== "" || source.password !== "" || source.pathname.includes("%")) {
-    return;
-  }
-  const segments = source.pathname.split("/").filter(Boolean);
-  if (segments.length !== 2) {
-    return;
-  }
-  const owner = segments[0];
-  const repository = segments[1]?.replace(/\.git$/iu, "");
-  const commit = source.hash.slice(1).toLowerCase();
-  if (!owner || !repository || !GITHUB_COMPONENT.test(owner) || !GITHUB_COMPONENT.test(repository) || owner === "." || owner === ".." || repository === "." || repository === ".." || !GIT_COMMIT.test(commit)) {
-    return;
-  }
-  const queryKeys = [...source.searchParams.keys()];
-  if (queryKeys.length > 1 || queryKeys.some((key) => !CARGO_GIT_QUERY_KEYS.has(key)) || queryKeys.some((key) => source.searchParams.getAll(key).length !== 1) || queryKeys.some((key) => {
-    const value = source.searchParams.get(key);
-    return value === null || value === "" || value.length > 256 || value.includes("\x00");
-  })) {
-    return;
-  }
-  return {
-    owner,
-    repository,
-    commit,
-    archiveUrl: `https://codeload.github.com/${owner}/${repository}/tar.gz/${commit}`
-  };
-}
-function collectCargoGitHubArchiveEvidenceBatch(input) {
-  const symlinks = new Map;
-  const archive = readArchiveBytes({
-    displayName: `${safeDisplayPart(input.source.repository)}-${input.source.commit.slice(0, 12)}.tar.gz`,
-    bytes: input.archive,
-    formatHint: "tar.gz",
-    tarLinkPolicy: "skip",
-    onTarSymlink: (entryPath, linkTarget) => {
-      symlinks.set(entryPath, linkTarget);
-    },
-    limits: {
-      inputBytes: input.artifactMaxBytes,
-      entries: CARGO_GIT_MAX_ENTRIES,
-      entryBytes: CARGO_GIT_ENTRY_MAX_BYTES,
-      expandedBytes: CARGO_GIT_EXPANDED_MAX_BYTES,
-      materializedBytes: CARGO_GIT_MATERIALIZED_MAX_BYTES
-    }
-  });
-  if (!archive.ok) {
-    return ok(unavailableEvidenceBatch(input.packages, `Commit-pinned Cargo Git archive failed bounded inspection (${archive.error.code}); its contents were not trusted.`));
-  }
-  const root = singleArchiveRoot(archive.value);
-  if (!root) {
-    return ok(unavailableEvidenceBatch(input.packages, "Commit-pinned Cargo Git archive did not contain exactly one repository root."));
-  }
-  const manifestEntries = archive.value.entries.filter((entry) => entry.type === "file" && entry.path.startsWith(`${root}/`) && path7.posix.basename(entry.path) === "Cargo.toml").sort((left, right) => left.path.localeCompare(right.path));
-  if (manifestEntries.length > CARGO_GIT_MANIFEST_LIMIT) {
-    return ok(unavailableEvidenceBatch(input.packages, "Commit-pinned Cargo Git archive exceeded the Cargo.toml inspection limit."));
-  }
-  const manifests = new Map;
-  for (const entry of manifestEntries) {
-    const text = archive.value.readText(entry.path, CARGO_GIT_MANIFEST_MAX_BYTES);
-    if (text.ok) {
-      manifests.set(entry.path, text.value);
-    }
-  }
-  const parsedManifests = [...manifests.entries()].map(([manifestPath, manifestText]) => {
-    const workspaceManifest = nearestWorkspaceManifest({
-      root,
-      manifestPath,
-      manifests
-    });
-    return {
-      manifestPath,
-      workspaceManifestPath: workspaceManifest?.path,
-      metadata: parseCargoWorkspacePackageMetadata({
-        manifestText,
-        ...workspaceManifest ? { workspaceManifestText: workspaceManifest.text } : {}
-      })
-    };
-  });
-  return ok(new Map(input.packages.map((requestedPackage) => [
-    requestedPackage.packageId,
-    collectPreparedCargoGitHubEvidence({
-      requestedPackage,
-      archive: archive.value,
-      root,
-      symlinks,
-      parsedManifests
-    })
-  ])));
-}
-function collectPreparedCargoGitHubEvidence(input) {
-  const matches = input.parsedManifests.filter((candidate) => candidate.metadata.name === input.requestedPackage.packageName && candidate.metadata.version === input.requestedPackage.version);
-  if (matches.length !== 1) {
-    return unavailableEvidence(input.requestedPackage.packageId, matches.length === 0 ? "Commit-pinned Cargo Git archive did not contain the locked package identity." : "Commit-pinned Cargo Git archive contained multiple matching package manifests.");
-  }
-  const match = matches[0];
-  const packageDirectory = path7.posix.dirname(match.manifestPath);
-  const workspaceDirectory = match.workspaceManifestPath ? path7.posix.dirname(match.workspaceManifestPath) : input.root;
-  const evidencePaths = new Map;
-  addDirectEvidencePaths({
-    archive: input.archive,
-    directory: packageDirectory,
-    root: input.root,
-    symlinks: input.symlinks,
-    evidencePaths
-  });
-  if (match.metadata.licenseFile) {
-    const declaredPath = resolveContainedArchivePath({
-      root: input.root,
-      directory: packageDirectory,
-      relativePath: match.metadata.licenseFile
-    });
-    if (declaredPath) {
-      evidencePaths.set(declaredPath, "license");
-    }
-  }
-  if (!hasLicenseLikeEvidence(evidencePaths)) {
-    addDirectEvidencePaths({
-      archive: input.archive,
-      directory: workspaceDirectory,
-      root: input.root,
-      symlinks: input.symlinks,
-      evidencePaths
-    });
-  }
-  if (!hasLicenseLikeEvidence(evidencePaths) && workspaceDirectory !== input.root) {
-    addDirectEvidencePaths({
-      archive: input.archive,
-      directory: input.root,
-      root: input.root,
-      symlinks: input.symlinks,
-      evidencePaths
-    });
-  }
-  const warnings = [];
-  const files = [];
-  for (const [entryPath, kind] of [...evidencePaths.entries()].sort(([left], [right]) => left.localeCompare(right)).slice(0, CARGO_GIT_LICENSE_FILE_LIMIT)) {
-    const entry = input.archive.entries.find((candidate) => candidate.type === "file" && candidate.path === entryPath);
-    if (!entry) {
-      warnings.push(`Cargo.toml declared missing license-file ${archiveRelativePath(input.root, entryPath)}.`);
-      continue;
-    }
-    const text = input.archive.readText(entryPath, CARGO_GIT_LICENSE_MAX_BYTES);
-    if (!text.ok) {
-      warnings.push(`Skipped ${archiveRelativePath(input.root, entryPath)}: Cargo license evidence exceeded bounded text limits.`);
-      continue;
-    }
-    files.push({
-      path: archiveRelativePath(input.root, entryPath),
-      kind,
-      text: text.value
-    });
-  }
-  if (files.length === 0) {
-    warnings.push("Commit-pinned Cargo Git source did not contain a package or workspace license evidence file.");
-  }
-  if (!match.metadata.license) {
-    warnings.push("Cargo.toml did not declare a package license.");
-  }
-  return {
-    packageId: input.requestedPackage.packageId,
-    ...match.metadata.license ? {
-      metadataLicense: match.metadata.license,
-      metadataSource: "Cargo.toml at pinned Git commit"
-    } : {},
-    files,
-    source: "tarball",
-    warnings
-  };
-}
-function singleArchiveRoot(archive) {
-  const roots = new Set(archive.entries.map((entry) => entry.path.split("/")[0]).filter((value) => value !== undefined && value !== ""));
-  return roots.size === 1 ? [...roots][0] : undefined;
-}
-function nearestWorkspaceManifest(input) {
-  let directory = path7.posix.dirname(input.manifestPath);
-  while (directory === input.root || directory.startsWith(`${input.root}/`)) {
-    const candidatePath = `${directory}/Cargo.toml`;
-    const candidateText = input.manifests.get(candidatePath);
-    if (candidateText && /^\s*\[workspace(?:\.package)?\]/mu.test(candidateText)) {
-      return { path: candidatePath, text: candidateText };
-    }
-    if (directory === input.root) {
-      break;
-    }
-    directory = path7.posix.dirname(directory);
-  }
-  return;
-}
-function addDirectEvidencePaths(input) {
-  const prefix = `${input.directory}/`;
-  for (const entry of input.archive.entries) {
-    if (entry.type !== "file" || !entry.path.startsWith(prefix)) {
-      continue;
-    }
-    const fileName = entry.path.slice(prefix.length);
-    if (fileName === "" || fileName.includes("/")) {
-      continue;
-    }
-    const kind = classifyEvidenceFile(fileName);
-    if (kind && !input.evidencePaths.has(entry.path)) {
-      input.evidencePaths.set(entry.path, kind);
-    }
-  }
-  for (const [linkPath, linkTarget] of input.symlinks) {
-    if (!linkPath.startsWith(prefix)) {
-      continue;
-    }
-    const fileName = linkPath.slice(prefix.length);
-    if (fileName === "" || fileName.includes("/")) {
-      continue;
-    }
-    const kind = classifyEvidenceFile(fileName);
-    const resolved = kind ? resolveContainedArchivePath({
-      root: input.root,
-      directory: input.directory,
-      relativePath: linkTarget
-    }) : undefined;
-    if (kind && resolved && input.archive.entries.some((entry) => entry.type === "file" && entry.path === resolved) && !input.evidencePaths.has(resolved)) {
-      input.evidencePaths.set(resolved, kind);
-    }
-  }
-}
-function hasLicenseLikeEvidence(evidencePaths) {
-  return [...evidencePaths.values()].some((kind) => kind === "license" || kind === "copying");
-}
-function resolveContainedArchivePath(input) {
-  if (input.relativePath.includes("\x00") || path7.posix.isAbsolute(input.relativePath) || path7.win32.isAbsolute(input.relativePath)) {
-    return;
-  }
-  const resolved = path7.posix.normalize(path7.posix.join(input.directory, input.relativePath.replace(/\\/g, "/")));
-  return resolved === input.root || resolved.startsWith(`${input.root}/`) ? resolved : undefined;
-}
-function archiveRelativePath(root, entryPath) {
-  return entryPath.startsWith(`${root}/`) ? entryPath.slice(root.length + 1) : entryPath;
-}
-function unavailableEvidence(packageId, warning) {
-  return {
-    packageId,
-    files: [],
-    source: "unavailable",
-    warnings: [warning]
-  };
-}
-function unavailableEvidenceBatch(packages, warning) {
-  return new Map(packages.map((requestedPackage) => [
-    requestedPackage.packageId,
-    unavailableEvidence(requestedPackage.packageId, warning)
-  ]));
-}
-function safeDisplayPart(value) {
-  return value.replace(/[^A-Za-z0-9._+-]/g, "_").slice(0, 120) || "repository";
-}
-
-// src/evidence/bazel-module.ts
-import { existsSync as existsSync4, readdirSync as readdirSync6, statSync as statSync5 } from "node:fs";
-import path8 from "node:path";
-import { fileURLToPath } from "node:url";
-var BAZEL_REGISTRY_JSON_MAX_BYTES = 64 * 1024;
-var BAZEL_SOURCE_JSON_MAX_BYTES = 64 * 1024;
-var BAZEL_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
-var BAZEL_LICENSE_FILE_LIMIT = 50;
-function collectBazelModuleEvidence(input) {
-  const sourceDir = findBazelLocalPathSourceDir({
-    packageId: input.packageId,
-    packageName: input.packageName,
-    version: input.version,
-    projectRoot: input.projectRoot,
-    registryJsonMaxBytes: input.registryJsonMaxBytes ?? BAZEL_REGISTRY_JSON_MAX_BYTES,
-    sourceJsonMaxBytes: input.sourceJsonMaxBytes ?? BAZEL_SOURCE_JSON_MAX_BYTES
-  });
-  if (!sourceDir.ok) {
-    return err(sourceDir.error);
-  }
-  if (sourceDir.value) {
-    const warnings = [];
-    const files = readBazelEvidenceFiles({
-      sourceDir: sourceDir.value,
-      maxBytes: input.evidenceFileMaxBytes ?? BAZEL_EVIDENCE_FILE_MAX_BYTES,
-      warnings
-    });
-    if (files.length === 0) {
-      warnings.push("No supported license, notice, attribution, or legal evidence file found in Bazel module source.");
-    }
-    return ok({
-      packageId: input.packageId,
-      files,
-      source: "local",
-      warnings
-    });
-  }
-  return ok({
-    packageId: input.packageId,
-    files: [],
-    source: "unavailable",
-    warnings: [
-      "Bazel module license evidence was not found in local Bazel registry local_path sources. Remote Bazel registry metadata fetching is not supported yet."
-    ]
-  });
-}
-function findBazelLocalPathSourceDir(input) {
-  for (const registryRoot of findLocalBazelRegistryRoots(input.projectRoot)) {
-    const sourceJsonPath = path8.join(registryRoot, "modules", input.packageName, input.version, "source.json");
-    if (!existsSync4(sourceJsonPath)) {
-      continue;
-    }
-    const sourceJson = readJsonFile({
-      packageId: input.packageId,
-      filePath: sourceJsonPath,
-      maxBytes: input.sourceJsonMaxBytes,
-      label: "Bazel source metadata"
-    });
-    if (!sourceJson.ok) {
-      return err(sourceJson.error);
-    }
-    if (!isRecord(sourceJson.value) || sourceJson.value.type !== "local_path" || typeof sourceJson.value.path !== "string") {
-      continue;
-    }
-    const registryJson = readBazelRegistryJson({
-      packageId: input.packageId,
-      registryRoot,
-      maxBytes: input.registryJsonMaxBytes
-    });
-    if (!registryJson.ok) {
-      return err(registryJson.error);
-    }
-    const sourceDir = resolveBazelLocalPathSourceDir({
-      registryRoot,
-      moduleBasePath: registryJson.value,
-      sourcePath: sourceJson.value.path
-    });
-    if (sourceDir && isReadableDirectory2(sourceDir)) {
-      return ok(sourceDir);
-    }
-  }
-  return ok(undefined);
-}
-function findLocalBazelRegistryRoots(projectRoot) {
-  const roots = new Set;
-  const projectRegistry = path8.resolve(projectRoot);
-  if (isReadableDirectory2(path8.join(projectRegistry, "modules"))) {
-    roots.add(projectRegistry);
-  }
-  for (const registry of readBazelrcRegistries(path8.join(projectRoot, ".bazelrc"))) {
-    if (registry.startsWith("file://")) {
-      try {
-        const registryRoot = path8.resolve(fileURLToPath(registry));
-        if (isReadableDirectory2(path8.join(registryRoot, "modules"))) {
-          roots.add(registryRoot);
-        }
-      } catch {
-        continue;
-      }
-    }
-  }
-  return [...roots];
-}
-function readBazelrcRegistries(bazelrcPath) {
-  if (!existsSync4(bazelrcPath)) {
-    return [];
-  }
-  const text = readTextFileWithLimit({
-    filePath: bazelrcPath,
-    maxBytes: BAZEL_SOURCE_JSON_MAX_BYTES
-  });
-  if (!text.ok) {
-    return [];
-  }
-  return [...text.value.matchAll(/(?:^|\s)--registry=("[^"]+"|'[^']+'|\S+)/gm)].map((match) => (match[1] ?? "").replace(/^["']|["']$/g, "")).filter((value) => value !== "");
-}
-function readBazelRegistryJson(input) {
-  const registryJsonPath = path8.join(input.registryRoot, "bazel_registry.json");
-  if (!existsSync4(registryJsonPath)) {
-    return ok(undefined);
-  }
-  const registryJson = readJsonFile({
-    packageId: input.packageId,
-    filePath: registryJsonPath,
-    maxBytes: input.maxBytes,
-    label: "Bazel registry metadata"
-  });
-  if (!registryJson.ok) {
-    return err(registryJson.error);
-  }
-  return ok(isRecord(registryJson.value) && typeof registryJson.value.module_base_path === "string" ? registryJson.value.module_base_path : undefined);
-}
-function resolveBazelLocalPathSourceDir(input) {
-  if (path8.isAbsolute(input.sourcePath)) {
-    return path8.resolve(input.sourcePath);
-  }
-  const moduleBasePath = input.moduleBasePath ?? "";
-  if (moduleBasePath !== "" && path8.isAbsolute(moduleBasePath)) {
-    return path8.resolve(moduleBasePath, input.sourcePath);
-  }
-  return path8.resolve(input.registryRoot, moduleBasePath, input.sourcePath);
-}
-function readBazelEvidenceFiles(input) {
-  const files = [];
-  for (const entry of readDirectoryEntries(input.sourceDir)) {
-    if (!entry.isFile()) {
-      continue;
-    }
-    const kind = classifyEvidenceFile(entry.name);
-    if (!kind) {
-      continue;
-    }
-    if (files.length >= BAZEL_LICENSE_FILE_LIMIT) {
-      input.warnings.push(`Bazel module evidence file limit reached at ${BAZEL_LICENSE_FILE_LIMIT} files.`);
-      break;
-    }
-    const text = readTextFileWithLimit({
-      filePath: path8.join(input.sourceDir, entry.name),
-      maxBytes: input.maxBytes
-    });
-    if (!text.ok) {
-      input.warnings.push(`Skipped Bazel evidence file ${entry.name}: ${evidenceReadError(text.error)}.`);
-      continue;
-    }
-    files.push({
-      path: entry.name,
-      kind,
-      text: text.value
-    });
-  }
-  return files.sort((left, right) => left.path.localeCompare(right.path));
-}
-function readJsonFile(input) {
-  const text = readTextFileWithLimit({
-    filePath: input.filePath,
-    maxBytes: input.maxBytes
-  });
-  if (!text.ok) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: textFileReadErrorCategory(text.error),
-      message: text.error.kind === "too_large" ? `${input.label} exceeded the maximum supported size.` : `Failed to read ${input.label}.`,
-      details: {
-        packageId: input.packageId,
-        metadataPath: input.filePath,
-        ...textFileReadErrorDetails(text.error)
-      }
-    }));
-  }
-  try {
-    return ok(JSON.parse(text.value));
-  } catch (cause) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: "unsupported_input",
-      message: `Failed to parse ${input.label}.`,
-      details: {
-        packageId: input.packageId,
-        metadataPath: input.filePath,
-        cause: cause instanceof Error ? cause.message : String(cause)
-      }
-    }));
-  }
-}
-function readDirectoryEntries(dir) {
-  try {
-    return readdirSync6(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-}
-function evidenceReadError(error) {
-  switch (error.kind) {
-    case "too_large":
-      return `file exceeded ${error.maxBytes} bytes`;
-    case "filesystem":
-      return error.cause;
-  }
-}
-function isReadableDirectory2(pathname) {
-  try {
-    return statSync5(pathname).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function isRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 // src/evidence/carthage-package.ts
-import { existsSync as existsSync5, readdirSync as readdirSync7, statSync as statSync6 } from "node:fs";
-import path9 from "node:path";
+import { existsSync as existsSync6, readdirSync as readdirSync6, statSync as statSync6 } from "node:fs";
+import path8 from "node:path";
 var CARTHAGE_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var CARTHAGE_LICENSE_FILE_LIMIT = 50;
 function collectCarthagePackageEvidence(input) {
@@ -25024,9 +22953,9 @@ function findCarthageCheckoutDir(input) {
   if (!checkoutName) {
     return;
   }
-  const checkoutsRoot = path9.resolve(input.projectRoot, "Carthage", "Checkouts");
-  const exactCandidate = path9.resolve(checkoutsRoot, checkoutName);
-  if (isPathInside2(checkoutsRoot, exactCandidate) && existsSync5(exactCandidate) && isReadableDirectory3(exactCandidate)) {
+  const checkoutsRoot = path8.resolve(input.projectRoot, "Carthage", "Checkouts");
+  const exactCandidate = path8.resolve(checkoutsRoot, checkoutName);
+  if (isPathInside3(checkoutsRoot, exactCandidate) && existsSync6(exactCandidate) && isReadableDirectory3(exactCandidate)) {
     return exactCandidate;
   }
   return findCaseInsensitiveChildDirectory({
@@ -25042,12 +22971,12 @@ function checkoutNameForCarthagePackage(packageName) {
   return checkoutName.trim() === "" ? undefined : checkoutName.trim();
 }
 function findCaseInsensitiveChildDirectory(input) {
-  if (!existsSync5(input.parent) || !isReadableDirectory3(input.parent)) {
+  if (!existsSync6(input.parent) || !isReadableDirectory3(input.parent)) {
     return;
   }
   let entries;
   try {
-    entries = readdirSync7(input.parent, { withFileTypes: true });
+    entries = readdirSync6(input.parent, { withFileTypes: true });
   } catch {
     return;
   }
@@ -25056,8 +22985,8 @@ function findCaseInsensitiveChildDirectory(input) {
     if (!entry.isDirectory() || entry.name.toLowerCase() !== normalizedName) {
       continue;
     }
-    const candidate = path9.resolve(input.parent, entry.name);
-    if (isPathInside2(input.parent, candidate) && isReadableDirectory3(candidate)) {
+    const candidate = path8.resolve(input.parent, entry.name);
+    if (isPathInside3(input.parent, candidate) && isReadableDirectory3(candidate)) {
       return candidate;
     }
   }
@@ -25092,8 +23021,8 @@ function readCarthageEvidenceFiles(input) {
 }
 function evidenceFileCandidates2(dir) {
   try {
-    return readdirSync7(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path9.join(dir, entry.name),
+    return readdirSync6(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path8.join(dir, entry.name),
       relativePath: entry.name
     }));
   } catch {
@@ -25115,14 +23044,14 @@ function isReadableDirectory3(pathname) {
     return false;
   }
 }
-function isPathInside2(parent, child) {
-  const relative = path9.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path9.isAbsolute(relative);
+function isPathInside3(parent, child) {
+  const relative = path8.relative(parent, child);
+  return relative === "" || !relative.startsWith("..") && !path8.isAbsolute(relative);
 }
 
 // src/evidence/cocoapods-package.ts
-import { existsSync as existsSync6, readdirSync as readdirSync8, statSync as statSync7 } from "node:fs";
-import path10 from "node:path";
+import { existsSync as existsSync7, readdirSync as readdirSync7, statSync as statSync7 } from "node:fs";
+import path9 from "node:path";
 var COCOAPODS_PODSPEC_MAX_BYTES = 1024 * 1024;
 var COCOAPODS_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var COCOAPODS_LICENSE_FILE_LIMIT = 50;
@@ -25172,9 +23101,9 @@ function collectCocoapodsPackageEvidence(input) {
   });
 }
 function findCocoapodsPackageDir(input) {
-  const podsRoot = path10.resolve(input.projectRoot, "Pods");
-  const exactCandidate = path10.resolve(podsRoot, input.packageName);
-  if (isPathInside3(podsRoot, exactCandidate) && existsSync6(exactCandidate) && isReadableDirectory4(exactCandidate)) {
+  const podsRoot = path9.resolve(input.projectRoot, "Pods");
+  const exactCandidate = path9.resolve(podsRoot, input.packageName);
+  if (isPathInside4(podsRoot, exactCandidate) && existsSync7(exactCandidate) && isReadableDirectory4(exactCandidate)) {
     return exactCandidate;
   }
   return findCaseInsensitiveChildDirectory2({
@@ -25183,12 +23112,12 @@ function findCocoapodsPackageDir(input) {
   });
 }
 function findCaseInsensitiveChildDirectory2(input) {
-  if (!existsSync6(input.parent) || !isReadableDirectory4(input.parent)) {
+  if (!existsSync7(input.parent) || !isReadableDirectory4(input.parent)) {
     return;
   }
   let entries;
   try {
-    entries = readdirSync8(input.parent, { withFileTypes: true });
+    entries = readdirSync7(input.parent, { withFileTypes: true });
   } catch {
     return;
   }
@@ -25197,16 +23126,16 @@ function findCaseInsensitiveChildDirectory2(input) {
     if (!entry.isDirectory() || entry.name.toLowerCase() !== normalizedName) {
       continue;
     }
-    const candidate = path10.resolve(input.parent, entry.name);
-    if (isPathInside3(input.parent, candidate) && isReadableDirectory4(candidate)) {
+    const candidate = path9.resolve(input.parent, entry.name);
+    if (isPathInside4(input.parent, candidate) && isReadableDirectory4(candidate)) {
       return candidate;
     }
   }
   return;
 }
 function readPodspecLicense(input) {
-  const podspecPath = path10.resolve(input.projectRoot, "Pods", "Local Podspecs", `${input.packageName}.podspec.json`);
-  if (!existsSync6(podspecPath)) {
+  const podspecPath = path9.resolve(input.projectRoot, "Pods", "Local Podspecs", `${input.packageName}.podspec.json`);
+  if (!existsSync7(podspecPath)) {
     return ok(undefined);
   }
   const text = readTextFileWithLimit({
@@ -25284,8 +23213,8 @@ function readCocoapodsEvidenceFiles(input) {
 }
 function evidenceFileCandidates3(dir) {
   try {
-    return readdirSync8(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path10.join(dir, entry.name),
+    return readdirSync7(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path9.join(dir, entry.name),
       relativePath: entry.name
     }));
   } catch {
@@ -25307,17 +23236,17 @@ function isReadableDirectory4(pathname) {
     return false;
   }
 }
-function isPathInside3(parent, child) {
-  const relative = path10.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path10.isAbsolute(relative);
+function isPathInside4(parent, child) {
+  const relative = path9.relative(parent, child);
+  return relative === "" || !relative.startsWith("..") && !path9.isAbsolute(relative);
 }
 function isRecord2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/evidence/conda-package.ts
-import { existsSync as existsSync7, readdirSync as readdirSync9, statSync as statSync8 } from "node:fs";
-import path11 from "node:path";
+import { existsSync as existsSync8, readdirSync as readdirSync8, statSync as statSync8 } from "node:fs";
+import path10 from "node:path";
 var CONDA_INDEX_MAX_BYTES = 1024 * 1024;
 var CONDA_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var CONDA_EVIDENCE_FILE_LIMIT = 50;
@@ -25337,7 +23266,7 @@ function collectCondaPackageEvidence(input) {
     });
   }
   const packageIndex = readCondaPackageIndex({
-    indexPath: path11.join(packageDir, "info", "index.json"),
+    indexPath: path10.join(packageDir, "info", "index.json"),
     packageId: input.packageId,
     maxBytes: input.indexMaxBytes ?? CONDA_INDEX_MAX_BYTES
   });
@@ -25369,15 +23298,15 @@ function findCondaPackageDir(input) {
   const exactDirName = condaPackageDirNameFromUrl(input.resolved);
   for (const cacheRoot of condaPackageCacheRoots(input.projectRoot)) {
     if (exactDirName) {
-      const exactCandidate = path11.join(cacheRoot, exactDirName);
+      const exactCandidate = path10.join(cacheRoot, exactDirName);
       if (isReadableDirectory5(exactCandidate)) {
         return exactCandidate;
       }
     }
     const prefix = `${input.packageName}-${input.version}-`;
     for (const entry of readDirectoryEntries2(cacheRoot)) {
-      if (entry.isDirectory() && entry.name.startsWith(prefix) && isReadableDirectory5(path11.join(cacheRoot, entry.name))) {
-        return path11.join(cacheRoot, entry.name);
+      if (entry.isDirectory() && entry.name.startsWith(prefix) && isReadableDirectory5(path10.join(cacheRoot, entry.name))) {
+        return path10.join(cacheRoot, entry.name);
       }
     }
   }
@@ -25385,30 +23314,30 @@ function findCondaPackageDir(input) {
 }
 function condaPackageCacheRoots(projectRoot) {
   const roots = [
-    path11.join(projectRoot, ".conda", "pkgs"),
-    path11.join(projectRoot, "pkgs")
+    path10.join(projectRoot, ".conda", "pkgs"),
+    path10.join(projectRoot, "pkgs")
   ];
   const explicitCacheRoots = process.env.CONDA_PKGS_DIRS;
   if (explicitCacheRoots) {
-    roots.push(...explicitCacheRoots.split(path11.delimiter));
+    roots.push(...explicitCacheRoots.split(path10.delimiter));
   }
   const condaPrefix = process.env.CONDA_PREFIX;
   if (condaPrefix) {
-    roots.push(path11.resolve(condaPrefix, "..", "pkgs"));
+    roots.push(path10.resolve(condaPrefix, "..", "pkgs"));
   }
   const home = process.env.USERPROFILE ?? process.env.HOME;
   if (home) {
-    roots.push(path11.join(home, ".conda", "pkgs"));
-    roots.push(path11.join(home, "miniconda3", "pkgs"));
-    roots.push(path11.join(home, "anaconda3", "pkgs"));
-    roots.push(path11.join(home, "mambaforge", "pkgs"));
-    roots.push(path11.join(home, "miniforge3", "pkgs"));
+    roots.push(path10.join(home, ".conda", "pkgs"));
+    roots.push(path10.join(home, "miniconda3", "pkgs"));
+    roots.push(path10.join(home, "anaconda3", "pkgs"));
+    roots.push(path10.join(home, "mambaforge", "pkgs"));
+    roots.push(path10.join(home, "miniforge3", "pkgs"));
   }
   const localAppData = process.env.LOCALAPPDATA;
   if (localAppData) {
-    roots.push(path11.join(localAppData, "conda", "conda", "pkgs"));
+    roots.push(path10.join(localAppData, "conda", "conda", "pkgs"));
   }
-  return [...new Set(roots.filter((root) => root.trim() !== "").map((root) => path11.resolve(root)))].filter(isReadableDirectory5);
+  return [...new Set(roots.filter((root) => root.trim() !== "").map((root) => path10.resolve(root)))].filter(isReadableDirectory5);
 }
 function condaPackageDirNameFromUrl(value) {
   if (!value) {
@@ -25416,15 +23345,15 @@ function condaPackageDirNameFromUrl(value) {
   }
   let basename = value;
   try {
-    basename = path11.posix.basename(new URL(value).pathname);
+    basename = path10.posix.basename(new URL(value).pathname);
   } catch {
-    basename = path11.basename(value);
+    basename = path10.basename(value);
   }
   const withoutExtension = basename.endsWith(".tar.bz2") ? basename.slice(0, -".tar.bz2".length) : basename.endsWith(".conda") ? basename.slice(0, -".conda".length) : undefined;
   return withoutExtension && withoutExtension.includes("-") ? withoutExtension : undefined;
 }
 function readCondaPackageIndex(input) {
-  if (!existsSync7(input.indexPath)) {
+  if (!existsSync8(input.indexPath)) {
     return ok(undefined);
   }
   const text = readTextFileWithLimit({
@@ -25488,16 +23417,16 @@ function readCondaEvidenceFiles(input) {
 }
 function evidenceFileCandidates4(packageDir) {
   const candidates = [];
-  const roots = [packageDir, path11.join(packageDir, "info"), path11.join(packageDir, "info", "licenses")];
+  const roots = [packageDir, path10.join(packageDir, "info"), path10.join(packageDir, "info", "licenses")];
   for (const root of roots) {
     for (const entry of readDirectoryEntries2(root)) {
       if (!entry.isFile()) {
         continue;
       }
-      const absolutePath = path11.join(root, entry.name);
+      const absolutePath = path10.join(root, entry.name);
       candidates.push({
         absolutePath,
-        relativePath: path11.relative(packageDir, absolutePath).replace(/\\/g, "/")
+        relativePath: path10.relative(packageDir, absolutePath).replace(/\\/g, "/")
       });
     }
   }
@@ -25519,7 +23448,7 @@ function condaEvidenceReadError(error) {
 }
 function readDirectoryEntries2(pathname) {
   try {
-    return readdirSync9(pathname, { withFileTypes: true });
+    return readdirSync8(pathname, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -25539,9 +23468,9 @@ function isRecord3(value) {
 }
 
 // src/evidence/conan-package.ts
-import { existsSync as existsSync8, readdirSync as readdirSync10, statSync as statSync9 } from "node:fs";
+import { existsSync as existsSync9, readdirSync as readdirSync9, statSync as statSync9 } from "node:fs";
 import os2 from "node:os";
-import path12 from "node:path";
+import path11 from "node:path";
 var CONANFILE_PY_MAX_BYTES = 1024 * 1024;
 var CONAN_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var CONAN_LICENSE_FILE_LIMIT = 50;
@@ -25615,8 +23544,8 @@ function findConanPackageSourceRoots(input) {
 }
 function conanDataRoots(projectRoot) {
   const candidates = [
-    path12.resolve(projectRoot, ".conan", "data"),
-    path12.resolve(os2.homedir(), ".conan", "data")
+    path11.resolve(projectRoot, ".conan", "data"),
+    path11.resolve(os2.homedir(), ".conan", "data")
   ];
   return [...new Set(candidates)].filter((candidate) => isReadableDirectory6(candidate));
 }
@@ -25625,16 +23554,16 @@ function sourceRootsForConanDataRoot(input) {
   if (!packageName) {
     return [];
   }
-  const packageDir = path12.resolve(input.cacheRoot, packageName, input.version);
-  if (!isPathInside4(input.cacheRoot, packageDir) || !isReadableDirectory6(packageDir)) {
+  const packageDir = path11.resolve(input.cacheRoot, packageName, input.version);
+  if (!isPathInside5(input.cacheRoot, packageDir) || !isReadableDirectory6(packageDir)) {
     return [];
   }
   const roots = [];
   for (const userDir of childDirectories(packageDir)) {
     for (const channelDir of childDirectories(userDir)) {
       for (const childName of ["export", "source"]) {
-        const sourceRoot = path12.resolve(channelDir, childName);
-        if (isPathInside4(input.cacheRoot, sourceRoot) && isReadableDirectory6(sourceRoot)) {
+        const sourceRoot = path11.resolve(channelDir, childName);
+        if (isPathInside5(input.cacheRoot, sourceRoot) && isReadableDirectory6(sourceRoot)) {
           roots.push(sourceRoot);
         }
       }
@@ -25650,15 +23579,15 @@ function conanCachePackageName(packageName) {
 }
 function childDirectories(parent) {
   try {
-    return readdirSync10(parent, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path12.resolve(parent, entry.name)).filter((candidate) => isPathInside4(parent, candidate) && isReadableDirectory6(candidate)).sort();
+    return readdirSync9(parent, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path11.resolve(parent, entry.name)).filter((candidate) => isPathInside5(parent, candidate) && isReadableDirectory6(candidate)).sort();
   } catch {
     return [];
   }
 }
 function readFirstConanfileLicenses(input) {
   for (const sourceRoot of input.sourceRoots) {
-    const conanfilePath = path12.join(sourceRoot, "conanfile.py");
-    if (!existsSync8(conanfilePath)) {
+    const conanfilePath = path11.join(sourceRoot, "conanfile.py");
+    if (!existsSync9(conanfilePath)) {
       continue;
     }
     const text = readTextFileWithLimit({
@@ -25727,8 +23656,8 @@ function readConanEvidenceFiles(input) {
 }
 function evidenceFileCandidates5(dir) {
   try {
-    return readdirSync10(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path12.join(dir, entry.name),
+    return readdirSync9(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path11.join(dir, entry.name),
       relativePath: entry.name
     }));
   } catch {
@@ -25750,23 +23679,23 @@ function isReadableDirectory6(pathname) {
     return false;
   }
 }
-function isPathInside4(parent, child) {
-  const relative = path12.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path12.isAbsolute(relative);
+function isPathInside5(parent, child) {
+  const relative = path11.relative(parent, child);
+  return relative === "" || !relative.startsWith("..") && !path11.isAbsolute(relative);
 }
 
 // src/evidence/composer-package.ts
-import { existsSync as existsSync9, readdirSync as readdirSync11, statSync as statSync10 } from "node:fs";
-import path13 from "node:path";
+import { existsSync as existsSync10, readdirSync as readdirSync10, statSync as statSync10 } from "node:fs";
+import path12 from "node:path";
 var COMPOSER_JSON_MAX_BYTES = 1024 * 1024;
 var COMPOSER_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 function collectComposerPackageEvidence(input) {
-  const vendorRoot = path13.resolve(input.projectRoot, "vendor");
+  const vendorRoot = path12.resolve(input.projectRoot, "vendor");
   const packageDir = composerPackageDir({
     vendorRoot,
     packageName: input.packageName
   });
-  if (!existsSync9(packageDir) || !isReadableDirectory7(packageDir)) {
+  if (!existsSync10(packageDir) || !isReadableDirectory7(packageDir)) {
     return ok({
       packageId: input.packageId,
       files: [],
@@ -25776,7 +23705,7 @@ function collectComposerPackageEvidence(input) {
   }
   const packageJson = readComposerPackageJson({
     packageId: input.packageId,
-    composerJsonPath: path13.join(packageDir, "composer.json"),
+    composerJsonPath: path12.join(packageDir, "composer.json"),
     maxBytes: input.composerJsonMaxBytes ?? COMPOSER_JSON_MAX_BYTES
   });
   if (!packageJson.ok) {
@@ -25812,13 +23741,13 @@ function collectComposerPackageEvidence(input) {
 function composerPackageDir(input) {
   const segments = input.packageName.split("/");
   if (segments.length !== 2 || segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
-    return path13.join(input.vendorRoot, ".ohrisk-invalid-composer-package");
+    return path12.join(input.vendorRoot, ".ohrisk-invalid-composer-package");
   }
-  const packageDir = path13.resolve(input.vendorRoot, ...segments);
-  return isPathInside5(input.vendorRoot, packageDir) ? packageDir : path13.join(input.vendorRoot, ".ohrisk-invalid-composer-package");
+  const packageDir = path12.resolve(input.vendorRoot, ...segments);
+  return isPathInside6(input.vendorRoot, packageDir) ? packageDir : path12.join(input.vendorRoot, ".ohrisk-invalid-composer-package");
 }
 function readComposerPackageJson(input) {
-  if (!existsSync9(input.composerJsonPath)) {
+  if (!existsSync10(input.composerJsonPath)) {
     return ok({});
   }
   const text = readTextFileWithLimit({
@@ -25880,12 +23809,12 @@ function readComposerEvidenceFiles(input) {
   return files.sort((left, right) => left.path.localeCompare(right.path));
 }
 function evidenceFileCandidates6(dir) {
-  if (!existsSync9(dir) || !isReadableDirectory7(dir)) {
+  if (!existsSync10(dir) || !isReadableDirectory7(dir)) {
     return [];
   }
   try {
-    return readdirSync11(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path13.join(dir, entry.name),
+    return readdirSync10(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path12.join(dir, entry.name),
       relativePath: entry.name
     }));
   } catch {
@@ -25899,18 +23828,18 @@ function isReadableDirectory7(dir) {
     return false;
   }
 }
-function isPathInside5(parent, child) {
-  const relative = path13.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path13.isAbsolute(relative);
+function isPathInside6(parent, child) {
+  const relative = path12.relative(parent, child);
+  return relative === "" || !relative.startsWith("..") && !path12.isAbsolute(relative);
 }
 function evidenceFileReadWarning2(fileName, error) {
   return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
 }
 
 // src/evidence/cpan-package.ts
-import { existsSync as existsSync10, readFileSync as readFileSync2, statSync as statSync11 } from "node:fs";
-import path14 from "node:path";
-import { gunzipSync as gunzipSync2 } from "node:zlib";
+import { existsSync as existsSync11, readFileSync as readFileSync2, statSync as statSync11 } from "node:fs";
+import path13 from "node:path";
+import { gunzipSync } from "node:zlib";
 
 // node_modules/.bun/yaml@2.9.0/node_modules/yaml/dist/index.js
 var composer = require_composer();
@@ -25967,7 +23896,7 @@ function collectCpanPackageEvidence(input) {
     projectRoot: input.projectRoot,
     pathname: input.resolved
   }));
-  if (!archivePath || !existsSync10(archivePath)) {
+  if (!archivePath || !existsSync11(archivePath)) {
     return ok({
       packageId: input.packageId,
       files: [],
@@ -26014,9 +23943,9 @@ function cpanArchivePath(input) {
   if (segments.length === 0 || !segments.every((segment) => /^[A-Za-z0-9_.-]+$/.test(segment)) || !/\.(?:tar\.gz|tgz)$/i.test(segments[segments.length - 1] ?? "")) {
     return;
   }
-  const cacheRoot = path14.resolve(input.projectRoot, "local", "cache", "authors", "id");
-  const candidate = path14.resolve(cacheRoot, ...segments);
-  return isPathInside6(cacheRoot, candidate) ? candidate : undefined;
+  const cacheRoot = path13.resolve(input.projectRoot, "local", "cache", "authors", "id");
+  const candidate = path13.resolve(cacheRoot, ...segments);
+  return isPathInside7(cacheRoot, candidate) ? candidate : undefined;
 }
 function readCpanArchiveMetadata(input) {
   const archive = readArchiveWithLimit(input);
@@ -26024,7 +23953,7 @@ function readCpanArchiveMetadata(input) {
     return err(archive.error);
   }
   try {
-    const unpacked = gunzipSync2(archive.value, {
+    const unpacked = gunzipSync(archive.value, {
       maxOutputLength: CPAN_ARCHIVE_UNPACKED_MAX_BYTES
     });
     const entries = parseTarEntries({
@@ -26127,7 +24056,7 @@ function parseTarEntries(input) {
   let observedEntries = 0;
   while (offset + 512 <= input.tarball.length) {
     const header = input.tarball.subarray(offset, offset + 512);
-    if (isZeroBlock2(header)) {
+    if (isZeroBlock(header)) {
       break;
     }
     observedEntries += 1;
@@ -26160,11 +24089,11 @@ function readString2(value) {
 function isRecord4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function isPathInside6(root, candidate) {
-  const relative = path14.relative(root, candidate);
-  return relative === "" || !relative.startsWith("..") && !path14.isAbsolute(relative);
+function isPathInside7(root, candidate) {
+  const relative = path13.relative(root, candidate);
+  return relative === "" || !relative.startsWith("..") && !path13.isAbsolute(relative);
 }
-function isZeroBlock2(buffer) {
+function isZeroBlock(buffer) {
   return buffer.every((byte) => byte === 0);
 }
 function readNullTerminated(buffer, start, length) {
@@ -26184,12 +24113,27 @@ function roundUpToBlock(size) {
 }
 
 // src/evidence/go-module.ts
-import { existsSync as existsSync12, readdirSync as readdirSync13, realpathSync as realpathSync2, statSync as statSync12 } from "node:fs";
-import path16 from "node:path";
+import { existsSync as existsSync13, readdirSync as readdirSync12, realpathSync as realpathSync2, statSync as statSync12 } from "node:fs";
+import path15 from "node:path";
 
 // src/graph/go-mod.ts
-import { existsSync as existsSync11, readdirSync as readdirSync12 } from "node:fs";
-import path15 from "node:path";
+import { existsSync as existsSync12, readdirSync as readdirSync11 } from "node:fs";
+import path14 from "node:path";
+
+// src/graph/read-input-file.ts
+var LOCKFILE_MAX_BYTES = 50 * 1024 * 1024;
+var PACKAGE_JSON_MAX_BYTES = 1024 * 1024;
+function readInputTextFile(input) {
+  return readTextFileWithLimit(input);
+}
+function inputFileReadErrorCategory(error) {
+  return textFileReadErrorCategory(error);
+}
+function inputFileReadErrorDetails(error) {
+  return textFileReadErrorDetails(error);
+}
+
+// src/graph/go-mod.ts
 var GO_SOURCE_FILE_MAX_BYTES = 1024 * 1024;
 var GO_SOURCE_TOTAL_MAX_BYTES = 64 * 1024 * 1024;
 var GO_SOURCE_FILE_LIMIT = 50000;
@@ -26254,13 +24198,13 @@ function parseGoModText(input, goModPath = "go.mod", options = {}) {
         records.set(id, existing ? {
           ...existing,
           direct: existing.direct || record.direct,
-          dependencyType: mergeDependencyType2(existing.dependencyType, record.dependencyType),
+          dependencyType: mergeDependencyType(existing.dependencyType, record.dependencyType),
           ...existing.checksum ? {} : record.checksum ? { checksum: record.checksum } : {},
           ...existing.goModChecksum ? {} : record.goModChecksum ? { goModChecksum: record.goModChecksum } : {}
         } : record);
       }
     }
-    const rootName = goMod.value.modulePath ?? path15.basename(path15.dirname(goModPath)) ?? "<go-module>";
+    const rootName = goMod.value.modulePath ?? path14.basename(path14.dirname(goModPath)) ?? "<go-module>";
     return ok({
       rootName,
       lockfilePath: goModPath,
@@ -26293,8 +24237,8 @@ function parseGoModText(input, goModPath = "go.mod", options = {}) {
   }
 }
 function readOptionalGoSum(input) {
-  const goSumPath = path15.join(path15.dirname(input.goModPath), "go.sum");
-  if (!existsSync11(goSumPath)) {
+  const goSumPath = path14.join(path14.dirname(input.goModPath), "go.sum");
+  if (!existsSync12(goSumPath)) {
     return ok(undefined);
   }
   const goSumText = readInputTextFile({
@@ -26315,7 +24259,7 @@ function readOptionalGoSum(input) {
   return ok(goSumText.value);
 }
 function readBoundedGoSourceFiles(goModPath) {
-  const rootDir = path15.dirname(goModPath);
+  const rootDir = path14.dirname(goModPath);
   const sourceFiles = [];
   const pending = [{ directory: rootDir, relativeDirectory: "", depth: 0 }];
   let totalBytes = 0;
@@ -26326,7 +24270,7 @@ function readBoundedGoSourceFiles(goModPath) {
     }
     let entries;
     try {
-      entries = readdirSync12(current.directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
+      entries = readdirSync11(current.directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
     } catch {
       return [];
     }
@@ -26335,12 +24279,12 @@ function readBoundedGoSourceFiles(goModPath) {
         continue;
       }
       const relativePath = current.relativeDirectory ? `${current.relativeDirectory}/${entry.name}` : entry.name;
-      const absolutePath = path15.join(current.directory, entry.name);
+      const absolutePath = path14.join(current.directory, entry.name);
       if (entry.isDirectory()) {
         if (GO_SOURCE_IGNORED_DIRECTORIES.has(entry.name)) {
           continue;
         }
-        if (existsSync11(path15.join(absolutePath, "go.mod"))) {
+        if (existsSync12(path14.join(absolutePath, "go.mod"))) {
           continue;
         }
         pending.push({
@@ -26960,9 +24904,9 @@ function normalizeGoReplacementTarget(target, baseDir, rootDir) {
   if (target.kind !== "local") {
     return target;
   }
-  const absolutePath = path15.resolve(baseDir, target.path);
-  const relativePath = path15.relative(rootDir, absolutePath);
-  if (relativePath === "" || relativePath !== ".." && !relativePath.startsWith(`..${path15.sep}`) && !path15.isAbsolute(relativePath)) {
+  const absolutePath = path14.resolve(baseDir, target.path);
+  const relativePath = path14.relative(rootDir, absolutePath);
+  if (relativePath === "" || relativePath !== ".." && !relativePath.startsWith(`..${path14.sep}`) && !path14.isAbsolute(relativePath)) {
     const normalized = relativePath === "" ? "." : relativePath.replace(/\\/g, "/");
     return {
       kind: "local",
@@ -27054,15 +24998,15 @@ function splitGoDirectiveFields(line) {
   return fields;
 }
 function isGoLocalReplacementPath(value) {
-  return value.startsWith("./") || value.startsWith("../") || value === "." || value === ".." || path15.isAbsolute(value);
+  return value.startsWith("./") || value.startsWith("../") || value === "." || value === ".." || path14.isAbsolute(value);
 }
 function goRecordId(record) {
   return `${record.modulePath}@${record.version}`;
 }
-function mergeDependencyType2(left, right) {
-  return dependencyTypeRank2(left) >= dependencyTypeRank2(right) ? left : right;
+function mergeDependencyType(left, right) {
+  return dependencyTypeRank(left) >= dependencyTypeRank(right) ? left : right;
 }
-function dependencyTypeRank2(type) {
+function dependencyTypeRank(type) {
   switch (type) {
     case "production":
       return 4;
@@ -27133,8 +25077,8 @@ function collectGoModuleEvidence(input) {
   });
 }
 function readInternalReplacementProjectRootEvidence(input) {
-  const rootGoModPath = path16.join(input.projectRoot, "go.mod");
-  if (!existsSync12(rootGoModPath)) {
+  const rootGoModPath = path15.join(input.projectRoot, "go.mod");
+  if (!existsSync13(rootGoModPath)) {
     return [];
   }
   const rootGoModText = readTextFileWithLimit({
@@ -27158,8 +25102,8 @@ function readInternalReplacementProjectRootEvidence(input) {
   });
 }
 function readLocalGoModuleRequirements(moduleDir) {
-  const goModPath = path16.join(moduleDir, "go.mod");
-  if (!existsSync12(goModPath)) {
+  const goModPath = path15.join(moduleDir, "go.mod");
+  if (!existsSync13(goModPath)) {
     return;
   }
   const goModText = readTextFileWithLimit({
@@ -27185,13 +25129,13 @@ function findGoModuleDir(input) {
   const escapedModulePath = encodeGoModuleCachePath(input.modulePath);
   const relativeModulePath = `${escapedModulePath}@${input.version}`;
   for (const moduleCacheRoot of goModuleCacheRoots(input.projectRoot)) {
-    const candidate = path16.join(moduleCacheRoot, ...relativeModulePath.split("/"));
-    if (existsSync12(candidate) && isReadableDirectory8(candidate)) {
+    const candidate = path15.join(moduleCacheRoot, ...relativeModulePath.split("/"));
+    if (existsSync13(candidate) && isReadableDirectory8(candidate)) {
       return candidate;
     }
   }
-  const vendorCandidate = path16.join(input.projectRoot, "vendor", ...input.modulePath.split("/"));
-  if (existsSync12(vendorCandidate) && isReadableDirectory8(vendorCandidate)) {
+  const vendorCandidate = path15.join(input.projectRoot, "vendor", ...input.modulePath.split("/"));
+  if (existsSync13(vendorCandidate) && isReadableDirectory8(vendorCandidate)) {
     return vendorCandidate;
   }
   return;
@@ -27222,37 +25166,37 @@ function parseGoReplacementResolved(resolved) {
   };
 }
 function resolveLocalReplacementModuleDir(input) {
-  const candidate = path16.resolve(input.projectRoot, input.localPath);
+  const candidate = path15.resolve(input.projectRoot, input.localPath);
   const projectRoot = resolveRealPathIfPossible(input.projectRoot);
   const moduleDir = resolveRealPathIfPossible(candidate);
-  if (!isPathInsideOrEqual(moduleDir, projectRoot)) {
+  if (!isPathInsideOrEqual2(moduleDir, projectRoot)) {
     return;
   }
-  if (!existsSync12(moduleDir) || !isReadableDirectory8(moduleDir)) {
+  if (!existsSync13(moduleDir) || !isReadableDirectory8(moduleDir)) {
     return;
   }
   return moduleDir;
 }
 function goModuleCacheRoots(projectRoot) {
   const roots = [
-    path16.join(projectRoot, "pkg", "mod")
+    path15.join(projectRoot, "pkg", "mod")
   ];
   const goModCache = process.env.GOMODCACHE;
   if (goModCache) {
     roots.push(goModCache);
   }
   for (const goPathRoot of goPathRoots()) {
-    roots.push(path16.join(goPathRoot, "pkg", "mod"));
+    roots.push(path15.join(goPathRoot, "pkg", "mod"));
   }
-  return [...new Set(roots.map((root) => path16.resolve(root)))];
+  return [...new Set(roots.map((root) => path15.resolve(root)))];
 }
 function goPathRoots() {
   const goPath = process.env.GOPATH;
   if (goPath) {
-    return goPath.split(path16.delimiter).filter((entry) => entry.trim() !== "");
+    return goPath.split(path15.delimiter).filter((entry) => entry.trim() !== "");
   }
   const home = process.env.USERPROFILE ?? process.env.HOME;
-  return home ? [path16.join(home, "go")] : [];
+  return home ? [path15.join(home, "go")] : [];
 }
 function readGoEvidenceFiles(input) {
   const files = [];
@@ -27278,12 +25222,12 @@ function readGoEvidenceFiles(input) {
   return files.sort((left, right) => left.path.localeCompare(right.path));
 }
 function evidenceFileCandidates7(dir) {
-  if (!existsSync12(dir) || !isReadableDirectory8(dir)) {
+  if (!existsSync13(dir) || !isReadableDirectory8(dir)) {
     return [];
   }
   try {
-    return readdirSync13(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path16.join(dir, entry.name),
+    return readdirSync12(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path15.join(dir, entry.name),
       relativePath: entry.name
     }));
   } catch {
@@ -27304,20 +25248,20 @@ function resolveRealPathIfPossible(targetPath) {
   try {
     return realpathSync2(targetPath);
   } catch {
-    return path16.resolve(targetPath);
+    return path15.resolve(targetPath);
   }
 }
-function isPathInsideOrEqual(candidate, root) {
-  const relativePath = path16.relative(root, candidate);
-  return relativePath === "" || relativePath !== ".." && !relativePath.startsWith(`..${path16.sep}`) && !path16.isAbsolute(relativePath);
+function isPathInsideOrEqual2(candidate, root) {
+  const relativePath = path15.relative(root, candidate);
+  return relativePath === "" || relativePath !== ".." && !relativePath.startsWith(`..${path15.sep}`) && !path15.isAbsolute(relativePath);
 }
 function evidenceFileReadWarning3(fileName, error) {
   return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
 }
 
 // src/evidence/hackage-package.ts
-import { existsSync as existsSync13, readdirSync as readdirSync14, statSync as statSync13 } from "node:fs";
-import path17 from "node:path";
+import { existsSync as existsSync14, readdirSync as readdirSync13, statSync as statSync13 } from "node:fs";
+import path16 from "node:path";
 var HACKAGE_PACKAGE_CONF_MAX_BYTES = 1024 * 1024;
 var HACKAGE_PACKAGE_DB_SEARCH_MAX_DEPTH = 8;
 var HACKAGE_PACKAGE_DB_SEARCH_MAX_DIRS = 4000;
@@ -27390,7 +25334,7 @@ function collectHackageCabalEvidence(input) {
   });
 }
 function findHackagePackageConf(input) {
-  const root = path17.join(input.projectRoot, ".stack-work", "install");
+  const root = path16.join(input.projectRoot, ".stack-work", "install");
   if (!isReadableDirectory9(root)) {
     return ok(undefined);
   }
@@ -27402,7 +25346,7 @@ function findHackagePackageConf(input) {
       continue;
     }
     visited += 1;
-    if (path17.basename(item.dir) === "pkgdb") {
+    if (path16.basename(item.dir) === "pkgdb") {
       const found = findHackagePackageConfInDb(input, item.dir);
       if (!found.ok || found.value) {
         return found;
@@ -27423,7 +25367,7 @@ function findHackagePackageConfInDb(input, packageDbDir) {
     if (!entry.isFile() || !entry.name.endsWith(".conf") || !entry.name.startsWith(prefix)) {
       continue;
     }
-    const packageConfPath = path17.join(packageDbDir, entry.name);
+    const packageConfPath = path16.join(packageDbDir, entry.name);
     const packageConf = readHackagePackageConf({
       packageId: `${input.packageName}@${input.version}`,
       packageConfPath,
@@ -27513,18 +25457,18 @@ function parseCabalIdentityFields(text) {
   }));
 }
 function childDirectories2(dir) {
-  return readDirectoryEntries3(dir).filter((entry) => entry.isDirectory()).map((entry) => path17.join(dir, entry.name));
+  return readDirectoryEntries3(dir).filter((entry) => entry.isDirectory()).map((entry) => path16.join(dir, entry.name));
 }
 function readDirectoryEntries3(dir) {
   try {
-    return readdirSync14(dir, { withFileTypes: true });
+    return readdirSync13(dir, { withFileTypes: true });
   } catch {
     return [];
   }
 }
 function isReadableDirectory9(pathname) {
   try {
-    return existsSync13(pathname) && statSync13(pathname).isDirectory();
+    return existsSync14(pathname) && statSync13(pathname).isDirectory();
   } catch {
     return false;
   }
@@ -27534,8 +25478,8 @@ function hackagePackageConfReadFailedMessage(error) {
 }
 
 // src/evidence/helm-chart.ts
-import { existsSync as existsSync14, readdirSync as readdirSync15, statSync as statSync14 } from "node:fs";
-import path18 from "node:path";
+import { existsSync as existsSync15, readdirSync as readdirSync14, statSync as statSync14 } from "node:fs";
+import path17 from "node:path";
 var HELM_CHART_YAML_MAX_BYTES = 1024 * 1024;
 var HELM_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var HELM_EVIDENCE_FILE_LIMIT = 50;
@@ -27583,16 +25527,16 @@ function collectHelmChartEvidence(input) {
   });
 }
 function findLocalChartRoot(input) {
-  const chartsDir = path18.resolve(input.projectRoot, "charts");
+  const chartsDir = path17.resolve(input.projectRoot, "charts");
   const candidates = [
-    path18.join(chartsDir, input.chartName),
-    path18.join(chartsDir, `${input.chartName}-${input.version}`)
+    path17.join(chartsDir, input.chartName),
+    path17.join(chartsDir, `${input.chartName}-${input.version}`)
   ];
   return candidates.find(isReadableDirectory10);
 }
 function readChartYamlLicense(input) {
-  const chartYamlPath = path18.join(input.chartRoot, "Chart.yaml");
-  if (!existsSync14(chartYamlPath)) {
+  const chartYamlPath = path17.join(input.chartRoot, "Chart.yaml");
+  if (!existsSync15(chartYamlPath)) {
     input.warnings.push("Local Helm chart source is missing Chart.yaml.");
     return;
   }
@@ -27641,7 +25585,7 @@ function readEvidenceFiles(input) {
       input.warnings.push(`Helm chart evidence file limit reached at ${input.limit} files.`);
       break;
     }
-    const absolutePath = path18.join(input.chartRoot, entry.name);
+    const absolutePath = path17.join(input.chartRoot, entry.name);
     const text = readTextFileWithLimit({
       filePath: absolutePath,
       maxBytes: input.maxBytes
@@ -27660,7 +25604,7 @@ function readEvidenceFiles(input) {
 }
 function directoryEntries(dir) {
   try {
-    return readdirSync15(dir, { withFileTypes: true });
+    return readdirSync14(dir, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -27685,8 +25629,8 @@ function isRecord5(value) {
 }
 
 // src/evidence/hex-package.ts
-import { existsSync as existsSync15, readdirSync as readdirSync16, statSync as statSync15 } from "node:fs";
-import path19 from "node:path";
+import { existsSync as existsSync16, readdirSync as readdirSync15, statSync as statSync15 } from "node:fs";
+import path18 from "node:path";
 var MIX_EXS_MAX_BYTES = 1024 * 1024;
 var REBAR_CONFIG_MAX_BYTES = 1024 * 1024;
 var HEX_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
@@ -27745,9 +25689,9 @@ function findHexPackageDir(input) {
   if (!packageDirName) {
     return;
   }
-  const depsRoot = path19.resolve(input.projectRoot, "deps");
-  const exactCandidate = path19.resolve(depsRoot, packageDirName);
-  if (isPathInside7(depsRoot, exactCandidate) && existsSync15(exactCandidate) && isReadableDirectory11(exactCandidate)) {
+  const depsRoot = path18.resolve(input.projectRoot, "deps");
+  const exactCandidate = path18.resolve(depsRoot, packageDirName);
+  if (isPathInside8(depsRoot, exactCandidate) && existsSync16(exactCandidate) && isReadableDirectory11(exactCandidate)) {
     return exactCandidate;
   }
   return findCaseInsensitiveChildDirectory3({
@@ -27762,12 +25706,12 @@ function hexPackageDirectoryName(packageName) {
   return basename.trim() === "" ? undefined : basename.trim();
 }
 function findCaseInsensitiveChildDirectory3(input) {
-  if (!existsSync15(input.parent) || !isReadableDirectory11(input.parent)) {
+  if (!existsSync16(input.parent) || !isReadableDirectory11(input.parent)) {
     return;
   }
   let entries;
   try {
-    entries = readdirSync16(input.parent, { withFileTypes: true });
+    entries = readdirSync15(input.parent, { withFileTypes: true });
   } catch {
     return;
   }
@@ -27776,8 +25720,8 @@ function findCaseInsensitiveChildDirectory3(input) {
     if (!entry.isDirectory() || entry.name.toLowerCase() !== normalizedName) {
       continue;
     }
-    const candidate = path19.resolve(input.parent, entry.name);
-    if (isPathInside7(input.parent, candidate) && isReadableDirectory11(candidate)) {
+    const candidate = path18.resolve(input.parent, entry.name);
+    if (isPathInside8(input.parent, candidate) && isReadableDirectory11(candidate)) {
       return candidate;
     }
   }
@@ -27786,7 +25730,7 @@ function findCaseInsensitiveChildDirectory3(input) {
 function readHexMetadataLicenses(input) {
   const mixExsLicenses = readMixExsLicenses({
     packageId: input.packageId,
-    mixExsPath: path19.join(input.packageDir, "mix.exs"),
+    mixExsPath: path18.join(input.packageDir, "mix.exs"),
     maxBytes: input.mixExsMaxBytes
   });
   if (!mixExsLicenses.ok) {
@@ -27800,7 +25744,7 @@ function readHexMetadataLicenses(input) {
   }
   const rebarConfigLicenses = readRebarConfigLicenses({
     packageId: input.packageId,
-    rebarConfigPath: path19.join(input.packageDir, "rebar.config"),
+    rebarConfigPath: path18.join(input.packageDir, "rebar.config"),
     maxBytes: input.rebarConfigMaxBytes
   });
   if (!rebarConfigLicenses.ok) {
@@ -27815,7 +25759,7 @@ function readHexMetadataLicenses(input) {
   return ok(undefined);
 }
 function readMixExsLicenses(input) {
-  if (!existsSync15(input.mixExsPath)) {
+  if (!existsSync16(input.mixExsPath)) {
     return ok(undefined);
   }
   const text = readTextFileWithLimit({
@@ -27837,7 +25781,7 @@ function readMixExsLicenses(input) {
   return ok(parseMixExsLicenses(text.value));
 }
 function readRebarConfigLicenses(input) {
-  if (!existsSync15(input.rebarConfigPath)) {
+  if (!existsSync16(input.rebarConfigPath)) {
     return ok(undefined);
   }
   const text = readTextFileWithLimit({
@@ -27906,8 +25850,8 @@ function readHexEvidenceFiles(input) {
 }
 function evidenceFileCandidates8(dir) {
   try {
-    return readdirSync16(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path19.join(dir, entry.name),
+    return readdirSync15(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path18.join(dir, entry.name),
       relativePath: entry.name
     }));
   } catch {
@@ -27929,14 +25873,14 @@ function isReadableDirectory11(pathname) {
     return false;
   }
 }
-function isPathInside7(parent, child) {
-  const relative = path19.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path19.isAbsolute(relative);
+function isPathInside8(parent, child) {
+  const relative = path18.relative(parent, child);
+  return relative === "" || !relative.startsWith("..") && !path18.isAbsolute(relative);
 }
 
 // src/evidence/julia-package.ts
-import { existsSync as existsSync16, readdirSync as readdirSync17, statSync as statSync16 } from "node:fs";
-import path20 from "node:path";
+import { existsSync as existsSync17, readdirSync as readdirSync16, statSync as statSync16 } from "node:fs";
+import path19 from "node:path";
 var JULIA_PROJECT_TOML_MAX_BYTES = 1024 * 1024;
 var JULIA_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 function collectJuliaPackageEvidence(input) {
@@ -27959,7 +25903,7 @@ function collectJuliaPackageEvidence(input) {
   }
   const projectToml = readJuliaProjectToml({
     packageId: input.packageId,
-    projectTomlPath: path20.join(packageDir.value, "Project.toml"),
+    projectTomlPath: path19.join(packageDir.value, "Project.toml"),
     maxBytes: input.projectTomlMaxBytes ?? JULIA_PROJECT_TOML_MAX_BYTES
   });
   if (!projectToml.ok) {
@@ -27990,17 +25934,17 @@ function collectJuliaPackageEvidence(input) {
 }
 function findJuliaPackageDir(input) {
   for (const depotRoot of juliaDepotRoots(input.projectRoot)) {
-    const packageRoot = path20.resolve(depotRoot, "packages", input.packageName);
-    if (!isPathInside8(path20.resolve(depotRoot, "packages"), packageRoot)) {
+    const packageRoot = path19.resolve(depotRoot, "packages", input.packageName);
+    if (!isPathInside9(path19.resolve(depotRoot, "packages"), packageRoot)) {
       continue;
     }
-    if (!existsSync16(packageRoot) || !isReadableDirectory12(packageRoot)) {
+    if (!existsSync17(packageRoot) || !isReadableDirectory12(packageRoot)) {
       continue;
     }
     for (const candidate of childDirectories3(packageRoot)) {
       const projectToml = readJuliaProjectToml({
         packageId: `${input.packageName}@${input.version}`,
-        projectTomlPath: path20.join(candidate, "Project.toml"),
+        projectTomlPath: path19.join(candidate, "Project.toml"),
         maxBytes: input.projectTomlMaxBytes
       });
       if (!projectToml.ok) {
@@ -28014,19 +25958,19 @@ function findJuliaPackageDir(input) {
   return ok(undefined);
 }
 function juliaDepotRoots(projectRoot) {
-  const roots = [path20.join(projectRoot, ".julia")];
+  const roots = [path19.join(projectRoot, ".julia")];
   const juliaDepotPath = process.env.JULIA_DEPOT_PATH;
   if (juliaDepotPath) {
-    roots.push(...juliaDepotPath.split(path20.delimiter).filter((item) => item.trim() !== ""));
+    roots.push(...juliaDepotPath.split(path19.delimiter).filter((item) => item.trim() !== ""));
   }
   const home = process.env.USERPROFILE ?? process.env.HOME;
   if (home) {
-    roots.push(path20.join(home, ".julia"));
+    roots.push(path19.join(home, ".julia"));
   }
-  return [...new Set(roots.map((root) => path20.resolve(root)))];
+  return [...new Set(roots.map((root) => path19.resolve(root)))];
 }
 function readJuliaProjectToml(input) {
-  if (!existsSync16(input.projectTomlPath)) {
+  if (!existsSync17(input.projectTomlPath)) {
     return ok(undefined);
   }
   const text = readTextFileWithLimit({
@@ -28050,7 +25994,7 @@ function readJuliaProjectToml(input) {
 function parseJuliaProjectToml(text) {
   const fields = {};
   for (const rawLine of text.split(/\r?\n/)) {
-    const line = stripTomlComment3(rawLine).trim();
+    const line = stripTomlComment2(rawLine).trim();
     const match = line.match(/^([A-Za-z0-9_-]+)\s*=\s*"((?:\\"|[^"])*)"$/);
     if (!match?.[1] || match[2] === undefined) {
       continue;
@@ -28091,8 +26035,8 @@ function readJuliaEvidenceFiles(input) {
 }
 function evidenceFileCandidates9(dir) {
   try {
-    return readdirSync17(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path20.join(dir, entry.name),
+    return readdirSync16(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path19.join(dir, entry.name),
       relativePath: entry.name
     }));
   } catch {
@@ -28101,12 +26045,12 @@ function evidenceFileCandidates9(dir) {
 }
 function childDirectories3(dir) {
   try {
-    return readdirSync17(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path20.join(dir, entry.name));
+    return readdirSync16(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path19.join(dir, entry.name));
   } catch {
     return [];
   }
 }
-function stripTomlComment3(line) {
+function stripTomlComment2(line) {
   let inString = false;
   let escaped = false;
   for (let index = 0;index < line.length; index += 1) {
@@ -28139,14 +26083,14 @@ function isReadableDirectory12(pathname) {
     return false;
   }
 }
-function isPathInside8(parent, child) {
-  const relative = path20.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path20.isAbsolute(relative);
+function isPathInside9(parent, child) {
+  const relative = path19.relative(parent, child);
+  return relative === "" || !relative.startsWith("..") && !path19.isAbsolute(relative);
 }
 
 // src/evidence/luarocks-package.ts
-import { existsSync as existsSync17 } from "node:fs";
-import path21 from "node:path";
+import { existsSync as existsSync18 } from "node:fs";
+import path20 from "node:path";
 var LUAROCKS_ROCKSPEC_MAX_BYTES = 1024 * 1024;
 function collectLuarocksPackageEvidence(input) {
   const rockspecPath = findLuarocksRockspec({
@@ -28191,18 +26135,18 @@ function findLuarocksRockspec(input) {
   }
   const fileName = `${input.packageName}-${input.version}.rockspec`;
   const candidates = [
-    path21.join(input.projectRoot, fileName),
-    path21.join(input.projectRoot, "rocks", input.packageName, input.version, fileName),
-    path21.join(input.projectRoot, "lua_modules", "lib", "luarocks", "rocks-5.1", input.packageName, input.version, fileName),
-    path21.join(input.projectRoot, "lua_modules", "lib", "luarocks", "rocks-5.2", input.packageName, input.version, fileName),
-    path21.join(input.projectRoot, "lua_modules", "lib", "luarocks", "rocks-5.3", input.packageName, input.version, fileName),
-    path21.join(input.projectRoot, "lua_modules", "lib", "luarocks", "rocks-5.4", input.packageName, input.version, fileName),
-    path21.join(input.projectRoot, ".luarocks", "lib", "luarocks", "rocks-5.1", input.packageName, input.version, fileName),
-    path21.join(input.projectRoot, ".luarocks", "lib", "luarocks", "rocks-5.2", input.packageName, input.version, fileName),
-    path21.join(input.projectRoot, ".luarocks", "lib", "luarocks", "rocks-5.3", input.packageName, input.version, fileName),
-    path21.join(input.projectRoot, ".luarocks", "lib", "luarocks", "rocks-5.4", input.packageName, input.version, fileName)
+    path20.join(input.projectRoot, fileName),
+    path20.join(input.projectRoot, "rocks", input.packageName, input.version, fileName),
+    path20.join(input.projectRoot, "lua_modules", "lib", "luarocks", "rocks-5.1", input.packageName, input.version, fileName),
+    path20.join(input.projectRoot, "lua_modules", "lib", "luarocks", "rocks-5.2", input.packageName, input.version, fileName),
+    path20.join(input.projectRoot, "lua_modules", "lib", "luarocks", "rocks-5.3", input.packageName, input.version, fileName),
+    path20.join(input.projectRoot, "lua_modules", "lib", "luarocks", "rocks-5.4", input.packageName, input.version, fileName),
+    path20.join(input.projectRoot, ".luarocks", "lib", "luarocks", "rocks-5.1", input.packageName, input.version, fileName),
+    path20.join(input.projectRoot, ".luarocks", "lib", "luarocks", "rocks-5.2", input.packageName, input.version, fileName),
+    path20.join(input.projectRoot, ".luarocks", "lib", "luarocks", "rocks-5.3", input.packageName, input.version, fileName),
+    path20.join(input.projectRoot, ".luarocks", "lib", "luarocks", "rocks-5.4", input.packageName, input.version, fileName)
   ];
-  return candidates.find((candidate) => existsSync17(candidate));
+  return candidates.find((candidate) => existsSync18(candidate));
 }
 function readRockspecMetadata(input) {
   const text = readTextFileWithLimit({
@@ -28246,605 +26190,9 @@ function rockspecReadFailedMessage(error) {
   return error.kind === "too_large" ? "LuaRocks rockspec metadata exceeded the maximum supported size." : "Failed to read LuaRocks rockspec metadata.";
 }
 
-// src/graph/xml.ts
-function parseXmlDocument(input, lockfilePath, parseError) {
-  const stack = [];
-  let root;
-  let index = 0;
-  while (index < input.length) {
-    const tagStart = input.indexOf("<", index);
-    if (tagStart === -1) {
-      const appended = appendText(input.slice(index), stack, lockfilePath, parseError);
-      return appended.ok ? completeXmlDocument(root, stack, lockfilePath, parseError) : appended;
-    }
-    const textResult = appendText(input.slice(index, tagStart), stack, lockfilePath, parseError);
-    if (!textResult.ok) {
-      return textResult;
-    }
-    if (input.startsWith("<!--", tagStart)) {
-      const commentEnd = input.indexOf("-->", tagStart + 4);
-      if (commentEnd === -1) {
-        return parseError(lockfilePath, "Unclosed XML comment.");
-      }
-      index = commentEnd + 3;
-      continue;
-    }
-    if (input.startsWith("<![CDATA[", tagStart)) {
-      const cdataEnd = input.indexOf("]]>", tagStart + 9);
-      if (cdataEnd === -1) {
-        return parseError(lockfilePath, "Unclosed XML CDATA section.");
-      }
-      const current = stack[stack.length - 1];
-      if (current) {
-        current.text += input.slice(tagStart + 9, cdataEnd);
-      }
-      index = cdataEnd + 3;
-      continue;
-    }
-    if (input.startsWith("<?", tagStart)) {
-      const instructionEnd = input.indexOf("?>", tagStart + 2);
-      if (instructionEnd === -1) {
-        return parseError(lockfilePath, "Unclosed XML processing instruction.");
-      }
-      index = instructionEnd + 2;
-      continue;
-    }
-    if (input.startsWith("<!", tagStart)) {
-      return parseError(lockfilePath, "Unsupported XML declaration.");
-    }
-    const tagEnd = input.indexOf(">", tagStart + 1);
-    if (tagEnd === -1) {
-      return parseError(lockfilePath, "Unclosed XML tag.");
-    }
-    const rawTag = input.slice(tagStart + 1, tagEnd).trim();
-    if (rawTag === "") {
-      return parseError(lockfilePath, "Empty XML tag.");
-    }
-    if (rawTag.startsWith("/")) {
-      const closed = closeXmlNode(rawTag.slice(1), stack, lockfilePath, parseError);
-      if (!closed.ok) {
-        return closed;
-      }
-      const attached = attachXmlNode(closed.value, stack, root, lockfilePath, parseError);
-      if (!attached.ok) {
-        return attached;
-      }
-      root = attached.value;
-      index = tagEnd + 1;
-      continue;
-    }
-    const selfClosing = rawTag.endsWith("/");
-    const startTag = parseStartTag(selfClosing ? rawTag.slice(0, -1).trimEnd() : rawTag, lockfilePath, parseError);
-    if (!startTag.ok) {
-      return startTag;
-    }
-    const node = {
-      name: localName(startTag.value.name),
-      attributes: startTag.value.attributes,
-      children: [],
-      text: ""
-    };
-    if (selfClosing) {
-      const attached = attachXmlNode(node, stack, root, lockfilePath, parseError);
-      if (!attached.ok) {
-        return attached;
-      }
-      root = attached.value;
-    } else {
-      stack.push(node);
-    }
-    index = tagEnd + 1;
-  }
-  return completeXmlDocument(root, stack, lockfilePath, parseError);
-}
-function childText(node, name) {
-  const child = firstChild(node, name);
-  const text = child?.text.trim();
-  return text === "" ? undefined : text;
-}
-function firstChild(node, name) {
-  return childNodes(node, name)[0];
-}
-function childNodes(node, name) {
-  return node?.children.filter((child) => child.name === name) ?? [];
-}
-function localName(name) {
-  const colonIndex = name.indexOf(":");
-  return colonIndex === -1 ? name : name.slice(colonIndex + 1);
-}
-function appendText(text, stack, lockfilePath, parseError) {
-  if (text === "") {
-    return ok(undefined);
-  }
-  const decoded = decodeXmlText(text, lockfilePath, parseError);
-  if (!decoded.ok) {
-    return decoded;
-  }
-  const current = stack[stack.length - 1];
-  if (current) {
-    current.text += decoded.value;
-  } else if (decoded.value.trim() !== "") {
-    return parseError(lockfilePath, "Unexpected text outside the XML root element.");
-  }
-  return ok(undefined);
-}
-function closeXmlNode(rawClosingTag, stack, lockfilePath, parseError) {
-  const closingName = localName(rawClosingTag.trim().split(/\s+/)[0] ?? "");
-  const node = stack.pop();
-  if (!node) {
-    return parseError(lockfilePath, "Unexpected XML closing tag.");
-  }
-  if (node.name !== closingName) {
-    return parseError(lockfilePath, `Mismatched XML closing tag. Expected </${node.name}> but found </${closingName}>.`);
-  }
-  return ok(node);
-}
-function attachXmlNode(node, stack, root, lockfilePath, parseError) {
-  const parent = stack[stack.length - 1];
-  if (parent) {
-    parent.children.push(node);
-    return ok(root);
-  }
-  if (root) {
-    return parseError(lockfilePath, "Multiple XML root elements.");
-  }
-  return ok(node);
-}
-function completeXmlDocument(root, stack, lockfilePath, parseError) {
-  if (stack.length > 0) {
-    return parseError(lockfilePath, `Unclosed XML tag <${stack[stack.length - 1]?.name}>.`);
-  }
-  if (!root) {
-    return parseError(lockfilePath, "Missing XML root element.");
-  }
-  return ok(root);
-}
-function parseStartTag(rawTag, lockfilePath, parseError) {
-  const nameMatch = rawTag.match(/^([^\s/>]+)/);
-  if (!nameMatch) {
-    return parseError(lockfilePath, "Missing XML element name.");
-  }
-  const name = nameMatch[1] ?? "";
-  const attributes = parseAttributes(rawTag.slice(name.length), lockfilePath, parseError);
-  if (!attributes.ok) {
-    return attributes;
-  }
-  return ok({
-    name,
-    attributes: attributes.value
-  });
-}
-function parseAttributes(input, lockfilePath, parseError) {
-  const attributes = {};
-  let index = 0;
-  while (index < input.length) {
-    while (/\s/.test(input[index] ?? "")) {
-      index += 1;
-    }
-    if (index >= input.length) {
-      break;
-    }
-    const nameStart = index;
-    while (index < input.length && !/[\s=]/.test(input[index] ?? "")) {
-      index += 1;
-    }
-    const name = input.slice(nameStart, index);
-    if (name === "") {
-      return parseError(lockfilePath, "Malformed XML attribute.");
-    }
-    while (/\s/.test(input[index] ?? "")) {
-      index += 1;
-    }
-    if (input[index] !== "=") {
-      return parseError(lockfilePath, `XML attribute "${name}" is missing a value.`);
-    }
-    index += 1;
-    while (/\s/.test(input[index] ?? "")) {
-      index += 1;
-    }
-    const quote = input[index];
-    if (quote !== '"' && quote !== "'") {
-      return parseError(lockfilePath, `XML attribute "${name}" must use quotes.`);
-    }
-    index += 1;
-    const valueStart = index;
-    while (index < input.length && input[index] !== quote) {
-      index += 1;
-    }
-    if (index >= input.length) {
-      return parseError(lockfilePath, `Unclosed XML attribute "${name}".`);
-    }
-    const decoded = decodeXmlText(input.slice(valueStart, index), lockfilePath, parseError);
-    if (!decoded.ok) {
-      return decoded;
-    }
-    attributes[localName(name)] = decoded.value;
-    index += 1;
-  }
-  return ok(attributes);
-}
-function decodeXmlText(input, lockfilePath, parseError) {
-  let failedEntity;
-  const decoded = input.replace(/&([^;]+);/g, (match, entity) => {
-    switch (entity) {
-      case "amp":
-        return "&";
-      case "lt":
-        return "<";
-      case "gt":
-        return ">";
-      case "quot":
-        return '"';
-      case "apos":
-        return "'";
-      default:
-        const codePoint = parseXmlNumericEntity(entity);
-        if (codePoint !== undefined) {
-          return String.fromCodePoint(codePoint);
-        }
-        failedEntity = match;
-        return match;
-    }
-  });
-  if (failedEntity) {
-    return parseError(lockfilePath, `Unsupported XML entity ${failedEntity}.`);
-  }
-  return ok(decoded);
-}
-function parseXmlNumericEntity(entity) {
-  const hexadecimal = entity.match(/^#x([0-9A-Fa-f]+)$/);
-  const decimal = entity.match(/^#([0-9]+)$/);
-  const digits = hexadecimal?.[1] ?? decimal?.[1];
-  if (!digits) {
-    return;
-  }
-  const codePoint = Number.parseInt(digits, hexadecimal ? 16 : 10);
-  return isXml10CodePoint(codePoint) ? codePoint : undefined;
-}
-function isXml10CodePoint(codePoint) {
-  return codePoint === 9 || codePoint === 10 || codePoint === 13 || codePoint >= 32 && codePoint <= 55295 || codePoint >= 57344 && codePoint <= 65533 || codePoint >= 65536 && codePoint <= 1114111;
-}
-
-// src/shared/maven-repository.ts
-import { existsSync as existsSync18 } from "node:fs";
-import path22 from "node:path";
-var MAVEN_GROUP_SEGMENT_PATTERN = /^[A-Za-z0-9_-]+$/;
-var MAVEN_ARTIFACT_SEGMENT_PATTERN = /^[A-Za-z0-9_.+-]+$/;
-function mavenRepositoryRoots(projectRoot, extraRoots = []) {
-  const roots = [
-    ...extraRoots,
-    path22.join(projectRoot, ".m2", "repository")
-  ];
-  const home = process.env.USERPROFILE ?? process.env.HOME;
-  if (home) {
-    roots.push(path22.join(home, ".m2", "repository"));
-  }
-  return [...new Set(roots.map((root) => path22.resolve(root)))];
-}
-function findMavenPomInRepository(input) {
-  const repositoryPath = mavenPomRepositoryPath(input);
-  const relativePomPath = repositoryPath?.replaceAll("/", path22.sep);
-  if (!relativePomPath) {
-    return;
-  }
-  for (const repositoryRoot of input.repositoryRoots) {
-    const root = path22.resolve(repositoryRoot);
-    const candidate = path22.resolve(root, relativePomPath);
-    if (!isPathInside9(root, candidate)) {
-      continue;
-    }
-    if (existsSync18(candidate)) {
-      return candidate;
-    }
-  }
-  return;
-}
-function mavenPomRepositoryPath(input) {
-  const groupSegments = input.groupId.split(".");
-  if (groupSegments.some((segment) => !isSafeMavenPathSegment(segment, MAVEN_GROUP_SEGMENT_PATTERN)) || !isSafeMavenPathSegment(input.artifactId, MAVEN_ARTIFACT_SEGMENT_PATTERN) || !isSafeMavenPathSegment(input.version, MAVEN_ARTIFACT_SEGMENT_PATTERN)) {
-    return;
-  }
-  return [
-    ...groupSegments,
-    input.artifactId,
-    input.version,
-    `${input.artifactId}-${input.version}.pom`
-  ].join("/");
-}
-function isSafeMavenPathSegment(segment, pattern) {
-  return segment.length > 0 && segment !== "." && segment !== ".." && !segment.includes("..") && !segment.includes("/") && !segment.includes("\\") && !segment.includes("\x00") && !path22.isAbsolute(segment) && !/^[A-Za-z]:/.test(segment) && pattern.test(segment);
-}
-function isPathInside9(root, candidate) {
-  const relative = path22.relative(root, candidate);
-  return relative.length > 0 && !relative.startsWith("..") && !path22.isAbsolute(relative);
-}
-
-// src/evidence/maven-package.ts
-var MAVEN_POM_METADATA_MAX_BYTES = 2 * 1024 * 1024;
-var MAVEN_LICENSE_PARENT_MAX_DEPTH = 8;
-var MAVEN_LICENSE_NAME_MAX_CHARS = 200;
-var MAVEN_LICENSE_COUNT_MAX = 16;
-var MAVEN_PROPERTY_RESOLUTION_MAX_DEPTH = 8;
-var MAVEN_PROPERTY_REFERENCE_PATTERN = /\$\{([^{}]+)\}/gu;
-function collectMavenPackageEvidence(input) {
-  const requested = parseMavenPackageCoordinates(input.coordinates, input.version);
-  if (!requested) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: [`Maven coordinates were not parseable: ${input.coordinates}`]
-    });
-  }
-  const repositoryRoots = mavenRepositoryRoots(input.projectRoot);
-  const maxParentDepth = input.maxParentDepth ?? MAVEN_LICENSE_PARENT_MAX_DEPTH;
-  const visited = new Set;
-  let current = requested;
-  for (let depth = 0;depth <= maxParentDepth; depth += 1) {
-    const coordinateKey = mavenCoordinateKey(current);
-    if (visited.has(coordinateKey)) {
-      return err(mavenPomMetadataError({
-        packageId: input.packageId,
-        source: coordinateKey,
-        message: "Maven POM license inheritance contains a parent cycle.",
-        details: { reason: "parent_cycle", coordinates: coordinateKey }
-      }));
-    }
-    visited.add(coordinateKey);
-    const pomPath = findMavenPomInRepository({ repositoryRoots, ...current });
-    if (!pomPath) {
-      const warning = depth === 0 ? `Maven POM metadata for ${input.coordinates}@${input.version} was not found in local .m2/repository caches; run Maven/Gradle dependency resolution first or provide a project .m2/repository cache.` : `Maven parent POM metadata for ${coordinateKey} was not found in local .m2/repository caches.`;
-      return ok({
-        packageId: input.packageId,
-        files: [],
-        source: "unavailable",
-        warnings: [warning]
-      });
-    }
-    const pomText = readTextFileWithLimit({
-      filePath: pomPath,
-      maxBytes: input.pomMaxBytes ?? MAVEN_POM_METADATA_MAX_BYTES
-    });
-    if (!pomText.ok) {
-      return err(createError({
-        code: "PACKAGE_EVIDENCE_READ_FAILED",
-        category: textFileReadErrorCategory(pomText.error),
-        message: pomReadFailedMessage(pomText.error),
-        details: {
-          packageId: input.packageId,
-          pomPath,
-          ...textFileReadErrorDetails(pomText.error)
-        }
-      }));
-    }
-    const metadata = parseMavenPomLicenseMetadata({
-      packageId: input.packageId,
-      requested: current,
-      source: coordinateKey,
-      text: pomText.value
-    });
-    if (!metadata.ok) {
-      return metadata;
-    }
-    if (metadata.value.licenses.length > 0) {
-      return ok({
-        packageId: input.packageId,
-        metadataLicense: metadata.value.licenses.join(" OR "),
-        metadataSource: depth === 0 ? "pom.xml" : `parent pom.xml (${coordinateKey})`,
-        files: [],
-        source: "local",
-        warnings: []
-      });
-    }
-    if (!metadata.value.parent) {
-      return ok({
-        packageId: input.packageId,
-        files: [],
-        source: "local",
-        warnings: ["Maven POM and its resolvable parent chain did not declare license names."]
-      });
-    }
-    current = metadata.value.parent;
-  }
-  return err(mavenPomMetadataError({
-    packageId: input.packageId,
-    source: mavenCoordinateKey(current),
-    message: "Maven POM license inheritance exceeded the maximum supported parent depth.",
-    details: { reason: "parent_depth", maxParentDepth }
-  }));
-}
-function parseMavenPackageCoordinates(coordinates, version) {
-  const [groupId, artifactId, extra] = coordinates.split(":");
-  if (!groupId || !artifactId || extra !== undefined) {
-    return;
-  }
-  const parsed = { groupId, artifactId, version };
-  return mavenPomRepositoryPath(parsed) ? parsed : undefined;
-}
-function parseMavenPomLicenseMetadata(input) {
-  const parsed = parseXmlDocument(input.text, input.source, (_source, cause) => err(mavenPomMetadataError({
-    packageId: input.packageId,
-    source: input.source,
-    message: "Maven POM metadata was not valid bounded XML.",
-    details: { reason: "malformed_xml", cause }
-  })));
-  if (!parsed.ok) {
-    return parsed;
-  }
-  if (parsed.value.name !== "project") {
-    return err(mavenPomMetadataError({
-      packageId: input.packageId,
-      source: input.source,
-      message: "Maven POM metadata did not use a project root element.",
-      details: { reason: "invalid_root", rootElement: parsed.value.name }
-    }));
-  }
-  const properties = readMavenPomProperties(parsed.value, input.requested);
-  const parent = readParentCoordinates({
-    packageId: input.packageId,
-    source: input.source,
-    parent: firstChild(parsed.value, "parent"),
-    properties
-  });
-  if (!parent.ok) {
-    return parent;
-  }
-  const artifactId = resolveMavenPomValue(childText(parsed.value, "artifactId"), properties);
-  const groupId = resolveMavenPomValue(childText(parsed.value, "groupId"), properties) ?? parent.value?.groupId;
-  const version = resolveMavenPomValue(childText(parsed.value, "version"), properties) ?? parent.value?.version;
-  if (artifactId !== input.requested.artifactId || groupId !== undefined && groupId !== input.requested.groupId || version !== undefined && version !== input.requested.version) {
-    return err(mavenPomMetadataError({
-      packageId: input.packageId,
-      source: input.source,
-      message: "Maven POM metadata did not match the requested package identity.",
-      details: {
-        reason: "identity_mismatch",
-        requested: mavenCoordinateKey(input.requested),
-        ...groupId ? { metadataGroupId: groupId } : {},
-        ...artifactId ? { metadataArtifactId: artifactId } : {},
-        ...version ? { metadataVersion: version } : {}
-      }
-    }));
-  }
-  const licenses = readPomLicenseNames({
-    packageId: input.packageId,
-    source: input.source,
-    project: parsed.value,
-    properties
-  });
-  if (!licenses.ok) {
-    return licenses;
-  }
-  return ok({
-    licenses: licenses.value,
-    ...parent.value ? { parent: parent.value } : {}
-  });
-}
-function mavenCoordinateKey(coordinates) {
-  return `${coordinates.groupId}:${coordinates.artifactId}@${coordinates.version}`;
-}
-function readParentCoordinates(input) {
-  if (!input.parent) {
-    return ok(undefined);
-  }
-  const groupId = resolveMavenPomValue(childText(input.parent, "groupId"), input.properties);
-  const artifactId = resolveMavenPomValue(childText(input.parent, "artifactId"), input.properties);
-  const version = resolveMavenPomValue(childText(input.parent, "version"), input.properties);
-  if (!groupId || !artifactId || !version) {
-    return err(mavenPomMetadataError({
-      packageId: input.packageId,
-      source: input.source,
-      message: "Maven parent POM coordinates were incomplete or unresolved.",
-      details: { reason: "parent_coordinates_unresolved" }
-    }));
-  }
-  const coordinates = { groupId, artifactId, version };
-  if (!mavenPomRepositoryPath(coordinates)) {
-    return err(mavenPomMetadataError({
-      packageId: input.packageId,
-      source: input.source,
-      message: "Maven parent POM coordinates were not safe exact repository coordinates.",
-      details: { reason: "parent_coordinates_invalid" }
-    }));
-  }
-  return ok(coordinates);
-}
-function readMavenPomProperties(project, requested) {
-  const properties = new Map([
-    ["project.groupId", requested.groupId],
-    ["pom.groupId", requested.groupId],
-    ["project.artifactId", requested.artifactId],
-    ["pom.artifactId", requested.artifactId],
-    ["project.version", requested.version],
-    ["pom.version", requested.version]
-  ]);
-  for (const property of firstChild(project, "properties")?.children ?? []) {
-    const value = property.text.trim();
-    if (value !== "") {
-      properties.set(property.name, value);
-    }
-  }
-  return properties;
-}
-function resolveMavenPomValue(value, properties) {
-  if (!value) {
-    return;
-  }
-  let resolved = value.trim();
-  for (let depth = 0;depth < MAVEN_PROPERTY_RESOLUTION_MAX_DEPTH; depth += 1) {
-    let changed = false;
-    resolved = resolved.replace(MAVEN_PROPERTY_REFERENCE_PATTERN, (reference, key) => {
-      const replacement = properties.get(key.trim());
-      if (replacement === undefined) {
-        return reference;
-      }
-      changed = true;
-      return replacement;
-    });
-    if (!changed) {
-      break;
-    }
-  }
-  return resolved === "" || resolved.includes("${") ? undefined : resolved;
-}
-function readPomLicenseNames(input) {
-  const licenseNodes = childNodes(firstChild(input.project, "licenses"), "license");
-  if (licenseNodes.length > MAVEN_LICENSE_COUNT_MAX) {
-    return err(mavenPomMetadataError({
-      packageId: input.packageId,
-      source: input.source,
-      message: "Maven POM declared too many license records.",
-      details: {
-        reason: "license_count",
-        maxLicenses: MAVEN_LICENSE_COUNT_MAX,
-        observedLicenses: licenseNodes.length
-      }
-    }));
-  }
-  const names = [];
-  for (const license of licenseNodes) {
-    const name = resolveMavenPomValue(childText(license, "name"), input.properties);
-    if (!name) {
-      continue;
-    }
-    const normalized = name.replace(/\s+/gu, " ").trim();
-    if (normalized.length > MAVEN_LICENSE_NAME_MAX_CHARS) {
-      return err(mavenPomMetadataError({
-        packageId: input.packageId,
-        source: input.source,
-        message: "Maven POM license name exceeded the maximum supported length.",
-        details: {
-          reason: "license_name_length",
-          maxChars: MAVEN_LICENSE_NAME_MAX_CHARS,
-          observedChars: normalized.length
-        }
-      }));
-    }
-    if (normalized !== "") {
-      names.push(normalized);
-    }
-  }
-  return ok([...new Set(names)]);
-}
-function mavenPomMetadataError(input) {
-  return createError({
-    code: "PACKAGE_EVIDENCE_READ_FAILED",
-    category: "unsupported_input",
-    message: input.message,
-    details: {
-      packageId: input.packageId,
-      pomSource: input.source,
-      ...input.details ?? {}
-    }
-  });
-}
-function pomReadFailedMessage(error) {
-  return error.kind === "too_large" ? "Maven POM metadata exceeded the maximum supported size." : "Failed to read Maven POM metadata.";
-}
-
 // src/evidence/nix-package.ts
-import { existsSync as existsSync19, readdirSync as readdirSync18, statSync as statSync17 } from "node:fs";
-import path23 from "node:path";
+import { existsSync as existsSync19, readdirSync as readdirSync17, statSync as statSync17 } from "node:fs";
+import path21 from "node:path";
 var NIX_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var NIX_EVIDENCE_FILE_LIMIT = 50;
 function collectNixPackageEvidence(input) {
@@ -28881,7 +26229,7 @@ function localNixSourceRoot(input) {
   if (!input.resolved || looksRemote(input.resolved)) {
     return;
   }
-  const candidate = path23.resolve(input.projectRoot, input.resolved);
+  const candidate = path21.resolve(input.projectRoot, input.resolved);
   if (!isPathInside10(input.projectRoot, candidate) || !isReadableDirectory13(candidate)) {
     return;
   }
@@ -28901,7 +26249,7 @@ function readEvidenceFiles2(input) {
       input.warnings.push(`Nix flake input evidence file limit reached at ${input.limit} files.`);
       break;
     }
-    const absolutePath = path23.join(input.sourceRoot, entry.name);
+    const absolutePath = path21.join(input.sourceRoot, entry.name);
     const text = readTextFileWithLimit({
       filePath: absolutePath,
       maxBytes: input.maxBytes
@@ -28920,7 +26268,7 @@ function readEvidenceFiles2(input) {
 }
 function directoryEntries2(dir) {
   try {
-    return readdirSync18(dir, { withFileTypes: true });
+    return readdirSync17(dir, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -28944,13 +26292,13 @@ function isReadableDirectory13(pathname) {
   }
 }
 function isPathInside10(parent, child) {
-  const relative = path23.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path23.isAbsolute(relative);
+  const relative = path21.relative(parent, child);
+  return relative === "" || !relative.startsWith("..") && !path21.isAbsolute(relative);
 }
 
 // src/evidence/nuget-package.ts
-import { existsSync as existsSync20, readdirSync as readdirSync19, statSync as statSync18 } from "node:fs";
-import path24 from "node:path";
+import { existsSync as existsSync20, readdirSync as readdirSync18, statSync as statSync18 } from "node:fs";
+import path22 from "node:path";
 var NUGET_NUSPEC_MAX_BYTES = 1024 * 1024;
 var NUGET_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var NUGET_LICENSE_FILE_LIMIT = 50;
@@ -29008,12 +26356,12 @@ function findNugetPackageDir(input) {
   const normalizedName = input.packageName.toLowerCase();
   const normalizedVersion = input.version.toLowerCase();
   for (const root of nugetPackageRoots(input.projectRoot)) {
-    const packageRoot = path24.resolve(root);
-    const globalCandidate = path24.resolve(root, normalizedName, normalizedVersion);
+    const packageRoot = path22.resolve(root);
+    const globalCandidate = path22.resolve(root, normalizedName, normalizedVersion);
     if (isPathInside11(packageRoot, globalCandidate) && existsSync20(globalCandidate) && isReadableDirectory14(globalCandidate)) {
       return globalCandidate;
     }
-    const packagesCandidate = path24.resolve(root, `${input.packageName}.${input.version}`);
+    const packagesCandidate = path22.resolve(root, `${input.packageName}.${input.version}`);
     if (isPathInside11(packageRoot, packagesCandidate) && existsSync20(packagesCandidate) && isReadableDirectory14(packagesCandidate)) {
       return packagesCandidate;
     }
@@ -29022,8 +26370,8 @@ function findNugetPackageDir(input) {
 }
 function nugetPackageRoots(projectRoot) {
   const roots = [
-    path24.join(projectRoot, ".nuget", "packages"),
-    path24.join(projectRoot, "packages")
+    path22.join(projectRoot, ".nuget", "packages"),
+    path22.join(projectRoot, "packages")
   ];
   const nugetPackages = process.env.NUGET_PACKAGES;
   if (nugetPackages) {
@@ -29031,22 +26379,22 @@ function nugetPackageRoots(projectRoot) {
   }
   const home = process.env.USERPROFILE ?? process.env.HOME;
   if (home) {
-    roots.push(path24.join(home, ".nuget", "packages"));
+    roots.push(path22.join(home, ".nuget", "packages"));
   }
-  return [...new Set(roots.map((root) => path24.resolve(root)))];
+  return [...new Set(roots.map((root) => path22.resolve(root)))];
 }
 function findNuspecPath(packageDir, packageName, version) {
-  const expected = path24.join(packageDir, `${packageName}.nuspec`);
+  const expected = path22.join(packageDir, `${packageName}.nuspec`);
   if (existsSync20(expected)) {
     return expected;
   }
-  const expectedWithVersion = path24.join(packageDir, `${packageName}.${version}.nuspec`);
+  const expectedWithVersion = path22.join(packageDir, `${packageName}.${version}.nuspec`);
   if (existsSync20(expectedWithVersion)) {
     return expectedWithVersion;
   }
   try {
-    const nuspec = readdirSync19(packageDir).find((entry) => entry.toLowerCase().endsWith(".nuspec"));
-    return nuspec ? path24.join(packageDir, nuspec) : undefined;
+    const nuspec = readdirSync18(packageDir).find((entry) => entry.toLowerCase().endsWith(".nuspec"));
+    return nuspec ? path22.join(packageDir, nuspec) : undefined;
   } catch {
     return;
   }
@@ -29155,7 +26503,7 @@ function readNugetEvidenceFiles(input) {
   const candidates = evidenceFileCandidates10(input.packageDir);
   if (input.metadata.license && input.metadata.licenseType === "file") {
     candidates.unshift({
-      absolutePath: path24.resolve(input.packageDir, input.metadata.license),
+      absolutePath: path22.resolve(input.packageDir, input.metadata.license),
       relativePath: input.metadata.license
     });
   }
@@ -29169,7 +26517,7 @@ function readNugetEvidenceFiles(input) {
 function readEvidenceFiles3(input) {
   const files = [];
   const seen = new Set;
-  const packageRoot = path24.resolve(input.packageDir);
+  const packageRoot = path22.resolve(input.packageDir);
   for (const candidate of input.candidates.slice(0, NUGET_LICENSE_FILE_LIMIT)) {
     if (seen.has(candidate.absolutePath)) {
       continue;
@@ -29200,8 +26548,8 @@ function evidenceFileCandidates10(dir) {
     return [];
   }
   try {
-    return readdirSync19(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path24.join(dir, entry.name),
+    return readdirSync18(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path22.join(dir, entry.name),
       relativePath: entry.name
     }));
   } catch {
@@ -29216,16 +26564,16 @@ function isReadableDirectory14(dir) {
   }
 }
 function isPathInside11(parent, child) {
-  const relative = path24.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path24.isAbsolute(relative);
+  const relative = path22.relative(parent, child);
+  return relative === "" || !relative.startsWith("..") && !path22.isAbsolute(relative);
 }
 function evidenceFileReadWarning5(fileName, error) {
   return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
 }
 
 // src/evidence/pub-package.ts
-import { existsSync as existsSync21, readdirSync as readdirSync20, statSync as statSync19 } from "node:fs";
-import path25 from "node:path";
+import { existsSync as existsSync21, readdirSync as readdirSync19, statSync as statSync19 } from "node:fs";
+import path23 from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var PUBSPEC_MAX_BYTES = 1024 * 1024;
 var PUB_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
@@ -29245,7 +26593,7 @@ function collectPubPackageEvidence(input) {
     });
   }
   const pubspec = readPubspec({
-    pubspecPath: path25.join(packageDir, "pubspec.yaml"),
+    pubspecPath: path23.join(packageDir, "pubspec.yaml"),
     packageId: input.packageId,
     maxBytes: input.pubspecMaxBytes ?? PUBSPEC_MAX_BYTES
   });
@@ -29281,8 +26629,8 @@ function findPubPackageDir(input) {
   const packageDirName = `${input.packageName}-${input.version}`;
   for (const cacheRoot of pubCacheRoots(input.projectRoot)) {
     for (const hostedRoot of ["pub.dev", "pub.dartlang.org"]) {
-      const candidate = path25.resolve(cacheRoot, "hosted", hostedRoot, packageDirName);
-      const hostedDir = path25.resolve(cacheRoot, "hosted", hostedRoot);
+      const candidate = path23.resolve(cacheRoot, "hosted", hostedRoot, packageDirName);
+      const hostedDir = path23.resolve(cacheRoot, "hosted", hostedRoot);
       if (isPathInside12(hostedDir, candidate) && existsSync21(candidate) && isReadableDirectory15(candidate)) {
         return candidate;
       }
@@ -29291,7 +26639,7 @@ function findPubPackageDir(input) {
   return;
 }
 function findPackageConfigPackageDir(input) {
-  const packageConfigPath = path25.join(input.projectRoot, ".dart_tool", "package_config.json");
+  const packageConfigPath = path23.join(input.projectRoot, ".dart_tool", "package_config.json");
   if (!existsSync21(packageConfigPath)) {
     return;
   }
@@ -29319,7 +26667,7 @@ function findPackageConfigPackageDir(input) {
       rootUri: item.rootUri,
       projectRoot: input.projectRoot
     });
-    if (candidate && path25.basename(candidate) === `${input.packageName}-${input.version}` && existsSync21(candidate) && isReadableDirectory15(candidate)) {
+    if (candidate && path23.basename(candidate) === `${input.packageName}-${input.version}` && existsSync21(candidate) && isReadableDirectory15(candidate)) {
       return candidate;
     }
   }
@@ -29336,11 +26684,11 @@ function resolvePackageConfigRootUri(input) {
   if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(input.rootUri)) {
     return;
   }
-  return path25.resolve(input.projectRoot, ".dart_tool", input.rootUri);
+  return path23.resolve(input.projectRoot, ".dart_tool", input.rootUri);
 }
 function pubCacheRoots(projectRoot) {
   const roots = [
-    path25.join(projectRoot, ".pub-cache")
+    path23.join(projectRoot, ".pub-cache")
   ];
   const pubCache = process.env.PUB_CACHE;
   if (pubCache) {
@@ -29348,13 +26696,13 @@ function pubCacheRoots(projectRoot) {
   }
   const home = process.env.USERPROFILE ?? process.env.HOME;
   if (home) {
-    roots.push(path25.join(home, ".pub-cache"));
+    roots.push(path23.join(home, ".pub-cache"));
   }
   const localAppData = process.env.LOCALAPPDATA;
   if (localAppData) {
-    roots.push(path25.join(localAppData, "Pub", "Cache"));
+    roots.push(path23.join(localAppData, "Pub", "Cache"));
   }
-  return [...new Set(roots.map((root) => path25.resolve(root)))];
+  return [...new Set(roots.map((root) => path23.resolve(root)))];
 }
 function readPubspec(input) {
   if (!existsSync21(input.pubspecPath)) {
@@ -29418,8 +26766,8 @@ function readPubEvidenceFiles(input) {
 }
 function evidenceFileCandidates11(packageDir) {
   try {
-    return readdirSync20(packageDir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path25.join(packageDir, entry.name),
+    return readdirSync19(packageDir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path23.join(packageDir, entry.name),
       relativePath: entry.name
     }));
   } catch {
@@ -29445,16 +26793,16 @@ function isReadableDirectory15(pathname) {
   }
 }
 function isPathInside12(parent, child) {
-  const relative = path25.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path25.isAbsolute(relative);
+  const relative = path23.relative(parent, child);
+  return relative === "" || !relative.startsWith("..") && !path23.isAbsolute(relative);
 }
 function isRecord6(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/evidence/python-package.ts
-import { existsSync as existsSync22, readdirSync as readdirSync21, statSync as statSync20 } from "node:fs";
-import path26 from "node:path";
+import { existsSync as existsSync22, readdirSync as readdirSync20, statSync as statSync20 } from "node:fs";
+import path24 from "node:path";
 var PYTHON_METADATA_MAX_BYTES = 1024 * 1024;
 var PYTHON_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var PYTHON_LICENSE_FILE_LIMIT = 50;
@@ -29505,21 +26853,21 @@ function collectPythonPackageEvidence(input) {
 }
 function findPythonSitePackageDirs(projectRoot) {
   const candidates = [
-    path26.join(projectRoot, ".venv", "Lib", "site-packages"),
-    path26.join(projectRoot, "venv", "Lib", "site-packages"),
-    ...sitePackageDirsUnder(path26.join(projectRoot, ".venv", "lib")),
-    ...sitePackageDirsUnder(path26.join(projectRoot, "venv", "lib")),
-    ...sitePackageDirsUnder(path26.join(projectRoot, ".venv", "lib64")),
-    ...sitePackageDirsUnder(path26.join(projectRoot, "venv", "lib64"))
+    path24.join(projectRoot, ".venv", "Lib", "site-packages"),
+    path24.join(projectRoot, "venv", "Lib", "site-packages"),
+    ...sitePackageDirsUnder(path24.join(projectRoot, ".venv", "lib")),
+    ...sitePackageDirsUnder(path24.join(projectRoot, "venv", "lib")),
+    ...sitePackageDirsUnder(path24.join(projectRoot, ".venv", "lib64")),
+    ...sitePackageDirsUnder(path24.join(projectRoot, "venv", "lib64"))
   ];
-  return [...new Set(candidates.map((candidate) => path26.resolve(candidate)))].filter((candidate) => existsSync22(candidate) && isReadableDirectory16(candidate));
+  return [...new Set(candidates.map((candidate) => path24.resolve(candidate)))].filter((candidate) => existsSync22(candidate) && isReadableDirectory16(candidate));
 }
 function sitePackageDirsUnder(libDir) {
   if (!existsSync22(libDir) || !isReadableDirectory16(libDir)) {
     return [];
   }
   try {
-    return readdirSync21(libDir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name.startsWith("python")).map((entry) => path26.join(libDir, entry.name, "site-packages")).filter((candidate) => existsSync22(candidate) && isReadableDirectory16(candidate));
+    return readdirSync20(libDir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name.startsWith("python")).map((entry) => path24.join(libDir, entry.name, "site-packages")).filter((candidate) => existsSync22(candidate) && isReadableDirectory16(candidate));
   } catch {
     return [];
   }
@@ -29527,7 +26875,7 @@ function sitePackageDirsUnder(libDir) {
 function findMatchingDistInfo(input) {
   let entries;
   try {
-    entries = readdirSync21(input.sitePackageDir, { withFileTypes: true });
+    entries = readdirSync20(input.sitePackageDir, { withFileTypes: true });
   } catch (cause) {
     return err(createError({
       code: "PACKAGE_EVIDENCE_READ_FAILED",
@@ -29543,9 +26891,9 @@ function findMatchingDistInfo(input) {
     if (!entry.isDirectory() || !entry.name.endsWith(".dist-info")) {
       continue;
     }
-    const distInfoPath = path26.join(input.sitePackageDir, entry.name);
+    const distInfoPath = path24.join(input.sitePackageDir, entry.name);
     const metadata = readPythonMetadata({
-      metadataPath: path26.join(distInfoPath, "METADATA"),
+      metadataPath: path24.join(distInfoPath, "METADATA"),
       packageId: `${input.packageName}@${input.version}`,
       maxBytes: input.metadataMaxBytes
     });
@@ -29676,7 +27024,7 @@ function readPythonEvidenceFiles(input) {
   const files = [];
   const candidates = [
     ...evidenceFileCandidates12(input.distInfoPath, ""),
-    ...evidenceFileCandidates12(path26.join(input.distInfoPath, "licenses"), "licenses")
+    ...evidenceFileCandidates12(path24.join(input.distInfoPath, "licenses"), "licenses")
   ];
   for (const candidate of candidates.slice(0, PYTHON_LICENSE_FILE_LIMIT)) {
     const kind = classifyEvidenceFile(candidate.relativePath);
@@ -29708,8 +27056,8 @@ function evidenceFileCandidates12(dir, relativePrefix) {
     return [];
   }
   try {
-    return readdirSync21(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path26.join(dir, entry.name),
+    return readdirSync20(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path24.join(dir, entry.name),
       relativePath: relativePrefix ? `${relativePrefix}/${entry.name}` : entry.name
     }));
   } catch {
@@ -29734,8 +27082,8 @@ function evidenceFileReadWarning6(fileName, error) {
 }
 
 // src/evidence/r-package.ts
-import { existsSync as existsSync23, readdirSync as readdirSync22, statSync as statSync21 } from "node:fs";
-import path27 from "node:path";
+import { existsSync as existsSync23, readdirSync as readdirSync21, statSync as statSync21 } from "node:fs";
+import path25 from "node:path";
 var R_DESCRIPTION_MAX_BYTES = 1024 * 1024;
 var R_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var R_PACKAGE_SEARCH_MAX_DEPTH = 6;
@@ -29760,7 +27108,7 @@ function collectRPackageEvidence(input) {
   }
   const description = readRDescription({
     packageId: input.packageId,
-    descriptionPath: path27.join(packageDir.value, "DESCRIPTION"),
+    descriptionPath: path25.join(packageDir.value, "DESCRIPTION"),
     maxBytes: input.descriptionMaxBytes ?? R_DESCRIPTION_MAX_BYTES
   });
   if (!description.ok) {
@@ -29808,9 +27156,9 @@ function findRPackageDir(input) {
 }
 function rPackageSearchRoots(projectRoot) {
   return [
-    path27.join(projectRoot, "renv", "library"),
-    path27.join(projectRoot, "library")
-  ].map((root) => path27.resolve(root));
+    path25.join(projectRoot, "renv", "library"),
+    path25.join(projectRoot, "library")
+  ].map((root) => path25.resolve(root));
 }
 function findRPackageDirUnderRoot(input) {
   if (!existsSync23(input.root) || !isReadableDirectory17(input.root)) {
@@ -29824,10 +27172,10 @@ function findRPackageDirUnderRoot(input) {
       continue;
     }
     visited += 1;
-    if (path27.basename(item.dir) === input.packageName) {
+    if (path25.basename(item.dir) === input.packageName) {
       const description = readRDescription({
         packageId: `${input.packageName}@${input.version}`,
-        descriptionPath: path27.join(item.dir, "DESCRIPTION"),
+        descriptionPath: path25.join(item.dir, "DESCRIPTION"),
         maxBytes: input.descriptionMaxBytes
       });
       if (!description.ok) {
@@ -29923,8 +27271,8 @@ function readRPackageEvidenceFiles(input) {
 }
 function evidenceFileCandidates13(dir) {
   try {
-    return readdirSync22(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path27.join(dir, entry.name),
+    return readdirSync21(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path25.join(dir, entry.name),
       relativePath: entry.name
     }));
   } catch {
@@ -29933,7 +27281,7 @@ function evidenceFileCandidates13(dir) {
 }
 function childDirectories4(dir) {
   try {
-    return readdirSync22(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path27.join(dir, entry.name));
+    return readdirSync21(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path25.join(dir, entry.name));
   } catch {
     return [];
   }
@@ -29950,8 +27298,8 @@ function isReadableDirectory17(pathname) {
 }
 
 // src/evidence/ruby-gem.ts
-import { existsSync as existsSync24, readdirSync as readdirSync23, statSync as statSync22 } from "node:fs";
-import path28 from "node:path";
+import { existsSync as existsSync24, readdirSync as readdirSync22, statSync as statSync22 } from "node:fs";
+import path26 from "node:path";
 var GEMSPEC_MAX_BYTES = 1024 * 1024;
 var GEM_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 function collectRubyGemEvidence(input) {
@@ -30006,13 +27354,13 @@ function collectRubyGemEvidence(input) {
 function findRubyGemLocation(input) {
   const gemDirName = `${input.gemName}-${input.version}`;
   for (const root of rubyGemInstallRoots(input.projectRoot)) {
-    const gemsRoot = path28.resolve(root, "gems");
-    const packageDir = path28.resolve(gemsRoot, gemDirName);
+    const gemsRoot = path26.resolve(root, "gems");
+    const packageDir = path26.resolve(gemsRoot, gemDirName);
     if (!isPathInside13(gemsRoot, packageDir) || !existsSync24(packageDir) || !isReadableDirectory18(packageDir)) {
       continue;
     }
-    const specificationsRoot = path28.resolve(root, "specifications");
-    const gemspecPath = path28.resolve(specificationsRoot, `${gemDirName}.gemspec`);
+    const specificationsRoot = path26.resolve(root, "specifications");
+    const gemspecPath = path26.resolve(specificationsRoot, `${gemDirName}.gemspec`);
     return {
       packageDir,
       ...isPathInside13(specificationsRoot, gemspecPath) && existsSync24(gemspecPath) ? { gemspecPath } : {}
@@ -30022,7 +27370,7 @@ function findRubyGemLocation(input) {
 }
 function rubyGemInstallRoots(projectRoot) {
   const roots = [];
-  for (const vendorRoot of globRubyVersionRoots(path28.join(projectRoot, "vendor", "bundle", "ruby"))) {
+  for (const vendorRoot of globRubyVersionRoots(path26.join(projectRoot, "vendor", "bundle", "ruby"))) {
     roots.push(vendorRoot);
   }
   const gemHome = process.env.GEM_HOME;
@@ -30031,22 +27379,22 @@ function rubyGemInstallRoots(projectRoot) {
   }
   const gemPath = process.env.GEM_PATH;
   if (gemPath) {
-    roots.push(...gemPath.split(path28.delimiter).filter((entry) => entry.trim() !== ""));
+    roots.push(...gemPath.split(path26.delimiter).filter((entry) => entry.trim() !== ""));
   }
   const home = process.env.USERPROFILE ?? process.env.HOME;
   if (home) {
-    for (const userGemRoot of globRubyVersionRoots(path28.join(home, ".gem", "ruby"))) {
+    for (const userGemRoot of globRubyVersionRoots(path26.join(home, ".gem", "ruby"))) {
       roots.push(userGemRoot);
     }
   }
-  return [...new Set(roots.map((root) => path28.resolve(root)))];
+  return [...new Set(roots.map((root) => path26.resolve(root)))];
 }
 function globRubyVersionRoots(root) {
   if (!existsSync24(root) || !isReadableDirectory18(root)) {
     return [];
   }
   try {
-    return readdirSync23(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path28.join(root, entry.name));
+    return readdirSync22(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path26.join(root, entry.name));
   } catch {
     return [];
   }
@@ -30109,8 +27457,8 @@ function evidenceFileCandidates14(dir) {
     return [];
   }
   try {
-    return readdirSync23(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path28.join(dir, entry.name),
+    return readdirSync22(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path26.join(dir, entry.name),
       relativePath: entry.name
     }));
   } catch {
@@ -30125,16 +27473,16 @@ function isReadableDirectory18(dir) {
   }
 }
 function isPathInside13(parent, child) {
-  const relative = path28.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path28.isAbsolute(relative);
+  const relative = path26.relative(parent, child);
+  return relative === "" || !relative.startsWith("..") && !path26.isAbsolute(relative);
 }
 function evidenceFileReadWarning8(fileName, error) {
   return error.kind === "too_large" ? `Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${error.maxBytes}, observedBytes: ${error.observedBytes}).` : `Failed to read ${fileName}: ${error.cause}`;
 }
 
 // src/evidence/swift-package.ts
-import { existsSync as existsSync25, readdirSync as readdirSync24, statSync as statSync23 } from "node:fs";
-import path29 from "node:path";
+import { existsSync as existsSync25, readdirSync as readdirSync23, statSync as statSync23 } from "node:fs";
+import path27 from "node:path";
 var SWIFT_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var SWIFT_LICENSE_FILE_LIMIT = 50;
 function collectSwiftPackageEvidence(input) {
@@ -30173,7 +27521,7 @@ function findSwiftPackageDir(input) {
     if (!existsSync25(checkoutsRoot) || !isReadableDirectory19(checkoutsRoot)) {
       continue;
     }
-    const exactCandidate = path29.resolve(checkoutsRoot, input.packageName);
+    const exactCandidate = path27.resolve(checkoutsRoot, input.packageName);
     if (isPathInside14(checkoutsRoot, exactCandidate) && existsSync25(exactCandidate) && isReadableDirectory19(exactCandidate)) {
       return exactCandidate;
     }
@@ -30189,14 +27537,14 @@ function findSwiftPackageDir(input) {
 }
 function swiftCheckoutsRoots(projectRoot) {
   return [...new Set([
-    path29.resolve(projectRoot, ".build", "checkouts"),
-    path29.resolve(projectRoot, "SourcePackages", "checkouts")
+    path27.resolve(projectRoot, ".build", "checkouts"),
+    path27.resolve(projectRoot, "SourcePackages", "checkouts")
   ])];
 }
 function findCaseInsensitiveChildDirectory4(input) {
   let entries;
   try {
-    entries = readdirSync24(input.parent, { withFileTypes: true });
+    entries = readdirSync23(input.parent, { withFileTypes: true });
   } catch {
     return;
   }
@@ -30205,7 +27553,7 @@ function findCaseInsensitiveChildDirectory4(input) {
     if (!entry.isDirectory() || entry.name.toLowerCase() !== normalizedName) {
       continue;
     }
-    const candidate = path29.resolve(input.parent, entry.name);
+    const candidate = path27.resolve(input.parent, entry.name);
     if (isPathInside14(input.parent, candidate) && isReadableDirectory19(candidate)) {
       return candidate;
     }
@@ -30241,8 +27589,8 @@ function readSwiftEvidenceFiles(input) {
 }
 function evidenceFileCandidates15(dir) {
   try {
-    return readdirSync24(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path29.join(dir, entry.name),
+    return readdirSync23(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path27.join(dir, entry.name),
       relativePath: entry.name
     }));
   } catch {
@@ -30265,13 +27613,13 @@ function isReadableDirectory19(pathname) {
   }
 }
 function isPathInside14(parent, child) {
-  const relative = path29.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path29.isAbsolute(relative);
+  const relative = path27.relative(parent, child);
+  return relative === "" || !relative.startsWith("..") && !path27.isAbsolute(relative);
 }
 
 // src/evidence/terraform-provider.ts
-import { existsSync as existsSync26, readdirSync as readdirSync25, statSync as statSync24 } from "node:fs";
-import path30 from "node:path";
+import { existsSync as existsSync26, readdirSync as readdirSync24, statSync as statSync24 } from "node:fs";
+import path28 from "node:path";
 var TERRAFORM_PROVIDER_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var TERRAFORM_PROVIDER_EVIDENCE_FILE_LIMIT = 50;
 function collectTerraformProviderEvidence(input) {
@@ -30306,7 +27654,7 @@ function collectTerraformProviderEvidence(input) {
   });
 }
 function findTerraformProviderRoot(input) {
-  const providerRoot = path30.resolve(input.projectRoot, ".terraform", "providers", ...input.sourceAddress.split("/"), input.version);
+  const providerRoot = path28.resolve(input.projectRoot, ".terraform", "providers", ...input.sourceAddress.split("/"), input.version);
   return isReadableDirectory20(providerRoot) ? providerRoot : undefined;
 }
 function readEvidenceFilesRecursively(input) {
@@ -30315,8 +27663,8 @@ function readEvidenceFilesRecursively(input) {
   while (queue.length > 0) {
     const currentDir = queue.shift();
     for (const entry of directoryEntries3(currentDir)) {
-      const absolutePath = path30.join(currentDir, entry.name);
-      const relativePath = path30.relative(input.rootDir, absolutePath).replace(/\\/g, "/");
+      const absolutePath = path28.join(currentDir, entry.name);
+      const relativePath = path28.relative(input.rootDir, absolutePath).replace(/\\/g, "/");
       if (entry.isDirectory()) {
         queue.push(absolutePath);
         continue;
@@ -30351,7 +27699,7 @@ function readEvidenceFilesRecursively(input) {
 }
 function directoryEntries3(dir) {
   try {
-    return readdirSync25(dir, { withFileTypes: true });
+    return readdirSync24(dir, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -30373,13 +27721,13 @@ function isReadableDirectory20(pathname) {
 }
 
 // src/evidence/unity-package.ts
-import { existsSync as existsSync28, readdirSync as readdirSync27, statSync as statSync26 } from "node:fs";
-import path32 from "node:path";
+import { existsSync as existsSync28, readdirSync as readdirSync26, statSync as statSync26 } from "node:fs";
+import path30 from "node:path";
 
 // src/evidence/local-package.ts
-import { Buffer as Buffer3 } from "node:buffer";
-import { existsSync as existsSync27, readdirSync as readdirSync26, statSync as statSync25 } from "node:fs";
-import path31 from "node:path";
+import { Buffer as Buffer2 } from "node:buffer";
+import { existsSync as existsSync27, readdirSync as readdirSync25, statSync as statSync25 } from "node:fs";
+import path29 from "node:path";
 var LOCAL_PACKAGE_JSON_MAX_BYTES = 1024 * 1024;
 var LOCAL_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 function collectLocalPackageEvidenceFromSnapshot(input) {
@@ -30396,7 +27744,7 @@ function collectLocalPackageEvidenceFromSnapshot(input) {
     return packageJsonText;
   }
   const packageJsonMaxBytes = input.packageJsonMaxBytes ?? LOCAL_PACKAGE_JSON_MAX_BYTES;
-  const packageJsonBytes = Buffer3.byteLength(packageJsonText.value, "utf8");
+  const packageJsonBytes = Buffer2.byteLength(packageJsonText.value, "utf8");
   if (packageJsonBytes > packageJsonMaxBytes) {
     return err(createError({
       code: "PACKAGE_EVIDENCE_READ_FAILED",
@@ -30452,7 +27800,7 @@ function collectLocalPackageEvidenceFromSnapshot(input) {
       warnings.push(`Failed to read ${fileName}: ${text.error.message}`);
       continue;
     }
-    const observedBytes = Buffer3.byteLength(text.value, "utf8");
+    const observedBytes = Buffer2.byteLength(text.value, "utf8");
     if (observedBytes > evidenceFileMaxBytes) {
       warnings.push(`Skipped ${fileName}: evidence file exceeded the maximum supported size (maxBytes: ${evidenceFileMaxBytes}, observedBytes: ${observedBytes}).`);
       continue;
@@ -30473,7 +27821,7 @@ function collectLocalPackageEvidenceFromSnapshot(input) {
 }
 function collectLocalPackageEvidence(input) {
   const warnings = [];
-  const packageJsonPath = path31.join(input.packageDir, "package.json");
+  const packageJsonPath = path29.join(input.packageDir, "package.json");
   const packageJsonMaxBytes = input.packageJsonMaxBytes ?? LOCAL_PACKAGE_JSON_MAX_BYTES;
   const evidenceFileMaxBytes = input.evidenceFileMaxBytes ?? LOCAL_EVIDENCE_FILE_MAX_BYTES;
   try {
@@ -30590,8 +27938,8 @@ function isObjectRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function normalizeSnapshotDirectory(value) {
-  const normalized = path31.posix.normalize(value.replace(/\\/g, "/"));
-  if (normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/") || path31.win32.isAbsolute(value)) {
+  const normalized = path29.posix.normalize(value.replace(/\\/g, "/"));
+  if (normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/") || path29.win32.isAbsolute(value)) {
     return;
   }
   return normalized === "." ? "" : normalized;
@@ -30599,7 +27947,7 @@ function normalizeSnapshotDirectory(value) {
 function readEvidenceFiles4(input) {
   const files = [];
   let foundEvidenceFile = false;
-  for (const entry of readdirSync26(input.packageDir, { withFileTypes: true })) {
+  for (const entry of readdirSync25(input.packageDir, { withFileTypes: true })) {
     if (!entry.isFile()) {
       continue;
     }
@@ -30608,7 +27956,7 @@ function readEvidenceFiles4(input) {
       continue;
     }
     foundEvidenceFile = true;
-    const filePath = path31.join(input.packageDir, entry.name);
+    const filePath = path29.join(input.packageDir, entry.name);
     try {
       const text = readTextFileWithLimit({
         filePath,
@@ -30658,13 +28006,13 @@ function collectUnityPackageEvidence(input) {
   });
 }
 function findUnityPackageDir(input) {
-  const embeddedPackage = path32.resolve(input.projectRoot, "Packages", input.packageName);
-  const embeddedRoot = path32.resolve(input.projectRoot, "Packages");
+  const embeddedPackage = path30.resolve(input.projectRoot, "Packages", input.packageName);
+  const embeddedRoot = path30.resolve(input.projectRoot, "Packages");
   if (isPathInside15(embeddedRoot, embeddedPackage) && existsSync28(embeddedPackage) && isReadableDirectory21(embeddedPackage)) {
     return embeddedPackage;
   }
-  const packageCacheRoot = path32.resolve(input.projectRoot, "Library", "PackageCache");
-  const exactCachePackage = path32.resolve(packageCacheRoot, `${input.packageName}@${input.version}`);
+  const packageCacheRoot = path30.resolve(input.projectRoot, "Library", "PackageCache");
+  const exactCachePackage = path30.resolve(packageCacheRoot, `${input.packageName}@${input.version}`);
   if (isPathInside15(packageCacheRoot, exactCachePackage) && existsSync28(exactCachePackage) && isReadableDirectory21(exactCachePackage)) {
     return exactCachePackage;
   }
@@ -30680,12 +28028,12 @@ function findUnityPackageDir(input) {
 function packageCacheCandidates(input) {
   let entries;
   try {
-    entries = readdirSync27(input.packageCacheRoot);
+    entries = readdirSync26(input.packageCacheRoot);
   } catch {
     return [];
   }
   const prefix = `${input.packageName}@${input.version}`;
-  return entries.filter((entry) => entry === prefix || entry.startsWith(`${prefix}-`)).map((entry) => path32.resolve(input.packageCacheRoot, entry)).filter((candidate) => isPathInside15(input.packageCacheRoot, candidate) && existsSync28(candidate) && isReadableDirectory21(candidate)).sort();
+  return entries.filter((entry) => entry === prefix || entry.startsWith(`${prefix}-`)).map((entry) => path30.resolve(input.packageCacheRoot, entry)).filter((candidate) => isPathInside15(input.packageCacheRoot, candidate) && existsSync28(candidate) && isReadableDirectory21(candidate)).sort();
 }
 function isReadableDirectory21(pathname) {
   try {
@@ -30695,13 +28043,13 @@ function isReadableDirectory21(pathname) {
   }
 }
 function isPathInside15(parent, child) {
-  const relative = path32.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path32.isAbsolute(relative);
+  const relative = path30.relative(parent, child);
+  return relative === "" || !relative.startsWith("..") && !path30.isAbsolute(relative);
 }
 
 // src/evidence/vcpkg-package.ts
-import { existsSync as existsSync29, readdirSync as readdirSync28, statSync as statSync27 } from "node:fs";
-import path33 from "node:path";
+import { existsSync as existsSync29, readdirSync as readdirSync27, statSync as statSync27 } from "node:fs";
+import path31 from "node:path";
 var VCPKG_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var VCPKG_EVIDENCE_FILE_LIMIT = 20;
 var VCPKG_INSTALL_ROOT_LIMIT = 8;
@@ -30756,16 +28104,16 @@ function readVcpkgEvidenceFiles(input) {
 }
 function findVcpkgInstallRoots(projectRoot) {
   const roots = [];
-  const direct = path33.join(projectRoot, "vcpkg_installed");
+  const direct = path31.join(projectRoot, "vcpkg_installed");
   if (isReadableDirectory22(direct)) {
     roots.push(direct);
   }
   try {
-    for (const entry of readdirSync28(projectRoot, { withFileTypes: true })) {
+    for (const entry of readdirSync27(projectRoot, { withFileTypes: true })) {
       if (!entry.isDirectory()) {
         continue;
       }
-      const candidate = path33.join(projectRoot, entry.name, "vcpkg_installed");
+      const candidate = path31.join(projectRoot, entry.name, "vcpkg_installed");
       if (isReadableDirectory22(candidate) && !roots.includes(candidate)) {
         roots.push(candidate);
       }
@@ -30781,23 +28129,23 @@ function findVcpkgInstallRoots(projectRoot) {
 function vcpkgCopyrightCandidates(input) {
   const candidates = [];
   for (const tripletDir of childDirectories5(input.installRoot)) {
-    if (path33.basename(tripletDir) === "vcpkg") {
+    if (path31.basename(tripletDir) === "vcpkg") {
       continue;
     }
-    const copyrightPath = path33.join(tripletDir, "share", input.packageName, "copyright");
+    const copyrightPath = path31.join(tripletDir, "share", input.packageName, "copyright");
     if (!isFile(copyrightPath)) {
       continue;
     }
     candidates.push({
       absolutePath: copyrightPath,
-      relativePath: path33.relative(input.installRoot, copyrightPath).replace(/\\/g, "/")
+      relativePath: path31.relative(input.installRoot, copyrightPath).replace(/\\/g, "/")
     });
   }
   return candidates.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
 }
 function childDirectories5(parent) {
   try {
-    return readdirSync28(parent, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path33.join(parent, entry.name)).filter(isReadableDirectory22).sort();
+    return readdirSync27(parent, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path31.join(parent, entry.name)).filter(isReadableDirectory22).sort();
   } catch {
     return [];
   }
@@ -30829,13 +28177,13 @@ function isFile(pathname) {
 }
 
 // src/evidence/zig-package.ts
-import { createHash as createHash5 } from "node:crypto";
-import { existsSync as existsSync30, readdirSync as readdirSync29, statSync as statSync28 } from "node:fs";
-import path35 from "node:path";
+import { createHash as createHash4 } from "node:crypto";
+import { existsSync as existsSync30, readdirSync as readdirSync28, statSync as statSync28 } from "node:fs";
+import path33 from "node:path";
 import { TextDecoder as TextDecoder3 } from "node:util";
 
 // src/evidence/tarball.ts
-import { gunzipSync as gunzipSync3 } from "node:zlib";
+import { gunzipSync as gunzipSync2 } from "node:zlib";
 
 // src/shared/inspection-metrics.ts
 import { AsyncLocalStorage as AsyncLocalStorage2 } from "node:async_hooks";
@@ -30985,7 +28333,7 @@ function collectPubTarballEvidence(input) {
 }
 function gunzipTarballWithLimit(input) {
   try {
-    return ok(measureInspectionPhase("decompress", () => gunzipSync3(input.tarball, { maxOutputLength: input.maxBytes })));
+    return ok(measureInspectionPhase("decompress", () => gunzipSync2(input.tarball, { maxOutputLength: input.maxBytes })));
   } catch (cause) {
     return err(createError({
       code: "TARBALL_PARSE_FAILED",
@@ -31051,7 +28399,7 @@ function parseTarEntries2(input) {
   let reachedEndMarker = false;
   while (offset + 512 <= input.tarball.length) {
     const header = input.tarball.subarray(offset, offset + 512);
-    if (isZeroBlock3(header)) {
+    if (isZeroBlock2(header)) {
       reachedEndMarker = true;
       break;
     }
@@ -31195,14 +28543,14 @@ function parseOctal2(value, fieldName) {
 function roundUpToBlock2(size) {
   return Math.ceil(size / 512) * 512;
 }
-function isZeroBlock3(buffer) {
+function isZeroBlock2(buffer) {
   return buffer.every((byte) => byte === 0);
 }
 
 // src/graph/zig-zon.ts
-import path34 from "node:path";
+import path32 from "node:path";
 import { TextDecoder as TextDecoder2, TextEncoder } from "node:util";
-var CRC32_TABLE2 = buildCrc32Table2();
+var CRC32_TABLE = buildCrc32Table();
 var ZON_TEXT_ENCODER = new TextEncoder;
 var ZON_TEXT_DECODER = new TextDecoder2("utf-8", { fatal: true });
 var ZIG_RESERVED_KEYWORDS = new Set([
@@ -31860,7 +29208,7 @@ function hasFieldWithUnexpectedKind(value, key, expectedKind) {
   return (value.fieldValues.get(key) ?? []).some((field) => field.kind !== expectedKind);
 }
 function rootProjectNameFromPath(lockfilePath) {
-  return path34.basename(path34.dirname(lockfilePath)) || "<zig>";
+  return path32.basename(path32.dirname(lockfilePath)) || "<zig>";
 }
 function zigZonShapeError(input) {
   return err(createError({
@@ -31963,7 +29311,7 @@ function isValidSemanticIdentifiers(value, rejectLeadingZeroNumbers) {
   const identifiers = value.split(".");
   return identifiers.every((identifier) => identifier.length > 0 && /^[0-9A-Za-z-]+$/.test(identifier) && (!rejectLeadingZeroNumbers || !/^[0-9]+$/.test(identifier) || isValidSemanticVersionNumber(identifier)));
 }
-function buildCrc32Table2() {
+function buildCrc32Table() {
   const table = new Uint32Array(256);
   for (let index = 0;index < table.length; index += 1) {
     let value = index;
@@ -31974,10 +29322,10 @@ function buildCrc32Table2() {
   }
   return table;
 }
-function crc322(bytes) {
+function crc32(bytes) {
   let crc = 4294967295;
   for (const byte of bytes) {
-    crc = crc >>> 8 ^ (CRC32_TABLE2[(crc ^ byte) & 255] ?? 0);
+    crc = crc >>> 8 ^ (CRC32_TABLE[(crc ^ byte) & 255] ?? 0);
   }
   return (crc ^ 4294967295) >>> 0;
 }
@@ -31987,7 +29335,7 @@ function isValidZigFingerprint(name, fingerprint) {
   }
   const id = Number(fingerprint & 0xffffffffn);
   const checksum = Number(fingerprint >> 32n & 0xffffffffn);
-  return id !== 0 && id !== 4294967295 && checksum === crc322(Buffer.from(name, "utf8"));
+  return id !== 0 && id !== 4294967295 && checksum === crc32(Buffer.from(name, "utf8"));
 }
 function extractPaths(root) {
   const pathsField = root.fields.get("paths");
@@ -32122,6 +29470,7 @@ function collectRemoteZigTarballEvidence(input) {
     });
   }
   const warnings = [];
+  recordArtifactCheck({ packageId: input.packageId, bytes: input.tarball, kind: "zig-package-hash", value: input.expectedHash });
   const evidenceFiles = collectZigTarballEvidenceFiles(coveredEntries, warnings);
   if (evidenceFiles.length === 0) {
     warnings.push("No supported license, notice, attribution, or legal evidence file found in Zig package tarball.");
@@ -32138,14 +29487,14 @@ function computeZigPackageHash(entries) {
   const perFileHashes = [];
   let totalSize = 0;
   for (const entry of sorted) {
-    const hasher = createHash5("sha256");
+    const hasher = createHash4("sha256");
     hasher.update(Buffer.from(entry.normalizedPath, "latin1"));
     hasher.update(Buffer.from([0, 0]));
     hasher.update(entry.data);
     perFileHashes.push(hasher.digest());
     totalSize += entry.data.length;
   }
-  const overallHasher = createHash5("sha256");
+  const overallHasher = createHash4("sha256");
   for (const fileHash of perFileHashes) {
     overallHasher.update(fileHash);
   }
@@ -32345,7 +29694,7 @@ function resolveLocalZigPath(input) {
   if (looksRemote2(input.resolved)) {
     return;
   }
-  const candidate = path35.resolve(input.projectRoot, input.resolved);
+  const candidate = path33.resolve(input.projectRoot, input.resolved);
   if (!isPathInside16(input.projectRoot, candidate) || !isReadableDirectory23(candidate)) {
     return;
   }
@@ -32383,8 +29732,8 @@ function evidenceFileCandidates16(dir) {
     return [];
   }
   try {
-    return readdirSync29(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
-      absolutePath: path35.join(dir, entry.name),
+    return readdirSync28(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => ({
+      absolutePath: path33.join(dir, entry.name),
       relativePath: entry.name
     }));
   } catch {
@@ -32410,8 +29759,8 @@ function isReadableDirectory23(pathname) {
   }
 }
 function isPathInside16(parent, child) {
-  const relative = path35.relative(parent, child);
-  return relative === "" || !relative.startsWith("..") && !path35.isAbsolute(relative);
+  const relative = path33.relative(parent, child);
+  return relative === "" || !relative.startsWith("..") && !path33.isAbsolute(relative);
 }
 
 // src/evidence/ecosystem-collectors.ts
@@ -32578,7 +29927,7 @@ function collectEcosystemEvidence(input) {
 
 // src/graph/java-maven-pom.ts
 import { realpathSync as realpathSync3 } from "node:fs";
-import path36 from "node:path";
+import path34 from "node:path";
 var MAVEN_REPOSITORY_MAX_COUNT = 32;
 var MAVEN_REPOSITORY_URL_MAX_CHARS = 2048;
 function parseMavenPomFile(pomPath, options = {}) {
@@ -32597,7 +29946,7 @@ function parseMavenPomFile(pomPath, options = {}) {
       }
     }));
   }
-  const projectRoot = path36.resolve(options.projectRoot ?? path36.dirname(pomPath));
+  const projectRoot = path34.resolve(options.projectRoot ?? path34.dirname(pomPath));
   return parseMavenPomText(pomText.value, pomPath, {
     ...options,
     projectRoot,
@@ -32619,7 +29968,7 @@ function parseMavenPomText(input, pomPath = "pom.xml", options = {}) {
       ...options.externalPoms ? { externalPoms: options.externalPoms } : {}
     };
     const moduleState = {
-      projectRoot: path36.resolve(projectRoot),
+      projectRoot: path34.resolve(projectRoot),
       maxModuleDepth: options.maxModuleDepth ?? 16,
       maxModules: options.maxModules ?? 512,
       ...options.readProjectPom ? { readProjectPom: options.readProjectPom } : {},
@@ -32674,7 +30023,7 @@ function readMavenProjectModules(input) {
       }
     }));
   }
-  const normalizedPomPath = path36.resolve(input.pomPath);
+  const normalizedPomPath = path34.resolve(input.pomPath);
   const visitedKey = normalizedPomPath.toLowerCase();
   if (input.moduleState.visitedPomPaths.has(visitedKey)) {
     return err(createError({
@@ -32706,7 +30055,7 @@ function readMavenProjectModules(input) {
   if (!model.ok) {
     return model;
   }
-  const rootName = model.value.rootName ?? (path36.basename(path36.dirname(input.pomPath)) || "<maven-project>");
+  const rootName = model.value.rootName ?? (path34.basename(path34.dirname(input.pomPath)) || "<maven-project>");
   const dependencies = readMavenPomDependencies(scannedProject, model.value, input.pomPath, input.context);
   if (!dependencies.ok) {
     return dependencies;
@@ -32833,11 +30182,11 @@ function firstXmlTagText(text, tagName) {
 }
 function resolveMavenModulePomPath(input) {
   const rawPath = input.modulePath.replace(/\\/g, "/");
-  if (rawPath === "" || rawPath.includes("${") || path36.posix.isAbsolute(rawPath) || path36.win32.isAbsolute(input.modulePath) || /[\u0000-\u001f\u007f]/u.test(rawPath)) {
+  if (rawPath === "" || rawPath.includes("${") || path34.posix.isAbsolute(rawPath) || path34.win32.isAbsolute(input.modulePath) || /[\u0000-\u001f\u007f]/u.test(rawPath)) {
     return err(invalidMavenModulePath(input, "invalid_maven_module_path"));
   }
-  const moduleTarget = path36.resolve(path36.dirname(input.fromPomPath), ...rawPath.split("/"), rawPath.toLowerCase().endsWith(".xml") ? "" : "pom.xml");
-  if (!isPathInsideOrEqual2(moduleTarget, input.projectRoot)) {
+  const moduleTarget = path34.resolve(path34.dirname(input.fromPomPath), ...rawPath.split("/"), rawPath.toLowerCase().endsWith(".xml") ? "" : "pom.xml");
+  if (!isPathInsideOrEqual3(moduleTarget, input.projectRoot)) {
     return err(invalidMavenModulePath(input, "maven_module_path_escape"));
   }
   return ok(moduleTarget);
@@ -32855,13 +30204,13 @@ function invalidMavenModulePath(input, reason) {
   });
 }
 function createDiskMavenProjectPomReader(input) {
-  let canonicalProjectRoot = path36.resolve(input.projectRoot);
+  let canonicalProjectRoot = path34.resolve(input.projectRoot);
   try {
     canonicalProjectRoot = realpathSync3.native(canonicalProjectRoot);
   } catch {}
   return ({ pomPath, fromPomPath }) => {
-    const resolvedPomPath = path36.resolve(pomPath);
-    if (!isPathInsideOrEqual2(resolvedPomPath, input.projectRoot)) {
+    const resolvedPomPath = path34.resolve(pomPath);
+    if (!isPathInsideOrEqual3(resolvedPomPath, input.projectRoot)) {
       return err(invalidMavenModulePath({
         modulePath: pomPath,
         fromPomPath
@@ -32869,7 +30218,7 @@ function createDiskMavenProjectPomReader(input) {
     }
     try {
       const canonicalPomPath = realpathSync3.native(resolvedPomPath);
-      if (!isPathInsideOrEqual2(canonicalPomPath, canonicalProjectRoot)) {
+      if (!isPathInsideOrEqual3(canonicalPomPath, canonicalProjectRoot)) {
         return err(invalidMavenModulePath({
           modulePath: pomPath,
           fromPomPath
@@ -32921,7 +30270,7 @@ function dependencyNodesFromMavenModules(modules) {
         });
         continue;
       }
-      existing.dependencyType = dependencyTypeRank3(existing.dependencyType) >= dependencyTypeRank3(dependencyType) ? existing.dependencyType : dependencyType;
+      existing.dependencyType = dependencyTypeRank2(existing.dependencyType) >= dependencyTypeRank2(dependencyType) ? existing.dependencyType : dependencyType;
       if (!existing.paths.some((candidate) => pathsEqual(candidate, dependencyPath))) {
         existing.paths.push(dependencyPath);
       }
@@ -32932,9 +30281,9 @@ function dependencyNodesFromMavenModules(modules) {
 function pathsEqual(left, right) {
   return left.length === right.length && left.every((segment, index) => segment === right[index]);
 }
-function isPathInsideOrEqual2(candidate, root) {
-  const relative = path36.relative(path36.resolve(root), path36.resolve(candidate));
-  return relative === "" || !relative.startsWith("..") && !path36.isAbsolute(relative);
+function isPathInsideOrEqual3(candidate, root) {
+  const relative = path34.relative(path34.resolve(root), path34.resolve(candidate));
+  return relative === "" || !relative.startsWith("..") && !path34.isAbsolute(relative);
 }
 function readMavenPomModel(text, pomPath, context, depth, declaredModuleParent) {
   if (depth > context.maxExternalPomDepth) {
@@ -32982,22 +30331,22 @@ function relativePathTargetsDeclaredMavenParent(input) {
     return false;
   }
   const relativePath = readXmlTagText(parentText, "relativePath") ?? "../pom.xml";
-  if (path36.isAbsolute(relativePath) || path36.win32.isAbsolute(relativePath)) {
+  if (path34.isAbsolute(relativePath) || path34.win32.isAbsolute(relativePath)) {
     return false;
   }
-  const resolvedParentPom = path36.resolve(path36.dirname(input.pomPath), relativePath);
+  const resolvedParentPom = path34.resolve(path34.dirname(input.pomPath), relativePath);
   if (comparableFilesystemPath(resolvedParentPom) === comparableFilesystemPath(input.parentPomPath)) {
     return true;
   }
-  const expectedRelativePath = path36.relative(path36.dirname(input.pomPath), input.parentPomPath);
+  const expectedRelativePath = path34.relative(path34.dirname(input.pomPath), input.parentPomPath);
   return comparableMavenRelativePath(relativePath) === comparableMavenRelativePath(expectedRelativePath);
 }
 function comparableFilesystemPath(value) {
-  const resolved = path36.resolve(value);
+  const resolved = path34.resolve(value);
   return process.platform === "win32" ? resolved.toLowerCase() : resolved;
 }
 function comparableMavenRelativePath(value) {
-  const normalized = path36.posix.normalize(value.replace(/\\/g, "/"));
+  const normalized = path34.posix.normalize(value.replace(/\\/g, "/"));
   return process.platform === "win32" ? normalized.toLowerCase() : normalized;
 }
 function matchesDeclaredMavenParent(text, candidate) {
@@ -33323,7 +30672,7 @@ function mavenProjectRootFromPomPath(pomPath) {
   if (pomPath.includes(":")) {
     return process.cwd();
   }
-  return path36.dirname(path36.resolve(pomPath));
+  return path34.dirname(path34.resolve(pomPath));
 }
 function mavenCoordinateKey2(groupId, artifactId) {
   return `${groupId}:${artifactId}`;
@@ -33422,9 +30771,9 @@ function mergeMavenScope(left, right) {
     optional: false,
     scope: right
   }));
-  return dependencyTypeRank3(leftType) >= dependencyTypeRank3(rightType) ? left : right;
+  return dependencyTypeRank2(leftType) >= dependencyTypeRank2(rightType) ? left : right;
 }
-function dependencyTypeRank3(type) {
+function dependencyTypeRank2(type) {
   switch (type) {
     case "production":
       return 4;
@@ -33914,101 +31263,6 @@ function edgeLimitError(limit) {
   }));
 }
 
-// src/evidence/package-integrity.ts
-import { createHash as createHash6, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
-var SUPPORTED_INTEGRITY_DIGEST_BYTES = {
-  sha1: 20,
-  sha256: 32,
-  sha384: 48,
-  sha512: 64
-};
-function verifyPackageIntegrity(input) {
-  if (!input.integrity) {
-    return ok(undefined);
-  }
-  const supported = parseSupportedIntegrityEntries(input.integrity);
-  if (supported.length === 0) {
-    return err(createError({
-      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
-      category: "unsupported_input",
-      message: "Package artifact integrity could not be verified because no supported digest was found.",
-      details: {
-        packageId: input.packageId,
-        resolved: input.resolvedDetail,
-        integrity: input.integrity,
-        supportedAlgorithms: ["sha512", "sha384", "sha256", "sha1"]
-      }
-    }));
-  }
-  const computed = [];
-  for (const entry of supported) {
-    const actualDigest = createHash6(entry.algorithm).update(input.artifact).digest();
-    const actual = `${entry.algorithm}-${actualDigest.toString("base64")}`;
-    computed.push(actual);
-    if (actualDigest.byteLength === entry.digest.byteLength && timingSafeEqual2(actualDigest, entry.digest)) {
-      recordArtifactCheck({ packageId: input.packageId, bytes: input.artifact, kind: "sri", value: actual });
-      return ok(undefined);
-    }
-  }
-  return err(createError({
-    code: "PACKAGE_INTEGRITY_CHECK_FAILED",
-    category: "unsupported_input",
-    message: "Package artifact integrity did not match the lockfile digest.",
-    details: {
-      packageId: input.packageId,
-      resolved: input.resolvedDetail,
-      integrity: input.integrity,
-      computed
-    }
-  }));
-}
-function sha256HexIntegrity(sha256) {
-  return `sha256-${Buffer.from(sha256, "hex").toString("base64")}`;
-}
-function parseSupportedIntegrityEntries(integrity) {
-  return integrity.split(/\s+/).map((entry) => {
-    const separatorIndex = entry.indexOf("-");
-    if (separatorIndex <= 0) {
-      return;
-    }
-    const algorithm = entry.slice(0, separatorIndex);
-    const digest = entry.slice(separatorIndex + 1);
-    if (!isSupportedIntegrityAlgorithm(algorithm) || digest === "") {
-      return;
-    }
-    const decoded = decodeIntegrityDigest({ algorithm, digest });
-    if (!decoded) {
-      return;
-    }
-    return {
-      algorithm,
-      digest: decoded
-    };
-  }).filter((entry) => entry !== undefined);
-}
-function isSupportedIntegrityAlgorithm(value) {
-  return Object.prototype.hasOwnProperty.call(SUPPORTED_INTEGRITY_DIGEST_BYTES, value);
-}
-function decodeIntegrityDigest(input) {
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(input.digest)) {
-    return;
-  }
-  const paddingStart = input.digest.indexOf("=");
-  if (paddingStart !== -1 && !/^=+$/.test(input.digest.slice(paddingStart))) {
-    return;
-  }
-  if (input.digest.length % 4 === 1) {
-    return;
-  }
-  const decoded = Buffer.from(input.digest, "base64");
-  if (decoded.byteLength !== SUPPORTED_INTEGRITY_DIGEST_BYTES[input.algorithm]) {
-    return;
-  }
-  const normalizedInput = input.digest.replace(/=+$/, "");
-  const normalizedDecoded = decoded.toString("base64").replace(/=+$/, "");
-  return normalizedDecoded === normalizedInput ? decoded : undefined;
-}
-
 // src/graph/artifact-identity.ts
 var ARTIFACT_FIELDS = ["resolved", "integrity", "yarnCacheChecksum", "goModIntegrity"];
 function canonicalIntegrity(value) {
@@ -34194,7 +31448,7 @@ function mergeDependencyNode(left, right) {
   const merged = {
     ...left,
     ...(left.installNames?.length ?? 0) > 0 || (right.installNames?.length ?? 0) > 0 ? { installNames: unique([...left.installNames ?? [], ...right.installNames ?? []]) } : {},
-    dependencyType: mergeDependencyType3(left.dependencyType, right.dependencyType),
+    dependencyType: mergeDependencyType2(left.dependencyType, right.dependencyType),
     direct: left.direct || right.direct,
     paths: uniquePaths([...left.paths, ...right.paths]),
     origins: uniqueOrigins([...left.origins ?? [], ...right.origins ?? []])
@@ -34204,7 +31458,7 @@ function mergeDependencyNode(left, right) {
   }
   return Object.assign(merged, mergeArtifactIdentity(left, right));
 }
-function mergeDependencyType3(left, right) {
+function mergeDependencyType2(left, right) {
   const rank = {
     production: 5,
     optional: 4,
@@ -34325,7 +31579,7 @@ function compareEvidenceFiles(left, right) {
 }
 
 // src/graph/bazel-module.ts
-import path37 from "node:path";
+import path35 from "node:path";
 var UNSUPPORTED_BAZEL_GRAPH_CONSTRUCTS = new Set([
   "archive_override",
   "git_override",
@@ -34826,7 +32080,7 @@ function isSupportedBazelModuleName(name) {
   return /^[a-z][a-z0-9._-]*[a-z0-9]$/.test(name) || /^[a-z]$/.test(name);
 }
 function bazelModuleRootName(modulePath) {
-  return path37.basename(path37.dirname(modulePath)) || "<bazel-module>";
+  return path35.basename(path35.dirname(modulePath)) || "<bazel-module>";
 }
 function bazelModuleParseError(input) {
   return err(createError({
@@ -34838,7 +32092,7 @@ function bazelModuleParseError(input) {
 }
 
 // src/graph/carthage-cartfile-resolved.ts
-import path38 from "node:path";
+import path36 from "node:path";
 function parseCartfileResolvedFile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -34862,7 +32116,7 @@ function parseCartfileResolvedText(input, lockfilePath = "Cartfile.resolved") {
   if (!records.ok) {
     return records;
   }
-  const rootName = path38.basename(path38.dirname(lockfilePath)) || "<carthage-project>";
+  const rootName = path36.basename(path36.dirname(lockfilePath)) || "<carthage-project>";
   return ok({
     rootName,
     lockfilePath,
@@ -34999,7 +32253,7 @@ function cartfileResolvedParseError(input) {
 }
 
 // src/graph/cocoapods-podfile-lock.ts
-import path39 from "node:path";
+import path37 from "node:path";
 function parsePodfileLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -35023,7 +32277,7 @@ function parsePodfileLockText(input, lockfilePath = "Podfile.lock") {
   if (!parsed.ok) {
     return parsed;
   }
-  const rootName = path39.basename(path39.dirname(lockfilePath)) || "<cocoapods-project>";
+  const rootName = path37.basename(path37.dirname(lockfilePath)) || "<cocoapods-project>";
   const records = [...parsed.value.records.values()].sort((left, right) => left.id.localeCompare(right.id));
   const recordIdsByName = new Map(records.map((record) => [record.name, record.id]));
   const directNames = parsed.value.directNames.size > 0 ? parsed.value.directNames : new Set(records.map((record) => record.name));
@@ -35232,7 +32486,7 @@ function resolvedPodVersion(version) {
 }
 
 // src/graph/conda-environment.ts
-import path40 from "node:path";
+import path38 from "node:path";
 function parseCondaEnvironmentFile(environmentPath, options = {}) {
   const environmentText = readInputTextFile({
     filePath: environmentPath,
@@ -35406,7 +32660,7 @@ function readRootName(parsed, environmentPath) {
   if (isRecord8(parsed) && typeof parsed.name === "string" && parsed.name.trim() !== "") {
     return parsed.name.trim();
   }
-  return path40.basename(path40.dirname(environmentPath)) || "<conda-environment>";
+  return path38.basename(path38.dirname(environmentPath)) || "<conda-environment>";
 }
 function condaEnvironmentParseError(input) {
   return err(createError({
@@ -35421,7 +32675,7 @@ function isRecord8(value) {
 }
 
 // src/graph/conda-lock.ts
-import path41 from "node:path";
+import path39 from "node:path";
 function parseCondaLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -35551,12 +32805,12 @@ function buildCondaNodes(input) {
   return [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id));
 }
 function walkCondaDependency(input) {
-  const dependencyType = mergeDependencyType4(input.record.dependencyType, input.inheritedDependencyType);
+  const dependencyType = mergeDependencyType3(input.record.dependencyType, input.inheritedDependencyType);
   const existing = input.nodeMap.get(input.record.id);
   input.nodeMap.set(input.record.id, existing ? {
     ...existing,
     direct: existing.direct || input.direct,
-    dependencyType: mergeDependencyType4(existing.dependencyType, dependencyType),
+    dependencyType: mergeDependencyType3(existing.dependencyType, dependencyType),
     paths: appendUniquePath(existing.paths, input.path)
   } : {
     id: input.record.id,
@@ -35629,10 +32883,10 @@ function readRootName2(parsed, lockfilePath) {
   if (isRecord9(parsed) && isRecord9(parsed.metadata) && Array.isArray(parsed.metadata.sources)) {
     const firstSource = parsed.metadata.sources.find((source) => typeof source === "string" && source.trim() !== "");
     if (typeof firstSource === "string") {
-      return path41.basename(firstSource, path41.extname(firstSource)) || "<conda-project>";
+      return path39.basename(firstSource, path39.extname(firstSource)) || "<conda-project>";
     }
   }
-  return path41.basename(path41.dirname(lockfilePath)) || "<conda-project>";
+  return path39.basename(path39.dirname(lockfilePath)) || "<conda-project>";
 }
 function readManager(value) {
   if (typeof value !== "string") {
@@ -35656,10 +32910,10 @@ function appendUniquePath(paths, pathToAdd) {
 function pathsEqual2(left, right) {
   return left.length === right.length && left.every((item, index) => item === right[index]);
 }
-function mergeDependencyType4(left, right) {
-  return dependencyTypeRank4(left) >= dependencyTypeRank4(right) ? left : right;
+function mergeDependencyType3(left, right) {
+  return dependencyTypeRank3(left) >= dependencyTypeRank3(right) ? left : right;
 }
-function dependencyTypeRank4(type) {
+function dependencyTypeRank3(type) {
   switch (type) {
     case "production":
       return 4;
@@ -35686,7 +32940,7 @@ function isRecord9(value) {
 }
 
 // src/graph/conan-lock.ts
-import path42 from "node:path";
+import path40 from "node:path";
 var CONAN_LOCK_FIELDS = [
   {
     field: "requires",
@@ -35747,7 +33001,7 @@ function parseConanLockText(input, lockfilePath = "conan.lock") {
   if (!records.ok) {
     return records;
   }
-  const rootName = path42.basename(path42.dirname(lockfilePath)) || "<conan-project>";
+  const rootName = path40.basename(path40.dirname(lockfilePath)) || "<conan-project>";
   return ok({
     rootName,
     lockfilePath,
@@ -35847,9 +33101,9 @@ function isValidConanNamePart(value) {
   return /^[A-Za-z0-9_.+~-]+$/.test(value);
 }
 function strongestDependencyType(left, right) {
-  return dependencyTypeRank5(right) > dependencyTypeRank5(left) ? right : left;
+  return dependencyTypeRank4(right) > dependencyTypeRank4(left) ? right : left;
 }
-function dependencyTypeRank5(value) {
+function dependencyTypeRank4(value) {
   switch (value) {
     case "production":
       return 4;
@@ -36277,7 +33531,7 @@ function traverseCycloneDxDependencies(input) {
     const existing = nodeMap.get(record.id);
     if (existing) {
       existing.direct = existing.direct || directRefs.has(ref);
-      existing.dependencyType = mergeDependencyType5(existing.dependencyType, dependencyType);
+      existing.dependencyType = mergeDependencyType4(existing.dependencyType, dependencyType);
       continue;
     }
     nodeMap.set(record.id, {
@@ -36379,7 +33633,7 @@ function resolveCycloneDxDependencyTypes(input) {
       continue;
     }
     const previous = resolved.get(current.ref);
-    const dependencyType = previous ? mergeDependencyType5(previous, current.dependencyType) : current.dependencyType;
+    const dependencyType = previous ? mergeDependencyType4(previous, current.dependencyType) : current.dependencyType;
     if (previous === dependencyType) {
       continue;
     }
@@ -36415,7 +33669,7 @@ function deduplicateCycloneDxRecords(records) {
     seen.set(record.ref, existing ? {
       ...existing,
       aliases: [...new Set([...existing.aliases, ...record.aliases])],
-      dependencyType: mergeDependencyType5(existing.dependencyType, record.dependencyType),
+      dependencyType: mergeDependencyType4(existing.dependencyType, record.dependencyType),
       licenseExpressions: [...new Set([
         ...existing.licenseExpressions,
         ...record.licenseExpressions
@@ -36465,10 +33719,10 @@ function cycloneDxDependencyValueKind(value) {
 function dependencyTypeForChildEdge(parentType, childType) {
   return parentType === "production" ? childType : parentType;
 }
-function mergeDependencyType5(left, right) {
-  return dependencyTypeRank6(left) >= dependencyTypeRank6(right) ? left : right;
+function mergeDependencyType4(left, right) {
+  return dependencyTypeRank5(left) >= dependencyTypeRank5(right) ? left : right;
 }
-function dependencyTypeRank6(type) {
+function dependencyTypeRank5(type) {
   switch (type) {
     case "production":
       return 4;
@@ -36680,7 +33934,7 @@ function unsupportedCycloneDxXmlDependencyError(lockfilePath, details) {
 }
 
 // src/graph/dart-pubspec-lock.ts
-import path43 from "node:path";
+import path41 from "node:path";
 var PUB_DEV_ORIGIN = "https://pub.dev";
 function parsePubspecLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
@@ -36719,7 +33973,7 @@ function parsePubspecLockText(input, lockfilePath = "pubspec.lock") {
   if (!records.ok) {
     return records;
   }
-  const rootName = path43.basename(path43.dirname(lockfilePath)) || "<dart-project>";
+  const rootName = path41.basename(path41.dirname(lockfilePath)) || "<dart-project>";
   return ok({
     rootName,
     lockfilePath,
@@ -36810,15 +34064,15 @@ function deduplicatePubRecords(records) {
     merged.set(record.id, existing ? {
       ...existing,
       direct: existing.direct || record.direct,
-      dependencyType: mergeDependencyType6(existing.dependencyType, record.dependencyType)
+      dependencyType: mergeDependencyType5(existing.dependencyType, record.dependencyType)
     } : record);
   }
   return [...merged.values()];
 }
-function mergeDependencyType6(left, right) {
-  return dependencyTypeRank7(left) >= dependencyTypeRank7(right) ? left : right;
+function mergeDependencyType5(left, right) {
+  return dependencyTypeRank6(left) >= dependencyTypeRank6(right) ? left : right;
 }
-function dependencyTypeRank7(type) {
+function dependencyTypeRank6(type) {
   switch (type) {
     case "production":
       return 4;
@@ -36848,7 +34102,7 @@ function isRecord12(value) {
 }
 
 // src/graph/deno-lock.ts
-import path44 from "node:path";
+import path42 from "node:path";
 
 // src/graph/npm-spec.ts
 function resolveNpmDependencyReference(requestedName, range) {
@@ -37293,7 +34547,7 @@ function walkDependency(input) {
   const existing = input.nodeMap.get(input.record.id);
   if (existing) {
     existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType7(existing.dependencyType, input.dependencyType);
+    existing.dependencyType = mergeDependencyType6(existing.dependencyType, input.dependencyType);
     const installNames = addUniqueInstallName({
       current: existing.installNames,
       installName
@@ -37339,10 +34593,10 @@ function walkDependency(input) {
 function dependencyTypeForChildEdge2(parentType, childEdgeType) {
   return parentType === "production" ? childEdgeType : parentType;
 }
-function mergeDependencyType7(left, right) {
-  return dependencyTypeRank8(left) >= dependencyTypeRank8(right) ? left : right;
+function mergeDependencyType6(left, right) {
+  return dependencyTypeRank7(left) >= dependencyTypeRank7(right) ? left : right;
 }
-function dependencyTypeRank8(type) {
+function dependencyTypeRank7(type) {
   switch (type) {
     case "production":
       return 4;
@@ -37369,7 +34623,7 @@ function rootNameForLockfile(lockfilePath) {
   if (isGitRefSyntheticPath(lockfilePath)) {
     return;
   }
-  const parent = path44.basename(path44.dirname(path44.resolve(lockfilePath)));
+  const parent = path42.basename(path42.dirname(path42.resolve(lockfilePath)));
   return parent && parent !== "." ? parent : undefined;
 }
 function isGitRefSyntheticPath(lockfilePath) {
@@ -37381,7 +34635,7 @@ function isObjectRecord3(value) {
 
 // src/graph/dotnet-nuget-lock.ts
 import { existsSync as existsSync31 } from "node:fs";
-import path45 from "node:path";
+import path43 from "node:path";
 function parseNugetLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -37471,7 +34725,7 @@ function parseNugetLockText(input, lockfilePath = "packages.lock.json") {
   if (!parsed.ok) {
     return parsed;
   }
-  const rootName = path45.basename(path45.dirname(lockfilePath)) || "<dotnet-project>";
+  const rootName = path43.basename(path43.dirname(lockfilePath)) || "<dotnet-project>";
   return ok(graphFromNugetRecords({
     rootName,
     lockfilePath,
@@ -37495,7 +34749,7 @@ function parseDotnetProjectText(input, projectFilePath = "project.csproj", optio
     return parsed;
   }
   return ok(graphFromNugetRecords({
-    rootName: options.rootName ?? (path45.basename(projectFilePath, path45.extname(projectFilePath)) || "<dotnet-project>"),
+    rootName: options.rootName ?? (path43.basename(projectFilePath, path43.extname(projectFilePath)) || "<dotnet-project>"),
     lockfilePath: projectFilePath,
     records: parsed.value
   }));
@@ -37517,7 +34771,7 @@ function parseNugetPackagesConfigText(input, packagesConfigPath = "packages.conf
     return parsed;
   }
   return ok(graphFromNugetRecords({
-    rootName: path45.basename(path45.dirname(packagesConfigPath)) || "<dotnet-project>",
+    rootName: path43.basename(path43.dirname(packagesConfigPath)) || "<dotnet-project>",
     lockfilePath: packagesConfigPath,
     records: parsed.value
   }));
@@ -37595,7 +34849,7 @@ function parseNugetLockJson(input, lockfilePath) {
         ...existing,
         ...existing.integrity ?? record.integrity ? { integrity: existing.integrity ?? record.integrity } : {},
         direct: existing.direct || record.direct,
-        dependencyType: mergeDependencyType8(existing.dependencyType, record.dependencyType),
+        dependencyType: mergeDependencyType7(existing.dependencyType, record.dependencyType),
         dependencies: [...new Set([...existing.dependencies, ...record.dependencies])].sort()
       } : record);
     }
@@ -37875,13 +35129,13 @@ function readNearestDirectoryPackagesProps(input) {
   return parseDirectoryPackagesPropsText(propsText.value, propsPath);
 }
 function findNearestDirectoryPackagesPropsPath(projectFilePath) {
-  let current = path45.dirname(path45.resolve(projectFilePath));
+  let current = path43.dirname(path43.resolve(projectFilePath));
   while (true) {
-    const candidate = path45.join(current, "Directory.Packages.props");
+    const candidate = path43.join(current, "Directory.Packages.props");
     if (existsSync31(candidate)) {
       return candidate;
     }
-    const parent = path45.dirname(current);
+    const parent = path43.dirname(current);
     if (parent === current) {
       return;
     }
@@ -37943,7 +35197,7 @@ function upsertNugetPackageRecord(records, record) {
     ...existing,
     ...existing.integrity ?? record.integrity ? { integrity: existing.integrity ?? record.integrity } : {},
     direct: existing.direct || record.direct,
-    dependencyType: mergeDependencyType8(existing.dependencyType, record.dependencyType),
+    dependencyType: mergeDependencyType7(existing.dependencyType, record.dependencyType),
     dependencies: [...new Set([...existing.dependencies, ...record.dependencies])].sort()
   } : record);
 }
@@ -38081,10 +35335,10 @@ function decodeXmlText2(text) {
   return text.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 }
 function nugetProjectRootName(filePath, fallback) {
-  const fileName = path45.basename(filePath).toLowerCase();
-  const dir = path45.dirname(filePath);
-  const rootDir = fileName === "project.assets.json" && path45.basename(dir).toLowerCase() === "obj" ? path45.dirname(dir) : dir;
-  return path45.basename(rootDir) || fallback;
+  const fileName = path43.basename(filePath).toLowerCase();
+  const dir = path43.dirname(filePath);
+  const rootDir = fileName === "project.assets.json" && path43.basename(dir).toLowerCase() === "obj" ? path43.dirname(dir) : dir;
+  return path43.basename(rootDir) || fallback;
 }
 function normalizeXmlSnippet(text) {
   return text.replace(/\s+/g, " ").trim();
@@ -38110,7 +35364,7 @@ function walkNugetDependency(input) {
   const existing = input.nodeMap.get(input.record.id);
   if (existing) {
     existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType8(existing.dependencyType, input.dependencyType);
+    existing.dependencyType = mergeDependencyType7(existing.dependencyType, input.dependencyType);
     existing.paths.push(nextPath);
   } else {
     input.nodeMap.set(input.record.id, {
@@ -38191,10 +35445,10 @@ function nugetIntegrityParseError(input) {
     }
   }));
 }
-function mergeDependencyType8(left, right) {
-  return dependencyTypeRank9(left) >= dependencyTypeRank9(right) ? left : right;
+function mergeDependencyType7(left, right) {
+  return dependencyTypeRank8(left) >= dependencyTypeRank8(right) ? left : right;
 }
-function dependencyTypeRank9(type) {
+function dependencyTypeRank8(type) {
   switch (type) {
     case "production":
       return 4;
@@ -38214,7 +35468,7 @@ function isRecord13(value) {
 
 // src/graph/elixir-mix-lock.ts
 import { existsSync as existsSync32 } from "node:fs";
-import path46 from "node:path";
+import path44 from "node:path";
 function parseMixLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -38254,7 +35508,7 @@ function parseMixLockText(input, lockfilePath = "mix.lock", options = {}) {
       }
     }));
   }
-  const rootName = path46.basename(path46.dirname(lockfilePath)) || "<elixir-project>";
+  const rootName = path44.basename(path44.dirname(lockfilePath)) || "<elixir-project>";
   const rootTypes = options.mixExsText ? readMixRootTypes(options.mixExsText, records) : new Map;
   return ok({
     rootName,
@@ -38273,7 +35527,7 @@ function parseMixLockText(input, lockfilePath = "mix.lock", options = {}) {
   });
 }
 function readOptionalMixExs(input) {
-  const mixExsPath = path46.join(path46.dirname(input.lockfilePath), "mix.exs");
+  const mixExsPath = path44.join(path44.dirname(input.lockfilePath), "mix.exs");
   if (!existsSync32(mixExsPath)) {
     return ok(undefined);
   }
@@ -38384,7 +35638,7 @@ function readMixRootTypes(input, records) {
       continue;
     }
     const existing = roots.get(dependency.name);
-    roots.set(dependency.name, existing ? mergeDependencyType9(existing, dependency.type) : dependency.type);
+    roots.set(dependency.name, existing ? mergeDependencyType8(existing, dependency.type) : dependency.type);
   }
   return roots;
 }
@@ -38439,7 +35693,7 @@ function stripElixirComment(line) {
   }
   return line;
 }
-function mergeDependencyType9(left, right) {
+function mergeDependencyType8(left, right) {
   if (left === "production" || right === "production") {
     return "production";
   }
@@ -38450,7 +35704,7 @@ function mergeDependencyType9(left, right) {
 }
 
 // src/graph/erlang-rebar-lock.ts
-import path47 from "node:path";
+import path45 from "node:path";
 function parseRebarLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -38487,7 +35741,7 @@ function parseRebarLockText(input, lockfilePath = "rebar.lock") {
       }
     }));
   }
-  const rootName = path47.basename(path47.dirname(lockfilePath)) || "<erlang-project>";
+  const rootName = path45.basename(path45.dirname(lockfilePath)) || "<erlang-project>";
   return ok({
     rootName,
     lockfilePath,
@@ -38580,7 +35834,7 @@ function uniqueSorted(values) {
 
 // src/graph/go-work.ts
 import { existsSync as existsSync33 } from "node:fs";
-import path48 from "node:path";
+import path46 from "node:path";
 function parseGoWorkFile(goWorkPath, options = {}) {
   const goWorkText = readInputTextFile({
     filePath: goWorkPath,
@@ -38597,7 +35851,7 @@ function parseGoWorkFile(goWorkPath, options = {}) {
       }
     }));
   }
-  const workspaceRootDir = path48.dirname(goWorkPath);
+  const workspaceRootDir = path46.dirname(goWorkPath);
   const moduleInputs = readGoWorkModuleInputs({
     goWorkText: goWorkText.value,
     goWorkPath,
@@ -38611,7 +35865,7 @@ function parseGoWorkFile(goWorkPath, options = {}) {
   return parseGoWorkText(goWorkText.value, goWorkPath, {
     moduleInputs: moduleInputs.value,
     workspaceRootDir,
-    goWorkDir: path48.dirname(goWorkPath)
+    goWorkDir: path46.dirname(goWorkPath)
   });
 }
 function parseGoWorkText(input, goWorkPath = "go.work", options = {}) {
@@ -38627,8 +35881,8 @@ function parseGoWorkText(input, goWorkPath = "go.work", options = {}) {
       message: "Failed to parse go.work. Ohrisk requires readable go.mod files for every workspace module."
     });
   }
-  const workspaceRootDir = options.workspaceRootDir ?? path48.dirname(goWorkPath);
-  const goWorkDir = options.goWorkDir ?? path48.dirname(goWorkPath);
+  const workspaceRootDir = options.workspaceRootDir ?? path46.dirname(goWorkPath);
+  const goWorkDir = options.goWorkDir ?? path46.dirname(goWorkPath);
   const workspaceReplacements = normalizeGoReplacementDirectives(directives.value.replacements, goWorkDir, workspaceRootDir);
   const workspaceReplacementGroup = dedupeReplacementGroup({
     replacements: workspaceReplacements,
@@ -38647,7 +35901,7 @@ function parseGoWorkText(input, goWorkPath = "go.work", options = {}) {
   if (!moduleReplacementGroup.ok) {
     return moduleReplacementGroup;
   }
-  const workspaceRootName = path48.basename(workspaceRootDir) || "<go-workspace>";
+  const workspaceRootName = path46.basename(workspaceRootDir) || "<go-workspace>";
   const mergedNodes = new Map;
   for (const moduleInput of [...moduleInputs].sort((left, right) => left.goModPath.localeCompare(right.goModPath))) {
     const graph = parseGoModText(moduleInput.goModText, moduleInput.goModPath, omitUndefined({
@@ -38693,9 +35947,9 @@ function findGoWorkModulePaths(input) {
   }
   const paths = [];
   const seen = new Set;
-  const goWorkDir = path48.dirname(input.goWorkPath);
+  const goWorkDir = path46.dirname(input.goWorkPath);
   for (const usePath of directives.value.usePaths) {
-    const moduleRootDir = path48.resolve(goWorkDir, usePath);
+    const moduleRootDir = path46.resolve(goWorkDir, usePath);
     const relativeModuleRoot = normalizeProjectRelativePath(input.projectRoot, moduleRootDir);
     if (!relativeModuleRoot) {
       return goWorkParseError({
@@ -38705,8 +35959,8 @@ function findGoWorkModulePaths(input) {
         message: "Failed to parse go.work. Workspace module paths must stay inside the project root."
       });
     }
-    const goModPath = path48.join(moduleRootDir, "go.mod");
-    const goSumPath = path48.join(moduleRootDir, "go.sum");
+    const goModPath = path46.join(moduleRootDir, "go.mod");
+    const goSumPath = path46.join(moduleRootDir, "go.sum");
     const goModRelativePath = normalizeProjectRelativePath(input.projectRoot, goModPath);
     const goSumRelativePath = normalizeProjectRelativePath(input.projectRoot, goSumPath);
     if (!goModRelativePath || !goSumRelativePath) {
@@ -38961,7 +36215,7 @@ function mergeGoWorkspaceNode(left, right, goWorkPath) {
   }
   return ok({
     ...left,
-    dependencyType: mergeDependencyType10(left.dependencyType, right.dependencyType),
+    dependencyType: mergeDependencyType9(left.dependencyType, right.dependencyType),
     direct: left.direct || right.direct,
     paths: uniqueDependencyPaths([...left.paths, ...right.paths])
   });
@@ -38985,10 +36239,10 @@ function goReplacementKey(replacement) {
 function goReplacementTargetIdentity(replacement) {
   return goReplacementResolvedSpecifier(replacement.target);
 }
-function mergeDependencyType10(left, right) {
-  return dependencyTypeRank10(left) >= dependencyTypeRank10(right) ? left : right;
+function mergeDependencyType9(left, right) {
+  return dependencyTypeRank9(left) >= dependencyTypeRank9(right) ? left : right;
 }
-function dependencyTypeRank10(type) {
+function dependencyTypeRank9(type) {
   switch (type) {
     case "production":
       return 4;
@@ -39003,8 +36257,8 @@ function dependencyTypeRank10(type) {
   }
 }
 function normalizeProjectRelativePath(projectRoot, targetPath) {
-  const relativePath = path48.relative(projectRoot, targetPath);
-  if (relativePath === ".." || relativePath.startsWith(`..${path48.sep}`) || path48.isAbsolute(relativePath)) {
+  const relativePath = path46.relative(projectRoot, targetPath);
+  if (relativePath === ".." || relativePath.startsWith(`..${path46.sep}`) || path46.isAbsolute(relativePath)) {
     return;
   }
   return relativePath === "" ? "." : relativePath.replace(/\\/g, "/");
@@ -39025,7 +36279,7 @@ function goWorkParseError(input) {
 }
 
 // src/graph/helm-chart.ts
-import path49 from "node:path";
+import path47 from "node:path";
 function parseHelmChartFile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -39035,7 +36289,7 @@ function parseHelmChartFile(lockfilePath, options = {}) {
     return err(createError({
       code: "HELM_CHART_READ_FAILED",
       category: inputFileReadErrorCategory(lockfileText.error),
-      message: lockfileText.error.kind === "too_large" ? `${path49.basename(lockfilePath)} exceeded the maximum supported size.` : `Failed to read ${path49.basename(lockfilePath)}.`,
+      message: lockfileText.error.kind === "too_large" ? `${path47.basename(lockfilePath)} exceeded the maximum supported size.` : `Failed to read ${path47.basename(lockfilePath)}.`,
       details: {
         lockfilePath,
         ...inputFileReadErrorDetails(lockfileText.error)
@@ -39052,7 +36306,7 @@ function parseHelmChartText(input, lockfilePath = "Chart.lock") {
     return err(createError({
       code: "HELM_CHART_PARSE_FAILED",
       category: "unsupported_input",
-      message: `Failed to parse ${path49.basename(lockfilePath)}.`,
+      message: `Failed to parse ${path47.basename(lockfilePath)}.`,
       details: {
         lockfilePath,
         cause: cause instanceof Error ? cause.message : String(cause)
@@ -39063,7 +36317,7 @@ function parseHelmChartText(input, lockfilePath = "Chart.lock") {
   if (!records.ok) {
     return records;
   }
-  const rootName = path49.basename(path49.dirname(lockfilePath)) || "<helm-chart>";
+  const rootName = path47.basename(path47.dirname(lockfilePath)) || "<helm-chart>";
   return ok({
     rootName,
     lockfilePath,
@@ -39143,7 +36397,7 @@ function isRecord14(value) {
 }
 
 // src/graph/haskell-stack-lock.ts
-import path50 from "node:path";
+import path48 from "node:path";
 function parseStackLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -39181,7 +36435,7 @@ function parseStackLockText(input, lockfilePath = "stack.yaml.lock") {
   if (!records.ok) {
     return records;
   }
-  const rootName = path50.basename(path50.dirname(lockfilePath)) || "<haskell-stack-project>";
+  const rootName = path48.basename(path48.dirname(lockfilePath)) || "<haskell-stack-project>";
   return ok({
     rootName,
     lockfilePath,
@@ -39298,8 +36552,8 @@ function uniqueSortedNumbers(values) {
 }
 
 // src/graph/java-gradle-lock.ts
-import { readdirSync as readdirSync30, statSync as statSync29 } from "node:fs";
-import path51 from "node:path";
+import { readdirSync as readdirSync29, statSync as statSync29 } from "node:fs";
+import path49 from "node:path";
 function parseGradleLockfile(lockfilePath, options = {}) {
   if (isDirectory(lockfilePath)) {
     return parseGradleDependencyLocksDirectory(lockfilePath, options);
@@ -39324,7 +36578,7 @@ function parseGradleLockfile(lockfilePath, options = {}) {
 function parseGradleDependencyLocksDirectory(lockfilePath, options) {
   let entries;
   try {
-    entries = readdirSync30(lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile2(path51.join(lockfilePath, entry))).sort();
+    entries = readdirSync29(lockfilePath).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile2(path49.join(lockfilePath, entry))).sort();
   } catch (cause) {
     return err(createError({
       code: "GRADLE_LOCK_READ_FAILED",
@@ -39349,7 +36603,7 @@ function parseGradleDependencyLocksDirectory(lockfilePath, options) {
   }
   const nodeMap = new Map;
   for (const entry of entries) {
-    const filePath = path51.join(lockfilePath, entry);
+    const filePath = path49.join(lockfilePath, entry);
     const graph = parseGradleLockfile(filePath, options);
     if (!graph.ok) {
       return graph;
@@ -39397,7 +36651,7 @@ function parseGradleLockText(input, lockfilePath = "gradle.lockfile") {
       ...existing.configurations,
       ...parsed.configurations
     ])].sort();
-    existing.dependencyType = mergeDependencyType11(existing.dependencyType, parsed.dependencyType);
+    existing.dependencyType = mergeDependencyType10(existing.dependencyType, parsed.dependencyType);
   }
   return ok({
     rootName,
@@ -39418,7 +36672,7 @@ function parseGradleLockText(input, lockfilePath = "gradle.lockfile") {
   });
 }
 function rootNameForGradleLockfile(lockfilePath) {
-  const segments = path51.normalize(lockfilePath).split(path51.sep);
+  const segments = path49.normalize(lockfilePath).split(path49.sep);
   const isDependencyLockDirectory = segments.length >= 2 && segments[segments.length - 1] === "dependency-locks" && segments[segments.length - 2] === "gradle";
   const isDependencyLockfile = segments.length >= 3 && segments[segments.length - 1]?.toLowerCase().endsWith(".lockfile") === true && segments[segments.length - 2] === "dependency-locks" && segments[segments.length - 3] === "gradle";
   if (isDependencyLockDirectory) {
@@ -39429,7 +36683,7 @@ function rootNameForGradleLockfile(lockfilePath) {
     const projectDir = segments[segments.length - 4];
     return projectDir && projectDir !== "" ? projectDir : "<root>";
   }
-  return path51.basename(path51.dirname(lockfilePath)) || "<root>";
+  return path49.basename(path49.dirname(lockfilePath)) || "<root>";
 }
 function mergeGradleGraphNodes(nodeMap, nodes) {
   for (const node of nodes) {
@@ -39438,7 +36692,7 @@ function mergeGradleGraphNodes(nodeMap, nodes) {
       nodeMap.set(node.id, { ...node });
       continue;
     }
-    existing.dependencyType = mergeDependencyType11(existing.dependencyType, node.dependencyType);
+    existing.dependencyType = mergeDependencyType10(existing.dependencyType, node.dependencyType);
     existing.direct = existing.direct || node.direct;
     existing.paths = uniquePaths2([...existing.paths, ...node.paths]);
   }
@@ -39494,10 +36748,10 @@ function isDevelopmentGradleConfiguration(configuration) {
 function gradleRecordId(record) {
   return `${record.groupId}:${record.artifactId}@${record.version}`;
 }
-function mergeDependencyType11(left, right) {
-  return dependencyTypeRank11(left) >= dependencyTypeRank11(right) ? left : right;
+function mergeDependencyType10(left, right) {
+  return dependencyTypeRank10(left) >= dependencyTypeRank10(right) ? left : right;
 }
-function dependencyTypeRank11(type) {
+function dependencyTypeRank10(type) {
   switch (type) {
     case "production":
       return 4;
@@ -39527,7 +36781,7 @@ function isDirectory(pathname) {
 }
 
 // src/graph/java-gradle-version-catalog.ts
-import path52 from "node:path";
+import path50 from "node:path";
 function parseGradleVersionCatalogFile(catalogPath, options = {}) {
   const catalogText = readInputTextFile({
     filePath: catalogPath,
@@ -39546,7 +36800,7 @@ function parseGradleVersionCatalogFile(catalogPath, options = {}) {
   }
   return parseGradleVersionCatalogText(catalogText.value, catalogPath);
 }
-function parseGradleVersionCatalogText(input, catalogPath = path52.join("gradle", "libs.versions.toml")) {
+function parseGradleVersionCatalogText(input, catalogPath = path50.join("gradle", "libs.versions.toml")) {
   const parsed = readGradleVersionCatalogRecords(input, catalogPath);
   if (!parsed.ok) {
     return parsed;
@@ -39584,7 +36838,7 @@ function readGradleVersionCatalogRecords(input, catalogPath) {
   const records = [];
   let currentTable = "other";
   for (const [index, rawLine] of input.split(/\r?\n/).entries()) {
-    const line = stripTomlComment4(rawLine).trim();
+    const line = stripTomlComment3(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -39748,7 +37002,7 @@ function unescapeBasicTomlString(value) {
   return value.replace(/\\b/g, "\b").replace(/\\t/g, "\t").replace(/\\n/g, `
 `).replace(/\\f/g, "\f").replace(/\\r/g, "\r").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
 }
-function stripTomlComment4(line) {
+function stripTomlComment3(line) {
   let quote;
   let escaped = false;
   for (let index = 0;index < line.length; index += 1) {
@@ -39848,9 +37102,9 @@ function normalizeTomlKey(key) {
   return /^[A-Za-z0-9_.-]+$/.test(trimmed) ? trimmed : undefined;
 }
 function gradleCatalogRootName(catalogPath) {
-  const dir = path52.dirname(catalogPath);
-  const rootDir = path52.basename(dir) === "gradle" ? path52.dirname(dir) : dir;
-  return path52.basename(rootDir) || "<gradle-project>";
+  const dir = path50.dirname(catalogPath);
+  const rootDir = path50.basename(dir) === "gradle" ? path50.dirname(dir) : dir;
+  return path50.basename(rootDir) || "<gradle-project>";
 }
 function gradleCatalogParseError(input) {
   return err(createError({
@@ -39863,7 +37117,7 @@ function gradleCatalogParseError(input) {
 
 // src/graph/julia-manifest.ts
 import { existsSync as existsSync34 } from "node:fs";
-import path53 from "node:path";
+import path51 from "node:path";
 function parseJuliaManifestFile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -39896,7 +37150,7 @@ function parseJuliaManifestText(input, lockfilePath = "Manifest.toml", options =
   if (!records.ok) {
     return records;
   }
-  const rootName = path53.basename(path53.dirname(lockfilePath)) || "<julia-project>";
+  const rootName = path51.basename(path51.dirname(lockfilePath)) || "<julia-project>";
   const referencedNames = new Set(records.value.flatMap((record) => record.dependencies));
   const projectRootTypes = options.projectText ? readJuliaProjectRootTypes(options.projectText, records.value) : new Map;
   const projectRootNames = projectRootTypes.size > 0 ? new Set(projectRootTypes.keys()) : undefined;
@@ -39921,7 +37175,7 @@ function parseJuliaManifestText(input, lockfilePath = "Manifest.toml", options =
   });
 }
 function readOptionalJuliaProject(input) {
-  const projectTomlPath = path53.join(path53.dirname(input.lockfilePath), "Project.toml");
+  const projectTomlPath = path51.join(path51.dirname(input.lockfilePath), "Project.toml");
   if (!existsSync34(projectTomlPath)) {
     return ok(undefined);
   }
@@ -39946,7 +37200,7 @@ function readJuliaManifestRecords(input, lockfilePath) {
   const records = new Map;
   let current;
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment5(rawLine).trim();
+    const line = stripTomlComment4(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -40023,7 +37277,7 @@ function readJuliaProjectRootTypes(input, records) {
   const testTargets = new Set;
   let section = "";
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment5(rawLine).trim();
+    const line = stripTomlComment4(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -40069,7 +37323,7 @@ function juliaDependencyType(input) {
   const nextVisiting = new Set(visiting);
   nextVisiting.add(input.record.id);
   for (const parent of input.records.filter((candidate) => candidate.dependencies.includes(input.record.name))) {
-    dependencyType = mergeDependencyType12(dependencyType, juliaDependencyType({
+    dependencyType = mergeDependencyType11(dependencyType, juliaDependencyType({
       record: parent,
       records: input.records,
       rootTypes: input.rootTypes,
@@ -40149,7 +37403,7 @@ function readUnsupportedTomlArrayKinds(input) {
   }
   return [...kinds].sort();
 }
-function stripTomlComment5(line) {
+function stripTomlComment4(line) {
   let inString = false;
   let escaped = false;
   for (let index = 0;index < line.length; index += 1) {
@@ -40172,7 +37426,7 @@ function stripTomlComment5(line) {
   }
   return line;
 }
-function mergeDependencyType12(left, right) {
+function mergeDependencyType11(left, right) {
   if (left === "production" || right === "production") {
     return "production";
   }
@@ -40196,7 +37450,7 @@ function unsupportedJuliaDependencyError(lockfilePath, packageName, valueKinds) 
 }
 
 // src/graph/lua-luarocks-lock.ts
-import path54 from "node:path";
+import path52 from "node:path";
 function parseLuarocksLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -40228,7 +37482,7 @@ function parseLuarocksLockText(input, lockfilePath = "luarocks.lock") {
   if (records.length === 0) {
     return luarocksLockShapeError(lockfilePath, "no_dependencies");
   }
-  const rootName = path54.basename(path54.dirname(lockfilePath)) || "<lua-project>";
+  const rootName = path52.basename(path52.dirname(lockfilePath)) || "<lua-project>";
   return ok({
     rootName,
     lockfilePath,
@@ -40361,7 +37615,7 @@ function uniqueSorted3(values) {
 }
 
 // src/graph/nix-flake-lock.ts
-import path55 from "node:path";
+import path53 from "node:path";
 
 // src/shared/nixos-release-archive.ts
 var NIXOS_RELEASE_ARCHIVE_HOST = "releases.nixos.org";
@@ -40888,7 +38142,7 @@ function stringField(record, field) {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 }
 function rootProjectName(lockfilePath) {
-  return path55.basename(path55.dirname(lockfilePath)) || "<nix-flake>";
+  return path53.basename(path53.dirname(lockfilePath)) || "<nix-flake>";
 }
 function nixLockShapeError(input) {
   return err(createError({
@@ -40903,7 +38157,7 @@ function isRecord16(value) {
 }
 
 // src/graph/npm-bun-lock.ts
-import path56 from "node:path";
+import path54 from "node:path";
 function parseBunLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -41043,7 +38297,7 @@ function parsePackageIdentity(input) {
   return { name: parsed.name, version: parsed.reference };
 }
 function isLocalArtifactReference(value) {
-  return value.startsWith("file:") || isWorkspaceLocalArtifactReference(value) || value.startsWith(".") || path56.isAbsolute(value) || /^[A-Za-z]:[\\/]/.test(value);
+  return value.startsWith("file:") || isWorkspaceLocalArtifactReference(value) || value.startsWith(".") || path54.isAbsolute(value) || /^[A-Za-z]:[\\/]/.test(value);
 }
 function isWorkspaceLocalArtifactReference(value) {
   if (!value.startsWith("workspace:")) {
@@ -41165,7 +38419,7 @@ function walkDependency2(input) {
   const existing = input.nodeMap.get(input.record.id);
   if (existing) {
     existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType13(existing.dependencyType, input.dependencyType);
+    existing.dependencyType = mergeDependencyType12(existing.dependencyType, input.dependencyType);
     const installNames = addUniqueInstallName({
       current: existing.installNames,
       installName
@@ -41208,10 +38462,10 @@ function walkDependency2(input) {
 function dependencyTypeForChildEdge3(parentType, childEdgeType) {
   return parentType === "production" ? childEdgeType : parentType;
 }
-function mergeDependencyType13(left, right) {
-  return dependencyTypeRank12(left) >= dependencyTypeRank12(right) ? left : right;
+function mergeDependencyType12(left, right) {
+  return dependencyTypeRank11(left) >= dependencyTypeRank11(right) ? left : right;
 }
-function dependencyTypeRank12(type) {
+function dependencyTypeRank11(type) {
   switch (type) {
     case "production":
       return 4;
@@ -41230,7 +38484,7 @@ function isObjectRecord4(value) {
 }
 
 // src/graph/npm-package-json.ts
-import path57 from "node:path";
+import path55 from "node:path";
 var DEPENDENCY_FIELDS = [
   "dependencies",
   "devDependencies",
@@ -41317,7 +38571,7 @@ function packageNameOrDirectory(value, packageJsonPath) {
   if (typeof value === "string" && value.trim() !== "") {
     return value;
   }
-  const parent = path57.basename(path57.dirname(packageJsonPath));
+  const parent = path55.basename(path55.dirname(packageJsonPath));
   return parent === "" ? "." : parent;
 }
 function isRecord17(value) {
@@ -41796,7 +39050,7 @@ function walkDependencies(input) {
     const pathKey = JSON.stringify(nextPath);
     const existing = input.nodeMap.get(state.record.id);
     const previousDependencyType = existing?.dependencyType;
-    const mergedDependencyType = previousDependencyType ? mergeDependencyType14(previousDependencyType, state.dependencyType) : state.dependencyType;
+    const mergedDependencyType = previousDependencyType ? mergeDependencyType13(previousDependencyType, state.dependencyType) : state.dependencyType;
     const dependencyTypeStrengthened = previousDependencyType !== undefined && mergedDependencyType !== previousDependencyType;
     const node = existing ?? {
       id: state.record.id,
@@ -41887,7 +39141,7 @@ function walkV1Dependency(input) {
   const existing = input.nodeMap.get(id);
   if (existing) {
     existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType14(existing.dependencyType, input.dependencyType);
+    existing.dependencyType = mergeDependencyType13(existing.dependencyType, input.dependencyType);
     existing.paths.push(nextPath);
   } else {
     input.nodeMap.set(id, {
@@ -41941,13 +39195,13 @@ function collectReferencedRootV1DependencyNames(rootDependencies) {
   }
   return referenced;
 }
-function mergeDependencyType14(left, right) {
-  return dependencyTypeRank13(left) >= dependencyTypeRank13(right) ? left : right;
+function mergeDependencyType13(left, right) {
+  return dependencyTypeRank12(left) >= dependencyTypeRank12(right) ? left : right;
 }
 function dependencyTypeForChildEdge4(parentType, childEdgeType) {
   return parentType === "production" ? childEdgeType : parentType;
 }
-function dependencyTypeRank13(type) {
+function dependencyTypeRank12(type) {
   switch (type) {
     case "production":
       return 4;
@@ -42007,7 +39261,7 @@ function isObjectRecord5(value) {
 
 // src/graph/npm-pnpm-lock.ts
 import { existsSync as existsSync35 } from "node:fs";
-import path58 from "node:path";
+import path56 from "node:path";
 import { isDeepStrictEqual } from "node:util";
 var PNPM_MAX_PATHS_PER_PACKAGE = 64;
 var PNPM_MAX_YAML_DOCUMENTS = 16;
@@ -42243,7 +39497,7 @@ function defineSafeRecordValue(record, key, value) {
   });
 }
 function readPnpmWorkspaceCatalogs(input) {
-  const workspacePath = path58.join(path58.dirname(input.lockfilePath), "pnpm-workspace.yaml");
+  const workspacePath = path56.join(path56.dirname(input.lockfilePath), "pnpm-workspace.yaml");
   if (!existsSync35(workspacePath)) {
     return ok(emptyPnpmCatalogs());
   }
@@ -42560,7 +39814,7 @@ function walkDependency3(input) {
   ];
   const existing = input.nodeMap.get(input.record.id);
   const previousDependencyType = existing?.dependencyType;
-  const mergedDependencyType = previousDependencyType ? mergeDependencyType15(previousDependencyType, input.dependencyType) : input.dependencyType;
+  const mergedDependencyType = previousDependencyType ? mergeDependencyType14(previousDependencyType, input.dependencyType) : input.dependencyType;
   const dependencyTypeStrengthened = previousDependencyType !== undefined && mergedDependencyType !== previousDependencyType;
   const node = existing ?? {
     id: input.record.id,
@@ -42634,13 +39888,13 @@ function walkDependency3(input) {
     });
   }
 }
-function mergeDependencyType15(left, right) {
-  return dependencyTypeRank14(left) >= dependencyTypeRank14(right) ? left : right;
+function mergeDependencyType14(left, right) {
+  return dependencyTypeRank13(left) >= dependencyTypeRank13(right) ? left : right;
 }
 function dependencyTypeForChildEdge5(parentType, childEdgeType) {
   return parentType === "production" ? childEdgeType : parentType;
 }
-function dependencyTypeRank14(type) {
+function dependencyTypeRank13(type) {
   switch (type) {
     case "production":
       return 4;
@@ -42663,8 +39917,8 @@ function isObjectRecord6(value) {
 
 // src/graph/npm-yarn-lock.ts
 var yarnLockfileModule = __toESM(require_lockfile(), 1);
-import { existsSync as existsSync36, readdirSync as readdirSync31, statSync as statSync30 } from "node:fs";
-import path59 from "node:path";
+import { existsSync as existsSync36, readdirSync as readdirSync30, statSync as statSync30 } from "node:fs";
+import path57 from "node:path";
 
 // src/graph/yarn-classic-input.ts
 function prepareYarnClassicInput(input) {
@@ -42711,7 +39965,7 @@ function prepareYarnClassicInput(input) {
 // src/graph/npm-yarn-lock.ts
 var yarnLockfile = yarnLockfileModule;
 var YARN_MAX_PATHS_PER_PACKAGE = 64;
-function parseYarnLockfile(lockfilePath, packageJsonPath = path59.join(path59.dirname(lockfilePath), "package.json"), options = {}) {
+function parseYarnLockfile(lockfilePath, packageJsonPath = path57.join(path57.dirname(lockfilePath), "package.json"), options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
     maxBytes: options.lockfileMaxBytes ?? LOCKFILE_MAX_BYTES
@@ -42748,7 +40002,7 @@ function parseYarnLockfile(lockfilePath, packageJsonPath = path59.join(path59.di
     return parsedRootPackageJson;
   }
   const workspacePackageJsonTexts = readWorkspacePackageJsonTexts({
-    projectRoot: path59.dirname(packageJsonPath),
+    projectRoot: path57.dirname(packageJsonPath),
     rootPackageJson: parsedRootPackageJson.value,
     lockfilePath,
     packageJsonMaxBytes: options.packageJsonMaxBytes ?? PACKAGE_JSON_MAX_BYTES
@@ -42898,7 +40152,7 @@ function readWorkspacePackageJsonTexts(input) {
   return ok(packageJsons);
 }
 function findYarnWorkspacePackageJsonPathsFromRelativePaths(input) {
-  const projectRoot = path59.resolve(input.projectRoot);
+  const projectRoot = path57.resolve(input.projectRoot);
   const patterns = readWorkspacePatterns(input.workspaces);
   const includedPatterns = patterns.filter((pattern) => !pattern.startsWith("!"));
   const excludedPatterns = patterns.filter((pattern) => pattern.startsWith("!")).map((pattern) => pattern.slice(1));
@@ -42916,7 +40170,7 @@ function findYarnWorkspacePackageJsonPathsFromRelativePaths(input) {
       continue;
     }
     locations.set(relativePackageJsonPath, {
-      packageJsonPath: path59.join(projectRoot, ...relativePackageJsonPath.split("/")),
+      packageJsonPath: path57.join(projectRoot, ...relativePackageJsonPath.split("/")),
       relativePackageJsonPath,
       workspacePath
     });
@@ -42926,26 +40180,26 @@ function findYarnWorkspacePackageJsonPathsFromRelativePaths(input) {
 function findYarnWorkspacePackageJsonPaths(input) {
   const locations = [];
   const seen = new Set;
-  const projectRoot = path59.resolve(input.projectRoot);
+  const projectRoot = path57.resolve(input.projectRoot);
   const patterns = readWorkspacePatterns(input.workspaces);
-  const excludedWorkspacePaths = new Set(patterns.filter((pattern) => pattern.startsWith("!")).flatMap((pattern) => expandWorkspacePattern(projectRoot, pattern.slice(1))).filter((workspacePath) => isInsideDirectory2(projectRoot, workspacePath)).map((workspacePath) => path59.resolve(workspacePath)));
+  const excludedWorkspacePaths = new Set(patterns.filter((pattern) => pattern.startsWith("!")).flatMap((pattern) => expandWorkspacePattern(projectRoot, pattern.slice(1))).filter((workspacePath) => isInsideDirectory(projectRoot, workspacePath)).map((workspacePath) => path57.resolve(workspacePath)));
   for (const pattern of patterns) {
     if (pattern.startsWith("!")) {
       continue;
     }
     for (const workspacePath of expandWorkspacePattern(projectRoot, pattern)) {
-      if (!isInsideDirectory2(projectRoot, workspacePath)) {
+      if (!isInsideDirectory(projectRoot, workspacePath)) {
         continue;
       }
-      const packageJsonPath = path59.join(workspacePath, "package.json");
-      const relativePackageJsonPath = path59.relative(projectRoot, packageJsonPath).replace(/\\/g, "/");
-      if (seen.has(relativePackageJsonPath) || excludedWorkspacePaths.has(path59.resolve(workspacePath)) || !existsSync36(packageJsonPath)) {
+      const packageJsonPath = path57.join(workspacePath, "package.json");
+      const relativePackageJsonPath = path57.relative(projectRoot, packageJsonPath).replace(/\\/g, "/");
+      if (seen.has(relativePackageJsonPath) || excludedWorkspacePaths.has(path57.resolve(workspacePath)) || !existsSync36(packageJsonPath)) {
         continue;
       }
       locations.push({
         packageJsonPath,
         relativePackageJsonPath,
-        workspacePath: path59.relative(projectRoot, workspacePath).replace(/\\/g, "/")
+        workspacePath: path57.relative(projectRoot, workspacePath).replace(/\\/g, "/")
       });
       seen.add(relativePackageJsonPath);
     }
@@ -42985,12 +40239,12 @@ function expandWorkspaceSegments(currentPath, segments) {
   }
   if (segment.includes("*")) {
     const matcher = wildcardSegmentMatcher(segment);
-    return listChildDirectories(currentPath).filter((childPath) => matcher.test(path59.basename(childPath))).flatMap((childPath) => expandWorkspaceSegments(childPath, rest));
+    return listChildDirectories(currentPath).filter((childPath) => matcher.test(path57.basename(childPath))).flatMap((childPath) => expandWorkspaceSegments(childPath, rest));
   }
-  return expandWorkspaceSegments(path59.join(currentPath, segment), rest);
+  return expandWorkspaceSegments(path57.join(currentPath, segment), rest);
 }
 function normalizeWorkspaceRelativePath(value) {
-  const normalized = path59.posix.normalize(value.replace(/\\/g, "/"));
+  const normalized = path57.posix.normalize(value.replace(/\\/g, "/"));
   if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/")) {
     return;
   }
@@ -43016,13 +40270,13 @@ function matchesWorkspaceSegments(pathSegments, patternSegments, pathIndex, patt
   const matcher = wildcardSegmentMatcher(pattern);
   return matcher.test(pathSegments[pathIndex] ?? "") && matchesWorkspaceSegments(pathSegments, patternSegments, pathIndex + 1, patternIndex + 1);
 }
-function isInsideDirectory2(rootPath, candidatePath) {
-  const relativePath = path59.relative(rootPath, path59.resolve(candidatePath));
-  return relativePath === "" || relativePath !== ".." && !relativePath.startsWith(`..${path59.sep}`) && !path59.isAbsolute(relativePath);
+function isInsideDirectory(rootPath, candidatePath) {
+  const relativePath = path57.relative(rootPath, path57.resolve(candidatePath));
+  return relativePath === "" || relativePath !== ".." && !relativePath.startsWith(`..${path57.sep}`) && !path57.isAbsolute(relativePath);
 }
 function listChildDirectories(parentPath) {
   try {
-    return readdirSync31(parentPath, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name !== "node_modules").map((entry) => path59.join(parentPath, entry.name));
+    return readdirSync30(parentPath, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name !== "node_modules").map((entry) => path57.join(parentPath, entry.name));
   } catch {
     return [];
   }
@@ -43367,7 +40621,7 @@ function walkDependency4(input) {
   const existing = input.nodeMap.get(input.record.id);
   if (existing) {
     existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType16(existing.dependencyType, input.dependencyType);
+    existing.dependencyType = mergeDependencyType15(existing.dependencyType, input.dependencyType);
     const installNames = addUniqueInstallName({
       current: existing.installNames,
       installName
@@ -43424,13 +40678,13 @@ function walkDependency4(input) {
 function sameDependencyPath(left, right) {
   return left.length === right.length && left.every((segment, index) => segment === right[index]);
 }
-function mergeDependencyType16(left, right) {
-  return dependencyTypeRank15(left) >= dependencyTypeRank15(right) ? left : right;
+function mergeDependencyType15(left, right) {
+  return dependencyTypeRank14(left) >= dependencyTypeRank14(right) ? left : right;
 }
 function dependencyTypeForChildEdge6(parentType, childEdgeType) {
   return parentType === "production" ? childEdgeType : parentType;
 }
-function dependencyTypeRank15(type) {
+function dependencyTypeRank14(type) {
   switch (type) {
     case "production":
       return 4;
@@ -43449,7 +40703,7 @@ function isObjectRecord7(value) {
 }
 
 // src/graph/perl-cpanfile-snapshot.ts
-import path60 from "node:path";
+import path58 from "node:path";
 function parseCpanfileSnapshotFile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -43473,7 +40727,7 @@ function parseCpanfileSnapshotText(input, lockfilePath = "cpanfile.snapshot") {
   if (!records.ok) {
     return records;
   }
-  const rootName = path60.basename(path60.dirname(lockfilePath)) || "<perl-project>";
+  const rootName = path58.basename(path58.dirname(lockfilePath)) || "<perl-project>";
   return ok({
     rootName,
     lockfilePath,
@@ -43665,7 +40919,7 @@ function cpanfileSnapshotShapeError(lockfilePath, reason, entry) {
 
 // src/graph/php-composer-lock.ts
 import { existsSync as existsSync37 } from "node:fs";
-import path61 from "node:path";
+import path59 from "node:path";
 function parseComposerLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -43698,7 +40952,7 @@ function parseComposerLockText(input, lockfilePath = "composer.lock", options = 
   if (!parsed.ok) {
     return parsed;
   }
-  const rootName = readComposerProjectName(options.composerJsonText) ?? path61.basename(path61.dirname(lockfilePath)) ?? "<composer-project>";
+  const rootName = readComposerProjectName(options.composerJsonText) ?? path59.basename(path59.dirname(lockfilePath)) ?? "<composer-project>";
   const rootDependencies = readComposerRootDependencies(omitUndefined({
     composerJsonText: options.composerJsonText,
     records: parsed.value
@@ -43727,7 +40981,7 @@ function parseComposerLockText(input, lockfilePath = "composer.lock", options = 
   });
 }
 function readOptionalComposerJson(input) {
-  const composerJsonPath = path61.join(path61.dirname(input.lockfilePath), "composer.json");
+  const composerJsonPath = path59.join(path59.dirname(input.lockfilePath), "composer.json");
   if (!existsSync37(composerJsonPath)) {
     return ok(undefined);
   }
@@ -43879,7 +41133,7 @@ function walkComposerDependency(input) {
   const existing = input.nodeMap.get(input.record.id);
   if (existing) {
     existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType17(existing.dependencyType, input.dependencyType);
+    existing.dependencyType = mergeDependencyType16(existing.dependencyType, input.dependencyType);
     existing.paths.push(nextPath);
   } else {
     input.nodeMap.set(input.record.id, {
@@ -43918,7 +41172,7 @@ function deduplicateComposerRecords(records) {
     const existing = seen.get(record.id);
     seen.set(record.id, existing ? {
       ...existing,
-      dependencyType: mergeDependencyType17(existing.dependencyType, record.dependencyType),
+      dependencyType: mergeDependencyType16(existing.dependencyType, record.dependencyType),
       dependencies: [...new Set([...existing.dependencies, ...record.dependencies])].sort()
     } : record);
   }
@@ -43937,10 +41191,10 @@ function composerLockShapeError(lockfilePath) {
 function dependencyTypeForChildEdge7(parentType, childType) {
   return parentType === "production" ? childType : parentType;
 }
-function mergeDependencyType17(left, right) {
-  return dependencyTypeRank16(left) >= dependencyTypeRank16(right) ? left : right;
+function mergeDependencyType16(left, right) {
+  return dependencyTypeRank15(left) >= dependencyTypeRank15(right) ? left : right;
 }
-function dependencyTypeRank16(type) {
+function dependencyTypeRank15(type) {
   switch (type) {
     case "production":
       return 4;
@@ -43960,11 +41214,11 @@ function isRecord18(value) {
 
 // src/graph/python-pdm-lock.ts
 import { existsSync as existsSync39 } from "node:fs";
-import path63 from "node:path";
+import path61 from "node:path";
 
 // src/graph/python-local-source.ts
 import { existsSync as existsSync38 } from "node:fs";
-import path62 from "node:path";
+import path60 from "node:path";
 var LOCAL_SOURCE_METADATA_FILES = ["pyproject.toml", "setup.cfg", "PKG-INFO"];
 var LOCAL_SOURCE_EVIDENCE_FILE_CANDIDATES = [
   "LICENSE",
@@ -44072,7 +41326,7 @@ function readPythonLocalSourcePackage(input) {
   });
 }
 function createDiskPythonLocalSourceFileReader(input) {
-  const rootDir = path62.resolve(input.rootDir);
+  const rootDir = path60.resolve(input.rootDir);
   return ({ sourcePath, relativeFilePath, fromFilePath }) => {
     const resolvedSource = resolveDiskLocalSourcePath({
       sourcePath,
@@ -44083,8 +41337,8 @@ function createDiskPythonLocalSourceFileReader(input) {
     if (!resolvedSource.ok) {
       return resolvedSource;
     }
-    const resolvedFilePath = path62.resolve(resolvedSource.value, relativeFilePath);
-    if (!isPathInsideOrEqual3(resolvedFilePath, resolvedSource.value)) {
+    const resolvedFilePath = path60.resolve(resolvedSource.value, relativeFilePath);
+    if (!isPathInsideOrEqual4(resolvedFilePath, resolvedSource.value)) {
       return err(createError({
         code: input.errors.parseCode,
         category: "unsupported_input",
@@ -44162,7 +41416,7 @@ function parseLocalSourcePyproject(input) {
   const poetry = {};
   let section = "other";
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment6(rawLine).trim();
+    const line = stripTomlComment5(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -44272,7 +41526,7 @@ function readLocalSourceEvidence(input) {
       continue;
     }
     files.push({
-      path: path62.posix.join(input.sourcePath.replace(/\\/g, "/"), relativeFilePath),
+      path: path60.posix.join(input.sourcePath.replace(/\\/g, "/"), relativeFilePath),
       kind,
       text: sourceFile.value.text
     });
@@ -44295,7 +41549,7 @@ function readLocalSourceEvidence(input) {
   });
 }
 function resolveDiskLocalSourcePath(input) {
-  if (path62.isAbsolute(input.sourcePath)) {
+  if (path60.isAbsolute(input.sourcePath)) {
     return err(createError({
       code: input.errors.parseCode,
       category: "unsupported_input",
@@ -44306,8 +41560,8 @@ function resolveDiskLocalSourcePath(input) {
       }
     }));
   }
-  const resolved = path62.resolve(path62.dirname(input.fromFilePath), input.sourcePath);
-  if (!isPathInsideOrEqual3(resolved, input.rootDir)) {
+  const resolved = path60.resolve(path60.dirname(input.fromFilePath), input.sourcePath);
+  if (!isPathInsideOrEqual4(resolved, input.rootDir)) {
     return err(createError({
       code: input.errors.parseCode,
       category: "unsupported_input",
@@ -44346,7 +41600,7 @@ function safeDecodePath(value) {
 }
 function isRelativeLocalPath(value, allowBareRelativePath) {
   const normalized = value.replace(/\\/g, "/");
-  if (normalized === "" || normalized.startsWith("/") || path62.win32.isAbsolute(value) || /^[A-Za-z][A-Za-z0-9+.-]*:/u.test(normalized) || /[\u0000-\u001f\u007f]/u.test(normalized)) {
+  if (normalized === "" || normalized.startsWith("/") || path60.win32.isAbsolute(value) || /^[A-Za-z][A-Za-z0-9+.-]*:/u.test(normalized) || /[\u0000-\u001f\u007f]/u.test(normalized)) {
     return false;
   }
   return allowBareRelativePath || normalized === "." || normalized === ".." || normalized.startsWith("./") || normalized.startsWith("../");
@@ -44362,14 +41616,14 @@ function unquotePythonLocalSourcePath(input) {
   return value;
 }
 function readTomlStringAssignment(line, key) {
-  const match = new RegExp(`^${escapeRegExp3(key)}\\s*=\\s*(["'])(.*?)\\1\\s*$`).exec(line);
+  const match = new RegExp(`^${escapeRegExp2(key)}\\s*=\\s*(["'])(.*?)\\1\\s*$`).exec(line);
   return match?.[2];
 }
 function readTomlInlineTextLicense(line, key) {
-  const match = new RegExp(`^${escapeRegExp3(key)}\\s*=\\s*\\{\\s*text\\s*=\\s*(["'])(.*?)\\1\\s*\\}\\s*$`).exec(line);
+  const match = new RegExp(`^${escapeRegExp2(key)}\\s*=\\s*\\{\\s*text\\s*=\\s*(["'])(.*?)\\1\\s*\\}\\s*$`).exec(line);
   return match?.[2];
 }
-function stripTomlComment6(line) {
+function stripTomlComment5(line) {
   return stripInlineComment(line, "#");
 }
 function stripIniComment(line) {
@@ -44398,12 +41652,12 @@ function stripInlineComment(line, marker) {
   }
   return line;
 }
-function escapeRegExp3(input) {
+function escapeRegExp2(input) {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-function isPathInsideOrEqual3(candidate, root) {
-  const relative = path62.relative(root, candidate);
-  return relative === "" || !relative.startsWith("..") && !path62.isAbsolute(relative);
+function isPathInsideOrEqual4(candidate, root) {
+  const relative = path60.relative(root, candidate);
+  return relative === "" || !relative.startsWith("..") && !path60.isAbsolute(relative);
 }
 
 // src/graph/python-pdm-lock.ts
@@ -44438,7 +41692,7 @@ function parsePdmLockfile(lockfilePath, options = {}) {
   return parsePdmLockText(lockfileText.value, lockfilePath, omitUndefined({
     pyprojectText: pyproject.value,
     readLocalSourceFile: createDiskPythonLocalSourceFileReader({
-      rootDir: path63.dirname(lockfilePath),
+      rootDir: path61.dirname(lockfilePath),
       maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES,
       errors: PDM_LOCK_LOCAL_SOURCE_ERRORS
     })
@@ -44464,7 +41718,7 @@ function parsePdmLockText(input, lockfilePath = "pdm.lock", options = {}) {
         }
       }));
     }
-    const rootName = readPyprojectName(options.pyprojectText) ?? path63.basename(path63.dirname(lockfilePath)) ?? "<root>";
+    const rootName = readPyprojectName(options.pyprojectText) ?? path61.basename(path61.dirname(lockfilePath)) ?? "<root>";
     const rootDependencies = readPdmRootDependencies(omitUndefined({
       pyprojectText: options.pyprojectText,
       records
@@ -44504,7 +41758,7 @@ function parsePdmLockText(input, lockfilePath = "pdm.lock", options = {}) {
   }
 }
 function readOptionalPyproject(input) {
-  const pyprojectPath = path63.join(path63.dirname(input.lockfilePath), "pyproject.toml");
+  const pyprojectPath = path61.join(path61.dirname(input.lockfilePath), "pyproject.toml");
   if (!existsSync39(pyprojectPath)) {
     return ok(undefined);
   }
@@ -44611,7 +41865,7 @@ function parsePdmPackageRecords(input, options) {
   };
   try {
     for (const rawLine of input.split(/\r?\n/)) {
-      const line = stripTomlComment7(rawLine).trim();
+      const line = stripTomlComment6(rawLine).trim();
       if (line === "") {
         continue;
       }
@@ -44644,12 +41898,12 @@ function parsePdmPackageRecords(input, options) {
       if (currentTable !== "package") {
         continue;
       }
-      const name = readStringAssignment3(line, "name");
+      const name = readStringAssignment2(line, "name");
       if (name !== undefined) {
         current.name = name;
         continue;
       }
-      const version = readStringAssignment3(line, "version");
+      const version = readStringAssignment2(line, "version");
       if (version !== undefined) {
         current.version = version;
         continue;
@@ -44729,12 +41983,12 @@ function parsePyprojectRootDependencies(input) {
     }
     for (const name of dependencyNamesFromArray(activeArray.lines.join(`
 `))) {
-      mergeRootDependency2(roots, name, activeArray.type);
+      mergeRootDependency(roots, name, activeArray.type);
     }
     activeArray = undefined;
   };
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment7(rawLine).trim();
+    const line = stripTomlComment6(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -44754,7 +42008,7 @@ function parsePyprojectRootDependencies(input) {
       const value = line.slice(line.indexOf("=") + 1).trim();
       if (value.includes("[") && value.includes("]")) {
         for (const name of dependencyNamesFromArray(value)) {
-          mergeRootDependency2(roots, name, "production");
+          mergeRootDependency(roots, name, "production");
         }
       } else if (value.startsWith("[")) {
         activeArray = { type: "production", lines: [value] };
@@ -44766,7 +42020,7 @@ function parsePyprojectRootDependencies(input) {
       const type = section === "project.optional-dependencies" ? "optional" : "development";
       if (value.includes("[") && value.includes("]")) {
         for (const name of dependencyNamesFromArray(value)) {
-          mergeRootDependency2(roots, name, type);
+          mergeRootDependency(roots, name, type);
         }
       } else if (value.startsWith("[")) {
         activeArray = { type, lines: [value] };
@@ -44798,7 +42052,7 @@ function walkPdmDependency(input) {
   const existing = input.nodeMap.get(input.record.id);
   if (existing) {
     existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType18(existing.dependencyType, input.dependencyType);
+    existing.dependencyType = mergeDependencyType17(existing.dependencyType, input.dependencyType);
     existing.paths.push(nextPath);
   } else {
     input.nodeMap.set(input.record.id, {
@@ -44838,13 +42092,13 @@ function readPyprojectName(text) {
   }
   let section = "";
   for (const rawLine of text.split(/\r?\n/)) {
-    const line = stripTomlComment7(rawLine).trim();
+    const line = stripTomlComment6(rawLine).trim();
     if (line.startsWith("[") && line.endsWith("]")) {
       section = line.slice(1, -1);
       continue;
     }
     if (section === "project") {
-      const name = readStringAssignment3(line, "name");
+      const name = readStringAssignment2(line, "name");
       if (name) {
         return name;
       }
@@ -44862,12 +42116,12 @@ function dependencyTypeForPdmRecord(record) {
   }
   return "unknown";
 }
-function readStringAssignment3(line, key) {
-  const match = new RegExp(`^${escapeRegExp4(key)}\\s*=\\s*"([^"]*)"`).exec(line);
+function readStringAssignment2(line, key) {
+  const match = new RegExp(`^${escapeRegExp3(key)}\\s*=\\s*"([^"]*)"`).exec(line);
   return match?.[1];
 }
 function readPdmSourceAssignment(line) {
-  const pathSource = readStringAssignment3(line, "path");
+  const pathSource = readStringAssignment2(line, "path");
   if (pathSource !== undefined) {
     const sourcePath = normalizePythonLocalSourcePathSpec(pathSource, {
       allowBareRelativePath: true
@@ -44879,7 +42133,7 @@ function readPdmSourceAssignment(line) {
       }
     };
   }
-  const remoteSource = readStringAssignment3(line, "git") ?? readStringAssignment3(line, "url");
+  const remoteSource = readStringAssignment2(line, "git") ?? readStringAssignment2(line, "url");
   if (remoteSource === undefined) {
     return;
   }
@@ -44891,7 +42145,7 @@ function readPdmSourceAssignment(line) {
   };
 }
 function readInlineStringArrayAssignment(line, key) {
-  const match = new RegExp(`^${escapeRegExp4(key)}\\s*=\\s*\\[(.*)\\]\\s*$`).exec(line);
+  const match = new RegExp(`^${escapeRegExp3(key)}\\s*=\\s*\\[(.*)\\]\\s*$`).exec(line);
   if (!match?.[1]) {
     return;
   }
@@ -44925,12 +42179,12 @@ function dependencyNameFromRequirement(requirement) {
   const match = /^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?/.exec(requirement.trim());
   return match?.[1];
 }
-function mergeRootDependency2(roots, rawName, type) {
+function mergeRootDependency(roots, rawName, type) {
   const name = dependencyNameFromRequirement(rawName) ?? rawName;
   const existing = roots.get(name);
-  roots.set(name, existing ? mergeDependencyType18(existing, type) : type);
+  roots.set(name, existing ? mergeDependencyType17(existing, type) : type);
 }
-function stripTomlComment7(line) {
+function stripTomlComment6(line) {
   let inString = false;
   let escaped = false;
   for (let index = 0;index < line.length; index += 1) {
@@ -44959,10 +42213,10 @@ function normalizePythonPackageName3(name) {
 function dependencyTypeForChildEdge8(parentType, childType) {
   return parentType === "production" ? childType : parentType;
 }
-function mergeDependencyType18(left, right) {
-  return dependencyTypeRank17(left) >= dependencyTypeRank17(right) ? left : right;
+function mergeDependencyType17(left, right) {
+  return dependencyTypeRank16(left) >= dependencyTypeRank16(right) ? left : right;
 }
-function dependencyTypeRank17(type) {
+function dependencyTypeRank16(type) {
   switch (type) {
     case "production":
       return 4;
@@ -44976,7 +42230,7 @@ function dependencyTypeRank17(type) {
       return 0;
   }
 }
-function escapeRegExp4(input) {
+function escapeRegExp3(input) {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 function classifyUnsupportedPythonSource(value, sourceKey) {
@@ -44984,7 +42238,7 @@ function classifyUnsupportedPythonSource(value, sourceKey) {
   if (sourceKey === "git" || /^(?:git|hg|svn|bzr)\+(?:https?|ssh|git):\/\//i.test(source)) {
     return "unsupported_remote_vcs_source";
   }
-  if (path63.isAbsolute(source) || source.startsWith("file://")) {
+  if (path61.isAbsolute(source) || source.startsWith("file://")) {
     return "unsupported_absolute_source_path";
   }
   if (/^(?:https?|ssh|git):\/\//i.test(source)) {
@@ -44994,7 +42248,7 @@ function classifyUnsupportedPythonSource(value, sourceKey) {
 }
 
 // src/graph/python-pipfile-lock.ts
-import path64 from "node:path";
+import path62 from "node:path";
 var PIPFILE_LOCK_LOCAL_SOURCE_ERRORS = {
   parseCode: "PIPFILE_LOCK_PARSE_FAILED",
   readCode: "PIPFILE_LOCK_READ_FAILED",
@@ -45018,7 +42272,7 @@ function parsePipfileLockfile(lockfilePath, options = {}) {
   }
   return parsePipfileLockText(lockfileText.value, lockfilePath, {
     readLocalSourceFile: createDiskPythonLocalSourceFileReader({
-      rootDir: path64.dirname(lockfilePath),
+      rootDir: path62.dirname(lockfilePath),
       maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES,
       errors: PIPFILE_LOCK_LOCAL_SOURCE_ERRORS
     })
@@ -45060,7 +42314,7 @@ function parsePipfileLockText(input, lockfilePath = "Pipfile.lock", options = {}
       }
     }));
   }
-  const rootName = options.rootName ?? (path64.basename(path64.dirname(lockfilePath)) || "<pipfile-project>");
+  const rootName = options.rootName ?? (path62.basename(path62.dirname(lockfilePath)) || "<pipfile-project>");
   const deduplicatedRecords = deduplicatePipfileLockRecords(records).sort((left, right) => left.id.localeCompare(right.id));
   const embeddedEvidence = deduplicatedRecords.map((record) => record.evidence).filter((evidence) => evidence !== undefined);
   return ok({
@@ -45219,7 +42473,7 @@ function deduplicatePipfileLockRecords(records) {
     const existing = seen.get(record.id);
     seen.set(record.id, existing ? {
       ...existing,
-      dependencyType: mergeDependencyType19(existing.dependencyType, record.dependencyType)
+      dependencyType: mergeDependencyType18(existing.dependencyType, record.dependencyType)
     } : record);
   }
   return [...seen.values()];
@@ -45265,10 +42519,10 @@ function pipfileLockUnsupportedSourceError(input) {
     }
   }));
 }
-function mergeDependencyType19(left, right) {
-  return dependencyTypeRank18(left) >= dependencyTypeRank18(right) ? left : right;
+function mergeDependencyType18(left, right) {
+  return dependencyTypeRank17(left) >= dependencyTypeRank17(right) ? left : right;
 }
-function dependencyTypeRank18(type) {
+function dependencyTypeRank17(type) {
   switch (type) {
     case "production":
       return 4;
@@ -45290,7 +42544,7 @@ function classifyUnsupportedPipfileSource(value) {
   if (/^(?:git|hg|svn|bzr)\+(?:https?|ssh|git):\/\//i.test(source)) {
     return "unsupported_remote_vcs_source";
   }
-  if (path64.isAbsolute(source) || source.startsWith("file://")) {
+  if (path62.isAbsolute(source) || source.startsWith("file://")) {
     return "unsupported_absolute_source_path";
   }
   if (/^(?:https?|ssh|git):\/\//i.test(source)) {
@@ -45301,7 +42555,7 @@ function classifyUnsupportedPipfileSource(value) {
 
 // src/graph/python-poetry-lock.ts
 import { existsSync as existsSync40 } from "node:fs";
-import path65 from "node:path";
+import path63 from "node:path";
 function parsePoetryLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -45342,7 +42596,7 @@ function parsePoetryLockText(input, lockfilePath = "poetry.lock", options = {}) 
         }
       }));
     }
-    const rootName = readPyprojectName2(options.pyprojectText) ?? path65.basename(path65.dirname(lockfilePath)) ?? "<root>";
+    const rootName = readPyprojectName2(options.pyprojectText) ?? path63.basename(path63.dirname(lockfilePath)) ?? "<root>";
     const rootDependencies = readPoetryRootDependencies(omitUndefined({
       pyprojectText: options.pyprojectText,
       records
@@ -45381,7 +42635,7 @@ function parsePoetryLockText(input, lockfilePath = "poetry.lock", options = {}) 
   }
 }
 function readOptionalPyproject2(input) {
-  const pyprojectPath = path65.join(path65.dirname(input.lockfilePath), "pyproject.toml");
+  const pyprojectPath = path63.join(path63.dirname(input.lockfilePath), "pyproject.toml");
   if (!existsSync40(pyprojectPath)) {
     return ok(undefined);
   }
@@ -45422,7 +42676,7 @@ function parsePoetryPackageRecords(input) {
     });
   };
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment8(rawLine).trim();
+    const line = stripTomlComment7(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -45448,17 +42702,17 @@ function parsePoetryPackageRecords(input) {
       continue;
     }
     if (currentTable === "package") {
-      const name = readStringAssignment4(line, "name");
+      const name = readStringAssignment3(line, "name");
       if (name !== undefined) {
         current.name = name;
         continue;
       }
-      const version = readStringAssignment4(line, "version");
+      const version = readStringAssignment3(line, "version");
       if (version !== undefined) {
         current.version = version;
         continue;
       }
-      const category = readStringAssignment4(line, "category");
+      const category = readStringAssignment3(line, "category");
       if (category !== undefined) {
         current.category = category;
         continue;
@@ -45468,7 +42722,7 @@ function parsePoetryPackageRecords(input) {
         current.groups = groups;
         continue;
       }
-      const optional = readBooleanAssignment2(line, "optional");
+      const optional = readBooleanAssignment(line, "optional");
       if (optional !== undefined) {
         current.optional = optional;
         continue;
@@ -45503,12 +42757,12 @@ function parsePyprojectRootDependencies2(input) {
     }
     for (const name of dependencyNamesFromArray2(activeArray.lines.join(`
 `))) {
-      mergeRootDependency3(roots, name, activeArray.type);
+      mergeRootDependency2(roots, name, activeArray.type);
     }
     activeArray = undefined;
   };
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment8(rawLine).trim();
+    const line = stripTomlComment7(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -45527,14 +42781,14 @@ function parsePyprojectRootDependencies2(input) {
     if (section === "tool.poetry.dependencies") {
       const dependencyName = readDependencyKey(line);
       if (dependencyName && normalizePythonPackageName4(dependencyName) !== "python") {
-        mergeRootDependency3(roots, dependencyName, "production");
+        mergeRootDependency2(roots, dependencyName, "production");
       }
       continue;
     }
     if (section === "tool.poetry.dev-dependencies" || /^tool\.poetry\.group\.[^.]+\.dependencies$/.test(section)) {
       const dependencyName = readDependencyKey(line);
       if (dependencyName && normalizePythonPackageName4(dependencyName) !== "python") {
-        mergeRootDependency3(roots, dependencyName, "development");
+        mergeRootDependency2(roots, dependencyName, "development");
       }
       continue;
     }
@@ -45542,7 +42796,7 @@ function parsePyprojectRootDependencies2(input) {
       const value = line.slice(line.indexOf("=") + 1).trim();
       if (value.includes("[") && value.includes("]")) {
         for (const name of dependencyNamesFromArray2(value)) {
-          mergeRootDependency3(roots, name, "production");
+          mergeRootDependency2(roots, name, "production");
         }
       } else if (value.startsWith("[")) {
         activeArray = { type: "production", lines: [value] };
@@ -45553,7 +42807,7 @@ function parsePyprojectRootDependencies2(input) {
       const value = line.slice(line.indexOf("=") + 1).trim();
       if (value.includes("[") && value.includes("]")) {
         for (const name of dependencyNamesFromArray2(value)) {
-          mergeRootDependency3(roots, name, "development");
+          mergeRootDependency2(roots, name, "development");
         }
       } else if (value.startsWith("[")) {
         activeArray = { type: "development", lines: [value] };
@@ -45585,7 +42839,7 @@ function walkPoetryDependency(input) {
   const existing = input.nodeMap.get(input.record.id);
   if (existing) {
     existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType20(existing.dependencyType, input.dependencyType);
+    existing.dependencyType = mergeDependencyType19(existing.dependencyType, input.dependencyType);
     existing.paths.push(nextPath);
   } else {
     input.nodeMap.set(input.record.id, {
@@ -45625,13 +42879,13 @@ function readPyprojectName2(text) {
   }
   let section = "";
   for (const rawLine of text.split(/\r?\n/)) {
-    const line = stripTomlComment8(rawLine).trim();
+    const line = stripTomlComment7(rawLine).trim();
     if (line.startsWith("[") && line.endsWith("]")) {
       section = line.slice(1, -1);
       continue;
     }
     if (section === "tool.poetry" || section === "project") {
-      const name = readStringAssignment4(line, "name");
+      const name = readStringAssignment3(line, "name");
       if (name) {
         return name;
       }
@@ -45655,16 +42909,16 @@ function dependencyTypeForPoetryRecord(record) {
   }
   return "unknown";
 }
-function readStringAssignment4(line, key) {
-  const match = new RegExp(`^${escapeRegExp5(key)}\\s*=\\s*"([^"]*)"`).exec(line);
+function readStringAssignment3(line, key) {
+  const match = new RegExp(`^${escapeRegExp4(key)}\\s*=\\s*"([^"]*)"`).exec(line);
   return match?.[1];
 }
-function readBooleanAssignment2(line, key) {
-  const match = new RegExp(`^${escapeRegExp5(key)}\\s*=\\s*(true|false)\\b`).exec(line);
+function readBooleanAssignment(line, key) {
+  const match = new RegExp(`^${escapeRegExp4(key)}\\s*=\\s*(true|false)\\b`).exec(line);
   return match ? match[1] === "true" : undefined;
 }
 function readStringArrayAssignment(line, key) {
-  const match = new RegExp(`^${escapeRegExp5(key)}\\s*=\\s*\\[([^\\]]*)\\]`).exec(line);
+  const match = new RegExp(`^${escapeRegExp4(key)}\\s*=\\s*\\[([^\\]]*)\\]`).exec(line);
   if (!match?.[1]) {
     return;
   }
@@ -45675,7 +42929,7 @@ function readDependencyKey(line) {
   if (separatorIndex <= 0) {
     return;
   }
-  return unquoteTomlKey2(line.slice(0, separatorIndex).trim());
+  return unquoteTomlKey(line.slice(0, separatorIndex).trim());
 }
 function dependencyNamesFromArray2(value) {
   const names = [];
@@ -45691,18 +42945,18 @@ function dependencyNameFromRequirement2(requirement) {
   const match = /^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?/.exec(requirement.trim());
   return match?.[1];
 }
-function mergeRootDependency3(roots, rawName, type) {
+function mergeRootDependency2(roots, rawName, type) {
   const name = dependencyNameFromRequirement2(rawName) ?? rawName;
   const existing = roots.get(name);
-  roots.set(name, existing ? mergeDependencyType20(existing, type) : type);
+  roots.set(name, existing ? mergeDependencyType19(existing, type) : type);
 }
-function unquoteTomlKey2(key) {
+function unquoteTomlKey(key) {
   if (key.startsWith('"') && key.endsWith('"') || key.startsWith("'") && key.endsWith("'")) {
     return key.slice(1, -1);
   }
   return key;
 }
-function stripTomlComment8(line) {
+function stripTomlComment7(line) {
   let inString = false;
   let escaped = false;
   for (let index = 0;index < line.length; index += 1) {
@@ -45731,10 +42985,10 @@ function normalizePythonPackageName4(name) {
 function dependencyTypeForChildEdge9(parentType, childType) {
   return parentType === "production" ? childType : parentType;
 }
-function mergeDependencyType20(left, right) {
-  return dependencyTypeRank19(left) >= dependencyTypeRank19(right) ? left : right;
+function mergeDependencyType19(left, right) {
+  return dependencyTypeRank18(left) >= dependencyTypeRank18(right) ? left : right;
 }
-function dependencyTypeRank19(type) {
+function dependencyTypeRank18(type) {
   switch (type) {
     case "production":
       return 4;
@@ -45748,12 +43002,12 @@ function dependencyTypeRank19(type) {
       return 0;
   }
 }
-function escapeRegExp5(input) {
+function escapeRegExp4(input) {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // src/graph/python-pylock.ts
-import path66 from "node:path";
+import path64 from "node:path";
 var PYLOCK_LOCAL_SOURCE_ERRORS = {
   parseCode: "PYLOCK_PARSE_FAILED",
   readCode: "PYLOCK_READ_FAILED",
@@ -45777,7 +43031,7 @@ function parsePylockFile(lockfilePath, options = {}) {
   }
   return parsePylockText(lockfileText.value, lockfilePath, {
     readLocalSourceFile: createDiskPythonLocalSourceFileReader({
-      rootDir: path66.dirname(lockfilePath),
+      rootDir: path64.dirname(lockfilePath),
       maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES,
       errors: PYLOCK_LOCAL_SOURCE_ERRORS
     })
@@ -45933,7 +43187,7 @@ function parsePylockPackageRecords(input, options) {
     }
   };
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment9(rawLine).trim();
+    const line = stripTomlComment8(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -45978,12 +43232,12 @@ function parsePylockPackageRecords(input, options) {
       continue;
     }
     if (currentTable === "packages") {
-      const name = readStringAssignment5(line, "name");
+      const name = readStringAssignment4(line, "name");
       if (name !== undefined) {
         current.name = name;
         continue;
       }
-      const version = readStringAssignment5(line, "version");
+      const version = readStringAssignment4(line, "version");
       if (version !== undefined) {
         current.version = version;
         continue;
@@ -45999,14 +43253,14 @@ function parsePylockPackageRecords(input, options) {
       }
     }
     if (currentTable === "packages.dependencies") {
-      const name = readStringAssignment5(line, "name");
+      const name = readStringAssignment4(line, "name");
       if (name !== undefined) {
         currentDependency = {
           ...currentDependency,
           name
         };
       }
-      const version = readStringAssignment5(line, "version");
+      const version = readStringAssignment4(line, "version");
       if (version !== undefined) {
         currentDependency = {
           ...currentDependency,
@@ -46015,7 +43269,7 @@ function parsePylockPackageRecords(input, options) {
       }
     }
     if (currentTable === "packages.directory") {
-      const path = readStringAssignment5(line, "path");
+      const path = readStringAssignment4(line, "path");
       if (path !== undefined) {
         current.directoryPath = path;
       }
@@ -46034,13 +43288,13 @@ function readDependencyRefsFromInlineTableArray(value) {
   const refs = [];
   for (const match of value.matchAll(/\{([^}]*)\}/g)) {
     const table = match[1] ?? "";
-    const name = readStringAssignment5(table.trim(), "name");
+    const name = readStringAssignment4(table.trim(), "name");
     if (!name) {
       continue;
     }
     refs.push(omitUndefined({
       name,
-      version: readStringAssignment5(table.trim(), "version")
+      version: readStringAssignment4(table.trim(), "version")
     }));
   }
   return refs;
@@ -46098,11 +43352,11 @@ function readPylockRootName(lockfilePath) {
   }
   return;
 }
-function readStringAssignment5(line, key) {
-  const match = new RegExp(`(?:^|[,\\s])${escapeRegExp6(key)}\\s*=\\s*("([^"]*)"|'([^']*)')`).exec(line);
+function readStringAssignment4(line, key) {
+  const match = new RegExp(`(?:^|[,\\s])${escapeRegExp5(key)}\\s*=\\s*("([^"]*)"|'([^']*)')`).exec(line);
   return match?.[2] ?? match?.[3];
 }
-function stripTomlComment9(line) {
+function stripTomlComment8(line) {
   let inString = false;
   let escaped = false;
   let quote;
@@ -46130,12 +43384,12 @@ function stripTomlComment9(line) {
 function normalizePythonPackageName5(name) {
   return name.toLowerCase().replace(/[-_.]+/g, "-");
 }
-function escapeRegExp6(input) {
+function escapeRegExp5(input) {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // src/graph/python-pyproject.ts
-import path67 from "node:path";
+import path65 from "node:path";
 function parsePyprojectFile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -46155,7 +43409,7 @@ function parsePyprojectFile(lockfilePath, options = {}) {
   return parsePyprojectText(lockfileText.value, lockfilePath);
 }
 function parsePyprojectText(input, lockfilePath = "pyproject.toml") {
-  const rootName = readProjectName(input) ?? path67.basename(path67.dirname(lockfilePath)) ?? "<root>";
+  const rootName = readProjectName(input) ?? path65.basename(path65.dirname(lockfilePath)) ?? "<root>";
   const dependencies = readPyprojectDependencies(input, lockfilePath);
   if (!dependencies.ok) {
     return dependencies;
@@ -46215,7 +43469,7 @@ function readPyprojectDependencies(input, lockfilePath) {
     return ok(undefined);
   };
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment10(rawLine).trim();
+    const line = stripTomlComment9(rawLine).trim();
     if (line === "") {
       continue;
     }
@@ -46280,7 +43534,7 @@ function parseExactDependency(entry) {
 function readProjectName(input) {
   let section = "";
   for (const rawLine of input.split(/\r?\n/)) {
-    const line = stripTomlComment10(rawLine).trim();
+    const line = stripTomlComment9(rawLine).trim();
     if (line.startsWith("[") && line.endsWith("]")) {
       section = line.slice(1, -1);
       continue;
@@ -46304,7 +43558,7 @@ function readStringArrayValues2(value) {
   }
   return values.filter((item) => item.length > 0);
 }
-function stripTomlComment10(line) {
+function stripTomlComment9(line) {
   let inString = false;
   let escaped = false;
   for (let index = 0;index < line.length; index += 1) {
@@ -46329,7 +43583,7 @@ function stripTomlComment10(line) {
 }
 
 // src/graph/python-requirements.ts
-import path68 from "node:path";
+import path66 from "node:path";
 var MAX_REQUIREMENTS_INCLUDE_DEPTH = 32;
 var MAX_REQUIREMENTS_PATHS_PER_PACKAGE = 64;
 var MAX_REQUIREMENTS_PATH_DEPTH = 64;
@@ -46356,17 +43610,17 @@ function parseRequirementsFile(lockfilePath, options = {}) {
   }
   return parseRequirementsText(lockfileText.value, lockfilePath, {
     readIncludedFile: createDiskRequirementsIncludedFileReader({
-      rootDir: path68.dirname(lockfilePath),
+      rootDir: path66.dirname(lockfilePath),
       maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES
     }),
     readLocalSourceFile: createDiskRequirementsLocalSourceFileReader({
-      rootDir: path68.dirname(lockfilePath),
+      rootDir: path66.dirname(lockfilePath),
       maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES
     })
   });
 }
 function parseRequirementsText(input, lockfilePath = "requirements.txt", options = {}) {
-  const rootName = options.rootName ?? (path68.basename(path68.dirname(lockfilePath)) || "<root>");
+  const rootName = options.rootName ?? (path66.basename(path66.dirname(lockfilePath)) || "<root>");
   const constraints = new Map;
   const records = parseRequirementsDocument({
     text: input,
@@ -46769,9 +44023,9 @@ function isUnsupportedRequirementDirective(line) {
   return line.startsWith("-e ") || line.startsWith("--editable ") || line.startsWith("git+") || line.startsWith("http://") || line.startsWith("https://") || line.startsWith("file:");
 }
 function createDiskRequirementsIncludedFileReader(input) {
-  const rootDir = path68.resolve(input.rootDir);
+  const rootDir = path66.resolve(input.rootDir);
   return ({ includePath, fromFilePath }) => {
-    if (path68.isAbsolute(includePath)) {
+    if (path66.isAbsolute(includePath)) {
       return err(createError({
         code: "REQUIREMENTS_PARSE_FAILED",
         category: "unsupported_input",
@@ -46782,8 +44036,8 @@ function createDiskRequirementsIncludedFileReader(input) {
         }
       }));
     }
-    const resolved = path68.resolve(path68.dirname(fromFilePath), includePath);
-    if (!isPathInsideOrEqual4(resolved, rootDir)) {
+    const resolved = path66.resolve(path66.dirname(fromFilePath), includePath);
+    if (!isPathInsideOrEqual5(resolved, rootDir)) {
       return err(createError({
         code: "REQUIREMENTS_PARSE_FAILED",
         category: "unsupported_input",
@@ -46864,9 +44118,9 @@ function unquoteRequirementPath(input) {
   }
   return value;
 }
-function isPathInsideOrEqual4(candidate, root) {
-  const relative = path68.relative(root, candidate);
-  return relative === "" || !relative.startsWith("..") && !path68.isAbsolute(relative);
+function isPathInsideOrEqual5(candidate, root) {
+  const relative = path66.relative(root, candidate);
+  return relative === "" || !relative.startsWith("..") && !path66.isAbsolute(relative);
 }
 function splitRequirementComment(line) {
   let quote;
@@ -47011,7 +44265,7 @@ function isRequirementRootVia(value) {
 }
 
 // src/graph/python-uv-lock.ts
-import path69 from "node:path";
+import path67 from "node:path";
 var UV_LOCK_LOCAL_SOURCE_ERRORS = {
   parseCode: "UV_LOCK_PARSE_FAILED",
   readCode: "UV_LOCK_READ_FAILED",
@@ -47036,7 +44290,7 @@ function parseUvLockfile(lockfilePath, options = {}) {
   }
   return parseUvLockText(lockfileText.value, lockfilePath, {
     readLocalSourceFile: createDiskPythonLocalSourceFileReader({
-      rootDir: options.localSourceRootDir ?? path69.dirname(lockfilePath),
+      rootDir: options.localSourceRootDir ?? path67.dirname(lockfilePath),
       maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES,
       errors: UV_LOCK_LOCAL_SOURCE_ERRORS
     })
@@ -47222,7 +44476,7 @@ function parseUvPackageRecords(input, options) {
   };
   try {
     for (const rawLine of input.split(/\r?\n/)) {
-      const line = stripTomlComment11(rawLine).trim();
+      const line = stripTomlComment10(rawLine).trim();
       if (line === "") {
         continue;
       }
@@ -47261,12 +44515,12 @@ function parseUvPackageRecords(input, options) {
         continue;
       }
       if (currentTable === "package") {
-        const name = readStringAssignment6(line, "name");
+        const name = readStringAssignment5(line, "name");
         if (name !== undefined) {
           current.name = name;
           continue;
         }
-        const version = readStringAssignment6(line, "version");
+        const version = readStringAssignment5(line, "version");
         if (version !== undefined) {
           current.version = version;
           continue;
@@ -47353,7 +44607,7 @@ function readDependencyNamesFromArray(value) {
   }
   return names;
 }
-function readStringAssignment6(line, key) {
+function readStringAssignment5(line, key) {
   const match = new RegExp(`^${key}\\s*=\\s*"([^"]*)"`).exec(line);
   return match?.[1];
 }
@@ -47413,7 +44667,7 @@ function classifyUnsupportedPythonSource2(value, sourceKey) {
   if (sourceKey === "git" || /^(?:git|hg|svn|bzr)\+(?:https?|ssh|git):\/\//i.test(source)) {
     return "unpinned_remote_vcs_source";
   }
-  if (path69.isAbsolute(source) || source.startsWith("file://")) {
+  if (path67.isAbsolute(source) || source.startsWith("file://")) {
     return "unsupported_absolute_source_path";
   }
   if (/^(?:https?|ssh|git):\/\//i.test(source)) {
@@ -47481,7 +44735,7 @@ function safeUvSourceForErrorDetails(value, reason) {
     return "<remote source>";
   }
 }
-function stripTomlComment11(line) {
+function stripTomlComment10(line) {
   let inString = false;
   let escaped = false;
   for (let index = 0;index < line.length; index += 1) {
@@ -47517,7 +44771,7 @@ function walkUvDependencies(input) {
     const pathKey = JSON.stringify(nextPath);
     const existing = input.nodeMap.get(state.record.id);
     const previousDependencyType = existing?.dependencyType;
-    const mergedDependencyType = previousDependencyType ? mergeDependencyType21(previousDependencyType, state.dependencyType) : state.dependencyType;
+    const mergedDependencyType = previousDependencyType ? mergeDependencyType20(previousDependencyType, state.dependencyType) : state.dependencyType;
     const dependencyTypeStrengthened = previousDependencyType !== undefined && mergedDependencyType !== previousDependencyType;
     const node = existing ?? {
       id: state.record.id,
@@ -47602,10 +44856,10 @@ function normalizePythonPackageName7(name) {
 function dependencyTypeForChildEdge10(parentType, childEdgeType) {
   return parentType === "production" ? childEdgeType : parentType;
 }
-function mergeDependencyType21(left, right) {
-  return dependencyTypeRank20(left) >= dependencyTypeRank20(right) ? left : right;
+function mergeDependencyType20(left, right) {
+  return dependencyTypeRank19(left) >= dependencyTypeRank19(right) ? left : right;
 }
-function dependencyTypeRank20(type) {
+function dependencyTypeRank19(type) {
   switch (type) {
     case "production":
       return 4;
@@ -47622,7 +44876,7 @@ function dependencyTypeRank20(type) {
 
 // src/graph/r-renv-lock.ts
 import { existsSync as existsSync41 } from "node:fs";
-import path70 from "node:path";
+import path68 from "node:path";
 function parseRenvLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -47669,7 +44923,7 @@ function parseRenvLockText(input, lockfilePath = "renv.lock", options = {}) {
   if (!records.ok) {
     return records;
   }
-  const rootName = path70.basename(path70.dirname(lockfilePath)) || "<r-project>";
+  const rootName = path68.basename(path68.dirname(lockfilePath)) || "<r-project>";
   const rootTypes = options.descriptionText ? readDescriptionRootTypes(options.descriptionText, records.value) : new Map;
   return ok({
     rootName,
@@ -47687,7 +44941,7 @@ function parseRenvLockText(input, lockfilePath = "renv.lock", options = {}) {
   });
 }
 function readOptionalDescription(input) {
-  const descriptionPath = path70.join(path70.dirname(input.lockfilePath), "DESCRIPTION");
+  const descriptionPath = path68.join(path68.dirname(input.lockfilePath), "DESCRIPTION");
   if (!existsSync41(descriptionPath)) {
     return ok(undefined);
   }
@@ -47813,7 +45067,7 @@ function isRecord20(value) {
 
 // src/graph/ruby-gemfile-lock.ts
 import { existsSync as existsSync42 } from "node:fs";
-import path71 from "node:path";
+import path69 from "node:path";
 function parseGemfileLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -47854,7 +45108,7 @@ function parseGemfileLockText(input, lockfilePath = "Gemfile.lock", options = {}
         }
       }));
     }
-    const rootName = path71.basename(path71.dirname(lockfilePath)) || "<ruby-project>";
+    const rootName = path69.basename(path69.dirname(lockfilePath)) || "<ruby-project>";
     const roots = readGemRootDependencies(omitUndefined({
       gemfileText: options.gemfileText,
       lockfileDependencies: parsed.dependencies,
@@ -47894,7 +45148,7 @@ function parseGemfileLockText(input, lockfilePath = "Gemfile.lock", options = {}
   }
 }
 function readOptionalGemfile(input) {
-  const gemfilePath = path71.join(path71.dirname(input.lockfilePath), "Gemfile");
+  const gemfilePath = path69.join(path69.dirname(input.lockfilePath), "Gemfile");
   if (!existsSync42(gemfilePath)) {
     return ok(undefined);
   }
@@ -47978,7 +45232,7 @@ function readGemRootDependencies(input) {
     const existing = byName.get(dependency.name);
     byName.set(dependency.name, {
       name: dependency.name,
-      type: existing ? mergeDependencyType22(existing.type, dependency.type) : dependency.type
+      type: existing ? mergeDependencyType21(existing.type, dependency.type) : dependency.type
     });
   }
   return byName.size > 0 ? [...byName.values()].sort((left, right) => left.name.localeCompare(right.name)) : fallbackRoots;
@@ -48007,7 +45261,7 @@ function readGemfileDependencies(gemfileText) {
       const inlineGroupType = readGemfileInlineGroupType(line);
       dependencies.push({
         name,
-        type: inlineGroupType && hasGroupFrame ? mergeDependencyType22(blockType, inlineGroupType) : inlineGroupType ?? blockType
+        type: inlineGroupType && hasGroupFrame ? mergeDependencyType21(blockType, inlineGroupType) : inlineGroupType ?? blockType
       });
     }
     if (blockStack.length > 0 && isRubyBlockStart(line)) {
@@ -48090,7 +45344,7 @@ function walkGemDependency(input) {
   const existing = input.nodeMap.get(input.record.id);
   if (existing) {
     existing.direct = existing.direct || input.direct;
-    existing.dependencyType = mergeDependencyType22(existing.dependencyType, input.dependencyType);
+    existing.dependencyType = mergeDependencyType21(existing.dependencyType, input.dependencyType);
     existing.paths.push(nextPath);
   } else {
     input.nodeMap.set(input.record.id, {
@@ -48123,7 +45377,7 @@ function resolveGemRecord(records, name) {
   const matches = records.filter((record) => record.name === name);
   return matches.length === 1 ? matches[0] : undefined;
 }
-function mergeDependencyType22(left, right) {
+function mergeDependencyType21(left, right) {
   if (left === "production" || right === "production") {
     return "production";
   }
@@ -48131,6 +45385,1184 @@ function mergeDependencyType22(left, right) {
     return "development";
   }
   return left;
+}
+
+// src/graph/rust-cargo-lock.ts
+import { Buffer as Buffer3 } from "node:buffer";
+import { existsSync as existsSync43, readdirSync as readdirSync31 } from "node:fs";
+import path70 from "node:path";
+var CARGO_MAX_PATHS_PER_PACKAGE = 64;
+var CARGO_WORKSPACE_EVIDENCE_FILE_LIMIT = 50;
+var CARGO_WORKSPACE_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+function parseCargoWorkspacePackageMetadata(input) {
+  return readCargoPackageLicenseMetadata(input.manifestText, readCargoWorkspacePackageLicenseMetadata(input.workspaceManifestText));
+}
+function readCargoWorkspaceEvidenceFromSnapshot(input) {
+  const directory = normalizeProjectRelativeDirectory(input.directoryRelativePath);
+  if (directory === undefined) {
+    return { files: [], warnings: [] };
+  }
+  const prefix = directory === "" ? "" : `${directory}/`;
+  const candidates = [...input.relativePaths].map((relativePath) => relativePath.replace(/\\/g, "/")).filter((relativePath) => relativePath.startsWith(prefix)).map((relativePath) => ({
+    relativePath,
+    fileName: relativePath.slice(prefix.length)
+  })).filter((candidate) => candidate.fileName !== "" && !candidate.fileName.includes("/") && classifyEvidenceFile(candidate.fileName) !== undefined).sort((left, right) => left.fileName.localeCompare(right.fileName)).slice(0, CARGO_WORKSPACE_EVIDENCE_FILE_LIMIT);
+  const files = [];
+  const warnings = [];
+  const maxBytes = input.maxBytes ?? CARGO_WORKSPACE_EVIDENCE_FILE_MAX_BYTES;
+  for (const candidate of candidates) {
+    const kind = classifyEvidenceFile(candidate.fileName);
+    if (!kind) {
+      continue;
+    }
+    const text = input.readFile(candidate.relativePath);
+    if (!text.ok) {
+      warnings.push(`Failed to read ${candidate.fileName}.`);
+      continue;
+    }
+    const observedBytes = Buffer3.byteLength(text.value, "utf8");
+    if (observedBytes > maxBytes) {
+      warnings.push(`Skipped ${candidate.fileName}: evidence file exceeded the maximum supported size.`);
+      continue;
+    }
+    files.push({ path: candidate.fileName, kind, text: text.value });
+  }
+  return { files, warnings };
+}
+function parseCargoLockfile(lockfilePath, options = {}) {
+  const lockfileText = readInputTextFile({
+    filePath: lockfilePath,
+    maxBytes: options.maxBytes ?? LOCKFILE_MAX_BYTES
+  });
+  if (!lockfileText.ok) {
+    return err(createError({
+      code: "CARGO_LOCK_READ_FAILED",
+      category: inputFileReadErrorCategory(lockfileText.error),
+      message: lockfileText.error.kind === "too_large" ? "Cargo.lock exceeded the maximum supported size." : "Failed to read Cargo.lock.",
+      details: {
+        lockfilePath,
+        ...inputFileReadErrorDetails(lockfileText.error)
+      }
+    }));
+  }
+  const manifest = readOptionalCargoManifest({
+    lockfilePath,
+    maxBytes: options.manifestMaxBytes ?? LOCKFILE_MAX_BYTES
+  });
+  if (!manifest.ok) {
+    return manifest;
+  }
+  const evidenceFileMaxBytes = options.evidenceFileMaxBytes ?? CARGO_WORKSPACE_EVIDENCE_FILE_MAX_BYTES;
+  const rootManifestEvidence = manifest.value ? readCargoWorkspaceEvidenceDirectory({
+    directory: path70.dirname(lockfilePath),
+    maxBytes: evidenceFileMaxBytes
+  }) : undefined;
+  const memberManifests = manifest.value ? readCargoWorkspaceMemberManifests({
+    lockfilePath,
+    rootManifestText: manifest.value,
+    maxBytes: options.manifestMaxBytes ?? LOCKFILE_MAX_BYTES,
+    evidenceFileMaxBytes
+  }) : ok([]);
+  if (!memberManifests.ok) {
+    return memberManifests;
+  }
+  return parseCargoLockText(lockfileText.value, lockfilePath, omitUndefined({
+    manifestText: manifest.value,
+    memberManifestTexts: memberManifests.value.map((item) => item.manifestText),
+    manifestEvidence: rootManifestEvidence,
+    memberManifestEvidence: memberManifests.value.map((item) => item.evidence)
+  }));
+}
+function parseCargoLockText(input, lockfilePath = "Cargo.lock", options = {}) {
+  try {
+    const records = parseCargoPackageRecords(input);
+    if (records.length === 0) {
+      return err(createError({
+        code: "CARGO_LOCK_PARSE_FAILED",
+        category: "unsupported_input",
+        message: "Failed to parse Cargo.lock. Ohrisk expected at least one [[package]] record.",
+        details: {
+          lockfilePath
+        }
+      }));
+    }
+    const rootName = options.rootName ?? readCargoPackageName(options.manifestText) ?? path70.basename(path70.dirname(lockfilePath)) ?? "<cargo-project>";
+    const rootDependencies = readCargoRootDependencies(omitUndefined({
+      manifestText: options.manifestText,
+      memberManifestTexts: options.memberManifestTexts,
+      records
+    }));
+    const nodeMap = new Map;
+    const recordIndex = indexCargoPackageRecords(records);
+    const traversalStates = [];
+    const pathLimitAffected = new Set;
+    for (const rootDependency of rootDependencies) {
+      const record = resolveCargoPackageRecord(records, omitUndefined({
+        name: rootDependency.name,
+        version: rootDependency.version
+      }));
+      if (!record) {
+        continue;
+      }
+      traversalStates.push({
+        record,
+        dependencyType: rootDependency.type,
+        direct: true,
+        path: [rootName]
+      });
+    }
+    walkCargoDependencies({
+      states: traversalStates,
+      recordIndex,
+      nodeMap,
+      pathLimitAffected
+    });
+    return ok({
+      rootName,
+      lockfilePath,
+      nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
+      ...cargoWorkspaceEmbeddedEvidence(options.manifestText, options.memberManifestTexts ?? [], records, options.manifestEvidence, options.memberManifestEvidence ?? []),
+      ...pathLimitAffected.size > 0 ? {
+        diagnostics: [{
+          code: "dependency_paths_truncated",
+          affectedNodeCount: pathLimitAffected.size,
+          limit: CARGO_MAX_PATHS_PER_PACKAGE,
+          message: "Cargo dependency paths were limited."
+        }]
+      } : {}
+    });
+  } catch (cause) {
+    return err(createError({
+      code: "CARGO_LOCK_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Failed to parse Cargo.lock.",
+      details: {
+        lockfilePath,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
+function readOptionalCargoManifest(input) {
+  const manifestPath = path70.join(path70.dirname(input.lockfilePath), "Cargo.toml");
+  if (!existsSync43(manifestPath)) {
+    return ok(undefined);
+  }
+  const manifestText = readInputTextFile({
+    filePath: manifestPath,
+    maxBytes: input.maxBytes
+  });
+  if (!manifestText.ok) {
+    return err(createError({
+      code: "CARGO_MANIFEST_READ_FAILED",
+      category: inputFileReadErrorCategory(manifestText.error),
+      message: manifestText.error.kind === "too_large" ? "Cargo.toml exceeded the maximum supported size." : "Failed to read Cargo.toml.",
+      details: {
+        manifestPath,
+        ...inputFileReadErrorDetails(manifestText.error)
+      }
+    }));
+  }
+  return ok(manifestText.value);
+}
+function readCargoWorkspaceMemberManifests(input) {
+  const rootDir = path70.dirname(input.lockfilePath);
+  const manifests = [];
+  for (const memberManifest of findCargoWorkspaceMemberManifestPaths({
+    rootManifestText: input.rootManifestText,
+    lockfilePath: input.lockfilePath,
+    projectRoot: rootDir
+  })) {
+    if (!existsSync43(memberManifest.manifestPath)) {
+      continue;
+    }
+    const manifestText = readInputTextFile({
+      filePath: memberManifest.manifestPath,
+      maxBytes: input.maxBytes
+    });
+    if (!manifestText.ok) {
+      return err(createError({
+        code: "CARGO_MANIFEST_READ_FAILED",
+        category: inputFileReadErrorCategory(manifestText.error),
+        message: manifestText.error.kind === "too_large" ? "Cargo workspace member Cargo.toml exceeded the maximum supported size." : "Failed to read Cargo workspace member Cargo.toml.",
+        details: {
+          manifestPath: memberManifest.manifestPath,
+          ...inputFileReadErrorDetails(manifestText.error)
+        }
+      }));
+    }
+    manifests.push({
+      manifestText: manifestText.value,
+      evidence: readCargoWorkspaceEvidenceDirectory({
+        directory: path70.dirname(memberManifest.manifestPath),
+        maxBytes: input.evidenceFileMaxBytes
+      })
+    });
+  }
+  return ok(manifests);
+}
+function readCargoWorkspaceEvidenceDirectory(input) {
+  const files = [];
+  const warnings = [];
+  let entries;
+  try {
+    entries = readdirSync31(input.directory, { withFileTypes: true });
+  } catch {
+    return { files, warnings };
+  }
+  for (const entry of entries.filter((candidate) => candidate.isFile() && classifyEvidenceFile(candidate.name) !== undefined).sort((left, right) => left.name.localeCompare(right.name)).slice(0, CARGO_WORKSPACE_EVIDENCE_FILE_LIMIT)) {
+    const kind = classifyEvidenceFile(entry.name);
+    if (!kind) {
+      continue;
+    }
+    const text = readInputTextFile({
+      filePath: path70.join(input.directory, entry.name),
+      maxBytes: input.maxBytes
+    });
+    if (!text.ok) {
+      warnings.push(text.error.kind === "too_large" ? `Skipped ${entry.name}: evidence file exceeded the maximum supported size.` : `Failed to read ${entry.name}.`);
+      continue;
+    }
+    files.push({ path: entry.name, kind, text: text.value });
+  }
+  return { files, warnings };
+}
+function normalizeProjectRelativeDirectory(value) {
+  const normalized = path70.posix.normalize(value.replace(/\\/g, "/"));
+  if (normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/") || path70.win32.isAbsolute(value)) {
+    return;
+  }
+  return normalized === "." ? "" : normalized.replace(/\/$/u, "");
+}
+function findCargoWorkspaceMemberManifestPathsFromRelativePaths(input) {
+  const projectRoot = path70.resolve(input.projectRoot);
+  const lockfileRoot = path70.dirname(path70.resolve(input.lockfilePath));
+  const members = readCargoWorkspaceMembers(input.rootManifestText);
+  const implicitMembers = new Set(readCargoRootPathDependencyMembers(input.rootManifestText).map(normalizeCargoWorkspaceMemberPath).filter((memberPath) => memberPath !== undefined));
+  const excludes = readCargoWorkspaceExcludes(input.rootManifestText);
+  const paths = new Map;
+  for (const rawRelativeManifestPath of input.relativePaths) {
+    const relativeManifestPath = normalizeProjectRelativeManifestPath(rawRelativeManifestPath);
+    if (!relativeManifestPath || path70.posix.basename(relativeManifestPath) !== "Cargo.toml") {
+      continue;
+    }
+    const manifestPath = path70.resolve(projectRoot, ...relativeManifestPath.split("/"));
+    if (!isInsideDirectory2(projectRoot, manifestPath) || manifestPath === path70.join(lockfileRoot, "Cargo.toml")) {
+      continue;
+    }
+    const memberPath = normalizeCargoWorkspaceMemberPath(path70.relative(lockfileRoot, path70.dirname(manifestPath)));
+    if (!memberPath) {
+      continue;
+    }
+    if (!implicitMembers.has(memberPath) && !members.some((pattern) => cargoWorkspaceMemberPatternMatches(memberPath, pattern))) {
+      continue;
+    }
+    if (excludes.some((pattern) => cargoWorkspaceMemberPatternMatches(memberPath, pattern))) {
+      continue;
+    }
+    paths.set(relativeManifestPath, {
+      memberPath,
+      manifestPath,
+      relativeManifestPath
+    });
+  }
+  return [...paths.values()].sort((left, right) => left.relativeManifestPath.localeCompare(right.relativeManifestPath));
+}
+function findCargoWorkspaceMemberManifestPaths(input) {
+  const rootDir = path70.dirname(input.lockfilePath);
+  const paths = new Map;
+  const excludedMemberPaths = new Set;
+  for (const excludePath of readCargoWorkspaceExcludes(input.rootManifestText)) {
+    if (path70.isAbsolute(excludePath)) {
+      continue;
+    }
+    for (const resolvedExcludePath of expandCargoWorkspaceMemberPath({
+      memberPath: excludePath,
+      rootDir,
+      projectRoot: input.projectRoot
+    })) {
+      const normalizedExcludePath = normalizeCargoWorkspaceMemberPath(resolvedExcludePath);
+      if (normalizedExcludePath) {
+        excludedMemberPaths.add(normalizedExcludePath);
+      }
+    }
+  }
+  const memberPaths = [
+    ...readCargoWorkspaceMembers(input.rootManifestText),
+    ...readCargoRootPathDependencyMembers(input.rootManifestText)
+  ];
+  for (const memberPath of memberPaths) {
+    if (path70.isAbsolute(memberPath)) {
+      continue;
+    }
+    for (const resolvedMemberPath of expandCargoWorkspaceMemberPath({
+      memberPath,
+      rootDir,
+      projectRoot: input.projectRoot
+    })) {
+      const normalizedMemberPath = normalizeCargoWorkspaceMemberPath(resolvedMemberPath);
+      if (!normalizedMemberPath || excludedMemberPaths.has(normalizedMemberPath)) {
+        continue;
+      }
+      const manifestPath = path70.resolve(rootDir, normalizedMemberPath, "Cargo.toml");
+      if (!isInsideDirectory2(input.projectRoot, manifestPath)) {
+        continue;
+      }
+      const relativeManifestPath = normalizeRelativePath(path70.relative(input.projectRoot, manifestPath));
+      if (!relativeManifestPath) {
+        continue;
+      }
+      paths.set(relativeManifestPath, {
+        memberPath: normalizedMemberPath,
+        manifestPath,
+        relativeManifestPath
+      });
+    }
+  }
+  return [...paths.values()].sort((left, right) => left.relativeManifestPath.localeCompare(right.relativeManifestPath));
+}
+function normalizeProjectRelativeManifestPath(value) {
+  const normalized = path70.posix.normalize(value.replace(/\\/g, "/"));
+  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/")) {
+    return;
+  }
+  return normalized;
+}
+function cargoWorkspaceMemberPatternMatches(memberPath, rawPattern) {
+  const normalizedPattern = rawPattern.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/$/, "");
+  const memberSegments = memberPath.split("/").filter(Boolean);
+  const patternSegments = normalizedPattern.split("/").filter(Boolean);
+  if (memberSegments.length !== patternSegments.length) {
+    return false;
+  }
+  return patternSegments.every((segment, index) => cargoWorkspaceGlobSegmentPattern(segment).test(memberSegments[index] ?? ""));
+}
+function expandCargoWorkspaceMemberPath(input) {
+  if (!hasCargoWorkspaceGlob(input.memberPath)) {
+    return [input.memberPath];
+  }
+  const normalizedMemberPath = input.memberPath.replace(/\\/g, "/");
+  const segments = normalizedMemberPath.split("/").filter((segment) => segment.length > 0);
+  const expandedPaths = expandCargoWorkspaceMemberSegments({
+    segments,
+    index: 0,
+    currentPath: input.rootDir,
+    relativeSegments: [],
+    projectRoot: input.projectRoot
+  });
+  return expandedPaths.filter((memberPath) => existsSync43(path70.resolve(input.rootDir, memberPath, "Cargo.toml"))).sort((left, right) => left.localeCompare(right));
+}
+function expandCargoWorkspaceMemberSegments(input) {
+  if (input.index >= input.segments.length) {
+    return [input.relativeSegments.join("/")];
+  }
+  const segment = input.segments[input.index];
+  if (!segment) {
+    return [];
+  }
+  if (!hasCargoWorkspaceGlob(segment)) {
+    const nextPath = path70.resolve(input.currentPath, segment);
+    if (!isInsideDirectory2(input.projectRoot, nextPath)) {
+      return [];
+    }
+    return expandCargoWorkspaceMemberSegments({
+      segments: input.segments,
+      index: input.index + 1,
+      currentPath: nextPath,
+      relativeSegments: [...input.relativeSegments, segment],
+      projectRoot: input.projectRoot
+    });
+  }
+  let entries;
+  try {
+    entries = readdirSync31(input.currentPath, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const globPattern = cargoWorkspaceGlobSegmentPattern(segment);
+  return entries.filter((entry) => entry.isDirectory()).filter((entry) => globPattern.test(entry.name)).flatMap((entry) => {
+    const nextPath = path70.resolve(input.currentPath, entry.name);
+    if (!isInsideDirectory2(input.projectRoot, nextPath)) {
+      return [];
+    }
+    return expandCargoWorkspaceMemberSegments({
+      segments: input.segments,
+      index: input.index + 1,
+      currentPath: nextPath,
+      relativeSegments: [...input.relativeSegments, entry.name],
+      projectRoot: input.projectRoot
+    });
+  });
+}
+function hasCargoWorkspaceGlob(value) {
+  return value.includes("*") || value.includes("?");
+}
+function cargoWorkspaceGlobSegmentPattern(segment) {
+  const escaped = segment.replace(/[\\^$+*?.()|[\]{}]/g, "\\$&");
+  const pattern = escaped.replace(/\\\*/g, "[^/]*").replace(/\\\?/g, "[^/]");
+  return new RegExp(`^${pattern}$`);
+}
+function readCargoWorkspaceMembers(input) {
+  return readCargoWorkspaceStringArray(input, "members");
+}
+function readCargoWorkspaceExcludes(input) {
+  return readCargoWorkspaceStringArray(input, "exclude");
+}
+function readCargoRootPathDependencyMembers(input) {
+  const memberPaths = [];
+  let section = "";
+  let dependencyTable = false;
+  for (const rawLine of input.split(/\r?\n/)) {
+    const line = stripTomlComment11(rawLine).trim();
+    if (line === "") {
+      continue;
+    }
+    if (line.startsWith("[") && line.endsWith("]")) {
+      section = line.slice(1, -1);
+      dependencyTable = isCargoPathDependencyTable(section);
+      continue;
+    }
+    if (dependencyTable) {
+      const memberPath = readStringAssignment6(line, "path");
+      if (memberPath) {
+        memberPaths.push(memberPath);
+      }
+      continue;
+    }
+    if (section !== "workspace.dependencies" && !dependencyTypeForCargoManifestSection(section)) {
+      continue;
+    }
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+    const memberPath = readInlineTableString(line.slice(separatorIndex + 1), "path");
+    if (memberPath) {
+      memberPaths.push(memberPath);
+    }
+  }
+  return [...new Set(memberPaths)];
+}
+function isCargoPathDependencyTable(section) {
+  if (readCargoManifestDependencyTable(section)) {
+    return true;
+  }
+  const parts = splitTomlDottedKey(section).map(unquoteTomlKey2);
+  return parts.length === 3 && parts[0] === "workspace" && parts[1] === "dependencies";
+}
+function readCargoWorkspaceStringArray(input, key) {
+  const members = [];
+  let section = "";
+  let activeMembersArray;
+  for (const rawLine of input.split(/\r?\n/)) {
+    const line = stripTomlComment11(rawLine).trim();
+    if (line === "") {
+      continue;
+    }
+    if (activeMembersArray) {
+      activeMembersArray.push(line);
+      if (line.includes("]")) {
+        members.push(...readTomlStringArray(activeMembersArray.join(`
+`)));
+        activeMembersArray = undefined;
+      }
+      continue;
+    }
+    if (line.startsWith("[") && line.endsWith("]")) {
+      section = line.slice(1, -1);
+      continue;
+    }
+    if (section === "workspace" && line.startsWith(key) && line.includes("=")) {
+      const value = line.slice(line.indexOf("=") + 1).trim();
+      if (value.includes("[") && value.includes("]")) {
+        members.push(...readTomlStringArray(value));
+      } else if (value.startsWith("[")) {
+        activeMembersArray = [value];
+      }
+    }
+  }
+  return [...new Set(members)];
+}
+function parseCargoPackageRecords(input) {
+  const records = [];
+  let current;
+  let activeArray;
+  const flushArray = () => {
+    if (!activeArray || !current) {
+      activeArray = undefined;
+      return;
+    }
+    if (activeArray.key === "dependencies") {
+      current.dependencies.push(...readCargoDependencyEdges(activeArray.lines.join(`
+`)));
+    }
+    activeArray = undefined;
+  };
+  const flushCurrent = () => {
+    flushArray();
+    if (!current) {
+      return;
+    }
+    if (!current.name || !current.version) {
+      throw new Error("Encountered a [[package]] record without a string name and version.");
+    }
+    records.push({
+      name: current.name,
+      version: current.version,
+      id: `${current.name}@${current.version}`,
+      ...current.source ? { source: current.source } : {},
+      ...current.checksum ? { checksum: current.checksum } : {},
+      dependencies: current.dependencies
+    });
+  };
+  for (const rawLine of input.split(/\r?\n/)) {
+    const line = stripTomlComment11(rawLine).trim();
+    if (line === "") {
+      continue;
+    }
+    if (activeArray) {
+      activeArray.lines.push(line);
+      if (line.includes("]")) {
+        flushArray();
+      }
+      continue;
+    }
+    if (line === "[[package]]") {
+      flushCurrent();
+      current = {
+        dependencies: []
+      };
+      continue;
+    }
+    if (!current) {
+      continue;
+    }
+    const name = readStringAssignment6(line, "name");
+    if (name !== undefined) {
+      current.name = name;
+      continue;
+    }
+    const version = readStringAssignment6(line, "version");
+    if (version !== undefined) {
+      current.version = version;
+      continue;
+    }
+    const source = readStringAssignment6(line, "source");
+    if (source !== undefined) {
+      current.source = source;
+      continue;
+    }
+    const checksum = readStringAssignment6(line, "checksum");
+    if (checksum !== undefined) {
+      current.checksum = checksum;
+      continue;
+    }
+    if (line.startsWith("dependencies") && line.includes("=")) {
+      const value = line.slice(line.indexOf("=") + 1).trim();
+      if (value.includes("[") && value.includes("]")) {
+        current.dependencies.push(...readCargoDependencyEdges(value));
+      } else if (value.startsWith("[")) {
+        activeArray = {
+          key: "dependencies",
+          lines: [value]
+        };
+      }
+    }
+  }
+  flushCurrent();
+  return records;
+}
+function readCargoRootDependencies(input) {
+  const manifestTexts = [
+    ...input.manifestText ? [input.manifestText] : [],
+    ...input.memberManifestTexts ?? []
+  ];
+  if (manifestTexts.length > 0) {
+    const roots = mergeCargoManifestRootDependencies(manifestTexts, input.records);
+    if (roots.length > 0) {
+      return roots;
+    }
+  }
+  return inferCargoRootDependencies(input.records);
+}
+function mergeCargoManifestRootDependencies(manifestTexts, records) {
+  const roots = new Map;
+  const workspacePackageAliases = mergeCargoWorkspaceDependencyPackageAliases(manifestTexts);
+  for (const manifestText of manifestTexts) {
+    for (const dependency of parseCargoManifestRootDependencies(manifestText, records, workspacePackageAliases)) {
+      const existing = roots.get(dependency.name);
+      roots.set(dependency.name, existing ? omitUndefined({
+        name: dependency.name,
+        version: existing.version ?? dependency.version,
+        type: mergeDependencyType22(existing.type, dependency.type)
+      }) : dependency);
+    }
+  }
+  return [...roots.values()].sort((left, right) => left.name.localeCompare(right.name));
+}
+function parseCargoManifestRootDependencies(input, records, workspacePackageAliases = new Map) {
+  const roots = new Map;
+  let section = "";
+  let activeDependencyTable;
+  const flushDependencyTable = () => {
+    if (!activeDependencyTable) {
+      return;
+    }
+    const dependencyName = activeDependencyTable.workspace === true ? workspacePackageAliases.get(activeDependencyTable.name) ?? activeDependencyTable.packageName ?? activeDependencyTable.name : activeDependencyTable.packageName ?? activeDependencyTable.name;
+    mergeRootDependency3(roots, dependencyName, activeDependencyTable.type);
+    activeDependencyTable = undefined;
+  };
+  for (const rawLine of input.split(/\r?\n/)) {
+    const line = stripTomlComment11(rawLine).trim();
+    if (line === "") {
+      continue;
+    }
+    if (line.startsWith("[") && line.endsWith("]")) {
+      flushDependencyTable();
+      section = line.slice(1, -1);
+      activeDependencyTable = readCargoManifestDependencyTable(section);
+      continue;
+    }
+    if (activeDependencyTable) {
+      const packageName = readStringAssignment6(line, "package");
+      if (packageName) {
+        activeDependencyTable.packageName = packageName;
+      }
+      const workspace = readBooleanAssignment2(line, "workspace");
+      if (workspace !== undefined) {
+        activeDependencyTable.workspace = workspace;
+      }
+      const optional = readBooleanAssignment2(line, "optional");
+      if (optional === true && activeDependencyTable.type === "production") {
+        activeDependencyTable.type = "optional";
+      }
+      continue;
+    }
+    const dependencyType = dependencyTypeForCargoManifestSection(section);
+    if (!dependencyType) {
+      continue;
+    }
+    const dependency = readCargoManifestDependency(line, workspacePackageAliases);
+    if (dependency) {
+      mergeRootDependency3(roots, dependency, dependencyType);
+    }
+  }
+  flushDependencyTable();
+  const rootPackage = resolveCargoRootPackageRecord(input, records);
+  return [...roots.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([name, type]) => ({
+    name,
+    ...cargoRootDependencyVersion(rootPackage, name),
+    type
+  }));
+}
+function readCargoManifestDependencyTable(section) {
+  const parts = splitTomlDottedKey(section).map(unquoteTomlKey2);
+  if (parts.length < 2) {
+    return;
+  }
+  const dependencyName = parts.at(-1);
+  if (!dependencyName) {
+    return;
+  }
+  if (parts[0] === "dependencies" && parts.length === 2) {
+    return {
+      name: dependencyName,
+      type: "production"
+    };
+  }
+  if ((parts[0] === "dev-dependencies" || parts[0] === "build-dependencies") && parts.length === 2) {
+    return {
+      name: dependencyName,
+      type: "development"
+    };
+  }
+  if (parts[0] !== "target" || parts.length < 4) {
+    return;
+  }
+  const dependencySection = parts.at(-2);
+  if (dependencySection === "dependencies") {
+    return {
+      name: dependencyName,
+      type: "production"
+    };
+  }
+  if (dependencySection === "dev-dependencies" || dependencySection === "build-dependencies") {
+    return {
+      name: dependencyName,
+      type: "development"
+    };
+  }
+  return;
+}
+function dependencyTypeForCargoManifestSection(section) {
+  if (section === "dependencies" || /^target\..+\.dependencies$/.test(section)) {
+    return "production";
+  }
+  if (section === "dev-dependencies" || section === "build-dependencies" || /^target\..+\.(dev-dependencies|build-dependencies)$/.test(section)) {
+    return "development";
+  }
+  return;
+}
+function readCargoManifestDependency(line, workspacePackageAliases = new Map) {
+  const separatorIndex = line.indexOf("=");
+  if (separatorIndex <= 0) {
+    return;
+  }
+  const rawKey = line.slice(0, separatorIndex).trim();
+  const key = unquoteTomlKey2(rawKey);
+  const value = line.slice(separatorIndex + 1).trim();
+  const workspaceDependencyName = readCargoWorkspaceDottedDependencyKey(rawKey, value);
+  if (workspaceDependencyName) {
+    return workspacePackageAliases.get(workspaceDependencyName) ?? workspaceDependencyName;
+  }
+  const packageName = readInlineTableString(value, "package");
+  if (readInlineTableBoolean(value, "workspace") === true) {
+    return workspacePackageAliases.get(key) ?? packageName ?? key;
+  }
+  return packageName ?? key;
+}
+function inferCargoRootDependencies(records) {
+  const referenced = new Set;
+  for (const record of records) {
+    for (const dependency of record.dependencies) {
+      const resolved = resolveCargoPackageRecord(records, dependency);
+      if (resolved) {
+        referenced.add(resolved.id);
+      }
+    }
+  }
+  return records.filter((record) => !referenced.has(record.id)).sort((left, right) => left.id.localeCompare(right.id)).map((record) => ({
+    name: record.name,
+    type: "unknown"
+  }));
+}
+function resolveCargoRootPackageRecord(manifestText, records) {
+  const packageName = readCargoPackageName(manifestText);
+  if (!packageName) {
+    return;
+  }
+  return resolveCargoPackageRecord(records, { name: packageName });
+}
+function cargoRootDependencyVersion(rootPackage, dependencyName) {
+  const dependency = rootPackage?.dependencies.find((edge) => edge.name === dependencyName);
+  return dependency?.version ? { version: dependency.version } : {};
+}
+function walkCargoDependencies(input) {
+  const stack = [...input.states].reverse();
+  const pathKeysByNodeId = new Map;
+  const expandedPathTypesByNodeId = new Map;
+  while (stack.length > 0) {
+    const state = stack.pop();
+    if (!state || state.path.includes(state.record.id)) {
+      continue;
+    }
+    const nextPath = [...state.path, state.record.id];
+    const pathKey = JSON.stringify(nextPath);
+    const existing = input.nodeMap.get(state.record.id);
+    const previousDependencyType = existing?.dependencyType;
+    const mergedDependencyType = previousDependencyType ? mergeDependencyType22(previousDependencyType, state.dependencyType) : state.dependencyType;
+    const dependencyTypeStrengthened = previousDependencyType !== undefined && mergedDependencyType !== previousDependencyType;
+    const resolved = state.record.source;
+    const integrity = cargoChecksumIntegrity(state.record.checksum);
+    const node = existing ?? {
+      id: state.record.id,
+      name: state.record.name,
+      version: state.record.version,
+      ecosystem: "cargo",
+      ...resolved === undefined ? {} : { resolved },
+      ...integrity === undefined ? {} : { integrity },
+      dependencyType: mergedDependencyType,
+      direct: state.direct,
+      paths: []
+    };
+    node.direct = node.direct || state.direct;
+    node.dependencyType = mergedDependencyType;
+    if (!existing) {
+      input.nodeMap.set(state.record.id, node);
+    }
+    const pathKeys = pathKeysByNodeId.get(state.record.id) ?? new Set;
+    let traversalPath;
+    if (pathKeys.has(pathKey)) {
+      traversalPath = dependencyTypeStrengthened ? nextPath : undefined;
+    } else if (pathKeys.size < CARGO_MAX_PATHS_PER_PACKAGE) {
+      pathKeys.add(pathKey);
+      pathKeysByNodeId.set(state.record.id, pathKeys);
+      node.paths.push(nextPath);
+      traversalPath = nextPath;
+    } else {
+      input.pathLimitAffected.add(state.record.id);
+      traversalPath = dependencyTypeStrengthened ? node.paths[0] : undefined;
+    }
+    if (!traversalPath) {
+      continue;
+    }
+    const expansionKey = `${JSON.stringify(traversalPath)}\x00${state.dependencyType}`;
+    const expandedPathTypes = expandedPathTypesByNodeId.get(state.record.id) ?? new Set;
+    if (expandedPathTypes.has(expansionKey)) {
+      continue;
+    }
+    expandedPathTypes.add(expansionKey);
+    expandedPathTypesByNodeId.set(state.record.id, expandedPathTypes);
+    for (let index = state.record.dependencies.length - 1;index >= 0; index -= 1) {
+      const dependency = state.record.dependencies[index];
+      if (!dependency) {
+        continue;
+      }
+      const record = resolveCargoPackageRecordFromIndex(input.recordIndex, dependency);
+      if (!record) {
+        continue;
+      }
+      stack.push({
+        record,
+        dependencyType: state.dependencyType,
+        direct: false,
+        path: traversalPath
+      });
+    }
+  }
+}
+function cargoChecksumIntegrity(checksum) {
+  if (!checksum || !/^[0-9a-f]{64}$/u.test(checksum)) {
+    return;
+  }
+  return `sha256-${Buffer3.from(checksum, "hex").toString("base64")}`;
+}
+function indexCargoPackageRecords(records) {
+  const byName = new Map;
+  for (const record of records) {
+    const matches = byName.get(record.name) ?? [];
+    matches.push(record);
+    byName.set(record.name, matches);
+  }
+  return byName;
+}
+function resolveCargoPackageRecordFromIndex(recordIndex, dependency) {
+  const matches = (recordIndex.get(dependency.name) ?? []).filter((record) => dependency.version === undefined || record.version === dependency.version);
+  return matches.length === 1 ? matches[0] : undefined;
+}
+function resolveCargoPackageRecord(records, dependency) {
+  const matches = records.filter((record) => record.name === dependency.name && (dependency.version === undefined || record.version === dependency.version));
+  return matches.length === 1 ? matches[0] : undefined;
+}
+function readCargoDependencyEdges(value) {
+  const dependencies = [];
+  for (const match of value.matchAll(/"([^"]+)"/g)) {
+    const dependency = parseCargoDependencyString(match[1] ?? "");
+    if (dependency) {
+      dependencies.push(dependency);
+    }
+  }
+  return dependencies;
+}
+function parseCargoDependencyString(input) {
+  const parts = input.trim().split(/\s+/);
+  const name = parts[0];
+  if (!name) {
+    return;
+  }
+  const version = parts.find((part, index) => index > 0 && /^\d+\.\d+\.\d+/.test(part));
+  return {
+    name,
+    ...version ? { version } : {}
+  };
+}
+function readCargoPackageName(text) {
+  if (!text) {
+    return;
+  }
+  let section = "";
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = stripTomlComment11(rawLine).trim();
+    if (line.startsWith("[") && line.endsWith("]")) {
+      section = line.slice(1, -1);
+      continue;
+    }
+    if (section === "package") {
+      const name = readStringAssignment6(line, "name");
+      if (name) {
+        return name;
+      }
+    }
+  }
+  return;
+}
+function cargoWorkspaceEmbeddedEvidence(rootManifestText, manifestTexts, records, rootEvidence, memberEvidence) {
+  const workspaceMetadata = readCargoWorkspacePackageLicenseMetadata(rootManifestText);
+  const packageManifests = [
+    ...rootManifestText ? [{ text: rootManifestText, evidence: rootEvidence }] : [],
+    ...manifestTexts.map((text, index) => ({
+      text,
+      evidence: memberEvidence[index]
+    }))
+  ];
+  const embeddedEvidence = packageManifests.map((manifest) => {
+    const metadata = readCargoPackageLicenseMetadata(manifest.text, workspaceMetadata);
+    const evidence = manifest.evidence?.files.length ? manifest.evidence : rootEvidence;
+    if (!metadata.name || !metadata.version || !metadata.license && !evidence?.files.length) {
+      return;
+    }
+    const record = resolveCargoPackageRecord(records, {
+      name: metadata.name,
+      version: metadata.version
+    });
+    if (!record) {
+      return;
+    }
+    return {
+      packageId: record.id,
+      ...metadata.license ? {
+        metadataLicense: metadata.license,
+        metadataSource: "workspace Cargo.toml"
+      } : {},
+      files: evidence?.files ?? [],
+      source: "local",
+      warnings: evidence?.warnings ?? []
+    };
+  }).filter((evidence) => evidence !== undefined).sort((left, right) => left.packageId.localeCompare(right.packageId));
+  return embeddedEvidence.length > 0 ? { embeddedEvidence } : {};
+}
+function readCargoPackageLicenseMetadata(text, workspaceMetadata) {
+  let section = "";
+  const metadata = {};
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = stripTomlComment11(rawLine).trim();
+    if (line.startsWith("[") && line.endsWith("]")) {
+      section = line.slice(1, -1);
+      continue;
+    }
+    if (section !== "package") {
+      continue;
+    }
+    for (const key of ["name", "version", "license", "license-file"]) {
+      const value = readStringAssignment6(line, key);
+      if (value !== undefined) {
+        metadata[key === "license-file" ? "licenseFile" : key] = value;
+        break;
+      }
+      if (key !== "name") {
+        const metadataKey = key === "license-file" ? "licenseFile" : key;
+        const inheritedValue = workspaceMetadata?.[metadataKey];
+        if (inheritedValue !== undefined && readsWorkspaceInheritedValue(line, key)) {
+          metadata[metadataKey] = inheritedValue;
+          break;
+        }
+      }
+    }
+  }
+  return metadata;
+}
+function readCargoWorkspacePackageLicenseMetadata(text) {
+  if (!text) {
+    return {};
+  }
+  let section = "";
+  const metadata = {};
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = stripTomlComment11(rawLine).trim();
+    if (line.startsWith("[") && line.endsWith("]")) {
+      section = line.slice(1, -1);
+      continue;
+    }
+    if (section !== "workspace.package") {
+      continue;
+    }
+    for (const key of ["version", "license", "license-file"]) {
+      const value = readStringAssignment6(line, key);
+      if (value !== undefined) {
+        metadata[key === "license-file" ? "licenseFile" : key] = value;
+        break;
+      }
+    }
+  }
+  return metadata;
+}
+function readsWorkspaceInheritedValue(line, key) {
+  if (readBooleanAssignment2(line, `${key}.workspace`) === true) {
+    return true;
+  }
+  const inlineTable = new RegExp(`^${escapeRegExp6(key)}\\s*=\\s*\\{(.*)\\}\\s*$`).exec(line);
+  return inlineTable?.[1] !== undefined && readInlineTableBoolean(inlineTable[1], "workspace") === true;
+}
+function readStringAssignment6(line, key) {
+  const match = new RegExp(`^${escapeRegExp6(key)}\\s*=\\s*"([^"]*)"`).exec(line);
+  return match?.[1];
+}
+function readBooleanAssignment2(line, key) {
+  const match = new RegExp(`^${escapeRegExp6(key)}\\s*=\\s*(true|false)\\b`).exec(line);
+  if (!match) {
+    return;
+  }
+  return match[1] === "true";
+}
+function readInlineTableString(value, key) {
+  const match = new RegExp(`\\b${escapeRegExp6(key)}\\s*=\\s*"([^"]*)"`).exec(value);
+  return match?.[1];
+}
+function readInlineTableBoolean(value, key) {
+  const match = new RegExp(`\\b${escapeRegExp6(key)}\\s*=\\s*(true|false)\\b`).exec(value);
+  if (!match) {
+    return;
+  }
+  return match[1] === "true";
+}
+function readTomlStringArray(value) {
+  return [...value.matchAll(/"([^"]+)"/g)].map((match) => match[1]).filter((item) => item !== undefined && item !== "");
+}
+function mergeCargoWorkspaceDependencyPackageAliases(manifestTexts) {
+  const aliases = new Map;
+  for (const manifestText of manifestTexts) {
+    for (const [alias, packageName] of readCargoWorkspaceDependencyPackageAliases(manifestText)) {
+      aliases.set(alias, packageName);
+    }
+  }
+  return aliases;
+}
+function readCargoWorkspaceDependencyPackageAliases(input) {
+  const aliases = new Map;
+  let section = "";
+  for (const rawLine of input.split(/\r?\n/)) {
+    const line = stripTomlComment11(rawLine).trim();
+    if (line === "") {
+      continue;
+    }
+    if (line.startsWith("[") && line.endsWith("]")) {
+      section = line.slice(1, -1);
+      continue;
+    }
+    if (section !== "workspace.dependencies") {
+      continue;
+    }
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+    const alias = unquoteTomlKey2(line.slice(0, separatorIndex).trim());
+    const packageName = readInlineTableString(line.slice(separatorIndex + 1).trim(), "package");
+    if (alias && packageName) {
+      aliases.set(alias, packageName);
+    }
+  }
+  return aliases;
+}
+function readCargoWorkspaceDottedDependencyKey(rawKey, value) {
+  if (value !== "true") {
+    return;
+  }
+  const parts = splitTomlDottedKey(rawKey).map(unquoteTomlKey2);
+  if (parts.length !== 2 || parts[1] !== "workspace") {
+    return;
+  }
+  const dependencyName = parts[0];
+  return dependencyName && dependencyName.length > 0 ? dependencyName : undefined;
+}
+function splitTomlDottedKey(key) {
+  const parts = [];
+  let current = "";
+  let quote;
+  let escaped = false;
+  for (const char of key) {
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+    if (quote === '"' && char === "\\") {
+      current += char;
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      current += char;
+      if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      current += char;
+      quote = char;
+      continue;
+    }
+    if (char === ".") {
+      parts.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  parts.push(current.trim());
+  return parts;
+}
+function mergeRootDependency3(roots, name, type) {
+  const existing = roots.get(name);
+  roots.set(name, existing ? mergeDependencyType22(existing, type) : type);
+}
+function unquoteTomlKey2(key) {
+  if (key.startsWith('"') && key.endsWith('"') || key.startsWith("'") && key.endsWith("'")) {
+    return key.slice(1, -1);
+  }
+  return key;
+}
+function stripTomlComment11(line) {
+  let inString = false;
+  let escaped = false;
+  for (let index = 0;index < line.length; index += 1) {
+    const char = line[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (char === "#" && !inString) {
+      return line.slice(0, index);
+    }
+  }
+  return line;
+}
+function mergeDependencyType22(left, right) {
+  return dependencyTypeRank20(left) >= dependencyTypeRank20(right) ? left : right;
+}
+function dependencyTypeRank20(type) {
+  switch (type) {
+    case "production":
+      return 4;
+    case "optional":
+      return 3;
+    case "peer":
+      return 2;
+    case "development":
+      return 1;
+    case "unknown":
+      return 0;
+  }
+}
+function isInsideDirectory2(rootPath, candidatePath) {
+  const relativePath = path70.relative(rootPath, candidatePath);
+  return relativePath === "" || relativePath !== ".." && !relativePath.startsWith(`..${path70.sep}`) && !path70.isAbsolute(relativePath);
+}
+function normalizeRelativePath(relativePath) {
+  const normalized = path70.normalize(relativePath).replace(/\\/g, "/");
+  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || path70.isAbsolute(normalized)) {
+    return;
+  }
+  return normalized;
+}
+function normalizeCargoWorkspaceMemberPath(memberPath) {
+  const normalized = path70.normalize(memberPath).replace(/\\/g, "/");
+  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || path70.isAbsolute(normalized)) {
+    return;
+  }
+  return normalized;
+}
+function escapeRegExp6(input) {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // src/graph/spdx-json.ts
@@ -49092,7 +47524,7 @@ function spdxTagValueParseError(input) {
 }
 
 // src/graph/swift-package-resolved.ts
-import path72 from "node:path";
+import path71 from "node:path";
 function parseSwiftPackageResolvedFile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -49232,12 +47664,12 @@ function deduplicateSwiftPins(pins) {
   return [...merged.values()];
 }
 function rootNameForPackageResolved(lockfilePath) {
-  const segments = path72.normalize(lockfilePath).split(path72.sep);
+  const segments = path71.normalize(lockfilePath).split(path71.sep);
   const xcodeContainerIndex = segments.findIndex((segment) => segment.endsWith(".xcodeproj") || segment.endsWith(".xcworkspace"));
   if (xcodeContainerIndex > 0) {
     return segments[xcodeContainerIndex - 1] || "<swift-project>";
   }
-  return path72.basename(path72.dirname(lockfilePath)) || "<swift-project>";
+  return path71.basename(path71.dirname(lockfilePath)) || "<swift-project>";
 }
 function swiftPinParseError(lockfilePath, index, packageName) {
   return err(createError({
@@ -49256,7 +47688,7 @@ function isRecord22(value) {
 }
 
 // src/graph/terraform-lock.ts
-import path73 from "node:path";
+import path72 from "node:path";
 function parseTerraformLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -49322,7 +47754,7 @@ function parseTerraformLockText(input, lockfilePath = ".terraform.lock.hcl") {
       id: `${sourceAddress}@${version}`
     });
   }
-  const rootName = path73.basename(path73.dirname(lockfilePath)) || "<terraform-project>";
+  const rootName = path72.basename(path72.dirname(lockfilePath)) || "<terraform-project>";
   return ok({
     rootName,
     lockfilePath,
@@ -49446,7 +47878,7 @@ function escapeRegExp7(value) {
 }
 
 // src/graph/unity-packages-lock.ts
-import path74 from "node:path";
+import path73 from "node:path";
 function parseUnityPackagesLockfile(lockfilePath, options = {}) {
   const lockfileText = readInputTextFile({
     filePath: lockfilePath,
@@ -49465,7 +47897,7 @@ function parseUnityPackagesLockfile(lockfilePath, options = {}) {
   }
   return parseUnityPackagesLockText(lockfileText.value, lockfilePath);
 }
-function parseUnityPackagesLockText(input, lockfilePath = path74.join("Packages", "packages-lock.json")) {
+function parseUnityPackagesLockText(input, lockfilePath = path73.join("Packages", "packages-lock.json")) {
   let parsed;
   try {
     parsed = JSON.parse(input);
@@ -49614,11 +48046,11 @@ function deduplicatePaths3(paths) {
   return deduped.sort((left, right) => left.join("\x00").localeCompare(right.join("\x00")));
 }
 function unityProjectName(lockfilePath) {
-  const lockfileDir = path74.dirname(lockfilePath);
-  if (path74.basename(lockfileDir).toLowerCase() === "packages") {
-    return path74.basename(path74.dirname(lockfileDir)) || "<unity-project>";
+  const lockfileDir = path73.dirname(lockfilePath);
+  if (path73.basename(lockfileDir).toLowerCase() === "packages") {
+    return path73.basename(path73.dirname(lockfileDir)) || "<unity-project>";
   }
-  return path74.basename(lockfileDir) || "<unity-project>";
+  return path73.basename(lockfileDir) || "<unity-project>";
 }
 function isUnityPackageName(value) {
   return value.trim() !== "" && !/[\\/]/.test(value);
@@ -49636,9 +48068,9 @@ function isRecord23(value) {
 }
 
 // src/graph/vcpkg-json.ts
-import { existsSync as existsSync43, readdirSync as readdirSync32, statSync as statSync31 } from "node:fs";
-import path75 from "node:path";
-var VCPKG_STATUS_RELATIVE_PATH = path75.join("vcpkg_installed", "vcpkg", "status");
+import { existsSync as existsSync44, readdirSync as readdirSync32, statSync as statSync31 } from "node:fs";
+import path74 from "node:path";
+var VCPKG_STATUS_RELATIVE_PATH = path74.join("vcpkg_installed", "vcpkg", "status");
 function parseVcpkgJsonFile(manifestPath, options = {}) {
   const manifestText = readInputTextFile({
     filePath: manifestPath,
@@ -49655,7 +48087,7 @@ function parseVcpkgJsonFile(manifestPath, options = {}) {
       }
     }));
   }
-  const statusPath = findVcpkgStatusPath(path75.dirname(manifestPath));
+  const statusPath = findVcpkgStatusPath(path74.dirname(manifestPath));
   if (!statusPath) {
     return parseVcpkgJsonText(manifestText.value, manifestPath);
   }
@@ -49744,7 +48176,7 @@ function parseVcpkgJsonText(input, manifestPath = "vcpkg.json", options = {}) {
   });
 }
 function findVcpkgStatusPath(projectRoot) {
-  const direct = path75.join(projectRoot, VCPKG_STATUS_RELATIVE_PATH);
+  const direct = path74.join(projectRoot, VCPKG_STATUS_RELATIVE_PATH);
   if (isFile3(direct)) {
     return direct;
   }
@@ -49753,7 +48185,7 @@ function findVcpkgStatusPath(projectRoot) {
       if (!entry.isDirectory()) {
         continue;
       }
-      const candidate = path75.join(projectRoot, entry.name, VCPKG_STATUS_RELATIVE_PATH);
+      const candidate = path74.join(projectRoot, entry.name, VCPKG_STATUS_RELATIVE_PATH);
       if (isFile3(candidate)) {
         return candidate;
       }
@@ -49764,7 +48196,7 @@ function findVcpkgStatusPath(projectRoot) {
   return;
 }
 function readVcpkgRootName(manifest, manifestPath) {
-  return typeof manifest.name === "string" && manifest.name.trim() !== "" ? manifest.name.trim() : path75.basename(path75.dirname(manifestPath)) || "<vcpkg-project>";
+  return typeof manifest.name === "string" && manifest.name.trim() !== "" ? manifest.name.trim() : path74.basename(path74.dirname(manifestPath)) || "<vcpkg-project>";
 }
 function readVcpkgManifestDependencies(manifest, manifestPath) {
   if (manifest.dependencies === undefined) {
@@ -50102,7 +48534,7 @@ function samePath(left, right) {
   return left.length === right.length && left.every((item, index) => item === right[index]);
 }
 function isFile3(pathname) {
-  if (!existsSync43(pathname)) {
+  if (!existsSync44(pathname)) {
     return false;
   }
   try {
@@ -50395,11 +48827,11 @@ function parseLockfileTextForKind(input) {
 }
 
 // src/project/discover.ts
-import { closeSync as closeSync3, existsSync as existsSync44, openSync as openSync3, readSync as readSync3, readdirSync as readdirSync33, statSync as statSync32 } from "node:fs";
-import path77 from "node:path";
+import { closeSync as closeSync2, existsSync as existsSync45, openSync as openSync2, readSync as readSync2, readdirSync as readdirSync33, statSync as statSync32 } from "node:fs";
+import path76 from "node:path";
 
 // src/repository/tree-inventory.ts
-import path76 from "node:path";
+import path75 from "node:path";
 function listDirectoryEntries(dir, inventory) {
   const entries = inventory.directories.get(dir);
   return entries ? [...entries] : [];
@@ -50414,8 +48846,8 @@ function entryExists(entries, name) {
   return entries.some((entry) => entry.name === name);
 }
 function fileExistsInInventory(inventory, absolutePath) {
-  const relative = path76.relative(inventory.rootDir, absolutePath);
-  const segments = relative.split(path76.sep).filter((segment) => segment !== "" && segment !== ".");
+  const relative = path75.relative(inventory.rootDir, absolutePath);
+  const segments = relative.split(path75.sep).filter((segment) => segment !== "" && segment !== ".");
   if (segments.length === 0) {
     return false;
   }
@@ -50429,7 +48861,7 @@ function fileExistsInInventory(inventory, absolutePath) {
     if (!entries?.some((entry) => entry.name === segment && entry.kind === "directory")) {
       return false;
     }
-    currentDir = path76.join(currentDir, segment);
+    currentDir = path75.join(currentDir, segment);
   }
   const finalName = segments[segments.length - 1];
   if (finalName === undefined) {
@@ -50455,7 +48887,7 @@ function projectLockfiles(project) {
   return project.lockfiles ?? [project.lockfile];
 }
 function projectLockfilesFromRelativePaths(input) {
-  const rootDir = path77.resolve(input.rootDir);
+  const rootDir = path76.resolve(input.rootDir);
   const files = new Set([...input.relativePaths].map(normalizeListedProjectPath).filter((value) => value !== undefined));
   const candidates = [];
   for (const lockfile of KNOWN_LOCKFILES) {
@@ -50493,7 +48925,7 @@ function projectLockfilesFromRelativePaths(input) {
     }
     return [{
       kind,
-      path: path77.join(rootDir, ...relativePath.replace(/\\/g, "/").split("/"))
+      path: path76.join(rootDir, ...relativePath.replace(/\\/g, "/").split("/"))
     }];
   });
 }
@@ -50624,11 +49056,11 @@ var KNOWN_LOCKFILES = [
   "yarn.lock"
 ];
 var KNOWN_NESTED_LOCKFILES = [
-  path77.join("gradle", "libs.versions.toml"),
+  path76.join("gradle", "libs.versions.toml"),
   "obj/project.assets.json",
-  path77.join("Packages", "packages-lock.json")
+  path76.join("Packages", "packages-lock.json")
 ];
-var GRADLE_DEPENDENCY_LOCKS_DIR = path77.join("gradle", "dependency-locks");
+var GRADLE_DEPENDENCY_LOCKS_DIR = path76.join("gradle", "dependency-locks");
 var SBOM_SNIFF_MAX_BYTES = 64 * 1024;
 var KNOWN_PROJECT_MANIFESTS = [
   "package.json",
@@ -50640,7 +49072,7 @@ var KNOWN_PROJECT_MANIFESTS = [
   "pyproject.toml",
   "build.gradle",
   "build.gradle.kts",
-  path77.join("gradle", "libs.versions.toml"),
+  path76.join("gradle", "libs.versions.toml"),
   "MODULE.bazel",
   "conanfile.py",
   "conanfile.txt",
@@ -50651,7 +49083,7 @@ var KNOWN_PROJECT_MANIFESTS = [
   "versions.tf",
   "Chart.yaml",
   "flake.nix",
-  path77.join("Packages", "manifest.json"),
+  path76.join("Packages", "manifest.json"),
   "renv.lock",
   "Project.toml",
   "stack.yaml",
@@ -50682,7 +49114,7 @@ var KNOWN_PROJECT_MANIFESTS = [
 ];
 var SUPPORTED_LOCKFILE_MESSAGE = "Ohrisk currently supports dependency-free package.json manifests, bun.lock, package-lock.json, npm-shrinkwrap.json, pnpm-lock.yaml, deno.lock, Cargo.lock, go.work, go.mod, Pipfile.lock, pdm.lock, poetry.lock, pyproject.toml, requirements.txt, uv.lock, pylock.toml, pylock.<name>.toml, gradle.lockfile, gradle/dependency-locks, gradle/dependency-locks/*.lockfile, gradle/libs.versions.toml, MODULE.bazel, pom.xml, packages.lock.json, obj/project.assets.json, packages.config, *.csproj, conan.lock, environment.yml, environment.yaml, conda-lock.yml, conda-lock.yaml, vcpkg.json, .terraform.lock.hcl, Chart.lock, Chart.yaml, flake.lock, Packages/packages-lock.json, renv.lock, Manifest.toml, stack.yaml.lock, cpanfile.snapshot, luarocks.lock, pubspec.lock, Package.resolved, Cartfile.resolved, Podfile.lock, mix.lock, rebar.lock, Gemfile.lock, composer.lock, CycloneDX JSON/XML, SPDX JSON/RDF, SPDX tag-value .spdx, Yarn classic/Berry yarn.lock, and build.zig.zon.";
 function discoverProject(options = {}) {
-  const startDir = path77.resolve(options.cwd ?? process.cwd());
+  const startDir = path76.resolve(options.cwd ?? process.cwd());
   const searchMode = options.searchMode ?? "ancestors";
   try {
     if (options.lockfilePath) {
@@ -50709,7 +49141,7 @@ function discoverProject(options = {}) {
             rootDir: dir,
             lockfile: {
               kind: "package-json",
-              path: path77.join(dir, packageJsonManifest)
+              path: path76.join(dir, packageJsonManifest)
             }
           });
         }
@@ -50734,7 +49166,7 @@ function discoverProject(options = {}) {
       }
       const projectLockfileEntries = lockfiles.flatMap((lockfileName) => {
         const kind = supportedKindForLockfilePath(lockfileName);
-        return kind ? [{ kind, path: path77.join(dir, lockfileName) }] : [];
+        return kind ? [{ kind, path: path76.join(dir, lockfileName) }] : [];
       });
       if (projectLockfileEntries.length !== lockfiles.length) {
         return err(createError({
@@ -50819,7 +49251,7 @@ function discoverDescendantProject(input) {
     }
     const entries = input.inventory ? listDirectoryEntries(currentDir, input.inventory) : undefined;
     const lockfiles = findKnownLockfiles(currentDir, entries, input.inventory).flatMap((lockfileName) => {
-      const lockfilePath = path77.join(currentDir, lockfileName);
+      const lockfilePath = path76.join(currentDir, lockfileName);
       const kind = supportedKindForLockfilePath(lockfilePath);
       return kind && isConcreteAutoDiscoveryInput({ kind, path: lockfilePath }, entries) ? [{ kind, path: lockfilePath }] : [];
     });
@@ -50828,7 +49260,7 @@ function discoverDescendantProject(input) {
       if (packageJsonManifest) {
         lockfiles.push({
           kind: "package-json",
-          path: path77.join(currentDir, packageJsonManifest)
+          path: path76.join(currentDir, packageJsonManifest)
         });
       }
     }
@@ -50838,7 +49270,7 @@ function discoverDescendantProject(input) {
       projectLockfiles.set(`${lockfile.kind}\x00${lockfile.path}`, lockfile);
       projects.set(projectRoot, projectLockfiles);
     }
-    const childDirectories = input.inventory ? listDirectoryEntries(currentDir, input.inventory).filter((entry) => entry.kind === "directory" && entry.name !== ".git").map((entry) => path77.join(currentDir, entry.name)).sort().reverse() : readdirSync33(currentDir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name !== ".git").map((entry) => path77.join(currentDir, entry.name)).sort().reverse();
+    const childDirectories = input.inventory ? listDirectoryEntries(currentDir, input.inventory).filter((entry) => entry.kind === "directory" && entry.name !== ".git").map((entry) => path76.join(currentDir, entry.name)).sort().reverse() : readdirSync33(currentDir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name !== ".git").map((entry) => path76.join(currentDir, entry.name)).sort().reverse();
     pendingDirectories.push(...childDirectories);
   }
   const candidates = [...projects.entries()].map(([rootDir, lockfileMap]) => ({
@@ -50910,7 +49342,7 @@ function descendantProjectLimitError(reason, actual, limit) {
   });
 }
 function projectRelativePath(rootDir, targetPath) {
-  const relativePath = path77.relative(rootDir, targetPath).replace(/\\/g, "/");
+  const relativePath = path76.relative(rootDir, targetPath).replace(/\\/g, "/");
   return relativePath === "" ? "." : relativePath;
 }
 function isConcreteAutoDiscoveryInput(lockfile, entries) {
@@ -50921,7 +49353,7 @@ function isConcreteAutoDiscoveryInput(lockfile, entries) {
     if (entries) {
       return entryIsFile(entries, "package.json");
     }
-    return isFile4(path77.join(path77.dirname(lockfile.path), "package.json"));
+    return isFile4(path76.join(path76.dirname(lockfile.path), "package.json"));
   }
   if (lockfile.kind === "pyproject-toml") {
     return parsePyprojectFile(lockfile.path).ok;
@@ -50945,18 +49377,18 @@ function isConcreteAutoDiscoveryInput(lockfile, entries) {
   return prefix === undefined || !/@[A-Z_][A-Z0-9_]*@/.test(prefix);
 }
 function findNonConcreteDirectLockfiles(dir, entries) {
-  return KNOWN_LOCKFILES.filter((lockfileName) => entries ? entryIsFile(entries, lockfileName) : isFile4(path77.join(dir, lockfileName))).filter((lockfileName) => {
+  return KNOWN_LOCKFILES.filter((lockfileName) => entries ? entryIsFile(entries, lockfileName) : isFile4(path76.join(dir, lockfileName))).filter((lockfileName) => {
     const kind = supportedKindForLockfilePath(lockfileName);
     return kind !== undefined && !isConcreteAutoDiscoveryInput({
       kind,
-      path: path77.join(dir, lockfileName)
+      path: path76.join(dir, lockfileName)
     }, entries);
   }).sort();
 }
 function discoverExplicitLockfile(input) {
-  const lockfilePath = path77.resolve(input.cwd, input.lockfilePath);
+  const lockfilePath = path76.resolve(input.cwd, input.lockfilePath);
   const pathKind = supportedKindForLockfilePath(lockfilePath);
-  if (!existsSync44(lockfilePath)) {
+  if (!existsSync45(lockfilePath)) {
     if (!pathKind) {
       return err(createError({
         code: "UNSUPPORTED_LOCKFILE",
@@ -51037,22 +49469,22 @@ function sniffExplicitSbomKind(lockfilePath) {
 function readFilePrefix(filePath) {
   let fd;
   try {
-    fd = openSync3(filePath, "r");
+    fd = openSync2(filePath, "r");
     const buffer = Buffer.alloc(SBOM_SNIFF_MAX_BYTES);
-    const bytesRead = readSync3(fd, buffer, 0, buffer.length, 0);
+    const bytesRead = readSync2(fd, buffer, 0, buffer.length, 0);
     return buffer.subarray(0, bytesRead).toString("utf8");
   } catch {
     return;
   } finally {
     if (fd !== undefined) {
       try {
-        closeSync3(fd);
+        closeSync2(fd);
       } catch {}
     }
   }
 }
 function normalizeListedProjectPath(value) {
-  const normalized = path77.posix.normalize(value.replace(/\\/g, "/"));
+  const normalized = path76.posix.normalize(value.replace(/\\/g, "/"));
   if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/")) {
     return;
   }
@@ -51065,7 +49497,7 @@ function isListedXcodePackageResolvedPath(relativePath) {
 function findKnownLockfiles(dir, entries, inventory) {
   if (entries) {
     const directLockfiles = KNOWN_LOCKFILES.filter((lockfile) => entryIsFile(entries, lockfile));
-    const nestedLockfiles = KNOWN_NESTED_LOCKFILES.filter((lockfile) => inventory ? fileExistsInInventory(inventory, path77.join(dir, lockfile)) : entryIsFile(entries, lockfile));
+    const nestedLockfiles = KNOWN_NESTED_LOCKFILES.filter((lockfile) => inventory ? fileExistsInInventory(inventory, path76.join(dir, lockfile)) : entryIsFile(entries, lockfile));
     const gradleDependencyLockfiles = findGradleDependencyLockfiles(dir, entries, inventory);
     const dotnetProjects = findDotnetProjectFiles(dir, entries);
     const xcodeSwiftPackageResolvedFiles = findXcodeSwiftPackageResolvedFiles(dir, entries, inventory);
@@ -51078,7 +49510,7 @@ function findKnownLockfiles(dir, entries, inventory) {
       ...xcodeSwiftPackageResolvedFiles,
       ...namedPylockTomlFiles
     ]).filter((lockfileName) => {
-      const lockfilePath = path77.join(dir, lockfileName);
+      const lockfilePath = path76.join(dir, lockfileName);
       const kind = supportedKindForLockfilePath(lockfilePath);
       return kind === undefined || isConcreteAutoDiscoveryInput({
         kind,
@@ -51086,8 +49518,8 @@ function findKnownLockfiles(dir, entries, inventory) {
       }, entries);
     }).sort();
   }
-  const directLockfiles = KNOWN_LOCKFILES.filter((lockfile) => isFile4(path77.join(dir, lockfile)));
-  const nestedLockfiles = KNOWN_NESTED_LOCKFILES.filter((lockfile) => isFile4(path77.join(dir, lockfile)));
+  const directLockfiles = KNOWN_LOCKFILES.filter((lockfile) => isFile4(path76.join(dir, lockfile)));
+  const nestedLockfiles = KNOWN_NESTED_LOCKFILES.filter((lockfile) => isFile4(path76.join(dir, lockfile)));
   const gradleDependencyLockfiles = findGradleDependencyLockfiles(dir);
   const dotnetProjects = findDotnetProjectFiles(dir);
   const xcodeSwiftPackageResolvedFiles = findXcodeSwiftPackageResolvedFiles(dir);
@@ -51100,7 +49532,7 @@ function findKnownLockfiles(dir, entries, inventory) {
     ...xcodeSwiftPackageResolvedFiles,
     ...namedPylockTomlFiles
   ]).filter((lockfileName) => {
-    const lockfilePath = path77.join(dir, lockfileName);
+    const lockfilePath = path76.join(dir, lockfileName);
     const kind = supportedKindForLockfilePath(lockfilePath);
     return kind === undefined || isConcreteAutoDiscoveryInput({
       kind,
@@ -51110,10 +49542,10 @@ function findKnownLockfiles(dir, entries, inventory) {
 }
 function findKnownProjectManifests(dir, entries, inventory) {
   if (entries) {
-    const manifests = KNOWN_PROJECT_MANIFESTS.filter((manifest) => inventory ? fileExistsInInventory(inventory, path77.join(dir, manifest)) : entryExists(entries, manifest));
+    const manifests = KNOWN_PROJECT_MANIFESTS.filter((manifest) => inventory ? fileExistsInInventory(inventory, path76.join(dir, manifest)) : entryExists(entries, manifest));
     return [...new Set([...manifests, ...findDotnetProjectFiles(dir, entries)])].sort();
   }
-  const manifests = KNOWN_PROJECT_MANIFESTS.filter((manifest) => existsSync44(path77.join(dir, manifest)));
+  const manifests = KNOWN_PROJECT_MANIFESTS.filter((manifest) => existsSync45(path76.join(dir, manifest)));
   return [...new Set([...manifests, ...findDotnetProjectFiles(dir)])].sort();
 }
 function findDotnetProjectFiles(dir, entries) {
@@ -51121,20 +49553,20 @@ function findDotnetProjectFiles(dir, entries) {
     return entries.filter((entry) => entry.kind === "file" && entry.name.toLowerCase().endsWith(".csproj")).map((entry) => entry.name).sort();
   }
   try {
-    return readdirSync33(dir).filter((entry) => entry.toLowerCase().endsWith(".csproj")).filter((entry) => isFile4(path77.join(dir, entry))).sort();
+    return readdirSync33(dir).filter((entry) => entry.toLowerCase().endsWith(".csproj")).filter((entry) => isFile4(path76.join(dir, entry))).sort();
   } catch {
     return [];
   }
 }
 function findGradleDependencyLockfiles(dir, entries, inventory) {
-  const lockDir = path77.join(dir, GRADLE_DEPENDENCY_LOCKS_DIR);
+  const lockDir = path76.join(dir, GRADLE_DEPENDENCY_LOCKS_DIR);
   if (entries) {
     const lockEntries = inventory ? listDirectoryEntries(lockDir, inventory) : [];
     const lockfiles = lockEntries.filter((entry) => entry.kind === "file" && entry.name.toLowerCase().endsWith(".lockfile")).map((entry) => entry.name).sort();
     return lockfiles.length > 0 ? [GRADLE_DEPENDENCY_LOCKS_DIR] : [];
   }
   try {
-    const lockfiles = readdirSync33(lockDir).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile4(path77.join(lockDir, entry))).sort();
+    const lockfiles = readdirSync33(lockDir).filter((entry) => entry.toLowerCase().endsWith(".lockfile")).filter((entry) => isFile4(path76.join(lockDir, entry))).sort();
     return lockfiles.length > 0 ? [GRADLE_DEPENDENCY_LOCKS_DIR] : [];
   } catch {
     return [];
@@ -51150,9 +49582,9 @@ function normalizeCompanionLockfiles(lockfiles) {
     normalized = normalized.filter((lockfile) => lockfile !== "pyproject.toml");
   }
   if (normalized.includes("gradle.lockfile")) {
-    normalized = normalized.filter((lockfile) => lockfile !== path77.join("gradle", "libs.versions.toml") && !isGradleDependencyLockInputPath(lockfile));
+    normalized = normalized.filter((lockfile) => lockfile !== path76.join("gradle", "libs.versions.toml") && !isGradleDependencyLockInputPath(lockfile));
   } else if (normalized.includes(GRADLE_DEPENDENCY_LOCKS_DIR)) {
-    normalized = normalized.filter((lockfile) => lockfile !== path77.join("gradle", "libs.versions.toml"));
+    normalized = normalized.filter((lockfile) => lockfile !== path76.join("gradle", "libs.versions.toml"));
   }
   if (normalized.includes("Chart.lock")) {
     normalized = normalized.filter((lockfile) => lockfile !== "Chart.yaml");
@@ -51165,10 +49597,10 @@ function normalizeCompanionLockfiles(lockfiles) {
 }
 function findXcodeSwiftPackageResolvedFiles(dir, entries, inventory) {
   if (entries) {
-    return entries.flatMap((entry) => xcodePackageResolvedCandidates(entry.name)).filter((candidate) => inventory ? fileExistsInInventory(inventory, path77.join(dir, candidate)) : false).sort();
+    return entries.flatMap((entry) => xcodePackageResolvedCandidates(entry.name)).filter((candidate) => inventory ? fileExistsInInventory(inventory, path76.join(dir, candidate)) : false).sort();
   }
   try {
-    return readdirSync33(dir).flatMap((entry) => xcodePackageResolvedCandidates(entry)).filter((candidate) => isFile4(path77.join(dir, candidate))).sort();
+    return readdirSync33(dir).flatMap((entry) => xcodePackageResolvedCandidates(entry)).filter((candidate) => isFile4(path76.join(dir, candidate))).sort();
   } catch {
     return [];
   }
@@ -51176,18 +49608,18 @@ function findXcodeSwiftPackageResolvedFiles(dir, entries, inventory) {
 function xcodePackageResolvedCandidates(entry) {
   if (entry.endsWith(".xcodeproj")) {
     return [
-      path77.join(entry, "project.xcworkspace", "xcshareddata", "swiftpm", "Package.resolved")
+      path76.join(entry, "project.xcworkspace", "xcshareddata", "swiftpm", "Package.resolved")
     ];
   }
   if (entry.endsWith(".xcworkspace")) {
     return [
-      path77.join(entry, "xcshareddata", "swiftpm", "Package.resolved")
+      path76.join(entry, "xcshareddata", "swiftpm", "Package.resolved")
     ];
   }
   return [];
 }
 function supportedKindForLockfilePath(lockfilePath) {
-  const lockfileName = path77.basename(lockfilePath);
+  const lockfileName = path76.basename(lockfilePath);
   if (lockfileName === "package.json") {
     return "package-json";
   }
@@ -51224,31 +49656,31 @@ function projectRootForLockfile(lockfile) {
   return rootDirForLockfilePath(lockfile.path, lockfile.kind);
 }
 function rootDirForLockfilePath(lockfilePath, kind) {
-  if (kind === "gradle-version-catalog" && path77.basename(path77.dirname(lockfilePath)) === "gradle") {
-    return path77.dirname(path77.dirname(lockfilePath));
+  if (kind === "gradle-version-catalog" && path76.basename(path76.dirname(lockfilePath)) === "gradle") {
+    return path76.dirname(path76.dirname(lockfilePath));
   }
   if (kind === "gradle-lock" && isGradleDependencyLockInputPath(lockfilePath)) {
     return rootDirForGradleDependencyLockInput(lockfilePath);
   }
-  if (kind === "nuget-assets" && path77.basename(path77.dirname(lockfilePath)).toLowerCase() === "obj") {
-    return path77.dirname(path77.dirname(lockfilePath));
+  if (kind === "nuget-assets" && path76.basename(path76.dirname(lockfilePath)).toLowerCase() === "obj") {
+    return path76.dirname(path76.dirname(lockfilePath));
   }
   if (kind === "swift-package-resolved") {
     return swiftProjectRootForPackageResolved(lockfilePath);
   }
-  if (kind === "unity-packages-lock" && path77.basename(path77.dirname(lockfilePath)).toLowerCase() === "packages") {
-    return path77.dirname(path77.dirname(lockfilePath));
+  if (kind === "unity-packages-lock" && path76.basename(path76.dirname(lockfilePath)).toLowerCase() === "packages") {
+    return path76.dirname(path76.dirname(lockfilePath));
   }
-  return path77.dirname(lockfilePath);
+  return path76.dirname(lockfilePath);
 }
 function supportedLockfileNames() {
-  return ["package.json (dependency-free)", ...Object.keys(SUPPORTED_LOCKFILES), "pylock.<name>.toml", ...KNOWN_NESTED_LOCKFILES, GRADLE_DEPENDENCY_LOCKS_DIR, path77.join(GRADLE_DEPENDENCY_LOCKS_DIR, "*.lockfile"), "*.csproj", "*.cdx.json", "*.spdx.json", "*.spdx", "*.spdx.rdf", "*.spdx.rdf.xml", "*.cdx.xml"];
+  return ["package.json (dependency-free)", ...Object.keys(SUPPORTED_LOCKFILES), "pylock.<name>.toml", ...KNOWN_NESTED_LOCKFILES, GRADLE_DEPENDENCY_LOCKS_DIR, path76.join(GRADLE_DEPENDENCY_LOCKS_DIR, "*.lockfile"), "*.csproj", "*.cdx.json", "*.spdx.json", "*.spdx", "*.spdx.rdf", "*.spdx.rdf.xml", "*.cdx.xml"];
 }
 function findDependencyFreePackageJsonManifest(dir, entries) {
   if (entries && !entryIsFile(entries, "package.json")) {
     return;
   }
-  const packageJsonPath = path77.join(dir, "package.json");
+  const packageJsonPath = path76.join(dir, "package.json");
   if (!isFile4(packageJsonPath)) {
     return;
   }
@@ -51260,28 +49692,28 @@ function hasKnownLockfileDirectoryPath(dir, entries) {
     return KNOWN_LOCKFILES.some((lockfile) => entryIsDirectory(entries, lockfile));
   }
   return KNOWN_LOCKFILES.some((lockfile) => {
-    const lockfilePath = path77.join(dir, lockfile);
-    return existsSync44(lockfilePath) && isDirectory3(lockfilePath);
+    const lockfilePath = path76.join(dir, lockfile);
+    return existsSync45(lockfilePath) && isDirectory3(lockfilePath);
   });
 }
 function swiftProjectRootForPackageResolved(lockfilePath) {
-  const segments = path77.normalize(lockfilePath).split(path77.sep);
+  const segments = path76.normalize(lockfilePath).split(path76.sep);
   const xcodeContainerIndex = segments.findIndex((segment) => segment.endsWith(".xcodeproj") || segment.endsWith(".xcworkspace"));
   if (xcodeContainerIndex > 0) {
-    return segments.slice(0, xcodeContainerIndex).join(path77.sep);
+    return segments.slice(0, xcodeContainerIndex).join(path76.sep);
   }
-  return path77.dirname(lockfilePath);
+  return path76.dirname(lockfilePath);
 }
 function isUnityPackagesLockPath(lockfilePath) {
-  const segments = path77.normalize(lockfilePath).split(path77.sep);
+  const segments = path76.normalize(lockfilePath).split(path76.sep);
   return segments.length >= 2 && segments[segments.length - 1] === "packages-lock.json" && segments[segments.length - 2] === "Packages";
 }
 function isGradleDependencyLockInputPath(lockfilePath) {
-  const segments = path77.normalize(lockfilePath).split(path77.sep);
+  const segments = path76.normalize(lockfilePath).split(path76.sep);
   return isGradleDependencyLockDirectorySegments(segments) || isGradleDependencyLockfileSegments(segments);
 }
 function isGradleDependencyLockfileDirectory(lockfilePath) {
-  return isGradleDependencyLockDirectorySegments(path77.normalize(lockfilePath).split(path77.sep)) && isDirectory3(lockfilePath);
+  return isGradleDependencyLockDirectorySegments(path76.normalize(lockfilePath).split(path76.sep)) && isDirectory3(lockfilePath);
 }
 function isGradleDependencyLockDirectorySegments(segments) {
   return segments.length >= 2 && segments[segments.length - 1] === "dependency-locks" && segments[segments.length - 2] === "gradle";
@@ -51290,15 +49722,15 @@ function isGradleDependencyLockfileSegments(segments) {
   return segments.length >= 3 && segments[segments.length - 1]?.toLowerCase().endsWith(".lockfile") === true && segments[segments.length - 2] === "dependency-locks" && segments[segments.length - 3] === "gradle";
 }
 function rootDirForGradleDependencyLockInput(lockfilePath) {
-  const segments = path77.normalize(lockfilePath).split(path77.sep);
-  return isGradleDependencyLockDirectorySegments(segments) ? path77.dirname(path77.dirname(lockfilePath)) : path77.dirname(path77.dirname(path77.dirname(lockfilePath)));
+  const segments = path76.normalize(lockfilePath).split(path76.sep);
+  return isGradleDependencyLockDirectorySegments(segments) ? path76.dirname(path76.dirname(lockfilePath)) : path76.dirname(path76.dirname(path76.dirname(lockfilePath)));
 }
 function findNamedPylockTomlFiles(dir, entries) {
   if (entries) {
     return entries.filter((entry) => entry.kind === "file" && entry.name !== "pylock.toml" && isPylockTomlFile(entry.name)).map((entry) => entry.name).sort();
   }
   try {
-    return readdirSync33(dir).filter((entry) => entry !== "pylock.toml" && isPylockTomlFile(entry)).filter((entry) => isFile4(path77.join(dir, entry))).sort();
+    return readdirSync33(dir).filter((entry) => entry !== "pylock.toml" && isPylockTomlFile(entry)).filter((entry) => isFile4(path76.join(dir, entry))).sort();
   } catch {
     return [];
   }
@@ -51329,7 +49761,7 @@ function ancestorsFrom(startDir) {
   let current = startDir;
   while (true) {
     dirs.push(current);
-    const parent = path77.dirname(current);
+    const parent = path76.dirname(current);
     if (parent === current) {
       return dirs;
     }
@@ -51655,270 +50087,1124 @@ function adapter(id, lockfileKinds, packageEcosystems) {
   };
 }
 
-// src/evidence/go-module-zip.ts
-import { createHash as createHash7, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
-import { TextDecoder as TextDecoder4 } from "node:util";
-var GO_MODULE_ZIP_MAX_ENTRIES = 65535;
-var GO_MODULE_ZIP_ENTRY_MAX_BYTES = 50 * 1024 * 1024;
-var GO_MODULE_ZIP_EXPANDED_MAX_BYTES = 512 * 1024 * 1024;
-var GO_MODULE_ZIP_MATERIALIZED_MAX_BYTES = 34 * 1024 * 1024;
-var GO_MODULE_LICENSE_MAX_BYTES = 2 * 1024 * 1024;
-var GO_MODULE_LICENSE_FILE_LIMIT = 16;
-var GO_MODULE_MOD_MAX_BYTES2 = 2 * 1024 * 1024;
-var GO_H1_DIGEST_BYTES = 32;
-var GO_MOD_DECODER = new TextDecoder4("utf-8", { fatal: true });
-function collectGoModuleZipEvidence(input) {
-  const archive = readArchiveBytes({
-    displayName: `${safeGoModuleDisplayName(input.modulePath)}@${input.version}.zip`,
-    bytes: input.zip,
-    formatHint: "zip",
-    limits: {
-      inputBytes: input.artifactMaxBytes,
-      entries: GO_MODULE_ZIP_MAX_ENTRIES,
-      entryBytes: GO_MODULE_ZIP_ENTRY_MAX_BYTES,
-      expandedBytes: GO_MODULE_ZIP_EXPANDED_MAX_BYTES,
-      materializedBytes: GO_MODULE_ZIP_MATERIALIZED_MAX_BYTES
+// src/evidence/hex-tarball.ts
+import { createHash as createHash6, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+
+// src/archive/archive-reader.ts
+import { createHash as createHash5 } from "node:crypto";
+import { closeSync as closeSync3, fstatSync, openSync as openSync3, readSync as readSync3, realpathSync as realpathSync4, statSync as statSync33 } from "node:fs";
+import { basename, isAbsolute, relative, resolve, sep } from "node:path";
+import { gunzipSync as gunzipSync3, inflateRawSync } from "node:zlib";
+var BLOCK_BYTES = 512;
+var ZIP_EOCD_SIGNATURE = 101010256;
+var ZIP_CENTRAL_SIGNATURE = 33639248;
+var ZIP_LOCAL_SIGNATURE = 67324752;
+var ZIP64_EOCD_SIGNATURE = 101075792;
+var ZIP64_LOCATOR_SIGNATURE = 117853008;
+var ZIP_EOCD_BYTES = 22;
+var ZIP_MAX_COMMENT_BYTES = 65535;
+var ZIP64_UINT16 = 65535;
+var ZIP64_UINT32 = 4294967295;
+var ZIP_DATA_DESCRIPTOR_SIGNATURE = 134695760;
+var DEFAULT_ARCHIVE_LIMITS = Object.freeze({
+  inputBytes: 256 * 1024 * 1024,
+  entries: 50000,
+  pathBytes: 4096,
+  pathSegments: 64,
+  segmentBytes: 255,
+  entryBytes: 50 * 1024 * 1024,
+  expandedBytes: 512 * 1024 * 1024,
+  materializedBytes: 128 * 1024 * 1024,
+  compressionRatio: 200,
+  compressionRatioMinBytes: 1024 * 1024,
+  workDeadlineMs: 30000
+});
+
+class ArchiveFailure extends Error {
+  code;
+  category;
+  details;
+  constructor(input) {
+    super(input.message);
+    this.name = "ArchiveFailure";
+    this.code = input.code;
+    this.category = input.category;
+    if (input.details !== undefined) {
+      this.details = input.details;
+    }
+  }
+}
+var CRC32_TABLE2 = buildCrc32Table2();
+function readArchiveFile(input) {
+  const safeName = safeBasename(input.archivePath);
+  try {
+    const limits = resolveLimits(input.limits);
+    checkArchiveCancellation(input.signal, safeName);
+    const cwd = realpathSync4(resolve(input.cwd));
+    const filePath = realpathSync4(resolve(cwd, input.archivePath));
+    const relativePath = relative(cwd, filePath);
+    if (relativePath === "" || isAbsolute(relativePath) || relativePath === ".." || relativePath.startsWith(`..${sep}`)) {
+      fail("ARCHIVE_READ_FAILED", "invalid_input", "Archive path is outside the working directory.", {
+        basename: safeName
+      });
+    }
+    const bytes = readFileBytesWithLimit(filePath, limits.inputBytes, safeName, input.signal);
+    return readOwnedArchiveBuffer({
+      displayName: relativePath.split(sep).join("/"),
+      bytes,
+      limits,
+      ...input.now ? { now: input.now } : {},
+      ...input.signal ? { signal: input.signal } : {}
+    });
+  } catch (cause) {
+    return err(toOhriskError(cause, "ARCHIVE_READ_FAILED", "filesystem", safeName));
+  }
+}
+function readArchiveBytes(input) {
+  const safeName = safeBasename(input.displayName);
+  try {
+    const limits = resolveLimits(input.limits);
+    checkArchiveCancellation(input.signal, safeName);
+    enforceLimit("inputBytes", limits.inputBytes, input.bytes.byteLength, safeName);
+    return readOwnedArchiveBuffer({
+      ...input,
+      limits,
+      bytes: Buffer.from(input.bytes)
+    });
+  } catch (cause) {
+    return err(toOhriskError(cause, "ARCHIVE_MALFORMED", "invalid_input", safeName));
+  }
+}
+function readOwnedArchiveBuffer(input) {
+  const safeName = safeBasename(input.displayName);
+  try {
+    const limits = resolveLimits(input.limits);
+    enforceLimit("inputBytes", limits.inputBytes, input.bytes.byteLength, safeName);
+    const budget = createBudget(limits, input.now, input.signal);
+    checkDeadline(budget, safeName);
+    const format = detectFormat(input.bytes, input.formatHint, safeName);
+    const indexed = format === "zip" ? parseZip(input.bytes, budget, safeName) : parseTarContainer(input.bytes, format, budget, safeName, input.tarLinkPolicy ?? "reject", input.onTarSymlink);
+    const sha256 = createHash5("sha256").update(input.bytes).digest("hex");
+    checkDeadline(budget, safeName);
+    const source = createArchiveSource({
+      format,
+      displayPath: safeDisplayPath(input.displayName),
+      sha256,
+      indexed,
+      budget,
+      basename: safeName
+    });
+    return ok(source);
+  } catch (cause) {
+    return err(toOhriskError(cause, "ARCHIVE_MALFORMED", "invalid_input", safeName));
+  }
+}
+function createArchiveSource(input) {
+  const sorted = [...input.indexed].sort((left, right) => comparePaths(left.path, right.path));
+  const publicEntries = Object.freeze(sorted.map(({ path, type, size, compressedSize }) => Object.freeze({ path, type, size, compressedSize })));
+  const byPath = new Map(sorted.map((entry) => [entry.path, entry]));
+  const paths = Object.freeze(publicEntries.map((entry) => entry.path));
+  const beginWork = () => {
+    const startedAt = input.budget.now();
+    return Object.freeze({
+      checkpoint: (entryPath) => {
+        try {
+          checkDeadlineSince(input.budget, startedAt, input.basename, entryPath);
+          return ok(undefined);
+        } catch (cause) {
+          return err(toOhriskError(cause, "ARCHIVE_LIMIT_EXCEEDED", "unsupported_input", input.basename));
+        }
+      }
+    });
+  };
+  const readEntry = (entryPath) => {
+    try {
+      const startedAt = input.budget.now();
+      checkDeadlineSince(input.budget, startedAt, input.basename);
+      const normalized = validateEntryPath(entryPath, input.budget.limits, false, input.basename);
+      const entry = byPath.get(normalized);
+      if (!entry || entry.type !== "file") {
+        fail("ARCHIVE_READ_FAILED", "invalid_input", "Archive file entry was not found.", {
+          basename: input.basename,
+          entryPath: normalized
+        });
+      }
+      chargeMaterialization(input.budget, entry.size, input.basename, entry.path);
+      const data = entry.materialize(startedAt);
+      checkDeadlineSince(input.budget, startedAt, input.basename, entry.path);
+      return ok(data);
+    } catch (cause) {
+      return err(toOhriskError(cause, "ARCHIVE_READ_FAILED", "invalid_input", input.basename));
+    }
+  };
+  const hashEntrySha256 = (entryPath) => {
+    try {
+      const startedAt = input.budget.now();
+      checkDeadlineSince(input.budget, startedAt, input.basename);
+      const normalized = validateEntryPath(entryPath, input.budget.limits, false, input.basename);
+      const entry = byPath.get(normalized);
+      if (!entry || entry.type !== "file") {
+        fail("ARCHIVE_READ_FAILED", "invalid_input", "Archive file entry was not found.", {
+          basename: input.basename,
+          entryPath: normalized
+        });
+      }
+      chargeHashing(input.budget, entry.size, input.basename, entry.path);
+      const data = entry.materialize(startedAt);
+      checkDeadlineSince(input.budget, startedAt, input.basename, entry.path);
+      return ok(createHash5("sha256").update(data).digest("hex"));
+    } catch (cause) {
+      return err(toOhriskError(cause, "ARCHIVE_READ_FAILED", "invalid_input", input.basename));
+    }
+  };
+  return Object.freeze({
+    format: input.format,
+    displayPath: input.displayPath,
+    sha256: input.sha256,
+    entries: publicEntries,
+    listPaths: () => paths,
+    beginWork,
+    readEntry,
+    hashEntrySha256,
+    readText: (entryPath, maxBytes) => {
+      if (maxBytes !== undefined) {
+        if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
+          return err(createError({
+            code: "ARCHIVE_LIMIT_EXCEEDED",
+            category: "invalid_input",
+            message: "Archive text read limit is invalid.",
+            details: {
+              basename: input.basename,
+              entryPath: safeEntryPathForError(entryPath),
+              limit: "readTextBytes",
+              max: maxBytes,
+              observed: maxBytes
+            }
+          }));
+        }
+        const candidate = byPath.get(entryPath);
+        if (candidate && candidate.type === "file" && candidate.size > maxBytes) {
+          return err(createError({
+            code: "ARCHIVE_LIMIT_EXCEEDED",
+            category: "unsupported_input",
+            message: "Archive text entry exceeds the caller limit.",
+            details: {
+              basename: input.basename,
+              entryPath: candidate.path,
+              limit: "readTextBytes",
+              max: maxBytes,
+              observed: candidate.size
+            }
+          }));
+        }
+      }
+      const data = readEntry(entryPath);
+      if (!data.ok) {
+        return data;
+      }
+      try {
+        return ok(decodeUtf8(data.value, entryPath, input.basename));
+      } catch (cause) {
+        return err(toOhriskError(cause, "ARCHIVE_INTEGRITY_FAILED", "invalid_input", input.basename));
+      }
     }
   });
-  if (!archive.ok) {
-    if (archive.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
-      return ok(unavailableGoModuleEvidence(input.packageId, `Checksum-identified Go module zip exceeded bounded archive limits (${archive.error.code}); its contents were not trusted.`));
-    }
-    return err(archive.error);
-  }
-  const rootPrefix = `${input.modulePath}@${input.version}/`;
-  const fileNames = archive.value.entries.map((entry) => entry.type === "directory" ? `${entry.path}/` : entry.path);
-  const unexpectedPath = fileNames.find((fileName) => !fileName.startsWith(rootPrefix));
-  if (unexpectedPath) {
-    return err(goModuleEvidenceError({
-      packageId: input.packageId,
-      message: "Go module zip did not use the requested module path and version prefix.",
-      details: {
-        reason: "go_module_zip_identity_mismatch",
-        expectedPrefix: rootPrefix,
-        observedPath: unexpectedPath
-      }
-    }));
-  }
-  const computedChecksum = hashGoModuleArchive({
-    packageId: input.packageId,
-    entries: archive.value.entries,
-    hashEntrySha256: archive.value.hashEntrySha256
-  });
-  if (!computedChecksum.ok) {
-    return computedChecksum;
-  }
-  if (!equalGoChecksums(input.checksum, computedChecksum.value)) {
-    return err(createError({
-      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
-      category: "unsupported_input",
-      message: "Go module zip checksum did not match go.sum.",
-      details: {
-        packageId: input.packageId,
-        modulePath: input.modulePath,
-        version: input.version,
-        integrity: input.checksum,
-        computed: computedChecksum.value
-      }
-    }));
-  }
-  const evidencePaths = archive.value.entries.filter((entry) => entry.type === "file").map((entry) => entry.path).filter((entryPath) => isGoModuleRootEvidencePath(entryPath, rootPrefix)).slice(0, GO_MODULE_LICENSE_FILE_LIMIT);
-  const files = [];
-  for (const evidencePath of evidencePaths) {
-    const kind = classifyEvidenceFile(evidencePath);
-    if (!kind) {
-      continue;
-    }
-    const text = archive.value.readText(evidencePath, GO_MODULE_LICENSE_MAX_BYTES);
-    if (!text.ok) {
-      return err(text.error);
-    }
-    files.push({
-      path: evidencePath.slice(rootPrefix.length),
-      kind,
-      text: text.value
+}
+function parseZip(bytes, budget, archiveName) {
+  const eocd = findZipEocd(bytes, archiveName);
+  const diskNumber = readU16(bytes, eocd + 4, archiveName);
+  const centralDisk = readU16(bytes, eocd + 6, archiveName);
+  const entriesOnDisk = readU16(bytes, eocd + 8, archiveName);
+  const totalEntries = readU16(bytes, eocd + 10, archiveName);
+  const centralSize = readU32(bytes, eocd + 12, archiveName);
+  const centralOffset = readU32(bytes, eocd + 16, archiveName);
+  if (diskNumber !== 0 || centralDisk !== 0 || entriesOnDisk !== totalEntries) {
+    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Multi-disk ZIP archives are not supported.", {
+      basename: archiveName,
+      format: "zip"
     });
   }
-  const goModuleRequirements = readVerifiedGoModuleRequirements({
-    goModPath: `${rootPrefix}go.mod`,
-    entries: archive.value.entries,
-    readText: archive.value.readText
-  });
-  return ok({
-    packageId: input.packageId,
-    ...goModuleRequirements ? { goModuleRequirements } : {},
-    files,
-    source: "tarball",
-    warnings: files.length > 0 ? [] : ["Checksum-verified Go module zip did not contain a root license evidence file."]
-  });
-}
-function readChecksumVerifiedGoModuleRequirements(input) {
-  const computedChecksum = hashGoModBytes(input.goMod);
-  if (!equalGoChecksums(input.checksum, computedChecksum)) {
-    return;
+  if (entriesOnDisk === ZIP64_UINT16 || totalEntries === ZIP64_UINT16 || centralSize === ZIP64_UINT32 || centralOffset === ZIP64_UINT32 || hasSignatureAt(bytes, eocd - 20, ZIP64_LOCATOR_SIGNATURE) || hasSignatureAt(bytes, eocd - 56, ZIP64_EOCD_SIGNATURE)) {
+    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "ZIP64 archives are not supported.", {
+      basename: archiveName,
+      format: "zip"
+    });
   }
-  let text;
+  enforceLimit("entries", budget.limits.entries, totalEntries, archiveName);
+  const centralEnd = safeAdd(centralOffset, centralSize, archiveName);
+  if (centralEnd !== eocd || centralEnd > bytes.length) {
+    malformed(archiveName, "ZIP central directory bounds are invalid.", "zip");
+  }
+  const entries = [];
+  const registry = new EntryRegistry(archiveName);
+  let expanded = 0;
+  let offset = centralOffset;
+  for (let index = 0;index < totalEntries; index += 1) {
+    checkDeadline(budget, archiveName);
+    if (readU32(bytes, offset, archiveName) !== ZIP_CENTRAL_SIGNATURE) {
+      malformed(archiveName, "ZIP central directory entry has an invalid signature.", "zip");
+    }
+    requireRange(bytes, offset, 46, archiveName);
+    const flags = readU16(bytes, offset + 8, archiveName);
+    const method = readU16(bytes, offset + 10, archiveName);
+    const crc = readU32(bytes, offset + 16, archiveName);
+    const compressedSize = readU32(bytes, offset + 20, archiveName);
+    const size = readU32(bytes, offset + 24, archiveName);
+    const nameLength = readU16(bytes, offset + 28, archiveName);
+    const extraLength = readU16(bytes, offset + 30, archiveName);
+    const commentLength = readU16(bytes, offset + 32, archiveName);
+    const diskStart = readU16(bytes, offset + 34, archiveName);
+    const externalAttributes = readU32(bytes, offset + 38, archiveName);
+    const localOffset = readU32(bytes, offset + 42, archiveName);
+    const recordLength = 46 + nameLength + extraLength + commentLength;
+    requireRange(bytes, offset, recordLength, archiveName);
+    if (offset + recordLength > centralEnd) {
+      malformed(archiveName, "ZIP central directory entry metadata is truncated.", "zip");
+    }
+    if ((flags & 1) !== 0 || (flags & 64) !== 0 || (flags & 8192) !== 0) {
+      fail("ARCHIVE_ENCRYPTED", "unsupported_input", "Encrypted ZIP entries are not supported.", {
+        basename: archiveName,
+        format: "zip"
+      });
+    }
+    if ((flags & ~2062) !== 0) {
+      fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "ZIP entry flags are not supported.", {
+        basename: archiveName,
+        format: "zip"
+      });
+    }
+    if (diskStart !== 0) {
+      fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Multi-disk ZIP entries are not supported.", {
+        basename: archiveName,
+        format: "zip"
+      });
+    }
+    if (compressedSize === ZIP64_UINT32 || size === ZIP64_UINT32 || localOffset === ZIP64_UINT32) {
+      fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "ZIP64 entries are not supported.", {
+        basename: archiveName,
+        format: "zip"
+      });
+    }
+    if (method !== 0 && method !== 8) {
+      fail("ARCHIVE_COMPRESSION_UNSUPPORTED", "unsupported_input", "ZIP compression method is not supported.", {
+        basename: archiveName,
+        format: "zip",
+        method
+      });
+    }
+    const rawName = bytes.subarray(offset + 46, offset + 46 + nameLength);
+    const decodedName = decodeUtf8(rawName, undefined, archiveName);
+    const directoryByName = decodedName.endsWith("/");
+    const entryPath = validateEntryPath(decodedName, budget.limits, directoryByName, archiveName);
+    const unixMode = externalAttributes >>> 16;
+    const unixType = unixMode & 61440;
+    const directoryByDos = (externalAttributes & 16) !== 0;
+    if (unixType !== 0 && unixType !== 32768 && unixType !== 16384) {
+      unsupportedType(archiveName, entryPath, "zip");
+    }
+    const zeroLengthDirectoryWithRegularUnixMode = (directoryByName || directoryByDos) && unixType === 32768 && size === 0;
+    if ((directoryByName || directoryByDos) && unixType === 32768 && !zeroLengthDirectoryWithRegularUnixMode) {
+      malformed(archiveName, "ZIP entry type metadata is inconsistent.", "zip", entryPath);
+    }
+    const type = directoryByName || directoryByDos || unixType === 16384 ? "directory" : "file";
+    const emptyDirectoryEncoding = size === 0 && (compressedSize === 0 || method === 8 && compressedSize === 2 && crc === 0);
+    if (type === "directory" && !emptyDirectoryEncoding || type === "file" && directoryByName) {
+      malformed(archiveName, "ZIP entry type metadata is inconsistent.", "zip", entryPath);
+    }
+    enforceEntryLimits({ size, compressedSize, budget, archiveName, entryPath });
+    expanded = safeAdd(expanded, size, archiveName);
+    enforceLimit("expandedBytes", budget.limits.expandedBytes, expanded, archiveName, entryPath);
+    const local = parseZipLocalHeader({
+      bytes,
+      localOffset,
+      centralOffset,
+      centralName: rawName,
+      flags,
+      method,
+      crc,
+      compressedSize,
+      size,
+      archiveName,
+      entryPath
+    });
+    registry.add(entryPath, type);
+    entries.push({
+      path: entryPath,
+      type,
+      size,
+      compressedSize,
+      crc32: crc,
+      flags,
+      method,
+      dataStart: local.dataStart,
+      dataEnd: local.dataEnd,
+      localOffset,
+      recordEnd: local.recordEnd
+    });
+    offset += recordLength;
+  }
+  if (offset !== centralEnd) {
+    malformed(archiveName, "ZIP central directory entry count does not match its size.", "zip");
+  }
+  validateZipLocalRecordLayout(entries, centralOffset, archiveName);
+  return entries.map((entry) => ({
+    path: entry.path,
+    type: entry.type,
+    size: entry.size,
+    compressedSize: entry.compressedSize,
+    materialize: (startedAt) => materializeZipEntry(bytes, entry, archiveName, budget, startedAt)
+  }));
+}
+function parseZipLocalHeader(input) {
+  requireRange(input.bytes, input.localOffset, 30, input.archiveName, input.entryPath);
+  if (readU32(input.bytes, input.localOffset, input.archiveName) !== ZIP_LOCAL_SIGNATURE) {
+    integrity(input.archiveName, input.entryPath, "ZIP local header signature does not match.", "zip");
+  }
+  const localFlags = readU16(input.bytes, input.localOffset + 6, input.archiveName);
+  const localMethod = readU16(input.bytes, input.localOffset + 8, input.archiveName);
+  const localCrc = readU32(input.bytes, input.localOffset + 14, input.archiveName);
+  const localCompressedSize = readU32(input.bytes, input.localOffset + 18, input.archiveName);
+  const localSize = readU32(input.bytes, input.localOffset + 22, input.archiveName);
+  const nameLength = readU16(input.bytes, input.localOffset + 26, input.archiveName);
+  const extraLength = readU16(input.bytes, input.localOffset + 28, input.archiveName);
+  requireRange(input.bytes, input.localOffset + 30, nameLength + extraLength, input.archiveName, input.entryPath);
+  const localName = input.bytes.subarray(input.localOffset + 30, input.localOffset + 30 + nameLength);
+  if (!localName.equals(input.centralName) || localFlags !== input.flags || localMethod !== input.method) {
+    integrity(input.archiveName, input.entryPath, "ZIP central and local headers do not match.", "zip");
+  }
+  const usesDescriptor = (input.flags & 8) !== 0;
+  if (!usesDescriptor && (localCrc !== input.crc || localCompressedSize !== input.compressedSize || localSize !== input.size) || usesDescriptor && !((localCrc === 0 || localCrc === input.crc) && (localCompressedSize === 0 || localCompressedSize === input.compressedSize) && (localSize === 0 || localSize === input.size))) {
+    integrity(input.archiveName, input.entryPath, "ZIP central and local size or CRC metadata do not match.", "zip");
+  }
+  const dataStart = safeAdd(input.localOffset + 30, nameLength + extraLength, input.archiveName);
+  const dataEnd = safeAdd(dataStart, input.compressedSize, input.archiveName);
+  if (dataEnd > input.centralOffset || dataEnd > input.bytes.length) {
+    malformed(input.archiveName, "ZIP entry data extends beyond its data area.", "zip", input.entryPath);
+  }
+  const recordEnd = usesDescriptor ? parseZipDataDescriptor({
+    bytes: input.bytes,
+    offset: dataEnd,
+    centralOffset: input.centralOffset,
+    crc: input.crc,
+    compressedSize: input.compressedSize,
+    size: input.size,
+    archiveName: input.archiveName,
+    entryPath: input.entryPath
+  }) : dataEnd;
+  return { dataStart, dataEnd, recordEnd };
+}
+function parseZipDataDescriptor(input) {
+  requireRange(input.bytes, input.offset, 16, input.archiveName, input.entryPath);
+  if (input.offset + 16 > input.centralOffset) {
+    malformed(input.archiveName, "ZIP data descriptor extends beyond its data area.", "zip", input.entryPath);
+  }
+  if (readU32(input.bytes, input.offset, input.archiveName) !== ZIP_DATA_DESCRIPTOR_SIGNATURE) {
+    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Unsigned ZIP data descriptors are not supported.", {
+      basename: input.archiveName,
+      entryPath: input.entryPath,
+      format: "zip"
+    });
+  }
+  const crc = readU32(input.bytes, input.offset + 4, input.archiveName);
+  const compressedSize = readU32(input.bytes, input.offset + 8, input.archiveName);
+  const size = readU32(input.bytes, input.offset + 12, input.archiveName);
+  if (crc !== input.crc || compressedSize !== input.compressedSize || size !== input.size) {
+    integrity(input.archiveName, input.entryPath, "ZIP data descriptor does not match central metadata.", "zip");
+  }
+  return input.offset + 16;
+}
+function validateZipLocalRecordLayout(entries, centralOffset, archiveName) {
+  const sorted = [...entries].sort((left, right) => left.localOffset - right.localOffset);
+  for (let index = 0;index < sorted.length; index += 1) {
+    const entry = sorted[index];
+    if (!entry) {
+      continue;
+    }
+    const nextOffset = sorted[index + 1]?.localOffset ?? centralOffset;
+    if (entry.recordEnd > nextOffset) {
+      malformed(archiveName, "ZIP local records overlap.", "zip", entry.path);
+    }
+  }
+}
+function materializeZipEntry(bytes, entry, archiveName, budget, startedAt) {
   try {
-    text = GO_MOD_DECODER.decode(input.goMod);
-  } catch {
-    return;
-  }
-  const parsed = parseGoModRecords(text, "go.mod", { strictEdges: true });
-  return parsed.ok ? [...new Set(parsed.value.records.map((record) => record.modulePath))].sort() : undefined;
-}
-function readVerifiedGoModuleRequirements(input) {
-  if (!input.entries.some((entry) => entry.type === "file" && entry.path === input.goModPath)) {
-    return;
-  }
-  const goModText = input.readText(input.goModPath, GO_MODULE_MOD_MAX_BYTES2);
-  if (!goModText.ok) {
-    return;
-  }
-  const parsed = parseGoModRecords(goModText.value, input.goModPath, { strictEdges: true });
-  if (!parsed.ok) {
-    return;
-  }
-  return [...new Set(parsed.value.records.map((record) => record.modulePath))].sort();
-}
-function hashGoModuleArchive(input) {
-  const summary = createHash7("sha256");
-  const entries = [...input.entries].sort((left, right) => {
-    const leftName = left.type === "directory" ? `${left.path}/` : left.path;
-    const rightName = right.type === "directory" ? `${right.path}/` : right.path;
-    return leftName < rightName ? -1 : leftName > rightName ? 1 : 0;
-  });
-  for (const entry of entries) {
-    const fileName = entry.type === "directory" ? `${entry.path}/` : entry.path;
-    if (fileName.includes(`
-`)) {
-      return err(goModuleEvidenceError({
-        packageId: input.packageId,
-        message: "Go module zip contained a newline in an entry path.",
-        details: { reason: "go_module_zip_newline_path" }
-      }));
+    const compressed = bytes.subarray(entry.dataStart, entry.dataEnd);
+    const output = entry.method === 0 ? Buffer.from(compressed) : inflateRawSync(compressed, { maxOutputLength: Math.max(1, entry.size) });
+    if (output.length !== entry.size) {
+      integrity(archiveName, entry.path, "ZIP entry expanded size does not match metadata.", "zip");
     }
-    let fileDigest;
-    if (entry.type === "directory") {
-      fileDigest = createHash7("sha256").digest("hex");
-    } else {
-      const hashed = input.hashEntrySha256(entry.path);
-      if (!hashed.ok) {
-        return hashed;
+    if (crc322(output, budget, startedAt, archiveName, entry.path) !== entry.crc32) {
+      integrity(archiveName, entry.path, "ZIP entry CRC32 does not match metadata.", "zip");
+    }
+    return output;
+  } catch (cause) {
+    if (cause instanceof ArchiveFailure) {
+      throw cause;
+    }
+    integrity(archiveName, entry.path, "ZIP entry decompression failed.", "zip");
+  }
+}
+function parseTarContainer(inputBytes, format, budget, archiveName, linkPolicy, onSymlink) {
+  let tar = inputBytes;
+  if (format === "tar.gz") {
+    const outputLimit = Math.min(budget.limits.expandedBytes, budget.limits.materializedBytes);
+    const outputLimitName = budget.limits.materializedBytes <= budget.limits.expandedBytes ? "materializedBytes" : "expandedBytes";
+    const observedLimit = Math.min(Number.MAX_SAFE_INTEGER, outputLimit + 1);
+    try {
+      tar = gunzipSync3(inputBytes, { maxOutputLength: observedLimit });
+    } catch (cause) {
+      if (cause instanceof ArchiveFailure) {
+        throw cause;
       }
-      fileDigest = hashed.value;
+      if (isZlibOutputLimitError(cause)) {
+        limitFailure(outputLimitName, outputLimit, observedLimit, archiveName);
+      }
+      malformed(archiveName, "Gzip-compressed TAR data is malformed or exceeds its expansion limit.", format);
     }
-    summary.update(`${fileDigest}  ${fileName}
-`, "utf8");
+    enforceLimit(outputLimitName, outputLimit, tar.length, archiveName);
+    enforceLimit("expandedBytes", budget.limits.expandedBytes, tar.length, archiveName);
+    enforceRatio(tar.length, inputBytes.length, budget.limits, archiveName);
+    chargeMaterialization(budget, tar.length, archiveName);
   }
-  return ok(`h1:${summary.digest("base64")}`);
+  checkDeadline(budget, archiveName);
+  return parseTar(tar, format, budget, archiveName, linkPolicy, onSymlink);
 }
-function hashGoModBytes(goMod) {
-  const fileDigest = createHash7("sha256").update(goMod).digest("hex");
-  const summary = createHash7("sha256").update(`${fileDigest}  go.mod
-`, "utf8").digest("base64");
-  return `h1:${summary}`;
-}
-function equalGoChecksums(expected, computed) {
-  const expectedDigest = decodeGoChecksum(expected);
-  const computedDigest = decodeGoChecksum(computed);
-  return expectedDigest !== undefined && computedDigest !== undefined && expectedDigest.length === computedDigest.length && timingSafeEqual3(expectedDigest, computedDigest);
-}
-function decodeGoChecksum(value) {
-  if (!/^h1:[A-Za-z0-9+/]{43}=$/u.test(value)) {
-    return;
+function parseTar(tar, format, budget, archiveName, linkPolicy, onSymlink) {
+  if (tar.length < BLOCK_BYTES * 2 || tar.length % BLOCK_BYTES !== 0) {
+    malformed(archiveName, "TAR length or end padding is invalid.", format);
   }
-  const digest = Buffer.from(value.slice("h1:".length), "base64");
-  return digest.length === GO_H1_DIGEST_BYTES ? digest : undefined;
-}
-function isGoModuleRootEvidencePath(entryPath, rootPrefix) {
-  if (!entryPath.startsWith(rootPrefix)) {
-    return false;
+  const entries = [];
+  const registry = new EntryRegistry(archiveName);
+  let offset = 0;
+  let headerCount = 0;
+  let expanded = 0;
+  let pendingPax;
+  let pendingLongName;
+  let sawEnd = false;
+  while (offset + BLOCK_BYTES <= tar.length) {
+    checkDeadline(budget, archiveName);
+    const header = tar.subarray(offset, offset + BLOCK_BYTES);
+    if (isZeroBlock3(header)) {
+      requireRange(tar, offset, BLOCK_BYTES * 2, archiveName);
+      if (!isZeroBlock3(tar.subarray(offset + BLOCK_BYTES, offset + BLOCK_BYTES * 2))) {
+        malformed(archiveName, "TAR end marker must contain two zero blocks.", format);
+      }
+      if (!isZeroBlock3(tar.subarray(offset + BLOCK_BYTES * 2))) {
+        malformed(archiveName, "TAR trailing padding contains non-zero bytes.", format);
+      }
+      sawEnd = true;
+      break;
+    }
+    headerCount += 1;
+    enforceLimit("entries", budget.limits.entries, headerCount, archiveName);
+    validateTarHeader(header, archiveName, format);
+    const typeByte = header[156] ?? 0;
+    const type = typeByte === 0 ? "0" : String.fromCharCode(typeByte);
+    const headerSize = parseTarNumber(header.subarray(124, 136), archiveName, format, "size");
+    const extension = type === "x" || type === "g" || type === "L";
+    const effectiveSize = extension ? headerSize : pendingPax?.size ?? headerSize;
+    enforceLimit("entryBytes", budget.limits.entryBytes, effectiveSize, archiveName);
+    const dataStart = offset + BLOCK_BYTES;
+    const dataEnd = safeAdd(dataStart, effectiveSize, archiveName);
+    const paddedEnd = safeAdd(dataStart, roundToTarBlock(effectiveSize), archiveName);
+    if (dataEnd > tar.length || paddedEnd > tar.length) {
+      malformed(archiveName, "TAR entry extends beyond archive data.", format);
+    }
+    if (!isZeroBlock3(tar.subarray(dataEnd, paddedEnd))) {
+      malformed(archiveName, "TAR entry padding contains non-zero bytes.", format);
+    }
+    const headerPath = readTarHeaderPath(header, archiveName, format);
+    if (type === "x" || type === "g") {
+      const pax = parsePax(tar.subarray(dataStart, dataEnd), archiveName, format, type === "g", budget);
+      if (type === "x") {
+        if (pendingPax !== undefined) {
+          malformed(archiveName, "PAX extended headers cannot replace an unconsumed header.", format);
+        }
+        pendingPax = pax;
+      }
+      offset = paddedEnd;
+      continue;
+    }
+    if (type === "L") {
+      if (pendingLongName !== undefined) {
+        malformed(archiveName, "GNU TAR longname headers cannot replace an unconsumed header.", format);
+      }
+      pendingLongName = parseGnuLongName(tar.subarray(dataStart, dataEnd), archiveName, format);
+      offset = paddedEnd;
+      continue;
+    }
+    if (pendingPax?.path !== undefined && pendingLongName !== undefined) {
+      malformed(archiveName, "TAR path extension headers are ambiguous.", format);
+    }
+    const rawPath = pendingPax?.path ?? pendingLongName ?? headerPath;
+    pendingPax = undefined;
+    pendingLongName = undefined;
+    const directory = type === "5";
+    const regular = type === "0" || type === "\x00";
+    const symlink = type === "2";
+    if (symlink && linkPolicy === "skip") {
+      const entryPath = validateEntryPath(rawPath, budget.limits, false, archiveName);
+      if (effectiveSize !== 0) {
+        malformed(archiveName, "TAR link entry has non-zero data size.", format, entryPath);
+      }
+      if (onSymlink) {
+        onSymlink(entryPath, decodeTarField(header.subarray(157, 257), archiveName, format));
+      }
+      offset = paddedEnd;
+      continue;
+    }
+    if (!directory && !regular) {
+      unsupportedType(archiveName, safeEntryPathForError(rawPath), format);
+    }
+    const entryPath = validateEntryPath(rawPath, budget.limits, directory || rawPath.endsWith("/"), archiveName);
+    if (directory && effectiveSize !== 0) {
+      malformed(archiveName, "TAR directory entry has non-zero data size.", format, entryPath);
+    }
+    enforceLimit("entryBytes", budget.limits.entryBytes, effectiveSize, archiveName, entryPath);
+    expanded = safeAdd(expanded, effectiveSize, archiveName);
+    enforceLimit("expandedBytes", budget.limits.expandedBytes, expanded, archiveName, entryPath);
+    registry.add(entryPath, directory ? "directory" : "file");
+    const capturedStart = dataStart;
+    const capturedEnd = dataEnd;
+    entries.push({
+      path: entryPath,
+      type: directory ? "directory" : "file",
+      size: effectiveSize,
+      compressedSize: format === "tar" ? effectiveSize : 0,
+      materialize: () => Buffer.from(tar.subarray(capturedStart, capturedEnd))
+    });
+    offset = paddedEnd;
   }
-  const relativePath = entryPath.slice(rootPrefix.length);
-  return relativePath !== "" && !relativePath.includes("/") && classifyEvidenceFile(relativePath) !== undefined;
+  if (!sawEnd || pendingPax || pendingLongName) {
+    malformed(archiveName, "TAR archive is missing a complete end marker or extension target.", format);
+  }
+  return entries;
 }
-function unavailableGoModuleEvidence(packageId, warning) {
+function validateTarHeader(header, archiveName, format) {
+  const expected = parseTarNumber(header.subarray(148, 156), archiveName, format, "checksum");
+  let unsigned = 0;
+  let signed = 0;
+  for (let index = 0;index < header.length; index += 1) {
+    const byte = index >= 148 && index < 156 ? 32 : header[index] ?? 0;
+    unsigned += byte;
+    signed += byte > 127 ? byte - 256 : byte;
+  }
+  if (expected !== unsigned && expected !== signed) {
+    integrity(archiveName, undefined, "TAR header checksum does not match.", format);
+  }
+  const magic = header.subarray(257, 263);
+  const version = header.subarray(263, 265);
+  const v7 = isZeroBlock3(magic) && isZeroBlock3(version);
+  const ustar = magic.equals(Buffer.from("ustar\x00", "ascii")) && version.equals(Buffer.from("00", "ascii"));
+  const gnu = magic.equals(Buffer.from("ustar ", "ascii"));
+  if (!v7 && !ustar && !gnu) {
+    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "TAR dialect is not supported.", {
+      basename: archiveName,
+      format
+    });
+  }
+}
+function readTarHeaderPath(header, archiveName, format) {
+  const name = decodeTarField(header.subarray(0, 100), archiveName, format);
+  const prefix = decodeTarField(header.subarray(345, 500), archiveName, format);
+  return prefix === "" ? name : `${prefix}/${name}`;
+}
+function decodeTarField(bytes, archiveName, format) {
+  const nul = bytes.indexOf(0);
+  const content = bytes.subarray(0, nul === -1 ? bytes.length : nul);
+  if (nul !== -1 && !isZeroBlock3(bytes.subarray(nul))) {
+    malformed(archiveName, "TAR string field contains data after NUL.", format);
+  }
+  return decodeUtf8(content, undefined, archiveName);
+}
+function parseGnuLongName(bytes, archiveName, format) {
+  const nul = bytes.indexOf(0);
+  const content = bytes.subarray(0, nul === -1 ? bytes.length : nul);
+  if (content.length === 0 || nul !== -1 && !isZeroBlock3(bytes.subarray(nul))) {
+    malformed(archiveName, "GNU TAR longname record is malformed.", format);
+  }
+  return decodeUtf8(content, undefined, archiveName);
+}
+function parsePax(bytes, archiveName, format, global, budget) {
+  let offset = 0;
+  const values = new Map;
+  while (offset < bytes.length) {
+    checkDeadline(budget, archiveName);
+    const space = bytes.indexOf(32, offset);
+    if (space === -1) {
+      malformed(archiveName, "PAX record length is malformed.", format);
+    }
+    const lengthText = bytes.subarray(offset, space).toString("ascii");
+    if (!/^[1-9][0-9]*$/.test(lengthText)) {
+      malformed(archiveName, "PAX record length is malformed.", format);
+    }
+    const length = Number(lengthText);
+    if (!Number.isSafeInteger(length) || length <= space - offset + 2 || offset + length > bytes.length) {
+      malformed(archiveName, "PAX record extends beyond metadata data.", format);
+    }
+    const record = bytes.subarray(space + 1, offset + length);
+    if (record[record.length - 1] !== 10) {
+      malformed(archiveName, "PAX record is missing its newline terminator.", format);
+    }
+    const body = record.subarray(0, -1);
+    const equals = body.indexOf(61);
+    if (equals <= 0) {
+      malformed(archiveName, "PAX record key/value is malformed.", format);
+    }
+    const key = body.subarray(0, equals).toString("ascii");
+    if (!/^[A-Za-z0-9_.-]+$/.test(key) || values.has(key)) {
+      malformed(archiveName, "PAX record key is invalid or duplicated.", format);
+    }
+    if (key === "linkpath" || key.startsWith("GNU.sparse") || key.startsWith("SCHILY.dev") || key === "SCHILY.filetype" || key === "SCHILY.realsize") {
+      unsupportedType(archiveName, undefined, format);
+    }
+    values.set(key, decodeUtf8(body.subarray(equals + 1), undefined, archiveName));
+    offset += length;
+  }
+  const pathValue = values.get("path");
+  const sizeValue = values.get("size");
+  if (global && (pathValue !== undefined || sizeValue !== undefined)) {
+    malformed(archiveName, "Global PAX path or size metadata is not safe to apply.", format);
+  }
+  let size;
+  if (sizeValue !== undefined) {
+    if (!/^(0|[1-9][0-9]*)$/.test(sizeValue)) {
+      malformed(archiveName, "PAX size metadata is invalid.", format);
+    }
+    size = Number(sizeValue);
+    if (!Number.isSafeInteger(size)) {
+      malformed(archiveName, "PAX size metadata exceeds the safe integer range.", format);
+    }
+  }
   return {
-    packageId,
-    files: [],
-    source: "unavailable",
-    warnings: [warning]
+    ...pathValue !== undefined ? { path: pathValue } : {},
+    ...size !== undefined ? { size } : {}
   };
-}
-function goModuleEvidenceError(input) {
-  return createError({
-    code: "PACKAGE_EVIDENCE_READ_FAILED",
-    category: "unsupported_input",
-    message: input.message,
-    details: {
-      packageId: input.packageId,
-      ...input.details
-    }
-  });
-}
-function safeGoModuleDisplayName(modulePath) {
-  return modulePath.replace(/[^A-Za-z0-9._-]+/gu, "_").slice(-120) || "go-module";
 }
 
-// src/evidence/go-proxy-url.ts
-var GO_MODULE_PROXY_BASE_URL = "https://proxy.golang.org";
-function remoteGoModuleCoordinates(node) {
-  if (!node.resolved) {
-    return { modulePath: node.name, version: node.version };
+class EntryRegistry {
+  entries = new Map;
+  foldedEntries = new Map;
+  parentPrefixes = new Set;
+  foldedParentPrefixes = new Set;
+  archiveName;
+  constructor(archiveName) {
+    this.archiveName = archiveName;
   }
-  if (!node.resolved.startsWith("go-module:")) {
-    return;
-  }
-  const specifier = node.resolved.slice("go-module:".length);
-  const separator = specifier.lastIndexOf("@");
-  if (separator <= 0 || separator === specifier.length - 1) {
-    return;
-  }
-  return {
-    modulePath: specifier.slice(0, separator),
-    version: specifier.slice(separator + 1)
-  };
-}
-function goModuleProxyZipUrl(modulePath, version) {
-  return goModuleProxyArtifactUrl(modulePath, version, "zip");
-}
-function goModuleProxyModUrl(modulePath, version) {
-  return goModuleProxyArtifactUrl(modulePath, version, "mod");
-}
-function goModuleProxyArtifactUrl(modulePath, version, extension) {
-  const escapedModulePath = escapeGoProxyModulePath(modulePath);
-  const escapedVersion = escapeGoProxyVersion(version);
-  return escapedModulePath && escapedVersion ? `${GO_MODULE_PROXY_BASE_URL}/${escapedModulePath}/@v/${escapedVersion}.${extension}` : undefined;
-}
-function escapeGoProxyModulePath(modulePath) {
-  if (modulePath === "" || modulePath.startsWith("/") || modulePath.endsWith("/") || !/^[A-Za-z0-9.!_~+\-/]+$/u.test(modulePath)) {
-    return;
-  }
-  const segments = modulePath.split("/");
-  if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
-    return;
-  }
-  return escapeGoProxyText(modulePath);
-}
-function escapeGoProxyVersion(version) {
-  return /^v[A-Za-z0-9.!_~+\-]+$/u.test(version) ? escapeGoProxyText(version) : undefined;
-}
-function escapeGoProxyText(value) {
-  let escaped = "";
-  for (const character of value) {
-    if (character === "!") {
-      escaped += "!!";
-    } else if (character >= "A" && character <= "Z") {
-      escaped += `!${character.toLowerCase()}`;
-    } else {
-      escaped += character;
+  add(entryPath, type) {
+    const foldedPath = foldEntryPath(entryPath);
+    if (this.entries.has(entryPath) || this.foldedEntries.has(foldedPath)) {
+      duplicate(this.archiveName, entryPath);
+    }
+    const segments = entryPath.split("/");
+    const foldedSegments = foldedPath.split("/");
+    const prefixes = [];
+    const foldedPrefixes = [];
+    let prefix = "";
+    let foldedPrefix = "";
+    for (let index = 1;index < segments.length; index += 1) {
+      prefix = prefix === "" ? segments[index - 1] ?? "" : `${prefix}/${segments[index - 1]}`;
+      foldedPrefix = foldedPrefix === "" ? foldedSegments[index - 1] ?? "" : `${foldedPrefix}/${foldedSegments[index - 1]}`;
+      if (this.entries.get(prefix) === "file" || this.foldedEntries.get(foldedPrefix) === "file") {
+        duplicate(this.archiveName, entryPath);
+      }
+      prefixes.push(prefix);
+      foldedPrefixes.push(foldedPrefix);
+    }
+    if (type === "file" && (this.parentPrefixes.has(entryPath) || this.foldedParentPrefixes.has(foldedPath))) {
+      duplicate(this.archiveName, entryPath);
+    }
+    this.entries.set(entryPath, type);
+    this.foldedEntries.set(foldedPath, type);
+    for (const value of prefixes) {
+      this.parentPrefixes.add(value);
+    }
+    for (const value of foldedPrefixes) {
+      this.foldedParentPrefixes.add(value);
     }
   }
-  return escaped;
+}
+function validateEntryPath(rawPath, limits, allowDirectorySlash, archiveName) {
+  const path = allowDirectorySlash && rawPath.endsWith("/") ? rawPath.slice(0, -1) : rawPath;
+  const invalidRoot = path === "" || rawPath.includes("\\") || rawPath.startsWith("/") || rawPath.startsWith("//") || /^[A-Za-z]:/u.test(rawPath) || /[\u0000-\u001f\u007f-\u009f]/u.test(rawPath) || rawPath !== rawPath.normalize("NFC");
+  if (invalidRoot || !allowDirectorySlash && rawPath.endsWith("/")) {
+    invalidPath(archiveName, safeEntryPathForError(rawPath));
+  }
+  const segments = path.split("/");
+  const encodedPathBytes = Buffer.byteLength(path, "utf8");
+  if (encodedPathBytes > limits.pathBytes) {
+    limitFailure("pathBytes", limits.pathBytes, encodedPathBytes, archiveName, safeEntryPathForError(path));
+  }
+  if (segments.length > limits.pathSegments) {
+    limitFailure("pathSegments", limits.pathSegments, segments.length, archiveName, safeEntryPathForError(path));
+  }
+  for (const segment of segments) {
+    const base = segment.split(".", 1)[0]?.toUpperCase() ?? "";
+    if (segment === "" || segment === "." || segment === ".." || segment.includes(":") || /[. ]$/u.test(segment) || /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/u.test(base)) {
+      invalidPath(archiveName, safeEntryPathForError(path));
+    }
+    const segmentBytes = Buffer.byteLength(segment, "utf8");
+    if (segmentBytes > limits.segmentBytes) {
+      limitFailure("segmentBytes", limits.segmentBytes, segmentBytes, archiveName, safeEntryPathForError(path));
+    }
+  }
+  return path;
+}
+function resolveLimits(overrides) {
+  const resolved = { ...DEFAULT_ARCHIVE_LIMITS, ...overrides };
+  for (const [name, value] of Object.entries(resolved)) {
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      fail("ARCHIVE_LIMIT_EXCEEDED", "invalid_input", "Archive limit configuration is invalid.", {
+        limit: name,
+        max: value,
+        observed: value
+      });
+    }
+  }
+  return resolved;
+}
+function readFileBytesWithLimit(filePath, maxBytes, archiveName, signal) {
+  let descriptor;
+  try {
+    checkArchiveCancellation(signal, archiveName);
+    descriptor = openSync3(filePath, "r");
+    const initial = fstatSync(descriptor, { bigint: true });
+    if (!initial.isFile()) {
+      fail("ARCHIVE_READ_FAILED", "filesystem", "Archive path is not a regular file.", {
+        basename: archiveName
+      });
+    }
+    if (initial.size > BigInt(maxBytes)) {
+      limitFailure("inputBytes", maxBytes, maxBytes + 1, archiveName);
+    }
+    const expectedBytes = Number(initial.size);
+    const bytes = Buffer.allocUnsafe(expectedBytes);
+    let offset = 0;
+    while (offset < expectedBytes) {
+      checkArchiveCancellation(signal, archiveName);
+      const bytesRead = readSync3(descriptor, bytes, offset, expectedBytes - offset, offset);
+      if (bytesRead === 0) {
+        archiveFileChanged(archiveName);
+      }
+      offset += bytesRead;
+    }
+    checkArchiveCancellation(signal, archiveName);
+    const growthProbe = Buffer.allocUnsafe(1);
+    const additionalBytes = readSync3(descriptor, growthProbe, 0, 1, expectedBytes);
+    const final = fstatSync(descriptor, { bigint: true });
+    const currentPath = statSync33(filePath, { bigint: true });
+    if (final.size > BigInt(maxBytes) || currentPath.size > BigInt(maxBytes)) {
+      limitFailure("inputBytes", maxBytes, maxBytes + 1, archiveName);
+    }
+    if (additionalBytes !== 0 || initial.dev !== final.dev || initial.ino !== final.ino || initial.size !== final.size || initial.mtimeNs !== final.mtimeNs || initial.ctimeNs !== final.ctimeNs || final.dev !== currentPath.dev || final.ino !== currentPath.ino || final.size !== currentPath.size || final.mtimeNs !== currentPath.mtimeNs || final.ctimeNs !== currentPath.ctimeNs || final.birthtimeNs !== currentPath.birthtimeNs) {
+      archiveFileChanged(archiveName);
+    }
+    return bytes;
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        closeSync3(descriptor);
+      } catch {}
+    }
+  }
+}
+function archiveFileChanged(archiveName) {
+  fail("ARCHIVE_READ_FAILED", "filesystem", "Archive file changed while it was being read.", {
+    basename: archiveName
+  });
+}
+function createBudget(limits, now, signal) {
+  const clock = now ?? Date.now;
+  return {
+    limits,
+    now: clock,
+    ...signal ? { signal } : {},
+    startedAt: clock(),
+    materializedBytes: 0,
+    hashedBytes: 0
+  };
+}
+function checkDeadline(budget, archiveName, entryPath) {
+  checkDeadlineSince(budget, budget.startedAt, archiveName, entryPath);
+}
+function checkDeadlineSince(budget, startedAt, archiveName, entryPath) {
+  checkArchiveCancellation(budget.signal, archiveName, entryPath);
+  const observed = Math.max(0, budget.now() - startedAt);
+  if (observed > budget.limits.workDeadlineMs) {
+    limitFailure("workDeadlineMs", budget.limits.workDeadlineMs, observed, archiveName, entryPath);
+  }
+}
+function checkArchiveCancellation(signal, archiveName, entryPath) {
+  if (!signal?.aborted)
+    return;
+  fail("ARCHIVE_READ_FAILED", "invalid_input", "Archive operation was cancelled.", {
+    basename: archiveName,
+    reason: "cancelled",
+    ...entryPath ? { entryPath } : {}
+  });
+}
+function chargeMaterialization(budget, amount, archiveName, entryPath) {
+  const observed = safeAdd(budget.materializedBytes, amount, archiveName);
+  enforceLimit("materializedBytes", budget.limits.materializedBytes, observed, archiveName, entryPath);
+  budget.materializedBytes = observed;
+}
+function chargeHashing(budget, amount, archiveName, entryPath) {
+  const observed = safeAdd(budget.hashedBytes, amount, archiveName);
+  enforceLimit("hashBytes", budget.limits.expandedBytes, observed, archiveName, entryPath);
+  budget.hashedBytes = observed;
+}
+function enforceEntryLimits(input) {
+  enforceLimit("entryBytes", input.budget.limits.entryBytes, input.size, input.archiveName, input.entryPath);
+  if (input.size >= input.budget.limits.compressionRatioMinBytes) {
+    const ratio = input.size / Math.max(1, input.compressedSize);
+    if (ratio > input.budget.limits.compressionRatio) {
+      limitFailure("compressionRatio", input.budget.limits.compressionRatio, ratio, input.archiveName, input.entryPath);
+    }
+  }
+}
+function enforceRatio(size, compressed, limits, archiveName) {
+  if (size >= limits.compressionRatioMinBytes) {
+    const ratio = size / Math.max(1, compressed);
+    if (ratio > limits.compressionRatio) {
+      limitFailure("compressionRatio", limits.compressionRatio, ratio, archiveName);
+    }
+  }
+}
+function enforceLimit(limit, max, observed, archiveName, entryPath) {
+  if (observed > max) {
+    limitFailure(limit, max, observed, archiveName, entryPath);
+  }
+}
+function limitFailure(limit, max, observed, archiveName, entryPath) {
+  fail("ARCHIVE_LIMIT_EXCEEDED", "unsupported_input", "Archive resource limit was exceeded.", {
+    basename: archiveName,
+    ...entryPath !== undefined ? { entryPath } : {},
+    limit,
+    max,
+    observed
+  });
+}
+function detectFormat(bytes, hint, archiveName) {
+  const detected = bytes.length >= 2 && bytes[0] === 31 && bytes[1] === 139 ? "tar.gz" : bytes.length >= 4 && (bytes.readUInt32LE(0) === ZIP_LOCAL_SIGNATURE || bytes.readUInt32LE(0) === ZIP_EOCD_SIGNATURE) ? "zip" : looksLikeTar(bytes) ? "tar" : undefined;
+  if (hint !== undefined) {
+    if (detected !== undefined && detected !== hint) {
+      fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Archive format hint does not match its bytes.", {
+        basename: archiveName,
+        format: hint
+      });
+    }
+    return hint;
+  }
+  if (detected === undefined) {
+    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Archive format is not supported.", {
+      basename: archiveName
+    });
+  }
+  return detected;
+}
+function looksLikeTar(bytes) {
+  if (bytes.length < BLOCK_BYTES * 2 || bytes.length % BLOCK_BYTES !== 0) {
+    return false;
+  }
+  if (isZeroBlock3(bytes.subarray(0, BLOCK_BYTES))) {
+    return true;
+  }
+  const magic = bytes.subarray(257, 263);
+  return magic.equals(Buffer.from("ustar\x00", "ascii")) || magic.equals(Buffer.from("ustar ", "ascii")) || isZeroBlock3(magic);
+}
+function findZipEocd(bytes, archiveName) {
+  if (bytes.length < ZIP_EOCD_BYTES) {
+    malformed(archiveName, "ZIP end of central directory is missing.", "zip");
+  }
+  const minimum = Math.max(0, bytes.length - ZIP_EOCD_BYTES - ZIP_MAX_COMMENT_BYTES);
+  for (let offset = bytes.length - ZIP_EOCD_BYTES;offset >= minimum; offset -= 1) {
+    if (bytes.readUInt32LE(offset) === ZIP_EOCD_SIGNATURE) {
+      const commentLength = bytes.readUInt16LE(offset + 20);
+      if (offset + ZIP_EOCD_BYTES + commentLength === bytes.length) {
+        return offset;
+      }
+    }
+  }
+  malformed(archiveName, "ZIP end of central directory is missing or malformed.", "zip");
+}
+function parseTarNumber(bytes, archiveName, format, field) {
+  if ((bytes[0] ?? 0) & 128) {
+    fail("ARCHIVE_FORMAT_UNSUPPORTED", "unsupported_input", "Base-256 TAR numeric fields are not supported.", {
+      basename: archiveName,
+      format
+    });
+  }
+  const text = bytes.toString("ascii").replace(/\0.*$/u, "").trim();
+  if (text === "") {
+    return 0;
+  }
+  if (!/^[0-7]+$/u.test(text)) {
+    malformed(archiveName, `TAR ${field} field is malformed.`, format);
+  }
+  const value = Number.parseInt(text, 8);
+  if (!Number.isSafeInteger(value)) {
+    malformed(archiveName, `TAR ${field} field exceeds the safe integer range.`, format);
+  }
+  return value;
+}
+function decodeUtf8(bytes, entryPath, archiveName) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    fail("ARCHIVE_INTEGRITY_FAILED", "invalid_input", "Archive text is not valid UTF-8.", {
+      basename: archiveName,
+      ...entryPath !== undefined ? { entryPath: safeEntryPathForError(entryPath) } : {}
+    });
+  }
+}
+function readU16(bytes, offset, archiveName) {
+  requireRange(bytes, offset, 2, archiveName);
+  return bytes.readUInt16LE(offset);
+}
+function readU32(bytes, offset, archiveName) {
+  requireRange(bytes, offset, 4, archiveName);
+  return bytes.readUInt32LE(offset);
+}
+function requireRange(bytes, offset, length, archiveName, entryPath) {
+  if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || offset < 0 || length < 0 || offset + length > bytes.length) {
+    malformed(archiveName, "Archive structure is truncated.", undefined, entryPath);
+  }
+}
+function safeAdd(left, right, archiveName) {
+  const value = left + right;
+  if (!Number.isSafeInteger(value) || value < left) {
+    malformed(archiveName, "Archive numeric field overflows the safe integer range.");
+  }
+  return value;
+}
+function roundToTarBlock(size) {
+  return Math.ceil(size / BLOCK_BYTES) * BLOCK_BYTES;
+}
+function isZeroBlock3(bytes) {
+  return bytes.every((byte) => byte === 0);
+}
+function hasSignatureAt(bytes, offset, signature) {
+  return offset >= 0 && offset + 4 <= bytes.length && bytes.readUInt32LE(offset) === signature;
+}
+function isZlibOutputLimitError(cause) {
+  if (!(cause instanceof Error)) {
+    return false;
+  }
+  const code = "code" in cause && typeof cause.code === "string" ? cause.code : "";
+  return code === "ERR_BUFFER_TOO_LARGE" || cause.message.includes("maxOutputLength") || cause.message.includes("larger than");
+}
+function foldEntryPath(entryPath) {
+  return entryPath.normalize("NFC").toLowerCase();
+}
+function comparePaths(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+function buildCrc32Table2() {
+  const table = new Uint32Array(256);
+  for (let index = 0;index < table.length; index += 1) {
+    let value = index;
+    for (let bit = 0;bit < 8; bit += 1) {
+      value = (value & 1) !== 0 ? value >>> 1 ^ 3988292384 : value >>> 1;
+    }
+    table[index] = value >>> 0;
+  }
+  return table;
+}
+function crc322(bytes, budget, startedAt, archiveName, entryPath) {
+  let crc = 4294967295;
+  for (let index = 0;index < bytes.length; index += 1) {
+    if ((index & 65535) === 0) {
+      checkDeadlineSince(budget, startedAt, archiveName, entryPath);
+    }
+    const byte = bytes[index] ?? 0;
+    crc = crc >>> 8 ^ (CRC32_TABLE2[(crc ^ byte) & 255] ?? 0);
+  }
+  return (crc ^ 4294967295) >>> 0;
+}
+function safeBasename(value) {
+  const normalized = value.replace(/\\/g, "/");
+  let name = basename(normalized).normalize("NFC").replace(/[\u0000-\u001f\u007f-\u009f:]/gu, "_").replace(/[. ]+$/u, "");
+  if (name === "" || name === "." || name === "/" || isWindowsDeviceName(name)) {
+    name = "archive";
+  }
+  while (Buffer.byteLength(name, "utf8") > 255) {
+    name = name.slice(0, -1);
+  }
+  return name || "archive";
+}
+function safeDisplayPath(value) {
+  const normalized = value.replace(/\\/g, "/");
+  const segments = normalized.split("/");
+  if (normalized.startsWith("/") || /^[A-Za-z]:/u.test(normalized) || normalized.startsWith("//") || normalized !== normalized.normalize("NFC") || Buffer.byteLength(normalized, "utf8") > 4096 || /[\u0000-\u001f\u007f-\u009f:]/u.test(normalized) || segments.some((segment) => segment === "" || segment === "." || segment === ".." || /[. ]$/u.test(segment) || Buffer.byteLength(segment, "utf8") > 255 || isWindowsDeviceName(segment))) {
+    return safeBasename(normalized);
+  }
+  return normalized;
+}
+function isWindowsDeviceName(segment) {
+  const base = segment.split(".", 1)[0]?.toUpperCase() ?? "";
+  return /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/u.test(base);
+}
+function safeEntryPathForError(value) {
+  if (value === undefined) {
+    return;
+  }
+  const withoutControls = value.replace(/[\u0000-\u001f\u007f-\u009f]/gu, "?");
+  return withoutControls.slice(0, 4096);
+}
+function invalidPath(archiveName, entryPath) {
+  fail("ARCHIVE_ENTRY_PATH_INVALID", "invalid_input", "Archive entry path is invalid.", {
+    basename: archiveName,
+    ...entryPath !== undefined ? { entryPath } : {}
+  });
+}
+function unsupportedType(archiveName, entryPath, format) {
+  fail("ARCHIVE_ENTRY_TYPE_UNSUPPORTED", "unsupported_input", "Archive entry type is not supported.", {
+    basename: archiveName,
+    ...entryPath !== undefined ? { entryPath } : {},
+    format
+  });
+}
+function duplicate(archiveName, entryPath) {
+  fail("ARCHIVE_DUPLICATE_ENTRY", "invalid_input", "Archive entries duplicate or collide by path.", {
+    basename: archiveName,
+    entryPath
+  });
+}
+function integrity(archiveName, entryPath, message, format) {
+  fail("ARCHIVE_INTEGRITY_FAILED", "invalid_input", message, {
+    basename: archiveName,
+    ...entryPath !== undefined ? { entryPath } : {},
+    ...format !== undefined ? { format } : {}
+  });
+}
+function malformed(archiveName, message, format, entryPath) {
+  fail("ARCHIVE_MALFORMED", "invalid_input", message, {
+    basename: archiveName,
+    ...entryPath !== undefined ? { entryPath } : {},
+    ...format !== undefined ? { format } : {}
+  });
+}
+function fail(code, category, message, details) {
+  throw new ArchiveFailure({ code, category, message, ...details ? { details } : {} });
+}
+function toOhriskError(cause, fallbackCode, fallbackCategory, archiveName) {
+  if (cause instanceof ArchiveFailure) {
+    return createError({
+      code: cause.code,
+      category: cause.category,
+      message: cause.message,
+      ...cause.details ? { details: cause.details } : {}
+    });
+  }
+  return createError({
+    code: fallbackCode,
+    category: fallbackCategory,
+    message: "Archive operation failed.",
+    details: { basename: archiveName }
+  });
 }
 
 // src/evidence/hex-tarball.ts
-import { createHash as createHash8, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
 var HEX_OUTER_ENTRY_LIMIT = 8;
 var HEX_CONTENT_ENTRY_LIMIT = 50000;
 var HEX_CONTENT_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
@@ -51929,7 +51215,7 @@ var HEX_LICENSE_FILE_LIMIT2 = 50;
 var HEX_OUTER_FILES = new Set(["VERSION", "CHECKSUM", "metadata.config", "contents.tar.gz"]);
 function collectHexTarballEvidence(input) {
   const outer = readArchiveBytes({
-    displayName: `${safeDisplayPart2(input.packageName)}-${safeDisplayPart2(input.version)}.tar`,
+    displayName: `${safeDisplayPart(input.packageName)}-${safeDisplayPart(input.version)}.tar`,
     bytes: input.tarball,
     formatHint: "tar",
     limits: {
@@ -51976,12 +51262,13 @@ function collectHexTarballEvidence(input) {
     }));
   }
   const expectedInnerChecksum = parseInnerChecksum(checksumBytes.value);
-  const computedInnerChecksum = createHash8("sha256").update(versionBytes.value).update(metadataBytes.value).update(contentsBytes.value).digest();
-  if (!expectedInnerChecksum || !timingSafeEqual4(expectedInnerChecksum, computedInnerChecksum)) {
+  const computedInnerChecksum = createHash6("sha256").update(versionBytes.value).update(metadataBytes.value).update(contentsBytes.value).digest();
+  if (!expectedInnerChecksum || !timingSafeEqual2(expectedInnerChecksum, computedInnerChecksum)) {
     return err(hexTarballError(input, "Hex package inner checksum did not match its payload.", {
       reason: "hex_inner_checksum_mismatch"
     }));
   }
+  recordArtifactCheck({ packageId: input.packageId, bytes: input.tarball, kind: "hex-inner-sha256", value: computedInnerChecksum.toString("hex") });
   const metadata = parseHexMetadata(input, metadataBytes.value);
   if (!metadata.ok) {
     return metadata;
@@ -52091,7 +51378,7 @@ function collectHexArchiveEvidenceFiles(archive, warnings) {
   }
   return files;
 }
-function safeDisplayPart2(value) {
+function safeDisplayPart(value) {
   return value.replace(/[^A-Za-z0-9._+-]/gu, "_").slice(0, 120) || "package";
 }
 function hexTarballError(input, message, details) {
@@ -52108,237 +51395,12 @@ function hexTarballError(input, message, details) {
   });
 }
 
-// src/evidence/local-artifact-path.ts
-import { existsSync as existsSync45, realpathSync as realpathSync4, statSync as statSync33 } from "node:fs";
-import path78 from "node:path";
-function resolveExistingLocalArtifactPath(input) {
-  const allowedRoots = realpathLocalArtifactRoots({
-    projectRoot: input.projectRoot,
-    workspaceRoot: input.workspaceRoot
-  });
-  if (!allowedRoots.ok) {
-    return err(allowedRoots.error);
-  }
-  const artifactPath = realpathSync4(input.artifactPath);
-  if (!isPathInsideAnyRoot(artifactPath, allowedRoots.value) && !isVerifiableExternalLocalTarball({
-    artifactPath,
-    integrity: input.integrity
-  })) {
-    return err(localArtifactOutsideProjectError({
-      packageId: input.packageId,
-      resolved: input.resolved,
-      artifactPath: input.artifactPath
-    }));
-  }
-  return ok(artifactPath);
-}
-function resolveTrustedWorkspaceRoot(workspaceRoot) {
-  const resolvedPath = path78.resolve(workspaceRoot);
-  try {
-    const realPath = realpathSync4(resolvedPath);
-    if (!statSync33(realPath).isDirectory()) {
-      return err(workspaceRootInvalidError(workspaceRoot, resolvedPath));
-    }
-    return ok(realPath);
-  } catch {
-    return err(workspaceRootInvalidError(workspaceRoot, resolvedPath));
-  }
-}
-function localArtifactOutsideProjectError(input) {
-  return createError({
-    code: "PACKAGE_EVIDENCE_READ_FAILED",
-    category: "unsupported_input",
-    message: "Resolved package artifact must stay inside the project, repository root, or explicit workspace root.",
-    details: {
-      packageId: input.packageId,
-      resolved: safeOptionalUrlForErrorDetails(input.resolved),
-      artifactPath: safeUrlForErrorDetails(input.artifactPath)
-    }
-  });
-}
-function isVerifiableExternalLocalTarball(input) {
-  return input.integrity !== undefined && parseSupportedIntegrityEntries(input.integrity).length > 0 && isSupportedLocalTarballPath(input.artifactPath);
-}
-function isSupportedLocalTarballPath(artifactPath) {
-  const normalizedPath = artifactPath.replace(/\\/g, "/").toLowerCase();
-  return normalizedPath.endsWith(".tgz") || normalizedPath.endsWith(".tar.gz");
-}
-function workspaceRootInvalidError(workspaceRoot, resolvedPath) {
-  return createError({
-    code: "INVALID_ARGUMENT",
-    category: "invalid_input",
-    message: "--workspace-root must point to an existing directory.",
-    details: {
-      workspaceRoot,
-      resolvedPath
-    }
-  });
-}
-function realpathLocalArtifactRoots(input) {
-  const workspaceRoot = input.workspaceRoot ? resolveTrustedWorkspaceRoot(input.workspaceRoot) : ok(undefined);
-  if (!workspaceRoot.ok) {
-    return err(workspaceRoot.error);
-  }
-  return ok([
-    realpathSync4(resolveLocalArtifactRoot(input.projectRoot)),
-    ...workspaceRoot.value ? [workspaceRoot.value] : []
-  ]);
-}
-function resolveLocalArtifactRoot(projectRoot) {
-  return findNearestGitRoot(projectRoot) ?? path78.resolve(projectRoot);
-}
-function findNearestGitRoot(startPath) {
-  let currentPath = path78.resolve(startPath);
-  while (true) {
-    if (existsSync45(path78.join(currentPath, ".git"))) {
-      return currentPath;
-    }
-    const parentPath = path78.dirname(currentPath);
-    if (parentPath === currentPath) {
-      return;
-    }
-    currentPath = parentPath;
-  }
-}
-function isPathInsideOrEqual5(childPath, parentPath) {
-  const relativePath = path78.relative(parentPath, childPath);
-  return relativePath === "" || !relativePath.startsWith("..") && !path78.isAbsolute(relativePath);
-}
-function isPathInsideAnyRoot(childPath, parentPaths) {
-  return parentPaths.some((parentPath) => isPathInsideOrEqual5(childPath, parentPath));
-}
-
-// src/evidence/maven-jar.ts
-var MAVEN_JAR_MAX_BYTES = 100 * 1024 * 1024;
-var MAVEN_JAR_MAX_ENTRIES = 50000;
-var MAVEN_JAR_ENTRY_MAX_BYTES = 2 * 1024 * 1024;
-var MAVEN_JAR_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
-var MAVEN_JAR_MATERIALIZED_MAX_BYTES = 16 * 1024 * 1024;
-var MAVEN_JAR_IDENTITY_MAX_BYTES = 64 * 1024;
-var MAVEN_JAR_EVIDENCE_FILE_MAX_BYTES = 1024 * 1024;
-var MAVEN_JAR_EVIDENCE_FILE_MAX_COUNT = 16;
-function collectMavenJarEvidence(input) {
-  const archive = readArchiveBytes({
-    displayName: `${input.coordinates.artifactId}-${input.coordinates.version}.jar`,
-    bytes: input.jar,
-    formatHint: "zip",
-    limits: {
-      inputBytes: MAVEN_JAR_MAX_BYTES,
-      entries: MAVEN_JAR_MAX_ENTRIES,
-      entryBytes: MAVEN_JAR_ENTRY_MAX_BYTES,
-      expandedBytes: MAVEN_JAR_EXPANDED_MAX_BYTES,
-      materializedBytes: MAVEN_JAR_MATERIALIZED_MAX_BYTES
-    }
-  });
-  if (!archive.ok) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: [
-        `Checksum-verified Maven JAR was rejected by the bounded archive reader (${archive.error.code}); its contents were not trusted.`
-      ]
-    });
-  }
-  const identityPath = mavenPomPropertiesPath(input.coordinates);
-  if (!archive.value.listPaths().includes(identityPath)) {
-    return ok({
-      packageId: input.packageId,
-      files: [],
-      source: "unavailable",
-      warnings: [
-        "Checksum-verified Maven JAR did not contain exact embedded pom.properties identity; its contents were not trusted."
-      ]
-    });
-  }
-  const identityText = archive.value.readText(identityPath, MAVEN_JAR_IDENTITY_MAX_BYTES);
-  if (!identityText.ok) {
-    return err(identityText.error);
-  }
-  const identity = parsePomProperties(identityText.value);
-  if (identity.groupId !== input.coordinates.groupId || identity.artifactId !== input.coordinates.artifactId || identity.version !== input.coordinates.version) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: "unsupported_input",
-      message: "Maven JAR metadata did not match the requested package identity.",
-      details: {
-        packageId: input.packageId,
-        reason: "maven_jar_identity_mismatch",
-        expectedGroupId: input.coordinates.groupId,
-        expectedArtifactId: input.coordinates.artifactId,
-        expectedVersion: input.coordinates.version,
-        ...identity.groupId ? { observedGroupId: identity.groupId } : {},
-        ...identity.artifactId ? { observedArtifactId: identity.artifactId } : {},
-        ...identity.version ? { observedVersion: identity.version } : {}
-      }
-    }));
-  }
-  const evidencePaths = archive.value.listPaths().filter(isPackageLicenseEvidencePath).slice(0, MAVEN_JAR_EVIDENCE_FILE_MAX_COUNT);
-  const files = [];
-  for (const evidencePath of evidencePaths) {
-    const kind = classifyEvidenceFile(evidencePath);
-    if (!kind) {
-      continue;
-    }
-    const text = archive.value.readText(evidencePath, MAVEN_JAR_EVIDENCE_FILE_MAX_BYTES);
-    if (!text.ok) {
-      return err(text.error);
-    }
-    files.push({ path: evidencePath, kind, text: text.value });
-  }
-  return ok({
-    packageId: input.packageId,
-    files,
-    source: "tarball",
-    warnings: files.length > 0 ? ["Maven JAR license files were verified with repository SHA-256 and embedded package identity."] : ["Verified Maven JAR did not contain a root or META-INF license evidence file."]
-  });
-}
-function mavenPomPropertiesPath(coordinates) {
-  return [
-    "META-INF",
-    "maven",
-    coordinates.groupId,
-    coordinates.artifactId,
-    "pom.properties"
-  ].join("/");
-}
-function parsePomProperties(text) {
-  const properties = {};
-  for (const line of text.split(/\r?\n/u)) {
-    const trimmed = line.trim();
-    if (trimmed === "" || trimmed.startsWith("#") || trimmed.startsWith("!")) {
-      continue;
-    }
-    const separator = trimmed.search(/[=:]/u);
-    if (separator <= 0) {
-      continue;
-    }
-    const key = trimmed.slice(0, separator).trim();
-    const value = trimmed.slice(separator + 1).trim();
-    if (key !== "" && value !== "") {
-      properties[key] = value;
-    }
-  }
-  return properties;
-}
-function isPackageLicenseEvidencePath(filePath) {
-  const normalized = filePath.replace(/\\/gu, "/");
-  if (normalized.includes("/../") || normalized.startsWith("../")) {
-    return false;
-  }
-  const segments = normalized.split("/");
-  if (segments.length === 1) {
-    return classifyEvidenceFile(normalized) !== undefined;
-  }
-  return segments.length === 2 && segments[0]?.toUpperCase() === "META-INF" && classifyEvidenceFile(segments[1] ?? "") !== undefined;
-}
-
 // src/evidence/nix-github.ts
+import { createHash as createHash7, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
 var import_xz_decompress = __toESM(require_xz_decompress(), 1);
-import { createHash as createHash9, timingSafeEqual as timingSafeEqual5 } from "node:crypto";
 import { closeSync as closeSync4, mkdtempSync as mkdtempSync2, openSync as openSync4, readSync as readSync4, rmSync as rmSync3, writeSync } from "node:fs";
 import { tmpdir as tmpdir2 } from "node:os";
-import path79 from "node:path";
+import path77 from "node:path";
 import { gunzipSync as gunzipSync4 } from "node:zlib";
 var NIX_GITHUB_ARCHIVE_MAX_BYTES = 100 * 1024 * 1024;
 var NIX_RELEASE_ARCHIVE_MAX_BYTES = 320 * 1024 * 1024;
@@ -52355,7 +51417,7 @@ var NIX_RELEASE_ARCHIVE_HOSTS = new Set(["releases.nixos.org"]);
 function collectNixGitHubArchiveEvidence(input) {
   const expectedDigest = parseSha256Sri(input.expectedNarHash);
   if (!expectedDigest) {
-    return ok(unavailableEvidence2(input.packageId, "Nix GitHub input narHash is missing or malformed; remote source was not trusted."));
+    return ok(unavailableEvidence(input.packageId, "Nix GitHub input narHash is missing or malformed; remote source was not trusted."));
   }
   const compressed = Buffer.from(input.tarball);
   const unpackedMaxBytes = input.unpackedMaxBytes ?? NIX_GITHUB_ARCHIVE_MAX_BYTES;
@@ -52376,6 +51438,7 @@ function collectNixGitHubArchiveEvidence(input) {
   }
   return collectVerifiedNixTarEvidence({
     packageId: input.packageId,
+    artifact: input.tarball,
     source: bufferTarSource(tar),
     compressedBytes: compressed.byteLength,
     expectedDigest,
@@ -52387,7 +51450,7 @@ function collectNixGitHubArchiveEvidence(input) {
 async function collectNixTarXzArchiveEvidence(input) {
   const expectedDigest = parseSha256Sri(input.expectedNarHash);
   if (!expectedDigest) {
-    return ok(unavailableEvidence2(input.packageId, "Nix release input narHash is missing or malformed; remote source was not trusted."));
+    return ok(unavailableEvidence(input.packageId, "Nix release input narHash is missing or malformed; remote source was not trusted."));
   }
   const compressed = Buffer.from(input.tarball);
   const unpackedMaxBytes = input.unpackedMaxBytes ?? NIX_RELEASE_ARCHIVE_MAX_BYTES;
@@ -52409,7 +51472,7 @@ function collectVerifiedNixTarEvidence(input) {
     }
     const entries = parseGitHubTar({ source: input.source, maxEntries: input.maxEntries });
     const actualDigest = hashNixArchive(input.source, entries);
-    if (!timingSafeEqual5(actualDigest, input.expectedDigest)) {
+    if (!timingSafeEqual3(actualDigest, input.expectedDigest)) {
       return err(createError({
         code: "PACKAGE_INTEGRITY_CHECK_FAILED",
         category: "unsupported_input",
@@ -52422,6 +51485,7 @@ function collectVerifiedNixTarEvidence(input) {
         }
       }));
     }
+    recordArtifactCheck({ packageId: input.packageId, bytes: input.artifact, kind: "nix-nar-hash", value: input.expectedNarHash });
     const files = collectRootEvidenceFiles(input.source, entries);
     return ok({
       packageId: input.packageId,
@@ -52444,14 +51508,14 @@ function collectVerifiedNixTarEvidence(input) {
 async function collectTemporaryNixTarXzEvidence(input) {
   let directory;
   try {
-    directory = mkdtempSync2(path79.join(tmpdir2(), "ohrisk-nix-xz-"));
+    directory = mkdtempSync2(path77.join(tmpdir2(), "ohrisk-nix-xz-"));
   } catch {
     return err(temporaryNixArchiveError(input.packageId, "create"));
   }
   let descriptor;
   let result = err(temporaryNixArchiveError(input.packageId, "process"));
   try {
-    descriptor = openSync4(path79.join(directory, "archive.tar"), "wx+", 384);
+    descriptor = openSync4(path77.join(directory, "archive.tar"), "wx+", 384);
     const decompressed = await decompressXzToFile({
       compressed: input.compressed,
       descriptor,
@@ -52460,6 +51524,7 @@ async function collectTemporaryNixTarXzEvidence(input) {
     });
     result = decompressed.ok ? collectVerifiedNixTarEvidence({
       packageId: input.packageId,
+      artifact: input.compressed,
       source: fileTarSource(descriptor, decompressed.bytesWritten),
       compressedBytes: input.compressedBytes,
       expectedDigest: input.expectedDigest,
@@ -52776,7 +51841,7 @@ function hashNixArchive(source, entries) {
     children.push({ node, nameBytes: Buffer.from(name, "utf8") });
     childrenByParent.set(parentPath, children);
   }
-  const hash = createHash9("sha256");
+  const hash = createHash7("sha256");
   const encodedStrings = new Map;
   const lengthBytes = Buffer.allocUnsafe(8);
   const paddingBytes = Buffer.alloc(7);
@@ -52964,485 +52029,12 @@ function isZeroBlock4(bytes) {
       return false;
   return true;
 }
-function unavailableEvidence2(packageId, warning) {
+function unavailableEvidence(packageId, warning) {
   return { packageId, files: [], source: "unavailable", warnings: [warning] };
-}
-
-// src/evidence/nuget-nupkg.ts
-import { createHash as createHash10, timingSafeEqual as timingSafeEqual6 } from "node:crypto";
-import path80 from "node:path";
-
-// src/evidence/nuget-registry.ts
-var NUGET_ORG_HOST = "api.nuget.org";
-var SHA512_DIGEST_BYTES = 64;
-function parseNugetServiceIndex(input) {
-  const document2 = parseJsonRecord(input, "NuGet service index");
-  if (!document2.ok) {
-    return document2;
-  }
-  if (!Array.isArray(document2.value.resources)) {
-    return err(nugetMetadataError(input, "NuGet service index did not contain a resources array."));
-  }
-  const packageBaseUrl = findServiceResource(document2.value.resources, ["PackageBaseAddress/3.0.0"]);
-  const registrationsBaseUrl = findServiceResource(document2.value.resources, ["RegistrationsBaseUrl/3.6.0"]);
-  if (!packageBaseUrl || !registrationsBaseUrl) {
-    return err(nugetMetadataError(input, "NuGet service index did not expose the required V3 resources.", {
-      reason: "required_service_resource_missing"
-    }));
-  }
-  const packageBase = validateNugetOrgUrl(packageBaseUrl, "service_package_base", true);
-  const registrationsBase = validateNugetOrgUrl(registrationsBaseUrl, "service_registrations_base", true);
-  if (!packageBase.ok) {
-    return err(nugetMetadataError(input, packageBase.message, packageBase.details));
-  }
-  if (!registrationsBase.ok) {
-    return err(nugetMetadataError(input, registrationsBase.message, registrationsBase.details));
-  }
-  return ok({
-    packageBaseUrl: packageBase.url,
-    registrationsBaseUrl: registrationsBase.url
-  });
-}
-function parseNugetPackageVersions(input) {
-  const document2 = parseJsonRecord(input, "NuGet package version index");
-  if (!document2.ok) {
-    return document2;
-  }
-  if (!Array.isArray(document2.value.versions)) {
-    return err(nugetMetadataError(input, "NuGet package version index did not contain a versions array."));
-  }
-  const requested = normalizeNugetVersion(input.requestedVersion);
-  if (!requested) {
-    return err(nugetMetadataError(input, "NuGet dependency version was not a safe exact version.", {
-      reason: "unsafe_exact_version",
-      requestedVersion: input.requestedVersion
-    }));
-  }
-  const matches = document2.value.versions.filter((value) => typeof value === "string").filter((value) => normalizeNugetVersion(value) === requested);
-  const unique = [...new Set(matches)];
-  if (unique.length !== 1) {
-    return err(nugetMetadataError(input, "NuGet package version index did not identify exactly one requested version.", {
-      reason: unique.length === 0 ? "version_not_found" : "version_ambiguous",
-      requestedVersion: input.requestedVersion,
-      matchCount: unique.length
-    }));
-  }
-  return ok(unique[0]);
-}
-function parseNugetRegistrationIndex(input) {
-  const document2 = parseJsonRecord(input, "NuGet registration index");
-  if (!document2.ok) {
-    return document2;
-  }
-  if (!Array.isArray(document2.value.items)) {
-    return err(nugetMetadataError(input, "NuGet registration index did not contain registration pages."));
-  }
-  for (const page of document2.value.items) {
-    if (!isRecord25(page)) {
-      continue;
-    }
-    if (Array.isArray(page.items)) {
-      const leaf = findRegistrationLeaf(input, page.items);
-      if (!leaf.ok || leaf.value) {
-        return leaf.ok ? ok({ kind: "leaf", leaf: leaf.value }) : leaf;
-      }
-      continue;
-    }
-    if (!registrationPageContainsVersion(page, input.normalizedVersion)) {
-      continue;
-    }
-    const pageUrl = typeof page["@id"] === "string" ? page["@id"] : undefined;
-    const validated = pageUrl ? validateNugetOrgUrl(pageUrl, "registration_page", false) : { ok: false, message: "NuGet registration page did not include a safe URL.", details: { reason: "registration_page_url_missing" } };
-    if (!validated.ok) {
-      return err(nugetMetadataError(input, validated.message, validated.details));
-    }
-    return ok({ kind: "page", pageUrl: validated.url });
-  }
-  return err(nugetMetadataError(input, "NuGet registration index did not contain the requested package version.", {
-    reason: "registration_version_not_found",
-    normalizedVersion: input.normalizedVersion
-  }));
-}
-function parseNugetRegistrationPage(input) {
-  const document2 = parseJsonRecord(input, "NuGet registration page");
-  if (!document2.ok) {
-    return document2;
-  }
-  if (!Array.isArray(document2.value.items)) {
-    return err(nugetMetadataError(input, "NuGet registration page did not contain registration leaves."));
-  }
-  const leaf = findRegistrationLeaf(input, document2.value.items);
-  if (!leaf.ok) {
-    return leaf;
-  }
-  if (!leaf.value) {
-    return err(nugetMetadataError(input, "NuGet registration page did not contain the requested package version.", {
-      reason: "registration_version_not_found",
-      normalizedVersion: input.normalizedVersion
-    }));
-  }
-  return ok(leaf.value);
-}
-function parseNugetCatalogPackage(input) {
-  const document2 = parseJsonRecord(input, "NuGet catalog leaf");
-  if (!document2.ok) {
-    return document2;
-  }
-  const id = document2.value.id;
-  const version = document2.value.version;
-  const packageHash = document2.value.packageHash;
-  const packageHashAlgorithm = document2.value.packageHashAlgorithm;
-  const packageSize = document2.value.packageSize;
-  const digest = typeof packageHash === "string" ? decodeCanonicalBase64(packageHash) : undefined;
-  if (typeof id !== "string" || id.toLowerCase() !== input.packageName.toLowerCase() || typeof version !== "string" || normalizeNugetVersion(version) !== input.normalizedVersion) {
-    return err(nugetMetadataError(input, "NuGet catalog leaf identity did not match the requested package.", {
-      reason: "catalog_identity_mismatch",
-      ...typeof id === "string" ? { observedName: id } : {},
-      ...typeof version === "string" ? { observedVersion: version } : {}
-    }));
-  }
-  if (typeof packageHashAlgorithm !== "string" || packageHashAlgorithm.toUpperCase() !== "SHA512" || !digest || digest.length !== SHA512_DIGEST_BYTES) {
-    return err(nugetMetadataError(input, "NuGet catalog leaf did not contain a valid SHA-512 package hash.", {
-      reason: "catalog_hash_invalid",
-      ...typeof packageHashAlgorithm === "string" ? { packageHashAlgorithm } : {}
-    }));
-  }
-  if (!Number.isSafeInteger(packageSize) || packageSize <= 0) {
-    return err(nugetMetadataError(input, "NuGet catalog leaf did not contain a valid package size.", {
-      reason: "catalog_package_size_invalid"
-    }));
-  }
-  return ok({ packageHash, packageSize });
-}
-function normalizeNugetVersion(value) {
-  if (value.length === 0 || value.length > 256) {
-    return;
-  }
-  const match = value.trim().match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u);
-  if (!match) {
-    return;
-  }
-  const numeric = [match[1], match[2] ?? "0", match[3] ?? "0", match[4] ?? "0"].map((part) => BigInt(part).toString());
-  const core = numeric[3] === "0" ? numeric.slice(0, 3) : numeric;
-  const prerelease = match[5]?.split(".").map((part) => /^\d+$/u.test(part) ? BigInt(part).toString() : part.toLowerCase()).join(".");
-  return `${core.join(".")}${prerelease ? `-${prerelease}` : ""}`.toLowerCase();
-}
-function findRegistrationLeaf(input, items) {
-  const matches = items.filter((item) => {
-    if (!isRecord25(item) || !isRecord25(item.catalogEntry)) {
-      return false;
-    }
-    return typeof item.catalogEntry.id === "string" && item.catalogEntry.id.toLowerCase() === input.packageName.toLowerCase() && typeof item.catalogEntry.version === "string" && normalizeNugetVersion(item.catalogEntry.version) === input.normalizedVersion;
-  });
-  if (matches.length > 1) {
-    return err(nugetMetadataError(input, "NuGet registration metadata contained duplicate package versions.", {
-      reason: "registration_version_ambiguous",
-      matchCount: matches.length
-    }));
-  }
-  const item = matches[0];
-  if (!isRecord25(item) || !isRecord25(item.catalogEntry)) {
-    return ok(undefined);
-  }
-  const catalogUrl = typeof item.catalogEntry["@id"] === "string" ? item.catalogEntry["@id"] : undefined;
-  const packageContentUrl = typeof item.packageContent === "string" ? item.packageContent : undefined;
-  const validatedCatalog = catalogUrl ? validateNugetOrgUrl(catalogUrl, "catalog_leaf", false) : { ok: false, message: "NuGet registration leaf did not include a catalog URL.", details: { reason: "catalog_url_missing" } };
-  if (!validatedCatalog.ok) {
-    return err(nugetMetadataError(input, validatedCatalog.message, validatedCatalog.details));
-  }
-  const validatedContent = packageContentUrl ? validateNugetOrgUrl(packageContentUrl, "package_content", false) : { ok: false, message: "NuGet registration leaf did not include a package content URL.", details: { reason: "package_content_url_missing" } };
-  if (!validatedContent.ok) {
-    return err(nugetMetadataError(input, validatedContent.message, validatedContent.details));
-  }
-  if (validatedContent.url !== input.expectedPackageContentUrl) {
-    return err(nugetMetadataError(input, "NuGet registration package URL did not match the discovered flat-container URL.", {
-      reason: "package_content_url_mismatch",
-      expectedPackageContentUrl: input.expectedPackageContentUrl,
-      observedPackageContentUrl: validatedContent.url
-    }));
-  }
-  return ok({
-    catalogUrl: validatedCatalog.url,
-    packageContentUrl: validatedContent.url
-  });
-}
-function registrationPageContainsVersion(page, version) {
-  const lower = typeof page.lower === "string" ? normalizeNugetVersion(page.lower) : undefined;
-  const upper = typeof page.upper === "string" ? normalizeNugetVersion(page.upper) : undefined;
-  if (!lower || !upper) {
-    return false;
-  }
-  return compareNugetVersions(lower, version) <= 0 && compareNugetVersions(version, upper) <= 0;
-}
-function compareNugetVersions(left, right) {
-  const parsedLeft = splitNormalizedVersion(left);
-  const parsedRight = splitNormalizedVersion(right);
-  if (!parsedLeft || !parsedRight) {
-    return left.localeCompare(right);
-  }
-  for (let index = 0;index < 4; index += 1) {
-    const leftPart = parsedLeft.numeric[index] ?? 0n;
-    const rightPart = parsedRight.numeric[index] ?? 0n;
-    if (leftPart !== rightPart) {
-      return leftPart < rightPart ? -1 : 1;
-    }
-  }
-  if (!parsedLeft.prerelease && !parsedRight.prerelease)
-    return 0;
-  if (!parsedLeft.prerelease)
-    return 1;
-  if (!parsedRight.prerelease)
-    return -1;
-  const length = Math.max(parsedLeft.prerelease.length, parsedRight.prerelease.length);
-  for (let index = 0;index < length; index += 1) {
-    const leftPart = parsedLeft.prerelease[index];
-    const rightPart = parsedRight.prerelease[index];
-    if (leftPart === undefined)
-      return -1;
-    if (rightPart === undefined)
-      return 1;
-    if (leftPart === rightPart)
-      continue;
-    const leftNumeric = /^\d+$/u.test(leftPart);
-    const rightNumeric = /^\d+$/u.test(rightPart);
-    if (leftNumeric && rightNumeric) {
-      return BigInt(leftPart) < BigInt(rightPart) ? -1 : 1;
-    }
-    if (leftNumeric !== rightNumeric)
-      return leftNumeric ? -1 : 1;
-    return leftPart < rightPart ? -1 : 1;
-  }
-  return 0;
-}
-function splitNormalizedVersion(value) {
-  const match = value.match(/^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?(?:-(.+))?$/u);
-  if (!match)
-    return;
-  return {
-    numeric: [match[1], match[2], match[3], match[4] ?? "0"].map((part) => BigInt(part)),
-    ...match[5] ? { prerelease: match[5].split(".") } : {}
-  };
-}
-function findServiceResource(resources, acceptedTypes) {
-  for (const resource of resources) {
-    if (!isRecord25(resource) || typeof resource["@id"] !== "string")
-      continue;
-    const types = Array.isArray(resource["@type"]) ? resource["@type"] : [resource["@type"]];
-    if (types.some((type) => typeof type === "string" && acceptedTypes.includes(type))) {
-      return resource["@id"];
-    }
-  }
-  return;
-}
-function validateNugetOrgUrl(value, usage, requireTrailingSlash) {
-  try {
-    const url = new URL(value);
-    const supportedPath = url.pathname.startsWith("/v3/") || (usage === "service_package_base" || usage === "package_content") && url.pathname.startsWith("/v3-flatcontainer/");
-    if (url.protocol !== "https:" || url.hostname.toLowerCase() !== NUGET_ORG_HOST || url.port !== "" || url.username !== "" || url.password !== "" || url.search !== "" || url.hash !== "" || !supportedPath || requireTrailingSlash && !url.pathname.endsWith("/")) {
-      return { ok: false, message: "NuGet service metadata included an unsupported URL.", details: { reason: "unsupported_nuget_url", usage } };
-    }
-    return { ok: true, url: url.toString() };
-  } catch {
-    return { ok: false, message: "NuGet service metadata included a malformed URL.", details: { reason: "malformed_nuget_url", usage } };
-  }
-}
-function decodeCanonicalBase64(value) {
-  if (!/^[A-Za-z0-9+/]+={0,2}$/u.test(value) || value.length % 4 !== 0) {
-    return;
-  }
-  const bytes = Buffer.from(value, "base64");
-  return bytes.toString("base64") === value ? bytes : undefined;
-}
-function parseJsonRecord(input, label) {
-  try {
-    const document2 = JSON.parse(input.text);
-    return isRecord25(document2) ? ok(document2) : err(nugetMetadataError(input, `${label} was not a JSON object.`));
-  } catch (cause) {
-    return err(nugetMetadataError(input, `${label} was not valid JSON.`, {
-      cause: cause instanceof Error ? cause.message : String(cause)
-    }));
-  }
-}
-function nugetMetadataError(input, message, details = {}) {
-  return createError({
-    code: "REGISTRY_METADATA_FETCH_FAILED",
-    category: "unsupported_input",
-    message,
-    details: {
-      packageId: input.packageId,
-      ...input.packageName ? { packageName: input.packageName } : {},
-      ...details
-    }
-  });
-}
-function isRecord25(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// src/evidence/nuget-nupkg.ts
-var NUGET_NUPKG_MAX_ENTRIES = 50000;
-var NUGET_NUPKG_ENTRY_MAX_BYTES = 50 * 1024 * 1024;
-var NUGET_NUPKG_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
-var NUGET_NUPKG_MATERIALIZED_MAX_BYTES = 128 * 1024 * 1024;
-var NUGET_NUSPEC_MAX_BYTES2 = 1024 * 1024;
-var NUGET_LICENSE_MAX_BYTES = 2 * 1024 * 1024;
-var NUGET_LICENSE_FILE_LIMIT2 = 50;
-var SHA512_DIGEST_BYTES2 = 64;
-function collectNugetNupkgEvidence(input) {
-  const integrity = verifyNugetNupkgIntegrity(input);
-  if (!integrity.ok) {
-    return integrity;
-  }
-  const archive = readArchiveBytes({
-    displayName: `${safeDisplayPart3(input.packageName)}.${safeDisplayPart3(input.normalizedVersion)}.nupkg`,
-    bytes: input.nupkg,
-    formatHint: "zip",
-    limits: {
-      inputBytes: input.artifactMaxBytes,
-      entries: NUGET_NUPKG_MAX_ENTRIES,
-      entryBytes: NUGET_NUPKG_ENTRY_MAX_BYTES,
-      expandedBytes: NUGET_NUPKG_EXPANDED_MAX_BYTES,
-      materializedBytes: NUGET_NUPKG_MATERIALIZED_MAX_BYTES
-    }
-  });
-  if (!archive.ok) {
-    if (archive.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
-      return ok(unavailableNugetEvidence(input.packageId, `SHA-512-verified NuGet package exceeded bounded archive limits (${archive.error.code}); its contents were not trusted.`));
-    }
-    return err(archive.error);
-  }
-  const nuspecEntries = archive.value.entries.filter((entry) => entry.type === "file" && !entry.path.includes("/") && entry.path.toLowerCase().endsWith(".nuspec"));
-  if (nuspecEntries.length !== 1) {
-    return err(nugetPackageError(input, "NuGet package did not contain exactly one root nuspec manifest.", {
-      reason: nuspecEntries.length === 0 ? "nuspec_missing" : "nuspec_ambiguous",
-      nuspecCount: nuspecEntries.length
-    }));
-  }
-  const nuspecPath = nuspecEntries[0]?.path;
-  const nuspecText = archive.value.readText(nuspecPath, NUGET_NUSPEC_MAX_BYTES2);
-  if (!nuspecText.ok) {
-    return err(nuspecText.error);
-  }
-  const metadataResult = parseNuspecMetadata({
-    packageId: input.packageId,
-    text: nuspecText.value
-  });
-  if (!metadataResult.ok) {
-    return metadataResult;
-  }
-  const metadata = metadataResult.value;
-  if (!metadata.id || metadata.id.toLowerCase() !== input.packageName.toLowerCase() || !metadata.version || normalizeNugetVersion(metadata.version) !== input.normalizedVersion) {
-    return err(nugetPackageError(input, "NuGet nuspec identity did not match the requested package.", {
-      reason: "nuspec_identity_mismatch",
-      ...metadata.id ? { observedName: metadata.id } : {},
-      ...metadata.version ? { observedVersion: metadata.version } : {}
-    }));
-  }
-  const evidencePaths = new Map;
-  const declaredLicenseFile = metadata.licenseType === "file" ? normalizeDeclaredArchivePath(metadata.license) : undefined;
-  if (declaredLicenseFile) {
-    evidencePaths.set(declaredLicenseFile, "license");
-  }
-  for (const entry of archive.value.entries.filter((candidate) => candidate.type === "file").sort((left, right) => left.path.localeCompare(right.path))) {
-    const kind = classifyEvidenceFile(entry.path);
-    if (kind && !evidencePaths.has(entry.path)) {
-      evidencePaths.set(entry.path, kind);
-    }
-  }
-  const entryPathsByFoldedPath = new Map(archive.value.entries.filter((entry) => entry.type === "file").map((entry) => [entry.path.toLowerCase(), entry.path]));
-  const warnings = [];
-  const files = [];
-  for (const [candidatePath, kind] of [...evidencePaths.entries()].slice(0, NUGET_LICENSE_FILE_LIMIT2)) {
-    const entryPath = entryPathsByFoldedPath.get(candidatePath.toLowerCase());
-    if (!entryPath) {
-      warnings.push(`NuGet nuspec declared missing license file ${candidatePath}.`);
-      continue;
-    }
-    const text = archive.value.readText(entryPath, NUGET_LICENSE_MAX_BYTES);
-    if (!text.ok) {
-      warnings.push(`Skipped ${entryPath}: NuGet license evidence exceeded bounded text limits.`);
-      continue;
-    }
-    files.push({ path: entryPath, kind, text: text.value });
-  }
-  if (files.length === 0) {
-    warnings.push("SHA-512-verified NuGet package did not contain a license evidence file.");
-  }
-  if (!metadata.license && metadata.licenseUrl) {
-    warnings.push(`NuGet nuspec declared only a licenseUrl: ${metadata.licenseUrl}`);
-  } else if (!metadata.license) {
-    warnings.push("NuGet nuspec did not declare a package license.");
-  } else if (metadata.licenseType !== "expression" && metadata.licenseType !== "file") {
-    warnings.push("NuGet nuspec license declaration used an unsupported type and was not trusted as an expression.");
-  } else if (metadata.licenseType === "file" && !declaredLicenseFile) {
-    warnings.push("NuGet nuspec declared an unsafe license file path and it was not read.");
-  }
-  return ok({
-    packageId: input.packageId,
-    ...metadata.license && metadata.licenseType === "expression" ? { metadataLicense: metadata.license, metadataSource: "nuspec" } : {},
-    files,
-    source: "tarball",
-    warnings
-  });
-}
-function verifyNugetNupkgIntegrity(input) {
-  const expected = decodeCanonicalSha512(input.expectedSha512);
-  const actual = createHash10("sha512").update(input.nupkg).digest();
-  if (input.nupkg.byteLength !== input.expectedSize || !expected || expected.length !== actual.length || !timingSafeEqual6(expected, actual)) {
-    return err(createError({
-      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
-      category: "unsupported_input",
-      message: "NuGet package content did not match the nuget.org catalog identity.",
-      details: {
-        packageId: input.packageId,
-        expectedSize: input.expectedSize,
-        observedSize: input.nupkg.byteLength,
-        computed: `sha512-${actual.toString("base64")}`
-      }
-    }));
-  }
-  recordArtifactCheck({ packageId: input.packageId, bytes: input.nupkg, kind: "nuget-sha512", value: `sha512-${actual.toString("base64")}` });
-  return ok(undefined);
-}
-function decodeCanonicalSha512(value) {
-  if (!/^[A-Za-z0-9+/]+={0,2}$/u.test(value) || value.length % 4 !== 0) {
-    return;
-  }
-  const digest = Buffer.from(value, "base64");
-  return digest.length === SHA512_DIGEST_BYTES2 && digest.toString("base64") === value ? digest : undefined;
-}
-function normalizeDeclaredArchivePath(value) {
-  if (!value || value.includes("\\")) {
-    return;
-  }
-  const normalized = path80.posix.normalize(value);
-  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/") || normalized !== value || /[\u0000-\u001f\u007f-\u009f:]/u.test(normalized)) {
-    return;
-  }
-  return normalized;
-}
-function unavailableNugetEvidence(packageId, warning) {
-  return { packageId, files: [], source: "unavailable", warnings: [warning] };
-}
-function safeDisplayPart3(value) {
-  return value.replace(/[^A-Za-z0-9._+-]/gu, "_").slice(0, 120) || "package";
-}
-function nugetPackageError(input, message, details) {
-  return createError({
-    code: "PACKAGE_EVIDENCE_READ_FAILED",
-    category: "unsupported_input",
-    message,
-    details: {
-      packageId: input.packageId,
-      packageName: input.packageName,
-      version: input.version,
-      ...details
-    }
-  });
 }
 
 // src/evidence/pypi-package.ts
-import path81 from "node:path";
+import path78 from "node:path";
 var PYTHON_DISTRIBUTION_METADATA_MAX_BYTES = 1024 * 1024;
 var PYTHON_DISTRIBUTION_EVIDENCE_FILE_MAX_BYTES = 2 * 1024 * 1024;
 var PYTHON_DISTRIBUTION_LICENSE_FILE_LIMIT = 50;
@@ -53455,7 +52047,7 @@ function parsePyPiReleaseMetadata(input) {
       cause: cause instanceof Error ? cause.message : String(cause)
     }));
   }
-  if (!isRecord26(document2) || !isRecord26(document2.info) || !Array.isArray(document2.urls)) {
+  if (!isRecord25(document2) || !isRecord25(document2.info) || !Array.isArray(document2.urls)) {
     return err(pypiMetadataError(input, "PyPI release metadata did not have the expected shape."));
   }
   const infoName = document2.info.name;
@@ -53550,13 +52142,13 @@ function pythonDistributionArchiveFormat(filename) {
   return;
 }
 function readPyPiReleaseArtifact(value) {
-  if (!isRecord26(value)) {
+  if (!isRecord25(value)) {
     return;
   }
   const filename = value.filename;
   const url = value.url;
   const packageType = value.packagetype;
-  const sha256 = isRecord26(value.digests) ? value.digests.sha256 : undefined;
+  const sha256 = isRecord25(value.digests) ? value.digests.sha256 : undefined;
   if (typeof filename !== "string" || filename === "" || filename.includes("/") || filename.includes("\\") || !pythonDistributionArchiveFormat(filename) || typeof url !== "string" || url === "" || !isOfficialPyPiArtifactUrl(url) || packageType !== "sdist" && packageType !== "bdist_wheel" || typeof sha256 !== "string" || !/^[a-f0-9]{64}$/iu.test(sha256)) {
     return;
   }
@@ -53700,7 +52292,7 @@ function relativeEvidencePath(entryPath, packageRoot) {
   return packageRoot && entryPath.startsWith(`${packageRoot}/`) ? entryPath.slice(packageRoot.length + 1) : entryPath;
 }
 function archiveDirname(entryPath) {
-  const dirname = path81.posix.dirname(entryPath);
+  const dirname = path78.posix.dirname(entryPath);
   return dirname === "." ? "" : dirname;
 }
 function joinArchivePath(left, right) {
@@ -53725,205 +52317,1636 @@ function safeArtifactFilename(value) {
   const normalized = value.replace(/\\/gu, "/");
   return normalized.split("/").pop() || "python-distribution";
 }
-function isRecord26(value) {
+function isRecord25(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// src/evidence/rubygems-package.ts
-import { gunzipSync as gunzipSync5 } from "node:zlib";
-var GEM_METADATA_MAX_BYTES = 1024 * 1024;
-var GEM_EVIDENCE_FILE_MAX_BYTES2 = 2 * 1024 * 1024;
-var GEM_EVIDENCE_FILE_LIMIT = 50;
-function parseRubyGemsVersionMetadata(input) {
-  let document2;
-  try {
-    document2 = JSON.parse(input.text);
-  } catch (cause) {
-    return err(metadataError(input, "RubyGems version metadata was not valid JSON.", {
-      cause: cause instanceof Error ? cause.message : String(cause)
-    }));
+// src/evidence/evidence-failure.ts
+function isRecoverableRemoteEvidenceError(error) {
+  if (isCollectionAbortedError(error)) {
+    return false;
   }
-  if (!isRecord27(document2)) {
-    return err(metadataError(input, "RubyGems version metadata did not have the expected shape."));
-  }
-  const name = document2.name;
-  const version = document2.version;
-  const platform = document2.platform;
-  const sha256 = document2.sha;
-  const gemUrl = document2.gem_uri;
-  const expectedGemUrl = rubyGemsArtifactUrl(input.packageName, input.version);
-  if (!expectedGemUrl || name !== input.packageName || version !== input.version || platform !== "ruby" || typeof sha256 !== "string" || !/^[a-f0-9]{64}$/iu.test(sha256) || gemUrl !== expectedGemUrl) {
-    return err(metadataError(input, "RubyGems version metadata did not match the requested package identity and artifact.", {
-      ...typeof name === "string" ? { metadataName: name } : {},
-      ...typeof version === "string" ? { metadataVersion: version } : {},
-      ...typeof platform === "string" ? { metadataPlatform: platform } : {}
-    }));
-  }
-  return ok({ gemUrl, sha256: sha256.toLowerCase() });
+  return error.category === "network" && (error.code === "REGISTRY_METADATA_FETCH_FAILED" || error.code === "TARBALL_FETCH_FAILED");
 }
-function collectRubyGemArchiveEvidence(input) {
-  const gemBytes = Buffer.from(input.gem);
-  const integrity = verifyPackageIntegrity({
+function unavailableRemoteEvidence(input) {
+  const diagnostic = remoteEvidenceFailureDiagnostic(input.error);
+  return {
     packageId: input.packageId,
-    resolvedDetail: rubyGemsArtifactUrl(input.packageName, input.version),
-    integrity: sha256HexIntegrity(input.sha256),
-    artifact: gemBytes
-  });
-  if (!integrity.ok)
-    return integrity;
-  const outer = readArchiveBytes({
-    displayName: `${input.packageName}-${input.version}.gem`,
-    bytes: gemBytes,
-    formatHint: "tar",
-    limits: { inputBytes: input.artifactMaxBytes }
-  });
-  if (!outer.ok)
-    return outer;
-  const metadataEntry = outer.value.readEntry("metadata.gz");
-  const dataEntry = outer.value.readEntry("data.tar.gz");
-  if (!metadataEntry.ok || !dataEntry.ok) {
-    return err(createError({
-      code: "TARBALL_PARSE_FAILED",
-      category: "unsupported_input",
-      message: "Ruby gem archive is missing metadata.gz or data.tar.gz.",
-      details: { packageId: input.packageId }
-    }));
+    files: [],
+    source: "unavailable",
+    warnings: [
+      `Package evidence could not be fetched (${input.error.code}): ${input.error.message}${diagnostic ? ` (${diagnostic})` : ""}`
+    ]
+  };
+}
+function remoteEvidenceFailureDiagnostic(error) {
+  const cause = typeof error.details?.cause === "string" ? error.details.cause : undefined;
+  const timeout = cause?.match(/\btimed out after (\d+)ms\b/i);
+  return timeout?.[1] ? `timeout after ${timeout[1]}ms` : undefined;
+}
+function isPackageIntegrityMismatch(error) {
+  return Array.isArray(error.details?.computed);
+}
+function isPackageTarballTooLargeError(error) {
+  return error.code === "TARBALL_FETCH_FAILED" && error.message === "Package tarball response exceeded the maximum supported size." || error.code === "TARBALL_PARSE_FAILED" && error.message === "Failed to decompress package tarball evidence." && typeof error.details?.maxUnpackedBytes === "number";
+}
+function isPackageArtifactTooLargeError(error) {
+  return isPackageTarballTooLargeError(error) || error.code === "TARBALL_FETCH_FAILED" && error.message === "Python distribution response exceeded the maximum supported size.";
+}
+function unavailableOversizedTarballEvidence(packageId) {
+  return {
+    packageId,
+    files: [],
+    source: "unavailable",
+    warnings: [
+      "Package tarball evidence exceeded Ohrisk's size limit and was not scanned."
+    ]
+  };
+}
+function unavailableRemoteArchiveLimitEvidence(packageId, error, artifactLabel) {
+  const limit = typeof error.details?.limit === "string" ? ` (${error.details.limit})` : "";
+  const warning = error.code === "ARCHIVE_ENTRY_TYPE_UNSUPPORTED" ? `Remote ${artifactLabel} contained an unsupported archive entry type; its contents were not used as license evidence.` : `Remote ${artifactLabel} exceeded Ohrisk's bounded archive inspection limit${limit}; its contents were not used as license evidence.`;
+  return {
+    packageId,
+    files: [],
+    source: "unavailable",
+    warnings: [warning]
+  };
+}
+function addIntegrityWarningWhenUnverified(input) {
+  if (input.integrity) {
+    return input.evidence;
   }
-  const metadata = readGemMetadata({ packageId: input.packageId, bytes: metadataEntry.value });
-  if (!metadata.ok)
-    return metadata;
-  if (metadata.value.name !== input.packageName || metadata.value.version !== input.version) {
-    return err(createError({
-      code: "TARBALL_PARSE_FAILED",
-      category: "unsupported_input",
-      message: "Ruby gem archive metadata did not match the requested package identity.",
-      details: {
-        packageId: input.packageId,
-        expectedName: input.packageName,
-        expectedVersion: input.version,
-        metadataName: metadata.value.name,
-        metadataVersion: metadata.value.version
-      }
-    }));
+  return {
+    ...input.evidence,
+    warnings: [
+      ...input.evidence.warnings,
+      "Package artifact integrity was not available in the lockfile; tarball contents were not verified."
+    ]
+  };
+}
+function unavailableUnverifiedRemoteTarballEvidence(packageId, warning = "Remote package artifact integrity was not available in the lockfile; tarball contents were not trusted.") {
+  return {
+    packageId,
+    files: [],
+    source: "unavailable",
+    warnings: [
+      warning
+    ]
+  };
+}
+function yarnCacheOnlyIntegrityWarning() {
+  return "Yarn Berry checksum covers its cache ZIP, not the npm tarball; remote bytes were not trusted. Commit .yarn/cache or scan an installed checkout.";
+}
+function unsupportedRemoteEcosystemEvidence(input) {
+  const warning = input.reason ?? (input.node.resolved ? `Unsupported resolved artifact specifier: ${safeUrlForErrorDetails(input.node.resolved)}` : `Remote package evidence is not configured for the ${input.node.ecosystem} ecosystem.`);
+  return {
+    packageId: input.node.id,
+    files: [],
+    source: "unavailable",
+    warnings: [warning]
+  };
+}
+
+// src/evidence/cargo-crate.ts
+import { createHash as createHash8, timingSafeEqual as timingSafeEqual4 } from "node:crypto";
+import path79 from "node:path";
+var CARGO_CRATE_MAX_ENTRIES = 50000;
+var CARGO_CRATE_ENTRY_MAX_BYTES = 50 * 1024 * 1024;
+var CARGO_CRATE_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
+var CARGO_CRATE_MATERIALIZED_MAX_BYTES = 128 * 1024 * 1024;
+var CARGO_CRATE_MANIFEST_MAX_BYTES = 1024 * 1024;
+var CARGO_CRATE_LICENSE_MAX_BYTES = 2 * 1024 * 1024;
+var CARGO_CRATE_LICENSE_FILE_LIMIT = 50;
+var SHA256_DIGEST_BYTES = 32;
+function collectCargoCrateEvidence(input) {
+  const verified = verifyCargoCrateIntegrity(input);
+  if (!verified.ok) {
+    return verified;
   }
-  const data = readArchiveBytes({
-    displayName: "data.tar.gz",
-    bytes: dataEntry.value,
+  const archiveName = `${safeCargoDisplayPart(input.packageName)}-${safeCargoDisplayPart(input.version)}.crate`;
+  const archive = readArchiveBytes({
+    displayName: archiveName,
+    bytes: input.crate,
     formatHint: "tar.gz",
-    limits: { inputBytes: input.artifactMaxBytes }
+    limits: {
+      inputBytes: input.artifactMaxBytes,
+      entries: CARGO_CRATE_MAX_ENTRIES,
+      entryBytes: CARGO_CRATE_ENTRY_MAX_BYTES,
+      expandedBytes: CARGO_CRATE_EXPANDED_MAX_BYTES,
+      materializedBytes: CARGO_CRATE_MATERIALIZED_MAX_BYTES
+    }
   });
-  if (!data.ok)
-    return data;
-  const warnings = [];
-  const files = collectGemEvidenceFiles(data.value, warnings);
-  if (files.length === 0) {
-    warnings.push("No supported license, notice, attribution, or legal evidence file found in the checksum-verified Ruby gem archive.");
+  if (!archive.ok) {
+    const warning = archive.error.code === "ARCHIVE_LIMIT_EXCEEDED" ? `Checksum-identified Cargo crate exceeded bounded archive limits (${archive.error.code}); its contents were not trusted.` : `Checksum-identified Cargo crate failed bounded archive inspection (${archive.error.code}); its contents were not trusted.`;
+    return ok(unavailableCargoCrateEvidence(input.packageId, warning));
   }
-  if (metadata.value.licenses.length === 0) {
-    warnings.push("Checksum-verified Ruby gem metadata did not declare license metadata.");
+  const root = `${input.packageName}-${input.version}`;
+  const rootPrefix = `${root}/`;
+  const unexpectedEntry = archive.value.entries.find((entry) => entry.path !== root && !entry.path.startsWith(rootPrefix));
+  if (unexpectedEntry) {
+    return err(cargoCrateError(input, "Cargo crate archive did not use the requested package root.", {
+      reason: "cargo_crate_root_mismatch",
+      expectedRoot: root,
+      observedPath: unexpectedEntry.path
+    }));
+  }
+  const manifestPath = `${rootPrefix}Cargo.toml`;
+  const manifestEntry = archive.value.entries.find((entry) => entry.type === "file" && entry.path === manifestPath);
+  if (!manifestEntry) {
+    return err(cargoCrateError(input, "Cargo crate archive did not contain Cargo.toml.", {
+      reason: "cargo_crate_manifest_missing"
+    }));
+  }
+  const manifestText = archive.value.readText(manifestPath, CARGO_CRATE_MANIFEST_MAX_BYTES);
+  if (!manifestText.ok) {
+    return err(manifestText.error);
+  }
+  const manifest = parseCargoManifestMetadata(manifestText.value);
+  if (manifest.name !== input.packageName || manifest.version !== input.version) {
+    return err(cargoCrateError(input, "Cargo crate manifest identity did not match the requested package.", {
+      reason: "cargo_crate_identity_mismatch",
+      expectedName: input.packageName,
+      expectedVersion: input.version,
+      ...manifest.name ? { observedName: manifest.name } : {},
+      ...manifest.version ? { observedVersion: manifest.version } : {}
+    }));
+  }
+  const evidencePaths = new Map;
+  const declaredLicenseFile = normalizeDeclaredLicenseFile(manifest.licenseFile);
+  if (declaredLicenseFile) {
+    evidencePaths.set(declaredLicenseFile, "license");
+  }
+  for (const relativePath of archive.value.entries.filter((entry) => entry.type === "file" && entry.path.startsWith(rootPrefix)).map((entry) => entry.path.slice(rootPrefix.length)).filter((relativePath) => !relativePath.includes("/")).sort()) {
+    const kind = classifyEvidenceFile(relativePath);
+    if (kind && !evidencePaths.has(relativePath)) {
+      evidencePaths.set(relativePath, kind);
+    }
+  }
+  const readmePath = archive.value.entries.filter((entry) => entry.type === "file" && entry.path.startsWith(rootPrefix)).map((entry) => entry.path.slice(rootPrefix.length)).filter((relativePath) => !relativePath.includes("/") && isCargoReadme(relativePath)).sort()[0];
+  if (readmePath) {
+    const readme = archive.value.readText(`${rootPrefix}${readmePath}`, CARGO_CRATE_LICENSE_MAX_BYTES);
+    if (readme.ok && recognizePackageDualLicenseDeclaration(readme.value)) {
+      evidencePaths.set(readmePath, "other");
+    }
+  }
+  const warnings = [];
+  const files = [];
+  for (const [relativePath, kind] of [...evidencePaths.entries()].slice(0, CARGO_CRATE_LICENSE_FILE_LIMIT)) {
+    const entryPath = `${rootPrefix}${relativePath}`;
+    const entry = archive.value.entries.find((candidate) => candidate.type === "file" && candidate.path === entryPath);
+    if (!entry) {
+      warnings.push(`Cargo.toml declared missing license-file ${relativePath}.`);
+      continue;
+    }
+    const text = archive.value.readText(entryPath, CARGO_CRATE_LICENSE_MAX_BYTES);
+    if (!text.ok) {
+      warnings.push(`Skipped ${relativePath}: Cargo license evidence exceeded bounded text limits.`);
+      continue;
+    }
+    files.push({ path: relativePath, kind, text: text.value });
+  }
+  if (files.length === 0) {
+    warnings.push("Checksum-verified Cargo crate did not contain a package license evidence file.");
+  }
+  if (!manifest.license) {
+    warnings.push("Cargo.toml did not declare a package license.");
   }
   return ok({
     packageId: input.packageId,
-    ...metadata.value.licenses.length === 1 ? { metadataLicense: metadata.value.licenses[0], metadataSource: "metadata.gz" } : {},
-    ...metadata.value.licenses.length > 1 ? { metadataLicenses: metadata.value.licenses, metadataSource: "metadata.gz" } : {},
+    ...manifest.license ? { metadataLicense: manifest.license, metadataSource: "Cargo.toml" } : {},
     files,
     source: "tarball",
     warnings
   });
 }
-function rubyGemsVersionMetadataUrl(name, version) {
-  if (!isSafeGemCoordinate(name) || !isSafeGemCoordinate(version))
-    return;
-  return `https://rubygems.org/api/v2/rubygems/${encodeURIComponent(name)}/versions/${encodeURIComponent(version)}.json?platform=ruby`;
+function unavailableCargoCrateEvidence(packageId, warning) {
+  return {
+    packageId,
+    files: [],
+    source: "unavailable",
+    warnings: [warning]
+  };
 }
-function rubyGemsArtifactUrl(name, version) {
-  if (!isSafeGemCoordinate(name) || !isSafeGemCoordinate(version))
-    return;
-  return `https://rubygems.org/gems/${name}-${version}.gem`;
-}
-function isSafeGemCoordinate(value) {
-  return value.length > 0 && value.length <= 255 && /^[A-Za-z0-9_.+-]+$/u.test(value);
-}
-function readGemMetadata(input) {
-  let text;
-  try {
-    text = gunzipSync5(input.bytes, { maxOutputLength: GEM_METADATA_MAX_BYTES }).toString("utf8");
-  } catch (cause) {
+function verifyCargoCrateIntegrity(input) {
+  const expected = decodeSha256Integrity(input.integrity);
+  const actual = createHash8("sha256").update(input.crate).digest();
+  if (!expected || expected.length !== actual.length || !timingSafeEqual4(expected, actual)) {
     return err(createError({
-      code: "TARBALL_PARSE_FAILED",
+      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
       category: "unsupported_input",
-      message: "Ruby gem metadata.gz was malformed or exceeded the maximum supported size.",
+      message: "Cargo crate checksum did not match Cargo.lock.",
       details: {
         packageId: input.packageId,
-        maxBytes: GEM_METADATA_MAX_BYTES,
-        cause: cause instanceof Error ? cause.message : String(cause)
+        integrity: input.integrity,
+        computed: `sha256-${actual.toString("base64")}`
       }
     }));
   }
-  const name = readMetadataScalar(text, "name");
-  const rawVersion = text.match(/^version:\s*!ruby\/object:Gem::Version\s*\r?\n\s+version:\s*([^\r\n]+)$/mu)?.[1]?.trim();
-  const version = rawVersion ? unquoteYamlScalar(rawVersion) : undefined;
-  if (!name || !version || !isSafeGemCoordinate(name) || !isSafeGemCoordinate(version)) {
-    return err(createError({
-      code: "TARBALL_PARSE_FAILED",
-      category: "unsupported_input",
-      message: "Ruby gem metadata.gz did not contain a safe name and version.",
-      details: { packageId: input.packageId }
-    }));
-  }
-  const licenses = [];
-  const licenseBlock = text.match(/^licenses:\s*\r?\n((?:-\s*[^\r\n]*\r?\n?)*)/mu)?.[1] ?? "";
-  for (const match of licenseBlock.matchAll(/^-\s*([^\r\n]+)$/gmu)) {
-    const license = unquoteYamlScalar(match[1]?.trim() ?? "");
-    if (license)
-      licenses.push(license);
-  }
-  return ok({ name, version, licenses: [...new Set(licenses)] });
+  recordArtifactCheck({ packageId: input.packageId, bytes: input.crate, kind: "cargo-sha256", value: `sha256-${actual.toString("base64")}` });
+  return ok(undefined);
 }
-function readMetadataScalar(text, name) {
-  const value = text.match(new RegExp(`^${name}:\\s*([^\\r\\n]+)$`, "mu"))?.[1]?.trim();
-  return value ? unquoteYamlScalar(value) : undefined;
-}
-function unquoteYamlScalar(value) {
-  if (value === "" || value === "null" || value.startsWith("!"))
+function decodeSha256Integrity(integrity) {
+  if (!/^sha256-[A-Za-z0-9+/]{43}=$/u.test(integrity)) {
     return;
-  if (value.startsWith("'") && value.endsWith("'") || value.startsWith('"') && value.endsWith('"')) {
-    return value.slice(1, -1).trim() || undefined;
   }
-  return value.trim() || undefined;
+  const digest = Buffer.from(integrity.slice("sha256-".length), "base64");
+  return digest.length === SHA256_DIGEST_BYTES ? digest : undefined;
 }
-function collectGemEvidenceFiles(archive, warnings) {
-  const files = [];
-  const candidates = archive.entries.filter((entry) => entry.type === "file" && !entry.path.includes("/") && classifyEvidenceFile(entry.path)).sort((left, right) => left.path.localeCompare(right.path)).slice(0, GEM_EVIDENCE_FILE_LIMIT);
-  for (const candidate of candidates) {
-    const text = archive.readText(candidate.path, GEM_EVIDENCE_FILE_MAX_BYTES2);
-    if (!text.ok) {
-      warnings.push(`Skipped ${candidate.path}: Ruby gem evidence file could not be read within the supported bounds.`);
-      continue;
-    }
-    const kind = classifyEvidenceFile(candidate.path);
-    if (kind)
-      files.push({ path: candidate.path, kind, text: text.value });
+function normalizeDeclaredLicenseFile(value) {
+  if (!value) {
+    return;
   }
-  return files;
+  const normalized = path79.posix.normalize(value.replace(/\\/g, "/"));
+  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/")) {
+    return;
+  }
+  return normalized;
 }
-function metadataError(input, message, details = {}) {
+function isCargoReadme(relativePath) {
+  return /^README(?:\.(?:md|markdown|txt|text|rst))?$/iu.test(relativePath);
+}
+function safeCargoDisplayPart(value) {
+  return value.replace(/[^A-Za-z0-9._+-]/g, "_").slice(0, 120) || "package";
+}
+function cargoCrateError(input, message, details) {
   return createError({
-    code: "REGISTRY_METADATA_FETCH_FAILED",
+    code: "PACKAGE_EVIDENCE_READ_FAILED",
     category: "unsupported_input",
     message,
     details: {
       packageId: input.packageId,
       packageName: input.packageName,
       version: input.version,
-      registryUrl: input.registryUrl,
       ...details
     }
   });
 }
-function isRecord27(value) {
+
+// src/evidence/cargo-git.ts
+import path80 from "node:path";
+var CARGO_GIT_MAX_ENTRIES = 50000;
+var CARGO_GIT_ENTRY_MAX_BYTES = 50 * 1024 * 1024;
+var CARGO_GIT_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
+var CARGO_GIT_MATERIALIZED_MAX_BYTES = 128 * 1024 * 1024;
+var CARGO_GIT_MANIFEST_MAX_BYTES = 1024 * 1024;
+var CARGO_GIT_LICENSE_MAX_BYTES = 2 * 1024 * 1024;
+var CARGO_GIT_MANIFEST_LIMIT = 256;
+var CARGO_GIT_LICENSE_FILE_LIMIT = 50;
+var GITHUB_COMPONENT = /^[A-Za-z0-9_.-]+$/u;
+var GIT_COMMIT = /^[0-9a-f]{40}$/iu;
+var CARGO_GIT_QUERY_KEYS = new Set(["branch", "rev", "tag"]);
+var CARGO_GITHUB_ARCHIVE_HOSTS = new Set(["codeload.github.com"]);
+function parseCargoGitHubSource(resolved) {
+  if (!resolved?.startsWith("git+")) {
+    return;
+  }
+  let source;
+  try {
+    source = new URL(resolved.slice("git+".length));
+  } catch {
+    return;
+  }
+  if (source.protocol !== "https:" || source.hostname.toLowerCase() !== "github.com" || source.port !== "" || source.username !== "" || source.password !== "" || source.pathname.includes("%")) {
+    return;
+  }
+  const segments = source.pathname.split("/").filter(Boolean);
+  if (segments.length !== 2) {
+    return;
+  }
+  const owner = segments[0];
+  const repository = segments[1]?.replace(/\.git$/iu, "");
+  const commit = source.hash.slice(1).toLowerCase();
+  if (!owner || !repository || !GITHUB_COMPONENT.test(owner) || !GITHUB_COMPONENT.test(repository) || owner === "." || owner === ".." || repository === "." || repository === ".." || !GIT_COMMIT.test(commit)) {
+    return;
+  }
+  const queryKeys = [...source.searchParams.keys()];
+  if (queryKeys.length > 1 || queryKeys.some((key) => !CARGO_GIT_QUERY_KEYS.has(key)) || queryKeys.some((key) => source.searchParams.getAll(key).length !== 1) || queryKeys.some((key) => {
+    const value = source.searchParams.get(key);
+    return value === null || value === "" || value.length > 256 || value.includes("\x00");
+  })) {
+    return;
+  }
+  return {
+    owner,
+    repository,
+    commit,
+    archiveUrl: `https://codeload.github.com/${owner}/${repository}/tar.gz/${commit}`
+  };
+}
+function collectCargoGitHubArchiveEvidenceBatch(input) {
+  const symlinks = new Map;
+  const archive = readArchiveBytes({
+    displayName: `${safeDisplayPart2(input.source.repository)}-${input.source.commit.slice(0, 12)}.tar.gz`,
+    bytes: input.archive,
+    formatHint: "tar.gz",
+    tarLinkPolicy: "skip",
+    onTarSymlink: (entryPath, linkTarget) => {
+      symlinks.set(entryPath, linkTarget);
+    },
+    limits: {
+      inputBytes: input.artifactMaxBytes,
+      entries: CARGO_GIT_MAX_ENTRIES,
+      entryBytes: CARGO_GIT_ENTRY_MAX_BYTES,
+      expandedBytes: CARGO_GIT_EXPANDED_MAX_BYTES,
+      materializedBytes: CARGO_GIT_MATERIALIZED_MAX_BYTES
+    }
+  });
+  if (!archive.ok) {
+    return ok(unavailableEvidenceBatch(input.packages, `Commit-pinned Cargo Git archive failed bounded inspection (${archive.error.code}); its contents were not trusted.`));
+  }
+  const root = singleArchiveRoot(archive.value);
+  if (!root) {
+    return ok(unavailableEvidenceBatch(input.packages, "Commit-pinned Cargo Git archive did not contain exactly one repository root."));
+  }
+  const manifestEntries = archive.value.entries.filter((entry) => entry.type === "file" && entry.path.startsWith(`${root}/`) && path80.posix.basename(entry.path) === "Cargo.toml").sort((left, right) => left.path.localeCompare(right.path));
+  if (manifestEntries.length > CARGO_GIT_MANIFEST_LIMIT) {
+    return ok(unavailableEvidenceBatch(input.packages, "Commit-pinned Cargo Git archive exceeded the Cargo.toml inspection limit."));
+  }
+  const manifests = new Map;
+  for (const entry of manifestEntries) {
+    const text = archive.value.readText(entry.path, CARGO_GIT_MANIFEST_MAX_BYTES);
+    if (text.ok) {
+      manifests.set(entry.path, text.value);
+    }
+  }
+  const parsedManifests = [...manifests.entries()].map(([manifestPath, manifestText]) => {
+    const workspaceManifest = nearestWorkspaceManifest({
+      root,
+      manifestPath,
+      manifests
+    });
+    return {
+      manifestPath,
+      workspaceManifestPath: workspaceManifest?.path,
+      metadata: parseCargoWorkspacePackageMetadata({
+        manifestText,
+        ...workspaceManifest ? { workspaceManifestText: workspaceManifest.text } : {}
+      })
+    };
+  });
+  return ok(new Map(input.packages.map((requestedPackage) => [
+    requestedPackage.packageId,
+    collectPreparedCargoGitHubEvidence({
+      requestedPackage,
+      archive: archive.value,
+      root,
+      symlinks,
+      parsedManifests
+    })
+  ])));
+}
+function collectPreparedCargoGitHubEvidence(input) {
+  const matches = input.parsedManifests.filter((candidate) => candidate.metadata.name === input.requestedPackage.packageName && candidate.metadata.version === input.requestedPackage.version);
+  if (matches.length !== 1) {
+    return unavailableEvidence2(input.requestedPackage.packageId, matches.length === 0 ? "Commit-pinned Cargo Git archive did not contain the locked package identity." : "Commit-pinned Cargo Git archive contained multiple matching package manifests.");
+  }
+  const match = matches[0];
+  const packageDirectory = path80.posix.dirname(match.manifestPath);
+  const workspaceDirectory = match.workspaceManifestPath ? path80.posix.dirname(match.workspaceManifestPath) : input.root;
+  const evidencePaths = new Map;
+  addDirectEvidencePaths({
+    archive: input.archive,
+    directory: packageDirectory,
+    root: input.root,
+    symlinks: input.symlinks,
+    evidencePaths
+  });
+  if (match.metadata.licenseFile) {
+    const declaredPath = resolveContainedArchivePath({
+      root: input.root,
+      directory: packageDirectory,
+      relativePath: match.metadata.licenseFile
+    });
+    if (declaredPath) {
+      evidencePaths.set(declaredPath, "license");
+    }
+  }
+  if (!hasLicenseLikeEvidence(evidencePaths)) {
+    addDirectEvidencePaths({
+      archive: input.archive,
+      directory: workspaceDirectory,
+      root: input.root,
+      symlinks: input.symlinks,
+      evidencePaths
+    });
+  }
+  if (!hasLicenseLikeEvidence(evidencePaths) && workspaceDirectory !== input.root) {
+    addDirectEvidencePaths({
+      archive: input.archive,
+      directory: input.root,
+      root: input.root,
+      symlinks: input.symlinks,
+      evidencePaths
+    });
+  }
+  const warnings = [];
+  const files = [];
+  for (const [entryPath, kind] of [...evidencePaths.entries()].sort(([left], [right]) => left.localeCompare(right)).slice(0, CARGO_GIT_LICENSE_FILE_LIMIT)) {
+    const entry = input.archive.entries.find((candidate) => candidate.type === "file" && candidate.path === entryPath);
+    if (!entry) {
+      warnings.push(`Cargo.toml declared missing license-file ${archiveRelativePath(input.root, entryPath)}.`);
+      continue;
+    }
+    const text = input.archive.readText(entryPath, CARGO_GIT_LICENSE_MAX_BYTES);
+    if (!text.ok) {
+      warnings.push(`Skipped ${archiveRelativePath(input.root, entryPath)}: Cargo license evidence exceeded bounded text limits.`);
+      continue;
+    }
+    files.push({
+      path: archiveRelativePath(input.root, entryPath),
+      kind,
+      text: text.value
+    });
+  }
+  if (files.length === 0) {
+    warnings.push("Commit-pinned Cargo Git source did not contain a package or workspace license evidence file.");
+  }
+  if (!match.metadata.license) {
+    warnings.push("Cargo.toml did not declare a package license.");
+  }
+  return {
+    packageId: input.requestedPackage.packageId,
+    ...match.metadata.license ? {
+      metadataLicense: match.metadata.license,
+      metadataSource: "Cargo.toml at pinned Git commit"
+    } : {},
+    files,
+    source: "tarball",
+    warnings
+  };
+}
+function singleArchiveRoot(archive) {
+  const roots = new Set(archive.entries.map((entry) => entry.path.split("/")[0]).filter((value) => value !== undefined && value !== ""));
+  return roots.size === 1 ? [...roots][0] : undefined;
+}
+function nearestWorkspaceManifest(input) {
+  let directory = path80.posix.dirname(input.manifestPath);
+  while (directory === input.root || directory.startsWith(`${input.root}/`)) {
+    const candidatePath = `${directory}/Cargo.toml`;
+    const candidateText = input.manifests.get(candidatePath);
+    if (candidateText && /^\s*\[workspace(?:\.package)?\]/mu.test(candidateText)) {
+      return { path: candidatePath, text: candidateText };
+    }
+    if (directory === input.root) {
+      break;
+    }
+    directory = path80.posix.dirname(directory);
+  }
+  return;
+}
+function addDirectEvidencePaths(input) {
+  const prefix = `${input.directory}/`;
+  for (const entry of input.archive.entries) {
+    if (entry.type !== "file" || !entry.path.startsWith(prefix)) {
+      continue;
+    }
+    const fileName = entry.path.slice(prefix.length);
+    if (fileName === "" || fileName.includes("/")) {
+      continue;
+    }
+    const kind = classifyEvidenceFile(fileName);
+    if (kind && !input.evidencePaths.has(entry.path)) {
+      input.evidencePaths.set(entry.path, kind);
+    }
+  }
+  for (const [linkPath, linkTarget] of input.symlinks) {
+    if (!linkPath.startsWith(prefix)) {
+      continue;
+    }
+    const fileName = linkPath.slice(prefix.length);
+    if (fileName === "" || fileName.includes("/")) {
+      continue;
+    }
+    const kind = classifyEvidenceFile(fileName);
+    const resolved = kind ? resolveContainedArchivePath({
+      root: input.root,
+      directory: input.directory,
+      relativePath: linkTarget
+    }) : undefined;
+    if (kind && resolved && input.archive.entries.some((entry) => entry.type === "file" && entry.path === resolved) && !input.evidencePaths.has(resolved)) {
+      input.evidencePaths.set(resolved, kind);
+    }
+  }
+}
+function hasLicenseLikeEvidence(evidencePaths) {
+  return [...evidencePaths.values()].some((kind) => kind === "license" || kind === "copying");
+}
+function resolveContainedArchivePath(input) {
+  if (input.relativePath.includes("\x00") || path80.posix.isAbsolute(input.relativePath) || path80.win32.isAbsolute(input.relativePath)) {
+    return;
+  }
+  const resolved = path80.posix.normalize(path80.posix.join(input.directory, input.relativePath.replace(/\\/g, "/")));
+  return resolved === input.root || resolved.startsWith(`${input.root}/`) ? resolved : undefined;
+}
+function archiveRelativePath(root, entryPath) {
+  return entryPath.startsWith(`${root}/`) ? entryPath.slice(root.length + 1) : entryPath;
+}
+function unavailableEvidence2(packageId, warning) {
+  return {
+    packageId,
+    files: [],
+    source: "unavailable",
+    warnings: [warning]
+  };
+}
+function unavailableEvidenceBatch(packages, warning) {
+  return new Map(packages.map((requestedPackage) => [
+    requestedPackage.packageId,
+    unavailableEvidence2(requestedPackage.packageId, warning)
+  ]));
+}
+function safeDisplayPart2(value) {
+  return value.replace(/[^A-Za-z0-9._+-]/g, "_").slice(0, 120) || "repository";
+}
+
+// src/evidence/artifact-response.ts
+function artifactBodyLimitDetails(limit) {
+  return limit.contentLength === undefined ? {
+    maxBytes: limit.maxBytes,
+    observedBytes: limit.observedBytes
+  } : {
+    maxBytes: limit.maxBytes,
+    observedBytes: limit.observedBytes,
+    contentLength: limit.contentLength
+  };
+}
+async function readResponseBodyWithLimit(input) {
+  const contentLength = readContentLength(input.response.headers);
+  if (contentLength !== undefined && contentLength > input.maxBytes) {
+    cancelReadableBody(input.response.body);
+    return err(input.createTooLargeError({
+      maxBytes: input.maxBytes,
+      observedBytes: contentLength,
+      contentLength
+    }));
+  }
+  if (input.response.body) {
+    return readStreamBodyWithLimit({
+      body: input.response.body,
+      signal: input.signal,
+      maxBytes: input.maxBytes,
+      ...contentLength === undefined ? {} : { contentLength },
+      createTooLargeError: input.createTooLargeError
+    });
+  }
+  return err(input.createUnreadableBodyError());
+}
+function cancelReadableBody(body) {
+  if (!body) {
+    return;
+  }
+  body.cancel().catch(() => {
+    return;
+  });
+}
+async function readStreamBodyWithLimit(input) {
+  const reader = input.body.getReader();
+  const cancelReader = () => {
+    reader.cancel().catch(() => {
+      return;
+    });
+  };
+  const chunks = [];
+  let observedBytes = 0;
+  try {
+    if (input.signal.aborted) {
+      cancelReader();
+    } else {
+      input.signal.addEventListener("abort", cancelReader, { once: true });
+    }
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) {
+        return ok(Buffer.concat(chunks, observedBytes));
+      }
+      observedBytes += chunk.value.byteLength;
+      if (observedBytes > input.maxBytes) {
+        cancelReader();
+        return err(input.createTooLargeError({
+          maxBytes: input.maxBytes,
+          observedBytes,
+          ...input.contentLength === undefined ? {} : { contentLength: input.contentLength }
+        }));
+      }
+      chunks.push(Buffer.from(chunk.value));
+    }
+  } finally {
+    input.signal.removeEventListener("abort", cancelReader);
+    reader.releaseLock();
+  }
+}
+function readContentLength(headers) {
+  const value = headers?.get("content-length");
+  const trimmed = value?.trim();
+  if (trimmed === undefined || trimmed === "") {
+    return;
+  }
+  if (!/^\d+$/.test(trimmed)) {
+    return;
+  }
+  const parsed = Number(trimmed);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+// src/evidence/collection-runtime.ts
+var ARTIFACT_FETCH_TIMEOUT_MS = 30000;
+var REGISTRY_METADATA_MAX_BYTES = 10 * 1024 * 1024;
+var PACKAGE_TARBALL_MAX_BYTES = 100 * 1024 * 1024;
+var INSTALLED_PACKAGE_JSON_MAX_BYTES = 1024 * 1024;
+var LOCAL_ARTIFACT_READ_CHUNK_BYTES = 64 * 1024;
+var MAX_ARTIFACT_REDIRECTS = 5;
+var DEFAULT_EVIDENCE_CONCURRENCY = 8;
+var PYPI_METADATA_HOSTS = new Set(["pypi.org"]);
+var PYPI_DISTRIBUTION_HOSTS = new Set(["files.pythonhosted.org"]);
+var RUBYGEMS_ORG_HOSTS = new Set(["rubygems.org"]);
+var PUB_DEV_ARCHIVE_HOSTS = new Set(["pub.dev"]);
+var HEX_PM_TARBALL_HOSTS = new Set(["repo.hex.pm"]);
+var NUGET_SERVICE_INDEX_URL = "https://api.nuget.org/v3/index.json";
+var NUGET_ORG_HOSTS = new Set(["api.nuget.org"]);
+var MAVEN_CENTRAL_BASE_URL = "https://repo.maven.apache.org/maven2";
+var MAVEN_CENTRAL_HOSTS = new Set(["repo.maven.apache.org"]);
+var MAVEN_JAR_MAX_BYTES = 32 * 1024 * 1024;
+var MAVEN_CHECKSUM_MAX_BYTES = 256;
+var GO_MODULE_PROXY_HOSTS = new Set(["proxy.golang.org", "storage.googleapis.com"]);
+var GO_MODULE_MOD_MAX_BYTES2 = 2 * 1024 * 1024;
+var GO_MODULE_TRANSIENT_FETCH_ATTEMPTS = 2;
+var GO_MODULE_TRANSIENT_RETRY_DELAY_MS = 200;
+var CARGO_CRATES_IO_SOURCES2 = new Set([
+  "registry+https://github.com/rust-lang/crates.io-index",
+  "registry+https://index.crates.io/"
+]);
+var CARGO_CRATE_BASE_URL = "https://static.crates.io/crates";
+var CARGO_CRATE_HOSTS = new Set(["static.crates.io"]);
+var HACKAGE_CABAL_HOSTS = new Set(["hackage.haskell.org"]);
+var HACKAGE_CABAL_MAX_HISTORICAL_REVISIONS = 64;
+var HACKAGE_CABAL_MAX_BYTES = 1024 * 1024;
+
+// src/evidence/remote-artifact-reader.ts
+async function readRemoteArtifactBytes(input) {
+  const urlValidation = validateRemoteArtifactUrl({
+    code: input.code,
+    packageId: input.packageId,
+    resolved: input.url,
+    message: input.blockedMessage,
+    details: input.details,
+    allowedHosts: input.allowedHosts,
+    ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
+  });
+  if (!urlValidation.ok) {
+    return err(urlValidation.error);
+  }
+  if (input.signal.aborted) {
+    return err(collectionAbortedRemoteError({
+      code: input.code,
+      details: input.details
+    }));
+  }
+  const cached = input.artifactCache?.read(input.url, input.maxBytes);
+  if (cached && (!cached.stale || input.offline)) {
+    recordArtifactBytes({ packageId: input.packageId, bytes: cached.bytes, requestedOrigin: input.url, retrieval: "cache" });
+    return ok(cached.bytes);
+  }
+  if (input.offline) {
+    return err(createError({
+      code: input.code,
+      category: "network",
+      message: input.offlineMissMessage,
+      details: {
+        packageId: input.packageId,
+        ...redactUrlCredentialsInDetails(input.details),
+        reason: "offline_cache_miss"
+      }
+    }));
+  }
+  const preflight = await preflightRemoteArtifactFetchTarget({
+    code: input.code,
+    packageId: input.packageId,
+    resolved: input.url,
+    message: input.blockedMessage,
+    resolveFailureMessage: input.resolveFailureMessage,
+    details: input.details,
+    resolveArtifactHost: input.resolveArtifactHost,
+    timeoutMs: input.fetchTimeoutMs,
+    allowedHosts: input.allowedHosts,
+    ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
+  });
+  if (!preflight.ok) {
+    return err(preflight.error);
+  }
+  const requestHeaders = conditionalArtifactRequestHeaders(cached);
+  const artifact = await readTransientRemoteArtifactWithRetry({
+    attempts: input.transientFetchAttempts ?? 1,
+    retryDelayMs: input.transientRetryDelayMs ?? 0,
+    signal: input.signal,
+    createAbortError: () => collectionAbortedRemoteError({
+      code: input.code,
+      details: input.details
+    }),
+    read: () => readArtifactWithTimeout({
+      fetchArtifact: input.fetchArtifact,
+      url: input.url,
+      ...requestHeaders ? { requestHeaders } : {},
+      timeoutMs: input.fetchTimeoutMs,
+      signal: input.signal,
+      createAbortError: () => collectionAbortedRemoteError({
+        code: input.code,
+        details: input.details
+      }),
+      redirectPolicy: {
+        code: input.code,
+        packageId: input.packageId,
+        message: input.blockedMessage,
+        resolveFailureMessage: input.resolveFailureMessage,
+        details: input.details,
+        resolveArtifactHost: input.resolveArtifactHost,
+        allowedHosts: input.allowedHosts,
+        ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
+      },
+      createFailureError: (cause) => createRemoteArtifactExceptionError({
+        code: input.code,
+        message: input.fetchFailureMessage,
+        blockedMessage: input.blockedMessage,
+        details: {
+          packageId: input.packageId,
+          [input.urlDetailKey]: safeUrlForErrorDetails(input.url),
+          ...input.details
+        },
+        cause
+      }),
+      readResponse: async (response, signal) => {
+        const cacheMetadata = artifactCacheMetadataFromHeaders(response.headers);
+        if (response.status === 304) {
+          cancelReadableBody(response.body);
+          if (!cached) {
+            return err(createError({
+              code: input.code,
+              category: "network",
+              message: input.fetchFailureMessage,
+              details: {
+                packageId: input.packageId,
+                [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url),
+                status: response.status,
+                statusText: response.statusText,
+                reason: "not_modified_without_cache_entry"
+              }
+            }));
+          }
+          return ok({
+            bytes: cached.bytes,
+            cacheMetadata,
+            notModified: true
+          });
+        }
+        if (!response.ok) {
+          cancelReadableBody(response.body);
+          return err(createError({
+            code: input.code,
+            category: "network",
+            message: input.fetchFailureMessage,
+            details: {
+              packageId: input.packageId,
+              [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url),
+              status: response.status,
+              statusText: response.statusText
+            }
+          }));
+        }
+        const bytes = await readResponseBodyWithLimit({
+          response,
+          signal,
+          maxBytes: input.maxBytes,
+          createTooLargeError: (limit) => createError({
+            code: input.code,
+            category: "unsupported_input",
+            message: input.tooLargeMessage,
+            details: {
+              packageId: input.packageId,
+              [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url),
+              ...artifactBodyLimitDetails(limit)
+            }
+          }),
+          createUnreadableBodyError: () => createError({
+            code: input.code,
+            category: "unsupported_input",
+            message: input.unreadableMessage,
+            details: {
+              packageId: input.packageId,
+              [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url)
+            }
+          })
+        });
+        return bytes.ok ? ok({ bytes: bytes.value, cacheMetadata, notModified: false }) : bytes;
+      }
+    })
+  });
+  if (!artifact.ok) {
+    return artifact;
+  }
+  if (artifact.value.notModified) {
+    if (artifact.value.cacheMetadata.cacheable) {
+      input.artifactCache?.revalidate(input.url, artifact.value.cacheMetadata);
+    } else {
+      input.artifactCache?.remove(input.url);
+    }
+  } else if (artifact.value.cacheMetadata.cacheable) {
+    input.artifactCache?.write(input.url, artifact.value.bytes, artifact.value.cacheMetadata);
+  } else {
+    input.artifactCache?.remove(input.url);
+  }
+  recordArtifactBytes({
+    packageId: input.packageId,
+    bytes: artifact.value.bytes,
+    requestedOrigin: input.url,
+    retrieval: artifact.value.notModified ? "revalidated-cache" : "network"
+  });
+  return ok(artifact.value.bytes);
+}
+async function readTransientRemoteArtifactWithRetry(input) {
+  const attempts = Math.max(1, Math.trunc(input.attempts));
+  let result = await input.read();
+  for (let attempt = 1;attempt < attempts && !result.ok; attempt += 1) {
+    if (!isRetryableTransientRemoteError(result.error)) {
+      return result;
+    }
+    if (input.signal?.aborted) {
+      return err(input.createAbortError());
+    }
+    if (input.retryDelayMs > 0) {
+      await abortableDelay(input.retryDelayMs, input.signal);
+      if (input.signal?.aborted) {
+        return err(input.createAbortError());
+      }
+    }
+    result = await input.read();
+  }
+  return result;
+}
+function isRetryableTransientRemoteError(error) {
+  if (isCollectionAbortedError(error)) {
+    return false;
+  }
+  if (error.category !== "network") {
+    return false;
+  }
+  const status = error.details?.status;
+  if (typeof status === "number") {
+    return status === 408 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+  }
+  const cause = error.details?.cause;
+  return typeof cause !== "string" || !cause.toLowerCase().includes("timed out");
+}
+function collectionAbortedRemoteError(input) {
+  return createError({
+    code: input.code,
+    category: "network",
+    message: "Evidence collection was aborted.",
+    details: {
+      ...redactUrlCredentialsInDetails(input.details),
+      reason: "aborted"
+    }
+  });
+}
+async function readArtifactWithTimeout(input) {
+  const controller = new AbortController;
+  const fetchController = new AbortController;
+  let timeout;
+  let timeoutError;
+  let onExternalAbort;
+  const timeoutPromise = new Promise((resolve) => {
+    timeout = setTimeout(() => {
+      timeoutError = new Error(`Artifact fetch timed out after ${input.timeoutMs}ms.`);
+      controller.abort();
+      fetchController.abort();
+      resolve(err(input.createFailureError(timeoutError)));
+    }, input.timeoutMs);
+  });
+  if (input.signal) {
+    if (input.signal.aborted) {
+      fetchController.abort();
+    } else {
+      onExternalAbort = () => fetchController.abort();
+      input.signal.addEventListener("abort", onExternalAbort, { once: true });
+    }
+  }
+  try {
+    const readPromise = fetchArtifactWithManualRedirects({
+      fetchArtifact: input.fetchArtifact,
+      url: input.url,
+      signal: fetchController.signal,
+      ...input.requestHeaders ? { requestHeaders: input.requestHeaders } : {},
+      redirectPolicy: input.redirectPolicy
+    }).then(async (response) => {
+      if (!response.ok) {
+        return err(response.error);
+      }
+      const result = await input.readResponse(response.value, controller.signal);
+      if (timeoutError) {
+        throw timeoutError;
+      }
+      return result;
+    }).catch((cause) => {
+      if (input.signal?.aborted) {
+        return err(input.createAbortError());
+      }
+      return err(input.createFailureError(cause));
+    });
+    return await Promise.race([readPromise, timeoutPromise]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+    if (onExternalAbort) {
+      input.signal?.removeEventListener("abort", onExternalAbort);
+    }
+  }
+}
+async function fetchArtifactWithManualRedirects(input) {
+  let currentUrl = input.url;
+  for (let redirectCount = 0;redirectCount <= MAX_ARTIFACT_REDIRECTS; redirectCount += 1) {
+    const response = await input.fetchArtifact(currentUrl, {
+      signal: input.signal,
+      redirect: "manual",
+      ...redirectCount === 0 && input.requestHeaders ? { headers: input.requestHeaders } : {}
+    });
+    const responseWithUrl = {
+      ok: response.ok,
+      status: response.status,
+      statusText: response.statusText,
+      url: currentUrl,
+      arrayBuffer: () => response.arrayBuffer(),
+      ...response.headers === undefined ? {} : { headers: response.headers },
+      ...response.body === undefined ? {} : { body: response.body }
+    };
+    if (!isRedirectResponse(responseWithUrl)) {
+      return ok(responseWithUrl);
+    }
+    cancelReadableBody(responseWithUrl.body);
+    const location = responseWithUrl.headers?.get("location")?.trim();
+    if (!location) {
+      return ok(responseWithUrl);
+    }
+    if (redirectCount >= MAX_ARTIFACT_REDIRECTS) {
+      return err(createError({
+        code: input.redirectPolicy.code,
+        category: "network",
+        message: "Package artifact redirect limit exceeded.",
+        details: {
+          packageId: input.redirectPolicy.packageId,
+          ...redactUrlCredentialsInDetails(input.redirectPolicy.details),
+          redirectFrom: safeUrlForErrorDetails(currentUrl),
+          redirectCount: redirectCount + 1,
+          maxRedirects: MAX_ARTIFACT_REDIRECTS
+        }
+      }));
+    }
+    const nextUrl = resolveRedirectLocation(currentUrl, location);
+    if (!nextUrl) {
+      return err(createError({
+        code: input.redirectPolicy.code,
+        category: "unsupported_input",
+        message: input.redirectPolicy.message,
+        details: {
+          packageId: input.redirectPolicy.packageId,
+          ...redactUrlCredentialsInDetails(input.redirectPolicy.details),
+          redirectFrom: safeUrlForErrorDetails(currentUrl),
+          redirectLocation: safeUrlForErrorDetails(location),
+          reason: "invalid_redirect_location"
+        }
+      }));
+    }
+    const redirectPreflight = await preflightRemoteArtifactFetchTarget({
+      code: input.redirectPolicy.code,
+      packageId: input.redirectPolicy.packageId,
+      resolved: nextUrl,
+      message: input.redirectPolicy.message,
+      resolveFailureMessage: input.redirectPolicy.resolveFailureMessage,
+      details: {
+        ...input.redirectPolicy.details,
+        redirectFrom: currentUrl,
+        redirectUrl: nextUrl
+      },
+      resolveArtifactHost: input.redirectPolicy.resolveArtifactHost,
+      ...input.redirectPolicy.allowedHosts ? { allowedHosts: input.redirectPolicy.allowedHosts } : {},
+      ...input.redirectPolicy.permittedHosts ? { permittedHosts: input.redirectPolicy.permittedHosts } : {}
+    });
+    if (!redirectPreflight.ok) {
+      return err(redirectPreflight.error);
+    }
+    currentUrl = nextUrl;
+  }
+  return err(createError({
+    code: input.redirectPolicy.code,
+    category: "network",
+    message: "Package artifact redirect limit exceeded.",
+    details: {
+      packageId: input.redirectPolicy.packageId,
+      ...redactUrlCredentialsInDetails(input.redirectPolicy.details),
+      redirectFrom: safeUrlForErrorDetails(currentUrl),
+      maxRedirects: MAX_ARTIFACT_REDIRECTS
+    }
+  }));
+}
+function isRedirectResponse(response) {
+  return response.status === 301 || response.status === 302 || response.status === 303 || response.status === 307 || response.status === 308;
+}
+function conditionalArtifactRequestHeaders(cached) {
+  if (!cached?.stale) {
+    return;
+  }
+  const headers = {};
+  if (cached.etag) {
+    headers["if-none-match"] = cached.etag;
+  }
+  if (cached.lastModified) {
+    headers["if-modified-since"] = cached.lastModified;
+  }
+  return Object.keys(headers).length > 0 ? headers : undefined;
+}
+function resolveRedirectLocation(currentUrl, location) {
+  try {
+    return new URL(location, currentUrl).toString();
+  } catch {
+    return;
+  }
+}
+function isHttpUrl(value) {
+  const url = parseHttpUrl(value);
+  return url !== undefined;
+}
+function validateRemoteArtifactUrl(input) {
+  const url = parseHttpUrl(input.resolved);
+  if (!url) {
+    return err(createError({
+      code: input.code,
+      category: "unsupported_input",
+      message: input.message,
+      details: {
+        packageId: input.packageId,
+        ...redactUrlCredentialsInDetails(input.details),
+        reason: "unsupported_or_invalid_url"
+      }
+    }));
+  }
+  if (url.username !== "" || url.password !== "") {
+    return err(createError({
+      code: input.code,
+      category: "unsupported_input",
+      message: input.message,
+      details: {
+        packageId: input.packageId,
+        ...redactUrlCredentialsInDetails(input.details),
+        artifactHost: normalizeUrlHostname(url.hostname),
+        reason: "url_credentials_not_supported"
+      }
+    }));
+  }
+  if (url.protocol !== "https:") {
+    return err(createError({
+      code: input.code,
+      category: "unsupported_input",
+      message: input.message,
+      details: {
+        packageId: input.packageId,
+        ...redactUrlCredentialsInDetails(input.details),
+        artifactHost: normalizeUrlHostname(url.hostname),
+        reason: "insecure_http_not_supported"
+      }
+    }));
+  }
+  const normalizedHost = normalizeUrlHostname(url.hostname);
+  if (input.permittedHosts && !input.permittedHosts.has(normalizedHost)) {
+    return err(createError({
+      code: input.code,
+      category: "unsupported_input",
+      message: input.message,
+      details: {
+        packageId: input.packageId,
+        ...redactUrlCredentialsInDetails(input.details),
+        artifactHost: normalizedHost,
+        reason: "host_not_permitted"
+      }
+    }));
+  }
+  const blockedHostReason = isExplicitlyAllowedArtifactHost(normalizedHost, input.allowedHosts) ? undefined : blockedRemoteArtifactHostReason(normalizedHost);
+  if (blockedHostReason) {
+    return err(createError({
+      code: input.code,
+      category: "unsupported_input",
+      message: input.message,
+      details: {
+        packageId: input.packageId,
+        ...redactUrlCredentialsInDetails(input.details),
+        artifactHost: normalizeUrlHostname(url.hostname),
+        reason: blockedHostReason
+      }
+    }));
+  }
+  return ok(undefined);
+}
+async function preflightRemoteArtifactFetchTarget(input) {
+  const urlValidation = validateRemoteArtifactUrl({
+    code: input.code,
+    packageId: input.packageId,
+    resolved: input.resolved,
+    message: input.message,
+    details: input.details,
+    ...input.allowedHosts ? { allowedHosts: input.allowedHosts } : {},
+    ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
+  });
+  if (!urlValidation.ok) {
+    return err(urlValidation.error);
+  }
+  if (!input.resolveArtifactHost) {
+    return ok(undefined);
+  }
+  const url = parseHttpUrl(input.resolved);
+  if (!url) {
+    return ok(undefined);
+  }
+  const artifactHost = normalizeUrlHostname(url.hostname);
+  if (!shouldResolveRemoteArtifactHost(artifactHost)) {
+    return ok(undefined);
+  }
+  let resolutions;
+  try {
+    resolutions = await resolveArtifactHostWithTimeout({
+      resolveArtifactHost: input.resolveArtifactHost,
+      artifactHost,
+      ...input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }
+    });
+  } catch (cause) {
+    return err(createError({
+      code: input.code,
+      category: "network",
+      message: input.resolveFailureMessage,
+      details: {
+        packageId: input.packageId,
+        ...redactUrlCredentialsInDetails(input.details),
+        artifactHost,
+        cause: safeErrorCauseForDetails(cause)
+      }
+    }));
+  }
+  if (resolutions.length === 0) {
+    return err(createError({
+      code: input.code,
+      category: "network",
+      message: input.resolveFailureMessage,
+      details: {
+        packageId: input.packageId,
+        ...redactUrlCredentialsInDetails(input.details),
+        artifactHost,
+        reason: "empty_dns_response"
+      }
+    }));
+  }
+  for (const resolution of resolutions) {
+    const resolvedAddress = normalizeUrlHostname(resolution.address);
+    const blockedHostReason = blockedRemoteArtifactHostReason(resolvedAddress);
+    if (blockedHostReason) {
+      return err(createError({
+        code: input.code,
+        category: "unsupported_input",
+        message: input.message,
+        details: {
+          packageId: input.packageId,
+          ...redactUrlCredentialsInDetails(input.details),
+          artifactHost,
+          resolvedAddress,
+          reason: blockedHostReason
+        }
+      }));
+    }
+  }
+  return ok(undefined);
+}
+async function resolveArtifactHostWithTimeout(input) {
+  if (input.timeoutMs === undefined) {
+    return input.resolveArtifactHost(input.artifactHost);
+  }
+  let timeout;
+  try {
+    return await Promise.race([
+      input.resolveArtifactHost(input.artifactHost),
+      new Promise((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`Artifact host resolution timed out after ${input.timeoutMs}ms.`));
+        }, input.timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+function createRemoteArtifactExceptionError(input) {
+  if (input.cause instanceof BlockedArtifactRemoteAddressError) {
+    return createError({
+      code: input.code,
+      category: "unsupported_input",
+      message: input.blockedMessage,
+      details: {
+        ...redactUrlCredentialsInDetails(input.details),
+        artifactHost: input.cause.hostname,
+        resolvedAddress: normalizeUrlHostname(input.cause.remoteAddress),
+        reason: input.cause.reason
+      }
+    });
+  }
+  if (isAbortErrorLike(input.cause)) {
+    return collectionAbortedRemoteError({
+      code: input.code,
+      details: input.details
+    });
+  }
+  return createError({
+    code: input.code,
+    category: "network",
+    message: input.message,
+    details: {
+      ...redactUrlCredentialsInDetails(input.details),
+      cause: safeErrorCauseForDetails(input.cause)
+    }
+  });
+}
+
+// src/evidence/remote-cargo-evidence.ts
+function createCargoGitHubArchiveEvidenceCache(nodes) {
+  const cache = new Map;
+  for (const node of nodes) {
+    if (node.ecosystem !== "cargo") {
+      continue;
+    }
+    const source = parseCargoGitHubSource(node.resolved);
+    if (!source) {
+      continue;
+    }
+    const existing = cache.get(source.archiveUrl);
+    const requestedPackage = {
+      packageId: node.id,
+      packageName: node.name,
+      version: node.version
+    };
+    if (existing) {
+      existing.packages.push(requestedPackage);
+    } else {
+      cache.set(source.archiveUrl, {
+        source,
+        packages: [requestedPackage]
+      });
+    }
+  }
+  return cache;
+}
+async function collectRemoteCargoCrateEvidence(input) {
+  const gitHubSource = parseCargoGitHubSource(input.node.resolved);
+  if (gitHubSource) {
+    const cacheEntry = input.cargoGitHubArchiveEvidenceCache.get(gitHubSource.archiveUrl);
+    if (!cacheEntry) {
+      return ok(unsupportedRemoteEcosystemEvidence({
+        node: input.node,
+        reason: "Commit-pinned Cargo Git source was not registered in the current evidence batch."
+      }));
+    }
+    cacheEntry.result ??= collectCargoGitHubArchiveEvidenceIndex({
+      cacheEntry,
+      representativeNode: input.node,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      artifactMaxBytes: input.artifactMaxBytes,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      signal: input.signal,
+      allowedHosts: input.allowedHosts
+    });
+    const collected = await cacheEntry.result;
+    if (!collected.ok) {
+      return collected;
+    }
+    return ok(collected.value.get(input.node.id) ?? unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: "Commit-pinned Cargo Git archive did not produce evidence for the locked package."
+    }));
+  }
+  if (!input.node.resolved || !CARGO_CRATES_IO_SOURCES2.has(input.node.resolved)) {
+    return ok(unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: "Cargo path, non-GitHub Git, non-commit-pinned Git, and non-crates.io registry sources are not fetched during a remote repository scan."
+    }));
+  }
+  if (!input.node.integrity || !/^sha256-[A-Za-z0-9+/]{43}=$/u.test(input.node.integrity)) {
+    return ok({
+      packageId: input.node.id,
+      files: [],
+      source: "unavailable",
+      warnings: [
+        "Cargo crate source was not fetched because Cargo.lock did not contain a valid SHA-256 checksum."
+      ]
+    });
+  }
+  if (!/^[A-Za-z0-9_-]+$/u.test(input.node.name) || !/^[A-Za-z0-9.+-]+$/u.test(input.node.version)) {
+    return ok(unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: "Cargo crate name or version could not be encoded safely for the fixed crates.io artifact host."
+    }));
+  }
+  const encodedName = encodeURIComponent(input.node.name);
+  const encodedVersion = encodeURIComponent(input.node.version);
+  const resolved = `${CARGO_CRATE_BASE_URL}/${encodedName}/${encodedName}-${encodedVersion}.crate`;
+  const crate = await readRemoteArtifactBytes({
+    code: "TARBALL_FETCH_FAILED",
+    packageId: input.node.id,
+    url: resolved,
+    blockedMessage: "Cargo crate URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve the Cargo crate artifact host.",
+    fetchFailureMessage: "Failed to fetch Cargo crate archive.",
+    tooLargeMessage: "Cargo crate archive response exceeded the maximum supported size.",
+    unreadableMessage: "Cargo crate archive response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find the Cargo crate archive in the artifact cache.",
+    details: {
+      packageName: input.node.name,
+      version: input.node.version,
+      registry: CARGO_CRATE_BASE_URL
+    },
+    maxBytes: input.artifactMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: CARGO_CRATE_HOSTS,
+    urlDetailKey: "resolved"
+  });
+  if (!crate.ok) {
+    return crate;
+  }
+  return collectCargoCrateEvidence({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    version: input.node.version,
+    integrity: input.node.integrity,
+    crate: crate.value,
+    artifactMaxBytes: input.artifactMaxBytes
+  });
+}
+async function collectCargoGitHubArchiveEvidenceIndex(input) {
+  const archive = await readRemoteArtifactBytes({
+    code: "TARBALL_FETCH_FAILED",
+    packageId: input.representativeNode.id,
+    url: input.cacheEntry.source.archiveUrl,
+    blockedMessage: "Cargo GitHub archive URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve the Cargo GitHub archive host.",
+    fetchFailureMessage: "Failed to fetch the commit-pinned Cargo GitHub archive.",
+    tooLargeMessage: "Cargo GitHub archive response exceeded the maximum supported size.",
+    unreadableMessage: "Cargo GitHub archive response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find the Cargo GitHub archive in the artifact cache.",
+    details: {
+      owner: input.cacheEntry.source.owner,
+      repository: input.cacheEntry.source.repository,
+      commit: input.cacheEntry.source.commit
+    },
+    maxBytes: input.artifactMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: CARGO_GITHUB_ARCHIVE_HOSTS,
+    urlDetailKey: "resolved"
+  });
+  if (!archive.ok) {
+    return archive;
+  }
+  return collectCargoGitHubArchiveEvidenceBatch({
+    packages: input.cacheEntry.packages,
+    source: input.cacheEntry.source,
+    archive: archive.value,
+    artifactMaxBytes: input.artifactMaxBytes
+  });
+}
+
+// src/evidence/remote-hackage-evidence.ts
+async function collectRemoteHackageCabalEvidence(input) {
+  const resolved = input.node.resolved;
+  if (!resolved || !input.node.integrity) {
+    return ok(unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: "The Stack lockfile did not provide checksum-pinned Hackage Cabal metadata."
+    }));
+  }
+  const currentCabalBytes = await readRemoteHackageCabalBytes({
+    ...input,
+    packageId: input.node.id,
+    url: resolved
+  });
+  if (!currentCabalBytes.ok) {
+    return err(currentCabalBytes.error);
+  }
+  const currentIntegrity = verifyPackageIntegrity({
+    packageId: input.node.id,
+    resolvedDetail: safeUrlForErrorDetails(resolved),
+    integrity: input.node.integrity,
+    artifact: currentCabalBytes.value
+  });
+  let cabalBytes = currentCabalBytes.value;
+  let cabalUrl = resolved;
+  if (!currentIntegrity.ok) {
+    if (!isPackageIntegrityMismatch(currentIntegrity.error)) {
+      return err(currentIntegrity.error);
+    }
+    const historicalCabal = await findChecksumPinnedHackageCabalRevision({
+      ...input,
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      integrity: input.node.integrity
+    });
+    if (!historicalCabal.ok) {
+      return err(historicalCabal.error);
+    }
+    if (!historicalCabal.value) {
+      return ok({
+        packageId: input.node.id,
+        files: [],
+        source: "unavailable",
+        warnings: [
+          "Locked Hackage Cabal metadata is not the current public revision; mismatched bytes were not trusted."
+        ]
+      });
+    }
+    cabalBytes = historicalCabal.value.bytes;
+    cabalUrl = historicalCabal.value.url;
+  }
+  let text;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(cabalBytes);
+  } catch {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "unsupported_input",
+      message: "Hackage Cabal metadata was not valid UTF-8.",
+      details: {
+        packageId: input.node.id,
+        registryUrl: safeUrlForErrorDetails(cabalUrl)
+      }
+    }));
+  }
+  return collectHackageCabalEvidence({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    version: input.node.version,
+    text
+  });
+}
+async function findChecksumPinnedHackageCabalRevision(input) {
+  for (let revision = 0;revision < HACKAGE_CABAL_MAX_HISTORICAL_REVISIONS; revision += 1) {
+    const url = hackageCabalRevisionUrl(input.packageName, input.version, revision);
+    if (!url) {
+      return ok(undefined);
+    }
+    const candidate = await readRemoteHackageCabalBytes({ ...input, url });
+    if (!candidate.ok) {
+      if (candidate.error.details?.status === 404) {
+        return ok(undefined);
+      }
+      if (input.offline && candidate.error.details?.reason === "offline_cache_miss") {
+        continue;
+      }
+      return err(candidate.error);
+    }
+    const integrity = verifyPackageIntegrity({
+      packageId: input.packageId,
+      resolvedDetail: safeUrlForErrorDetails(url),
+      integrity: input.integrity,
+      artifact: candidate.value
+    });
+    if (integrity.ok) {
+      return ok({ bytes: candidate.value, url });
+    }
+    if (!isPackageIntegrityMismatch(integrity.error)) {
+      return err(integrity.error);
+    }
+  }
+  return ok(undefined);
+}
+function readRemoteHackageCabalBytes(input) {
+  return readRemoteArtifactBytes({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    packageId: input.packageId,
+    url: input.url,
+    blockedMessage: "Hackage Cabal metadata URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve the Hackage metadata host.",
+    fetchFailureMessage: "Failed to fetch Hackage Cabal metadata.",
+    tooLargeMessage: "Hackage Cabal metadata exceeded the maximum supported size.",
+    unreadableMessage: "Hackage Cabal metadata did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find Hackage Cabal metadata in the artifact cache.",
+    details: { registryUrl: input.url },
+    maxBytes: input.metadataMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: HACKAGE_CABAL_HOSTS,
+    urlDetailKey: "registryUrl"
+  });
+}
+function hackageCabalRevisionUrl(packageName, version, revision) {
+  if (!/^[A-Za-z][A-Za-z0-9-]*$/.test(packageName) || !/^[0-9]+(?:\.[0-9]+)*$/.test(version) || !Number.isSafeInteger(revision) || revision < 0) {
+    return;
+  }
+  return `https://hackage.haskell.org/package/${packageName}-${version}/revision/${revision}.cabal`;
+}
+
+// src/evidence/registry-metadata.ts
+function shouldCollectNpmRegistryEvidence(input) {
+  if (!input.node.resolved) {
+    return true;
+  }
+  if (input.node.direct) {
+    return false;
+  }
+  const resolvedUrl = parseHttpUrl(input.node.resolved);
+  const registryUrl = parseHttpUrl(input.npmRegistryUrl ?? "https://registry.npmjs.org");
+  return resolvedUrl?.protocol === "https:" && registryUrl?.protocol === "https:" && normalizeUrlHostname(resolvedUrl.hostname) === normalizeUrlHostname(registryUrl.hostname);
+}
+function parseRegistryMetadata(input) {
+  try {
+    return ok(JSON.parse(input.text));
+  } catch (cause) {
+    return err(createError({
+      code: "REGISTRY_METADATA_FETCH_FAILED",
+      category: "unsupported_input",
+      message: "npm registry metadata was not valid JSON.",
+      details: {
+        packageId: input.packageId,
+        registryUrl: input.registryUrl,
+        cause: safeErrorCauseForDetails(cause)
+      }
+    }));
+  }
+}
+function npmRegistryPackageVersionUrl(name, version, registryUrl) {
+  return `${npmRegistryPackageUrl(name, registryUrl)}/${encodeURIComponent(version)}`;
+}
+function pypiPackageVersionUrl(name, version) {
+  return `https://pypi.org/pypi/${encodeURIComponent(name)}/${encodeURIComponent(version)}/json`;
+}
+function remoteArtifactFilename(resolved) {
+  const parsed = parseHttpUrl(resolved);
+  const encodedFilename = parsed?.pathname.split("/").pop();
+  if (!encodedFilename) {
+    return;
+  }
+  try {
+    return decodeURIComponent(encodedFilename);
+  } catch {
+    return encodedFilename;
+  }
+}
+function npmRegistryPackageUrl(name, registryUrl) {
+  const baseUrl = (registryUrl ?? "https://registry.npmjs.org").replace(/\/$/, "");
+  return `${baseUrl}/${encodeURIComponent(name).replace(/^%40/, "@")}`;
+}
+function readRegistryTarballUrl(metadata, version) {
+  const versionMetadata = readRegistryVersionMetadata(metadata, version);
+  if (!versionMetadata) {
+    return;
+  }
+  const dist = versionMetadata.dist;
+  if (isRecord26(dist) && typeof dist.tarball === "string") {
+    return dist.tarball;
+  }
+  return;
+}
+function readRegistryVersionMetadata(metadata, version) {
+  if (!isRecord26(metadata)) {
+    return;
+  }
+  if (metadata.version === version || !isRecord26(metadata.versions)) {
+    return metadata;
+  }
+  const versions = metadata.versions;
+  const versionMetadata = versions[version];
+  return isRecord26(versionMetadata) ? versionMetadata : undefined;
+}
+function isRecord26(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
+// src/evidence/local-package-evidence.ts
+import { closeSync as closeSync5, existsSync as existsSync46, openSync as openSync5, readdirSync as readdirSync34, readSync as readSync5, statSync as statSync34 } from "node:fs";
+import path81 from "node:path";
+import { fileURLToPath as fileURLToPath3 } from "node:url";
 
 // src/evidence/zip-package.ts
 import { inflateRawSync as inflateRawSync2 } from "node:zlib";
@@ -54214,308 +54237,2195 @@ function isObjectRecord8(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// src/evidence/collect.ts
-var ARTIFACT_FETCH_TIMEOUT_MS = 30000;
-var REGISTRY_METADATA_MAX_BYTES = 10 * 1024 * 1024;
-var PACKAGE_TARBALL_MAX_BYTES = 100 * 1024 * 1024;
-var INSTALLED_PACKAGE_JSON_MAX_BYTES = 1024 * 1024;
-var LOCAL_ARTIFACT_READ_CHUNK_BYTES = 64 * 1024;
-var MAX_ARTIFACT_REDIRECTS = 5;
-var DEFAULT_EVIDENCE_CONCURRENCY = 8;
-var PYPI_METADATA_HOSTS = new Set(["pypi.org"]);
-var PYPI_DISTRIBUTION_HOSTS = new Set(["files.pythonhosted.org"]);
-var RUBYGEMS_ORG_HOSTS = new Set(["rubygems.org"]);
-var PUB_DEV_ARCHIVE_HOSTS = new Set(["pub.dev"]);
-var HEX_PM_TARBALL_HOSTS = new Set(["repo.hex.pm"]);
-var NUGET_SERVICE_INDEX_URL = "https://api.nuget.org/v3/index.json";
-var NUGET_ORG_HOSTS = new Set(["api.nuget.org"]);
-var MAVEN_CENTRAL_BASE_URL = "https://repo.maven.apache.org/maven2";
-var MAVEN_CENTRAL_HOSTS = new Set(["repo.maven.apache.org"]);
-var MAVEN_JAR_MAX_BYTES2 = 32 * 1024 * 1024;
-var MAVEN_CHECKSUM_MAX_BYTES = 256;
-var GO_MODULE_PROXY_HOSTS = new Set(["proxy.golang.org", "storage.googleapis.com"]);
-var GO_MODULE_MOD_MAX_BYTES3 = 2 * 1024 * 1024;
-var GO_MODULE_TRANSIENT_FETCH_ATTEMPTS = 2;
-var GO_MODULE_TRANSIENT_RETRY_DELAY_MS = 200;
-var CARGO_CRATES_IO_SOURCES2 = new Set([
-  "registry+https://github.com/rust-lang/crates.io-index",
-  "registry+https://index.crates.io/"
-]);
-var CARGO_CRATE_BASE_URL = "https://static.crates.io/crates";
-var CARGO_CRATE_HOSTS = new Set(["static.crates.io"]);
-var HACKAGE_CABAL_HOSTS = new Set(["hackage.haskell.org"]);
-var HACKAGE_CABAL_MAX_HISTORICAL_REVISIONS = 64;
-var HACKAGE_CABAL_MAX_BYTES = 1024 * 1024;
-async function collectGraphEvidence(input) {
-  const evidence = new Array(input.graph.nodes.length);
-  const total = input.graph.nodes.length;
-  if (total === 0) {
-    return ok([]);
+// src/evidence/local-package-evidence.ts
+function collectLocalPathEvidence(input) {
+  if (!existsSync46(input.localPath)) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "filesystem",
+      message: "Resolved package artifact does not exist.",
+      details: {
+        packageId: input.node.id,
+        resolved: safeOptionalUrlForErrorDetails(input.node.resolved),
+        artifactPath: safeUrlForErrorDetails(input.localPath)
+      }
+    }));
   }
-  const batchCancellation = new BatchCancellation(input.signal);
-  const workspaceRoot = input.workspaceRoot ? resolveTrustedWorkspaceRoot(input.workspaceRoot) : ok(undefined);
-  if (!workspaceRoot.ok) {
-    return err(workspaceRoot.error);
-  }
-  let completed = 0;
-  let nextIndex = 0;
-  let failure;
-  const workerCount = normalizeEvidenceConcurrency(input.evidenceConcurrency, total);
-  const allowedHosts = normalizeAllowedArtifactHosts(input.allowedArtifactHosts);
-  const uncachedArtifactHostResolver = input.resolveArtifactHost ?? (input.fetchArtifact ? undefined : defaultArtifactHostResolver);
-  const resolveArtifactHost = uncachedArtifactHostResolver ? createCachingArtifactHostResolver(uncachedArtifactHostResolver) : undefined;
-  const baseFetchArtifact = input.fetchArtifact ?? createDefaultArtifactFetcher(resolveArtifactHost ?? defaultArtifactHostResolver);
-  const fetchArtifact = baseFetchArtifact;
-  const npmFetchArtifact = withRegistryAuthorization(baseFetchArtifact, input.registryAuthTokens);
-  const artifactCache = input.cacheDir ? createArtifactCache(input.cacheDir) : undefined;
-  const fetchTimeoutMs = input.fetchTimeoutMs ?? ARTIFACT_FETCH_TIMEOUT_MS;
-  const registryMetadataMaxBytes = input.registryMetadataMaxBytes ?? REGISTRY_METADATA_MAX_BYTES;
-  const tarballMaxBytes = input.tarballMaxBytes ?? PACKAGE_TARBALL_MAX_BYTES;
-  const cargoGitHubArchiveEvidenceCache = createCargoGitHubArchiveEvidenceCache(input.graph.nodes);
-  const installedPackageJsonMaxBytes = input.installedPackageJsonMaxBytes ?? INSTALLED_PACKAGE_JSON_MAX_BYTES;
-  const allowLocalProjectEvidence = input.allowLocalProjectEvidence ?? true;
-  const allowProjectContainedGoReplacementEvidence = input.allowProjectContainedGoReplacementEvidence ?? false;
-  const loadYarnCacheIndex = allowLocalProjectEvidence ? createYarnCacheIndexLoader(input.projectRoot) : () => ok(undefined);
-  const collectMavenEvidence = createMavenEvidenceCollector({
-    fetchArtifact,
-    resolveArtifactHost,
-    fetchTimeoutMs,
-    pomMaxBytes: Math.min(registryMetadataMaxBytes, MAVEN_POM_METADATA_MAX_BYTES),
-    jarMaxBytes: Math.min(tarballMaxBytes, MAVEN_JAR_MAX_BYTES2),
-    offline: input.offline ?? false,
-    artifactCache,
-    signal: batchCancellation.signal,
-    allowedHosts,
-    repositoryUrls: input.graph.mavenRepositoryUrls ?? []
+  const trustedLocalPath = resolveExistingLocalArtifactPath({
+    packageId: input.node.id,
+    resolved: input.node.resolved,
+    integrity: input.node.integrity,
+    projectRoot: input.projectRoot,
+    workspaceRoot: input.workspaceRoot,
+    artifactPath: input.localPath
   });
-  const loadNugetServiceIndex = createNugetServiceIndexLoader({
-    fetchArtifact,
-    resolveArtifactHost,
-    fetchTimeoutMs,
-    registryMetadataMaxBytes,
-    offline: input.offline ?? false,
-    artifactCache,
-    signal: batchCancellation.signal,
-    allowedHosts
+  if (!trustedLocalPath.ok) {
+    return err(trustedLocalPath.error);
+  }
+  const artifactStats = readLocalArtifactStats({
+    filePath: trustedLocalPath.value,
+    packageId: input.node.id,
+    resolved: input.node.resolved
   });
-  const collectNext = async () => {
-    while (!failure) {
-      const index = nextIndex;
-      nextIndex += 1;
-      if (index >= total) {
-        return;
-      }
-      const node = input.graph.nodes[index];
-      if (!node) {
-        return;
-      }
-      const collected = await collectNodeEvidence({
-        node,
-        projectRoot: input.projectRoot,
-        allowLocalProjectEvidence,
-        allowProjectContainedGoReplacementEvidence,
-        ...workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {},
-        fetchArtifact,
-        npmFetchArtifact,
-        resolveArtifactHost,
-        fetchTimeoutMs,
-        registryMetadataMaxBytes,
-        tarballMaxBytes,
-        installedPackageJsonMaxBytes,
-        offline: input.offline ?? false,
-        artifactCache,
-        signal: batchCancellation.signal,
-        npmRegistryUrl: input.npmRegistryUrl,
-        allowedHosts,
-        loadYarnCacheIndex,
-        collectMavenEvidence,
-        loadNugetServiceIndex,
-        cargoGitHubArchiveEvidenceCache
-      });
-      if (!collected.ok) {
-        if (isRecoverableRemoteEvidenceError(collected.error)) {
-          evidence[index] = unavailableRemoteEvidence({
-            packageId: node.id,
-            error: collected.error
-          });
-          completed += 1;
-          input.progress?.({
-            completed,
-            total,
-            packageId: node.id,
-            concurrency: workerCount
-          });
-          continue;
-        }
-        const previousFailure = failure;
-        if (isCollectionAbortedError(collected.error)) {
-          if (!previousFailure) {
-            failure = {
-              index,
-              error: collected.error
-            };
-            batchCancellation.abort();
-          }
-          return;
-        }
-        if (!previousFailure || index < previousFailure.index) {
-          failure = {
-            index,
-            error: collected.error
-          };
-          batchCancellation.abort();
-        }
-        return;
-      }
-      evidence[index] = collected.value;
-      completed += 1;
-      input.progress?.({
-        completed,
-        total,
-        packageId: node.id,
-        concurrency: workerCount
-      });
-    }
-  };
-  try {
-    await Promise.all(Array.from({ length: workerCount }, () => collectNext()));
-    artifactCache?.maintain({ signal: batchCancellation.signal });
-  } finally {
-    batchCancellation.dispose();
+  if (!artifactStats.ok) {
+    return err(artifactStats.error);
   }
-  if (failure) {
-    return err(failure.error);
+  if (artifactStats.value.isDirectory()) {
+    return collectLocalPackageEvidence({
+      packageId: input.node.id,
+      packageDir: trustedLocalPath.value
+    });
   }
-  return ok(evidence);
+  if (artifactStats.value.size > input.tarballMaxBytes) {
+    return err(localArtifactTooLargeError({
+      packageId: input.node.id,
+      resolved: input.node.resolved,
+      artifactPath: trustedLocalPath.value,
+      maxBytes: input.tarballMaxBytes,
+      observedBytes: artifactStats.value.size
+    }));
+  }
+  const tarball = readLocalArtifactFileWithLimit({
+    filePath: trustedLocalPath.value,
+    packageId: input.node.id,
+    resolved: input.node.resolved,
+    maxBytes: input.tarballMaxBytes
+  });
+  if (!tarball.ok) {
+    return err(tarball.error);
+  }
+  const verified = verifyPackageIntegrity({
+    packageId: input.node.id,
+    resolvedDetail: safeOptionalUrlForErrorDetails(input.node.resolved),
+    integrity: input.node.integrity,
+    artifact: tarball.value
+  });
+  if (!verified.ok) {
+    return err(verified.error);
+  }
+  const evidence = collectTarballEvidence({
+    packageId: input.node.id,
+    tarball: tarball.value
+  });
+  if (!evidence.ok) {
+    return err(evidence.error);
+  }
+  return ok(addIntegrityWarningWhenUnverified({
+    evidence: evidence.value,
+    integrity: input.node.integrity
+  }));
 }
-async function fetchMavenCentralModelPoms(input) {
-  if (input.requests.length === 0) {
-    return ok([]);
-  }
-  const uncachedArtifactHostResolver = input.resolveArtifactHost ?? (input.fetchArtifact ? undefined : defaultArtifactHostResolver);
-  const resolveArtifactHost = uncachedArtifactHostResolver ? createCachingArtifactHostResolver(uncachedArtifactHostResolver) : undefined;
-  const fetchArtifact = input.fetchArtifact ?? createDefaultArtifactFetcher(resolveArtifactHost ?? defaultArtifactHostResolver);
-  const artifactCache = input.cacheDir ? createArtifactCache(input.cacheDir) : undefined;
-  const documents = [];
+function readLocalArtifactStats(input) {
   try {
-    for (const request of input.requests) {
-      const repositoryPath = mavenPomRepositoryPath(request);
-      if (!repositoryPath) {
-        return err(createError({
-          code: "MAVEN_POM_PARSE_FAILED",
-          category: "unsupported_input",
-          message: "Remote Maven parent or BOM coordinates were not safe exact repository coordinates.",
-          details: {
-            dependency: request.dependency,
-            reason: "unsafe_remote_maven_coordinates"
-          }
+    return ok(statSync34(input.filePath));
+  } catch (cause) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "filesystem",
+      message: "Failed to inspect resolved package artifact.",
+      details: {
+        packageId: input.packageId,
+        resolved: safeOptionalUrlForErrorDetails(input.resolved),
+        artifactPath: safeUrlForErrorDetails(input.filePath),
+        cause: safeUrlForErrorDetails(cause instanceof Error ? cause.message : String(cause))
+      }
+    }));
+  }
+}
+function readLocalArtifactFileWithLimit(input) {
+  const chunks = [];
+  let observedBytes = 0;
+  let fileDescriptor;
+  try {
+    fileDescriptor = openSync5(input.filePath, "r");
+    while (true) {
+      const readSize = Math.min(LOCAL_ARTIFACT_READ_CHUNK_BYTES, Math.max(1, input.maxBytes + 1 - observedBytes));
+      const chunk = Buffer.alloc(readSize);
+      const bytesRead = readSync5(fileDescriptor, chunk, 0, chunk.length, null);
+      if (bytesRead === 0) {
+        const bytes = Buffer.concat(chunks, observedBytes);
+        recordArtifactBytes({ packageId: input.packageId, bytes, retrieval: "local" });
+        return ok(bytes);
+      }
+      observedBytes += bytesRead;
+      if (observedBytes > input.maxBytes) {
+        return err(localArtifactTooLargeError({
+          packageId: input.packageId,
+          resolved: safeOptionalUrlForErrorDetails(input.resolved),
+          artifactPath: safeUrlForErrorDetails(input.filePath),
+          maxBytes: input.maxBytes,
+          observedBytes
         }));
       }
-      const pomUrl = `${MAVEN_CENTRAL_BASE_URL}/${repositoryPath}`;
-      const pomBytes = await readRemoteArtifactBytes({
-        code: "REGISTRY_METADATA_FETCH_FAILED",
-        packageId: request.dependency,
-        url: pomUrl,
-        blockedMessage: "Maven Central parent or BOM URL targets an unsupported or blocked host.",
-        resolveFailureMessage: "Failed to resolve Maven Central host for parent or BOM metadata.",
-        fetchFailureMessage: "Failed to fetch Maven Central parent or BOM POM metadata.",
-        tooLargeMessage: "Maven Central parent or BOM POM exceeded the maximum supported size.",
-        unreadableMessage: "Maven Central parent or BOM POM did not expose a readable body stream.",
-        offlineMissMessage: "Offline mode could not find Maven parent or BOM metadata in the artifact cache.",
-        details: {
-          registryUrl: pomUrl,
-          coordinates: request.dependency,
-          usage: request.usage
-        },
-        maxBytes: input.pomMaxBytes ?? MAVEN_POM_METADATA_MAX_BYTES,
-        fetchArtifact,
-        resolveArtifactHost,
-        fetchTimeoutMs: input.fetchTimeoutMs ?? ARTIFACT_FETCH_TIMEOUT_MS,
-        offline: input.offline ?? false,
-        artifactCache,
-        signal: input.signal ?? new AbortController().signal,
-        allowedHosts: new Set,
-        permittedHosts: MAVEN_CENTRAL_HOSTS,
-        urlDetailKey: "registryUrl"
-      });
-      if (!pomBytes.ok) {
-        return pomBytes;
-      }
-      const text = pomBytes.value.toString("utf8");
-      const identity = parseMavenPomLicenseMetadata({
-        packageId: request.dependency,
-        requested: request,
-        source: pomUrl,
-        text
-      });
-      if (!identity.ok) {
-        return identity;
-      }
-      documents.push({ ...request, source: pomUrl, text });
+      chunks.push(bytesRead === chunk.length ? chunk : chunk.subarray(0, bytesRead));
     }
-    return ok(documents);
+  } catch (cause) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "filesystem",
+      message: "Failed to read resolved package artifact.",
+      details: {
+        packageId: input.packageId,
+        resolved: safeOptionalUrlForErrorDetails(input.resolved),
+        artifactPath: safeUrlForErrorDetails(input.filePath),
+        cause: safeUrlForErrorDetails(cause instanceof Error ? cause.message : String(cause))
+      }
+    }));
   } finally {
-    artifactCache?.maintain(input.signal ? { signal: input.signal } : {});
+    if (fileDescriptor !== undefined) {
+      try {
+        closeSync5(fileDescriptor);
+      } catch {}
+    }
   }
 }
-function isRecoverableRemoteEvidenceError(error) {
-  if (isCollectionAbortedError(error)) {
+function localArtifactTooLargeError(input) {
+  return createError({
+    code: "PACKAGE_EVIDENCE_READ_FAILED",
+    category: "unsupported_input",
+    message: "Resolved package artifact exceeded the maximum supported size.",
+    details: {
+      packageId: input.packageId,
+      resolved: safeOptionalUrlForErrorDetails(input.resolved),
+      artifactPath: safeUrlForErrorDetails(input.artifactPath),
+      ...artifactBodyLimitDetails({
+        maxBytes: input.maxBytes,
+        observedBytes: input.observedBytes
+      })
+    }
+  });
+}
+function resolveLocalArtifact(input) {
+  let localPath;
+  if (input.resolved.startsWith("file://")) {
+    const filePath = resolveFileUrl(input.resolved);
+    if (filePath) {
+      localPath = filePath;
+    }
+  }
+  if (!localPath && input.resolved.startsWith("file:")) {
+    const specifier = decodeFilePathSpecifier(input.resolved.slice("file:".length));
+    localPath = path81.resolve(input.projectRoot, specifier);
+  }
+  if (!localPath && input.resolved.startsWith("workspace:")) {
+    const specifier = decodeFilePathSpecifier(input.resolved.slice("workspace:".length));
+    if (isWorkspaceLocalPathSpecifier(specifier)) {
+      localPath = path81.resolve(input.projectRoot, specifier);
+    }
+  }
+  if (!localPath && (input.resolved.startsWith(".") || path81.isAbsolute(input.resolved))) {
+    localPath = path81.resolve(input.projectRoot, input.resolved);
+  }
+  if (!localPath) {
+    return ok(undefined);
+  }
+  const artifactPath = path81.resolve(localPath);
+  return ok(artifactPath);
+}
+function resolveFileUrl(value) {
+  try {
+    return fileURLToPath3(value);
+  } catch {
+    return;
+  }
+}
+function decodeFilePathSpecifier(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+function isWorkspaceLocalPathSpecifier(value) {
+  return value.startsWith(".") || value.startsWith("/") || value.includes("/") || value.includes("\\");
+}
+function findNodeModulesPackage(input) {
+  const packageNames = [...new Set([...input.node.installNames ?? [], input.node.name])];
+  for (const packageName of packageNames) {
+    for (const packagePath of resolveNodeModulesPackageCandidates({
+      packageName,
+      version: input.node.version,
+      projectRoot: input.projectRoot
+    })) {
+      if (existsSync46(packagePath) && isReadableDirectory24(packagePath) && installedPackageMatchesNode({
+        node: input.node,
+        packagePath,
+        maxBytes: input.packageJsonMaxBytes
+      })) {
+        return packagePath;
+      }
+    }
+  }
+  return;
+}
+function resolveNodeModulesPackageCandidates(input) {
+  const segments = nodeModulesPackageSegments(input.packageName);
+  if (!segments) {
+    return [];
+  }
+  const candidates = [path81.join(input.projectRoot, "node_modules", ...segments)];
+  const bunStoreSegment = bunIsolatedStoreSegment(input.packageName, input.version);
+  if (bunStoreSegment) {
+    candidates.push(path81.join(input.projectRoot, "node_modules", ".bun", bunStoreSegment, "node_modules", ...segments));
+  }
+  return candidates;
+}
+function bunIsolatedStoreSegment(packageName, version) {
+  if (version === "" || version === "." || version === ".." || version.includes("/") || version.includes("\\") || version.includes(":")) {
+    return;
+  }
+  return `${packageName.replaceAll("/", "+")}@${version}`;
+}
+function nodeModulesPackageSegments(packageName) {
+  if (packageName === "" || packageName.includes("\\") || packageName.includes(":")) {
+    return;
+  }
+  const segments = packageName.split("/");
+  if (segments.length === 1) {
+    const [name] = segments;
+    return name && isSafeNodeModulesSegment(name) && !name.startsWith("@") ? segments : undefined;
+  }
+  if (segments.length === 2) {
+    const [scope, name] = segments;
+    if (scope && name && scope.startsWith("@") && scope.length > 1 && isSafeNodeModulesSegment(scope) && isSafeNodeModulesSegment(name)) {
+      return segments;
+    }
+  }
+  return;
+}
+function isSafeNodeModulesSegment(segment) {
+  return segment !== "" && segment !== "." && segment !== "..";
+}
+function isReadableDirectory24(filePath) {
+  try {
+    return statSync34(filePath).isDirectory();
+  } catch {
     return false;
   }
-  return error.category === "network" && (error.code === "REGISTRY_METADATA_FETCH_FAILED" || error.code === "TARBALL_FETCH_FAILED");
 }
-function unavailableRemoteEvidence(input) {
-  const diagnostic = remoteEvidenceFailureDiagnostic(input.error);
-  return {
-    packageId: input.packageId,
-    files: [],
-    source: "unavailable",
-    warnings: [
-      `Package evidence could not be fetched (${input.error.code}): ${input.error.message}${diagnostic ? ` (${diagnostic})` : ""}`
-    ]
+function installedPackageMatchesNode(input) {
+  try {
+    const packageJsonText = readTextFileWithLimit({
+      filePath: path81.join(input.packagePath, "package.json"),
+      maxBytes: input.maxBytes
+    });
+    if (!packageJsonText.ok) {
+      return false;
+    }
+    const packageJson = JSON.parse(packageJsonText.value);
+    return isRecord26(packageJson) && packageJson.name === input.node.name && packageJson.version === input.node.version;
+  } catch {
+    return false;
+  }
+}
+function collectYarnCachePackageEvidence(input) {
+  const filenamePrefix = yarnCacheFilenamePrefix(input.node);
+  if (!filenamePrefix) {
+    return ok(undefined);
+  }
+  const loadedIndex = input.loadYarnCacheIndex();
+  if (!loadedIndex.ok) {
+    return err(loadedIndex.error);
+  }
+  if (!loadedIndex.value) {
+    return ok(undefined);
+  }
+  for (const filename of loadedIndex.value.filenames) {
+    if (!filename.startsWith(filenamePrefix)) {
+      continue;
+    }
+    const cachePath = path81.join(loadedIndex.value.cacheDir, filename);
+    const stats = readLocalArtifactStats({
+      filePath: cachePath,
+      packageId: input.node.id,
+      resolved: undefined
+    });
+    if (!stats.ok) {
+      return err(stats.error);
+    }
+    if (stats.value.size > input.zipMaxBytes) {
+      return err(localArtifactTooLargeError({
+        packageId: input.node.id,
+        resolved: undefined,
+        artifactPath: cachePath,
+        maxBytes: input.zipMaxBytes,
+        observedBytes: stats.value.size
+      }));
+    }
+    const zip = readLocalArtifactFileWithLimit({
+      filePath: cachePath,
+      packageId: input.node.id,
+      resolved: undefined,
+      maxBytes: input.zipMaxBytes
+    });
+    if (!zip.ok) {
+      return err(zip.error);
+    }
+    const evidence = collectZipPackageEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      packageVersion: input.node.version,
+      zip: zip.value
+    });
+    if (!evidence.ok) {
+      return err(evidence.error);
+    }
+    if (evidence.value) {
+      return ok(evidence.value);
+    }
+  }
+  return ok(undefined);
+}
+function createYarnCacheIndexLoader(projectRoot) {
+  let loaded;
+  return () => {
+    if (loaded) {
+      return loaded;
+    }
+    const cacheDir = path81.join(projectRoot, ".yarn", "cache");
+    if (!existsSync46(cacheDir) || !isReadableDirectory24(cacheDir)) {
+      loaded = ok(undefined);
+      return loaded;
+    }
+    try {
+      loaded = ok({
+        cacheDir,
+        filenames: readdirSync34(cacheDir, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".zip")).map((entry) => entry.name).sort((left, right) => left.localeCompare(right))
+      });
+    } catch (cause) {
+      loaded = err(createError({
+        code: "PACKAGE_EVIDENCE_READ_FAILED",
+        category: "filesystem",
+        message: "Failed to read Yarn package cache directory.",
+        details: {
+          cacheDir,
+          cause: safeUrlForErrorDetails(cause instanceof Error ? cause.message : String(cause))
+        }
+      }));
+    }
+    return loaded;
   };
 }
-function remoteEvidenceFailureDiagnostic(error) {
-  const cause = typeof error.details?.cause === "string" ? error.details.cause : undefined;
-  const timeout = cause?.match(/\btimed out after (\d+)ms\b/i);
-  return timeout?.[1] ? `timeout after ${timeout[1]}ms` : undefined;
+function yarnCacheFilenamePrefix(node) {
+  const slug = yarnCachePackageSlug(node.name);
+  return slug ? `${slug}-npm-${node.version}-` : undefined;
 }
-function normalizeEvidenceConcurrency(value, total) {
-  if (value === undefined) {
-    return Math.min(DEFAULT_EVIDENCE_CONCURRENCY, total);
+function yarnCachePackageSlug(packageName) {
+  const segments = nodeModulesPackageSegments(packageName);
+  return segments ? segments.join("-") : undefined;
+}
+
+// src/evidence/remote-nuget-evidence.ts
+import { timingSafeEqual as timingSafeEqual6 } from "node:crypto";
+import { gunzipSync as gunzipSync5 } from "node:zlib";
+
+// src/evidence/nuget-nupkg.ts
+import { createHash as createHash9, timingSafeEqual as timingSafeEqual5 } from "node:crypto";
+import path82 from "node:path";
+
+// src/evidence/nuget-registry.ts
+var NUGET_ORG_HOST = "api.nuget.org";
+var SHA512_DIGEST_BYTES = 64;
+function parseNugetServiceIndex(input) {
+  const document2 = parseJsonRecord(input, "NuGet service index");
+  if (!document2.ok) {
+    return document2;
   }
-  if (!Number.isFinite(value)) {
+  if (!Array.isArray(document2.value.resources)) {
+    return err(nugetMetadataError(input, "NuGet service index did not contain a resources array."));
+  }
+  const packageBaseUrl = findServiceResource(document2.value.resources, ["PackageBaseAddress/3.0.0"]);
+  const registrationsBaseUrl = findServiceResource(document2.value.resources, ["RegistrationsBaseUrl/3.6.0"]);
+  if (!packageBaseUrl || !registrationsBaseUrl) {
+    return err(nugetMetadataError(input, "NuGet service index did not expose the required V3 resources.", {
+      reason: "required_service_resource_missing"
+    }));
+  }
+  const packageBase = validateNugetOrgUrl(packageBaseUrl, "service_package_base", true);
+  const registrationsBase = validateNugetOrgUrl(registrationsBaseUrl, "service_registrations_base", true);
+  if (!packageBase.ok) {
+    return err(nugetMetadataError(input, packageBase.message, packageBase.details));
+  }
+  if (!registrationsBase.ok) {
+    return err(nugetMetadataError(input, registrationsBase.message, registrationsBase.details));
+  }
+  return ok({
+    packageBaseUrl: packageBase.url,
+    registrationsBaseUrl: registrationsBase.url
+  });
+}
+function parseNugetPackageVersions(input) {
+  const document2 = parseJsonRecord(input, "NuGet package version index");
+  if (!document2.ok) {
+    return document2;
+  }
+  if (!Array.isArray(document2.value.versions)) {
+    return err(nugetMetadataError(input, "NuGet package version index did not contain a versions array."));
+  }
+  const requested = normalizeNugetVersion(input.requestedVersion);
+  if (!requested) {
+    return err(nugetMetadataError(input, "NuGet dependency version was not a safe exact version.", {
+      reason: "unsafe_exact_version",
+      requestedVersion: input.requestedVersion
+    }));
+  }
+  const matches = document2.value.versions.filter((value) => typeof value === "string").filter((value) => normalizeNugetVersion(value) === requested);
+  const unique = [...new Set(matches)];
+  if (unique.length !== 1) {
+    return err(nugetMetadataError(input, "NuGet package version index did not identify exactly one requested version.", {
+      reason: unique.length === 0 ? "version_not_found" : "version_ambiguous",
+      requestedVersion: input.requestedVersion,
+      matchCount: unique.length
+    }));
+  }
+  return ok(unique[0]);
+}
+function parseNugetRegistrationIndex(input) {
+  const document2 = parseJsonRecord(input, "NuGet registration index");
+  if (!document2.ok) {
+    return document2;
+  }
+  if (!Array.isArray(document2.value.items)) {
+    return err(nugetMetadataError(input, "NuGet registration index did not contain registration pages."));
+  }
+  for (const page of document2.value.items) {
+    if (!isRecord27(page)) {
+      continue;
+    }
+    if (Array.isArray(page.items)) {
+      const leaf = findRegistrationLeaf(input, page.items);
+      if (!leaf.ok || leaf.value) {
+        return leaf.ok ? ok({ kind: "leaf", leaf: leaf.value }) : leaf;
+      }
+      continue;
+    }
+    if (!registrationPageContainsVersion(page, input.normalizedVersion)) {
+      continue;
+    }
+    const pageUrl = typeof page["@id"] === "string" ? page["@id"] : undefined;
+    const validated = pageUrl ? validateNugetOrgUrl(pageUrl, "registration_page", false) : { ok: false, message: "NuGet registration page did not include a safe URL.", details: { reason: "registration_page_url_missing" } };
+    if (!validated.ok) {
+      return err(nugetMetadataError(input, validated.message, validated.details));
+    }
+    return ok({ kind: "page", pageUrl: validated.url });
+  }
+  return err(nugetMetadataError(input, "NuGet registration index did not contain the requested package version.", {
+    reason: "registration_version_not_found",
+    normalizedVersion: input.normalizedVersion
+  }));
+}
+function parseNugetRegistrationPage(input) {
+  const document2 = parseJsonRecord(input, "NuGet registration page");
+  if (!document2.ok) {
+    return document2;
+  }
+  if (!Array.isArray(document2.value.items)) {
+    return err(nugetMetadataError(input, "NuGet registration page did not contain registration leaves."));
+  }
+  const leaf = findRegistrationLeaf(input, document2.value.items);
+  if (!leaf.ok) {
+    return leaf;
+  }
+  if (!leaf.value) {
+    return err(nugetMetadataError(input, "NuGet registration page did not contain the requested package version.", {
+      reason: "registration_version_not_found",
+      normalizedVersion: input.normalizedVersion
+    }));
+  }
+  return ok(leaf.value);
+}
+function parseNugetCatalogPackage(input) {
+  const document2 = parseJsonRecord(input, "NuGet catalog leaf");
+  if (!document2.ok) {
+    return document2;
+  }
+  const id = document2.value.id;
+  const version = document2.value.version;
+  const packageHash = document2.value.packageHash;
+  const packageHashAlgorithm = document2.value.packageHashAlgorithm;
+  const packageSize = document2.value.packageSize;
+  const digest = typeof packageHash === "string" ? decodeCanonicalBase64(packageHash) : undefined;
+  if (typeof id !== "string" || id.toLowerCase() !== input.packageName.toLowerCase() || typeof version !== "string" || normalizeNugetVersion(version) !== input.normalizedVersion) {
+    return err(nugetMetadataError(input, "NuGet catalog leaf identity did not match the requested package.", {
+      reason: "catalog_identity_mismatch",
+      ...typeof id === "string" ? { observedName: id } : {},
+      ...typeof version === "string" ? { observedVersion: version } : {}
+    }));
+  }
+  if (typeof packageHashAlgorithm !== "string" || packageHashAlgorithm.toUpperCase() !== "SHA512" || !digest || digest.length !== SHA512_DIGEST_BYTES) {
+    return err(nugetMetadataError(input, "NuGet catalog leaf did not contain a valid SHA-512 package hash.", {
+      reason: "catalog_hash_invalid",
+      ...typeof packageHashAlgorithm === "string" ? { packageHashAlgorithm } : {}
+    }));
+  }
+  if (!Number.isSafeInteger(packageSize) || packageSize <= 0) {
+    return err(nugetMetadataError(input, "NuGet catalog leaf did not contain a valid package size.", {
+      reason: "catalog_package_size_invalid"
+    }));
+  }
+  return ok({ packageHash, packageSize });
+}
+function normalizeNugetVersion(value) {
+  if (value.length === 0 || value.length > 256) {
+    return;
+  }
+  const match = value.trim().match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u);
+  if (!match) {
+    return;
+  }
+  const numeric = [match[1], match[2] ?? "0", match[3] ?? "0", match[4] ?? "0"].map((part) => BigInt(part).toString());
+  const core = numeric[3] === "0" ? numeric.slice(0, 3) : numeric;
+  const prerelease = match[5]?.split(".").map((part) => /^\d+$/u.test(part) ? BigInt(part).toString() : part.toLowerCase()).join(".");
+  return `${core.join(".")}${prerelease ? `-${prerelease}` : ""}`.toLowerCase();
+}
+function findRegistrationLeaf(input, items) {
+  const matches = items.filter((item) => {
+    if (!isRecord27(item) || !isRecord27(item.catalogEntry)) {
+      return false;
+    }
+    return typeof item.catalogEntry.id === "string" && item.catalogEntry.id.toLowerCase() === input.packageName.toLowerCase() && typeof item.catalogEntry.version === "string" && normalizeNugetVersion(item.catalogEntry.version) === input.normalizedVersion;
+  });
+  if (matches.length > 1) {
+    return err(nugetMetadataError(input, "NuGet registration metadata contained duplicate package versions.", {
+      reason: "registration_version_ambiguous",
+      matchCount: matches.length
+    }));
+  }
+  const item = matches[0];
+  if (!isRecord27(item) || !isRecord27(item.catalogEntry)) {
+    return ok(undefined);
+  }
+  const catalogUrl = typeof item.catalogEntry["@id"] === "string" ? item.catalogEntry["@id"] : undefined;
+  const packageContentUrl = typeof item.packageContent === "string" ? item.packageContent : undefined;
+  const validatedCatalog = catalogUrl ? validateNugetOrgUrl(catalogUrl, "catalog_leaf", false) : { ok: false, message: "NuGet registration leaf did not include a catalog URL.", details: { reason: "catalog_url_missing" } };
+  if (!validatedCatalog.ok) {
+    return err(nugetMetadataError(input, validatedCatalog.message, validatedCatalog.details));
+  }
+  const validatedContent = packageContentUrl ? validateNugetOrgUrl(packageContentUrl, "package_content", false) : { ok: false, message: "NuGet registration leaf did not include a package content URL.", details: { reason: "package_content_url_missing" } };
+  if (!validatedContent.ok) {
+    return err(nugetMetadataError(input, validatedContent.message, validatedContent.details));
+  }
+  if (validatedContent.url !== input.expectedPackageContentUrl) {
+    return err(nugetMetadataError(input, "NuGet registration package URL did not match the discovered flat-container URL.", {
+      reason: "package_content_url_mismatch",
+      expectedPackageContentUrl: input.expectedPackageContentUrl,
+      observedPackageContentUrl: validatedContent.url
+    }));
+  }
+  return ok({
+    catalogUrl: validatedCatalog.url,
+    packageContentUrl: validatedContent.url
+  });
+}
+function registrationPageContainsVersion(page, version) {
+  const lower = typeof page.lower === "string" ? normalizeNugetVersion(page.lower) : undefined;
+  const upper = typeof page.upper === "string" ? normalizeNugetVersion(page.upper) : undefined;
+  if (!lower || !upper) {
+    return false;
+  }
+  return compareNugetVersions(lower, version) <= 0 && compareNugetVersions(version, upper) <= 0;
+}
+function compareNugetVersions(left, right) {
+  const parsedLeft = splitNormalizedVersion(left);
+  const parsedRight = splitNormalizedVersion(right);
+  if (!parsedLeft || !parsedRight) {
+    return left.localeCompare(right);
+  }
+  for (let index = 0;index < 4; index += 1) {
+    const leftPart = parsedLeft.numeric[index] ?? 0n;
+    const rightPart = parsedRight.numeric[index] ?? 0n;
+    if (leftPart !== rightPart) {
+      return leftPart < rightPart ? -1 : 1;
+    }
+  }
+  if (!parsedLeft.prerelease && !parsedRight.prerelease)
+    return 0;
+  if (!parsedLeft.prerelease)
     return 1;
+  if (!parsedRight.prerelease)
+    return -1;
+  const length = Math.max(parsedLeft.prerelease.length, parsedRight.prerelease.length);
+  for (let index = 0;index < length; index += 1) {
+    const leftPart = parsedLeft.prerelease[index];
+    const rightPart = parsedRight.prerelease[index];
+    if (leftPart === undefined)
+      return -1;
+    if (rightPart === undefined)
+      return 1;
+    if (leftPart === rightPart)
+      continue;
+    const leftNumeric = /^\d+$/u.test(leftPart);
+    const rightNumeric = /^\d+$/u.test(rightPart);
+    if (leftNumeric && rightNumeric) {
+      return BigInt(leftPart) < BigInt(rightPart) ? -1 : 1;
+    }
+    if (leftNumeric !== rightNumeric)
+      return leftNumeric ? -1 : 1;
+    return leftPart < rightPart ? -1 : 1;
   }
-  return Math.min(Math.max(1, Math.trunc(value)), total);
+  return 0;
 }
-function createCargoGitHubArchiveEvidenceCache(nodes) {
-  const cache = new Map;
-  for (const node of nodes) {
-    if (node.ecosystem !== "cargo") {
+function splitNormalizedVersion(value) {
+  const match = value.match(/^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?(?:-(.+))?$/u);
+  if (!match)
+    return;
+  return {
+    numeric: [match[1], match[2], match[3], match[4] ?? "0"].map((part) => BigInt(part)),
+    ...match[5] ? { prerelease: match[5].split(".") } : {}
+  };
+}
+function findServiceResource(resources, acceptedTypes) {
+  for (const resource of resources) {
+    if (!isRecord27(resource) || typeof resource["@id"] !== "string")
+      continue;
+    const types = Array.isArray(resource["@type"]) ? resource["@type"] : [resource["@type"]];
+    if (types.some((type) => typeof type === "string" && acceptedTypes.includes(type))) {
+      return resource["@id"];
+    }
+  }
+  return;
+}
+function validateNugetOrgUrl(value, usage, requireTrailingSlash) {
+  try {
+    const url = new URL(value);
+    const supportedPath = url.pathname.startsWith("/v3/") || (usage === "service_package_base" || usage === "package_content") && url.pathname.startsWith("/v3-flatcontainer/");
+    if (url.protocol !== "https:" || url.hostname.toLowerCase() !== NUGET_ORG_HOST || url.port !== "" || url.username !== "" || url.password !== "" || url.search !== "" || url.hash !== "" || !supportedPath || requireTrailingSlash && !url.pathname.endsWith("/")) {
+      return { ok: false, message: "NuGet service metadata included an unsupported URL.", details: { reason: "unsupported_nuget_url", usage } };
+    }
+    return { ok: true, url: url.toString() };
+  } catch {
+    return { ok: false, message: "NuGet service metadata included a malformed URL.", details: { reason: "malformed_nuget_url", usage } };
+  }
+}
+function decodeCanonicalBase64(value) {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/u.test(value) || value.length % 4 !== 0) {
+    return;
+  }
+  const bytes = Buffer.from(value, "base64");
+  return bytes.toString("base64") === value ? bytes : undefined;
+}
+function parseJsonRecord(input, label) {
+  try {
+    const document2 = JSON.parse(input.text);
+    return isRecord27(document2) ? ok(document2) : err(nugetMetadataError(input, `${label} was not a JSON object.`));
+  } catch (cause) {
+    return err(nugetMetadataError(input, `${label} was not valid JSON.`, {
+      cause: cause instanceof Error ? cause.message : String(cause)
+    }));
+  }
+}
+function nugetMetadataError(input, message, details = {}) {
+  return createError({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    category: "unsupported_input",
+    message,
+    details: {
+      packageId: input.packageId,
+      ...input.packageName ? { packageName: input.packageName } : {},
+      ...details
+    }
+  });
+}
+function isRecord27(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// src/evidence/nuget-nupkg.ts
+var NUGET_NUPKG_MAX_ENTRIES = 50000;
+var NUGET_NUPKG_ENTRY_MAX_BYTES = 50 * 1024 * 1024;
+var NUGET_NUPKG_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
+var NUGET_NUPKG_MATERIALIZED_MAX_BYTES = 128 * 1024 * 1024;
+var NUGET_NUSPEC_MAX_BYTES2 = 1024 * 1024;
+var NUGET_LICENSE_MAX_BYTES = 2 * 1024 * 1024;
+var NUGET_LICENSE_FILE_LIMIT2 = 50;
+var SHA512_DIGEST_BYTES2 = 64;
+function collectNugetNupkgEvidence(input) {
+  const integrity = verifyNugetNupkgIntegrity(input);
+  if (!integrity.ok) {
+    return integrity;
+  }
+  const archive = readArchiveBytes({
+    displayName: `${safeDisplayPart3(input.packageName)}.${safeDisplayPart3(input.normalizedVersion)}.nupkg`,
+    bytes: input.nupkg,
+    formatHint: "zip",
+    limits: {
+      inputBytes: input.artifactMaxBytes,
+      entries: NUGET_NUPKG_MAX_ENTRIES,
+      entryBytes: NUGET_NUPKG_ENTRY_MAX_BYTES,
+      expandedBytes: NUGET_NUPKG_EXPANDED_MAX_BYTES,
+      materializedBytes: NUGET_NUPKG_MATERIALIZED_MAX_BYTES
+    }
+  });
+  if (!archive.ok) {
+    if (archive.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
+      return ok(unavailableNugetEvidence(input.packageId, `SHA-512-verified NuGet package exceeded bounded archive limits (${archive.error.code}); its contents were not trusted.`));
+    }
+    return err(archive.error);
+  }
+  const nuspecEntries = archive.value.entries.filter((entry) => entry.type === "file" && !entry.path.includes("/") && entry.path.toLowerCase().endsWith(".nuspec"));
+  if (nuspecEntries.length !== 1) {
+    return err(nugetPackageError(input, "NuGet package did not contain exactly one root nuspec manifest.", {
+      reason: nuspecEntries.length === 0 ? "nuspec_missing" : "nuspec_ambiguous",
+      nuspecCount: nuspecEntries.length
+    }));
+  }
+  const nuspecPath = nuspecEntries[0]?.path;
+  const nuspecText = archive.value.readText(nuspecPath, NUGET_NUSPEC_MAX_BYTES2);
+  if (!nuspecText.ok) {
+    return err(nuspecText.error);
+  }
+  const metadataResult = parseNuspecMetadata({
+    packageId: input.packageId,
+    text: nuspecText.value
+  });
+  if (!metadataResult.ok) {
+    return metadataResult;
+  }
+  const metadata = metadataResult.value;
+  if (!metadata.id || metadata.id.toLowerCase() !== input.packageName.toLowerCase() || !metadata.version || normalizeNugetVersion(metadata.version) !== input.normalizedVersion) {
+    return err(nugetPackageError(input, "NuGet nuspec identity did not match the requested package.", {
+      reason: "nuspec_identity_mismatch",
+      ...metadata.id ? { observedName: metadata.id } : {},
+      ...metadata.version ? { observedVersion: metadata.version } : {}
+    }));
+  }
+  const evidencePaths = new Map;
+  const declaredLicenseFile = metadata.licenseType === "file" ? normalizeDeclaredArchivePath(metadata.license) : undefined;
+  if (declaredLicenseFile) {
+    evidencePaths.set(declaredLicenseFile, "license");
+  }
+  for (const entry of archive.value.entries.filter((candidate) => candidate.type === "file").sort((left, right) => left.path.localeCompare(right.path))) {
+    const kind = classifyEvidenceFile(entry.path);
+    if (kind && !evidencePaths.has(entry.path)) {
+      evidencePaths.set(entry.path, kind);
+    }
+  }
+  const entryPathsByFoldedPath = new Map(archive.value.entries.filter((entry) => entry.type === "file").map((entry) => [entry.path.toLowerCase(), entry.path]));
+  const warnings = [];
+  const files = [];
+  for (const [candidatePath, kind] of [...evidencePaths.entries()].slice(0, NUGET_LICENSE_FILE_LIMIT2)) {
+    const entryPath = entryPathsByFoldedPath.get(candidatePath.toLowerCase());
+    if (!entryPath) {
+      warnings.push(`NuGet nuspec declared missing license file ${candidatePath}.`);
       continue;
     }
-    const source = parseCargoGitHubSource(node.resolved);
-    if (!source) {
+    const text = archive.value.readText(entryPath, NUGET_LICENSE_MAX_BYTES);
+    if (!text.ok) {
+      warnings.push(`Skipped ${entryPath}: NuGet license evidence exceeded bounded text limits.`);
       continue;
     }
-    const existing = cache.get(source.archiveUrl);
-    const requestedPackage = {
-      packageId: node.id,
-      packageName: node.name,
-      version: node.version
-    };
-    if (existing) {
-      existing.packages.push(requestedPackage);
-    } else {
-      cache.set(source.archiveUrl, {
-        source,
-        packages: [requestedPackage]
+    files.push({ path: entryPath, kind, text: text.value });
+  }
+  if (files.length === 0) {
+    warnings.push("SHA-512-verified NuGet package did not contain a license evidence file.");
+  }
+  if (!metadata.license && metadata.licenseUrl) {
+    warnings.push(`NuGet nuspec declared only a licenseUrl: ${metadata.licenseUrl}`);
+  } else if (!metadata.license) {
+    warnings.push("NuGet nuspec did not declare a package license.");
+  } else if (metadata.licenseType !== "expression" && metadata.licenseType !== "file") {
+    warnings.push("NuGet nuspec license declaration used an unsupported type and was not trusted as an expression.");
+  } else if (metadata.licenseType === "file" && !declaredLicenseFile) {
+    warnings.push("NuGet nuspec declared an unsafe license file path and it was not read.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...metadata.license && metadata.licenseType === "expression" ? { metadataLicense: metadata.license, metadataSource: "nuspec" } : {},
+    files,
+    source: "tarball",
+    warnings
+  });
+}
+function verifyNugetNupkgIntegrity(input) {
+  const expected = decodeCanonicalSha512(input.expectedSha512);
+  const actual = createHash9("sha512").update(input.nupkg).digest();
+  if (input.nupkg.byteLength !== input.expectedSize || !expected || expected.length !== actual.length || !timingSafeEqual5(expected, actual)) {
+    return err(createError({
+      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
+      category: "unsupported_input",
+      message: "NuGet package content did not match the nuget.org catalog identity.",
+      details: {
+        packageId: input.packageId,
+        expectedSize: input.expectedSize,
+        observedSize: input.nupkg.byteLength,
+        computed: `sha512-${actual.toString("base64")}`
+      }
+    }));
+  }
+  recordArtifactCheck({ packageId: input.packageId, bytes: input.nupkg, kind: "nuget-sha512", value: `sha512-${actual.toString("base64")}` });
+  return ok(undefined);
+}
+function decodeCanonicalSha512(value) {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/u.test(value) || value.length % 4 !== 0) {
+    return;
+  }
+  const digest = Buffer.from(value, "base64");
+  return digest.length === SHA512_DIGEST_BYTES2 && digest.toString("base64") === value ? digest : undefined;
+}
+function normalizeDeclaredArchivePath(value) {
+  if (!value || value.includes("\\")) {
+    return;
+  }
+  const normalized = path82.posix.normalize(value);
+  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/") || normalized !== value || /[\u0000-\u001f\u007f-\u009f:]/u.test(normalized)) {
+    return;
+  }
+  return normalized;
+}
+function unavailableNugetEvidence(packageId, warning) {
+  return { packageId, files: [], source: "unavailable", warnings: [warning] };
+}
+function safeDisplayPart3(value) {
+  return value.replace(/[^A-Za-z0-9._+-]/gu, "_").slice(0, 120) || "package";
+}
+function nugetPackageError(input, message, details) {
+  return createError({
+    code: "PACKAGE_EVIDENCE_READ_FAILED",
+    category: "unsupported_input",
+    message,
+    details: {
+      packageId: input.packageId,
+      packageName: input.packageName,
+      version: input.version,
+      ...details
+    }
+  });
+}
+
+// src/evidence/remote-package-evidence.ts
+function isGzipBytes(bytes) {
+  return bytes.length >= 2 && bytes[0] === 31 && bytes[1] === 139;
+}
+async function collectRemoteTarballEvidence(input) {
+  const urlError = input.urlError ?? {
+    code: "TARBALL_FETCH_FAILED",
+    message: "Package tarball URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve package tarball host.",
+    details: {
+      resolved: safeUrlForErrorDetails(input.resolved)
+    }
+  };
+  const urlValidation = validateRemoteArtifactUrl({
+    code: urlError.code,
+    packageId: input.packageId,
+    resolved: input.resolved,
+    message: urlError.message,
+    details: urlError.details,
+    allowedHosts: input.allowedHosts,
+    ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
+  });
+  if (!urlValidation.ok) {
+    return err(urlValidation.error);
+  }
+  if (!input.integrity && !input.skipIntegrityCheck) {
+    if (!input.offline) {
+      const preflight = await preflightRemoteArtifactFetchTarget({
+        code: urlError.code,
+        packageId: input.packageId,
+        resolved: input.resolved,
+        message: urlError.message,
+        resolveFailureMessage: urlError.resolveFailureMessage,
+        details: urlError.details,
+        resolveArtifactHost: input.resolveArtifactHost,
+        timeoutMs: input.fetchTimeoutMs,
+        allowedHosts: input.allowedHosts,
+        ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
       });
+      if (!preflight.ok) {
+        return err(preflight.error);
+      }
+    }
+    return ok(unavailableUnverifiedRemoteTarballEvidence(input.packageId, input.unverifiedIntegrityWarning));
+  }
+  try {
+    const tarball = await readRemoteArtifactBytes({
+      code: urlError.code,
+      packageId: input.packageId,
+      url: input.resolved,
+      blockedMessage: urlError.message,
+      resolveFailureMessage: urlError.resolveFailureMessage,
+      fetchFailureMessage: "Failed to fetch package tarball.",
+      tooLargeMessage: "Package tarball response exceeded the maximum supported size.",
+      unreadableMessage: "Package tarball response did not expose a readable body stream.",
+      offlineMissMessage: "Offline mode could not find the package tarball in the artifact cache.",
+      details: urlError.details,
+      maxBytes: input.tarballMaxBytes,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      signal: input.signal,
+      allowedHosts: input.allowedHosts,
+      ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {},
+      urlDetailKey: "resolved"
+    });
+    if (!tarball.ok) {
+      if (isPackageTarballTooLargeError(tarball.error)) {
+        return ok(unavailableOversizedTarballEvidence(input.packageId));
+      }
+      return err(tarball.error);
+    }
+    if (!input.skipIntegrityCheck) {
+      const verified = verifyPackageIntegrity({
+        packageId: input.packageId,
+        resolvedDetail: safeOptionalUrlForErrorDetails(input.resolved),
+        integrity: input.integrity,
+        artifact: tarball.value
+      });
+      if (!verified.ok) {
+        return err(verified.error);
+      }
+    }
+    const evidence = input.collectEvidence ? await input.collectEvidence(tarball.value) : collectTarballEvidence({
+      packageId: input.packageId,
+      tarball: tarball.value
+    });
+    if (!evidence.ok) {
+      if (isPackageTarballTooLargeError(evidence.error)) {
+        return ok(unavailableOversizedTarballEvidence(input.packageId));
+      }
+      return err(evidence.error);
+    }
+    return ok(addIntegrityWarningWhenUnverified({
+      evidence: evidence.value,
+      integrity: input.integrity
+    }));
+  } catch (cause) {
+    return err(createRemoteArtifactExceptionError({
+      code: urlError.code,
+      message: "Failed to fetch package tarball.",
+      blockedMessage: urlError.message,
+      details: {
+        packageId: input.packageId,
+        resolved: safeUrlForErrorDetails(input.resolved),
+        ...urlError.details
+      },
+      cause
+    }));
+  }
+}
+
+// src/evidence/remote-nuget-evidence.ts
+function createNugetServiceIndexLoader(input) {
+  let pending;
+  return (packageId) => {
+    pending ??= (async () => {
+      const bytes = await readNugetRegistryBytes({
+        packageId,
+        url: NUGET_SERVICE_INDEX_URL,
+        label: "service index",
+        maxBytes: input.registryMetadataMaxBytes,
+        fetchArtifact: input.fetchArtifact,
+        resolveArtifactHost: input.resolveArtifactHost,
+        fetchTimeoutMs: input.fetchTimeoutMs,
+        offline: input.offline,
+        artifactCache: input.artifactCache,
+        signal: input.signal,
+        allowedHosts: input.allowedHosts
+      });
+      return bytes.ok ? parseNugetServiceIndex({ packageId, text: bytes.value.toString("utf8") }) : bytes;
+    })();
+    return pending;
+  };
+}
+async function collectRemoteNugetPackageEvidence(input) {
+  if (!/^[A-Za-z0-9._-]{1,100}$/u.test(input.node.name)) {
+    return ok(unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: "NuGet package ID was not safe for the public nuget.org V3 API."
+    }));
+  }
+  if (!normalizeNugetVersion(input.node.version)) {
+    return ok(unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: "NuGet dependency version was not a safe exact version."
+    }));
+  }
+  const lockDigest = input.node.integrity ? parseSupportedIntegrityEntries(input.node.integrity).find((entry) => entry.algorithm === "sha512")?.digest : undefined;
+  if (!lockDigest) {
+    return ok({
+      packageId: input.node.id,
+      files: [],
+      source: "unavailable",
+      warnings: [nugetMissingIntegrityWarning(input.allowLocalProjectEvidence)]
+    });
+  }
+  const service = await input.loadServiceIndex(input.node.id);
+  if (!service.ok) {
+    return service;
+  }
+  const lowerName = input.node.name.toLowerCase();
+  const encodedName = encodeURIComponent(lowerName);
+  const versionsUrl = `${service.value.packageBaseUrl}${encodedName}/index.json`;
+  const versionsBytes = await readNugetRegistryBytes({
+    packageId: input.node.id,
+    url: versionsUrl,
+    label: "package version index",
+    maxBytes: input.registryMetadataMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts
+  });
+  if (!versionsBytes.ok) {
+    return versionsBytes;
+  }
+  const normalizedVersion = parseNugetPackageVersions({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    requestedVersion: input.node.version,
+    text: versionsBytes.value.toString("utf8")
+  });
+  if (!normalizedVersion.ok) {
+    return normalizedVersion;
+  }
+  const encodedVersion = encodeURIComponent(normalizedVersion.value);
+  const packageContentUrl = `${service.value.packageBaseUrl}${encodedName}/${encodedVersion}/${encodedName}.${encodedVersion}.nupkg`;
+  const registrationUrl = `${service.value.registrationsBaseUrl}${encodedName}/index.json`;
+  const registrationBytes = await readNugetRegistryBytes({
+    packageId: input.node.id,
+    url: registrationUrl,
+    label: "registration index",
+    maxBytes: input.registryMetadataMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts
+  });
+  if (!registrationBytes.ok) {
+    return registrationBytes;
+  }
+  const lookup = parseNugetRegistrationIndex({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    normalizedVersion: normalizedVersion.value,
+    expectedPackageContentUrl: packageContentUrl,
+    text: registrationBytes.value.toString("utf8")
+  });
+  if (!lookup.ok) {
+    return lookup;
+  }
+  let registrationLeaf;
+  if (lookup.value.kind === "leaf") {
+    registrationLeaf = lookup.value.leaf;
+  } else {
+    const pageBytes = await readNugetRegistryBytes({
+      packageId: input.node.id,
+      url: lookup.value.pageUrl,
+      label: "registration page",
+      maxBytes: input.registryMetadataMaxBytes,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      signal: input.signal,
+      allowedHosts: input.allowedHosts
+    });
+    if (!pageBytes.ok) {
+      return pageBytes;
+    }
+    const page = parseNugetRegistrationPage({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      normalizedVersion: normalizedVersion.value,
+      expectedPackageContentUrl: packageContentUrl,
+      text: pageBytes.value.toString("utf8")
+    });
+    if (!page.ok) {
+      return page;
+    }
+    registrationLeaf = page.value;
+  }
+  const catalogBytes = await readNugetRegistryBytes({
+    packageId: input.node.id,
+    url: registrationLeaf.catalogUrl,
+    label: "catalog leaf",
+    maxBytes: input.registryMetadataMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts
+  });
+  if (!catalogBytes.ok) {
+    return catalogBytes;
+  }
+  const catalog = parseNugetCatalogPackage({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    normalizedVersion: normalizedVersion.value,
+    text: catalogBytes.value.toString("utf8")
+  });
+  if (!catalog.ok) {
+    return catalog;
+  }
+  const catalogDigest = Buffer.from(catalog.value.packageHash, "base64");
+  if (catalogDigest.length !== lockDigest.length || !timingSafeEqual6(catalogDigest, lockDigest)) {
+    return err(createError({
+      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
+      category: "unsupported_input",
+      message: "NuGet catalog package hash did not match the selected dependency input.",
+      details: {
+        packageId: input.node.id,
+        packageName: input.node.name,
+        version: normalizedVersion.value,
+        reason: "nuget_catalog_lock_hash_mismatch"
+      }
+    }));
+  }
+  if (catalog.value.packageSize > input.artifactMaxBytes) {
+    return ok({
+      packageId: input.node.id,
+      files: [],
+      source: "unavailable",
+      warnings: [
+        "NuGet package source was not fetched because the catalog-declared package size exceeded the configured artifact limit."
+      ]
+    });
+  }
+  const nupkg = await readRemoteArtifactBytes({
+    code: "TARBALL_FETCH_FAILED",
+    packageId: input.node.id,
+    url: registrationLeaf.packageContentUrl,
+    blockedMessage: "NuGet package content URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve the nuget.org package content host.",
+    fetchFailureMessage: "Failed to fetch NuGet package content.",
+    tooLargeMessage: "NuGet package content exceeded the maximum supported size.",
+    unreadableMessage: "NuGet package content did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find NuGet package content in the artifact cache.",
+    details: {
+      packageName: input.node.name,
+      version: normalizedVersion.value
+    },
+    maxBytes: Math.min(input.artifactMaxBytes, catalog.value.packageSize),
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: NUGET_ORG_HOSTS,
+    urlDetailKey: "resolved"
+  });
+  if (!nupkg.ok) {
+    return nupkg;
+  }
+  return collectNugetNupkgEvidence({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    version: input.node.version,
+    normalizedVersion: normalizedVersion.value,
+    expectedSha512: catalog.value.packageHash,
+    expectedSize: catalog.value.packageSize,
+    nupkg: nupkg.value,
+    artifactMaxBytes: input.artifactMaxBytes
+  });
+}
+function nugetMissingIntegrityWarning(allowLocalProjectEvidence) {
+  if (allowLocalProjectEvidence) {
+    return "NuGet package source was not fetched because the selected dependency input did not contain an exact SHA-512 package content hash. Restore the project, then rerun Ohrisk against the local checkout; use --lockfile obj/project.assets.json or a generated packages.lock.json when available.";
+  }
+  return "NuGet package source was not fetched because this non-local input did not contain an exact SHA-512 package content hash. For a repository URL, commit a generated packages.lock.json with contentHash entries; otherwise clone or extract, restore, and scan the local checkout.";
+}
+async function readNugetRegistryBytes(input) {
+  const response = await readRemoteArtifactBytes({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    packageId: input.packageId,
+    url: input.url,
+    blockedMessage: `NuGet ${input.label} URL targets an unsupported or blocked host.`,
+    resolveFailureMessage: `Failed to resolve the nuget.org ${input.label} host.`,
+    fetchFailureMessage: `Failed to fetch NuGet ${input.label}.`,
+    tooLargeMessage: `NuGet ${input.label} exceeded the maximum supported size.`,
+    unreadableMessage: `NuGet ${input.label} did not expose a readable body stream.`,
+    offlineMissMessage: `Offline mode could not find NuGet ${input.label} in the artifact cache.`,
+    details: { registryUrl: input.url },
+    maxBytes: input.maxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: NUGET_ORG_HOSTS,
+    urlDetailKey: "registryUrl"
+  });
+  if (!response.ok || !isGzipBytes(response.value)) {
+    return response;
+  }
+  try {
+    return ok(gunzipSync5(response.value, { maxOutputLength: input.maxBytes }));
+  } catch (cause) {
+    return err(createError({
+      code: "REGISTRY_METADATA_FETCH_FAILED",
+      category: "unsupported_input",
+      message: `NuGet ${input.label} gzip response was malformed or exceeded the maximum supported size.`,
+      details: {
+        packageId: input.packageId,
+        registryUrl: safeUrlForErrorDetails(input.url),
+        maxBytes: input.maxBytes,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+}
+
+// src/evidence/rubygems-package.ts
+import { gunzipSync as gunzipSync6 } from "node:zlib";
+var GEM_METADATA_MAX_BYTES = 1024 * 1024;
+var GEM_EVIDENCE_FILE_MAX_BYTES2 = 2 * 1024 * 1024;
+var GEM_EVIDENCE_FILE_LIMIT = 50;
+function parseRubyGemsVersionMetadata(input) {
+  let document2;
+  try {
+    document2 = JSON.parse(input.text);
+  } catch (cause) {
+    return err(metadataError(input, "RubyGems version metadata was not valid JSON.", {
+      cause: cause instanceof Error ? cause.message : String(cause)
+    }));
+  }
+  if (!isRecord28(document2)) {
+    return err(metadataError(input, "RubyGems version metadata did not have the expected shape."));
+  }
+  const name = document2.name;
+  const version = document2.version;
+  const platform = document2.platform;
+  const sha256 = document2.sha;
+  const gemUrl = document2.gem_uri;
+  const expectedGemUrl = rubyGemsArtifactUrl(input.packageName, input.version);
+  if (!expectedGemUrl || name !== input.packageName || version !== input.version || platform !== "ruby" || typeof sha256 !== "string" || !/^[a-f0-9]{64}$/iu.test(sha256) || gemUrl !== expectedGemUrl) {
+    return err(metadataError(input, "RubyGems version metadata did not match the requested package identity and artifact.", {
+      ...typeof name === "string" ? { metadataName: name } : {},
+      ...typeof version === "string" ? { metadataVersion: version } : {},
+      ...typeof platform === "string" ? { metadataPlatform: platform } : {}
+    }));
+  }
+  return ok({ gemUrl, sha256: sha256.toLowerCase() });
+}
+function collectRubyGemArchiveEvidence(input) {
+  const gemBytes = Buffer.from(input.gem);
+  const integrity = verifyPackageIntegrity({
+    packageId: input.packageId,
+    resolvedDetail: rubyGemsArtifactUrl(input.packageName, input.version),
+    integrity: sha256HexIntegrity(input.sha256),
+    artifact: gemBytes
+  });
+  if (!integrity.ok)
+    return integrity;
+  const outer = readArchiveBytes({
+    displayName: `${input.packageName}-${input.version}.gem`,
+    bytes: gemBytes,
+    formatHint: "tar",
+    limits: { inputBytes: input.artifactMaxBytes }
+  });
+  if (!outer.ok)
+    return outer;
+  const metadataEntry = outer.value.readEntry("metadata.gz");
+  const dataEntry = outer.value.readEntry("data.tar.gz");
+  if (!metadataEntry.ok || !dataEntry.ok) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Ruby gem archive is missing metadata.gz or data.tar.gz.",
+      details: { packageId: input.packageId }
+    }));
+  }
+  const metadata = readGemMetadata({ packageId: input.packageId, bytes: metadataEntry.value });
+  if (!metadata.ok)
+    return metadata;
+  if (metadata.value.name !== input.packageName || metadata.value.version !== input.version) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Ruby gem archive metadata did not match the requested package identity.",
+      details: {
+        packageId: input.packageId,
+        expectedName: input.packageName,
+        expectedVersion: input.version,
+        metadataName: metadata.value.name,
+        metadataVersion: metadata.value.version
+      }
+    }));
+  }
+  const data = readArchiveBytes({
+    displayName: "data.tar.gz",
+    bytes: dataEntry.value,
+    formatHint: "tar.gz",
+    limits: { inputBytes: input.artifactMaxBytes }
+  });
+  if (!data.ok)
+    return data;
+  const warnings = [];
+  const files = collectGemEvidenceFiles(data.value, warnings);
+  if (files.length === 0) {
+    warnings.push("No supported license, notice, attribution, or legal evidence file found in the checksum-verified Ruby gem archive.");
+  }
+  if (metadata.value.licenses.length === 0) {
+    warnings.push("Checksum-verified Ruby gem metadata did not declare license metadata.");
+  }
+  return ok({
+    packageId: input.packageId,
+    ...metadata.value.licenses.length === 1 ? { metadataLicense: metadata.value.licenses[0], metadataSource: "metadata.gz" } : {},
+    ...metadata.value.licenses.length > 1 ? { metadataLicenses: metadata.value.licenses, metadataSource: "metadata.gz" } : {},
+    files,
+    source: "tarball",
+    warnings
+  });
+}
+function rubyGemsVersionMetadataUrl(name, version) {
+  if (!isSafeGemCoordinate(name) || !isSafeGemCoordinate(version))
+    return;
+  return `https://rubygems.org/api/v2/rubygems/${encodeURIComponent(name)}/versions/${encodeURIComponent(version)}.json?platform=ruby`;
+}
+function rubyGemsArtifactUrl(name, version) {
+  if (!isSafeGemCoordinate(name) || !isSafeGemCoordinate(version))
+    return;
+  return `https://rubygems.org/gems/${name}-${version}.gem`;
+}
+function isSafeGemCoordinate(value) {
+  return value.length > 0 && value.length <= 255 && /^[A-Za-z0-9_.+-]+$/u.test(value);
+}
+function readGemMetadata(input) {
+  let text;
+  try {
+    text = gunzipSync6(input.bytes, { maxOutputLength: GEM_METADATA_MAX_BYTES }).toString("utf8");
+  } catch (cause) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Ruby gem metadata.gz was malformed or exceeded the maximum supported size.",
+      details: {
+        packageId: input.packageId,
+        maxBytes: GEM_METADATA_MAX_BYTES,
+        cause: cause instanceof Error ? cause.message : String(cause)
+      }
+    }));
+  }
+  const name = readMetadataScalar(text, "name");
+  const rawVersion = text.match(/^version:\s*!ruby\/object:Gem::Version\s*\r?\n\s+version:\s*([^\r\n]+)$/mu)?.[1]?.trim();
+  const version = rawVersion ? unquoteYamlScalar(rawVersion) : undefined;
+  if (!name || !version || !isSafeGemCoordinate(name) || !isSafeGemCoordinate(version)) {
+    return err(createError({
+      code: "TARBALL_PARSE_FAILED",
+      category: "unsupported_input",
+      message: "Ruby gem metadata.gz did not contain a safe name and version.",
+      details: { packageId: input.packageId }
+    }));
+  }
+  const licenses = [];
+  const licenseBlock = text.match(/^licenses:\s*\r?\n((?:-\s*[^\r\n]*\r?\n?)*)/mu)?.[1] ?? "";
+  for (const match of licenseBlock.matchAll(/^-\s*([^\r\n]+)$/gmu)) {
+    const license = unquoteYamlScalar(match[1]?.trim() ?? "");
+    if (license)
+      licenses.push(license);
+  }
+  return ok({ name, version, licenses: [...new Set(licenses)] });
+}
+function readMetadataScalar(text, name) {
+  const value = text.match(new RegExp(`^${name}:\\s*([^\\r\\n]+)$`, "mu"))?.[1]?.trim();
+  return value ? unquoteYamlScalar(value) : undefined;
+}
+function unquoteYamlScalar(value) {
+  if (value === "" || value === "null" || value.startsWith("!"))
+    return;
+  if (value.startsWith("'") && value.endsWith("'") || value.startsWith('"') && value.endsWith('"')) {
+    return value.slice(1, -1).trim() || undefined;
+  }
+  return value.trim() || undefined;
+}
+function collectGemEvidenceFiles(archive, warnings) {
+  const files = [];
+  const candidates = archive.entries.filter((entry) => entry.type === "file" && !entry.path.includes("/") && classifyEvidenceFile(entry.path)).sort((left, right) => left.path.localeCompare(right.path)).slice(0, GEM_EVIDENCE_FILE_LIMIT);
+  for (const candidate of candidates) {
+    const text = archive.readText(candidate.path, GEM_EVIDENCE_FILE_MAX_BYTES2);
+    if (!text.ok) {
+      warnings.push(`Skipped ${candidate.path}: Ruby gem evidence file could not be read within the supported bounds.`);
+      continue;
+    }
+    const kind = classifyEvidenceFile(candidate.path);
+    if (kind)
+      files.push({ path: candidate.path, kind, text: text.value });
+  }
+  return files;
+}
+function metadataError(input, message, details = {}) {
+  return createError({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    category: "unsupported_input",
+    message,
+    details: {
+      packageId: input.packageId,
+      packageName: input.packageName,
+      version: input.version,
+      registryUrl: input.registryUrl,
+      ...details
+    }
+  });
+}
+function isRecord28(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// src/evidence/remote-ruby-evidence.ts
+async function collectRemoteRubyGemEvidence(input) {
+  const metadataUrl = rubyGemsVersionMetadataUrl(input.node.name, input.node.version);
+  if (!metadataUrl) {
+    return ok(unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: "Ruby gem name or version could not be encoded safely for the fixed RubyGems.org API."
+    }));
+  }
+  const metadataBytes = await readRemoteArtifactBytes({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    packageId: input.node.id,
+    url: metadataUrl,
+    blockedMessage: "RubyGems version metadata URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve the RubyGems.org metadata host.",
+    fetchFailureMessage: "Failed to fetch RubyGems version metadata.",
+    tooLargeMessage: "RubyGems version metadata exceeded the maximum supported size.",
+    unreadableMessage: "RubyGems version metadata did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find RubyGems version metadata in the artifact cache.",
+    details: {
+      packageName: input.node.name,
+      version: input.node.version,
+      registryUrl: metadataUrl
+    },
+    maxBytes: input.registryMetadataMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: RUBYGEMS_ORG_HOSTS,
+    urlDetailKey: "registryUrl"
+  });
+  if (!metadataBytes.ok)
+    return metadataBytes;
+  const metadata = parseRubyGemsVersionMetadata({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    version: input.node.version,
+    registryUrl: metadataUrl,
+    text: metadataBytes.value.toString("utf8")
+  });
+  if (!metadata.ok)
+    return metadata;
+  const gem = await readRemoteArtifactBytes({
+    code: "TARBALL_FETCH_FAILED",
+    packageId: input.node.id,
+    url: metadata.value.gemUrl,
+    blockedMessage: "Ruby gem artifact URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve the RubyGems.org artifact host.",
+    fetchFailureMessage: "Failed to fetch Ruby gem archive.",
+    tooLargeMessage: "Ruby gem archive exceeded the maximum supported size.",
+    unreadableMessage: "Ruby gem archive did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find the Ruby gem archive in the artifact cache.",
+    details: {
+      packageName: input.node.name,
+      version: input.node.version,
+      resolved: metadata.value.gemUrl
+    },
+    maxBytes: input.artifactMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: RUBYGEMS_ORG_HOSTS,
+    urlDetailKey: "resolved"
+  });
+  if (!gem.ok)
+    return gem;
+  const collected = collectRubyGemArchiveEvidence({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    version: input.node.version,
+    sha256: metadata.value.sha256,
+    gem: gem.value,
+    artifactMaxBytes: input.artifactMaxBytes
+  });
+  if (!collected.ok && (collected.error.code === "ARCHIVE_LIMIT_EXCEEDED" || collected.error.code === "ARCHIVE_ENTRY_TYPE_UNSUPPORTED")) {
+    return ok(unavailableRemoteArchiveLimitEvidence(input.node.id, collected.error, "Ruby gem"));
+  }
+  return collected;
+}
+
+// src/evidence/go-module-zip.ts
+import { createHash as createHash10, timingSafeEqual as timingSafeEqual7 } from "node:crypto";
+import { TextDecoder as TextDecoder4 } from "node:util";
+var GO_MODULE_ZIP_MAX_ENTRIES = 65535;
+var GO_MODULE_ZIP_ENTRY_MAX_BYTES = 50 * 1024 * 1024;
+var GO_MODULE_ZIP_EXPANDED_MAX_BYTES = 512 * 1024 * 1024;
+var GO_MODULE_ZIP_MATERIALIZED_MAX_BYTES = 34 * 1024 * 1024;
+var GO_MODULE_LICENSE_MAX_BYTES = 2 * 1024 * 1024;
+var GO_MODULE_LICENSE_FILE_LIMIT = 16;
+var GO_MODULE_MOD_MAX_BYTES3 = 2 * 1024 * 1024;
+var GO_H1_DIGEST_BYTES = 32;
+var GO_MOD_DECODER = new TextDecoder4("utf-8", { fatal: true });
+function collectGoModuleZipEvidence(input) {
+  const archive = readArchiveBytes({
+    displayName: `${safeGoModuleDisplayName(input.modulePath)}@${input.version}.zip`,
+    bytes: input.zip,
+    formatHint: "zip",
+    limits: {
+      inputBytes: input.artifactMaxBytes,
+      entries: GO_MODULE_ZIP_MAX_ENTRIES,
+      entryBytes: GO_MODULE_ZIP_ENTRY_MAX_BYTES,
+      expandedBytes: GO_MODULE_ZIP_EXPANDED_MAX_BYTES,
+      materializedBytes: GO_MODULE_ZIP_MATERIALIZED_MAX_BYTES
+    }
+  });
+  if (!archive.ok) {
+    if (archive.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
+      return ok(unavailableGoModuleEvidence(input.packageId, `Checksum-identified Go module zip exceeded bounded archive limits (${archive.error.code}); its contents were not trusted.`));
+    }
+    return err(archive.error);
+  }
+  const rootPrefix = `${input.modulePath}@${input.version}/`;
+  const fileNames = archive.value.entries.map((entry) => entry.type === "directory" ? `${entry.path}/` : entry.path);
+  const unexpectedPath = fileNames.find((fileName) => !fileName.startsWith(rootPrefix));
+  if (unexpectedPath) {
+    return err(goModuleEvidenceError({
+      packageId: input.packageId,
+      message: "Go module zip did not use the requested module path and version prefix.",
+      details: {
+        reason: "go_module_zip_identity_mismatch",
+        expectedPrefix: rootPrefix,
+        observedPath: unexpectedPath
+      }
+    }));
+  }
+  const computedChecksum = hashGoModuleArchive({
+    packageId: input.packageId,
+    entries: archive.value.entries,
+    hashEntrySha256: archive.value.hashEntrySha256
+  });
+  if (!computedChecksum.ok) {
+    return computedChecksum;
+  }
+  if (!equalGoChecksums(input.checksum, computedChecksum.value)) {
+    return err(createError({
+      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
+      category: "unsupported_input",
+      message: "Go module zip checksum did not match go.sum.",
+      details: {
+        packageId: input.packageId,
+        modulePath: input.modulePath,
+        version: input.version,
+        integrity: input.checksum,
+        computed: computedChecksum.value
+      }
+    }));
+  }
+  recordArtifactCheck({ packageId: input.packageId, bytes: input.zip, kind: "go-dirhash-h1", value: computedChecksum.value });
+  const evidencePaths = archive.value.entries.filter((entry) => entry.type === "file").map((entry) => entry.path).filter((entryPath) => isGoModuleRootEvidencePath(entryPath, rootPrefix)).slice(0, GO_MODULE_LICENSE_FILE_LIMIT);
+  const files = [];
+  for (const evidencePath of evidencePaths) {
+    const kind = classifyEvidenceFile(evidencePath);
+    if (!kind) {
+      continue;
+    }
+    const text = archive.value.readText(evidencePath, GO_MODULE_LICENSE_MAX_BYTES);
+    if (!text.ok) {
+      return err(text.error);
+    }
+    files.push({
+      path: evidencePath.slice(rootPrefix.length),
+      kind,
+      text: text.value
+    });
+  }
+  const goModuleRequirements = readVerifiedGoModuleRequirements({
+    goModPath: `${rootPrefix}go.mod`,
+    entries: archive.value.entries,
+    readText: archive.value.readText
+  });
+  return ok({
+    packageId: input.packageId,
+    ...goModuleRequirements ? { goModuleRequirements } : {},
+    files,
+    source: "tarball",
+    warnings: files.length > 0 ? [] : ["Checksum-verified Go module zip did not contain a root license evidence file."]
+  });
+}
+function readChecksumVerifiedGoModuleRequirements(input) {
+  const computedChecksum = hashGoModBytes(input.goMod);
+  if (!equalGoChecksums(input.checksum, computedChecksum)) {
+    return;
+  }
+  let text;
+  try {
+    text = GO_MOD_DECODER.decode(input.goMod);
+  } catch {
+    return;
+  }
+  const parsed = parseGoModRecords(text, "go.mod", { strictEdges: true });
+  return parsed.ok ? [...new Set(parsed.value.records.map((record) => record.modulePath))].sort() : undefined;
+}
+function readVerifiedGoModuleRequirements(input) {
+  if (!input.entries.some((entry) => entry.type === "file" && entry.path === input.goModPath)) {
+    return;
+  }
+  const goModText = input.readText(input.goModPath, GO_MODULE_MOD_MAX_BYTES3);
+  if (!goModText.ok) {
+    return;
+  }
+  const parsed = parseGoModRecords(goModText.value, input.goModPath, { strictEdges: true });
+  if (!parsed.ok) {
+    return;
+  }
+  return [...new Set(parsed.value.records.map((record) => record.modulePath))].sort();
+}
+function hashGoModuleArchive(input) {
+  const summary = createHash10("sha256");
+  const entries = [...input.entries].sort((left, right) => {
+    const leftName = left.type === "directory" ? `${left.path}/` : left.path;
+    const rightName = right.type === "directory" ? `${right.path}/` : right.path;
+    return leftName < rightName ? -1 : leftName > rightName ? 1 : 0;
+  });
+  for (const entry of entries) {
+    const fileName = entry.type === "directory" ? `${entry.path}/` : entry.path;
+    if (fileName.includes(`
+`)) {
+      return err(goModuleEvidenceError({
+        packageId: input.packageId,
+        message: "Go module zip contained a newline in an entry path.",
+        details: { reason: "go_module_zip_newline_path" }
+      }));
+    }
+    let fileDigest;
+    if (entry.type === "directory") {
+      fileDigest = createHash10("sha256").digest("hex");
+    } else {
+      const hashed = input.hashEntrySha256(entry.path);
+      if (!hashed.ok) {
+        return hashed;
+      }
+      fileDigest = hashed.value;
+    }
+    summary.update(`${fileDigest}  ${fileName}
+`, "utf8");
+  }
+  return ok(`h1:${summary.digest("base64")}`);
+}
+function hashGoModBytes(goMod) {
+  const fileDigest = createHash10("sha256").update(goMod).digest("hex");
+  const summary = createHash10("sha256").update(`${fileDigest}  go.mod
+`, "utf8").digest("base64");
+  return `h1:${summary}`;
+}
+function equalGoChecksums(expected, computed) {
+  const expectedDigest = decodeGoChecksum(expected);
+  const computedDigest = decodeGoChecksum(computed);
+  return expectedDigest !== undefined && computedDigest !== undefined && expectedDigest.length === computedDigest.length && timingSafeEqual7(expectedDigest, computedDigest);
+}
+function decodeGoChecksum(value) {
+  if (!/^h1:[A-Za-z0-9+/]{43}=$/u.test(value)) {
+    return;
+  }
+  const digest = Buffer.from(value.slice("h1:".length), "base64");
+  return digest.length === GO_H1_DIGEST_BYTES ? digest : undefined;
+}
+function isGoModuleRootEvidencePath(entryPath, rootPrefix) {
+  if (!entryPath.startsWith(rootPrefix)) {
+    return false;
+  }
+  const relativePath = entryPath.slice(rootPrefix.length);
+  return relativePath !== "" && !relativePath.includes("/") && classifyEvidenceFile(relativePath) !== undefined;
+}
+function unavailableGoModuleEvidence(packageId, warning) {
+  return {
+    packageId,
+    files: [],
+    source: "unavailable",
+    warnings: [warning]
+  };
+}
+function goModuleEvidenceError(input) {
+  return createError({
+    code: "PACKAGE_EVIDENCE_READ_FAILED",
+    category: "unsupported_input",
+    message: input.message,
+    details: {
+      packageId: input.packageId,
+      ...input.details
+    }
+  });
+}
+function safeGoModuleDisplayName(modulePath) {
+  return modulePath.replace(/[^A-Za-z0-9._-]+/gu, "_").slice(-120) || "go-module";
+}
+
+// src/evidence/go-proxy-url.ts
+var GO_MODULE_PROXY_BASE_URL = "https://proxy.golang.org";
+function remoteGoModuleCoordinates(node) {
+  if (!node.resolved) {
+    return { modulePath: node.name, version: node.version };
+  }
+  if (!node.resolved.startsWith("go-module:")) {
+    return;
+  }
+  const specifier = node.resolved.slice("go-module:".length);
+  const separator = specifier.lastIndexOf("@");
+  if (separator <= 0 || separator === specifier.length - 1) {
+    return;
+  }
+  return {
+    modulePath: specifier.slice(0, separator),
+    version: specifier.slice(separator + 1)
+  };
+}
+function goModuleProxyZipUrl(modulePath, version) {
+  return goModuleProxyArtifactUrl(modulePath, version, "zip");
+}
+function goModuleProxyModUrl(modulePath, version) {
+  return goModuleProxyArtifactUrl(modulePath, version, "mod");
+}
+function goModuleProxyArtifactUrl(modulePath, version, extension) {
+  const escapedModulePath = escapeGoProxyModulePath(modulePath);
+  const escapedVersion = escapeGoProxyVersion(version);
+  return escapedModulePath && escapedVersion ? `${GO_MODULE_PROXY_BASE_URL}/${escapedModulePath}/@v/${escapedVersion}.${extension}` : undefined;
+}
+function escapeGoProxyModulePath(modulePath) {
+  if (modulePath === "" || modulePath.startsWith("/") || modulePath.endsWith("/") || !/^[A-Za-z0-9.!_~+\-/]+$/u.test(modulePath)) {
+    return;
+  }
+  const segments = modulePath.split("/");
+  if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+    return;
+  }
+  return escapeGoProxyText(modulePath);
+}
+function escapeGoProxyVersion(version) {
+  return /^v[A-Za-z0-9.!_~+\-]+$/u.test(version) ? escapeGoProxyText(version) : undefined;
+}
+function escapeGoProxyText(value) {
+  let escaped = "";
+  for (const character of value) {
+    if (character === "!") {
+      escaped += "!!";
+    } else if (character >= "A" && character <= "Z") {
+      escaped += `!${character.toLowerCase()}`;
+    } else {
+      escaped += character;
     }
   }
-  return cache;
+  return escaped;
 }
+
+// src/evidence/remote-go-evidence.ts
+async function collectRemoteGoModuleEvidence(input) {
+  const coordinates = remoteGoModuleCoordinates(input.node);
+  if (!coordinates) {
+    return ok(unsupportedRemoteEcosystemEvidence({
+      node: input.node,
+      reason: input.node.resolved ? "Go local replacement evidence is unavailable during a remote repository scan." : "Go module coordinates were not safe for the fixed public module proxy."
+    }));
+  }
+  const zipChecksum = input.node.integrity && /^h1:[A-Za-z0-9+/]{43}=$/u.test(input.node.integrity) ? input.node.integrity : undefined;
+  let evidence;
+  if (!zipChecksum) {
+    evidence = {
+      packageId: input.node.id,
+      files: [],
+      source: "unavailable",
+      warnings: [
+        "Go module source was not fetched because go.sum did not contain an exact h1 checksum for the module zip."
+      ]
+    };
+  } else {
+    const resolved = goModuleProxyZipUrl(coordinates.modulePath, coordinates.version);
+    if (!resolved) {
+      return ok(unsupportedRemoteEcosystemEvidence({
+        node: input.node,
+        reason: "Go module path or version could not be encoded safely for the fixed public module proxy."
+      }));
+    }
+    const zip = await readRemoteArtifactBytes({
+      code: "TARBALL_FETCH_FAILED",
+      packageId: input.node.id,
+      url: resolved,
+      blockedMessage: "Go module proxy URL targets an unsupported or blocked host.",
+      resolveFailureMessage: "Failed to resolve the Go module proxy host.",
+      fetchFailureMessage: "Failed to fetch Go module zip.",
+      tooLargeMessage: "Go module zip response exceeded the maximum supported size.",
+      unreadableMessage: "Go module zip response did not expose a readable body stream.",
+      offlineMissMessage: "Offline mode could not find the Go module zip in the artifact cache.",
+      details: {
+        modulePath: coordinates.modulePath,
+        version: coordinates.version,
+        proxy: GO_MODULE_PROXY_BASE_URL
+      },
+      maxBytes: input.artifactMaxBytes,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      signal: input.signal,
+      allowedHosts: input.allowedHosts,
+      permittedHosts: GO_MODULE_PROXY_HOSTS,
+      urlDetailKey: "resolved",
+      transientFetchAttempts: GO_MODULE_TRANSIENT_FETCH_ATTEMPTS,
+      transientRetryDelayMs: GO_MODULE_TRANSIENT_RETRY_DELAY_MS
+    });
+    if (!zip.ok) {
+      if (!isGoModuleZipSizeLimitError(zip.error)) {
+        return zip;
+      }
+      evidence = unavailableRemoteEvidence({
+        packageId: input.node.id,
+        error: zip.error
+      });
+    } else {
+      const collected = collectGoModuleZipEvidence({
+        packageId: input.node.id,
+        modulePath: coordinates.modulePath,
+        version: coordinates.version,
+        checksum: zipChecksum,
+        zip: zip.value,
+        artifactMaxBytes: input.artifactMaxBytes
+      });
+      if (!collected.ok) {
+        return collected;
+      }
+      evidence = collected.value;
+    }
+  }
+  return collectVerifiedRemoteGoModuleRequirements({
+    node: input.node,
+    evidence,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts
+  });
+}
+function isGoModuleZipSizeLimitError(error) {
+  return error.code === "TARBALL_FETCH_FAILED" && error.message === "Go module zip response exceeded the maximum supported size." && typeof error.details?.maxBytes === "number" && typeof error.details?.observedBytes === "number";
+}
+async function collectVerifiedRemoteGoModuleRequirements(input) {
+  if (input.evidence.goModuleRequirements !== undefined) {
+    return ok(input.evidence);
+  }
+  const goModChecksum = input.node.goModIntegrity && /^h1:[A-Za-z0-9+/]{43}=$/u.test(input.node.goModIntegrity) ? input.node.goModIntegrity : undefined;
+  if (!goModChecksum) {
+    return ok(input.evidence);
+  }
+  const coordinates = remoteGoModuleCoordinates(input.node);
+  if (!coordinates) {
+    return ok(input.evidence);
+  }
+  const goModUrl = goModuleProxyModUrl(coordinates.modulePath, coordinates.version);
+  if (!goModUrl) {
+    return ok(input.evidence);
+  }
+  const goMod = await readRemoteArtifactBytes({
+    code: "TARBALL_FETCH_FAILED",
+    packageId: input.node.id,
+    url: goModUrl,
+    blockedMessage: "Go module proxy URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve the Go module proxy host.",
+    fetchFailureMessage: "Failed to fetch the checksum-identified Go module go.mod.",
+    tooLargeMessage: "Go module go.mod response exceeded the maximum supported size.",
+    unreadableMessage: "Go module go.mod response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find the Go module go.mod in the artifact cache.",
+    details: {
+      modulePath: coordinates.modulePath,
+      version: coordinates.version,
+      proxy: GO_MODULE_PROXY_BASE_URL
+    },
+    maxBytes: GO_MODULE_MOD_MAX_BYTES2,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: GO_MODULE_PROXY_HOSTS,
+    urlDetailKey: "resolved",
+    transientFetchAttempts: GO_MODULE_TRANSIENT_FETCH_ATTEMPTS,
+    transientRetryDelayMs: GO_MODULE_TRANSIENT_RETRY_DELAY_MS
+  });
+  if (!goMod.ok) {
+    return ok(input.evidence);
+  }
+  const requirements = readChecksumVerifiedGoModuleRequirements({
+    checksum: goModChecksum,
+    goMod: goMod.value
+  });
+  if (requirements !== undefined)
+    recordArtifactCheck({ packageId: input.node.id, bytes: goMod.value, kind: "go-mod-h1", value: goModChecksum });
+  return ok(requirements === undefined ? input.evidence : { ...input.evidence, goModuleRequirements: requirements });
+}
+
+// src/evidence/remote-npm-evidence.ts
+async function collectNpmRegistryTarballEvidence(input) {
+  const metadataUrl = npmRegistryPackageVersionUrl(input.node.name, input.node.version, input.npmRegistryUrl);
+  const metadataBytes = await readRemoteArtifactBytes({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    packageId: input.node.id,
+    url: metadataUrl,
+    blockedMessage: "npm registry metadata URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve npm registry metadata host.",
+    fetchFailureMessage: "Failed to fetch npm registry metadata.",
+    tooLargeMessage: "npm registry metadata response exceeded the maximum supported size.",
+    unreadableMessage: "npm registry metadata response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find npm registry metadata in the artifact cache.",
+    details: { registryUrl: metadataUrl },
+    maxBytes: input.registryMetadataMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts,
+    urlDetailKey: "registryUrl"
+  });
+  if (!metadataBytes.ok) {
+    return err(metadataBytes.error);
+  }
+  const metadata = parseRegistryMetadata({
+    packageId: input.node.id,
+    registryUrl: metadataUrl,
+    text: metadataBytes.value.toString("utf8")
+  });
+  if (!metadata.ok) {
+    return err(metadata.error);
+  }
+  const tarballUrl = readRegistryTarballUrl(metadata.value, input.node.version);
+  if (!tarballUrl) {
+    return err(createError({
+      code: "REGISTRY_METADATA_FETCH_FAILED",
+      category: "unsupported_input",
+      message: "npm registry metadata did not include a tarball for the requested version.",
+      details: {
+        packageId: input.node.id,
+        registryUrl: metadataUrl,
+        version: input.node.version
+      }
+    }));
+  }
+  return collectRemoteTarballEvidence({
+    packageId: input.node.id,
+    resolved: tarballUrl,
+    ...input.node.integrity ? { integrity: input.node.integrity } : {},
+    ...input.node.yarnCacheChecksum ? { unverifiedIntegrityWarning: yarnCacheOnlyIntegrityWarning() } : {},
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    tarballMaxBytes: input.tarballMaxBytes,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts,
+    urlError: {
+      code: "REGISTRY_METADATA_FETCH_FAILED",
+      message: "npm registry metadata included an unsupported tarball URL.",
+      resolveFailureMessage: "Failed to resolve registry tarball host.",
+      details: {
+        registryUrl: metadataUrl,
+        version: input.node.version,
+        tarballUrl
+      }
+    }
+  });
+}
+
+// src/evidence/remote-python-evidence.ts
+async function collectPyPiReleaseEvidence(input) {
+  const metadataUrl = pypiPackageVersionUrl(input.node.name, input.node.version);
+  const metadataBytes = await readRemoteArtifactBytes({
+    code: "REGISTRY_METADATA_FETCH_FAILED",
+    packageId: input.node.id,
+    url: metadataUrl,
+    blockedMessage: "PyPI release metadata URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve PyPI release metadata host.",
+    fetchFailureMessage: "Failed to fetch PyPI release metadata.",
+    tooLargeMessage: "PyPI release metadata response exceeded the maximum supported size.",
+    unreadableMessage: "PyPI release metadata response did not expose a readable body stream.",
+    offlineMissMessage: "Offline mode could not find PyPI release metadata in the artifact cache.",
+    details: { registryUrl: metadataUrl },
+    maxBytes: input.registryMetadataMaxBytes,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: PYPI_METADATA_HOSTS,
+    urlDetailKey: "registryUrl"
+  });
+  if (!metadataBytes.ok) {
+    return err(metadataBytes.error);
+  }
+  const release = parsePyPiReleaseMetadata({
+    packageId: input.node.id,
+    packageName: input.node.name,
+    version: input.node.version,
+    registryUrl: metadataUrl,
+    text: metadataBytes.value.toString("utf8")
+  });
+  if (!release.ok) {
+    return err(release.error);
+  }
+  if (release.value.artifact.size !== undefined && release.value.artifact.size > input.artifactMaxBytes) {
+    return ok(unavailableOversizedTarballEvidence(input.node.id));
+  }
+  return collectRemotePythonDistributionEvidence({
+    node: input.node,
+    resolved: release.value.artifact.url,
+    artifactFilename: release.value.artifact.filename,
+    integrity: sha256HexIntegrity(release.value.artifact.sha256),
+    yanked: release.value.artifact.yanked,
+    fetchArtifact: input.fetchArtifact,
+    resolveArtifactHost: input.resolveArtifactHost,
+    fetchTimeoutMs: input.fetchTimeoutMs,
+    artifactMaxBytes: input.artifactMaxBytes,
+    offline: input.offline,
+    artifactCache: input.artifactCache,
+    signal: input.signal,
+    allowedHosts: input.allowedHosts,
+    permittedHosts: PYPI_DISTRIBUTION_HOSTS,
+    urlError: {
+      code: "TARBALL_FETCH_FAILED",
+      message: "PyPI release metadata included an unsupported distribution URL.",
+      resolveFailureMessage: "Failed to resolve PyPI distribution host.",
+      details: {
+        registryUrl: metadataUrl,
+        version: input.node.version,
+        resolved: release.value.artifact.url
+      }
+    }
+  });
+}
+async function collectRemotePythonDistributionEvidence(input) {
+  const urlError = input.urlError ?? {
+    code: "TARBALL_FETCH_FAILED",
+    message: "Python distribution URL targets an unsupported or blocked host.",
+    resolveFailureMessage: "Failed to resolve Python distribution host.",
+    details: { resolved: safeUrlForErrorDetails(input.resolved) }
+  };
+  const urlValidation = validateRemoteArtifactUrl({
+    code: urlError.code,
+    packageId: input.node.id,
+    resolved: input.resolved,
+    message: urlError.message,
+    details: urlError.details,
+    allowedHosts: input.allowedHosts,
+    ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
+  });
+  if (!urlValidation.ok) {
+    return err(urlValidation.error);
+  }
+  if (!input.integrity) {
+    if (!input.offline) {
+      const preflight = await preflightRemoteArtifactFetchTarget({
+        code: urlError.code,
+        packageId: input.node.id,
+        resolved: input.resolved,
+        message: urlError.message,
+        resolveFailureMessage: urlError.resolveFailureMessage,
+        details: urlError.details,
+        resolveArtifactHost: input.resolveArtifactHost,
+        timeoutMs: input.fetchTimeoutMs,
+        allowedHosts: input.allowedHosts,
+        ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
+      });
+      if (!preflight.ok) {
+        return err(preflight.error);
+      }
+    }
+    return ok(unavailableUnverifiedRemoteTarballEvidence(input.node.id));
+  }
+  try {
+    const artifact = await readRemoteArtifactBytes({
+      code: urlError.code,
+      packageId: input.node.id,
+      url: input.resolved,
+      blockedMessage: urlError.message,
+      resolveFailureMessage: urlError.resolveFailureMessage,
+      fetchFailureMessage: "Failed to fetch Python distribution.",
+      tooLargeMessage: "Python distribution response exceeded the maximum supported size.",
+      unreadableMessage: "Python distribution response did not expose a readable body stream.",
+      offlineMissMessage: "Offline mode could not find the Python distribution in the artifact cache.",
+      details: urlError.details,
+      maxBytes: input.artifactMaxBytes,
+      fetchArtifact: input.fetchArtifact,
+      resolveArtifactHost: input.resolveArtifactHost,
+      fetchTimeoutMs: input.fetchTimeoutMs,
+      offline: input.offline,
+      artifactCache: input.artifactCache,
+      signal: input.signal,
+      allowedHosts: input.allowedHosts,
+      ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {},
+      urlDetailKey: "resolved"
+    });
+    if (!artifact.ok) {
+      if (isPackageArtifactTooLargeError(artifact.error)) {
+        return ok(unavailableOversizedTarballEvidence(input.node.id));
+      }
+      return err(artifact.error);
+    }
+    const verified = verifyPackageIntegrity({
+      packageId: input.node.id,
+      resolvedDetail: safeOptionalUrlForErrorDetails(input.resolved),
+      integrity: input.integrity,
+      artifact: artifact.value
+    });
+    if (!verified.ok) {
+      return err(verified.error);
+    }
+    const collected = collectPythonDistributionEvidence({
+      packageId: input.node.id,
+      packageName: input.node.name,
+      version: input.node.version,
+      artifactFilename: input.artifactFilename,
+      artifactBytes: artifact.value,
+      artifactMaxBytes: input.artifactMaxBytes,
+      ...input.yanked !== undefined ? { yanked: input.yanked } : {}
+    });
+    if (!collected.ok && collected.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
+      return ok(unavailableRemoteArchiveLimitEvidence(input.node.id, collected.error, "Python distribution"));
+    }
+    return collected;
+  } catch (cause) {
+    return err(createRemoteArtifactExceptionError({
+      code: urlError.code,
+      message: "Failed to fetch Python distribution.",
+      blockedMessage: urlError.message,
+      details: {
+        packageId: input.node.id,
+        resolved: safeUrlForErrorDetails(input.resolved),
+        ...urlError.details
+      },
+      cause
+    }));
+  }
+}
+
+// src/evidence/node-evidence.ts
 async function collectNodeEvidence(input) {
   if (input.node.artifactIdentityConflict) {
     return ok({
@@ -54905,949 +56815,136 @@ async function collectNodeEvidence(input) {
   }
   return ok(unsupportedRemoteEcosystemEvidence({ node: input.node }));
 }
-async function collectRemoteHackageCabalEvidence(input) {
-  const resolved = input.node.resolved;
-  if (!resolved || !input.node.integrity) {
-    return ok(unsupportedRemoteEcosystemEvidence({
-      node: input.node,
-      reason: "The Stack lockfile did not provide checksum-pinned Hackage Cabal metadata."
-    }));
-  }
-  const currentCabalBytes = await readRemoteHackageCabalBytes({
-    ...input,
-    packageId: input.node.id,
-    url: resolved
-  });
-  if (!currentCabalBytes.ok) {
-    return err(currentCabalBytes.error);
-  }
-  const currentIntegrity = verifyPackageIntegrity({
-    packageId: input.node.id,
-    resolvedDetail: safeUrlForErrorDetails(resolved),
-    integrity: input.node.integrity,
-    artifact: currentCabalBytes.value
-  });
-  let cabalBytes = currentCabalBytes.value;
-  let cabalUrl = resolved;
-  if (!currentIntegrity.ok) {
-    if (!isPackageIntegrityMismatch(currentIntegrity.error)) {
-      return err(currentIntegrity.error);
+
+// src/evidence/remote-maven-evidence.ts
+import { createHash as createHash11, timingSafeEqual as timingSafeEqual8 } from "node:crypto";
+
+// src/evidence/maven-jar.ts
+var MAVEN_JAR_MAX_BYTES2 = 100 * 1024 * 1024;
+var MAVEN_JAR_MAX_ENTRIES = 50000;
+var MAVEN_JAR_ENTRY_MAX_BYTES = 2 * 1024 * 1024;
+var MAVEN_JAR_EXPANDED_MAX_BYTES = 256 * 1024 * 1024;
+var MAVEN_JAR_MATERIALIZED_MAX_BYTES = 16 * 1024 * 1024;
+var MAVEN_JAR_IDENTITY_MAX_BYTES = 64 * 1024;
+var MAVEN_JAR_EVIDENCE_FILE_MAX_BYTES = 1024 * 1024;
+var MAVEN_JAR_EVIDENCE_FILE_MAX_COUNT = 16;
+function collectMavenJarEvidence(input) {
+  const archive = readArchiveBytes({
+    displayName: `${input.coordinates.artifactId}-${input.coordinates.version}.jar`,
+    bytes: input.jar,
+    formatHint: "zip",
+    limits: {
+      inputBytes: MAVEN_JAR_MAX_BYTES2,
+      entries: MAVEN_JAR_MAX_ENTRIES,
+      entryBytes: MAVEN_JAR_ENTRY_MAX_BYTES,
+      expandedBytes: MAVEN_JAR_EXPANDED_MAX_BYTES,
+      materializedBytes: MAVEN_JAR_MATERIALIZED_MAX_BYTES
     }
-    const historicalCabal = await findChecksumPinnedHackageCabalRevision({
-      ...input,
-      packageId: input.node.id,
-      packageName: input.node.name,
-      version: input.node.version,
-      integrity: input.node.integrity
-    });
-    if (!historicalCabal.ok) {
-      return err(historicalCabal.error);
-    }
-    if (!historicalCabal.value) {
-      return ok({
-        packageId: input.node.id,
-        files: [],
-        source: "unavailable",
-        warnings: [
-          "Locked Hackage Cabal metadata is not the current public revision; mismatched bytes were not trusted."
-        ]
-      });
-    }
-    cabalBytes = historicalCabal.value.bytes;
-    cabalUrl = historicalCabal.value.url;
-  }
-  let text;
-  try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(cabalBytes);
-  } catch {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: "unsupported_input",
-      message: "Hackage Cabal metadata was not valid UTF-8.",
-      details: {
-        packageId: input.node.id,
-        registryUrl: safeUrlForErrorDetails(cabalUrl)
-      }
-    }));
-  }
-  return collectHackageCabalEvidence({
-    packageId: input.node.id,
-    packageName: input.node.name,
-    version: input.node.version,
-    text
-  });
-}
-async function findChecksumPinnedHackageCabalRevision(input) {
-  for (let revision = 0;revision < HACKAGE_CABAL_MAX_HISTORICAL_REVISIONS; revision += 1) {
-    const url = hackageCabalRevisionUrl(input.packageName, input.version, revision);
-    if (!url) {
-      return ok(undefined);
-    }
-    const candidate = await readRemoteHackageCabalBytes({ ...input, url });
-    if (!candidate.ok) {
-      if (candidate.error.details?.status === 404) {
-        return ok(undefined);
-      }
-      if (input.offline && candidate.error.details?.reason === "offline_cache_miss") {
-        continue;
-      }
-      return err(candidate.error);
-    }
-    const integrity = verifyPackageIntegrity({
-      packageId: input.packageId,
-      resolvedDetail: safeUrlForErrorDetails(url),
-      integrity: input.integrity,
-      artifact: candidate.value
-    });
-    if (integrity.ok) {
-      return ok({ bytes: candidate.value, url });
-    }
-    if (!isPackageIntegrityMismatch(integrity.error)) {
-      return err(integrity.error);
-    }
-  }
-  return ok(undefined);
-}
-function readRemoteHackageCabalBytes(input) {
-  return readRemoteArtifactBytes({
-    code: "REGISTRY_METADATA_FETCH_FAILED",
-    packageId: input.packageId,
-    url: input.url,
-    blockedMessage: "Hackage Cabal metadata URL targets an unsupported or blocked host.",
-    resolveFailureMessage: "Failed to resolve the Hackage metadata host.",
-    fetchFailureMessage: "Failed to fetch Hackage Cabal metadata.",
-    tooLargeMessage: "Hackage Cabal metadata exceeded the maximum supported size.",
-    unreadableMessage: "Hackage Cabal metadata did not expose a readable body stream.",
-    offlineMissMessage: "Offline mode could not find Hackage Cabal metadata in the artifact cache.",
-    details: { registryUrl: input.url },
-    maxBytes: input.metadataMaxBytes,
-    fetchArtifact: input.fetchArtifact,
-    resolveArtifactHost: input.resolveArtifactHost,
-    fetchTimeoutMs: input.fetchTimeoutMs,
-    offline: input.offline,
-    artifactCache: input.artifactCache,
-    signal: input.signal,
-    allowedHosts: input.allowedHosts,
-    permittedHosts: HACKAGE_CABAL_HOSTS,
-    urlDetailKey: "registryUrl"
-  });
-}
-function hackageCabalRevisionUrl(packageName, version, revision) {
-  if (!/^[A-Za-z][A-Za-z0-9-]*$/.test(packageName) || !/^[0-9]+(?:\.[0-9]+)*$/.test(version) || !Number.isSafeInteger(revision) || revision < 0) {
-    return;
-  }
-  return `https://hackage.haskell.org/package/${packageName}-${version}/revision/${revision}.cabal`;
-}
-function isPackageIntegrityMismatch(error) {
-  return Array.isArray(error.details?.computed);
-}
-function shouldCollectNpmRegistryEvidence(input) {
-  if (!input.node.resolved) {
-    return true;
-  }
-  if (input.node.direct) {
-    return false;
-  }
-  const resolvedUrl = parseHttpUrl(input.node.resolved);
-  const registryUrl = parseHttpUrl(input.npmRegistryUrl ?? "https://registry.npmjs.org");
-  return resolvedUrl?.protocol === "https:" && registryUrl?.protocol === "https:" && normalizeUrlHostname(resolvedUrl.hostname) === normalizeUrlHostname(registryUrl.hostname);
-}
-function collectLocalPathEvidence(input) {
-  if (!existsSync46(input.localPath)) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: "filesystem",
-      message: "Resolved package artifact does not exist.",
-      details: {
-        packageId: input.node.id,
-        resolved: safeOptionalUrlForErrorDetails(input.node.resolved),
-        artifactPath: safeUrlForErrorDetails(input.localPath)
-      }
-    }));
-  }
-  const trustedLocalPath = resolveExistingLocalArtifactPath({
-    packageId: input.node.id,
-    resolved: input.node.resolved,
-    integrity: input.node.integrity,
-    projectRoot: input.projectRoot,
-    workspaceRoot: input.workspaceRoot,
-    artifactPath: input.localPath
-  });
-  if (!trustedLocalPath.ok) {
-    return err(trustedLocalPath.error);
-  }
-  const artifactStats = readLocalArtifactStats({
-    filePath: trustedLocalPath.value,
-    packageId: input.node.id,
-    resolved: input.node.resolved
-  });
-  if (!artifactStats.ok) {
-    return err(artifactStats.error);
-  }
-  if (artifactStats.value.isDirectory()) {
-    return collectLocalPackageEvidence({
-      packageId: input.node.id,
-      packageDir: trustedLocalPath.value
-    });
-  }
-  if (artifactStats.value.size > input.tarballMaxBytes) {
-    return err(localArtifactTooLargeError({
-      packageId: input.node.id,
-      resolved: input.node.resolved,
-      artifactPath: trustedLocalPath.value,
-      maxBytes: input.tarballMaxBytes,
-      observedBytes: artifactStats.value.size
-    }));
-  }
-  const tarball = readLocalArtifactFileWithLimit({
-    filePath: trustedLocalPath.value,
-    packageId: input.node.id,
-    resolved: input.node.resolved,
-    maxBytes: input.tarballMaxBytes
-  });
-  if (!tarball.ok) {
-    return err(tarball.error);
-  }
-  const verified = verifyPackageIntegrity({
-    packageId: input.node.id,
-    resolvedDetail: safeOptionalUrlForErrorDetails(input.node.resolved),
-    integrity: input.node.integrity,
-    artifact: tarball.value
-  });
-  if (!verified.ok) {
-    return err(verified.error);
-  }
-  const evidence = collectTarballEvidence({
-    packageId: input.node.id,
-    tarball: tarball.value
-  });
-  if (!evidence.ok) {
-    return err(evidence.error);
-  }
-  return ok(addIntegrityWarningWhenUnverified({
-    evidence: evidence.value,
-    integrity: input.node.integrity
-  }));
-}
-function createNugetServiceIndexLoader(input) {
-  let pending;
-  return (packageId) => {
-    pending ??= (async () => {
-      const bytes = await readNugetRegistryBytes({
-        packageId,
-        url: NUGET_SERVICE_INDEX_URL,
-        label: "service index",
-        maxBytes: input.registryMetadataMaxBytes,
-        fetchArtifact: input.fetchArtifact,
-        resolveArtifactHost: input.resolveArtifactHost,
-        fetchTimeoutMs: input.fetchTimeoutMs,
-        offline: input.offline,
-        artifactCache: input.artifactCache,
-        signal: input.signal,
-        allowedHosts: input.allowedHosts
-      });
-      return bytes.ok ? parseNugetServiceIndex({ packageId, text: bytes.value.toString("utf8") }) : bytes;
-    })();
-    return pending;
-  };
-}
-async function collectRemoteNugetPackageEvidence(input) {
-  if (!/^[A-Za-z0-9._-]{1,100}$/u.test(input.node.name)) {
-    return ok(unsupportedRemoteEcosystemEvidence({
-      node: input.node,
-      reason: "NuGet package ID was not safe for the public nuget.org V3 API."
-    }));
-  }
-  if (!normalizeNugetVersion(input.node.version)) {
-    return ok(unsupportedRemoteEcosystemEvidence({
-      node: input.node,
-      reason: "NuGet dependency version was not a safe exact version."
-    }));
-  }
-  const lockDigest = input.node.integrity ? parseSupportedIntegrityEntries(input.node.integrity).find((entry) => entry.algorithm === "sha512")?.digest : undefined;
-  if (!lockDigest) {
-    return ok({
-      packageId: input.node.id,
-      files: [],
-      source: "unavailable",
-      warnings: [nugetMissingIntegrityWarning(input.allowLocalProjectEvidence)]
-    });
-  }
-  const service = await input.loadServiceIndex(input.node.id);
-  if (!service.ok) {
-    return service;
-  }
-  const lowerName = input.node.name.toLowerCase();
-  const encodedName = encodeURIComponent(lowerName);
-  const versionsUrl = `${service.value.packageBaseUrl}${encodedName}/index.json`;
-  const versionsBytes = await readNugetRegistryBytes({
-    packageId: input.node.id,
-    url: versionsUrl,
-    label: "package version index",
-    maxBytes: input.registryMetadataMaxBytes,
-    fetchArtifact: input.fetchArtifact,
-    resolveArtifactHost: input.resolveArtifactHost,
-    fetchTimeoutMs: input.fetchTimeoutMs,
-    offline: input.offline,
-    artifactCache: input.artifactCache,
-    signal: input.signal,
-    allowedHosts: input.allowedHosts
-  });
-  if (!versionsBytes.ok) {
-    return versionsBytes;
-  }
-  const normalizedVersion = parseNugetPackageVersions({
-    packageId: input.node.id,
-    packageName: input.node.name,
-    requestedVersion: input.node.version,
-    text: versionsBytes.value.toString("utf8")
-  });
-  if (!normalizedVersion.ok) {
-    return normalizedVersion;
-  }
-  const encodedVersion = encodeURIComponent(normalizedVersion.value);
-  const packageContentUrl = `${service.value.packageBaseUrl}${encodedName}/${encodedVersion}/${encodedName}.${encodedVersion}.nupkg`;
-  const registrationUrl = `${service.value.registrationsBaseUrl}${encodedName}/index.json`;
-  const registrationBytes = await readNugetRegistryBytes({
-    packageId: input.node.id,
-    url: registrationUrl,
-    label: "registration index",
-    maxBytes: input.registryMetadataMaxBytes,
-    fetchArtifact: input.fetchArtifact,
-    resolveArtifactHost: input.resolveArtifactHost,
-    fetchTimeoutMs: input.fetchTimeoutMs,
-    offline: input.offline,
-    artifactCache: input.artifactCache,
-    signal: input.signal,
-    allowedHosts: input.allowedHosts
-  });
-  if (!registrationBytes.ok) {
-    return registrationBytes;
-  }
-  const lookup = parseNugetRegistrationIndex({
-    packageId: input.node.id,
-    packageName: input.node.name,
-    normalizedVersion: normalizedVersion.value,
-    expectedPackageContentUrl: packageContentUrl,
-    text: registrationBytes.value.toString("utf8")
-  });
-  if (!lookup.ok) {
-    return lookup;
-  }
-  let registrationLeaf;
-  if (lookup.value.kind === "leaf") {
-    registrationLeaf = lookup.value.leaf;
-  } else {
-    const pageBytes = await readNugetRegistryBytes({
-      packageId: input.node.id,
-      url: lookup.value.pageUrl,
-      label: "registration page",
-      maxBytes: input.registryMetadataMaxBytes,
-      fetchArtifact: input.fetchArtifact,
-      resolveArtifactHost: input.resolveArtifactHost,
-      fetchTimeoutMs: input.fetchTimeoutMs,
-      offline: input.offline,
-      artifactCache: input.artifactCache,
-      signal: input.signal,
-      allowedHosts: input.allowedHosts
-    });
-    if (!pageBytes.ok) {
-      return pageBytes;
-    }
-    const page = parseNugetRegistrationPage({
-      packageId: input.node.id,
-      packageName: input.node.name,
-      normalizedVersion: normalizedVersion.value,
-      expectedPackageContentUrl: packageContentUrl,
-      text: pageBytes.value.toString("utf8")
-    });
-    if (!page.ok) {
-      return page;
-    }
-    registrationLeaf = page.value;
-  }
-  const catalogBytes = await readNugetRegistryBytes({
-    packageId: input.node.id,
-    url: registrationLeaf.catalogUrl,
-    label: "catalog leaf",
-    maxBytes: input.registryMetadataMaxBytes,
-    fetchArtifact: input.fetchArtifact,
-    resolveArtifactHost: input.resolveArtifactHost,
-    fetchTimeoutMs: input.fetchTimeoutMs,
-    offline: input.offline,
-    artifactCache: input.artifactCache,
-    signal: input.signal,
-    allowedHosts: input.allowedHosts
-  });
-  if (!catalogBytes.ok) {
-    return catalogBytes;
-  }
-  const catalog = parseNugetCatalogPackage({
-    packageId: input.node.id,
-    packageName: input.node.name,
-    normalizedVersion: normalizedVersion.value,
-    text: catalogBytes.value.toString("utf8")
-  });
-  if (!catalog.ok) {
-    return catalog;
-  }
-  const catalogDigest = Buffer.from(catalog.value.packageHash, "base64");
-  if (catalogDigest.length !== lockDigest.length || !timingSafeEqual7(catalogDigest, lockDigest)) {
-    return err(createError({
-      code: "PACKAGE_INTEGRITY_CHECK_FAILED",
-      category: "unsupported_input",
-      message: "NuGet catalog package hash did not match the selected dependency input.",
-      details: {
-        packageId: input.node.id,
-        packageName: input.node.name,
-        version: normalizedVersion.value,
-        reason: "nuget_catalog_lock_hash_mismatch"
-      }
-    }));
-  }
-  if (catalog.value.packageSize > input.artifactMaxBytes) {
-    return ok({
-      packageId: input.node.id,
-      files: [],
-      source: "unavailable",
-      warnings: [
-        "NuGet package source was not fetched because the catalog-declared package size exceeded the configured artifact limit."
-      ]
-    });
-  }
-  const nupkg = await readRemoteArtifactBytes({
-    code: "TARBALL_FETCH_FAILED",
-    packageId: input.node.id,
-    url: registrationLeaf.packageContentUrl,
-    blockedMessage: "NuGet package content URL targets an unsupported or blocked host.",
-    resolveFailureMessage: "Failed to resolve the nuget.org package content host.",
-    fetchFailureMessage: "Failed to fetch NuGet package content.",
-    tooLargeMessage: "NuGet package content exceeded the maximum supported size.",
-    unreadableMessage: "NuGet package content did not expose a readable body stream.",
-    offlineMissMessage: "Offline mode could not find NuGet package content in the artifact cache.",
-    details: {
-      packageName: input.node.name,
-      version: normalizedVersion.value
-    },
-    maxBytes: Math.min(input.artifactMaxBytes, catalog.value.packageSize),
-    fetchArtifact: input.fetchArtifact,
-    resolveArtifactHost: input.resolveArtifactHost,
-    fetchTimeoutMs: input.fetchTimeoutMs,
-    offline: input.offline,
-    artifactCache: input.artifactCache,
-    signal: input.signal,
-    allowedHosts: input.allowedHosts,
-    permittedHosts: NUGET_ORG_HOSTS,
-    urlDetailKey: "resolved"
-  });
-  if (!nupkg.ok) {
-    return nupkg;
-  }
-  return collectNugetNupkgEvidence({
-    packageId: input.node.id,
-    packageName: input.node.name,
-    version: input.node.version,
-    normalizedVersion: normalizedVersion.value,
-    expectedSha512: catalog.value.packageHash,
-    expectedSize: catalog.value.packageSize,
-    nupkg: nupkg.value,
-    artifactMaxBytes: input.artifactMaxBytes
-  });
-}
-async function collectRemoteRubyGemEvidence(input) {
-  const metadataUrl = rubyGemsVersionMetadataUrl(input.node.name, input.node.version);
-  if (!metadataUrl) {
-    return ok(unsupportedRemoteEcosystemEvidence({
-      node: input.node,
-      reason: "Ruby gem name or version could not be encoded safely for the fixed RubyGems.org API."
-    }));
-  }
-  const metadataBytes = await readRemoteArtifactBytes({
-    code: "REGISTRY_METADATA_FETCH_FAILED",
-    packageId: input.node.id,
-    url: metadataUrl,
-    blockedMessage: "RubyGems version metadata URL targets an unsupported or blocked host.",
-    resolveFailureMessage: "Failed to resolve the RubyGems.org metadata host.",
-    fetchFailureMessage: "Failed to fetch RubyGems version metadata.",
-    tooLargeMessage: "RubyGems version metadata exceeded the maximum supported size.",
-    unreadableMessage: "RubyGems version metadata did not expose a readable body stream.",
-    offlineMissMessage: "Offline mode could not find RubyGems version metadata in the artifact cache.",
-    details: {
-      packageName: input.node.name,
-      version: input.node.version,
-      registryUrl: metadataUrl
-    },
-    maxBytes: input.registryMetadataMaxBytes,
-    fetchArtifact: input.fetchArtifact,
-    resolveArtifactHost: input.resolveArtifactHost,
-    fetchTimeoutMs: input.fetchTimeoutMs,
-    offline: input.offline,
-    artifactCache: input.artifactCache,
-    signal: input.signal,
-    allowedHosts: input.allowedHosts,
-    permittedHosts: RUBYGEMS_ORG_HOSTS,
-    urlDetailKey: "registryUrl"
-  });
-  if (!metadataBytes.ok)
-    return metadataBytes;
-  const metadata = parseRubyGemsVersionMetadata({
-    packageId: input.node.id,
-    packageName: input.node.name,
-    version: input.node.version,
-    registryUrl: metadataUrl,
-    text: metadataBytes.value.toString("utf8")
-  });
-  if (!metadata.ok)
-    return metadata;
-  const gem = await readRemoteArtifactBytes({
-    code: "TARBALL_FETCH_FAILED",
-    packageId: input.node.id,
-    url: metadata.value.gemUrl,
-    blockedMessage: "Ruby gem artifact URL targets an unsupported or blocked host.",
-    resolveFailureMessage: "Failed to resolve the RubyGems.org artifact host.",
-    fetchFailureMessage: "Failed to fetch Ruby gem archive.",
-    tooLargeMessage: "Ruby gem archive exceeded the maximum supported size.",
-    unreadableMessage: "Ruby gem archive did not expose a readable body stream.",
-    offlineMissMessage: "Offline mode could not find the Ruby gem archive in the artifact cache.",
-    details: {
-      packageName: input.node.name,
-      version: input.node.version,
-      resolved: metadata.value.gemUrl
-    },
-    maxBytes: input.artifactMaxBytes,
-    fetchArtifact: input.fetchArtifact,
-    resolveArtifactHost: input.resolveArtifactHost,
-    fetchTimeoutMs: input.fetchTimeoutMs,
-    offline: input.offline,
-    artifactCache: input.artifactCache,
-    signal: input.signal,
-    allowedHosts: input.allowedHosts,
-    permittedHosts: RUBYGEMS_ORG_HOSTS,
-    urlDetailKey: "resolved"
-  });
-  if (!gem.ok)
-    return gem;
-  const collected = collectRubyGemArchiveEvidence({
-    packageId: input.node.id,
-    packageName: input.node.name,
-    version: input.node.version,
-    sha256: metadata.value.sha256,
-    gem: gem.value,
-    artifactMaxBytes: input.artifactMaxBytes
-  });
-  if (!collected.ok && (collected.error.code === "ARCHIVE_LIMIT_EXCEEDED" || collected.error.code === "ARCHIVE_ENTRY_TYPE_UNSUPPORTED")) {
-    return ok(unavailableRemoteArchiveLimitEvidence(input.node.id, collected.error, "Ruby gem"));
-  }
-  return collected;
-}
-function nugetMissingIntegrityWarning(allowLocalProjectEvidence) {
-  if (allowLocalProjectEvidence) {
-    return "NuGet package source was not fetched because the selected dependency input did not contain an exact SHA-512 package content hash. Restore the project, then rerun Ohrisk against the local checkout; use --lockfile obj/project.assets.json or a generated packages.lock.json when available.";
-  }
-  return "NuGet package source was not fetched because this non-local input did not contain an exact SHA-512 package content hash. For a repository URL, commit a generated packages.lock.json with contentHash entries; otherwise clone or extract, restore, and scan the local checkout.";
-}
-async function readNugetRegistryBytes(input) {
-  const response = await readRemoteArtifactBytes({
-    code: "REGISTRY_METADATA_FETCH_FAILED",
-    packageId: input.packageId,
-    url: input.url,
-    blockedMessage: `NuGet ${input.label} URL targets an unsupported or blocked host.`,
-    resolveFailureMessage: `Failed to resolve the nuget.org ${input.label} host.`,
-    fetchFailureMessage: `Failed to fetch NuGet ${input.label}.`,
-    tooLargeMessage: `NuGet ${input.label} exceeded the maximum supported size.`,
-    unreadableMessage: `NuGet ${input.label} did not expose a readable body stream.`,
-    offlineMissMessage: `Offline mode could not find NuGet ${input.label} in the artifact cache.`,
-    details: { registryUrl: input.url },
-    maxBytes: input.maxBytes,
-    fetchArtifact: input.fetchArtifact,
-    resolveArtifactHost: input.resolveArtifactHost,
-    fetchTimeoutMs: input.fetchTimeoutMs,
-    offline: input.offline,
-    artifactCache: input.artifactCache,
-    signal: input.signal,
-    allowedHosts: input.allowedHosts,
-    permittedHosts: NUGET_ORG_HOSTS,
-    urlDetailKey: "registryUrl"
-  });
-  if (!response.ok || !isGzipBytes(response.value)) {
-    return response;
-  }
-  try {
-    return ok(gunzipSync6(response.value, { maxOutputLength: input.maxBytes }));
-  } catch (cause) {
-    return err(createError({
-      code: "REGISTRY_METADATA_FETCH_FAILED",
-      category: "unsupported_input",
-      message: `NuGet ${input.label} gzip response was malformed or exceeded the maximum supported size.`,
-      details: {
-        packageId: input.packageId,
-        registryUrl: safeUrlForErrorDetails(input.url),
-        maxBytes: input.maxBytes,
-        cause: cause instanceof Error ? cause.message : String(cause)
-      }
-    }));
-  }
-}
-function isGzipBytes(bytes) {
-  return bytes.length >= 2 && bytes[0] === 31 && bytes[1] === 139;
-}
-async function collectRemoteGoModuleEvidence(input) {
-  const coordinates = remoteGoModuleCoordinates(input.node);
-  if (!coordinates) {
-    return ok(unsupportedRemoteEcosystemEvidence({
-      node: input.node,
-      reason: input.node.resolved ? "Go local replacement evidence is unavailable during a remote repository scan." : "Go module coordinates were not safe for the fixed public module proxy."
-    }));
-  }
-  const zipChecksum = input.node.integrity && /^h1:[A-Za-z0-9+/]{43}=$/u.test(input.node.integrity) ? input.node.integrity : undefined;
-  let evidence;
-  if (!zipChecksum) {
-    evidence = {
-      packageId: input.node.id,
-      files: [],
-      source: "unavailable",
-      warnings: [
-        "Go module source was not fetched because go.sum did not contain an exact h1 checksum for the module zip."
-      ]
-    };
-  } else {
-    const resolved = goModuleProxyZipUrl(coordinates.modulePath, coordinates.version);
-    if (!resolved) {
-      return ok(unsupportedRemoteEcosystemEvidence({
-        node: input.node,
-        reason: "Go module path or version could not be encoded safely for the fixed public module proxy."
-      }));
-    }
-    const zip = await readRemoteArtifactBytes({
-      code: "TARBALL_FETCH_FAILED",
-      packageId: input.node.id,
-      url: resolved,
-      blockedMessage: "Go module proxy URL targets an unsupported or blocked host.",
-      resolveFailureMessage: "Failed to resolve the Go module proxy host.",
-      fetchFailureMessage: "Failed to fetch Go module zip.",
-      tooLargeMessage: "Go module zip response exceeded the maximum supported size.",
-      unreadableMessage: "Go module zip response did not expose a readable body stream.",
-      offlineMissMessage: "Offline mode could not find the Go module zip in the artifact cache.",
-      details: {
-        modulePath: coordinates.modulePath,
-        version: coordinates.version,
-        proxy: GO_MODULE_PROXY_BASE_URL
-      },
-      maxBytes: input.artifactMaxBytes,
-      fetchArtifact: input.fetchArtifact,
-      resolveArtifactHost: input.resolveArtifactHost,
-      fetchTimeoutMs: input.fetchTimeoutMs,
-      offline: input.offline,
-      artifactCache: input.artifactCache,
-      signal: input.signal,
-      allowedHosts: input.allowedHosts,
-      permittedHosts: GO_MODULE_PROXY_HOSTS,
-      urlDetailKey: "resolved",
-      transientFetchAttempts: GO_MODULE_TRANSIENT_FETCH_ATTEMPTS,
-      transientRetryDelayMs: GO_MODULE_TRANSIENT_RETRY_DELAY_MS
-    });
-    if (!zip.ok) {
-      if (!isGoModuleZipSizeLimitError(zip.error)) {
-        return zip;
-      }
-      evidence = unavailableRemoteEvidence({
-        packageId: input.node.id,
-        error: zip.error
-      });
-    } else {
-      const collected = collectGoModuleZipEvidence({
-        packageId: input.node.id,
-        modulePath: coordinates.modulePath,
-        version: coordinates.version,
-        checksum: zipChecksum,
-        zip: zip.value,
-        artifactMaxBytes: input.artifactMaxBytes
-      });
-      if (!collected.ok) {
-        return collected;
-      }
-      evidence = collected.value;
-    }
-  }
-  return collectVerifiedRemoteGoModuleRequirements({
-    node: input.node,
-    evidence,
-    fetchArtifact: input.fetchArtifact,
-    resolveArtifactHost: input.resolveArtifactHost,
-    fetchTimeoutMs: input.fetchTimeoutMs,
-    offline: input.offline,
-    artifactCache: input.artifactCache,
-    signal: input.signal,
-    allowedHosts: input.allowedHosts
-  });
-}
-function isGoModuleZipSizeLimitError(error) {
-  return error.code === "TARBALL_FETCH_FAILED" && error.message === "Go module zip response exceeded the maximum supported size." && typeof error.details?.maxBytes === "number" && typeof error.details?.observedBytes === "number";
-}
-async function collectVerifiedRemoteGoModuleRequirements(input) {
-  if (input.evidence.goModuleRequirements !== undefined) {
-    return ok(input.evidence);
-  }
-  const goModChecksum = input.node.goModIntegrity && /^h1:[A-Za-z0-9+/]{43}=$/u.test(input.node.goModIntegrity) ? input.node.goModIntegrity : undefined;
-  if (!goModChecksum) {
-    return ok(input.evidence);
-  }
-  const coordinates = remoteGoModuleCoordinates(input.node);
-  if (!coordinates) {
-    return ok(input.evidence);
-  }
-  const goModUrl = goModuleProxyModUrl(coordinates.modulePath, coordinates.version);
-  if (!goModUrl) {
-    return ok(input.evidence);
-  }
-  const goMod = await readRemoteArtifactBytes({
-    code: "TARBALL_FETCH_FAILED",
-    packageId: input.node.id,
-    url: goModUrl,
-    blockedMessage: "Go module proxy URL targets an unsupported or blocked host.",
-    resolveFailureMessage: "Failed to resolve the Go module proxy host.",
-    fetchFailureMessage: "Failed to fetch the checksum-identified Go module go.mod.",
-    tooLargeMessage: "Go module go.mod response exceeded the maximum supported size.",
-    unreadableMessage: "Go module go.mod response did not expose a readable body stream.",
-    offlineMissMessage: "Offline mode could not find the Go module go.mod in the artifact cache.",
-    details: {
-      modulePath: coordinates.modulePath,
-      version: coordinates.version,
-      proxy: GO_MODULE_PROXY_BASE_URL
-    },
-    maxBytes: GO_MODULE_MOD_MAX_BYTES3,
-    fetchArtifact: input.fetchArtifact,
-    resolveArtifactHost: input.resolveArtifactHost,
-    fetchTimeoutMs: input.fetchTimeoutMs,
-    offline: input.offline,
-    artifactCache: input.artifactCache,
-    signal: input.signal,
-    allowedHosts: input.allowedHosts,
-    permittedHosts: GO_MODULE_PROXY_HOSTS,
-    urlDetailKey: "resolved",
-    transientFetchAttempts: GO_MODULE_TRANSIENT_FETCH_ATTEMPTS,
-    transientRetryDelayMs: GO_MODULE_TRANSIENT_RETRY_DELAY_MS
-  });
-  if (!goMod.ok) {
-    return ok(input.evidence);
-  }
-  const requirements = readChecksumVerifiedGoModuleRequirements({
-    checksum: goModChecksum,
-    goMod: goMod.value
-  });
-  return ok(requirements === undefined ? input.evidence : { ...input.evidence, goModuleRequirements: requirements });
-}
-async function collectRemoteCargoCrateEvidence(input) {
-  const gitHubSource = parseCargoGitHubSource(input.node.resolved);
-  if (gitHubSource) {
-    const cacheEntry = input.cargoGitHubArchiveEvidenceCache.get(gitHubSource.archiveUrl);
-    if (!cacheEntry) {
-      return ok(unsupportedRemoteEcosystemEvidence({
-        node: input.node,
-        reason: "Commit-pinned Cargo Git source was not registered in the current evidence batch."
-      }));
-    }
-    cacheEntry.result ??= collectCargoGitHubArchiveEvidenceIndex({
-      cacheEntry,
-      representativeNode: input.node,
-      fetchArtifact: input.fetchArtifact,
-      resolveArtifactHost: input.resolveArtifactHost,
-      fetchTimeoutMs: input.fetchTimeoutMs,
-      artifactMaxBytes: input.artifactMaxBytes,
-      offline: input.offline,
-      artifactCache: input.artifactCache,
-      signal: input.signal,
-      allowedHosts: input.allowedHosts
-    });
-    const collected = await cacheEntry.result;
-    if (!collected.ok) {
-      return collected;
-    }
-    return ok(collected.value.get(input.node.id) ?? unsupportedRemoteEcosystemEvidence({
-      node: input.node,
-      reason: "Commit-pinned Cargo Git archive did not produce evidence for the locked package."
-    }));
-  }
-  if (!input.node.resolved || !CARGO_CRATES_IO_SOURCES2.has(input.node.resolved)) {
-    return ok(unsupportedRemoteEcosystemEvidence({
-      node: input.node,
-      reason: "Cargo path, non-GitHub Git, non-commit-pinned Git, and non-crates.io registry sources are not fetched during a remote repository scan."
-    }));
-  }
-  if (!input.node.integrity || !/^sha256-[A-Za-z0-9+/]{43}=$/u.test(input.node.integrity)) {
-    return ok({
-      packageId: input.node.id,
-      files: [],
-      source: "unavailable",
-      warnings: [
-        "Cargo crate source was not fetched because Cargo.lock did not contain a valid SHA-256 checksum."
-      ]
-    });
-  }
-  if (!/^[A-Za-z0-9_-]+$/u.test(input.node.name) || !/^[A-Za-z0-9.+-]+$/u.test(input.node.version)) {
-    return ok(unsupportedRemoteEcosystemEvidence({
-      node: input.node,
-      reason: "Cargo crate name or version could not be encoded safely for the fixed crates.io artifact host."
-    }));
-  }
-  const encodedName = encodeURIComponent(input.node.name);
-  const encodedVersion = encodeURIComponent(input.node.version);
-  const resolved = `${CARGO_CRATE_BASE_URL}/${encodedName}/${encodedName}-${encodedVersion}.crate`;
-  const crate = await readRemoteArtifactBytes({
-    code: "TARBALL_FETCH_FAILED",
-    packageId: input.node.id,
-    url: resolved,
-    blockedMessage: "Cargo crate URL targets an unsupported or blocked host.",
-    resolveFailureMessage: "Failed to resolve the Cargo crate artifact host.",
-    fetchFailureMessage: "Failed to fetch Cargo crate archive.",
-    tooLargeMessage: "Cargo crate archive response exceeded the maximum supported size.",
-    unreadableMessage: "Cargo crate archive response did not expose a readable body stream.",
-    offlineMissMessage: "Offline mode could not find the Cargo crate archive in the artifact cache.",
-    details: {
-      packageName: input.node.name,
-      version: input.node.version,
-      registry: CARGO_CRATE_BASE_URL
-    },
-    maxBytes: input.artifactMaxBytes,
-    fetchArtifact: input.fetchArtifact,
-    resolveArtifactHost: input.resolveArtifactHost,
-    fetchTimeoutMs: input.fetchTimeoutMs,
-    offline: input.offline,
-    artifactCache: input.artifactCache,
-    signal: input.signal,
-    allowedHosts: input.allowedHosts,
-    permittedHosts: CARGO_CRATE_HOSTS,
-    urlDetailKey: "resolved"
-  });
-  if (!crate.ok) {
-    return crate;
-  }
-  return collectCargoCrateEvidence({
-    packageId: input.node.id,
-    packageName: input.node.name,
-    version: input.node.version,
-    integrity: input.node.integrity,
-    crate: crate.value,
-    artifactMaxBytes: input.artifactMaxBytes
-  });
-}
-async function collectCargoGitHubArchiveEvidenceIndex(input) {
-  const archive = await readRemoteArtifactBytes({
-    code: "TARBALL_FETCH_FAILED",
-    packageId: input.representativeNode.id,
-    url: input.cacheEntry.source.archiveUrl,
-    blockedMessage: "Cargo GitHub archive URL targets an unsupported or blocked host.",
-    resolveFailureMessage: "Failed to resolve the Cargo GitHub archive host.",
-    fetchFailureMessage: "Failed to fetch the commit-pinned Cargo GitHub archive.",
-    tooLargeMessage: "Cargo GitHub archive response exceeded the maximum supported size.",
-    unreadableMessage: "Cargo GitHub archive response did not expose a readable body stream.",
-    offlineMissMessage: "Offline mode could not find the Cargo GitHub archive in the artifact cache.",
-    details: {
-      owner: input.cacheEntry.source.owner,
-      repository: input.cacheEntry.source.repository,
-      commit: input.cacheEntry.source.commit
-    },
-    maxBytes: input.artifactMaxBytes,
-    fetchArtifact: input.fetchArtifact,
-    resolveArtifactHost: input.resolveArtifactHost,
-    fetchTimeoutMs: input.fetchTimeoutMs,
-    offline: input.offline,
-    artifactCache: input.artifactCache,
-    signal: input.signal,
-    allowedHosts: input.allowedHosts,
-    permittedHosts: CARGO_GITHUB_ARCHIVE_HOSTS,
-    urlDetailKey: "resolved"
   });
   if (!archive.ok) {
-    return archive;
-  }
-  return collectCargoGitHubArchiveEvidenceBatch({
-    packages: input.cacheEntry.packages,
-    source: input.cacheEntry.source,
-    archive: archive.value,
-    artifactMaxBytes: input.artifactMaxBytes
-  });
-}
-function readLocalArtifactStats(input) {
-  try {
-    return ok(statSync34(input.filePath));
-  } catch (cause) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: "filesystem",
-      message: "Failed to inspect resolved package artifact.",
-      details: {
-        packageId: input.packageId,
-        resolved: safeOptionalUrlForErrorDetails(input.resolved),
-        artifactPath: safeUrlForErrorDetails(input.filePath),
-        cause: safeUrlForErrorDetails(cause instanceof Error ? cause.message : String(cause))
-      }
-    }));
-  }
-}
-function readLocalArtifactFileWithLimit(input) {
-  const chunks = [];
-  let observedBytes = 0;
-  let fileDescriptor;
-  try {
-    fileDescriptor = openSync5(input.filePath, "r");
-    while (true) {
-      const readSize = Math.min(LOCAL_ARTIFACT_READ_CHUNK_BYTES, Math.max(1, input.maxBytes + 1 - observedBytes));
-      const chunk = Buffer.alloc(readSize);
-      const bytesRead = readSync5(fileDescriptor, chunk, 0, chunk.length, null);
-      if (bytesRead === 0) {
-        const bytes = Buffer.concat(chunks, observedBytes);
-        recordArtifactBytes({ packageId: input.packageId, bytes, retrieval: "local" });
-        return ok(bytes);
-      }
-      observedBytes += bytesRead;
-      if (observedBytes > input.maxBytes) {
-        return err(localArtifactTooLargeError({
-          packageId: input.packageId,
-          resolved: safeOptionalUrlForErrorDetails(input.resolved),
-          artifactPath: safeUrlForErrorDetails(input.filePath),
-          maxBytes: input.maxBytes,
-          observedBytes
-        }));
-      }
-      chunks.push(bytesRead === chunk.length ? chunk : chunk.subarray(0, bytesRead));
-    }
-  } catch (cause) {
-    return err(createError({
-      code: "PACKAGE_EVIDENCE_READ_FAILED",
-      category: "filesystem",
-      message: "Failed to read resolved package artifact.",
-      details: {
-        packageId: input.packageId,
-        resolved: safeOptionalUrlForErrorDetails(input.resolved),
-        artifactPath: safeUrlForErrorDetails(input.filePath),
-        cause: safeUrlForErrorDetails(cause instanceof Error ? cause.message : String(cause))
-      }
-    }));
-  } finally {
-    if (fileDescriptor !== undefined) {
-      try {
-        closeSync5(fileDescriptor);
-      } catch {}
-    }
-  }
-}
-function localArtifactTooLargeError(input) {
-  return createError({
-    code: "PACKAGE_EVIDENCE_READ_FAILED",
-    category: "unsupported_input",
-    message: "Resolved package artifact exceeded the maximum supported size.",
-    details: {
+    return ok({
       packageId: input.packageId,
-      resolved: safeOptionalUrlForErrorDetails(input.resolved),
-      artifactPath: safeUrlForErrorDetails(input.artifactPath),
-      ...artifactBodyLimitDetails({
-        maxBytes: input.maxBytes,
-        observedBytes: input.observedBytes
-      })
+      files: [],
+      source: "unavailable",
+      warnings: [
+        `Checksum-verified Maven JAR was rejected by the bounded archive reader (${archive.error.code}); its contents were not trusted.`
+      ]
+    });
+  }
+  const identityPath = mavenPomPropertiesPath(input.coordinates);
+  if (!archive.value.listPaths().includes(identityPath)) {
+    return ok({
+      packageId: input.packageId,
+      files: [],
+      source: "unavailable",
+      warnings: [
+        "Checksum-verified Maven JAR did not contain exact embedded pom.properties identity; its contents were not trusted."
+      ]
+    });
+  }
+  const identityText = archive.value.readText(identityPath, MAVEN_JAR_IDENTITY_MAX_BYTES);
+  if (!identityText.ok) {
+    return err(identityText.error);
+  }
+  const identity = parsePomProperties(identityText.value);
+  if (identity.groupId !== input.coordinates.groupId || identity.artifactId !== input.coordinates.artifactId || identity.version !== input.coordinates.version) {
+    return err(createError({
+      code: "PACKAGE_EVIDENCE_READ_FAILED",
+      category: "unsupported_input",
+      message: "Maven JAR metadata did not match the requested package identity.",
+      details: {
+        packageId: input.packageId,
+        reason: "maven_jar_identity_mismatch",
+        expectedGroupId: input.coordinates.groupId,
+        expectedArtifactId: input.coordinates.artifactId,
+        expectedVersion: input.coordinates.version,
+        ...identity.groupId ? { observedGroupId: identity.groupId } : {},
+        ...identity.artifactId ? { observedArtifactId: identity.artifactId } : {},
+        ...identity.version ? { observedVersion: identity.version } : {}
+      }
+    }));
+  }
+  const evidencePaths = archive.value.listPaths().filter(isPackageLicenseEvidencePath).slice(0, MAVEN_JAR_EVIDENCE_FILE_MAX_COUNT);
+  const files = [];
+  for (const evidencePath of evidencePaths) {
+    const kind = classifyEvidenceFile(evidencePath);
+    if (!kind) {
+      continue;
     }
+    const text = archive.value.readText(evidencePath, MAVEN_JAR_EVIDENCE_FILE_MAX_BYTES);
+    if (!text.ok) {
+      return err(text.error);
+    }
+    files.push({ path: evidencePath, kind, text: text.value });
+  }
+  return ok({
+    packageId: input.packageId,
+    files,
+    source: "tarball",
+    warnings: files.length > 0 ? ["Maven JAR license files were verified with repository SHA-256 and embedded package identity."] : ["Verified Maven JAR did not contain a root or META-INF license evidence file."]
   });
 }
+function mavenPomPropertiesPath(coordinates) {
+  return [
+    "META-INF",
+    "maven",
+    coordinates.groupId,
+    coordinates.artifactId,
+    "pom.properties"
+  ].join("/");
+}
+function parsePomProperties(text) {
+  const properties = {};
+  for (const line of text.split(/\r?\n/u)) {
+    const trimmed = line.trim();
+    if (trimmed === "" || trimmed.startsWith("#") || trimmed.startsWith("!")) {
+      continue;
+    }
+    const separator = trimmed.search(/[=:]/u);
+    if (separator <= 0) {
+      continue;
+    }
+    const key = trimmed.slice(0, separator).trim();
+    const value = trimmed.slice(separator + 1).trim();
+    if (key !== "" && value !== "") {
+      properties[key] = value;
+    }
+  }
+  return properties;
+}
+function isPackageLicenseEvidencePath(filePath) {
+  const normalized = filePath.replace(/\\/gu, "/");
+  if (normalized.includes("/../") || normalized.startsWith("../")) {
+    return false;
+  }
+  const segments = normalized.split("/");
+  if (segments.length === 1) {
+    return classifyEvidenceFile(normalized) !== undefined;
+  }
+  return segments.length === 2 && segments[0]?.toUpperCase() === "META-INF" && classifyEvidenceFile(segments[1] ?? "") !== undefined;
+}
+
+// src/evidence/remote-maven-evidence.ts
 function createMavenEvidenceCollector(input) {
   const repositories = mavenRepositoryEndpoints(input.repositoryUrls, input.allowedHosts);
   const pomRequests = new Map;
@@ -56146,7 +57243,7 @@ async function collectRemoteMavenJarEvidence(input) {
   }
   const expected = Buffer.from(checksum, "hex");
   const observed = createHash11("sha256").update(jarBytes.value).digest();
-  if (expected.length !== observed.length || !timingSafeEqual7(expected, observed)) {
+  if (expected.length !== observed.length || !timingSafeEqual8(expected, observed)) {
     return err(createError({
       code: "PACKAGE_INTEGRITY_CHECK_FAILED",
       category: "unsupported_input",
@@ -56165,1287 +57262,228 @@ async function collectRemoteMavenJarEvidence(input) {
     jar: jarBytes.value
   });
 }
-async function collectNpmRegistryTarballEvidence(input) {
-  const metadataUrl = npmRegistryPackageVersionUrl(input.node.name, input.node.version, input.npmRegistryUrl);
-  const metadataBytes = await readRemoteArtifactBytes({
-    code: "REGISTRY_METADATA_FETCH_FAILED",
-    packageId: input.node.id,
-    url: metadataUrl,
-    blockedMessage: "npm registry metadata URL targets an unsupported or blocked host.",
-    resolveFailureMessage: "Failed to resolve npm registry metadata host.",
-    fetchFailureMessage: "Failed to fetch npm registry metadata.",
-    tooLargeMessage: "npm registry metadata response exceeded the maximum supported size.",
-    unreadableMessage: "npm registry metadata response did not expose a readable body stream.",
-    offlineMissMessage: "Offline mode could not find npm registry metadata in the artifact cache.",
-    details: { registryUrl: metadataUrl },
-    maxBytes: input.registryMetadataMaxBytes,
-    fetchArtifact: input.fetchArtifact,
-    resolveArtifactHost: input.resolveArtifactHost,
-    fetchTimeoutMs: input.fetchTimeoutMs,
-    offline: input.offline,
-    artifactCache: input.artifactCache,
-    signal: input.signal,
-    allowedHosts: input.allowedHosts,
-    urlDetailKey: "registryUrl"
-  });
-  if (!metadataBytes.ok) {
-    return err(metadataBytes.error);
+
+// src/evidence/collect.ts
+async function collectGraphEvidence(input) {
+  const evidence = new Array(input.graph.nodes.length);
+  const total = input.graph.nodes.length;
+  if (total === 0) {
+    return ok([]);
   }
-  const metadata = parseRegistryMetadata({
-    packageId: input.node.id,
-    registryUrl: metadataUrl,
-    text: metadataBytes.value.toString("utf8")
-  });
-  if (!metadata.ok) {
-    return err(metadata.error);
+  const batchCancellation = new BatchCancellation(input.signal);
+  const workspaceRoot = input.workspaceRoot ? resolveTrustedWorkspaceRoot(input.workspaceRoot) : ok(undefined);
+  if (!workspaceRoot.ok) {
+    return err(workspaceRoot.error);
   }
-  const tarballUrl = readRegistryTarballUrl(metadata.value, input.node.version);
-  if (!tarballUrl) {
-    return err(createError({
-      code: "REGISTRY_METADATA_FETCH_FAILED",
-      category: "unsupported_input",
-      message: "npm registry metadata did not include a tarball for the requested version.",
-      details: {
-        packageId: input.node.id,
-        registryUrl: metadataUrl,
-        version: input.node.version
+  let completed = 0;
+  let nextIndex = 0;
+  let failure;
+  const workerCount = normalizeEvidenceConcurrency(input.evidenceConcurrency, total);
+  const allowedHosts = normalizeAllowedArtifactHosts(input.allowedArtifactHosts);
+  const uncachedArtifactHostResolver = input.resolveArtifactHost ?? (input.fetchArtifact ? undefined : defaultArtifactHostResolver);
+  const resolveArtifactHost = uncachedArtifactHostResolver ? createCachingArtifactHostResolver(uncachedArtifactHostResolver) : undefined;
+  const baseFetchArtifact = input.fetchArtifact ?? createDefaultArtifactFetcher(resolveArtifactHost ?? defaultArtifactHostResolver);
+  const fetchArtifact = baseFetchArtifact;
+  const npmFetchArtifact = withRegistryAuthorization(baseFetchArtifact, input.registryAuthTokens);
+  const artifactCache = input.cacheDir ? createArtifactCache(input.cacheDir) : undefined;
+  const fetchTimeoutMs = input.fetchTimeoutMs ?? ARTIFACT_FETCH_TIMEOUT_MS;
+  const registryMetadataMaxBytes = input.registryMetadataMaxBytes ?? REGISTRY_METADATA_MAX_BYTES;
+  const tarballMaxBytes = input.tarballMaxBytes ?? PACKAGE_TARBALL_MAX_BYTES;
+  const cargoGitHubArchiveEvidenceCache = createCargoGitHubArchiveEvidenceCache(input.graph.nodes);
+  const installedPackageJsonMaxBytes = input.installedPackageJsonMaxBytes ?? INSTALLED_PACKAGE_JSON_MAX_BYTES;
+  const allowLocalProjectEvidence = input.allowLocalProjectEvidence ?? true;
+  const allowProjectContainedGoReplacementEvidence = input.allowProjectContainedGoReplacementEvidence ?? false;
+  const loadYarnCacheIndex = allowLocalProjectEvidence ? createYarnCacheIndexLoader(input.projectRoot) : () => ok(undefined);
+  const collectMavenEvidence = createMavenEvidenceCollector({
+    fetchArtifact,
+    resolveArtifactHost,
+    fetchTimeoutMs,
+    pomMaxBytes: Math.min(registryMetadataMaxBytes, MAVEN_POM_METADATA_MAX_BYTES),
+    jarMaxBytes: Math.min(tarballMaxBytes, MAVEN_JAR_MAX_BYTES),
+    offline: input.offline ?? false,
+    artifactCache,
+    signal: batchCancellation.signal,
+    allowedHosts,
+    repositoryUrls: input.graph.mavenRepositoryUrls ?? []
+  });
+  const loadNugetServiceIndex = createNugetServiceIndexLoader({
+    fetchArtifact,
+    resolveArtifactHost,
+    fetchTimeoutMs,
+    registryMetadataMaxBytes,
+    offline: input.offline ?? false,
+    artifactCache,
+    signal: batchCancellation.signal,
+    allowedHosts
+  });
+  const collectNext = async () => {
+    while (!failure) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= total) {
+        return;
       }
-    }));
-  }
-  return collectRemoteTarballEvidence({
-    packageId: input.node.id,
-    resolved: tarballUrl,
-    ...input.node.integrity ? { integrity: input.node.integrity } : {},
-    ...input.node.yarnCacheChecksum ? { unverifiedIntegrityWarning: yarnCacheOnlyIntegrityWarning() } : {},
-    fetchArtifact: input.fetchArtifact,
-    resolveArtifactHost: input.resolveArtifactHost,
-    fetchTimeoutMs: input.fetchTimeoutMs,
-    tarballMaxBytes: input.tarballMaxBytes,
-    offline: input.offline,
-    artifactCache: input.artifactCache,
-    signal: input.signal,
-    allowedHosts: input.allowedHosts,
-    urlError: {
-      code: "REGISTRY_METADATA_FETCH_FAILED",
-      message: "npm registry metadata included an unsupported tarball URL.",
-      resolveFailureMessage: "Failed to resolve registry tarball host.",
-      details: {
-        registryUrl: metadataUrl,
-        version: input.node.version,
-        tarballUrl
+      const node = input.graph.nodes[index];
+      if (!node) {
+        return;
       }
-    }
-  });
-}
-async function collectPyPiReleaseEvidence(input) {
-  const metadataUrl = pypiPackageVersionUrl(input.node.name, input.node.version);
-  const metadataBytes = await readRemoteArtifactBytes({
-    code: "REGISTRY_METADATA_FETCH_FAILED",
-    packageId: input.node.id,
-    url: metadataUrl,
-    blockedMessage: "PyPI release metadata URL targets an unsupported or blocked host.",
-    resolveFailureMessage: "Failed to resolve PyPI release metadata host.",
-    fetchFailureMessage: "Failed to fetch PyPI release metadata.",
-    tooLargeMessage: "PyPI release metadata response exceeded the maximum supported size.",
-    unreadableMessage: "PyPI release metadata response did not expose a readable body stream.",
-    offlineMissMessage: "Offline mode could not find PyPI release metadata in the artifact cache.",
-    details: { registryUrl: metadataUrl },
-    maxBytes: input.registryMetadataMaxBytes,
-    fetchArtifact: input.fetchArtifact,
-    resolveArtifactHost: input.resolveArtifactHost,
-    fetchTimeoutMs: input.fetchTimeoutMs,
-    offline: input.offline,
-    artifactCache: input.artifactCache,
-    signal: input.signal,
-    allowedHosts: input.allowedHosts,
-    permittedHosts: PYPI_METADATA_HOSTS,
-    urlDetailKey: "registryUrl"
-  });
-  if (!metadataBytes.ok) {
-    return err(metadataBytes.error);
-  }
-  const release = parsePyPiReleaseMetadata({
-    packageId: input.node.id,
-    packageName: input.node.name,
-    version: input.node.version,
-    registryUrl: metadataUrl,
-    text: metadataBytes.value.toString("utf8")
-  });
-  if (!release.ok) {
-    return err(release.error);
-  }
-  if (release.value.artifact.size !== undefined && release.value.artifact.size > input.artifactMaxBytes) {
-    return ok(unavailableOversizedTarballEvidence(input.node.id));
-  }
-  return collectRemotePythonDistributionEvidence({
-    node: input.node,
-    resolved: release.value.artifact.url,
-    artifactFilename: release.value.artifact.filename,
-    integrity: sha256HexIntegrity(release.value.artifact.sha256),
-    yanked: release.value.artifact.yanked,
-    fetchArtifact: input.fetchArtifact,
-    resolveArtifactHost: input.resolveArtifactHost,
-    fetchTimeoutMs: input.fetchTimeoutMs,
-    artifactMaxBytes: input.artifactMaxBytes,
-    offline: input.offline,
-    artifactCache: input.artifactCache,
-    signal: input.signal,
-    allowedHosts: input.allowedHosts,
-    permittedHosts: PYPI_DISTRIBUTION_HOSTS,
-    urlError: {
-      code: "TARBALL_FETCH_FAILED",
-      message: "PyPI release metadata included an unsupported distribution URL.",
-      resolveFailureMessage: "Failed to resolve PyPI distribution host.",
-      details: {
-        registryUrl: metadataUrl,
-        version: input.node.version,
-        resolved: release.value.artifact.url
-      }
-    }
-  });
-}
-async function collectRemotePythonDistributionEvidence(input) {
-  const urlError = input.urlError ?? {
-    code: "TARBALL_FETCH_FAILED",
-    message: "Python distribution URL targets an unsupported or blocked host.",
-    resolveFailureMessage: "Failed to resolve Python distribution host.",
-    details: { resolved: safeUrlForErrorDetails(input.resolved) }
-  };
-  const urlValidation = validateRemoteArtifactUrl({
-    code: urlError.code,
-    packageId: input.node.id,
-    resolved: input.resolved,
-    message: urlError.message,
-    details: urlError.details,
-    allowedHosts: input.allowedHosts,
-    ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
-  });
-  if (!urlValidation.ok) {
-    return err(urlValidation.error);
-  }
-  if (!input.integrity) {
-    if (!input.offline) {
-      const preflight = await preflightRemoteArtifactFetchTarget({
-        code: urlError.code,
-        packageId: input.node.id,
-        resolved: input.resolved,
-        message: urlError.message,
-        resolveFailureMessage: urlError.resolveFailureMessage,
-        details: urlError.details,
-        resolveArtifactHost: input.resolveArtifactHost,
-        timeoutMs: input.fetchTimeoutMs,
-        allowedHosts: input.allowedHosts,
-        ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
+      const collected = await collectNodeEvidence({
+        node,
+        projectRoot: input.projectRoot,
+        allowLocalProjectEvidence,
+        allowProjectContainedGoReplacementEvidence,
+        ...workspaceRoot.value ? { workspaceRoot: workspaceRoot.value } : {},
+        fetchArtifact,
+        npmFetchArtifact,
+        resolveArtifactHost,
+        fetchTimeoutMs,
+        registryMetadataMaxBytes,
+        tarballMaxBytes,
+        installedPackageJsonMaxBytes,
+        offline: input.offline ?? false,
+        artifactCache,
+        signal: batchCancellation.signal,
+        npmRegistryUrl: input.npmRegistryUrl,
+        allowedHosts,
+        loadYarnCacheIndex,
+        collectMavenEvidence,
+        loadNugetServiceIndex,
+        cargoGitHubArchiveEvidenceCache
       });
-      if (!preflight.ok) {
-        return err(preflight.error);
-      }
-    }
-    return ok(unavailableUnverifiedRemoteTarballEvidence(input.node.id));
-  }
-  try {
-    const artifact = await readRemoteArtifactBytes({
-      code: urlError.code,
-      packageId: input.node.id,
-      url: input.resolved,
-      blockedMessage: urlError.message,
-      resolveFailureMessage: urlError.resolveFailureMessage,
-      fetchFailureMessage: "Failed to fetch Python distribution.",
-      tooLargeMessage: "Python distribution response exceeded the maximum supported size.",
-      unreadableMessage: "Python distribution response did not expose a readable body stream.",
-      offlineMissMessage: "Offline mode could not find the Python distribution in the artifact cache.",
-      details: urlError.details,
-      maxBytes: input.artifactMaxBytes,
-      fetchArtifact: input.fetchArtifact,
-      resolveArtifactHost: input.resolveArtifactHost,
-      fetchTimeoutMs: input.fetchTimeoutMs,
-      offline: input.offline,
-      artifactCache: input.artifactCache,
-      signal: input.signal,
-      allowedHosts: input.allowedHosts,
-      ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {},
-      urlDetailKey: "resolved"
-    });
-    if (!artifact.ok) {
-      if (isPackageArtifactTooLargeError(artifact.error)) {
-        return ok(unavailableOversizedTarballEvidence(input.node.id));
-      }
-      return err(artifact.error);
-    }
-    const verified = verifyPackageIntegrity({
-      packageId: input.node.id,
-      resolvedDetail: safeOptionalUrlForErrorDetails(input.resolved),
-      integrity: input.integrity,
-      artifact: artifact.value
-    });
-    if (!verified.ok) {
-      return err(verified.error);
-    }
-    const collected = collectPythonDistributionEvidence({
-      packageId: input.node.id,
-      packageName: input.node.name,
-      version: input.node.version,
-      artifactFilename: input.artifactFilename,
-      artifactBytes: artifact.value,
-      artifactMaxBytes: input.artifactMaxBytes,
-      ...input.yanked !== undefined ? { yanked: input.yanked } : {}
-    });
-    if (!collected.ok && collected.error.code === "ARCHIVE_LIMIT_EXCEEDED") {
-      return ok(unavailableRemoteArchiveLimitEvidence(input.node.id, collected.error, "Python distribution"));
-    }
-    return collected;
-  } catch (cause) {
-    return err(createRemoteArtifactExceptionError({
-      code: urlError.code,
-      message: "Failed to fetch Python distribution.",
-      blockedMessage: urlError.message,
-      details: {
-        packageId: input.node.id,
-        resolved: safeUrlForErrorDetails(input.resolved),
-        ...urlError.details
-      },
-      cause
-    }));
-  }
-}
-function parseRegistryMetadata(input) {
-  try {
-    return ok(JSON.parse(input.text));
-  } catch (cause) {
-    return err(createError({
-      code: "REGISTRY_METADATA_FETCH_FAILED",
-      category: "unsupported_input",
-      message: "npm registry metadata was not valid JSON.",
-      details: {
-        packageId: input.packageId,
-        registryUrl: input.registryUrl,
-        cause: safeErrorCauseForDetails(cause)
-      }
-    }));
-  }
-}
-function resolveLocalArtifact(input) {
-  let localPath;
-  if (input.resolved.startsWith("file://")) {
-    const filePath = resolveFileUrl(input.resolved);
-    if (filePath) {
-      localPath = filePath;
-    }
-  }
-  if (!localPath && input.resolved.startsWith("file:")) {
-    const specifier = decodeFilePathSpecifier(input.resolved.slice("file:".length));
-    localPath = path82.resolve(input.projectRoot, specifier);
-  }
-  if (!localPath && input.resolved.startsWith("workspace:")) {
-    const specifier = decodeFilePathSpecifier(input.resolved.slice("workspace:".length));
-    if (isWorkspaceLocalPathSpecifier(specifier)) {
-      localPath = path82.resolve(input.projectRoot, specifier);
-    }
-  }
-  if (!localPath && (input.resolved.startsWith(".") || path82.isAbsolute(input.resolved))) {
-    localPath = path82.resolve(input.projectRoot, input.resolved);
-  }
-  if (!localPath) {
-    return ok(undefined);
-  }
-  const artifactPath = path82.resolve(localPath);
-  return ok(artifactPath);
-}
-function resolveFileUrl(value) {
-  try {
-    return fileURLToPath3(value);
-  } catch {
-    return;
-  }
-}
-function decodeFilePathSpecifier(value) {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-function isWorkspaceLocalPathSpecifier(value) {
-  return value.startsWith(".") || value.startsWith("/") || value.includes("/") || value.includes("\\");
-}
-function findNodeModulesPackage(input) {
-  const packageNames = [...new Set([...input.node.installNames ?? [], input.node.name])];
-  for (const packageName of packageNames) {
-    for (const packagePath of resolveNodeModulesPackageCandidates({
-      packageName,
-      version: input.node.version,
-      projectRoot: input.projectRoot
-    })) {
-      if (existsSync46(packagePath) && isReadableDirectory24(packagePath) && installedPackageMatchesNode({
-        node: input.node,
-        packagePath,
-        maxBytes: input.packageJsonMaxBytes
-      })) {
-        return packagePath;
-      }
-    }
-  }
-  return;
-}
-function resolveNodeModulesPackageCandidates(input) {
-  const segments = nodeModulesPackageSegments(input.packageName);
-  if (!segments) {
-    return [];
-  }
-  const candidates = [path82.join(input.projectRoot, "node_modules", ...segments)];
-  const bunStoreSegment = bunIsolatedStoreSegment(input.packageName, input.version);
-  if (bunStoreSegment) {
-    candidates.push(path82.join(input.projectRoot, "node_modules", ".bun", bunStoreSegment, "node_modules", ...segments));
-  }
-  return candidates;
-}
-function bunIsolatedStoreSegment(packageName, version) {
-  if (version === "" || version === "." || version === ".." || version.includes("/") || version.includes("\\") || version.includes(":")) {
-    return;
-  }
-  return `${packageName.replaceAll("/", "+")}@${version}`;
-}
-function nodeModulesPackageSegments(packageName) {
-  if (packageName === "" || packageName.includes("\\") || packageName.includes(":")) {
-    return;
-  }
-  const segments = packageName.split("/");
-  if (segments.length === 1) {
-    const [name] = segments;
-    return name && isSafeNodeModulesSegment(name) && !name.startsWith("@") ? segments : undefined;
-  }
-  if (segments.length === 2) {
-    const [scope, name] = segments;
-    if (scope && name && scope.startsWith("@") && scope.length > 1 && isSafeNodeModulesSegment(scope) && isSafeNodeModulesSegment(name)) {
-      return segments;
-    }
-  }
-  return;
-}
-function isSafeNodeModulesSegment(segment) {
-  return segment !== "" && segment !== "." && segment !== "..";
-}
-function isReadableDirectory24(filePath) {
-  try {
-    return statSync34(filePath).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function installedPackageMatchesNode(input) {
-  try {
-    const packageJsonText = readTextFileWithLimit({
-      filePath: path82.join(input.packagePath, "package.json"),
-      maxBytes: input.maxBytes
-    });
-    if (!packageJsonText.ok) {
-      return false;
-    }
-    const packageJson = JSON.parse(packageJsonText.value);
-    return isRecord28(packageJson) && packageJson.name === input.node.name && packageJson.version === input.node.version;
-  } catch {
-    return false;
-  }
-}
-function collectYarnCachePackageEvidence(input) {
-  const filenamePrefix = yarnCacheFilenamePrefix(input.node);
-  if (!filenamePrefix) {
-    return ok(undefined);
-  }
-  const loadedIndex = input.loadYarnCacheIndex();
-  if (!loadedIndex.ok) {
-    return err(loadedIndex.error);
-  }
-  if (!loadedIndex.value) {
-    return ok(undefined);
-  }
-  for (const filename of loadedIndex.value.filenames) {
-    if (!filename.startsWith(filenamePrefix)) {
-      continue;
-    }
-    const cachePath = path82.join(loadedIndex.value.cacheDir, filename);
-    const stats = readLocalArtifactStats({
-      filePath: cachePath,
-      packageId: input.node.id,
-      resolved: undefined
-    });
-    if (!stats.ok) {
-      return err(stats.error);
-    }
-    if (stats.value.size > input.zipMaxBytes) {
-      return err(localArtifactTooLargeError({
-        packageId: input.node.id,
-        resolved: undefined,
-        artifactPath: cachePath,
-        maxBytes: input.zipMaxBytes,
-        observedBytes: stats.value.size
-      }));
-    }
-    const zip = readLocalArtifactFileWithLimit({
-      filePath: cachePath,
-      packageId: input.node.id,
-      resolved: undefined,
-      maxBytes: input.zipMaxBytes
-    });
-    if (!zip.ok) {
-      return err(zip.error);
-    }
-    const evidence = collectZipPackageEvidence({
-      packageId: input.node.id,
-      packageName: input.node.name,
-      packageVersion: input.node.version,
-      zip: zip.value
-    });
-    if (!evidence.ok) {
-      return err(evidence.error);
-    }
-    if (evidence.value) {
-      return ok(evidence.value);
-    }
-  }
-  return ok(undefined);
-}
-function createYarnCacheIndexLoader(projectRoot) {
-  let loaded;
-  return () => {
-    if (loaded) {
-      return loaded;
-    }
-    const cacheDir = path82.join(projectRoot, ".yarn", "cache");
-    if (!existsSync46(cacheDir) || !isReadableDirectory24(cacheDir)) {
-      loaded = ok(undefined);
-      return loaded;
-    }
-    try {
-      loaded = ok({
-        cacheDir,
-        filenames: readdirSync34(cacheDir, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".zip")).map((entry) => entry.name).sort((left, right) => left.localeCompare(right))
-      });
-    } catch (cause) {
-      loaded = err(createError({
-        code: "PACKAGE_EVIDENCE_READ_FAILED",
-        category: "filesystem",
-        message: "Failed to read Yarn package cache directory.",
-        details: {
-          cacheDir,
-          cause: safeUrlForErrorDetails(cause instanceof Error ? cause.message : String(cause))
-        }
-      }));
-    }
-    return loaded;
-  };
-}
-function yarnCacheFilenamePrefix(node) {
-  const slug = yarnCachePackageSlug(node.name);
-  return slug ? `${slug}-npm-${node.version}-` : undefined;
-}
-function yarnCachePackageSlug(packageName) {
-  const segments = nodeModulesPackageSegments(packageName);
-  return segments ? segments.join("-") : undefined;
-}
-async function collectRemoteTarballEvidence(input) {
-  const urlError = input.urlError ?? {
-    code: "TARBALL_FETCH_FAILED",
-    message: "Package tarball URL targets an unsupported or blocked host.",
-    resolveFailureMessage: "Failed to resolve package tarball host.",
-    details: {
-      resolved: safeUrlForErrorDetails(input.resolved)
-    }
-  };
-  const urlValidation = validateRemoteArtifactUrl({
-    code: urlError.code,
-    packageId: input.packageId,
-    resolved: input.resolved,
-    message: urlError.message,
-    details: urlError.details,
-    allowedHosts: input.allowedHosts,
-    ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
-  });
-  if (!urlValidation.ok) {
-    return err(urlValidation.error);
-  }
-  if (!input.integrity && !input.skipIntegrityCheck) {
-    if (!input.offline) {
-      const preflight = await preflightRemoteArtifactFetchTarget({
-        code: urlError.code,
-        packageId: input.packageId,
-        resolved: input.resolved,
-        message: urlError.message,
-        resolveFailureMessage: urlError.resolveFailureMessage,
-        details: urlError.details,
-        resolveArtifactHost: input.resolveArtifactHost,
-        timeoutMs: input.fetchTimeoutMs,
-        allowedHosts: input.allowedHosts,
-        ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
-      });
-      if (!preflight.ok) {
-        return err(preflight.error);
-      }
-    }
-    return ok(unavailableUnverifiedRemoteTarballEvidence(input.packageId, input.unverifiedIntegrityWarning));
-  }
-  try {
-    const tarball = await readRemoteArtifactBytes({
-      code: urlError.code,
-      packageId: input.packageId,
-      url: input.resolved,
-      blockedMessage: urlError.message,
-      resolveFailureMessage: urlError.resolveFailureMessage,
-      fetchFailureMessage: "Failed to fetch package tarball.",
-      tooLargeMessage: "Package tarball response exceeded the maximum supported size.",
-      unreadableMessage: "Package tarball response did not expose a readable body stream.",
-      offlineMissMessage: "Offline mode could not find the package tarball in the artifact cache.",
-      details: urlError.details,
-      maxBytes: input.tarballMaxBytes,
-      fetchArtifact: input.fetchArtifact,
-      resolveArtifactHost: input.resolveArtifactHost,
-      fetchTimeoutMs: input.fetchTimeoutMs,
-      offline: input.offline,
-      artifactCache: input.artifactCache,
-      signal: input.signal,
-      allowedHosts: input.allowedHosts,
-      ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {},
-      urlDetailKey: "resolved"
-    });
-    if (!tarball.ok) {
-      if (isPackageTarballTooLargeError(tarball.error)) {
-        return ok(unavailableOversizedTarballEvidence(input.packageId));
-      }
-      return err(tarball.error);
-    }
-    if (!input.skipIntegrityCheck) {
-      const verified = verifyPackageIntegrity({
-        packageId: input.packageId,
-        resolvedDetail: safeOptionalUrlForErrorDetails(input.resolved),
-        integrity: input.integrity,
-        artifact: tarball.value
-      });
-      if (!verified.ok) {
-        return err(verified.error);
-      }
-    }
-    const evidence = input.collectEvidence ? await input.collectEvidence(tarball.value) : collectTarballEvidence({
-      packageId: input.packageId,
-      tarball: tarball.value
-    });
-    if (!evidence.ok) {
-      if (isPackageTarballTooLargeError(evidence.error)) {
-        return ok(unavailableOversizedTarballEvidence(input.packageId));
-      }
-      return err(evidence.error);
-    }
-    return ok(addIntegrityWarningWhenUnverified({
-      evidence: evidence.value,
-      integrity: input.integrity
-    }));
-  } catch (cause) {
-    return err(createRemoteArtifactExceptionError({
-      code: urlError.code,
-      message: "Failed to fetch package tarball.",
-      blockedMessage: urlError.message,
-      details: {
-        packageId: input.packageId,
-        resolved: safeUrlForErrorDetails(input.resolved),
-        ...urlError.details
-      },
-      cause
-    }));
-  }
-}
-async function readRemoteArtifactBytes(input) {
-  const urlValidation = validateRemoteArtifactUrl({
-    code: input.code,
-    packageId: input.packageId,
-    resolved: input.url,
-    message: input.blockedMessage,
-    details: input.details,
-    allowedHosts: input.allowedHosts,
-    ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
-  });
-  if (!urlValidation.ok) {
-    return err(urlValidation.error);
-  }
-  if (input.signal.aborted) {
-    return err(collectionAbortedRemoteError({
-      code: input.code,
-      details: input.details
-    }));
-  }
-  const cached = input.artifactCache?.read(input.url, input.maxBytes);
-  if (cached && (!cached.stale || input.offline)) {
-    recordArtifactBytes({ packageId: input.packageId, bytes: cached.bytes, requestedOrigin: input.url, retrieval: "cache" });
-    return ok(cached.bytes);
-  }
-  if (input.offline) {
-    return err(createError({
-      code: input.code,
-      category: "network",
-      message: input.offlineMissMessage,
-      details: {
-        packageId: input.packageId,
-        ...redactUrlCredentialsInDetails(input.details),
-        reason: "offline_cache_miss"
-      }
-    }));
-  }
-  const preflight = await preflightRemoteArtifactFetchTarget({
-    code: input.code,
-    packageId: input.packageId,
-    resolved: input.url,
-    message: input.blockedMessage,
-    resolveFailureMessage: input.resolveFailureMessage,
-    details: input.details,
-    resolveArtifactHost: input.resolveArtifactHost,
-    timeoutMs: input.fetchTimeoutMs,
-    allowedHosts: input.allowedHosts,
-    ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
-  });
-  if (!preflight.ok) {
-    return err(preflight.error);
-  }
-  const requestHeaders = conditionalArtifactRequestHeaders(cached);
-  const artifact = await readTransientRemoteArtifactWithRetry({
-    attempts: input.transientFetchAttempts ?? 1,
-    retryDelayMs: input.transientRetryDelayMs ?? 0,
-    signal: input.signal,
-    createAbortError: () => collectionAbortedRemoteError({
-      code: input.code,
-      details: input.details
-    }),
-    read: () => readArtifactWithTimeout({
-      fetchArtifact: input.fetchArtifact,
-      url: input.url,
-      ...requestHeaders ? { requestHeaders } : {},
-      timeoutMs: input.fetchTimeoutMs,
-      signal: input.signal,
-      createAbortError: () => collectionAbortedRemoteError({
-        code: input.code,
-        details: input.details
-      }),
-      redirectPolicy: {
-        code: input.code,
-        packageId: input.packageId,
-        message: input.blockedMessage,
-        resolveFailureMessage: input.resolveFailureMessage,
-        details: input.details,
-        resolveArtifactHost: input.resolveArtifactHost,
-        allowedHosts: input.allowedHosts,
-        ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
-      },
-      createFailureError: (cause) => createRemoteArtifactExceptionError({
-        code: input.code,
-        message: input.fetchFailureMessage,
-        blockedMessage: input.blockedMessage,
-        details: {
-          packageId: input.packageId,
-          [input.urlDetailKey]: safeUrlForErrorDetails(input.url),
-          ...input.details
-        },
-        cause
-      }),
-      readResponse: async (response, signal) => {
-        const cacheMetadata = artifactCacheMetadataFromHeaders(response.headers);
-        if (response.status === 304) {
-          cancelReadableBody(response.body);
-          if (!cached) {
-            return err(createError({
-              code: input.code,
-              category: "network",
-              message: input.fetchFailureMessage,
-              details: {
-                packageId: input.packageId,
-                [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url),
-                status: response.status,
-                statusText: response.statusText,
-                reason: "not_modified_without_cache_entry"
-              }
-            }));
-          }
-          return ok({
-            bytes: cached.bytes,
-            cacheMetadata,
-            notModified: true
+      if (!collected.ok) {
+        if (isRecoverableRemoteEvidenceError(collected.error)) {
+          evidence[index] = unavailableRemoteEvidence({
+            packageId: node.id,
+            error: collected.error
           });
+          completed += 1;
+          input.progress?.({
+            completed,
+            total,
+            packageId: node.id,
+            concurrency: workerCount
+          });
+          continue;
         }
-        if (!response.ok) {
-          cancelReadableBody(response.body);
-          return err(createError({
-            code: input.code,
-            category: "network",
-            message: input.fetchFailureMessage,
-            details: {
-              packageId: input.packageId,
-              [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url),
-              status: response.status,
-              statusText: response.statusText
-            }
-          }));
+        const previousFailure = failure;
+        if (isCollectionAbortedError(collected.error)) {
+          if (!previousFailure) {
+            failure = {
+              index,
+              error: collected.error
+            };
+            batchCancellation.abort();
+          }
+          return;
         }
-        const bytes = await readResponseBodyWithLimit({
-          response,
-          signal,
-          maxBytes: input.maxBytes,
-          createTooLargeError: (limit) => createError({
-            code: input.code,
-            category: "unsupported_input",
-            message: input.tooLargeMessage,
-            details: {
-              packageId: input.packageId,
-              [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url),
-              ...artifactBodyLimitDetails(limit)
-            }
-          }),
-          createUnreadableBodyError: () => createError({
-            code: input.code,
-            category: "unsupported_input",
-            message: input.unreadableMessage,
-            details: {
-              packageId: input.packageId,
-              [input.urlDetailKey]: safeUrlForErrorDetails(response.url ?? input.url)
-            }
-          })
-        });
-        return bytes.ok ? ok({ bytes: bytes.value, cacheMetadata, notModified: false }) : bytes;
+        if (!previousFailure || index < previousFailure.index) {
+          failure = {
+            index,
+            error: collected.error
+          };
+          batchCancellation.abort();
+        }
+        return;
       }
-    })
-  });
-  if (!artifact.ok) {
-    return artifact;
-  }
-  if (artifact.value.notModified) {
-    if (artifact.value.cacheMetadata.cacheable) {
-      input.artifactCache?.revalidate(input.url, artifact.value.cacheMetadata);
-    } else {
-      input.artifactCache?.remove(input.url);
+      evidence[index] = collected.value;
+      completed += 1;
+      input.progress?.({
+        completed,
+        total,
+        packageId: node.id,
+        concurrency: workerCount
+      });
     }
-  } else if (artifact.value.cacheMetadata.cacheable) {
-    input.artifactCache?.write(input.url, artifact.value.bytes, artifact.value.cacheMetadata);
-  } else {
-    input.artifactCache?.remove(input.url);
-  }
-  recordArtifactBytes({
-    packageId: input.packageId,
-    bytes: artifact.value.bytes,
-    requestedOrigin: input.url,
-    retrieval: artifact.value.notModified ? "revalidated-cache" : "network"
-  });
-  return ok(artifact.value.bytes);
-}
-async function readTransientRemoteArtifactWithRetry(input) {
-  const attempts = Math.max(1, Math.trunc(input.attempts));
-  let result = await input.read();
-  for (let attempt = 1;attempt < attempts && !result.ok; attempt += 1) {
-    if (!isRetryableTransientRemoteError(result.error)) {
-      return result;
-    }
-    if (input.signal?.aborted) {
-      return err(input.createAbortError());
-    }
-    if (input.retryDelayMs > 0) {
-      await abortableDelay(input.retryDelayMs, input.signal);
-      if (input.signal?.aborted) {
-        return err(input.createAbortError());
-      }
-    }
-    result = await input.read();
-  }
-  return result;
-}
-function isRetryableTransientRemoteError(error) {
-  if (isCollectionAbortedError(error)) {
-    return false;
-  }
-  if (error.category !== "network") {
-    return false;
-  }
-  const status = error.details?.status;
-  if (typeof status === "number") {
-    return status === 408 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
-  }
-  const cause = error.details?.cause;
-  return typeof cause !== "string" || !cause.toLowerCase().includes("timed out");
-}
-function collectionAbortedRemoteError(input) {
-  return createError({
-    code: input.code,
-    category: "network",
-    message: "Evidence collection was aborted.",
-    details: {
-      ...redactUrlCredentialsInDetails(input.details),
-      reason: "aborted"
-    }
-  });
-}
-function isPackageTarballTooLargeError(error) {
-  return error.code === "TARBALL_FETCH_FAILED" && error.message === "Package tarball response exceeded the maximum supported size." || error.code === "TARBALL_PARSE_FAILED" && error.message === "Failed to decompress package tarball evidence." && typeof error.details?.maxUnpackedBytes === "number";
-}
-function isPackageArtifactTooLargeError(error) {
-  return isPackageTarballTooLargeError(error) || error.code === "TARBALL_FETCH_FAILED" && error.message === "Python distribution response exceeded the maximum supported size.";
-}
-function unavailableOversizedTarballEvidence(packageId) {
-  return {
-    packageId,
-    files: [],
-    source: "unavailable",
-    warnings: [
-      "Package tarball evidence exceeded Ohrisk's size limit and was not scanned."
-    ]
   };
-}
-function unavailableRemoteArchiveLimitEvidence(packageId, error, artifactLabel) {
-  const limit = typeof error.details?.limit === "string" ? ` (${error.details.limit})` : "";
-  const warning = error.code === "ARCHIVE_ENTRY_TYPE_UNSUPPORTED" ? `Remote ${artifactLabel} contained an unsupported archive entry type; its contents were not used as license evidence.` : `Remote ${artifactLabel} exceeded Ohrisk's bounded archive inspection limit${limit}; its contents were not used as license evidence.`;
-  return {
-    packageId,
-    files: [],
-    source: "unavailable",
-    warnings: [warning]
-  };
-}
-function addIntegrityWarningWhenUnverified(input) {
-  if (input.integrity) {
-    return input.evidence;
-  }
-  return {
-    ...input.evidence,
-    warnings: [
-      ...input.evidence.warnings,
-      "Package artifact integrity was not available in the lockfile; tarball contents were not verified."
-    ]
-  };
-}
-function unavailableUnverifiedRemoteTarballEvidence(packageId, warning = "Remote package artifact integrity was not available in the lockfile; tarball contents were not trusted.") {
-  return {
-    packageId,
-    files: [],
-    source: "unavailable",
-    warnings: [
-      warning
-    ]
-  };
-}
-function yarnCacheOnlyIntegrityWarning() {
-  return "Yarn Berry checksum covers its cache ZIP, not the npm tarball; remote bytes were not trusted. Commit .yarn/cache or scan an installed checkout.";
-}
-async function readArtifactWithTimeout(input) {
-  const controller = new AbortController;
-  const fetchController = new AbortController;
-  let timeout;
-  let timeoutError;
-  let onExternalAbort;
-  const timeoutPromise = new Promise((resolve) => {
-    timeout = setTimeout(() => {
-      timeoutError = new Error(`Artifact fetch timed out after ${input.timeoutMs}ms.`);
-      controller.abort();
-      fetchController.abort();
-      resolve(err(input.createFailureError(timeoutError)));
-    }, input.timeoutMs);
-  });
-  if (input.signal) {
-    if (input.signal.aborted) {
-      fetchController.abort();
-    } else {
-      onExternalAbort = () => fetchController.abort();
-      input.signal.addEventListener("abort", onExternalAbort, { once: true });
-    }
-  }
   try {
-    const readPromise = fetchArtifactWithManualRedirects({
-      fetchArtifact: input.fetchArtifact,
-      url: input.url,
-      signal: fetchController.signal,
-      ...input.requestHeaders ? { requestHeaders: input.requestHeaders } : {},
-      redirectPolicy: input.redirectPolicy
-    }).then(async (response) => {
-      if (!response.ok) {
-        return err(response.error);
-      }
-      const result = await input.readResponse(response.value, controller.signal);
-      if (timeoutError) {
-        throw timeoutError;
-      }
-      return result;
-    }).catch((cause) => {
-      if (input.signal?.aborted) {
-        return err(input.createAbortError());
-      }
-      return err(input.createFailureError(cause));
-    });
-    return await Promise.race([readPromise, timeoutPromise]);
+    await Promise.all(Array.from({ length: workerCount }, () => collectNext()));
+    artifactCache?.maintain({ signal: batchCancellation.signal });
   } finally {
-    if (timeout) {
-      clearTimeout(timeout);
-    }
-    if (onExternalAbort) {
-      input.signal?.removeEventListener("abort", onExternalAbort);
-    }
+    batchCancellation.dispose();
   }
+  if (failure) {
+    return err(failure.error);
+  }
+  return ok(evidence);
 }
-async function fetchArtifactWithManualRedirects(input) {
-  let currentUrl = input.url;
-  for (let redirectCount = 0;redirectCount <= MAX_ARTIFACT_REDIRECTS; redirectCount += 1) {
-    const response = await input.fetchArtifact(currentUrl, {
-      signal: input.signal,
-      redirect: "manual",
-      ...redirectCount === 0 && input.requestHeaders ? { headers: input.requestHeaders } : {}
-    });
-    const responseWithUrl = {
-      ok: response.ok,
-      status: response.status,
-      statusText: response.statusText,
-      url: currentUrl,
-      arrayBuffer: () => response.arrayBuffer(),
-      ...response.headers === undefined ? {} : { headers: response.headers },
-      ...response.body === undefined ? {} : { body: response.body }
-    };
-    if (!isRedirectResponse(responseWithUrl)) {
-      return ok(responseWithUrl);
-    }
-    cancelReadableBody(responseWithUrl.body);
-    const location = responseWithUrl.headers?.get("location")?.trim();
-    if (!location) {
-      return ok(responseWithUrl);
-    }
-    if (redirectCount >= MAX_ARTIFACT_REDIRECTS) {
-      return err(createError({
-        code: input.redirectPolicy.code,
-        category: "network",
-        message: "Package artifact redirect limit exceeded.",
-        details: {
-          packageId: input.redirectPolicy.packageId,
-          ...redactUrlCredentialsInDetails(input.redirectPolicy.details),
-          redirectFrom: safeUrlForErrorDetails(currentUrl),
-          redirectCount: redirectCount + 1,
-          maxRedirects: MAX_ARTIFACT_REDIRECTS
-        }
-      }));
-    }
-    const nextUrl = resolveRedirectLocation(currentUrl, location);
-    if (!nextUrl) {
-      return err(createError({
-        code: input.redirectPolicy.code,
-        category: "unsupported_input",
-        message: input.redirectPolicy.message,
-        details: {
-          packageId: input.redirectPolicy.packageId,
-          ...redactUrlCredentialsInDetails(input.redirectPolicy.details),
-          redirectFrom: safeUrlForErrorDetails(currentUrl),
-          redirectLocation: safeUrlForErrorDetails(location),
-          reason: "invalid_redirect_location"
-        }
-      }));
-    }
-    const redirectPreflight = await preflightRemoteArtifactFetchTarget({
-      code: input.redirectPolicy.code,
-      packageId: input.redirectPolicy.packageId,
-      resolved: nextUrl,
-      message: input.redirectPolicy.message,
-      resolveFailureMessage: input.redirectPolicy.resolveFailureMessage,
-      details: {
-        ...input.redirectPolicy.details,
-        redirectFrom: currentUrl,
-        redirectUrl: nextUrl
-      },
-      resolveArtifactHost: input.redirectPolicy.resolveArtifactHost,
-      ...input.redirectPolicy.allowedHosts ? { allowedHosts: input.redirectPolicy.allowedHosts } : {},
-      ...input.redirectPolicy.permittedHosts ? { permittedHosts: input.redirectPolicy.permittedHosts } : {}
-    });
-    if (!redirectPreflight.ok) {
-      return err(redirectPreflight.error);
-    }
-    currentUrl = nextUrl;
+async function fetchMavenCentralModelPoms(input) {
+  if (input.requests.length === 0) {
+    return ok([]);
   }
-  return err(createError({
-    code: input.redirectPolicy.code,
-    category: "network",
-    message: "Package artifact redirect limit exceeded.",
-    details: {
-      packageId: input.redirectPolicy.packageId,
-      ...redactUrlCredentialsInDetails(input.redirectPolicy.details),
-      redirectFrom: safeUrlForErrorDetails(currentUrl),
-      maxRedirects: MAX_ARTIFACT_REDIRECTS
-    }
-  }));
-}
-function isRedirectResponse(response) {
-  return response.status === 301 || response.status === 302 || response.status === 303 || response.status === 307 || response.status === 308;
-}
-function conditionalArtifactRequestHeaders(cached) {
-  if (!cached?.stale) {
-    return;
-  }
-  const headers = {};
-  if (cached.etag) {
-    headers["if-none-match"] = cached.etag;
-  }
-  if (cached.lastModified) {
-    headers["if-modified-since"] = cached.lastModified;
-  }
-  return Object.keys(headers).length > 0 ? headers : undefined;
-}
-function resolveRedirectLocation(currentUrl, location) {
+  const uncachedArtifactHostResolver = input.resolveArtifactHost ?? (input.fetchArtifact ? undefined : defaultArtifactHostResolver);
+  const resolveArtifactHost = uncachedArtifactHostResolver ? createCachingArtifactHostResolver(uncachedArtifactHostResolver) : undefined;
+  const fetchArtifact = input.fetchArtifact ?? createDefaultArtifactFetcher(resolveArtifactHost ?? defaultArtifactHostResolver);
+  const artifactCache = input.cacheDir ? createArtifactCache(input.cacheDir) : undefined;
+  const documents = [];
   try {
-    return new URL(location, currentUrl).toString();
-  } catch {
-    return;
-  }
-}
-function isHttpUrl(value) {
-  const url = parseHttpUrl(value);
-  return url !== undefined;
-}
-function validateRemoteArtifactUrl(input) {
-  const url = parseHttpUrl(input.resolved);
-  if (!url) {
-    return err(createError({
-      code: input.code,
-      category: "unsupported_input",
-      message: input.message,
-      details: {
-        packageId: input.packageId,
-        ...redactUrlCredentialsInDetails(input.details),
-        reason: "unsupported_or_invalid_url"
+    for (const request of input.requests) {
+      const repositoryPath = mavenPomRepositoryPath(request);
+      if (!repositoryPath) {
+        return err(createError({
+          code: "MAVEN_POM_PARSE_FAILED",
+          category: "unsupported_input",
+          message: "Remote Maven parent or BOM coordinates were not safe exact repository coordinates.",
+          details: {
+            dependency: request.dependency,
+            reason: "unsafe_remote_maven_coordinates"
+          }
+        }));
       }
-    }));
-  }
-  if (url.username !== "" || url.password !== "") {
-    return err(createError({
-      code: input.code,
-      category: "unsupported_input",
-      message: input.message,
-      details: {
-        packageId: input.packageId,
-        ...redactUrlCredentialsInDetails(input.details),
-        artifactHost: normalizeUrlHostname(url.hostname),
-        reason: "url_credentials_not_supported"
-      }
-    }));
-  }
-  if (url.protocol !== "https:") {
-    return err(createError({
-      code: input.code,
-      category: "unsupported_input",
-      message: input.message,
-      details: {
-        packageId: input.packageId,
-        ...redactUrlCredentialsInDetails(input.details),
-        artifactHost: normalizeUrlHostname(url.hostname),
-        reason: "insecure_http_not_supported"
-      }
-    }));
-  }
-  const normalizedHost = normalizeUrlHostname(url.hostname);
-  if (input.permittedHosts && !input.permittedHosts.has(normalizedHost)) {
-    return err(createError({
-      code: input.code,
-      category: "unsupported_input",
-      message: input.message,
-      details: {
-        packageId: input.packageId,
-        ...redactUrlCredentialsInDetails(input.details),
-        artifactHost: normalizedHost,
-        reason: "host_not_permitted"
-      }
-    }));
-  }
-  const blockedHostReason = isExplicitlyAllowedArtifactHost(normalizedHost, input.allowedHosts) ? undefined : blockedRemoteArtifactHostReason(normalizedHost);
-  if (blockedHostReason) {
-    return err(createError({
-      code: input.code,
-      category: "unsupported_input",
-      message: input.message,
-      details: {
-        packageId: input.packageId,
-        ...redactUrlCredentialsInDetails(input.details),
-        artifactHost: normalizeUrlHostname(url.hostname),
-        reason: blockedHostReason
-      }
-    }));
-  }
-  return ok(undefined);
-}
-async function preflightRemoteArtifactFetchTarget(input) {
-  const urlValidation = validateRemoteArtifactUrl({
-    code: input.code,
-    packageId: input.packageId,
-    resolved: input.resolved,
-    message: input.message,
-    details: input.details,
-    ...input.allowedHosts ? { allowedHosts: input.allowedHosts } : {},
-    ...input.permittedHosts ? { permittedHosts: input.permittedHosts } : {}
-  });
-  if (!urlValidation.ok) {
-    return err(urlValidation.error);
-  }
-  if (!input.resolveArtifactHost) {
-    return ok(undefined);
-  }
-  const url = parseHttpUrl(input.resolved);
-  if (!url) {
-    return ok(undefined);
-  }
-  const artifactHost = normalizeUrlHostname(url.hostname);
-  if (!shouldResolveRemoteArtifactHost(artifactHost)) {
-    return ok(undefined);
-  }
-  let resolutions;
-  try {
-    resolutions = await resolveArtifactHostWithTimeout({
-      resolveArtifactHost: input.resolveArtifactHost,
-      artifactHost,
-      ...input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }
-    });
-  } catch (cause) {
-    return err(createError({
-      code: input.code,
-      category: "network",
-      message: input.resolveFailureMessage,
-      details: {
-        packageId: input.packageId,
-        ...redactUrlCredentialsInDetails(input.details),
-        artifactHost,
-        cause: safeErrorCauseForDetails(cause)
-      }
-    }));
-  }
-  if (resolutions.length === 0) {
-    return err(createError({
-      code: input.code,
-      category: "network",
-      message: input.resolveFailureMessage,
-      details: {
-        packageId: input.packageId,
-        ...redactUrlCredentialsInDetails(input.details),
-        artifactHost,
-        reason: "empty_dns_response"
-      }
-    }));
-  }
-  for (const resolution of resolutions) {
-    const resolvedAddress = normalizeUrlHostname(resolution.address);
-    const blockedHostReason = blockedRemoteArtifactHostReason(resolvedAddress);
-    if (blockedHostReason) {
-      return err(createError({
-        code: input.code,
-        category: "unsupported_input",
-        message: input.message,
+      const pomUrl = `${MAVEN_CENTRAL_BASE_URL}/${repositoryPath}`;
+      const pomBytes = await readRemoteArtifactBytes({
+        code: "REGISTRY_METADATA_FETCH_FAILED",
+        packageId: request.dependency,
+        url: pomUrl,
+        blockedMessage: "Maven Central parent or BOM URL targets an unsupported or blocked host.",
+        resolveFailureMessage: "Failed to resolve Maven Central host for parent or BOM metadata.",
+        fetchFailureMessage: "Failed to fetch Maven Central parent or BOM POM metadata.",
+        tooLargeMessage: "Maven Central parent or BOM POM exceeded the maximum supported size.",
+        unreadableMessage: "Maven Central parent or BOM POM did not expose a readable body stream.",
+        offlineMissMessage: "Offline mode could not find Maven parent or BOM metadata in the artifact cache.",
         details: {
-          packageId: input.packageId,
-          ...redactUrlCredentialsInDetails(input.details),
-          artifactHost,
-          resolvedAddress,
-          reason: blockedHostReason
-        }
-      }));
+          registryUrl: pomUrl,
+          coordinates: request.dependency,
+          usage: request.usage
+        },
+        maxBytes: input.pomMaxBytes ?? MAVEN_POM_METADATA_MAX_BYTES,
+        fetchArtifact,
+        resolveArtifactHost,
+        fetchTimeoutMs: input.fetchTimeoutMs ?? ARTIFACT_FETCH_TIMEOUT_MS,
+        offline: input.offline ?? false,
+        artifactCache,
+        signal: input.signal ?? new AbortController().signal,
+        allowedHosts: new Set,
+        permittedHosts: MAVEN_CENTRAL_HOSTS,
+        urlDetailKey: "registryUrl"
+      });
+      if (!pomBytes.ok) {
+        return pomBytes;
+      }
+      const text = pomBytes.value.toString("utf8");
+      const identity = parseMavenPomLicenseMetadata({
+        packageId: request.dependency,
+        requested: request,
+        source: pomUrl,
+        text
+      });
+      if (!identity.ok) {
+        return identity;
+      }
+      documents.push({ ...request, source: pomUrl, text });
     }
-  }
-  return ok(undefined);
-}
-async function resolveArtifactHostWithTimeout(input) {
-  if (input.timeoutMs === undefined) {
-    return input.resolveArtifactHost(input.artifactHost);
-  }
-  let timeout;
-  try {
-    return await Promise.race([
-      input.resolveArtifactHost(input.artifactHost),
-      new Promise((_resolve, reject) => {
-        timeout = setTimeout(() => {
-          reject(new Error(`Artifact host resolution timed out after ${input.timeoutMs}ms.`));
-        }, input.timeoutMs);
-      })
-    ]);
+    return ok(documents);
   } finally {
-    if (timeout) {
-      clearTimeout(timeout);
-    }
+    artifactCache?.maintain(input.signal ? { signal: input.signal } : {});
   }
 }
-function createRemoteArtifactExceptionError(input) {
-  if (input.cause instanceof BlockedArtifactRemoteAddressError) {
-    return createError({
-      code: input.code,
-      category: "unsupported_input",
-      message: input.blockedMessage,
-      details: {
-        ...redactUrlCredentialsInDetails(input.details),
-        artifactHost: input.cause.hostname,
-        resolvedAddress: normalizeUrlHostname(input.cause.remoteAddress),
-        reason: input.cause.reason
-      }
-    });
+function normalizeEvidenceConcurrency(value, total) {
+  if (value === undefined) {
+    return Math.min(DEFAULT_EVIDENCE_CONCURRENCY, total);
   }
-  if (isAbortErrorLike(input.cause)) {
-    return collectionAbortedRemoteError({
-      code: input.code,
-      details: input.details
-    });
+  if (!Number.isFinite(value)) {
+    return 1;
   }
-  return createError({
-    code: input.code,
-    category: "network",
-    message: input.message,
-    details: {
-      ...redactUrlCredentialsInDetails(input.details),
-      cause: safeErrorCauseForDetails(input.cause)
-    }
-  });
-}
-function npmRegistryPackageVersionUrl(name, version, registryUrl) {
-  return `${npmRegistryPackageUrl(name, registryUrl)}/${encodeURIComponent(version)}`;
-}
-function pypiPackageVersionUrl(name, version) {
-  return `https://pypi.org/pypi/${encodeURIComponent(name)}/${encodeURIComponent(version)}/json`;
-}
-function remoteArtifactFilename(resolved) {
-  const parsed = parseHttpUrl(resolved);
-  const encodedFilename = parsed?.pathname.split("/").pop();
-  if (!encodedFilename) {
-    return;
-  }
-  try {
-    return decodeURIComponent(encodedFilename);
-  } catch {
-    return encodedFilename;
-  }
-}
-function unsupportedRemoteEcosystemEvidence(input) {
-  const warning = input.reason ?? (input.node.resolved ? `Unsupported resolved artifact specifier: ${safeUrlForErrorDetails(input.node.resolved)}` : `Remote package evidence is not configured for the ${input.node.ecosystem} ecosystem.`);
-  return {
-    packageId: input.node.id,
-    files: [],
-    source: "unavailable",
-    warnings: [warning]
-  };
-}
-function npmRegistryPackageUrl(name, registryUrl) {
-  const baseUrl = (registryUrl ?? "https://registry.npmjs.org").replace(/\/$/, "");
-  return `${baseUrl}/${encodeURIComponent(name).replace(/^%40/, "@")}`;
-}
-function readRegistryTarballUrl(metadata, version) {
-  const versionMetadata = readRegistryVersionMetadata(metadata, version);
-  if (!versionMetadata) {
-    return;
-  }
-  const dist = versionMetadata.dist;
-  if (isRecord28(dist) && typeof dist.tarball === "string") {
-    return dist.tarball;
-  }
-  return;
-}
-function readRegistryVersionMetadata(metadata, version) {
-  if (!isRecord28(metadata)) {
-    return;
-  }
-  if (metadata.version === version || !isRecord28(metadata.versions)) {
-    return metadata;
-  }
-  const versions = metadata.versions;
-  const versionMetadata = versions[version];
-  return isRecord28(versionMetadata) ? versionMetadata : undefined;
-}
-function isRecord28(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return Math.min(Math.max(1, Math.trunc(value)), total);
 }
 
 // src/git/ref-file.ts
@@ -69591,7 +69629,7 @@ var SOURCES = new Set(["local", "registry", "sbom", "tarball", "unavailable"]);
 var RETRIEVALS = new Set(["network", "cache", "revalidated-cache", "local", "verification-only"]);
 var SHA256 = /^[0-9a-f]{64}$/u;
 var record2 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
-var string = (value) => typeof value === "string" && value.length <= 1024 * 1024;
+var string = (value) => typeof value === "string" && value.length <= 2 * 1024 * 1024;
 var strings = (value, max = 50000) => Array.isArray(value) && value.length <= max && value.every(string);
 var optional = (value, check) => value === undefined || check(value);
 var boolean = (value) => typeof value === "boolean";
@@ -70930,6 +70968,11 @@ async function runScanAt(input) {
     return exitCodeForError(scanError);
   }
   const repository = input.repository ?? scanned.value.snapshotRepository;
+  if (isCommandCancelled(signal)) {
+    await closeScanProgressReporter(reportProgress, "failure");
+    io.stderr(renderCommandCancelled("Scan"));
+    return COMMAND_CANCELLED_EXIT_CODE;
+  }
   const sourceSnapshot = scanned.value.snapshotSource;
   if (sourceSnapshot)
     io.stderr(`Replaying saved evidence from Ohrisk ${sourceSnapshot.payload.tool.version}; dependencies and evidence retained; policy ${sourceSnapshot.payload.policyDigest === scanned.value.policy.digest ? "unchanged" : "changed"}; rules ${sourceSnapshot.payload.tool.rulesVersion === OHRISK_VERSION ? "same version" : "changed version"}; waivers ${sourceSnapshot.payload.waiverDigest === scanned.value.snapshotWaiverDigest ? "unchanged" : "changed"}.`);

@@ -3,6 +3,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { readArchiveBytes, type ArchiveSource } from "../archive/archive-reader";
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
+import { recordArtifactCheck } from "./artifact-capture";
 import { classifyEvidenceFile } from "./license-files";
 import type { LicenseEvidence, LicenseEvidenceFile } from "./types";
 
@@ -83,6 +84,7 @@ export function collectHexTarballEvidence(input: {
     }));
   }
 
+  recordArtifactCheck({ packageId: input.packageId, bytes: input.tarball, kind: "hex-inner-sha256", value: computedInnerChecksum.toString("hex") });
   const metadata = parseHexMetadata(input, metadataBytes.value);
   if (!metadata.ok) {
     return metadata;

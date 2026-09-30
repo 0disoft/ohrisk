@@ -28,6 +28,15 @@ Renderers share a result model; model helpers do not import renderer code at
 runtime. CLI and diff use the same collection entry points. Extraction preserves
 the existing report schemas and output behavior.
 
+Evidence acquisition uses one `src/evidence/remote-artifact-reader.ts` boundary
+for URL, DNS, connected-address, redirect, response-size, timeout, retry and
+cache checks. `collect.ts` owns bounded scheduling and cancellation;
+`node-evidence.ts` selects the appropriate source. Local package discovery,
+registry metadata decoding and remote ecosystem collectors have separate
+modules. Ecosystem collectors share the same remote reader rather than copying
+its security policy. Internal collection callbacks and limits are declared in
+`collection-runtime.ts`; existing public collector exports remain compatible.
+
 - CLI argument parsing and command dispatch under `src/cli/`.
 - Dependency graph parsers under `src/graph/`.
 - License evidence collectors under `src/evidence/`.

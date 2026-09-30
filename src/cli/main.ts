@@ -528,6 +528,11 @@ async function runScanAt(input: {
   }
 
   const repository = input.repository ?? scanned.value.snapshotRepository;
+  if (isCommandCancelled(signal)) {
+    await closeScanProgressReporter(reportProgress, "failure");
+    io.stderr(renderCommandCancelled("Scan"));
+    return COMMAND_CANCELLED_EXIT_CODE;
+  }
   const sourceSnapshot = scanned.value.snapshotSource;
   if (sourceSnapshot) io.stderr(`Replaying saved evidence from Ohrisk ${sourceSnapshot.payload.tool.version}; dependencies and evidence retained; policy ${sourceSnapshot.payload.policyDigest === scanned.value.policy.digest ? "unchanged" : "changed"}; rules ${sourceSnapshot.payload.tool.rulesVersion === OHRISK_VERSION ? "same version" : "changed version"}; waivers ${sourceSnapshot.payload.waiverDigest === scanned.value.snapshotWaiverDigest ? "unchanged" : "changed"}.`);
   if (command.snapshotPath) {

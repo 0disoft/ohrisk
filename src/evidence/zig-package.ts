@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { recordArtifactCheck } from "./artifact-capture";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { TextDecoder } from "node:util";
@@ -168,6 +169,7 @@ export function collectRemoteZigTarballEvidence(input: {
   }
 
   const warnings: string[] = [];
+  recordArtifactCheck({ packageId: input.packageId, bytes: input.tarball, kind: "zig-package-hash", value: input.expectedHash });
   const evidenceFiles = collectZigTarballEvidenceFiles(coveredEntries, warnings);
 
   if (evidenceFiles.length === 0) {

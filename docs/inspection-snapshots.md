@@ -40,3 +40,9 @@ and request headers are not stored. Extracted license text and private package
 names can still be sensitive: snapshots are local inspection data, not shareable
 reports. Keep them out of version control unless deliberately owned by the
 project. Raw downloaded archives are not embedded; replay uses extracted text.
+
+Receipt checks distinguish ordinary SRI, Cargo SHA-256, NuGet SHA-512, Maven
+SHA-256, Go directory/go.mod h1, Nix NAR, Zig package hashes and Hex internal
+checksums. A Hex internal checksum is carried inside the archive and does not
+authenticate its origin. These checks record only successful byte/tree checks;
+they do not assert that every acquired artifact has a trusted checksum.

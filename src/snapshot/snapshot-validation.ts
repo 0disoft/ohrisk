@@ -8,7 +8,7 @@ const RETRIEVALS = new Set(["network", "cache", "revalidated-cache", "local", "v
 const SHA256 = /^[0-9a-f]{64}$/u;
 type ObjectValue = Record<string, unknown>;
 const record = (value: unknown): value is ObjectValue => value !== null && typeof value === "object" && !Array.isArray(value);
-const string = (value: unknown): value is string => typeof value === "string" && value.length <= 1024 * 1024;
+const string = (value: unknown): value is string => typeof value === "string" && value.length <= 2 * 1024 * 1024;
 const strings = (value: unknown, max = 50_000): value is string[] => Array.isArray(value) && value.length <= max && value.every(string);
 const optional = (value: unknown, check: (v: unknown) => boolean): boolean => value === undefined || check(value);
 const boolean = (value: unknown): boolean => typeof value === "boolean";
