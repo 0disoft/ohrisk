@@ -17,6 +17,7 @@ import {
   readInputTextFile
 } from "./read-input-file";
 import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
+import { extendGraphWithRecordDependencies, type RecordDependencyRequest } from "./record-dependency-edges";
 
 type UvPackageRecord = {
   name: string;
@@ -168,7 +169,7 @@ export function parseUvLockText(
       pathLimitAffected
     });
 
-    return ok(omitUndefined({
+    const graph: DependencyGraph = omitUndefined({
       rootName: roots[0]?.name,
       lockfilePath,
       nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
@@ -181,7 +182,19 @@ export function parseUvLockText(
           }]
         : undefined,
       ...embeddedEvidenceFromUvRecords(records)
-    }));
+    });
+    const request = (edge: UvDependencyEdge): RecordDependencyRequest<UvPackageRecord> => {
+      const record = resolveUvPackageRecord(recordIndex, edge.name);
+      return { name: edge.name, dependencyType: edge.type, ...(record ? { record } : {}) };
+    };
+    return extendGraphWithRecordDependencies({
+      graph,
+      roots: roots.length ? roots.flatMap((root) => root.dependencies.map(request))
+        : records.map((record) => ({ name: record.name, record, dependencyType: "unknown" as const })),
+      rootDependenciesUnknown: roots.length === 0,
+      node: (record) => ({ id: record.id, name: record.name, version: record.version, ecosystem: "pypi" }),
+      children: (record) => record.dependencies.map(request)
+    });
   } catch (cause) {
     return err(
       createError({

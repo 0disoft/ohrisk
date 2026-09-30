@@ -16,6 +16,15 @@ includes different levels of waiver detail.
 
 ## JSON schema versioning
 
+npm, pnpm, and uv source relationships are enumerated independently of bounded
+display paths. A shared package's 65th incoming edge and descendants remain in
+the scan and CycloneDX dependency graph. Source traversal rejects more than
+1,000,000 distinct scoped edges or 200,000 package nodes instead of silently
+dropping relationships. Missing required pnpm and uv requests are reported as
+unresolved dependencies. npm v1 root relationships remain unknown because its
+tree does not prove which hoisted packages were declared directly; pnpm local
+links outside the parsed package model are likewise opaque, not missing packages.
+
 Scan and each side of a diff share the same inspection completeness contract.
 Alongside the existing status and evidence/repository counters, candidate schema
 3.6 adds `unresolvedDependencyCount`, safe `unresolvedDependencies` records, and

@@ -132,7 +132,7 @@ test("inspection dimensions distinguish known graph, unknown license and unavail
   const unknown = parse({ "": { dependencies: { package: "1.0.0" } }, "node_modules/package": { version: "1.0.0" } });
   const unidentified = buildScanCompleteness({ graph: unknown, evidence: [{ packageId: "package@1.0.0", source: "sbom", files: [], warnings: [] }], normalizedLicenses: [] });
   expect(unidentified.status).toBe("complete");
-  expect(unidentified.dimensions?.graph.status).toBe("unknown");
+  expect(unidentified.dimensions?.graph.status).toBe("complete");
   expect(unidentified.dimensions?.licenses.status).toBe("unidentified");
   const unavailable = buildScanCompleteness({ graph: unknown, evidence: [{ packageId: "package@1.0.0", source: "unavailable", files: [], warnings: [], artifactIdentityConflict: true }] });
   expect(unavailable.status).toBe("partial");

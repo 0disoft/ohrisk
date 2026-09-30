@@ -184,6 +184,13 @@ but automatic discovery excludes it because its dependency entries are not fully
 error lists that input and points to explicit `--lockfile` selection for the exact parse failure;
 Ohrisk does not infer versions from ranges.
 
+npm, pnpm, and uv lockfile source edges are retained independently of display
+path limits. A bounded record traversal preserves reachable packages and scoped
+relationships, including cycles. Missing required records make CI and gated
+diffs partial. Missing optional npm or pnpm installations remain valid omissions;
+opaque local links and inferred npm v1 root relationships are reported unknown.
+Source graph limits fail explicitly rather than publishing truncated edges.
+
 Policy and waiver files in the cloned repository are untrusted and are not auto-loaded. The
 directory where Ohrisk was invoked remains the configuration, waiver, cache, and report-output
 root. General package-cache, install-tree, and vendored-source evidence from the temporary checkout

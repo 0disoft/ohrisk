@@ -2,6 +2,12 @@
 
 ## 1.16.0 - Unreleased
 
+- npm, pnpm, and uv source edges and reachable package records survive bounded
+  display-path truncation. Independent source traversal retains cycles and
+  scoped relationships, reports missing pnpm/uv records, and fails explicitly
+  at graph resource limits. npm v1 inferred roots and opaque pnpm links remain
+  distinguishable from proven complete relationships.
+
 - npm v1 and modern lockfiles retain missing required dependency requests and
   mark name-based installation recovery unproven. These requests survive graph
   merging, input reordering, and bounded display paths, and make CI and gated

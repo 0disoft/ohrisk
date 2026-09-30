@@ -20,6 +20,7 @@ import {
   readInputTextFile
 } from "./read-input-file";
 import type { DependencyGraph, DependencyNode, DependencyType } from "./types";
+import { extendGraphWithRecordDependencies, type RecordDependencyRequest } from "./record-dependency-edges";
 
 const PNPM_MAX_PATHS_PER_PACKAGE = 64;
 const PNPM_MAX_YAML_DOCUMENTS = 16;
@@ -184,7 +185,7 @@ export function parsePnpmLockText(
     }
   }
 
-  return ok(omitUndefined({
+  const graph: DependencyGraph = omitUndefined({
     lockfilePath,
     nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
     diagnostics: pathLimitAffected.size > 0
@@ -195,7 +196,20 @@ export function parsePnpmLockText(
           message: `pnpm dependency paths were limited to ${PNPM_MAX_PATHS_PER_PACKAGE} paths per package.`
         }]
       : undefined
-  }));
+  });
+  const request = (edge: PnpmDependencyEdge): RecordDependencyRequest<PnpmPackageRecord> => {
+    const record = resolvePackageRecord({ packageIndex, name: edge.name, range: edge.range });
+    return { name: edge.name, dependencyType: edge.type,
+      ...(record ? { record } : {}),
+      ...(edge.type === "optional" ? { optional: true } : {}),
+      ...(!record && /^(?:link|workspace):/u.test(edge.range) ? { opaque: true } : {}) };
+  };
+  return extendGraphWithRecordDependencies({
+    graph,
+    roots: importerEntries.flatMap((root) => collectRootDependencies(root.importer, catalogs.value).map(request)),
+    node: (record) => ({ id: record.id, name: record.name, version: record.version, ecosystem: "npm", ...omitUndefined({ resolved: record.resolved, integrity: record.integrity }) }),
+    children: (record) => record.dependencies.map(request)
+  });
 }
 
 function parseLockfileYaml(

@@ -15,6 +15,7 @@ import {
 } from "./read-input-file";
 import type { DependencyGraph, DependencyNode, DependencyType, UnresolvedDependency } from "./types";
 import { unresolvedDependencyKey, uniqueUnresolvedDependencies } from "./unresolved-dependencies";
+import { extendGraphWithRecordDependencies } from "./record-dependency-edges";
 
 type PackageLockPackage = {
   name?: unknown;
@@ -197,8 +198,6 @@ export function parsePackageLockText(
     }
   }
 
-  collectUnresolvedInstallations(traversalStates, recordIndex, unresolved);
-
   walkDependencies({
     states: traversalStates,
     recordIndex,
@@ -206,7 +205,7 @@ export function parsePackageLockText(
     pathLimitAffected
   });
 
-  return ok(omitUndefined({
+  const graph: DependencyGraph = omitUndefined({
     rootName,
     lockfilePath,
     nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
@@ -219,7 +218,19 @@ export function parsePackageLockText(
           message: "npm dependency paths were limited."
         }]
       : undefined
-  }));
+  });
+  const request = (edge: PackageLockDependencyEdge, parentPath?: string) => {
+    const resolution = resolvePackageRecord({ recordIndex, name: edge.name, range: edge.range, ...(parentPath === undefined ? {} : { parentPath }) });
+    return { name: edge.name, dependencyType: edge.type,
+      ...(edge.optional ? { optional: true } : {}),
+      ...(resolution ? { record: resolution.record, inferred: resolution.inferred } : {}) };
+  };
+  return extendGraphWithRecordDependencies({
+    graph,
+    roots: rootEntries.flatMap((root) => collectRootDependencies(root.pkg).map((edge) => request(edge, root.packagePath))),
+    node: (record) => ({ id: record.id, name: record.name, version: record.version, ecosystem: "npm", ...omitUndefined({ resolved: record.resolved, integrity: record.integrity }) }),
+    children: (record) => record.dependencies.map((edge) => request(edge, record.packagePath))
+  });
 }
 
 function parsePackageLockV1(input: {
@@ -258,12 +269,42 @@ function parsePackageLockV1(input: {
     });
   }
 
-  return ok(omitUndefined({
+  const graph: DependencyGraph = omitUndefined({
     rootName,
     lockfilePath: input.lockfilePath,
     nodes: [...nodeMap.values()].sort((left, right) => left.id.localeCompare(right.id)),
     ...(unresolved.size > 0 ? { unresolvedDependencies: uniqueUnresolvedDependencies([...unresolved.values()]) } : {})
-  }));
+  });
+  type V1Record = { name: string; dependency: PackageLockV1Dependency };
+  const indexed = new Map<PackageLockV1Dependency, Map<string, V1Record>>();
+  const recordFor = (name: string, dependency: PackageLockV1Dependency): V1Record => {
+    const entries = indexed.get(dependency) ?? new Map<string, V1Record>();
+    const record = entries.get(name) ?? { name, dependency };
+    entries.set(name, record);
+    indexed.set(dependency, entries);
+    return record;
+  };
+  const request = (name: string, dependency: PackageLockV1Dependency | undefined) => ({
+    name, dependencyType: dependencyTypeForV1Dependency(dependency ?? {}),
+    ...(dependency?.optional === true ? { optional: true } : {}),
+    ...(dependency && typeof dependency.version === "string" ? { record: recordFor(name, dependency) } : {})
+  });
+  const rootEntries = Object.entries(rootDependencies).filter(([name]) => !referencedRootDependencies.has(name));
+  return extendGraphWithRecordDependencies({
+    graph,
+    roots: (rootEntries.length ? rootEntries : Object.entries(rootDependencies)).map(([name, dependency]) => request(name, dependency)),
+    rootDependenciesUnknown: true,
+    node: ({ name, dependency }) => ({
+      id: `${name}@${dependency.version}`, name, version: dependency.version as string, ecosystem: "npm",
+      ...(typeof dependency.resolved === "string" ? { resolved: dependency.resolved } : {}),
+      ...(typeof dependency.integrity === "string" ? { integrity: dependency.integrity } : {})
+    }),
+    children: ({ dependency }) => {
+      const nested = readV1DependencyMap(dependency.dependencies);
+      const names = new Set([...Object.keys(nested), ...Object.keys(readDependencyMap(dependency.requires))]);
+      return [...names].map((name) => request(name, nested[name] ?? rootDependencies[name]));
+    }
+  });
 }
 
 function parseLockfileJson(
@@ -475,32 +516,6 @@ function resolvePackageRecord(input: {
 
 function addUnresolved(target: Map<string, UnresolvedDependency>, item: UnresolvedDependency): void {
   target.set(unresolvedDependencyKey(item), item);
-}
-
-/** Traverse installation records independently of the bounded display-path walk. */
-function collectUnresolvedInstallations(
-  roots: readonly PackageLockTraversalState[], index: PackageLockRecordIndex,
-  unresolved: Map<string, UnresolvedDependency>
-): void {
-  const queue = roots.map((state) => ({ record: state.record, type: state.dependencyType }));
-  const seen = new Set<string>();
-  for (let cursor = 0; cursor < queue.length; cursor++) {
-    const state = queue[cursor]!;
-    const key = JSON.stringify([state.record.packagePath, state.type]);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    for (const edge of state.record.dependencies) {
-      const resolution = resolvePackageRecord({
-        recordIndex: index, name: edge.name, range: edge.range, parentPath: state.record.packagePath
-      });
-      const type = dependencyTypeForChildEdge(state.type, edge.type);
-      if ((!resolution || resolution.inferred) && !edge.optional) addUnresolved(unresolved, {
-        from: state.record.id, name: edge.name, dependencyType: type,
-        reason: resolution ? "unproven_installation" : "missing_installation"
-      });
-      if (resolution && !(edge.optional && resolution.inferred)) queue.push({ record: resolution.record, type });
-    }
-  }
 }
 
 function onlyPackageRecordWithName(
