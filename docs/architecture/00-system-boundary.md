@@ -16,6 +16,18 @@ outside the archive trust boundary.
 
 ## Owned Components
 
+Inspection responsibilities are separated at these internal boundaries:
+
+- `src/cli/main.ts`: command dispatch, report emission and command exit results.
+- `src/cli/scan-engine.ts`: project discovery, evidence runtime, collection and snapshot replay.
+- `src/cli/scan-policy.ts` and `src/policy/`: graph selection, evaluation, waivers and independent gates.
+- `src/report/scan-model.ts`: shared provenance, evidence counts and decision summaries.
+- `src/report/scan-report.ts`, `html-scan-report.ts` and `html-scan-filter.ts`: text/JSON/Markdown, HTML markup and browser filtering respectively.
+
+Renderers share a result model; model helpers do not import renderer code at
+runtime. CLI and diff use the same collection entry points. Extraction preserves
+the existing report schemas and output behavior.
+
 - CLI argument parsing and command dispatch under `src/cli/`.
 - Dependency graph parsers under `src/graph/`.
 - License evidence collectors under `src/evidence/`.

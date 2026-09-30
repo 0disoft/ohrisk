@@ -2,6 +2,9 @@
 
 ## 1.16.0 - Unreleased
 
+- Inspection execution, shared scan result summaries, HTML markup and browser
+  filtering have separate module owners while retaining existing report contracts.
+
 - A bounded offline benchmark compares cold, warm and offline artifact caches
   in fresh processes, measuring collection, nested gzip decompression, license
   normalization, rendering and peak memory without external network traffic.
