@@ -1,6 +1,7 @@
 import type { LicenseEvidence } from "../evidence/types";
 import type { ProjectLockfile } from "../project/discover";
 import { packageUrl } from "./package-url";
+import { disambiguatePackageRecordIds } from "./package-identity";
 import type {
   DependencyGraph,
   DependencyGraphDiagnostic,
@@ -29,25 +30,10 @@ export function mergeDependencyGraphs(graphs: SourcedDependencyGraph[]): Depende
   const warnings: string[] = [];
   const diagnostics: DependencyGraphDiagnostic[] = [];
   const mavenRepositoryUrls: string[] = [];
-  const purlsById = new Map<string, Set<string>>();
-
-  for (const item of graphs) {
-    for (const node of item.graph.nodes) {
-      const purl = packageUrl(node);
-      const purls = purlsById.get(node.id) ?? new Set<string>();
-      purls.add(purl);
-      purlsById.set(node.id, purls);
-      if (!canonicalIdByPurl.has(purl)) {
-        canonicalIdByPurl.set(purl, node.id);
-      }
-    }
-  }
-
-  // Preserve established identities unless they alias distinct package coordinates.
-  // PURL identities disambiguate those packages independently of input order.
-  for (const [purl, id] of canonicalIdByPurl) {
-    if ((purlsById.get(id)?.size ?? 0) > 1) {
-      canonicalIdByPurl.set(purl, purl);
+  for (const node of disambiguatePackageRecordIds(graphs.flatMap((item) => item.graph.nodes))) {
+    const purl = packageUrl(node);
+    if (!canonicalIdByPurl.has(purl)) {
+      canonicalIdByPurl.set(purl, node.id);
     }
   }
 

@@ -1,6 +1,7 @@
 import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 import { parsePackageUrl } from "./package-url";
+import { disambiguatePackageRecordIds } from "./package-identity";
 import {
   inputFileReadErrorCategory,
   inputFileReadErrorDetails,
@@ -188,7 +189,10 @@ function readCycloneDxComponentRecords(value: unknown): CycloneDxComponentRecord
     });
   }
 
-  return deduplicateCycloneDxRecords(records);
+  return deduplicateCycloneDxRecords(disambiguatePackageRecordIds(records).map((record, index) => ({
+    ...record,
+    aliases: record.aliases.map((alias) => alias === records[index]?.id ? record.id : alias)
+  })));
 }
 
 function readCycloneDxFallbackIdentity(

@@ -3,6 +3,7 @@ import { createError, type OhriskError } from "../shared/errors";
 import { err, ok, type Result } from "../shared/result";
 import type { LicenseEvidence } from "../evidence/types";
 import { parsePackageUrl } from "./package-url";
+import { disambiguatePackageRecordIds } from "./package-identity";
 import {
   inputFileReadErrorCategory,
   inputFileReadErrorDetails,
@@ -231,7 +232,7 @@ function readSpdxPackageRecords(
     }));
   }
 
-  return deduplicateSpdxPackageRecords(records);
+  return deduplicateSpdxPackageRecords(disambiguatePackageRecordIds(records));
 }
 
 function readSpdxExtractedLicenseTexts(value: unknown): SpdxExtractedLicenseTextMap {
